@@ -53,4 +53,6 @@ Validated name and reservation types reject invalid stored identities, preserve 
 
 Atomic binding now requires an existing sandbox and matching reservation token, permits same-target replay and refuses transfer. Sandbox deletion removes bound ownership in the same memory mutex or Redis script; an old sandbox deletion cannot remove a name reused by a new sandbox. The shared contract verified missing-target and wrong-token rejection, replay, refusal to release a bound record as pending, deletion cleanup and safe name reuse against memory and live Redis.
 
-Node operation identity, legacy migration, authenticated routes and CLI use remain unimplemented. These primitives alone do not close the named SSH feature gap.
+Authenticated resolution now exists at `GET /sandbox-names/{name}` for admin and sandbox-scoped keys; inventory keys are refused. It returns only `name` and `sandboxID`, with no reservation token or guest connection credentials. Invalid names return 400, unknown or deleted names 404, and pending ownership or an observed conflicting legacy metadata name 409. Store failures return 503 with generic errors. The lookup checks current records but cannot prevent legacy metadata changing after that check; creation enforcement and migration remain necessary.
+
+Node operation identity, legacy migration, reservation management routes and CLI use remain unimplemented. These primitives alone do not close the named SSH feature gap.

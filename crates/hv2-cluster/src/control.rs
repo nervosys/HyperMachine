@@ -159,6 +159,7 @@ fn api_error(status: StatusCode, message: impl std::fmt::Display) -> Response {
 /// The routes.
 pub fn router(control: Arc<ControlPlane>) -> Router {
     let e2b = Router::new()
+        .route("/sandbox-names/{name}", get(resolve_sandbox_name))
         .route("/sandboxes", post(create_v1).get(list_v1))
         .route("/v2/sandboxes", post(create_v2).get(list_v2))
         .route("/sandboxes/{id}", get(detail).delete(forward))
@@ -288,6 +289,66 @@ async fn unbind_domain(
             "domain binding does not exist for this sandbox",
         ),
         Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+}
+
+async fn resolve_sandbox_name(
+    State(control): State<Arc<ControlPlane>>,
+    Path(name): Path<String>,
+) -> Response {
+    let name = match crate::names::SandboxName::parse(&name) {
+        Ok(name) => name,
+        Err(error) => return api_error(StatusCode::BAD_REQUEST, error),
+    };
+    let reservation = match control.store.name_reservation(&name).await {
+        Ok(Some(reservation)) if reservation.name() == &name => reservation,
+        Ok(Some(_)) => {
+            return api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "name ownership record mismatch",
+            )
+        }
+        Ok(None) => return api_error(StatusCode::NOT_FOUND, "name is not reserved"),
+        Err(_) => return api_error(StatusCode::SERVICE_UNAVAILABLE, "name lookup unavailable"),
+    };
+    let Some(id) = reservation.sandbox_id() else {
+        return api_error(
+            StatusCode::CONFLICT,
+            "name creation outcome requires reconciliation",
+        );
+    };
+    // Legacy metadata is still writable until creation migration is enforced.
+    // Refuse observed ambiguity rather than hiding it behind a reservation.
+    match control.store.sandboxes().await {
+        Ok(records)
+            if records.iter().any(|record| {
+                record.sandbox_id != id
+                    && record
+                        .metadata
+                        .get("hm.name")
+                        .is_some_and(|value| value == name.as_str())
+            }) =>
+        {
+            return api_error(
+                StatusCode::CONFLICT,
+                "name conflicts with legacy sandbox metadata",
+            );
+        }
+        Ok(_) => {}
+        Err(_) => {
+            return api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "legacy name lookup unavailable",
+            )
+        }
+    }
+    match control.store.sandbox(id).await {
+        Ok(Some(_)) => Json(json!({"name": name.as_str(), "sandboxID": id})).into_response(),
+        Ok(None) => api_error(StatusCode::NOT_FOUND, "named sandbox is missing"),
+        Err(_) => api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "named sandbox lookup unavailable",
+        ),
     }
 }
 
