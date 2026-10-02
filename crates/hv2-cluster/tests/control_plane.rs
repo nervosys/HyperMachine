@@ -550,6 +550,29 @@ async fn node_create(
     if token_of(&headers).as_deref() != Some(TOKEN) {
         return StatusCode::UNAUTHORIZED.into_response();
     }
+    let operation = if let Some(header) = headers.get(hv2_cluster::names::NAME_OPERATION_HEADER) {
+        let Some(name) = body["metadata"]["hm.name"].as_str() else {
+            return StatusCode::BAD_REQUEST.into_response();
+        };
+        let operation = header.to_str().ok().and_then(|token| {
+            hv2_cluster::names::SandboxName::parse(name)
+                .ok()
+                .and_then(|name| {
+                    hv2_cluster::names::NameReservation::from_operation(name, token).ok()
+                })
+        });
+        let Some(operation) = operation else {
+            return StatusCode::BAD_REQUEST.into_response();
+        };
+        if !node.agent.name_operation_pending(&operation).await.unwrap() {
+            return StatusCode::CONFLICT.into_response();
+        }
+        Some(operation)
+    } else if body["metadata"].get("hm.name").is_some() {
+        return StatusCode::CONFLICT.into_response();
+    } else {
+        None
+    };
     if node.running.lock().len() >= node.capacity {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -579,27 +602,35 @@ async fn node_create(
         running.insert(id.clone(), descriptor.clone());
         running.len() as u32
     };
-    node.agent
-        .created(
-            &SandboxRecord {
-                sandbox_id: id.clone(),
-                node_id: node.agent.id().to_string(),
-                template_id: "base".into(),
-                started_at_ms: now_ms(),
-                end_at_ms: now_ms() + 300_000,
-                cpu_count: 1,
-                memory_mb: 1024,
-                metadata,
-                envd_version: "0.6.3".into(),
-                descriptor: descriptor.clone(),
-                paused: false,
-                portable: false,
-                volume_mounts: Vec::new(),
-            },
-            running,
-        )
-        .await
-        .unwrap();
+    let record = SandboxRecord {
+        sandbox_id: id.clone(),
+        node_id: node.agent.id().to_string(),
+        template_id: "base".into(),
+        started_at_ms: now_ms(),
+        end_at_ms: now_ms() + 300_000,
+        cpu_count: 1,
+        memory_mb: 1024,
+        metadata,
+        envd_version: "0.6.3".into(),
+        descriptor: descriptor.clone(),
+        paused: false,
+        portable: false,
+        volume_mounts: Vec::new(),
+    };
+    if let Some(operation) = &operation {
+        if node
+            .agent
+            .created_named(&record, running, operation)
+            .await
+            .unwrap()
+            .is_none()
+        {
+            node.running.lock().remove(&id);
+            return StatusCode::CONFLICT.into_response();
+        }
+    } else {
+        node.agent.created(&record, running).await.unwrap();
+    }
     (StatusCode::CREATED, Json(descriptor)).into_response()
 }
 
@@ -1682,7 +1713,20 @@ async fn uncertain_named_creation_keeps_ownership_and_never_tries_another_node()
         assert_eq!(actual, status);
         let name = SandboxName::parse(mode).unwrap();
         let reservation = store.name_reservation(&name).await.unwrap().unwrap();
-        assert!(reservation.sandbox_id().is_none());
+        let id = reservation.sandbox_id().unwrap();
+        let record = store.sandbox(id).await.unwrap().unwrap();
+        assert_eq!(record.node_id, "a");
+        assert_eq!(record.metadata["hm.name"], mode);
+        let lookup = client()
+            .get(format!("{base}/sandbox-names/{mode}"))
+            .header("x-api-key", KEY)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(lookup.status(), 200);
+        let lookup = lookup.json::<Value>().await.unwrap();
+        assert_eq!(lookup, json!({"name":mode,"sandboxID":id}));
+        assert!(!lookup.to_string().contains(reservation.operation_token()));
         assert_eq!(create(&base, body).await.0, 409);
         assert!(b.running.lock().is_empty());
     }
@@ -1704,7 +1748,7 @@ async fn uncertain_named_creation_keeps_ownership_and_never_tries_another_node()
         .unwrap()
         .unwrap()
         .sandbox_id()
-        .is_none());
+        .is_some());
     task.abort();
     let _ = task.await;
     // An unreachable node also leaves an uncertain reservation, without fallback.
@@ -1726,4 +1770,30 @@ async fn uncertain_named_creation_keeps_ownership_and_never_tries_another_node()
         .sandbox_id()
         .is_none());
     assert!(b.running.lock().is_empty());
+}
+
+#[tokio::test]
+async fn named_creation_never_forwards_client_operation_context() {
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let (node, heartbeat) = fake_node(store.clone(), "trusted", 4, Duration::from_secs(30)).await;
+    let base = control_plane(store.clone(), Some(KEY)).await;
+    let response = client()
+        .post(format!("{base}/v2/sandboxes"))
+        .header("x-api-key", KEY)
+        .header(
+            hv2_cluster::names::NAME_OPERATION_HEADER,
+            "client-forged-invalid-token",
+        )
+        .json(&json!({"templateID":"base","metadata":{"hm.name":"trusted-operation"}}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 201);
+    assert_eq!(node.running.lock().len(), 1);
+    let name = hv2_cluster::names::SandboxName::parse("trusted-operation").unwrap();
+    let owner = store.name_reservation(&name).await.unwrap().unwrap();
+    assert!(owner.sandbox_id().is_some());
+    assert_ne!(owner.operation_token(), "client-forged-invalid-token");
+    heartbeat.abort();
+    let _ = heartbeat.await;
 }

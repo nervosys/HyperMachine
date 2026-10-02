@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::model::{now_ms, ClusterEvent, NodeInfo, SandboxRecord};
+use crate::names::NameReservation;
 use crate::store::ClusterStore;
 
 /// How a node joins a cluster.
@@ -175,6 +176,49 @@ impl NodeAgent {
         running: u32,
     ) -> crate::store::Result<ClusterEvent> {
         self.store.put_sandbox(record).await?;
+        self.publish_created(record, running).await
+    }
+
+    /// Check trusted pending ownership before allocating a named VM.
+    ///
+    /// # Errors
+    /// The shared store could not be read.
+    pub async fn name_operation_pending(
+        &self,
+        operation: &NameReservation,
+    ) -> crate::store::Result<bool> {
+        Ok(self
+            .store
+            .name_reservation(operation.name())
+            .await?
+            .is_some_and(|existing| existing.matches_pending_operation(operation)))
+    }
+
+    /// Atomically publish the VM record and bind its creation name before
+    /// announcing it. None is a definitive ownership/record refusal; a store
+    /// error may have committed and must not authorize another creation.
+    ///
+    /// # Errors
+    /// Storage, load announcement or event publication failed.
+    pub async fn created_named(
+        &self,
+        record: &SandboxRecord,
+        running: u32,
+        operation: &NameReservation,
+    ) -> crate::store::Result<Option<ClusterEvent>> {
+        if record.node_id != self.config.id
+            || !self.store.register_named_sandbox(record, operation).await?
+        {
+            return Ok(None);
+        }
+        self.publish_created(record, running).await.map(Some)
+    }
+
+    async fn publish_created(
+        &self,
+        record: &SandboxRecord,
+        running: u32,
+    ) -> crate::store::Result<ClusterEvent> {
         self.announce(running).await?;
         let event = ClusterEvent::new("sandbox-created", &self.config.id, Some(&record.sandbox_id))
             .with_record(record);
@@ -346,5 +390,60 @@ mod tests {
             .map(|e| e.kind)
             .collect();
         assert_eq!(kinds, ["sandbox-expired", "sandbox-created"]);
+    }
+    #[tokio::test]
+    async fn named_completion_binds_before_announcement_and_refuses_unowned_records() {
+        let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+        let node = agent(store.clone());
+        let name = crate::names::SandboxName::parse("node-completed").unwrap();
+        let owner = crate::names::NameReservation::pending(name.clone());
+        let wrong = crate::names::NameReservation::pending(name.clone());
+        let mut record = sandbox("node-completed-vm", "a");
+        record
+            .metadata
+            .insert("hm.name".into(), name.as_str().into());
+        assert!(!node.name_operation_pending(&owner).await.unwrap());
+        assert!(store.reserve_name(&owner).await.unwrap());
+        assert!(node.name_operation_pending(&owner).await.unwrap());
+        assert!(!node.name_operation_pending(&wrong).await.unwrap());
+        assert!(node
+            .created_named(&record, 1, &wrong)
+            .await
+            .unwrap()
+            .is_none());
+        let mut other = record.clone();
+        other.node_id = "other-node".into();
+        assert!(node
+            .created_named(&other, 1, &owner)
+            .await
+            .unwrap()
+            .is_none());
+        assert!(store.sandbox(&record.sandbox_id).await.unwrap().is_none());
+        assert!(store.events(10).await.unwrap().is_empty());
+        let event = node
+            .created_named(&record, 1, &owner)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(event.kind, "sandbox-created");
+        assert!(!serde_json::to_string(&event)
+            .unwrap()
+            .contains(owner.operation_token()));
+        assert_eq!(
+            store.sandbox(&record.sandbox_id).await.unwrap().as_ref(),
+            Some(&record)
+        );
+        assert_eq!(
+            store
+                .name_reservation(&name)
+                .await
+                .unwrap()
+                .unwrap()
+                .sandbox_id(),
+            Some(record.sandbox_id.as_str())
+        );
+        assert!(!node.name_operation_pending(&owner).await.unwrap());
+        assert_eq!(store.node("a").await.unwrap().unwrap().running, 1);
+        assert_eq!(store.events(10).await.unwrap().len(), 1);
     }
 }

@@ -34,7 +34,7 @@ use serde_json::{json, Value};
 use crate::domains::{DomainBinding, DomainName};
 use crate::metrics::{self, Counter, Exposition, Histogram};
 use crate::model::{metadata_matches, parse_metadata_query, ClusterEvent, NodeInfo, SandboxRecord};
-use crate::names::{NameReservation, SandboxName};
+use crate::names::{NameReservation, SandboxName, NAME_OPERATION_HEADER};
 use crate::scheduler::candidates;
 use crate::store::{ClusterStore, DomainClaim};
 
@@ -705,6 +705,12 @@ async fn create_inner(control: &ControlPlane, path: &str, body: Bytes) -> Respon
             .timeout(control.config.create_timeout)
             .header("content-type", "application/json")
             .body(body.clone());
+        if let Some(operation) = &reservation {
+            let mut value = HeaderValue::from_str(operation.operation_token())
+                .expect("validated operation UUID");
+            value.set_sensitive(true);
+            request = request.header(NAME_OPERATION_HEADER, value);
+        }
         if let Some(token) = &control.config.cluster_token {
             request = request.header(CLUSTER_TOKEN_HEADER, token);
         }
