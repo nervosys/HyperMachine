@@ -164,6 +164,19 @@ the same clock/RNG maintenance; direct Firecracker controls omit that
 operation, so their startup contract is different and a fully matched service
 comparison remains required. Raw earlier evidence remains preserved.
 
+A [matched guest clock/RNG comparison](benchmarks/2026-10-02/prepared-contract/README.md)
+now sends the Firecracker control a `Restored` notice with current host time
+and 64 fresh entropy bytes before the state command, matching HyperMachine's
+built-in creation maintenance. All 1124 restores pass at smoke/C8/C100 with
+cleanup verified. C8 median readiness is nearly equal (122.771/121.982 ms);
+HyperMachine P99 is lower (551.961/952.504 ms) but total PSS is higher. At
+C100 HyperMachine P50/P99 are 1687.128/5739.314 ms versus
+1133.562/1423.038 ms, and total PSS is 336.362 versus 285.053 MiB.
+The maintenance contract is now matched, while HTTP-daemon/fresh-VMM paths,
+kernel arguments and hypervisor implementations still differ. Earlier direct
+controls and raw evidence remain preserved; no managed-platform or universal
+performance claim follows.
+
 A subsequent [owned heap-reclamation diagnostic](benchmarks/2026-10-02/heap-reclaim/README.md)
 passed all 432 guest attempts and all post-probe guest checks. At C100, two pairs
 observed approximately 100–112 MiB reclaimable while guests remained running,

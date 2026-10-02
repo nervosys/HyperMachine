@@ -45,8 +45,13 @@ def valid_exec(value,expected,firecracker=False):
     if firecracker:require(value.get('kind')=='exited','guest response kind differs')
 
 
-def guest_exec(vsock,process,command):
-    with fc.guest(vsock,time.perf_counter()+15,process) as stream:
+def guest_exec(vsock,process,command,restored_notice=None):
+    def readiness():
+        entropy=os.urandom(64);now=time.time_ns()
+        restored_notice.update(entropy_bytes=64,entropy_sha256=hashlib.sha256(entropy).hexdigest(),unix_time_ns=now,attempts=restored_notice.get('attempts',0)+1)
+        return ({'kind':'restored','unix_time_ns':now,'entropy':list(entropy)},'acknowledged')
+    with fc.guest(vsock,time.perf_counter()+15,process,readiness=readiness if restored_notice is not None else None) as stream:
+        if restored_notice is not None:restored_notice['acknowledged']=True
         value=fc.rpc(stream,2,{'kind':'exec','program':'/bin/sh','args':['-c',command],'timeout_ms':10000})
     return value
 
@@ -71,6 +76,7 @@ def batch(args,engine,pair,url,node,seed,snapshot,directory):
                 created=engines.request(url,'POST','/v2/sandboxes',{'templateID':'warm-benchmark','timeout':300,'allowInternetAccess':False})
                 sandbox=created.get('sandboxID');require(isinstance(sandbox,str) and sandbox,'create returned no known sandbox ID')
                 with lock:handles[index]=(sandbox,None,None)
+                row['restored_notice']={'acknowledged_via_create':True,'entropy_bytes':64}
                 result=engines.request(url,'POST',f'/sandboxes/{sandbox}/exec',{'cmd':verify_command(seed,marker),'timeout_secs':10})
                 valid_exec(result,marker)
                 row['ready_ms']=(time.perf_counter()-started)*1000
@@ -84,10 +90,11 @@ def batch(args,engine,pair,url,node,seed,snapshot,directory):
                     args.owned_firecracker.append(process)
                 fc.wait_api(api,started+30,process)
                 fapi(api,'PUT','/snapshot/load',{'snapshot_path':str(snapshot/'vm.state'),'mem_backend':{'backend_type':'File','backend_path':str(snapshot/'memory.raw')},'resume_vm':True,'vsock_override':{'uds_path':str(vsock)}})
-                result=guest_exec(vsock,process,verify_command(seed,marker));valid_exec(result,marker,True)
+                row['restored_notice']={}
+                result=guest_exec(vsock,process,verify_command(seed,marker),row['restored_notice']);valid_exec(result,marker,True)
                 row['ready_ms']=(time.perf_counter()-started)*1000
                 config=fapi(api,'GET','/machine-config');require(config['vcpu_count']==1 and config['mem_size_mib']==1024,'guest resources differ')
-            row.update(success=True,prepared_file=True,prepared_process_environment=True,independent_child_write=True)
+            row.update(success=True,prepared_file=True,prepared_process_environment=True,independent_child_write=True,clock_rng_resynchronised=True)
         except Exception as error:row['error']=str(error)
         return row
     with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
@@ -146,6 +153,7 @@ def main():
         'limitations':['Shared WSL nested KVM and uncontrolled host background load','Persistent HyperMachine HTTP daemon versus fresh Firecracker process/Unix API','Prepared resident/cache-warm sources; no dropped-cache or storage durability comparison','PSS excludes kernel memory and unmapped page cache; not fleet density','Failed attempts retained; conditional latency and memory summaries','Engine-generated device kernel arguments differ']}
     args.output.parent.mkdir(parents=True,exist_ok=True)
     report['diagnostic_only']=bool(args.mapping_diagnostics)
+    report['guest_restore_contract']={'clock_rng_resynchronised':True,'entropy_bytes':64,'hypermachine':'acknowledged by successful create, source-bound after_restore','firecracker':'Restored RPC acknowledgement before exec; replaces readiness ping'}
     def save():args.output.write_text(json.dumps(report,indent=2)+'\n')
     with tempfile.TemporaryDirectory(prefix='hm-prepared-',dir='/var/tmp') as scratch:
         scratch=Path(scratch);node=None;parent=None;log=None;seed=uuid.uuid4().hex;url=None
