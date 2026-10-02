@@ -1,0 +1,180 @@
+diff --git a/crates/hv2-sandboxd/src/main.rs b/crates/hv2-sandboxd/src/main.rs
+index 03f2f84..ca4b552 100644
+--- a/crates/hv2-sandboxd/src/main.rs
++++ b/crates/hv2-sandboxd/src/main.rs
+@@ -460,6 +460,9 @@ struct LiveSandbox {
+     /// What listing, detail and the cluster store say about it -- including
+     /// when it ends, which the expiry task enforces.
+     record: SandboxRecord,
++    /// Original trusted owner, retained only while registration is uncertain.
++    /// This is local state and is never serialized into records or guests.
++    pending_registration: Option<NameReservation>,
+ }
+ 
+ struct LiveNetwork {
+@@ -1515,6 +1518,7 @@ async fn register(
+                 descriptor,
+                 network: running.network,
+                 record: record.clone(),
++                pending_registration: context.name_operation.cloned(),
+                 lifecycle,
+                 network_request,
+                 activity: Activity::new(),
+@@ -1532,7 +1536,12 @@ async fn register(
+             ));
+         };
+         match node.created_named(&record, count, operation).await {
+-            Ok(Some(event)) => state.events.deliver(&event),
++            Ok(Some(event)) => {
++                if let Some(live) = state.sandboxes.lock().get_mut(&sandbox_id) {
++                    live.pending_registration = None;
++                }
++                state.events.deliver(&event);
++            }
+             Ok(None) => {
+                 // Registration was refused before any shared writes. Remove
+                 // only this local guest; never delete another owner's record
+@@ -1574,6 +1583,96 @@ async fn register(
+     Ok(())
+ }
+ 
++fn authorize_registration_reconciliation(
++    headers: &HeaderMap,
++    clustered: bool,
++    token: Option<&str>,
++) -> Result<(), (StatusCode, &'static str)> {
++    use subtle::ConstantTimeEq;
++    if !clustered {
++        return Err((
++            StatusCode::SERVICE_UNAVAILABLE,
++            "registration reconciliation needs a cluster node",
++        ));
++    }
++    let token = token.ok_or((
++        StatusCode::SERVICE_UNAVAILABLE,
++        "registration reconciliation needs cluster authentication",
++    ))?;
++    let sent = headers
++        .get(CLUSTER_TOKEN_HEADER)
++        .map(axum::http::HeaderValue::as_bytes)
++        .unwrap_or_default();
++    if !bool::from(sent.ct_eq(token.as_bytes())) {
++        return Err((
++            StatusCode::UNAUTHORIZED,
++            "registration reconciliation requires cluster authorization",
++        ));
++    }
++    Ok(())
++}
++
++/// Recover the same preserved guest with locally retained trusted ownership.
++/// Per-request authorization is checked here and by the node route middleware.
++async fn reconcile_registration(
++    State(state): State<Arc<AppState>>,
++    Path(sandbox_id): Path<String>,
++    headers: HeaderMap,
++) -> Response {
++    if let Err((status, message)) = authorize_registration_reconciliation(
++        &headers,
++        state.node.is_some(),
++        state.opts.cluster_token.as_deref(),
++    ) {
++        return api_error(status, message);
++    }
++    let Some(node) = &state.node else {
++        return api_error(
++            StatusCode::SERVICE_UNAVAILABLE,
++            "registration reconciliation needs a cluster node",
++        );
++    };
++    let lock = transition_lock(&state, &sandbox_id);
++    let _held = lock.lock().await;
++    let (operation, record, descriptor) = {
++        let sandboxes = state.sandboxes.lock();
++        let Some(live) = sandboxes.get(&sandbox_id) else {
++            return api_error(StatusCode::NOT_FOUND, "no local running sandbox");
++        };
++        let Some(operation) = &live.pending_registration else {
++            return api_error(StatusCode::CONFLICT, "no uncertain local registration");
++        };
++        (
++            operation.clone(),
++            live.record.clone(),
++            live.descriptor.clone(),
++        )
++    };
++    match node
++        .created_named(&record, state.running(), &operation)
++        .await
++    {
++        Ok(Some(event)) => {
++            if let Some(live) = state.sandboxes.lock().get_mut(&sandbox_id) {
++                live.pending_registration = None;
++            }
++            state.events.deliver(&event);
++            Json(descriptor).into_response()
++        }
++        Ok(None) => api_error(
++            StatusCode::CONFLICT,
++            "registration reconciliation ownership refused",
++        ),
++        Err(error) => {
++            tracing::warn!(%sandbox_id,%error,"registration reconciliation remains uncertain");
++            api_error(
++                StatusCode::SERVICE_UNAVAILABLE,
++                "registration outcome still requires reconciliation",
++            )
++        }
++    }
++}
++
+ /// Record a sandbox's lifecycle event -- in the cluster store, with its
+ /// record, or in this node's own when it has no cluster -- and send it to
+ /// the webhooks that want it.
+@@ -4383,6 +4482,7 @@ async fn main() -> std::process::ExitCode {
+         .route("/sandboxes/{sandboxID}/connect", post(connect_sandbox))
+         .route("/v2/sandboxes/{sandboxID}/connect", post(connect_sandbox))
+         .route("/sandboxes/{sandboxID}/timeout", post(set_timeout))
++        .route("/sandboxes/{sandboxID}/registration/reconcile", post(reconcile_registration))
+         .route("/templates", get(list_templates).post(build_template_route))
+         .route("/sandboxes/{sandboxID}/pause", post(pause_route))
+         .route("/sandboxes/{sandboxID}/resume", post(resume_route))
+@@ -4588,6 +4688,38 @@ async fn main() -> std::process::ExitCode {
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++
++    #[test]
++    fn registration_reconciliation_requires_each_requests_cluster_credential() {
++        let mut headers = HeaderMap::new();
++        assert_eq!(
++            authorize_registration_reconciliation(&headers, false, Some("owned-token"))
++                .unwrap_err()
++                .0,
++            StatusCode::SERVICE_UNAVAILABLE
++        );
++        assert_eq!(
++            authorize_registration_reconciliation(&headers, true, None)
++                .unwrap_err()
++                .0,
++            StatusCode::SERVICE_UNAVAILABLE
++        );
++        assert_eq!(
++            authorize_registration_reconciliation(&headers, true, Some("owned-token"))
++                .unwrap_err()
++                .0,
++            StatusCode::UNAUTHORIZED
++        );
++        headers.insert(CLUSTER_TOKEN_HEADER, "wrong-token".parse().unwrap());
++        assert_eq!(
++            authorize_registration_reconciliation(&headers, true, Some("owned-token"))
++                .unwrap_err()
++                .0,
++            StatusCode::UNAUTHORIZED
++        );
++        headers.insert(CLUSTER_TOKEN_HEADER, "owned-token".parse().unwrap());
++        assert!(authorize_registration_reconciliation(&headers, true, Some("owned-token")).is_ok());
++    }
+     use hv2_net::network_policy::AddressVerdict;
+ 
+     fn allowing_everything() -> SandboxNetworkConfig {
