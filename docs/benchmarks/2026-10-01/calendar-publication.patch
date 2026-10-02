@@ -1,0 +1,59 @@
+diff --git a/crates/hv2-jobs/src/schedule.rs b/crates/hv2-jobs/src/schedule.rs
+index 03bc289..92c2849 100644
+--- a/crates/hv2-jobs/src/schedule.rs
++++ b/crates/hv2-jobs/src/schedule.rs
+@@ -408,7 +408,7 @@ impl Store {
+         let selected = schedule.due_occurrences(expected, now_ms, limit)?;
+         let mut records = Vec::with_capacity(selected.len());
+         for scheduled_ms in selected {
+-            records.push(self.record_interval_occurrence(id, scheduled_ms)?);
++            records.push(self.record_selected_occurrence(id, scheduled_ms, &schedule)?);
+         }
+         if let Some(last) = records.last() {
+             self.advance_interval_progress(id, expected, last.scheduled_ms)?;
+@@ -535,12 +535,20 @@ impl Store {
+                 "time is not an occurrence of this schedule".into(),
+             ));
+         }
+-        let mut job = schedule.job;
++        self.record_selected_occurrence(id, scheduled_ms, &schedule)
++    }
++
++    // Called only with timestamps selected or individually validated against
++    // the loaded immutable schedule. Existing records still require equality.
++    fn record_selected_occurrence(
++        &self, id: &str, scheduled_ms: u64, schedule: &IntervalSchedule,
++    ) -> Result<Occurrence> {
++        let mut job = schedule.job.clone();
+         job.not_before_ms = Some(scheduled_ms);
+         let occurrence = Occurrence {
+             schedule_id: id.into(),
+             scheduled_ms,
+-            vm: schedule.vm,
++            vm: schedule.vm.clone(),
+             job,
+         };
+         let key = format!("{id}--{scheduled_ms}");
+@@ -916,6 +924,22 @@ mod tests {
+         );
+     }
+ 
++    #[test]
++    fn batch_refuses_disagreeing_orphan_without_committing_progress() {
++        let dir = tempfile::tempdir().unwrap();
++        let store = Store::open(dir.path()).unwrap();
++        store.create_interval_schedule("corrupt-batch", &schedule()).unwrap();
++        let mut record = store.record_interval_occurrence("corrupt-batch", 100).unwrap();
++        record.job.command = vec!["different".into()];
++        let path = dir.path().join("occurrences/corrupt-batch--100");
++        let bytes = serde_json::to_vec(&record).unwrap();
++        std::fs::write(&path, &bytes).unwrap();
++        assert!(matches!(store.materialize_interval("corrupt-batch", 155, 3), Err(JobError::Corrupt(_))));
++        assert_eq!(store.interval_progress("corrupt-batch").unwrap(), None);
++        assert_eq!(std::fs::read(path).unwrap(), bytes);
++        assert!(store.record_interval_occurrence("corrupt-batch", 101).is_err());
++    }
++
+     #[test]
+     fn materialization_reconciles_interrupted_publication_and_continues_batches() {
+         let dir = tempfile::tempdir().unwrap();
