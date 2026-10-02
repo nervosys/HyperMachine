@@ -66,3 +66,5 @@ docs/benchmarks/2026-10-01/calendar-batch-kvm-coordinator.py -text
 
 docs/benchmarks/2026-10-01/calendar-publication-source.rs -text
 docs/benchmarks/2026-10-01/calendar-publication.patch -text whitespace=cr-at-eol,-blank-at-eol
+
+docs/benchmarks/2026-10-01/calendar-publication-kvm-coordinator.py -text
