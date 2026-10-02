@@ -1,0 +1,76 @@
+{
+  "diagnostic_only": true,
+  "performance_comparison": false,
+  "cohort_sha256": "aa0fad62acf66e420e387177d3ef15d95abb35bc7248840fda513316dc2eed8b",
+  "cohort_success": true,
+  "hm_attempted": 200,
+  "hm_passed_and_cleaned": 200,
+  "matched_successful_ids": 200,
+  "unmatched_passed_ids": [],
+  "other_first_exit_ids": [],
+  "first_exit_histogram": [
+    {
+      "kind": "io_out",
+      "io_port": 3320,
+      "n": 200
+    }
+  ],
+  "successful_dispatch_ms": {
+    "dispatch_queue_ms": {
+      "n": 200,
+      "mean": 3.979459385,
+      "median": 2.4583335,
+      "maximum": 48.264095
+    },
+    "wrapper_queue_ms": {
+      "n": 200,
+      "mean": 0.00781998,
+      "median": 0.003912,
+      "maximum": 0.538301
+    },
+    "thread_start_ms": {
+      "n": 200,
+      "mean": 7.575407715,
+      "median": 5.4653030000000005,
+      "maximum": 197.432367
+    },
+    "owner_setup_ms": {
+      "n": 200,
+      "mean": 1.609350485,
+      "median": 0.092333,
+      "maximum": 43.714138999999996
+    },
+    "first_backend_ms": {
+      "n": 200,
+      "mean": 3428.56687678,
+      "median": 3098.633669,
+      "maximum": 4986.784092
+    }
+  },
+  "successful_readiness_ms": {
+    "blocking_queue_ms": {
+      "n": 200,
+      "mean": 7.24521277,
+      "median": 5.116195,
+      "maximum": 49.820403999999996
+    },
+    "connect_ms": {
+      "n": 200,
+      "mean": 8103.318836935,
+      "median": 7933.0557235,
+      "maximum": 9655.917025
+    },
+    "ping_ms": {
+      "n": 200,
+      "mean": 12.77662632,
+      "median": 5.385667,
+      "maximum": 81.84320000000001
+    }
+  },
+  "limitations": [
+    "Summaries are conditional on successful, cleaned-up matched guests; raw failures remain in the cohort",
+    "Backend duration includes host scheduling and guest execution; no CPU-work attribution",
+    "First exit does not identify where the failed earlier cohort stalled",
+    "Tracing affects timing; excluded from competitor latency rankings"
+  ]
+}

@@ -100,3 +100,4 @@ docs/benchmarks/2026-10-02/access-audit/** -text whitespace=cr-at-eol,-blank-at-
 docs/benchmarks/2026-10-02/audit-batching/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
 docs/benchmarks/2026-10-02/observer-role/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
 docs/benchmarks/2026-10-02/role-reload/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/first-exit/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
