@@ -1,0 +1,37 @@
+{
+  "inputs": {
+    "hypermachine": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "cohorts": [
+    {
+      "report": "c8-report.json",
+      "analysis": "c8-analysis.json"
+    },
+    {
+      "report": "c8-repeat-report.json",
+      "analysis": "c8-repeat-analysis.json"
+    }
+  ],
+  "sha256": {
+    "README.md": "d6accb059f0d5ad9f81bbf4d7d569650154224c7aed618a08fa6031fd4a1c673",
+    "analyze-prepared-engines.py": "6391a62d630da7a61ef7ea55f801e396b3e385bba27a680b9bf80373a9fd4590",
+    "analyze-prepared-memory.py": "8f9485e8683ebaca9130b2d26797455809ce29cdc35390ce51712620372e7eeb",
+    "bench-firecracker-local.py": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6",
+    "bench-local-engines.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "bench-prepared-engines.py": "5a3cb8ec91ac527f55c681051ca68e3196e7926b84e8c1a625ce4ce73866130b",
+    "build-context.json": "1f58ce32de276164c11736c6b2c661b590795766d2a525bcb51d72406b1f6e9d",
+    "c8-analysis.json": "4f88eb4a5426e5e21eb56c80b89bd2e0343d54c6fe818c89f2c59d3968c5fdf4",
+    "c8-repeat-analysis.json": "3b0fd04032b5fe5831425cdbe484f4ed156e978b4c75021b2f3651f8d86615b0",
+    "c8-repeat-report.json": "9bf2aa363ed718749d8bf3fefe8196add146948af5e1c10faaea814198a22ba1",
+    "c8-report.json": "9494b649e35fc94f51a99f3bbe36ace7633659b818ace4efe965533ba07a193f",
+    "check-prepared-memory.py": "1fbd303baca26593e8cff77184cb272621b91a11449bfbd3ac85e127e4ef27de",
+    "compiled-main.rs": "5b8d92902845f748bcfd497cdaa349a7509b4ed27fd6dd867935c8f27e59fb52",
+    "negative-linux.log": "c0174980596449b39c0f703a09cd559e3cb22cf0aaa522fec2926357bfb333f3",
+    "negative-windows.log": "994ec4058c1e171e99fa8e716b7792d465f39a54372cb04cafccec8fc34fafef",
+    "prepared-memory-mappings.py": "7470c429a974f6f876349dc1a473b654f7a002ceae99d49efc12a4aad3f95ab3",
+    "verify-prepared-memory.py": "5f3a623e931f9c5359d874d9365748af6ddf20d0a6d55a8122d10464ddacfcc1"
+  }
+}
