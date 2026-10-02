@@ -1843,7 +1843,7 @@ impl hv2_api::sandbox_proxy::SandboxRoutes for ClusterRoutes {
     }
     fn authorize_request(
         &self,
-        _sandbox: &str,
+        sandbox: &str,
         port: u16,
         headers: &mut HeaderMap,
     ) -> Result<(), hv2_api::sandbox_proxy::ProxyAccessDenied> {
@@ -1860,7 +1860,7 @@ impl hv2_api::sandbox_proxy::SandboxRoutes for ClusterRoutes {
             challenge: Some("Basic realm=\"HyperMachine sandbox\", charset=\"UTF-8\""),
         };
         let subject = policy
-            .identity(headers, chrono::Utc::now().timestamp())
+            .identity(headers, sandbox, chrono::Utc::now().timestamp())
             .ok_or_else(denied)?;
         headers.remove(axum::http::header::AUTHORIZATION);
         headers.insert(

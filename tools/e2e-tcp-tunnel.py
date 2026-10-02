@@ -117,6 +117,7 @@ def terminal_check(argv, environment, register):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--private-web", action="store_true", help="verify dedicated browser login and trusted guest identity through the TLS/mTLS proxy")
+    parser.add_argument("--private-web-scopes", action="store_true", help="verify sandbox-ID browser sharing scopes, fork exclusion and atomic revocation")
     for name in ["daemon", "control-plane", "cli", "kernel", "initrd", "output"]:
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--ssh-fixture", type=Path,
@@ -139,6 +140,8 @@ def main():
     parser.add_argument("--reserved-create", action="store_true", help="verify name reservation during VM creation, duplicate refusal and reuse")
     parser.add_argument("--reserved-alias", action="store_true", help="assign a reserved alias with the CLI and verify named SSH without metadata")
     args = parser.parse_args()
+    if args.private_web_scopes and not args.private_web:
+        parser.error("--private-web-scopes requires --private-web")
     if args.node_response_loss and not args.node_name_operation:
         parser.error("--node-response-loss requires --node-name-operation")
     if args.node_publication_fault and not args.node_name_operation:
@@ -348,8 +351,10 @@ def main():
             if args.audit_resources:
                 control_environment["HV2_ACCESS_AUDIT_RESOURCES"] = "true"
             web_policy = directory / "web-access.json"
-            def web_policy_json(secret, expiry):
-                return json.dumps([{"subject":"fixture-user@example.test", "sha256":hashlib.sha256(secret.encode()).hexdigest(), "expires_at":expiry}])
+            def web_policy_json(secret, expiry, sandboxes=None):
+                users = [{"subject":"fixture-user@example.test", "sha256":hashlib.sha256(secret.encode()).hexdigest(), "expires_at":expiry}]
+                if sandboxes is not None: users[0]["sandboxes"] = sandboxes
+                return json.dumps(users)
             control_args = []
             if args.private_web:
                 web_policy.write_text(web_policy_json(web_secret, int(time.time())+600))
@@ -402,9 +407,9 @@ rm -f "$file"
 """
                 encoded = base64.b64encode(handler.encode()).decode()
                 command(id, f"printf %s {shlex.quote(encoded)} | busybox base64 -d > /tmp/hm-private-web-handler; chmod 700 /tmp/hm-private-web-handler; (while :; do busybox nc -l -p {web_port} -e /tmp/hm-private-web-handler; done) >/tmp/hm-private-web-server.log 2>&1 &")
-                def web(secret=None, expected=200, alias=None):
+                def web(secret=None, expected=200, alias=None, sandbox=None):
                     connection = http.client.HTTPSConnection("127.0.0.1", api_proxy, context=context, timeout=10)
-                    headers = {"host":alias or f"{web_port}-{id}.sandbox.test", "x-hypermachine-user":"spoofed-user"}
+                    headers = {"host":alias or f"{web_port}-{sandbox or id}.sandbox.test", "x-hypermachine-user":"spoofed-user"}
                     if secret is not None:
                         headers["authorization"] = "Basic " + base64.b64encode(("fixture-user@example.test:"+secret).encode()).decode()
                     try:
@@ -440,6 +445,49 @@ rm -f "$file"
                     api("POST",f"/sandboxes/{id}/resume",{"timeout":300},expected=201)
                     return web(web_secret)
                 case("private-web-unauthorized-request-does-not-resume",no_unauthorized_wake)
+                if args.private_web_scopes:
+                    def scoped_sharing():
+                        forks = api("POST",f"/sandboxes/{id}/fork",{"count":1,"timeout":300},expected=201)
+                        child = forks[0]["sandbox"]["sandboxID"]; guests.add(child)
+                        child_alias = "scope-child.example.test"
+                        api("PUT",f"/sandboxes/{child}/domains/{child_alias}",{"port":web_port})
+                        web(web_secret,sandbox=child)
+                        def replace_scope(scope, probe, status):
+                            web_policy.write_text(web_policy_json(web_secret,int(time.time())+600,scope))
+                            control_process.send_signal(signal.SIGHUP)
+                            deadline=time.monotonic()+5
+                            while True:
+                                try: web(web_secret,expected=status,sandbox=probe); return
+                                except RuntimeError:
+                                    if time.monotonic()>=deadline: raise
+                                    time.sleep(.05)
+                        replace_scope([id],child,401)
+                        web(web_secret); web(web_secret,expected=401,alias=child_alias)
+                        replace_scope([child],id,401)
+                        web(web_secret,expected=401,alias=alias); web(web_secret,alias=child_alias)
+                        api("POST",f"/sandboxes/{id}/pause",{},expected=204)
+                        web(web_secret,expected=401)
+                        if api("GET",f"/sandboxes/{id}")["state"] != "paused": raise RuntimeError("out-of-scope request resumed guest")
+                        api("POST",f"/sandboxes/{id}/resume",{"timeout":300},expected=201)
+                        rejected_before=(directory/"control.log").read_text().count("web access reload rejected")
+                        web_policy.write_text(web_policy_json(web_secret,int(time.time())+600,["*",id])); control_process.send_signal(signal.SIGHUP)
+                        deadline=time.monotonic()+5
+                        while (directory/"control.log").read_text().count("web access reload rejected") <= rejected_before:
+                            if time.monotonic()>=deadline: raise RuntimeError("invalid scope reload was not rejected")
+                            time.sleep(.05)
+                        web(web_secret,expected=401); web(web_secret,alias=child_alias)
+                        replace_scope([],child,401); web(web_secret,expected=401)
+                        replace_scope([id],id,200)
+                        api("DELETE",f"/sandboxes/{child}",expected=204); guests.remove(child)
+                        api("PUT",f"/sandboxes/{id}/domains/{child_alias}",{"port":web_port})
+                        web(web_secret,alias=child_alias)
+                        replace_scope([child],id,401)
+                        web(web_secret,expected=401,alias=child_alias)
+                        replace_scope(["*"],id,200)
+                        return {"fork_not_inherited":True,"custom_domains_scoped_by_id":True,"revoked_parent_refused":True,
+                            "out_of_scope_did_not_resume":True,"invalid_scope_preserved_policy":True,"empty_scope_denies_all":True,
+                            "rebound_domain_uses_current_id":True}
+                    case("private-web-sandbox-scope-sharing-and-revocation",scoped_sharing)
                 def rotation():
                     replacement=uuid.uuid4().hex+uuid.uuid4().hex
                     web_policy.write_text(web_policy_json(replacement,int(time.time())+600)); control_process.send_signal(signal.SIGHUP)

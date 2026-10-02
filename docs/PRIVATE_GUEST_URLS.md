@@ -24,7 +24,8 @@ The policy is a nonempty JSON array of at most 256 entries:
   {
     "subject": "operator@example.test",
     "sha256": "REPLACE_WITH_THE_64_HEX_DIGIT_CREDENTIAL_DIGEST",
-    "expires_at": 1791072000
+    "expires_at": 1791072000,
+    "sandboxes": ["sandbox-IDENTIFIER"]
   }
 ]
 ```
@@ -33,7 +34,24 @@ Subjects are opaque operator-provisioned identities, not externally verified
 email addresses. They must be unique and contain 1–128 ASCII letters, digits or
 `._@+-`. Digests and credentials must be unique. Expiry is Unix time in seconds
 and is checked on every new request. Unknown fields and malformed policies are
-refused. Generate a separate random credential with at least 32 random bytes;
+refused. `sandboxes` is a per-user list of at most 256 exact, case-sensitive
+sandbox IDs, each 1�128 ASCII letters, digits, `-` or `_`. It grants application
+URL access to those IDs across ports and custom domains. Duplicate IDs, `null`,
+malformed IDs and a wildcard mixed with IDs are rejected. `[]` grants no sandbox
+access; `["*"]` grants all current and future sandbox IDs. Omitting the field
+retains the original all-sandbox behavior, so use an explicit list when sharing
+a subset. Names, domains and prefixes are not accepted as substitutes for IDs.
+
+Authorization checks the resolved target ID, including explicit routing headers.
+A fork receives a new ID and is not granted by its parent's exact-ID scope.
+Rebinding a custom domain changes the ID evaluated for that request. Scope and
+credential replacement are atomic: omitted grants revoke new requests, while
+already admitted streams keep their original admission. Scope refusal uses the
+same 401 challenge as incorrect credentials and occurs before guest wakeup.
+These grants authorize web application access only; they do not grant API,
+exec, SSH, envd or lifecycle access. Policy administration remains operator-managed.
+
+Generate a separate random credential with at least 32 random bytes;
 this SHA-256 policy is intended for high-entropy credentials, not chosen passwords.
 For example, after creating a protected directory outside the repository:
 
@@ -48,7 +66,8 @@ Path("/secure/operator/web-login.txt").write_text(subject + "\n" + credential + 
 Path("/secure/operator/web-access.json").write_text(json.dumps([{
     "subject": subject,
     "sha256": hashlib.sha256(credential.encode()).hexdigest(),
-    "expires_at": int(time.time()) + 8 * 3600
+    "expires_at": int(time.time()) + 8 * 3600,
+    "sandboxes": ["*"]
 }]) + "\n")
 PY
 ```
@@ -82,16 +101,18 @@ separate from browser login.
 On Unix, replace the policy file atomically and send SIGHUP to the control-plane
 PID to reload. A valid replacement revokes omitted credentials for new requests;
 an invalid or empty replacement preserves the active policy. To deny all new
-logins, retain nonempty entries with expired timestamps. Existing authorized
+logins, retain nonempty entries with `"sandboxes": []` or expired timestamps. Existing authorized
 streams retain their original admission. On Windows, restart with the new policy.
 Browsers may cache Basic credentials; revocation or expiry is the server-side
 way to deny subsequent requests.
 
-This is single-team operator-provisioned access to all guest application URLs
-behind the configured proxy. It does not implement SSO/OIDC user login, individual
-sandbox sharing/ACLs, account self-service, a logout portal, verified email claims
+This is operator-provisioned access to selected or all guest application URLs
+behind the configured proxy. It does not implement SSO/OIDC user login,
+self-service sharing management, account self-service, a logout portal, verified email claims
 or guest/proxy access auditing. Private mode is opt-in; other proxy instances
 must be configured consistently. No authentication-throughput improvement or
 managed competitor performance win is implied.
 
 [Verified functional evidence](benchmarks/2026-10-02/private-web/README.md) includes real KVM/TLS/mTLS checks and Linux/Windows HTTP integration tests.
+
+[Sandbox scope evidence](benchmarks/2026-10-02/private-web-scopes/README.md) verifies exact-ID sharing, fork exclusion, domain rebinding and revocation with real KVM.

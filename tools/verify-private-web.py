@@ -12,7 +12,7 @@ def require(condition, message):
         raise ValueError(message)
 
 
-def verify(root):
+def verify(root, require_scopes=False):
     manifest = json.loads((root / 'manifest.json').read_text())
     for name, expected in manifest['sha256'].items():
         path = (root / name).resolve()
@@ -42,6 +42,13 @@ def verify(root):
     spec.loader.exec_module(module)
     checked = module.verify((root / 'kvm/report-access.jsonl').read_bytes(), bytes.fromhex('42' * 32))
     require(checked['verified_records'] == report['access_audit']['verified_records'] and checked['uncompleted_admissions'] == 0, 'independent audit mismatch')
+    scope_name = 'private-web-sandbox-scope-sharing-and-revocation'
+    if require_scopes or scope_name in indexed:
+        require(scope_name in indexed, 'missing sandbox scope verification')
+        scoped = indexed[scope_name]['result']
+        require(all(scoped.get(k) is True for k in ('fork_not_inherited', 'custom_domains_scoped_by_id',
+            'revoked_parent_refused', 'out_of_scope_did_not_resume', 'invalid_scope_preserved_policy',
+            'empty_scope_denies_all', 'rebound_domain_uses_current_id')), 'sandbox scope evidence incomplete')
     audit = report['access_audit']
     require(audit['credentials_absent'] is True and audit['uncompleted_admissions'] == 0, 'audit verification failed')
     return {'verified_files': len(manifest['sha256']), 'passed_cases': len(cases), 'artifacts_unchanged': True, 'cleanup_verified': True, 'functional_only': True}
@@ -50,8 +57,9 @@ def verify(root):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('archive', type=Path)
+    parser.add_argument("--require-scopes", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(verify(args.archive), indent=2))
+    print(json.dumps(verify(args.archive, args.require_scopes), indent=2))
 
 
 if __name__ == '__main__':
