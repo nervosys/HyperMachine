@@ -129,6 +129,7 @@ def main():
     parser.add_argument("--scheduled-calendar-batch", action="store_true", help="verify bounded calendar catch-up before VM dispatch")
     parser.add_argument("--node-response-loss", action="store_true", help="verify real control-plane response loss and timeout after node completion")
     parser.add_argument("--node-publication-fault", action="store_true", help="verify committed named guest survives a Redis event publication failure")
+    parser.add_argument("--node-registration-fault", action="store_true", help="verify a registration write denial preserves the local guest and pending ownership")
     parser.add_argument("--node-name-operation", action="store_true", help="verify authenticated node completion and recovery without a creation descriptor")
     parser.add_argument("--reserved-create", action="store_true", help="verify name reservation during VM creation, duplicate refusal and reuse")
     parser.add_argument("--reserved-alias", action="store_true", help="assign a reserved alias with the CLI and verify named SSH without metadata")
@@ -137,6 +138,8 @@ def main():
         parser.error("--node-response-loss requires --node-name-operation")
     if args.node_publication_fault and not args.node_name_operation:
         parser.error("--node-publication-fault requires --node-name-operation")
+    if args.node_registration_fault and not args.node_name_operation:
+        parser.error("--node-registration-fault requires --node-name-operation")
     if args.node_name_operation and not args.reserved_create:
         parser.error("--node-name-operation requires --reserved-create")
     if args.reserved_create and (not (args.ssh_by_name and args.ssh_fixture) or args.reserved_alias):
@@ -712,6 +715,61 @@ def main():
                                 "named_SSH_reaches_same_guest":True,"duplicate_creation_refused":True,
                                 "no_extra_VM":True,"publication_permission_restored":True,"deleted_name_released":True}
                     case("node-post-commit-event-publication-fault",publication_fault)
+                if args.node_registration_fault:
+                    def registration_fault():
+                        fault_name="registration-"+uuid.uuid4().hex
+                        body={"templateID":"base","timeout":300,"metadata":{"hm.name":fault_name}}
+                        def direct(method,path,body=None,expected=200):
+                            connection=http.client.HTTPSConnection("127.0.0.1",node_port,context=node_context,timeout=90)
+                            try:
+                                connection.request(method,path,body=None if body is None else json.dumps(body).encode(),
+                                    headers={"content-type":"application/json","x-hv2-cluster-token":token})
+                                response=connection.getresponse()
+                                raw=response.read()
+                                assert response.status==expected,(response.status,raw)
+                                return json.loads(raw) if raw else None
+                            finally:connection.close()
+                        def permission(rule):
+                            result=subprocess.check_output(["redis-cli","-p",str(redis_port),"ACL","SETUSER","default",rule])
+                            assert result.strip()==b"OK",result
+                        local_id=None
+                        try:
+                            permission("-sadd")
+                            error=api("POST","/v2/sandboxes",body,expected=503)
+                            assert error["code"]==503
+                            permission("+sadd")
+                            local=direct("GET","/v2/sandboxes")
+                            matching=[row for row in local if row.get("metadata",{}).get("hm.name")==fault_name]
+                            assert len(matching)==1,local
+                            local_id=matching[0]["sandboxID"]
+                            assert {row["sandboxID"] for row in local}=={id,local_id}
+                            assert {row["sandboxID"] for row in api("GET","/v2/sandboxes")}=={id}
+                            api("GET",f"/sandbox-names/{fault_name}",expected=409)
+                            api("POST","/v2/sandboxes",body,expected=409)
+                            reply=direct("POST",f"/sandboxes/{local_id}/exec",{"cmd":"printf preserved-before-registration","timeout_secs":10})
+                            assert reply["exit_code"]==0 and reply["stdout"]=="preserved-before-registration",reply
+                            record=subprocess.check_output(["redis-cli","-p",str(redis_port),"EXISTS",f"hv2:{namespace}:sandbox:{local_id}"])
+                            indexed=subprocess.check_output(["redis-cli","-p",str(redis_port),"SISMEMBER",f"hv2:{namespace}:sandboxes",local_id])
+                            names=subprocess.check_output(["redis-cli","-p",str(redis_port),"SCARD",f"hv2:{namespace}:reserved-names:{local_id}"])
+                            assert record.strip()==indexed.strip()==names.strip()==b"0"
+                            pending=json.loads(subprocess.check_output(["redis-cli","-p",str(redis_port),"HGET",f"hv2:{namespace}:name-reservations",fault_name]))
+                            assert pending["name"]==fault_name and pending["sandbox_id"] is None
+                            assert {row["sandboxID"] for row in direct("GET","/v2/sandboxes")}=={id,local_id}
+                        finally:
+                            permission("+sadd")
+                            if local_id is None:
+                                matching=[row for row in direct("GET","/v2/sandboxes") if row.get("metadata",{}).get("hm.name")==fault_name]
+                                if matching:local_id=matching[0]["sandboxID"]
+                            if local_id is not None:direct("DELETE",f"/sandboxes/{local_id}",expected=204)
+                        assert {row["sandboxID"] for row in direct("GET","/v2/sandboxes")}=={id}
+                        api("GET",f"/sandbox-names/{fault_name}",expected=409)
+                        api("POST","/v2/sandboxes",body,expected=409)
+                        return {"control_plane_status":503,"local_guest_preserved_and_executable":True,
+                                "VM_record_absent":True,"global_and_name_indexes_absent":True,
+                                "pending_ownership_preserved":True,"duplicate_creation_refused":True,
+                                "no_extra_local_VM":True,"write_permission_restored":True,
+                                "local_guest_deleted":True,"pending_not_blindly_released_after_delete":True}
+                    case("node-registration-write-permission-fault",registration_fault)
                 def ssh_binary():
                     sample = bytes(index % 251 for index in range(1024 * 1024))
                     result = ssh("cat > /tmp/ssh-transfer.bin; cat /tmp/ssh-transfer.bin", sample)
