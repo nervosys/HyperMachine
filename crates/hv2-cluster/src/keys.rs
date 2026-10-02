@@ -7,6 +7,26 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use subtle::ConstantTimeEq;
 
+/// Maximum policy document size accepted at startup and during rotation.
+pub const MAX_POLICY_BYTES: usize = 1_048_576;
+
+/// Read a UTF-8 policy document with bounded allocation.
+///
+/// # Errors
+/// Returns credential-free errors for unreadable, oversized or non-UTF-8 files.
+pub fn read_policy_file(path: impl AsRef<std::path::Path>) -> Result<String, String> {
+    use std::io::Read;
+    let file = std::fs::File::open(path).map_err(|_| "could not read API key policy file")?;
+    let mut bytes = Vec::new();
+    file.take((MAX_POLICY_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "could not read API key policy file")?;
+    if bytes.len() > MAX_POLICY_BYTES {
+        return Err("API key policy document exceeds 1 MiB".into());
+    }
+    String::from_utf8(bytes).map_err(|_| "API key policy document must be UTF-8".into())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ApiScope {
@@ -49,6 +69,9 @@ impl ApiKeyPolicy {
     /// Reject malformed JSON, unknown scopes/fields, invalid hashes, duplicate
     /// credentials, empty scopes, nonpositive expiry or more than 256 policies.
     pub fn from_json(json: &str) -> Result<Vec<Self>, String> {
+        if json.len() > MAX_POLICY_BYTES {
+            return Err("API key policy document exceeds 1 MiB".into());
+        }
         let raw: Vec<RawPolicy> = serde_json::from_str(json).map_err(|error| {
             format!("invalid API key policy JSON at line {}, column {}; check required fields and scopes",
                 error.line(), error.column())
@@ -140,6 +163,34 @@ impl ApiKeyPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn policy_reads_and_parsing_are_bounded_without_content_in_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("policies.json");
+        let oversized = "s".repeat(MAX_POLICY_BYTES + 1);
+        std::fs::write(&path, &oversized).unwrap();
+        assert_eq!(
+            read_policy_file(&path).unwrap_err(),
+            "API key policy document exceeds 1 MiB"
+        );
+        assert_eq!(
+            ApiKeyPolicy::from_json(&oversized).unwrap_err(),
+            "API key policy document exceeds 1 MiB"
+        );
+        std::fs::write(&path, [255]).unwrap();
+        assert_eq!(
+            read_policy_file(&path).unwrap_err(),
+            "API key policy document must be UTF-8"
+        );
+        std::fs::write(&path, "[]").unwrap();
+        assert_eq!(read_policy_file(&path).unwrap(), "[]");
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(
+            read_policy_file(&path).unwrap_err(),
+            "could not read API key policy file"
+        );
+    }
+
     fn policy(scope: &str) -> ApiKeyPolicy {
         let hash: String = Sha256::digest(b"fixture-key")
             .iter()

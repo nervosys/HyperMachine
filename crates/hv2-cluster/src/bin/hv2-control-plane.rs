@@ -134,8 +134,7 @@ async fn main() -> std::process::ExitCode {
         .api_keys_file
         .as_ref()
         .map(|path| {
-            std::fs::read_to_string(path)
-                .map_err(|error| format!("read API key policy: {error}"))
+            hv2_cluster::keys::read_policy_file(path)
                 .and_then(|json| hv2_cluster::keys::ApiKeyPolicy::from_json(&json))
         })
         .transpose()
@@ -271,8 +270,7 @@ async fn main() -> std::process::ExitCode {
                 let path = path.clone();
                 let control = Arc::clone(&policy_control);
                 let result = tokio::task::spawn_blocking(move || {
-                    let json = std::fs::read_to_string(path)
-                        .map_err(|_| "could not read API key policy file".to_owned())?;
+                    let json = hv2_cluster::keys::read_policy_file(path)?;
                     control.replace_api_key_policies(&json)
                 })
                 .await;
