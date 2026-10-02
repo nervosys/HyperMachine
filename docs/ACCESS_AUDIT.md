@@ -28,7 +28,14 @@ configured-key fingerprint and authorization outcome. They exclude request
 bodies, queries, caller-supplied path values, credentials and unknown-key hashes.
 This privacy choice records an operation class rather than a specific sandbox.
 
-Writes run on blocking workers and serialize within an instance. An audit I/O
+Writes run on one dedicated thread per audited instance. It groups up to 64
+already-queued records into one write and sync, then acknowledges their callers.
+There is no additional timer delay for a lone caller. The submission queue holds
+up to 1024 records and applies backpressure to additional callers. Dropping the
+writer closes its queue and waits for it to drain and release its file lock.
+Elapsed microseconds in a completion record cover time up to record submission;
+the caller also waits for that record's write and sync before receiving a response.
+An audit I/O
 failure permanently stops later protected requests in that process. Admission
 failure returns 503 without dispatch. Completion failure returns 503 explaining
 that the operation may already be committed; inspect its state rather than
@@ -66,3 +73,13 @@ operator rewriting files.
 Synced admission and completion add storage work per request. No performance
 win or throughput SLA is claimed. The [verification archive](benchmarks/2026-10-02/access-audit/README.md)
 records restart, fault, privacy and KVM/TLS lifecycle evidence.
+
+The [grouped-write comparison](benchmarks/2026-10-02/audit-batching/README.md)
+retains 204,516 successful API requests and 187,416 verified audit records across
+six cohorts. At concurrency 8/50/100, the main matched comparison improved
+median batch throughput from about 219/217/219 to 834/4239/4640 requests per
+second. A later matched repeat at 8/100 confirmed gains despite changed storage
+timing. The one-worker audited path was slightly slower; this is a concurrency
+improvement with a small lone-worker tradeoff, not an improvement in every profile.
+These local HTTP inventory measurements do not establish guest readiness,
+TLS throughput, a storage durability SLA or a competitor win.

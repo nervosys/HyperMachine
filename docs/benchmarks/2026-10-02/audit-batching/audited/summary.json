@@ -1,0 +1,280 @@
+{
+  "profiles": [
+    {
+      "concurrency": 1,
+      "variants": {
+        "previous": {
+          "planned_total": 132,
+          "attempted_total": 132,
+          "passed_total": 132,
+          "failed_total": 0,
+          "measured_attempted": 120,
+          "measured_passed": 120,
+          "successful_p50_ms": 4.719623000710271,
+          "successful_p95_ms": 5.029583000577986,
+          "successful_p99_ms": 5.796566998469643,
+          "successful_batch_median_requests_per_second": 209.0499069590823,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-off": {
+          "planned_total": 132,
+          "attempted_total": 132,
+          "passed_total": 132,
+          "failed_total": 0,
+          "measured_attempted": 120,
+          "measured_passed": 120,
+          "successful_p50_ms": 0.14869499136693776,
+          "successful_p95_ms": 0.21932499657850713,
+          "successful_p99_ms": 0.2668419911060482,
+          "successful_batch_median_requests_per_second": 5912.534710310534,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-on": {
+          "planned_total": 132,
+          "attempted_total": 132,
+          "passed_total": 132,
+          "failed_total": 0,
+          "measured_attempted": 120,
+          "measured_passed": 120,
+          "successful_p50_ms": 4.78031400416512,
+          "successful_p95_ms": 5.144513997947797,
+          "successful_p99_ms": 5.4130119970068336,
+          "successful_batch_median_requests_per_second": 205.30177523592118,
+          "successful_batches": 6,
+          "failed_runs": 0
+        }
+      },
+      "comparisons": {
+        "audit-off_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 6,
+          "median_paired_mean_reduction_ms": 4.59355980019609,
+          "median_paired_throughput_ratio": 28.134466461502825
+        },
+        "audit-on_versus_audit-off": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 0,
+          "median_paired_mean_reduction_ms": -4.6827163503621705,
+          "median_paired_throughput_ratio": 0.03525491663455915
+        },
+        "audit-on_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 2,
+          "median_paired_mean_reduction_ms": -0.0713082237780327,
+          "median_paired_throughput_ratio": 0.9854793113681228
+        }
+      }
+    },
+    {
+      "concurrency": 8,
+      "variants": {
+        "previous": {
+          "planned_total": 1056,
+          "attempted_total": 1056,
+          "passed_total": 1056,
+          "failed_total": 0,
+          "measured_attempted": 960,
+          "measured_passed": 960,
+          "successful_p50_ms": 36.233645005268045,
+          "successful_p95_ms": 37.89488700567745,
+          "successful_p99_ms": 39.68567699484993,
+          "successful_batch_median_requests_per_second": 218.53895837748374,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-off": {
+          "planned_total": 1056,
+          "attempted_total": 1056,
+          "passed_total": 1056,
+          "failed_total": 0,
+          "measured_attempted": 960,
+          "measured_passed": 960,
+          "successful_p50_ms": 1.2708629947155714,
+          "successful_p95_ms": 2.7234500012127683,
+          "successful_p99_ms": 3.6196489963913336,
+          "successful_batch_median_requests_per_second": 5137.396417566208,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-on": {
+          "planned_total": 1056,
+          "attempted_total": 1056,
+          "passed_total": 1056,
+          "failed_total": 0,
+          "measured_attempted": 960,
+          "measured_passed": 960,
+          "successful_p50_ms": 9.488158990279771,
+          "successful_p95_ms": 10.518238006625324,
+          "successful_p99_ms": 10.963414999423549,
+          "successful_batch_median_requests_per_second": 834.458782361819,
+          "successful_batches": 6,
+          "failed_runs": 0
+        }
+      },
+      "comparisons": {
+        "audit-off_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 6,
+          "median_paired_mean_reduction_ms": 34.72069901922623,
+          "median_paired_throughput_ratio": 23.395519863529582
+        },
+        "audit-on_versus_audit-off": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 0,
+          "median_paired_mean_reduction_ms": -8.06065450301503,
+          "median_paired_throughput_ratio": 0.1621613850833778
+        },
+        "audit-on_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 6,
+          "median_paired_mean_reduction_ms": 26.640631156169547,
+          "median_paired_throughput_ratio": 3.7989873329908086
+        }
+      }
+    },
+    {
+      "concurrency": 50,
+      "variants": {
+        "previous": {
+          "planned_total": 6600,
+          "attempted_total": 6600,
+          "passed_total": 6600,
+          "failed_total": 0,
+          "measured_attempted": 6000,
+          "measured_passed": 6000,
+          "successful_p50_ms": 229.32130499975756,
+          "successful_p95_ms": 236.85251499409787,
+          "successful_p99_ms": 243.60865900234785,
+          "successful_batch_median_requests_per_second": 217.31319261933143,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-off": {
+          "planned_total": 6600,
+          "attempted_total": 6600,
+          "passed_total": 6600,
+          "failed_total": 0,
+          "measured_attempted": 6000,
+          "measured_passed": 6000,
+          "successful_p50_ms": 7.348840008489788,
+          "successful_p95_ms": 18.3646450022934,
+          "successful_p99_ms": 25.130274007096887,
+          "successful_batch_median_requests_per_second": 5045.50617842467,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-on": {
+          "planned_total": 6600,
+          "attempted_total": 6600,
+          "passed_total": 6600,
+          "failed_total": 0,
+          "measured_attempted": 6000,
+          "measured_passed": 6000,
+          "successful_p50_ms": 10.805946993059479,
+          "successful_p95_ms": 14.096618004259653,
+          "successful_p99_ms": 17.1022420108784,
+          "successful_batch_median_requests_per_second": 4239.389729169929,
+          "successful_batches": 6,
+          "failed_runs": 0
+        }
+      },
+      "comparisons": {
+        "audit-off_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 6,
+          "median_paired_mean_reduction_ms": 217.9602654324699,
+          "median_paired_throughput_ratio": 23.13784166148626
+        },
+        "audit-on_versus_audit-off": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 0,
+          "median_paired_mean_reduction_ms": -2.2685819014004664,
+          "median_paired_throughput_ratio": 0.8383439856903542
+        },
+        "audit-on_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 6,
+          "median_paired_mean_reduction_ms": 215.1984821014703,
+          "median_paired_throughput_ratio": 19.33056252876358
+        }
+      }
+    },
+    {
+      "concurrency": 100,
+      "variants": {
+        "previous": {
+          "planned_total": 13200,
+          "attempted_total": 13200,
+          "passed_total": 13200,
+          "failed_total": 0,
+          "measured_attempted": 12000,
+          "measured_passed": 12000,
+          "successful_p50_ms": 452.61622400721535,
+          "successful_p95_ms": 467.1501859993441,
+          "successful_p99_ms": 798.1831710058032,
+          "successful_batch_median_requests_per_second": 218.52114198124644,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-off": {
+          "planned_total": 13200,
+          "attempted_total": 13200,
+          "passed_total": 13200,
+          "failed_total": 0,
+          "measured_attempted": 12000,
+          "measured_passed": 12000,
+          "successful_p50_ms": 14.438678001170047,
+          "successful_p95_ms": 37.70596400136128,
+          "successful_p99_ms": 51.083938000374474,
+          "successful_batch_median_requests_per_second": 5011.451788915781,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-on": {
+          "planned_total": 13200,
+          "attempted_total": 13200,
+          "passed_total": 13200,
+          "failed_total": 0,
+          "measured_attempted": 12000,
+          "measured_passed": 12000,
+          "successful_p50_ms": 17.689942003926262,
+          "successful_p95_ms": 31.439573998795822,
+          "successful_p99_ms": 39.47450099803973,
+          "successful_batch_median_requests_per_second": 4640.0201810233,
+          "successful_batches": 6,
+          "failed_runs": 0
+        }
+      },
+      "comparisons": {
+        "audit-off_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 6,
+          "median_paired_mean_reduction_ms": 433.1363678592461,
+          "median_paired_throughput_ratio": 22.86163723368263
+        },
+        "audit-on_versus_audit-off": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 0,
+          "median_paired_mean_reduction_ms": -1.1789224638305313,
+          "median_paired_throughput_ratio": 0.9302559160015981
+        },
+        "audit-on_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 6,
+          "median_paired_mean_reduction_ms": 431.960984462341,
+          "median_paired_throughput_ratio": 21.29656160539802
+        }
+      }
+    }
+  ],
+  "total_attempted": 62964,
+  "total_passed": 62964,
+  "audit_records_verified": 83952,
+  "cleanup_verified": true,
+  "cohort_success": true,
+  "artifacts_unchanged": true,
+  "previous_audited": true,
+  "competitor_win_established": false
+}
