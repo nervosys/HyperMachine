@@ -1,0 +1,45 @@
+{
+  "diagnostic_only": true,
+  "performance_comparison": false,
+  "address": "ffffffff81eda95f",
+  "artifact_sha256": {
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "failure_report": "9e5afc69842c28635b827228095baa7a94f2c6d67f4441af327719c637699623",
+    "coordinator": "58082733e827aa3b9cdaeb6913a06cedd909cfac2c2b83bdcfc3e51a1edb6306",
+    "harness": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6"
+  },
+  "sample": {
+    "index": 0,
+    "success": true,
+    "cleanup_success": true,
+    "ready_ms": 391.3987350097159
+  },
+  "symbol_query": {
+    "command": "awk '$1 <= \"ffffffff81eda95f\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+    "response": {
+      "kind": "exited",
+      "exit_code": 0,
+      "signal": null,
+      "stdout": "ffffffff81eda950 T default_idle\nffffffff81eda970 t __pfx_mwait_idle\n",
+      "stderr": "",
+      "truncated": false,
+      "timed_out": false
+    }
+  },
+  "success": true,
+  "limitations": [
+    "Symbol mapping from a separately booted identical kernel; not failed-guest execution tracing",
+    "A function identity alone does not explain a readiness timeout",
+    "The extra command is included in sample timing; no scored latency claim"
+  ],
+  "mapping": {
+    "symbol": "default_idle",
+    "symbol_address": "ffffffff81eda950",
+    "offset": 15,
+    "next_symbol": "__pfx_mwait_idle",
+    "next_address": "ffffffff81eda970"
+  },
+  "artifacts_unchanged": true
+}
