@@ -808,6 +808,7 @@ async fn control_plane_with_timeout(
         ControlConfig {
             api_key: api_key.map(str::to_string),
             api_keys,
+            access_audit: None,
             cluster_token: Some(TOKEN.into()),
             proxy_port: 5981,
             create_timeout,
@@ -1341,6 +1342,7 @@ async fn policy_replacement_revokes_old_keys_and_rejects_invalid_updates() {
         ControlConfig {
             api_key: Some(KEY.into()),
             api_keys: hv2_cluster::keys::ApiKeyPolicy::from_json(&policies("old-key")).unwrap(),
+            access_audit: None,
             cluster_token: Some(TOKEN.into()),
             proxy_port: 5981,
             create_timeout: Duration::from_secs(10),
@@ -1796,4 +1798,91 @@ async fn named_creation_never_forwards_client_operation_context() {
     assert_ne!(owner.operation_token(), "client-forged-invalid-token");
     heartbeat.abort();
     let _ = heartbeat.await;
+}
+
+#[tokio::test]
+async fn durable_access_records_survive_restart_without_credentials_or_request_values() {
+    use hv2_core::security::audit_chain::{verify, AuditRecord};
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("access.jsonl");
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let (node, heartbeat) =
+        fake_node(store.clone(), "audited-node", 4, Duration::from_secs(30)).await;
+    let audit_key = [42u8; 32];
+    for restart in 0..2 {
+        let audit = hv2_cluster::audit::AccessAudit::open(&path, audit_key).unwrap();
+        let control = ControlPlane::new(
+            store.clone(),
+            ControlConfig {
+                api_key: Some(KEY.into()),
+                api_keys: Vec::new(),
+                access_audit: Some(audit),
+                cluster_token: Some(TOKEN.into()),
+                proxy_port: 5981,
+                create_timeout: Duration::from_secs(10),
+                identity_issuer: None,
+            },
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let task = tokio::spawn(async move {
+            axum::serve(listener, control::router(control))
+                .await
+                .unwrap();
+        });
+        let response = client()
+            .get(format!("{base}/sandboxes?metadata[hidden]=query-secret"))
+            .header("x-api-key", "unknown-secret")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let response = client()
+            .get(format!("{base}/sandboxes"))
+            .header("x-api-key", KEY)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        if restart == 0 {
+            let (status, created) = create(
+                &base,
+                json!({"templateID":"base","metadata":{"hidden":"body-secret"}}),
+            )
+            .await;
+            assert_eq!(status, StatusCode::CREATED);
+            let id = created["sandboxID"].as_str().unwrap();
+            let response = client()
+                .delete(format!("{base}/sandboxes/{id}"))
+                .header("x-api-key", KEY)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        }
+        task.abort();
+        let _ = task.await;
+        tokio::task::yield_now().await;
+    }
+    heartbeat.abort();
+    let _ = heartbeat.await;
+    assert!(node.running.lock().is_empty());
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert_eq!(verify(text.lines(), &audit_key), Ok(12));
+    for secret in [KEY, TOKEN, "unknown-secret", "query-secret", "body-secret"] {
+        assert!(!text.contains(secret));
+    }
+    let records: Vec<AuditRecord> = text
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    for pair in records.as_chunks::<2>().0 {
+        assert_eq!(pair[0].event["phase"], "admission");
+        assert_eq!(pair[1].event["phase"], "completion");
+        assert_eq!(pair[0].event["request_id"], pair[1].event["request_id"]);
+    }
+    assert!(records.iter().any(|r| r.event["status"] == 201));
+    assert!(records.iter().any(|r| r.event["status"] == 401));
+    std::fs::write(&path, text.replace("\"status\":201", "\"status\":200")).unwrap();
+    assert!(hv2_cluster::audit::AccessAudit::open(&path, audit_key).is_err());
 }

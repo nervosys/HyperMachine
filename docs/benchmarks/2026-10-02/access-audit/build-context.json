@@ -1,0 +1,24 @@
+{
+  "source_overlays": {
+    "Cargo.lock": "da6e6f8c2bce64beb9d4bed33ac52a64576ea6a0017d61d91477580b90cbc92f",
+    "crates/hv2-core/Cargo.toml": "8db1f95fe63eb2dfb784df278adc4e80995d59f885ec266714b67e24f48eebd6",
+    "crates/hv2-core/src/security/audit_chain.rs": "12a40dc8fad61a614aa4e4d97c8edfce4d219a887b5c8f51925e8da9fff7f436",
+    "crates/hv2-cluster/Cargo.toml": "20bce0a9d6a009c6de864b4870f8c479a9bdf0ed720ae08adda8b94a37019966",
+    "crates/hv2-cluster/src/audit.rs": "47958758e11bdf67415da1aeb6e1e7826b0e3ccdd7e4e51e83a41a8df529a28d",
+    "crates/hv2-cluster/src/control.rs": "551221536a66d6c4724c765a67f1b0bca18f302670907b11cac58ab3569aacde",
+    "crates/hv2-cluster/src/lib.rs": "b66aa16ab05c85734d9e641b5a736ce837747593569d7bcb77ca617911f64c03",
+    "crates/hv2-cluster/src/bin/hv2-control-plane.rs": "9131e8be40f016a758799995451f3550b0bb08d399855db0cb952a83e9d5ac81",
+    "crates/hv2-cluster/tests/control_plane.rs": "2c49aadac95b5c3272a366d885672de3623c4404470f5140e437a90882245ffd"
+  },
+  "provisional_boot_changes_excluded": true,
+  "clean_boot_sha256": {
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+    "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+  },
+  "control_plane_sha256": "57d00f26056f1de328f849e37bdb6726372ef5efc39d243420a1722fda931fda",
+  "rustc": "rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)",
+  "release_build_command": "CARGO_TARGET_DIR=/var/tmp/hm-competitive-target cargo build --release -p hv2-cluster --bin hv2-control-plane",
+  "performance_win_established": false,
+  "artifacts_unchanged_after_final_kvm": true
+}

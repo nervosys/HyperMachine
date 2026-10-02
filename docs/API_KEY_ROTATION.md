@@ -11,3 +11,8 @@ On other platforms, signal reload is unavailable; restart the binary with the re
 A real HTTP integration test checks old-key revocation, replacement-key access, unchanged admin access, scope enforcement and rejected updates preserving active policies. [Process-level SIGHUP verification](benchmarks/2026-10-01/api-key-reload.md) passed 16 real HTTP checks using an owned Unix control-plane process. The feature provides operator rotation within the existing single team; it does not add tenant roles, central policy distribution or interruption of already-authorized work.
 
 [Bounded-reader process verification](benchmarks/2026-10-01/api-key-bounds.md) passed 20 HTTP checks, including oversized and invalid UTF-8 reloads preserving active policies and subsequent valid recovery. Startup rejection uses the same reader and has library coverage; these process checks cover reload.
+
+## Durable access history
+
+Protected control-plane requests can also write synced, tamper-evident admission
+and completion records. See [configuration, verification and failure semantics](ACCESS_AUDIT.md).

@@ -14,6 +14,8 @@ description = "HyperMachine multi-node sandbox cluster: shared store, scheduler,
 [dependencies]
 # The envd proxy the control plane runs, with cluster-aware routes.
 hv2-api = { path = "../hv2-api", version = "1.1.0" }
+hv2-core = { path = "../hv2-core", version = "1.1.0" }
+zeroize = "1.9.0"
 
 tokio = { workspace = true }
 async-trait = { workspace = true }
