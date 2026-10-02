@@ -34,6 +34,15 @@ impl CronExpression {
     /// Search is bounded to a 400-year civil-calendar horizon. Supported UTC
     /// years are 1970-9999; timezone rules come from the locked chrono-tz build.
     pub fn at_or_after_in_timezone(&self, time_ms: u64, timezone: &str) -> Result<Option<u64>> {
+        self.search_timezone(time_ms, timezone, true)
+    }
+
+    /// Latest local cron minute at or before the supplied UTC timestamp.
+    pub fn at_or_before_in_timezone(&self, time_ms: u64, timezone: &str) -> Result<Option<u64>> {
+        self.search_timezone(time_ms, timezone, false)
+    }
+
+    fn search_timezone(&self, time_ms: u64, timezone: &str, forward: bool) -> Result<Option<u64>> {
         let timezone: chrono_tz::Tz = timezone
             .parse()
             .map_err(|_| JobError::InvalidSpec("unknown cron timezone".into()))?;
@@ -45,25 +54,39 @@ impl CronExpression {
         let local_date = start.with_timezone(&timezone).date_naive();
         // UTC offsets are strictly less than a day in magnitude. Starting two
         // civil days earlier covers date-crossing backward transitions.
-        let mut date = local_date
-            .pred_opt()
-            .and_then(|d| d.pred_opt())
-            .ok_or_else(invalid_time)?;
+        let step = |date: NaiveDate| {
+            if forward {
+                date.succ_opt()
+            } else {
+                date.pred_opt()
+            }
+        };
+        let mut date = if forward {
+            local_date.pred_opt().and_then(|d| d.pred_opt())
+        } else {
+            local_date.succ_opt().and_then(|d| d.succ_opt())
+        }
+        .ok_or_else(invalid_time)?;
         let mut best: Option<u64> = None;
         for _ in 0..=146_102 {
-            let earliest_possible = date
+            let boundary = date
                 .and_hms_opt(0, 0, 0)
                 .expect("midnight")
                 .and_utc()
-                .timestamp_millis()
-                - 86_400_000;
-            if best.is_some_and(|candidate| earliest_possible > candidate as i64) {
+                .timestamp_millis();
+            if best.is_some_and(|candidate| {
+                if forward {
+                    boundary - 86_400_000 > candidate as i64
+                } else {
+                    boundary + 172_800_000 < candidate as i64
+                }
+            }) {
                 return Ok(best);
             }
-            if date.year() > 9999 {
+            if (forward && date.year() > 9999) || (!forward && date.year() < 1969) {
                 return Ok(best);
             }
-            if self.matches_date(date) {
+            if (1969..=9999).contains(&date.year()) && self.matches_date(date) {
                 for hour in 0..24 {
                     if !self.selected(1, hour) {
                         continue;
@@ -84,14 +107,27 @@ impl CronExpression {
                             let Ok(value) = u64::try_from(candidate.timestamp_millis()) else {
                                 continue;
                             };
-                            if value >= time_ms && best.is_none_or(|previous| value < previous) {
+                            let eligible = if forward {
+                                value >= time_ms
+                            } else {
+                                value <= time_ms
+                            };
+                            if eligible
+                                && best.is_none_or(|previous| {
+                                    if forward {
+                                        value < previous
+                                    } else {
+                                        value > previous
+                                    }
+                                })
+                            {
                                 best = Some(value);
                             }
                         }
                     }
                 }
             }
-            let Some(next) = date.succ_opt() else {
+            let Some(next) = step(date) else {
                 return Ok(best);
             };
             date = next;

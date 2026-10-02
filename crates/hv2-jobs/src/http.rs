@@ -437,6 +437,76 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn calendar_routes_publish_and_cancel_fold_history() {
+        let dir = tempfile::tempdir().unwrap();
+        let (_, app) = app(dir.path(), Some("calendar-token"));
+        let token = Some("calendar-token");
+        let spec = r#"{"first_ms":1793520000000,"cron":{"expression":"30 1 * * *","timezone":"America/Los_Angeles"},"job":{"command":["must-not-run"]}}"#;
+        assert_eq!(
+            call(
+                &app,
+                "POST",
+                "/api/v1/schedules/calendar",
+                Some(spec),
+                token
+            )
+            .await
+            .0,
+            StatusCode::CREATED
+        );
+        let body = r#"{"now_ms":1793527200000,"limit":2}"#;
+        let (status, records) = call(
+            &app,
+            "POST",
+            "/api/v1/schedules/calendar/publish",
+            Some(body),
+            token,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let records: serde_json::Value = serde_json::from_str(&records).unwrap();
+        assert_eq!(records[0]["scheduled_ms"], 1793521800000_u64);
+        assert_eq!(records[1]["scheduled_ms"], 1793525400000_u64);
+        assert_eq!(
+            call(
+                &app,
+                "POST",
+                "/api/v1/schedules/calendar/cancel",
+                None,
+                token
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+        assert_eq!(
+            call(
+                &app,
+                "POST",
+                "/api/v1/schedules/calendar/publish",
+                Some(body),
+                token
+            )
+            .await
+            .0,
+            StatusCode::CONFLICT
+        );
+        let (status, history) = call(
+            &app,
+            "GET",
+            "/api/v1/schedules/calendar/occurrences",
+            None,
+            token,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&history).unwrap(),
+            records
+        );
+    }
+
+    #[tokio::test]
     async fn schedule_receipts_recover_unresolved_and_completed_work() {
         let dir = tempfile::tempdir().unwrap();
         let (store, app) = app(dir.path(), Some("receipt-token"));

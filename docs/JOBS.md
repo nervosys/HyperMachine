@@ -424,7 +424,7 @@ link to its final name. Competing publishers cannot replace the winner or expose
 partial JSON. A crash before publication can leave an unreferenced temporary
 file. Filesystems without hard-link support return an error; there is no weaker
 fallback. Directory durability across power loss is not established. Schedule
-updates, cron/timezones, dispatch reconciliation and guest-job cancellation
+updates, calendar VM verification, timezone-rule migration, dispatch reconciliation and guest-job cancellation
 and guest execution remain to be implemented.
 
 The implementation must cover these requirements together:
@@ -541,9 +541,27 @@ offset changes, and search has a 400-year civil horizon with supported input
 UTC years 1970-9999 and an upper civil year of 9999. Tests include Los Angeles
 DST gaps/folds, Lord Howe half-hour folds, Apia's skipped day and historical
 Monrovia second-based offsets. Rules are those embedded in the locked build;
-future durable scheduling must preserve or validate its timezone database
-version when reconstructing history. Persisted cron schedules and
-publication/dispatch remain unimplemented. The CLI and API still accept interval schedules only.
-Durable progress compatibility,
-missed occurrences, cancellation and competing publishers remain required before
-cron support can be marked usable. Existing interval persistence is unchanged.
+durable scheduling pins and validates the timezone database version before
+reconstructing history. Persisted cron schedules and bounded publication are
+available through the CLI and authenticated API.
+Tests verify calendar catch-up, coalescing, interrupted publication, restart,
+cancellation and competing publishers, while preserving interval persistence.
+Calendar VM execution and calendar-specific performance remain unverified.
+
+A calendar schedule uses the existing `schedule create` command and schedule API:
+
+```json
+{"first_ms":1793520000000,"cron":{"expression":"30 1 * * *","timezone":"America/Los_Angeles"},"missed_policy":"catch_up","job":{"command":["true"]}}
+```
+
+`first_ms` is an inclusive UTC lower bound. Omit `every_ms` (it defaults to zero)
+for cron; combining a positive interval and a calendar expression is refused.
+The same optional VM target, occurrence keys, cancellation, claims and receipts
+apply. Catch-up selects oldest UTC occurrences in bounded batches; coalescing
+selects only the latest eligible UTC occurrence, including the second occurrence
+of a folded local time. A backward clock does not republish processed work.
+Creation persists `cron.tzdb_version` from this build. Loading refuses a missing
+version or a version different from the build, preventing silent reinterpretation
+of history after timezone rules change. Version migration is not implemented.
+Existing API/type method names retain `interval` for compatibility; their shared
+publication path now accepts calendar recurrence too.

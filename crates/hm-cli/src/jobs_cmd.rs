@@ -150,7 +150,7 @@ pub enum ScheduleCommand {
         #[arg(long)]
         ticks: Option<u64>,
     },
-    /// Create an immutable interval schedule from JSON (use - for stdin)
+    /// Create an immutable interval or calendar schedule from JSON (use - for stdin)
     Create { id: String, spec: PathBuf },
     /// Print the schedule and occurrence-publication progress as JSON
     Status { id: String },
@@ -308,8 +308,7 @@ pub async fn run(store: &StoreArgs, command: JobsCommand) -> Result<i32> {
                         std::fs::read_to_string(&spec)
                             .with_context(|| format!("reading {}", spec.display()))?
                     };
-                    let schedule =
-                        serde_json::from_str(&text).context("the interval schedule spec")?;
+                    let schedule = serde_json::from_str(&text).context("the schedule spec")?;
                     s.create_interval_schedule(&id, &schedule)?;
                     serde_json::json!({"id": id})
                 }
