@@ -104,6 +104,29 @@ not managed-platform measurements. [Full evidence](benchmarks/2026-10-02/cold-bu
 | Readiness P99 | 11741.469 ms | 11041.528 ms | Firecracker |
 | Held proportional memory | 8658.382 MiB | 8361.850 MiB | Firecracker |
 
+A separate [matched prepared-snapshot comparison](benchmarks/2026-10-02/prepared-engines/README.md)
+passes all 680 main restores plus four smoke restores. At concurrency eight,
+two 20-pair cohorts compare restored file and live-process state with identical
+guest commands. The table below separates prepared startup from the cold
+comparison above. HyperMachine uses a persistent daemon and Firecracker starts
+a fresh VMM. These are cache-warm sources on a shared WSL/KVM host.
+
+| Concurrency / cohort | Engine | Passed / planned | P50 ms | P95 ms | P99 ms | Held PSS MiB | Incremental PSS MiB |
+|---|---|---|---|---|---|---|---|
+| 1 / c1 | hypermachine | 20/20 | 144.550 | 776.709 | 996.605 | 72.299 | 31.340 |
+| 1 / c1 | firecracker | 20/20 | 251.022 | 814.257 | 965.727 | 22.324 | 22.324 |
+| 8 / c8 | hypermachine | 160/160 | 224.202 | 630.366 | 676.490 | 91.011 | 46.083 |
+| 8 / c8 | firecracker | 160/160 | 275.289 | 930.576 | 1151.289 | 39.786 | 39.786 |
+| 8 / c8-repeat | hypermachine | 160/160 | 242.313 | 529.611 | 609.110 | 92.385 | 46.428 |
+| 8 / c8-repeat | firecracker | 160/160 | 252.420 | 429.677 | 455.355 | 41.003 | 41.003 |
+
+HyperMachine has higher process PSS in every profile and worse single-restore
+P99; concurrency-eight aggregate P95/P99 rankings reverse on repeat.
+PSS omits kernel memory and unmapped page cache; it does not establish
+fleet density. All main and smoke cleanup checks pass; three retained setup
+failures prevented 12 planned restores, rather than failing scored restores.
+No runtime change or across-the-board performance claim follows from this data.
+
 A subsequent [owned heap-reclamation diagnostic](benchmarks/2026-10-02/heap-reclaim/README.md)
 passed all 432 guest attempts and all post-probe guest checks. At C100, two pairs
 observed approximately 100–112 MiB reclaimable while guests remained running,

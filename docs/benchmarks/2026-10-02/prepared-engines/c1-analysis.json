@@ -1,0 +1,177 @@
+{
+  "engines": {
+    "hypermachine": {
+      "planned": 20,
+      "attempted": 20,
+      "passed": 20,
+      "failed": 0,
+      "successful_p50_ms": 144.55047299998114,
+      "successful_p95_ms": 776.7090380002628,
+      "successful_p99_ms": 996.6049679987918,
+      "median_held_pss_mib": 72.298828125,
+      "median_incremental_pss_mib": 31.34033203125
+    },
+    "firecracker": {
+      "planned": 20,
+      "attempted": 20,
+      "passed": 20,
+      "failed": 0,
+      "successful_p50_ms": 251.0218730003544,
+      "successful_p95_ms": 814.2569690007804,
+      "successful_p99_ms": 965.7267090005917,
+      "median_held_pss_mib": 22.32421875,
+      "median_incremental_pss_mib": 22.32421875
+    }
+  },
+  "pairs": [
+    {
+      "pair": 0,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 166.9719610017637,
+      "hypermachine_p99_reduction_ms": 166.9719610017637,
+      "hypermachine_held_pss_reduction_mib": -50.24609375
+    },
+    {
+      "pair": 1,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": -38.32769199834729,
+      "hypermachine_p99_reduction_ms": -38.32769199834729,
+      "hypermachine_held_pss_reduction_mib": -49.748046875
+    },
+    {
+      "pair": 2,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 99.65799799829256,
+      "hypermachine_p99_reduction_ms": 99.65799799829256,
+      "hypermachine_held_pss_reduction_mib": -49.873046875
+    },
+    {
+      "pair": 3,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 272.1452469995711,
+      "hypermachine_p99_reduction_ms": 272.1452469995711,
+      "hypermachine_held_pss_reduction_mib": -49.787109375
+    },
+    {
+      "pair": 4,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 234.6634740006266,
+      "hypermachine_p99_reduction_ms": 234.6634740006266,
+      "hypermachine_held_pss_reduction_mib": -49.837890625
+    },
+    {
+      "pair": 5,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 238.6339559998305,
+      "hypermachine_p99_reduction_ms": 238.6339559998305,
+      "hypermachine_held_pss_reduction_mib": -49.91015625
+    },
+    {
+      "pair": 6,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 67.83491500027594,
+      "hypermachine_p99_reduction_ms": 67.83491500027594,
+      "hypermachine_held_pss_reduction_mib": -49.89453125
+    },
+    {
+      "pair": 7,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 18.200624999735737,
+      "hypermachine_p99_reduction_ms": 18.200624999735737,
+      "hypermachine_held_pss_reduction_mib": -49.896484375
+    },
+    {
+      "pair": 8,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 62.86457900023379,
+      "hypermachine_p99_reduction_ms": 62.86457900023379,
+      "hypermachine_held_pss_reduction_mib": -49.90234375
+    },
+    {
+      "pair": 9,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 78.05121199999121,
+      "hypermachine_p99_reduction_ms": 78.05121199999121,
+      "hypermachine_held_pss_reduction_mib": -50.88671875
+    },
+    {
+      "pair": 10,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 124.63757699879352,
+      "hypermachine_p99_reduction_ms": 124.63757699879352,
+      "hypermachine_held_pss_reduction_mib": -49.8662109375
+    },
+    {
+      "pair": 11,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 108.62506199919153,
+      "hypermachine_p99_reduction_ms": 108.62506199919153,
+      "hypermachine_held_pss_reduction_mib": -49.986328125
+    },
+    {
+      "pair": 12,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": -92.50972299741989,
+      "hypermachine_p99_reduction_ms": -92.50972299741989,
+      "hypermachine_held_pss_reduction_mib": -50.98046875
+    },
+    {
+      "pair": 13,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": -34.65908500038495,
+      "hypermachine_p99_reduction_ms": -34.65908500038495,
+      "hypermachine_held_pss_reduction_mib": -49.970703125
+    },
+    {
+      "pair": 14,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 27.892255999176996,
+      "hypermachine_p99_reduction_ms": 27.892255999176996,
+      "hypermachine_held_pss_reduction_mib": -50.0166015625
+    },
+    {
+      "pair": 15,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 538.0568529999437,
+      "hypermachine_p99_reduction_ms": 538.0568529999437,
+      "hypermachine_held_pss_reduction_mib": -50.939453125
+    },
+    {
+      "pair": 16,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 189.01767100032885,
+      "hypermachine_p99_reduction_ms": 189.01767100032885,
+      "hypermachine_held_pss_reduction_mib": -50.01171875
+    },
+    {
+      "pair": 17,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 228.19998399972974,
+      "hypermachine_p99_reduction_ms": 228.19998399972974,
+      "hypermachine_held_pss_reduction_mib": -50.982421875
+    },
+    {
+      "pair": 18,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": -240.63625899907493,
+      "hypermachine_p99_reduction_ms": -240.63625899907493,
+      "hypermachine_held_pss_reduction_mib": -50.099609375
+    },
+    {
+      "pair": 19,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": -434.15708300017286,
+      "hypermachine_p99_reduction_ms": -434.15708300017286,
+      "hypermachine_held_pss_reduction_mib": -50.0791015625
+    }
+  ],
+  "artifacts_unchanged": true,
+  "prepared_sources_unchanged": true,
+  "cohort_success": true,
+  "latencies_conditional_on_success": true,
+  "memory_conditional_on_complete_successful_batches": true,
+  "runtime_change_adopted": false,
+  "managed_competitor_win_established": false,
+  "cleanup_verified": true,
+  "hypermachine_faster_complete_pairs": 15
+}

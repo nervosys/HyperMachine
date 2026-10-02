@@ -1,0 +1,17 @@
+{
+  "rejected": [
+    "missing_run",
+    "resources",
+    "state",
+    "time",
+    "hold",
+    "memory",
+    "order",
+    "count",
+    "source",
+    "full",
+    "changed",
+    "cleanup"
+  ],
+  "count": 12
+}
