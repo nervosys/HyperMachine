@@ -140,8 +140,8 @@ impl VsockChannel {
             if Instant::now() >= deadline {
                 return Err(AgentError::Timeout(format!(
                     "a guest agent on vsock port {GUEST_AGENT_PORT} refused {refusals} \
-                     connection(s) in {timeout:?} without accepting one. It is listening but \
-                     never free, most likely still serving a caller that has not finished"
+                     connection(s) in {timeout:?} without accepting one. The agent may be \
+                     absent, still starting or busy; refusals alone do not distinguish these cases"
                 )));
             }
             std::thread::sleep(POLL_INTERVAL);

@@ -117,3 +117,4 @@ docs/benchmarks/2026-10-02/allocator-comparison/** -text whitespace=cr-at-eol,-b
 docs/benchmarks/2026-10-02/private-web/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
 docs/benchmarks/2026-10-02/private-web-scopes/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
 docs/benchmarks/2026-10-02/cold-budget-32/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/readiness-snapshots/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof

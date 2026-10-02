@@ -1,0 +1,16 @@
+{
+  "source_base": "clean private-web-scopes source; original base c01de88 plus accepted overlays",
+  "compiled_agent_sha256": "a6dfe88b1b2a6c08ddbde08cfcf40f56f6df2cab3de3594ad8673083e2d1a656",
+  "windows_overlay_matches": true,
+  "clean_boot_sha256": {
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+    "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+  },
+  "provisional_core_excluded": true,
+  "tests": {
+    "Linux": 13,
+    "Windows": 13
+  },
+  "runtime_logic_changed": false
+}
