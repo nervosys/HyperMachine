@@ -25,15 +25,18 @@ import uuid
 MAGIC = b"HMBACK01"
 MANIFEST = "HM_BACKUP_MANIFEST.json"
 CHUNK = 1024 * 1024
-MAX_OBJECT = 5_000_000_000  # Single PutObject; no multipart protocol in v1.
+MAX_OBJECT = 64 * 1024**3  # Ciphertext cap also stays below the GCM plaintext limit.
+MAX_SINGLE_PUT = 5_000_000_000
 MAX_FILES = 100_000
 MAX_MANIFEST = 32 * 1024 * 1024
 LOCK = ".backup.lock"
 
 
 class UploadUncertain(Exception):
-    def __init__(self, receipt):
+    def __init__(self, receipt, cleanup=None, interrupted=False):
         self.receipt = receipt
+        self.cleanup = cleanup
+        self.interrupted = interrupted
         super().__init__("upload not confirmed; object may already exist")
 
 
@@ -195,6 +198,7 @@ def make_bundle(root, output, maximum):
 
 def encrypt(source, output, key):
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    require(source.stat().st_size + 36 <= MAX_OBJECT, "encrypted bundle exceeds format size limit")
     nonce = os.urandom(12)
     header = MAGIC + nonce
     cipher = Cipher(algorithms.AES(key), modes.GCM(nonce)).encryptor()
@@ -206,7 +210,7 @@ def encrypt(source, output, key):
         dst.write(cipher.finalize())
         dst.write(cipher.tag)
         dst.flush(); os.fsync(dst.fileno())
-    require(output.stat().st_size <= MAX_OBJECT, "encrypted bundle exceeds single-object v1 limit")
+    require(output.stat().st_size <= MAX_OBJECT, "encrypted bundle exceeds format size limit")
 
 
 def decrypt(source, output, key):
@@ -341,6 +345,61 @@ def client(endpoint, region):
                       connect_timeout=10, read_timeout=60, retries={"total_max_attempts": 1}))
 
 
+def upload_ciphertext(s3, stream, bucket, object_key, receipt, threshold, part_size):
+    size = receipt["encrypted_bytes"]
+    receipt["upload_method"] = "multipart" if size >= threshold or size > MAX_SINGLE_PUT else "single"
+    receipt["parts"] = 0
+    if receipt["upload_method"] == "single":
+        try:
+            s3.put_object(Bucket=bucket, Key=object_key, Body=stream, ContentLength=size,
+                          ContentType="application/octet-stream", IfNoneMatch="*",
+                          ChecksumSHA256=base64.b64encode(bytes.fromhex(receipt["sha256"])).decode())
+            receipt["parts"] = 1
+            return
+        except BaseException as error:
+            raise UploadUncertain(receipt, interrupted=isinstance(error, KeyboardInterrupt)) from None
+    upload_id = None
+    try:
+        result = s3.create_multipart_upload(Bucket=bucket, Key=object_key,
+            ContentType="application/octet-stream", ChecksumAlgorithm="SHA256", ChecksumType="COMPOSITE")
+        upload_id = result["UploadId"]
+        require(isinstance(upload_id, str) and upload_id, "multipart upload ID missing")
+        parts, composite = [], hashlib.sha256()
+        while block := stream.read(part_size):
+            number = len(parts) + 1
+            require(number <= 10000, "multipart part limit exceeded")
+            digest = hashlib.sha256(block).digest()
+            checksum = base64.b64encode(digest).decode()
+            result = s3.upload_part(Bucket=bucket, Key=object_key, UploadId=upload_id,
+                PartNumber=number, Body=block, ContentLength=len(block), ChecksumSHA256=checksum)
+            require(isinstance(result.get("ETag"), str) and result["ETag"], "multipart part receipt missing")
+            if "ChecksumSHA256" in result:
+                require(result["ChecksumSHA256"] == checksum, "multipart part checksum mismatch")
+            composite.update(digest)
+            parts.append({"ETag": result["ETag"], "PartNumber": number, "ChecksumSHA256": checksum})
+            receipt["parts"] = number
+        require(parts, "empty multipart ciphertext")
+        checksum = base64.b64encode(composite.digest()).decode() + "-" + str(len(parts))
+        receipt["composite_sha256"] = checksum
+        result = s3.complete_multipart_upload(Bucket=bucket, Key=object_key, UploadId=upload_id,
+            MultipartUpload={"Parts": parts}, ChecksumType="COMPOSITE", IfNoneMatch="*")
+        if "ChecksumSHA256" in result:
+            require(result["ChecksumSHA256"] == checksum, "completed multipart checksum mismatch")
+    except BaseException as error:
+        cleanup = {"status": "upload_id_unavailable"}
+        if upload_id:
+            # Only this invocation's upload is aborted. This never deletes an object,
+            # even when completion committed before its acknowledgement was lost.
+            cleanup["upload_id"] = upload_id
+            try:
+                s3.abort_multipart_upload(Bucket=bucket, Key=object_key, UploadId=upload_id)
+                cleanup["status"] = "aborted"
+            except BaseException as abort_error:
+                code = getattr(abort_error, "response", {}).get("Error", {}).get("Code")
+                cleanup["status"] = "already_completed_or_absent" if code == "NoSuchUpload" else "abort_failed"
+        raise UploadUncertain(receipt, cleanup, isinstance(error, KeyboardInterrupt)) from None
+
+
 def backup(args):
     root = args.store.resolve(strict=True)
     require(root.is_dir(), "store must be a directory")
@@ -357,12 +416,8 @@ def backup(args):
             digest = hashlib.file_digest(stream, "sha256").digest(); stream.seek(0)
             receipt = {"operation": "backup", "object": args.object, "encrypted_bytes": encrypted.stat().st_size,
                        "sha256": digest.hex(), "files": len(manifest["files"]), "expanded_bytes": manifest["expanded_bytes"]}
-            try:
-                s3.put_object(Bucket=args.bucket, Key=args.object, Body=stream, ContentLength=encrypted.stat().st_size,
-                              ContentType="application/octet-stream", IfNoneMatch="*",
-                              ChecksumSHA256=base64.b64encode(digest).decode())
-            except Exception:
-                raise UploadUncertain(receipt) from None
+            upload_ciphertext(s3, stream, args.bucket, args.object, receipt,
+                              args.multipart_threshold_mib * 1024**2, args.multipart_part_mib * 1024**2)
         return receipt
 
 
@@ -416,6 +471,9 @@ def main():
         command.add_argument("--work-dir", type=Path, help="private temporary files require capacity for compressed plaintext and ciphertext")
         command.add_argument("--max-expanded-bytes", type=int, default=64 * 1024**3)
         command.add_argument("--store" if name == "backup" else "--destination", type=Path, required=True)
+        if name == "backup":
+            command.add_argument("--multipart-threshold-mib", type=int, default=64, help="multipart upload threshold, 1 to 4096 MiB")
+            command.add_argument("--multipart-part-mib", type=int, default=64, help="encrypted part buffer, 8 to 128 MiB")
         if name == "restore":
             command.add_argument("--sha256", help="independently retained receipt checksum; detects substitution of another valid backup")
     args = parser.parse_args()
@@ -424,6 +482,9 @@ def main():
     # All temporary files are private, including unauthenticated decryption output.
     os.umask(0o077)
     try:
+        if args.command == "backup":
+            require(1 <= args.multipart_threshold_mib <= 4096, "multipart threshold must be 1 to 4096 MiB")
+            require(8 <= args.multipart_part_mib <= 128, "multipart part size must be 8 to 128 MiB")
         result = backup(args) if args.command == "backup" else restore(args)
         print(json.dumps(dict(result, success=True)))
         return 0
@@ -435,8 +496,10 @@ def main():
         if isinstance(error, UploadUncertain):
             failure["attempt_receipt"] = error.receipt
             failure["upload_confirmed"] = False
+            if error.cleanup is not None: failure["multipart_cleanup"] = error.cleanup
+            if error.interrupted: failure["interrupted"] = True
         print(json.dumps(failure), file=sys.stderr)
-        return 1
+        return 130 if isinstance(error, UploadUncertain) and error.interrupted else 1
 
 
 if __name__ == "__main__":
