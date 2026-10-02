@@ -42,6 +42,7 @@ def main():
     parser.add_argument("--initrd", type=Path)
     parser.add_argument("--multipart", action="store_true", help="exercise multipart upload for the KVM backup")
     parser.add_argument("--compression-level", type=int, choices=range(1, 10), default=1)
+    parser.add_argument("--versioned", action="store_true", help="recover KVM store by version ID while its current key is deleted")
     args = parser.parse_args()
     require(all([args.daemon, args.kernel, args.initrd]) or not any([args.daemon, args.kernel, args.initrd]), "KVM paths must be supplied together")
     os.umask(0o077)
@@ -264,12 +265,19 @@ def main():
                 require(rejected.returncode != 0 and b"locked for offline" in rejected.stderr, "native daemon ignored offline lock")
                 (args.output / "locked-startup.log").write_bytes(rejected.stdout + rejected.stderr)
             require((store / "volumes" / volume["volumeID"] / "data/marker").read_text() == marker, "guest volume write not persisted")
+            if args.versioned: client.put_bucket_versioning(Bucket=bucket, VersioningConfiguration={"Status": "Enabled"})
             receipt = invoke("backup", store=store, object="kvm.hmb", extra=["--multipart-threshold-mib", "8", "--multipart-part-mib", "8"] if args.multipart else [])
             if args.multipart: require(receipt["upload_method"] == "multipart" and receipt["parts"] >= 2, "KVM multipart path not exercised")
             # Make original files unavailable; recovery must use the S3 object.
             original = args.output / "kvm-source-unavailable"
             store.rename(original)
-            recovery_receipt = invoke("restore", destination=recovered, object="kvm.hmb", extra=["--sha256", receipt["sha256"]])
+            restore_args = ["--sha256", receipt["sha256"]]
+            if args.versioned:
+                require(receipt["version_id"] != "null", "KVM version ID missing")
+                require(client.delete_object(Bucket=bucket, Key="kvm.hmb")["DeleteMarker"], "KVM object delete marker missing")
+                restore_args += ["--version-id", receipt["version_id"]]
+            recovery_receipt = invoke("restore", destination=recovered, object="kvm.hmb", extra=restore_args)
+            if args.versioned: require(recovery_receipt["version_pinned"] and recovery_receipt["version_id"] == receipt["version_id"], "KVM version not pinned")
             require(recovery_receipt["receipt_checksum_verified"], "KVM backup receipt not verified")
             recovered_header, _ = backup.snapshot_header(recovered / "paused" / (sandbox + ".snap"))
             require(recovered_header["memory_base"] == str(recovered / Path(original_header["memory_base"]).relative_to(store)), "KVM memory base not relocated")

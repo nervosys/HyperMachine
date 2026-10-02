@@ -194,11 +194,11 @@ def main():
                         result = client.get_object(**kwargs); result["VersionId"] = "different"
                         self.body = result["Body"]
                         self.body_closed = False
-                        original_close = self.body._raw_stream.close
+                        original_close = self.body.close
                         def close():
                             self.body_closed = True
                             original_close()
-                        self.body._raw_stream.close = close
+                        self.body.close = close
                         return result
                 wrong = WrongVersion(); destination = args.output / (method + "-wrong-response")
                 refused = invoke("restore", name, adapter=wrong, destination=destination, sha=old["sha256"],

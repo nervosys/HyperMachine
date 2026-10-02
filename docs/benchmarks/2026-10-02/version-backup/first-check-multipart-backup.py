@@ -193,17 +193,11 @@ def main():
                     def get_object(self, **kwargs):
                         result = client.get_object(**kwargs); result["VersionId"] = "different"
                         self.body = result["Body"]
-                        self.body_closed = False
-                        original_close = self.body._raw_stream.close
-                        def close():
-                            self.body_closed = True
-                            original_close()
-                        self.body._raw_stream.close = close
                         return result
                 wrong = WrongVersion(); destination = args.output / (method + "-wrong-response")
                 refused = invoke("restore", name, adapter=wrong, destination=destination, sha=old["sha256"],
                     extra=["--version-id", old["version_id"]], expected=1)
-                require(refused["error"] == "S3 returned a different object version" and not destination.exists() and wrong.body_closed, "wrong-version response was not refused/closed")
+                require(refused["error"] == "S3 returned a different object version" and not destination.exists() and wrong.body.closed, "wrong-version response was not refused/closed")
                 client.delete_object(Bucket=bucket, Key=name, VersionId=old["version_id"])
                 deleted = args.output / (method + "-deleted")
                 invoke("restore", name, destination=deleted, sha=old["sha256"], extra=["--version-id", old["version_id"]], expected=1)
