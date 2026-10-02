@@ -12,6 +12,32 @@ A real HTTP integration test checks old-key revocation, replacement-key access, 
 
 [Bounded-reader process verification](benchmarks/2026-10-01/api-key-bounds.md) passed 20 HTTP checks, including oversized and invalid UTF-8 reloads preserving active policies and subsequent valid recovery. Startup rejection uses the same reader and has library coverage; these process checks cover reload.
 
+## Single-team observer and operator roles
+
+Policies accept an optional `role`: `operator` (the default for existing policies)
+or `observer`. Unknown values and explicit null are rejected by startup and
+atomic replacement. Roles apply to the configured single team, without tenant
+isolation or per-resource ownership.
+
+An observer can only GET/HEAD `/sandboxes`, `/v2/sandboxes`, `/templates`,
+`/sandboxes/metrics` and `/cluster/nodes`, and only where its scopes also allow
+the route. The role caps even `admin` scope. All other protected routes are
+denied, including sandbox detail/name lookup, volume credentials, upload URLs,
+execution and GET TCP upgrades. Sandbox listings omit the guest access token.
+Operators retain the existing scope behavior. For an inventory observer, add
+`"role":"observer"` to a policy with `"scopes":["inventory"]`.
+
+Roles reload with the rest of a policy. They govern subsequent authorization
+decisions; they do not revoke previously issued bearer tokens or open streams.
+Public endpoints and independently authenticated guest/upload/content routes
+keep their existing authentication model. Configure node cluster tokens to
+prevent unauthenticated direct node access.
+
+[Preserved observer-role verification](benchmarks/2026-10-02/observer-role/README.md)
+includes 66 passing library/HTTP tests on each platform and a 23-case real KVM
+run with TLS, node mTLS, unchanged guest state after denied mutations, and 222
+independently verified access records.
+
 ## Durable access history
 
 Protected control-plane requests can also write synced, tamper-evident admission
