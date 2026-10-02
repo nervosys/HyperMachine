@@ -760,6 +760,11 @@ def main():
                             assert pending["name"]==fault_name and pending["sandbox_id"] is None
                             assert {row["sandboxID"] for row in direct("GET","/v2/sandboxes")}=={id,local_id}
                             if args.node_registration_reconcile:
+                                connected=direct("POST",f"/sandboxes/{local_id}/connect",{})
+                                assert connected["sandboxID"]==local_id
+                                direct("POST",f"/sandboxes/{local_id}/connect",{"timeout":600},expected=409)
+                                direct("POST",f"/sandboxes/{local_id}/checkpoints",{"name":"uncertain-registration"},expected=201)
+                                direct("POST",f"/sandboxes/{local_id}/checkpoints/uncertain-registration/restore",expected=409)
                                 time.sleep(35)  # Cross the configured 30-second idle window.
                                 idle_rows=[row for row in direct("GET","/v2/sandboxes") if row["sandboxID"]==local_id]
                                 assert len(idle_rows)==1 and idle_rows[0]["state"]=="running",idle_rows
@@ -787,6 +792,10 @@ def main():
                                 api("POST","/v2/sandboxes",body,expected=409)
                                 direct("POST",path,expected=409)
                                 direct("POST",f"/sandboxes/{local_id}/timeout",{"timeout":300},expected=204)
+                                extended=direct("POST",f"/sandboxes/{local_id}/connect",{"timeout":600})
+                                assert extended["sandboxID"]==local_id
+                                restored=direct("POST",f"/sandboxes/{local_id}/checkpoints/uncertain-registration/restore")
+                                assert restored["sandboxID"]==local_id
                                 direct("POST",f"/sandboxes/{local_id}/pause",{},expected=204)
                                 resumed=direct("POST",f"/sandboxes/{local_id}/resume",{"timeout":300},expected=201)
                                 assert resumed["sandboxID"]==local_id
@@ -822,6 +831,9 @@ def main():
                             return {"control_plane_status":503,"local_guest_preserved_and_executable":True,
                                     "partial_registration_writes_absent":True,"wrong_cluster_credential_refused":True,
                                     "uncertain_pause_fork_timeout_refused":True,"timeout_available_after_reconciliation":True,
+                                    "uncertain_read_only_connect_and_checkpoint_creation_allowed":True,
+                                    "uncertain_connect_extension_and_checkpoint_restore_refused":True,
+                                    "connect_extension_and_checkpoint_restore_available_after_reconciliation":True,
                                     "uncertain_guest_survives_idle_window_seconds":35,
                                     "pause_resume_fork_available_after_reconciliation":True,
                                     "replacement_owner_refused_without_guest_loss":True,"original_owner_reconciles_same_VM":True,
