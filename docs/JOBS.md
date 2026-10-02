@@ -314,12 +314,39 @@ exit code 7. The command uses an explicit `/bin/sh` under `env` so an executable
 containing `=` cannot be consumed as another environment assignment. This is a
 host shell test; it does not establish real guest or KVM behavior.
 
+An operator can record an independently verified completion without executing
+or retrying the guest command:
+
+```text
+hm jobs --store DIR schedule record-result NAME SCHEDULED_MS verified-result.json
+```
+
+The JSON uses the completion receipt schema, including the exact `claim_token`
+from `schedule receipt`, `exit_code` (0-255 or null), `timed_out`, optional
+`stdout`/`stderr`, and optional truncation flags. For example:
+
+```json
+{"claim_token":"TOKEN_FROM_EXISTING_CLAIM","exit_code":7,"timed_out":false,"stdout":"verified output","stderr":""}
+```
+
+The operator must establish that the original execution has finished and verify
+its result independently before recording it. This command trusts that supplied
+evidence; it does not inspect guest state or prove side effects have stopped.
+It requires an existing claim, validates its token and output bounds, and writes
+an immutable completion. Identical replay is accepted; a different result is
+refused. Recording completion allows the next ordered occurrence to be claimed,
+so an incorrect assertion can allow overlapping guest work. There is no claim
+reset or retry command. Receipts use the same schema as automatic completions;
+keep the independent evidence in operator records. Cross-process CLI tests check
+wrong-token refusal, persistence, identical replay, conflicting-result refusal,
+invalid status refusal and prevention of completion without a claim.
+
 A claim without a receipt is unresolved, including after worker loss. It may
 represent a running guest command, an unrecorded completion, or a dispatch that
 never reached the guest. Claims do not expire or automatically permit a second
 start. A future dispatcher must reconcile guest state before deciding what to do;
-lease-based retries, guest process handles, streaming logs and manual recovery interfaces
-remain unimplemented. Claim ownership alone does not enforce exactly-once guest
+lease-based retries, guest process handles, streaming logs and automatic recovery
+remain unimplemented. Operator-recorded completion is the limited interface above. Claim ownership alone does not enforce exactly-once guest
 execution or external side effects. Schedule cancellation preserves previously
 committed occurrences and does not revoke their dispatch claims.
 
