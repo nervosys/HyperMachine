@@ -63,6 +63,14 @@ and “not checked” do not establish that a competitor lacks a capability.
 
 ## HyperMachine capabilities to compare
 
+Cold boot now has an [optional per-node admission budget](COLD_START_ADMISSION.md).
+At 100 concurrent requests on the eight-CPU native fixture, the final binary's
+eight-slot budget reduced P50 readiness from 6702 to 3639 ms; P99 increased
+from 7898 to 8434 ms. All 800 attempts passed, and paired mean readiness improved
+in four of four pairs. [Raw comparisons and controls](benchmarks/2026-10-02/cold-start-admission/README.md)
+retain earlier failures and the slower default-disabled C8 control. This is an
+opt-in tradeoff, with no managed competitor performance claim.
+
 - Open source and self-hosted, down to the VMM.
 - Drop-in for the E2B SDKs, so existing agent code needs no changes.
 - Per-sandbox egress policy with a decision log.

@@ -1,0 +1,21 @@
+# Cold-start admission
+
+`hv2-sandboxd --cold-start-concurrency N` limits simultaneous cold VM boots.
+The option accepts 1–1024 and is disabled by default. It counts VMs, not vCPUs.
+Choose a budget for the node's CPU capacity and workload; eight is a tested
+setting on an eight-CPU shared nested-KVM fixture, not a recommended universal value.
+
+A cold creation waits before constructing and launching its VM. The slot is
+released after the guest agent answers, before networking, volumes and environment
+setup. Errors release the slot. Snapshot restoration and forks bypass this budget;
+startup and dynamic template construction are outside its scope.
+
+Queued requests already occupy sandbox capacity and continue consuming their
+request timeout. Queue time is included in the readiness benchmarks. The guest
+agent's existing 15-second readiness deadline starts after launch and is unchanged.
+Operators should account for upstream timeouts when enabling admission.
+
+The live-VM fixture verifies a two-slot bound, release after an unsuccessful boot,
+and snapshot resume while a one-slot cold budget is occupied. This does not establish
+complete cancellation cleanup or resolve the cause of previously observed boot
+timeouts. See [measurements and reproducibility](benchmarks/2026-10-02/cold-start-admission/README.md).

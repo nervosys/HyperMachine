@@ -1,0 +1,32 @@
+{
+  "base_source": "/var/tmp/hm-registration-mutations/source",
+  "base_context": {
+    "base_commit": "956bc14",
+    "source_provenance": "registration-lifecycle clean source plus daemon-main.rs and daemon-checkpoints.rs",
+    "daemon_source_sha256": "92697b46eb245dbc4c7677717e5fcb8d4b2f33b94e5806866fdf38964c9f6f08",
+    "store_sha256": "0c73540795cd8e2a359195b241f591d08184e91e05a3a36d452117450604d49f",
+    "committed_core_sha256": {
+      "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+      "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+      "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+    },
+    "provisional_boot_changes_excluded": true,
+    "windows_daemon_tests_passed": 35,
+    "linux_daemon_tests_passed": 39,
+    "linux_clippy_exception": "existing clippy::too_many_arguments lifecycle signatures",
+    "release_build_exit_code": 0,
+    "daemon_sha256": "8a41a012b9eaac150dce7832dfb7fdc01d12ba3c28796cf98ca76f7070eb206c",
+    "checkpoint_source_sha256": "50529c7432f68593e4f4d3ea67eb61b047da8f7123a7724d893053632b829a58"
+  },
+  "clean_boot_sha256": {
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+    "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+  },
+  "provisional_boot_excluded": true,
+  "candidate_main_sha256": "e1b85b8a455a9afad0452113739a089f202b67787f419fc0d76a60a172334d5c",
+  "candidate_daemon_sha256": "ef4afc154fc728e6d45e1677a49d2cd4101c34fe2386e07936e73bfe49131791",
+  "linux_daemon_tests_passed": 39,
+  "candidate_default": "disabled",
+  "guest_readiness_timeout_s": 15
+}
