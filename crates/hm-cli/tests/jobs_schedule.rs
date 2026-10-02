@@ -508,3 +508,73 @@ async fn vm_worker_sigint_waits_for_inflight_result_and_persists_receipt() {
     assert!(store.vm_dispatch_state("interrupt", 110).is_err());
     server.abort();
 }
+
+#[test]
+fn operator_result_requires_claim_token_and_preserves_immutable_completion() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = hv2_jobs::Store::open(dir.path().join("store")).unwrap();
+    let schedule = serde_json::from_value(json!({"first_ms":100,"every_ms":10,
+        "vm":{"sandbox_id":"guest","connection_profile":"local","timeout_secs":30},
+        "job":{"command":["true"]}}))
+    .unwrap();
+    store
+        .create_interval_schedule("recover", &schedule)
+        .unwrap();
+    store.materialize_interval("recover", 110, 2).unwrap();
+    let claim = store
+        .claim_vm_occurrence("recover", 100, "lost-worker")
+        .unwrap();
+    assert!(store.next_vm_occurrence("recover").is_err());
+    let file = dir.path().join("result.json");
+    let mut result = json!({"claim_token":"wrong","exit_code":7,"timed_out":false,
+        "stdout":"independently verified output","stderr":""});
+    let run = || {
+        invoke(
+            store.root(),
+            &["record-result", "recover", "100", file.to_str().unwrap()],
+        )
+    };
+    std::fs::write(&file, result.to_string()).unwrap();
+    assert!(!run().status.success());
+    assert!(store
+        .vm_dispatch_state("recover", 100)
+        .unwrap()
+        .completion
+        .is_none());
+    result["claim_token"] = json!(claim.token);
+    std::fs::write(&file, result.to_string()).unwrap();
+    assert_eq!(success(run())["completion_recorded"], true);
+    success(run());
+    let reopened = hv2_jobs::Store::open(store.root()).unwrap();
+    assert_eq!(
+        reopened
+            .next_vm_occurrence("recover")
+            .unwrap()
+            .unwrap()
+            .scheduled_ms,
+        110
+    );
+    assert_eq!(
+        reopened
+            .vm_dispatch_state("recover", 100)
+            .unwrap()
+            .completion
+            .unwrap()
+            .exit_code,
+        Some(7)
+    );
+    result["exit_code"] = json!(0);
+    std::fs::write(&file, result.to_string()).unwrap();
+    assert!(!run().status.success());
+    result["exit_code"] = json!(256);
+    std::fs::write(&file, result.to_string()).unwrap();
+    assert!(!run().status.success());
+    result["exit_code"] = json!(7);
+    std::fs::write(&file, result.to_string()).unwrap();
+    assert!(!invoke(
+        store.root(),
+        &["record-result", "recover", "110", file.to_str().unwrap()]
+    )
+    .status
+    .success());
+}

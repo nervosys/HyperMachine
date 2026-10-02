@@ -36,7 +36,7 @@ container. The comparison is about what surrounds the VM.
 | Persistent volumes shared between VMs | no | no | **Real**: E2B volumes over 9P, live and shared (Linux hosts) |
 | Build images from Dockerfiles or OCI | compose | Dockerfile | **Real**: E2B template builds, no Docker |
 | Backups to object storage | yes | no | **Absent** |
-| Scheduled jobs and event triggers | `*.run.ts` | no | **Partial**: lifecycle webhooks, [durable delayed host-process jobs and interval publication](JOBS.md), and [explicit VM dispatch verified with KVM/TLS](benchmarks/2026-10-01/scheduled-dispatch.md); an [automatic VM worker is verified with KVM/TLS](benchmarks/2026-10-01/scheduled-worker.md), while cron and guest reconciliation remain incomplete |
+| Scheduled jobs and event triggers | `*.run.ts` | no | **Partial**: lifecycle webhooks, [durable delayed host-process jobs and interval publication](JOBS.md), and [explicit VM dispatch verified with KVM/TLS](benchmarks/2026-10-01/scheduled-dispatch.md); an [automatic VM worker is verified with KVM/TLS](benchmarks/2026-10-01/scheduled-worker.md), with operator-recorded completion recovery; cron and automatic guest reconciliation remain incomplete |
 | Desktop in a browser, browser for agents | yes | web terminal | **Absent** |
 | MCP for agents | skill + MCP | remote MCP with browser login; Shelley agent | **Partial**: 12 lifecycle/exec/checkpoint tools plus 2 opt-in binary file tools over MCP stdio, with cancellable client waits checked on real KVM; accepted remote work can continue, and remote authenticated MCP, streaming plus the wider `hv2-agent` surface remain absent |
 | Email in and out | no | yes | **Absent** |

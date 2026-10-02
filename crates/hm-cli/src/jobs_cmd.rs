@@ -97,6 +97,12 @@ pub enum JobsCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ScheduleCommand {
+    /// Record an independently verified guest completion; does not execute or retry
+    RecordResult {
+        id: String,
+        scheduled_ms: u64,
+        result: PathBuf,
+    },
     /// Publish and execute VM occurrences in order; unresolved work stops the worker
     Worker {
         id: String,
@@ -194,6 +200,18 @@ pub async fn run(store: &StoreArgs, command: JobsCommand) -> Result<i32> {
                         },
                     )
                     .await;
+                }
+                ScheduleCommand::RecordResult {
+                    id,
+                    scheduled_ms,
+                    result,
+                } => {
+                    let text = std::fs::read_to_string(&result)
+                        .with_context(|| format!("reading {}", result.display()))?;
+                    let completion =
+                        serde_json::from_str(&text).context("the verified dispatch completion")?;
+                    s.complete_vm_occurrence(&id, scheduled_ms, &completion)?;
+                    serde_json::json!({"schedule_id":id,"scheduled_ms":scheduled_ms,"completion_recorded":true})
                 }
                 ScheduleCommand::Receipt { id, scheduled_ms } => {
                     serde_json::to_value(s.vm_dispatch_state(&id, scheduled_ms)?)?
