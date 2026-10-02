@@ -219,8 +219,16 @@ claim and optional completion as `schedule receipt`. It requires the jobs
 service bearer token when configured. A claim without completion returns 200
 with `completion: null`; a missing claim returns 404. Results retain bounded
 stdout/stderr and truncation flags, survive store reopening, and remain readable
-after schedule cancellation. This inspection route does not accept writes,
-execute jobs, or establish that an unresolved guest command has stopped.
+after schedule cancellation. GET does not execute jobs or establish that an unresolved guest command has
+stopped. `POST` to the same receipt path records an operator-verified completion
+using the `record-result` JSON schema and the configured bearer token. It checks
+the existing claim token, result bounds and immutable replay rules in a blocking
+task. Success is 200 with `completion_recorded: true`; a missing claim is 404,
+a wrong claim token or changed result is 409, and invalid result bounds are 400.
+As with CLI recovery, the operator must independently verify the original
+execution has finished. This API trusts that assertion and may unblock the next
+occurrence; it neither executes nor retries guest work. Automatic guest
+reconciliation is still absent.
 
 Schedule filesystem operations run in blocking tasks. These routes provide no
 job execution or schedule update yet. Automatic publication
