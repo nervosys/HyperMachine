@@ -73,3 +73,5 @@ docs/benchmarks/2026-10-01/calendar-sync-source.rs -text
 docs/benchmarks/2026-10-01/calendar-sync.patch -text whitespace=cr-at-eol,-blank-at-eol
 
 docs/benchmarks/2026-10-01/api-key-reload-coordinator.py -text
+
+docs/benchmarks/2026-10-01/api-key-bounds-coordinator.py -text

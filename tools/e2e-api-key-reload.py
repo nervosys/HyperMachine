@@ -33,7 +33,7 @@ def main():
                 "expires_at": expiry or int(time.time()) + 600, "scopes": ["inventory"]}])
         def replace(text):
             temporary = root / "replacement.json"
-            temporary.write_text(text)
+            temporary.write_bytes(text if isinstance(text, bytes) else text.encode())
             os.replace(temporary, policies)
         replace(document(old))
         def port():
@@ -88,7 +88,9 @@ def main():
                 check("new key active", new, 200)
                 check("scope preserved", new, 403, "POST")
                 for name, text in [("malformed", "invalid-fixture"), ("empty", "[]"),
-                                   ("admin collision", document(admin))]:
+                                   ("admin collision", document(admin)),
+                                   ("oversized", b"x" * (1048576 + 1)),
+                                   ("invalid UTF-8", b"\xff")]:
                     replace(text)
                     reload("API key reload rejected")
                     check(name + " preserves active key", new, 200)
