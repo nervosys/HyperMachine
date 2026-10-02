@@ -93,3 +93,4 @@ docs/benchmarks/2026-10-02/node-registration-fault/** -text whitespace=cr-at-eol
 docs/benchmarks/2026-10-02/registration-reconcile/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
 docs/benchmarks/2026-10-02/registration-lifecycle/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
 docs/benchmarks/2026-10-02/registration-mutations/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/current-native-engines/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
