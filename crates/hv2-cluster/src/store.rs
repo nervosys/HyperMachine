@@ -17,6 +17,7 @@ use std::time::{Duration, Instant};
 use parking_lot::Mutex;
 
 use crate::domains::{DomainBinding, DomainName};
+use crate::names::{NameReservation, SandboxName};
 
 use crate::model::{ClusterEvent, Delivery, NodeInfo, SandboxRecord, Webhook};
 
@@ -55,6 +56,13 @@ pub trait ClusterStore: Send + Sync {
     /// reports it.
     async fn delete_sandbox(&self, id: &str) -> Result<bool>;
     async fn sandboxes(&self) -> Result<Vec<SandboxRecord>>;
+
+    /// Atomically reserve pending ownership. True includes same-token replay.
+    /// Bound reservations must be created through a future atomic bind operation.
+    async fn reserve_name(&self, reservation: &NameReservation) -> Result<bool>;
+    async fn name_reservation(&self, name: &SandboxName) -> Result<Option<NameReservation>>;
+    /// Release pending ownership only with its matching operation token.
+    async fn release_pending_name(&self, name: &SandboxName, token: &str) -> Result<bool>;
 
     /// Claim a hostname, or update its port for the same sandbox. No ownership transfer.
     async fn claim_domain(&self, binding: &DomainBinding) -> Result<DomainClaim>;
@@ -102,6 +110,7 @@ pub struct MemoryStore {
 struct SandboxState {
     records: HashMap<String, SandboxRecord>,
     domains: HashMap<DomainName, DomainBinding>,
+    names: HashMap<SandboxName, NameReservation>,
 }
 
 impl MemoryStore {
@@ -168,6 +177,37 @@ impl ClusterStore for MemoryStore {
         let mut all: Vec<_> = self.sandboxes.lock().records.values().cloned().collect();
         all.sort_by(|a, b| (a.started_at_ms, &a.sandbox_id).cmp(&(b.started_at_ms, &b.sandbox_id)));
         Ok(all)
+    }
+
+    async fn reserve_name(&self, reservation: &NameReservation) -> Result<bool> {
+        if reservation.sandbox_id().is_some() {
+            return Err(StoreError(
+                "only pending name reservations can be inserted".into(),
+            ));
+        }
+        let mut state = self.sandboxes.lock();
+        if let Some(existing) = state.names.get(reservation.name()) {
+            return Ok(existing == reservation);
+        }
+        state
+            .names
+            .insert(reservation.name().clone(), reservation.clone());
+        Ok(true)
+    }
+    async fn name_reservation(&self, name: &SandboxName) -> Result<Option<NameReservation>> {
+        Ok(self.sandboxes.lock().names.get(name).cloned())
+    }
+    async fn release_pending_name(&self, name: &SandboxName, token: &str) -> Result<bool> {
+        let mut state = self.sandboxes.lock();
+        if state
+            .names
+            .get(name)
+            .is_some_and(|r| r.sandbox_id().is_none() && r.operation_token() == token)
+        {
+            state.names.remove(name);
+            return Ok(true);
+        }
+        Ok(false)
     }
 
     async fn claim_domain(&self, binding: &DomainBinding) -> Result<DomainClaim> {
@@ -505,6 +545,70 @@ return deleted
         Ok(deleted > 0)
     }
 
+    async fn reserve_name(&self, reservation: &NameReservation) -> Result<bool> {
+        if reservation.sandbox_id().is_some() {
+            return Err(StoreError(
+                "only pending name reservations can be inserted".into(),
+            ));
+        }
+        let mut c = self.connection.clone();
+        let result: u32 = redis::cmd("EVAL")
+            .arg(
+                r#"
+local existing = redis.call('HGET', KEYS[1], ARGV[1])
+if existing then
+    local value = cjson.decode(existing)
+    if value.token == ARGV[2] and value.sandbox_id == cjson.null then return 1 end
+    return 0
+end
+redis.call('HSET', KEYS[1], ARGV[1], ARGV[3])
+return 1
+"#,
+            )
+            .arg(1)
+            .arg(self.key("name-reservations"))
+            .arg(reservation.name().as_str())
+            .arg(reservation.operation_token())
+            .arg(serde_json::to_string(reservation).map_err(json_error)?)
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        Ok(result == 1)
+    }
+    async fn name_reservation(&self, name: &SandboxName) -> Result<Option<NameReservation>> {
+        let mut c = self.connection.clone();
+        let value: Option<String> = redis::cmd("HGET")
+            .arg(self.key("name-reservations"))
+            .arg(name.as_str())
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        value
+            .map(|json| serde_json::from_str(&json).map_err(json_error))
+            .transpose()
+    }
+    async fn release_pending_name(&self, name: &SandboxName, token: &str) -> Result<bool> {
+        let mut c = self.connection.clone();
+        let result: u32 = redis::cmd("EVAL")
+            .arg(
+                r#"
+local existing = redis.call('HGET', KEYS[1], ARGV[1])
+if not existing then return 0 end
+local value = cjson.decode(existing)
+if value.token ~= ARGV[2] or value.sandbox_id ~= cjson.null then return 0 end
+return redis.call('HDEL', KEYS[1], ARGV[1])
+"#,
+            )
+            .arg(1)
+            .arg(self.key("name-reservations"))
+            .arg(name.as_str())
+            .arg(token)
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        Ok(result == 1)
+    }
+
     async fn claim_domain(&self, binding: &DomainBinding) -> Result<DomainClaim> {
         let mut c = self.connection.clone();
         let result: u32 = redis::cmd("EVAL")
@@ -838,6 +942,41 @@ pub(crate) mod tests {
 
     /// The contract, run against any store.
     pub(crate) async fn contract(store: &dyn ClusterStore) {
+        let name = SandboxName::parse("reservation-fixture").unwrap();
+        let a = NameReservation::pending(name.clone());
+        let b = NameReservation::pending(name.clone());
+        let (ra, rb) = tokio::join!(store.reserve_name(&a), store.reserve_name(&b));
+        let ra = ra.unwrap();
+        let rb = rb.unwrap();
+        assert_ne!(ra, rb, "exactly one competing owner wins");
+        let (winner, loser) = if ra { (&a, &b) } else { (&b, &a) };
+        assert!(store.reserve_name(winner).await.unwrap());
+        assert!(!store
+            .release_pending_name(&name, loser.operation_token())
+            .await
+            .unwrap());
+        assert_eq!(
+            store.name_reservation(&name).await.unwrap().as_ref(),
+            Some(winner)
+        );
+        assert!(store
+            .release_pending_name(&name, winner.operation_token())
+            .await
+            .unwrap());
+        assert!(store.reserve_name(loser).await.unwrap());
+        assert!(!store
+            .release_pending_name(&name, winner.operation_token())
+            .await
+            .unwrap());
+        let mut bound = NameReservation::pending(SandboxName::parse("bound-refused").unwrap());
+        let token = bound.operation_token().to_owned();
+        bound.bind(&token, "sandbox-fixture").unwrap();
+        assert!(store.reserve_name(&bound).await.is_err());
+        assert!(store
+            .release_pending_name(&name, loser.operation_token())
+            .await
+            .unwrap());
+
         let first = DomainBinding::new("App.Example.com.", "domain-a", 8080).unwrap();
         let second = DomainBinding::new("app.example.com", "domain-b", 9090).unwrap();
         assert_eq!(
