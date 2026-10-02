@@ -1003,6 +1003,60 @@ pub(crate) mod tests {
 
     /// The contract, run against any store.
     pub(crate) async fn contract(store: &dyn ClusterStore) {
+        // Whichever transaction wins, deletion cannot leave bound ownership
+        // pointing at a missing sandbox. Uncertain pending ownership survives.
+        for round in 0..16 {
+            let name = SandboxName::parse(&format!("bind-delete-{round}")).unwrap();
+            let id = format!("bind-delete-vm-{round}");
+            let reservation = NameReservation::pending(name.clone());
+            assert!(store.reserve_name(&reservation).await.unwrap());
+            store.put_sandbox(&sandbox(&id, "a")).await.unwrap();
+            let (bound, deleted) = tokio::join!(
+                store.bind_name(&name, reservation.operation_token(), &id),
+                store.delete_sandbox(&id)
+            );
+            let bound = bound.unwrap();
+            assert!(deleted.unwrap());
+            assert!(store.sandbox(&id).await.unwrap().is_none());
+            let remaining = store.name_reservation(&name).await.unwrap();
+            if bound {
+                assert!(remaining.is_none(), "delete must remove winning binding");
+            } else {
+                assert_eq!(remaining.as_ref(), Some(&reservation));
+                assert!(store
+                    .release_pending_name(&name, reservation.operation_token())
+                    .await
+                    .unwrap());
+            }
+        }
+        let name = SandboxName::parse("competing-bind-targets").unwrap();
+        let reservation = NameReservation::pending(name.clone());
+        assert!(store.reserve_name(&reservation).await.unwrap());
+        for id in ["bind-target-a", "bind-target-b"] {
+            store.put_sandbox(&sandbox(id, "a")).await.unwrap();
+        }
+        let (a, b) = tokio::join!(
+            store.bind_name(&name, reservation.operation_token(), "bind-target-a"),
+            store.bind_name(&name, reservation.operation_token(), "bind-target-b")
+        );
+        let a = a.unwrap();
+        let b = b.unwrap();
+        assert_ne!(a, b, "one token cannot bind ownership to two targets");
+        let winner = if a { "bind-target-a" } else { "bind-target-b" };
+        let loser = if a { "bind-target-b" } else { "bind-target-a" };
+        assert!(store.delete_sandbox(loser).await.unwrap());
+        assert_eq!(
+            store
+                .name_reservation(&name)
+                .await
+                .unwrap()
+                .unwrap()
+                .sandbox_id(),
+            Some(winner)
+        );
+        assert!(store.delete_sandbox(winner).await.unwrap());
+        assert!(store.name_reservation(&name).await.unwrap().is_none());
+
         let bound_name = SandboxName::parse("binding-fixture").unwrap();
         let reservation = NameReservation::pending(bound_name.clone());
         let token = reservation.operation_token();
