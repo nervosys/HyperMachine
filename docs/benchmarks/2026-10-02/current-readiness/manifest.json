@@ -1,0 +1,18 @@
+{
+  "purpose": "unscored readiness diagnosis; scored failures retained separately",
+  "files_sha256": {
+    "analysis.json": "555907c49c0eee2b12b171b463c1d3011de3b504d8747124f02ac7c31bf4ca44",
+    "analyze-current-readiness.py": "890247e00aad2c8b2e962b44150bd4f8196d0985706d2461d1b9700e7b16f2da",
+    "bench-firecracker-local.py": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6",
+    "bench-local-engines-concurrent.py": "59fae86ff5a8a8de390e15359e7da3e470edbab1c701e04de5efa788ae5fa459",
+    "bench-local-engines.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "build-context.json": "0ee628e8e5e8dfbd445aec7555448ae352bfe66d9c364cf7628091664bb007a4",
+    "c100.json": "e60571bd349d711b0965458c3cfe1fd03ea9ae51803fa71e0d6bb876eb152566",
+    "c100.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "diagnose-concurrent-startup.py": "4b96cb8f28286c8a941972e189ad2d71ba74420cbeae9c946ef58e34cd0d9ff0",
+    "matrix.json": "6d4b48f0ea14f966749aa853a535f709e1882d656342ddd6872de95b7d8ee693",
+    "README.md": "2593d379426bc34f4c263eece33940c6b1ddbc4d2062fe85c9d5c51c010b47b7",
+    "refresh-local-engines.py": "9fb581b0e258bf4c869804ce9cba53a83413e0fc568f46a674be31abd9221109",
+    "verify.py": "1b14aa199b97f19fd0c3b52cd72956e00c3ae152c45a5cf835a133546c70a43b"
+  }
+}
