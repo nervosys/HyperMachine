@@ -1,0 +1,16 @@
+    Checking hv2-sandbox v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\object-backup-source\crates\hv2-sandbox)
+    Checking hv2-guest-agent v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\object-backup-source\crates\hv2-guest-agent)
+   Compiling hv2-api v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\object-backup-source\crates\hv2-api)
+    Checking hv2-core v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\object-backup-source\crates\hv2-core)
+    Checking axum v0.8.9
+    Checking hv2-context v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\object-backup-source\crates\hv2-context)
+    Checking tracing-subscriber v0.3.23
+    Checking reqwest v0.12.28
+    Checking tonic v0.14.6
+    Checking tonic-prost v0.14.6
+    Checking hv2-agent v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\object-backup-source\crates\hv2-agent)
+    Checking hv2-net v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\object-backup-source\crates\hv2-net)
+    Checking hv2-runtime v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\object-backup-source\crates\hv2-runtime)
+    Checking hv2-cluster v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\object-backup-source\crates\hv2-cluster)
+    Checking hv2-sandboxd v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\object-backup-source\crates\hv2-sandboxd)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 18s

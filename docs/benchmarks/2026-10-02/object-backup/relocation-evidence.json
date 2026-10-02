@@ -1,0 +1,28 @@
+{
+  "original_path_unavailable": true,
+  "source_root": "/var/tmp/hm-object-backup/kvm-coverage/kvm-store",
+  "recovered_root": "/var/tmp/hm-object-backup/kvm-coverage/kvm-recovered",
+  "snapshots": {
+    "paused/sbx-c46e3f6535ca4ffd92bc.snap": {
+      "original_base": "/var/tmp/hm-object-backup/kvm-coverage/kvm-store/templates/8523c5a89bb1448da70aa0fa7ee6eb31/template.snap.mem",
+      "original_image": null,
+      "original_payload_sha256": "35676512256570d9cf82fac4604ced22a32de3b42a39ffc22e473c8f33c37325"
+    },
+    "snapshots/backup-template-22a88ea8fca641789646061b9e5c2173.snap": {
+      "original_base": "/var/tmp/hm-object-backup/kvm-coverage/kvm-store/templates/8523c5a89bb1448da70aa0fa7ee6eb31/template.snap.mem",
+      "original_image": null,
+      "original_payload_sha256": "dde0f37950bcf13a4b75ddbe92491b374b9654cea39f6be0faa1895ae61b4fa6",
+      "recovered_base": "/var/tmp/hm-object-backup/kvm-coverage/kvm-recovered/templates/8523c5a89bb1448da70aa0fa7ee6eb31/template.snap.mem",
+      "recovered_image": null,
+      "recovered_payload_sha256": "dde0f37950bcf13a4b75ddbe92491b374b9654cea39f6be0faa1895ae61b4fa6"
+    },
+    "templates/8523c5a89bb1448da70aa0fa7ee6eb31/template.snap": {
+      "original_base": null,
+      "original_image": "template.snap.mem",
+      "original_payload_sha256": "c35020473aed1b4642cd726cad727b63fff2824ad68cedd7ffb73c7cbd890479",
+      "recovered_base": null,
+      "recovered_image": "template.snap.mem",
+      "recovered_payload_sha256": "c35020473aed1b4642cd726cad727b63fff2824ad68cedd7ffb73c7cbd890479"
+    }
+  }
+}

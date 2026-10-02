@@ -1,0 +1,80 @@
+{
+  "success": true,
+  "performance_comparison": false,
+  "storage": "owned Moto S3 HTTP emulator; no managed-store durability claim",
+  "artifact_sha256": {
+    "tool": "ccce593410a55c7a25bb47a11730d904e02526d7be31110173c04b073140bf03",
+    "coordinator": "458d94f20eac799662909672ccb230e83c953625a7b59a26b5e60abdc2e67092"
+  },
+  "versions": {
+    "boto3": "1.43.107",
+    "botocore": "1.43.107",
+    "cryptography": "50.0.0",
+    "moto": "5.2.3"
+  },
+  "checks": [
+    {
+      "name": "active-store-refused",
+      "refused": true
+    },
+    {
+      "name": "encrypted-conditional-upload",
+      "sha256": "3bc5a3f1afed14275891a3caf1c325a4fa3b1d650346eb6f3f63ebce4dcbed97",
+      "bytes": 793
+    },
+    {
+      "name": "relocated-roundtrip-with-empty-directory-and-permissions",
+      "files": 3
+    },
+    {
+      "name": "wrong-key-tampered-truncated-refused",
+      "refused": true
+    },
+    {
+      "name": "expanded-byte-limit-refused",
+      "refused": true
+    },
+    {
+      "name": "unsafe-path",
+      "refused": true,
+      "error": "unsafe relative file name"
+    },
+    {
+      "name": "symlink",
+      "refused": true,
+      "error": "unsupported archive entry"
+    },
+    {
+      "name": "missing-file",
+      "refused": true,
+      "error": "archive file missing"
+    },
+    {
+      "name": "wrong-digest",
+      "refused": true,
+      "error": "archive file digest mismatch"
+    },
+    {
+      "name": "extra-file",
+      "refused": true,
+      "error": "extra or duplicate archive file"
+    },
+    {
+      "name": "duplicate-file",
+      "refused": true,
+      "error": "extra or duplicate archive file"
+    },
+    {
+      "name": "source-symlink-and-unfinished-claim-refused",
+      "refused": true
+    }
+  ],
+  "cleanup_errors": [],
+  "processes_stopped": [
+    {
+      "name": "s3",
+      "exit_code": 0
+    }
+  ],
+  "artifacts_unchanged": true
+}
