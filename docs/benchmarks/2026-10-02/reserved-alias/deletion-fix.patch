@@ -1,0 +1,72 @@
+diff --git a/crates/hv2-cluster/src/control.rs b/crates/hv2-cluster/src/control.rs
+index ed57053..4b26cc4 100644
+--- a/crates/hv2-cluster/src/control.rs
++++ b/crates/hv2-cluster/src/control.rs
+@@ -965,6 +965,19 @@ async fn forward(
+         .to_string();
+     let bytes = response.bytes().await.unwrap_or_default();
+ 
++    // Older nodes remove the VM record without knowing about reserved names.
++    // Repeat the atomic store cleanup here before acknowledging deletion; it
++    // also clears ownership when the node has already removed the record.
++    if method == Method::DELETE && uri.path() == format!("/sandboxes/{id}") && status.is_success() {
++        if let Err(error) = control.store.delete_sandbox(&id).await {
++            tracing::warn!(%id, %error, "sandbox deletion store cleanup failed");
++            return api_error(
++                StatusCode::SERVICE_UNAVAILABLE,
++                "sandbox deletion store cleanup failed",
++            );
++        }
++    }
++
+     // `connect` and `resume` answer with the descriptor, which has to point
+     // here too; `fork` with one per fork, beside an error or not.
+     let path = uri.path();
+diff --git a/crates/hv2-cluster/tests/control_plane.rs b/crates/hv2-cluster/tests/control_plane.rs
+index 09bd160..41b632c 100644
+--- a/crates/hv2-cluster/tests/control_plane.rs
++++ b/crates/hv2-cluster/tests/control_plane.rs
+@@ -1484,7 +1484,33 @@ async fn name_assignment_is_authenticated_exclusive_and_reusable_after_deletion(
+         json!({"name":"alias","sandboxID":winner})
+     );
+     assert_eq!(assign(loser, "alias", KEY).await.unwrap().status(), 409);
+-    assert!(store.delete_sandbox(winner).await.unwrap());
++    // A successful legacy node response does not clean the shared name store.
++    // The control plane must perform cleanup itself before acknowledging it.
++    heartbeat.abort();
++    let _ = heartbeat.await;
++    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
++    let mut node = store.node("assign-node").await.unwrap().unwrap();
++    node.api = format!("http://{}", listener.local_addr().unwrap());
++    store
++        .put_node(&node, Duration::from_secs(30))
++        .await
++        .unwrap();
++    let app = Router::new().route(
++        "/sandboxes/{id}",
++        delete(|| async { StatusCode::NO_CONTENT }),
++    );
++    let legacy_node = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
++    assert_eq!(
++        client()
++            .delete(format!("{base}/sandboxes/{winner}"))
++            .header("x-api-key", KEY)
++            .send()
++            .await
++            .unwrap()
++            .status(),
++        204
++    );
++    assert!(store.sandbox(winner).await.unwrap().is_none());
+     assert_eq!(assign(loser, "alias", KEY).await.unwrap().status(), 200);
+     assert!(!store.delete_sandbox(winner).await.unwrap());
+     let resolved = client()
+@@ -1497,6 +1523,6 @@ async fn name_assignment_is_authenticated_exclusive_and_reusable_after_deletion(
+         .await
+         .unwrap();
+     assert_eq!(resolved, json!({"name":"alias","sandboxID":loser}));
+-    heartbeat.abort();
+-    let _ = heartbeat.await;
++    legacy_node.abort();
++    let _ = legacy_node.await;
+ }

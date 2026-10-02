@@ -125,7 +125,10 @@ def main():
     parser.add_argument("--scheduled-worker", action="store_true", help="verify automatic VM worker continuation and durable receipts")
     parser.add_argument("--scheduled-calendar", action="store_true", help="verify cron fold occurrences through the VM worker")
     parser.add_argument("--scheduled-calendar-batch", action="store_true", help="verify bounded calendar catch-up before VM dispatch")
+    parser.add_argument("--reserved-alias", action="store_true", help="assign a reserved alias with the CLI and verify named SSH without metadata")
     args = parser.parse_args()
+    if args.reserved_alias and not (args.ssh_by_name and args.ssh_fixture):
+        parser.error("--reserved-alias requires --ssh-by-name and --ssh-fixture")
     if args.scheduled_calendar_batch and not args.scheduled_calendar:
         parser.error("--scheduled-calendar-batch requires --scheduled-calendar")
     if args.scheduled_calendar and not args.scheduled_worker:
@@ -327,14 +330,32 @@ def main():
             report["transport"] = "CLI -> verified API TLS -> control plane -> node mTLS plus cluster token -> vsock -> loopback guest TCP"
             create_body = {"templateID": "base", "timeout": 300, "allowInternetAccess": False}
             ssh_name = "ssh-e2e-" + uuid.uuid4().hex
-            if args.ssh_by_name:
+            if args.ssh_by_name and not args.reserved_alias:
                 create_body["metadata"] = {"hm.name": ssh_name}
             created = api("POST", "/v2/sandboxes", create_body, expected=201)
             id = created["sandboxID"]
             guests.add(id)
             info = api("GET", f"/sandboxes/{id}")
             assert info["cpuCount"] == 1 and info["memoryMB"] == 1024
-            if args.ssh_by_name:
+            if args.reserved_alias:
+                assert "hm.name" not in info["metadata"]
+                def alias_cli(*arguments, succeeds=True):
+                    result = subprocess.run([str(args.cli), "sandbox", "vm", "--endpoint", api_url,
+                        "--api-ca-cert", str(directory / "ca.pem"), "alias", *arguments],
+                        env=dict(env, HV2_API_KEY=key), stdin=subprocess.DEVNULL,
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+                    assert (result.returncode == 0) == succeeds, result.stderr[:1000]
+                    return json.loads(result.stdout) if succeeds else None
+                def reserved_alias():
+                    expected = {"name":ssh_name,"sandboxID":id}
+                    assert alias_cli("bind",id,ssh_name) == expected
+                    assert alias_cli("bind",id,ssh_name) == expected
+                    assert alias_cli("inspect",ssh_name) == expected
+                    api("PUT",f"/sandboxes/{id}/names/{ssh_name}",{},supplied_key=inventory_key,expected=403)
+                    return {"CLI_assignment_and_replay":True,"CLI_inspection":True,
+                            "metadata_name_absent":True,"inventory_assignment_refused":True}
+                case("reserved-alias-CLI-TLS-assignment-and-lookup",reserved_alias)
+            elif args.ssh_by_name:
                 assert info["metadata"]["hm.name"] == ssh_name
             command(id, "/bin/tcp-fixture </dev/null >/tmp/tcp-fixture.log 2>&1 &")
             deadline = time.monotonic() + 5
@@ -456,7 +477,7 @@ def main():
                         raise RuntimeError("guest SSH did not start: " + probe.stderr.decode(errors="replace"))
                     time.sleep(.05)
                 report["ssh_fixture"] = {"build_sha256": digest(fixture / "build.json"),
-                    "resolution": "hm.name metadata" if args.ssh_by_name else "sandbox ID",
+                    "resolution": "reserved alias" if args.reserved_alias else "hm.name metadata" if args.ssh_by_name else "sandbox ID",
                     "server_version": build["server_version"], "host_public_key_sha256": build["host_public_key_sha256"],
                     "client_public_key_sha256": build["client_public_key_sha256"],
                     "openssh_version": subprocess.check_output(["ssh", "-V"], stderr=subprocess.STDOUT, text=True).strip()}
@@ -632,7 +653,13 @@ def main():
                 child = forks[0]["sandbox"]["sandboxID"]
                 guests.add(child)
                 result = mirror(child)
-                if args.ssh_by_name:
+                if args.reserved_alias:
+                    api("PUT",f"/sandboxes/{child}/names/{ssh_name}",{},expected=409)
+                    kept = ssh("printf reserved-parent")
+                    assert kept.returncode == 0 and kept.stdout == b"reserved-parent"
+                    result["alias_transfer_refused"] = True
+                    result["alias_keeps_parent_after_fork"] = True
+                elif args.ssh_by_name:
                     rejected = ssh("printf should-not-run")
                     assert rejected.returncode == 255 and not rejected.stdout
                     assert b"ambiguous" in rejected.stderr, rejected.stderr
@@ -655,7 +682,18 @@ def main():
                         guests.remove(id)
                         assert receive_all(stream) == b""
                     tunnel(18080, id, expected=404)
-                    return {"active_connection_closed": True, "subsequent_handshake_status": 404}
+                    result = {"active_connection_closed": True, "subsequent_handshake_status": 404}
+                    if args.reserved_alias:
+                        alias_cli("inspect",ssh_name,succeeds=False)
+                        replacement = api("POST","/v2/sandboxes",{"templateID":"base","timeout":300},expected=201)["sandboxID"]
+                        guests.add(replacement)
+                        assert alias_cli("bind",replacement,ssh_name) == {"name":ssh_name,"sandboxID":replacement}
+                        assert alias_cli("inspect",ssh_name) == {"name":ssh_name,"sandboxID":replacement}
+                        api("DELETE",f"/sandboxes/{replacement}",expected=204)
+                        guests.remove(replacement)
+                        alias_cli("inspect",ssh_name,succeeds=False)
+                        result["alias_deleted_and_reused"] = True
+                    return result
                 finally:
                     process.send_signal(signal.SIGINT)
                     process.wait(timeout=5)

@@ -1,0 +1,10 @@
+299:C 02 Oct 2026 00:32:55.085 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+299:C 02 Oct 2026 00:32:55.085 * Redis version=8.0.2, bits=64, commit=00000000, modified=0, pid=299, just started
+299:C 02 Oct 2026 00:32:55.085 * Configuration loaded
+299:M 02 Oct 2026 00:32:55.085 * monotonic clock: POSIX clock_gettime
+299:M 02 Oct 2026 00:32:55.086 * Running mode=standalone, port=60013.
+299:M 02 Oct 2026 00:32:55.086 * Server initialized
+299:M 02 Oct 2026 00:32:55.086 * Ready to accept connections tcp
+299:signal-handler (1790926416) Received SIGTERM scheduling shutdown...
+299:M 02 Oct 2026 00:33:36.267 * User requested shutdown...
+299:M 02 Oct 2026 00:33:36.267 # Redis is now ready to exit, bye bye...
