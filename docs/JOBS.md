@@ -265,7 +265,9 @@ Cancellation stops the worker when observed between ticks and preserves history.
 An unresolved claim or competing-writer conflict stops the worker; restart does
 not re-execute an uncertain occurrence. Polling permits 1-60000 milliseconds and
 publication limits permit 1-1024 records. Catch-up publication can outpace
-execution and grow the backlog. Long-history scan performance is unverified.
+execution and grow the backlog. [A warm-cache history diagnostic](benchmarks/2026-10-01/dispatch-history.md)
+measures growing selection cost; end-to-end long-history worker performance
+remains unverified.
 
 Windows and Linux protocol fixtures verify completion, continuation after
 restart and refusal to dispatch again after an uncertain response. [A separate KVM/TLS run](benchmarks/2026-10-01/scheduled-worker.md) also verifies
