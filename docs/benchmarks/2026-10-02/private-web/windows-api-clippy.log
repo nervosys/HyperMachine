@@ -1,0 +1,16 @@
+    Blocking waiting for file lock on package cache
+    Checking hv2-sandbox v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\private-web-windows-source\crates\hv2-sandbox)
+    Checking axum v0.8.9
+    Checking hv2-guest-agent v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\private-web-windows-source\crates\hv2-guest-agent)
+    Checking tinytemplate v1.2.1
+    Checking reqwest v0.12.28
+    Checking tracing-subscriber v0.3.23
+    Checking hv2-context v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\private-web-windows-source\crates\hv2-context)
+    Checking hv2-core v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\private-web-windows-source\crates\hv2-core)
+    Checking criterion v0.5.1
+    Checking tonic v0.14.6
+    Checking tonic-prost v0.14.6
+    Checking hv2-agent v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\private-web-windows-source\crates\hv2-agent)
+    Checking hv2-runtime v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\private-web-windows-source\crates\hv2-runtime)
+    Checking hv2-api v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\private-web-windows-source\crates\hv2-api)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 10s
