@@ -1,0 +1,396 @@
+diff --git a/crates/hv2-sandboxd/src/checkpoints.rs b/crates/hv2-sandboxd/src/checkpoints.rs
+index dcae3d6..ec22be2 100644
+--- a/crates/hv2-sandboxd/src/checkpoints.rs
++++ b/crates/hv2-sandboxd/src/checkpoints.rs
+@@ -33,7 +33,7 @@ use serde_json::json;
+ 
+ use super::{
+     api_error, bring_up, forwards, now_ms, register, telemetry, transition_lock,
+-    valid_template_name, AppState, NetworkSpec,
++    valid_template_name, AppState, NetworkSpec, RegistrationContext,
+ };
+ 
+ /// The most checkpoints one sandbox keeps.
+@@ -277,7 +277,7 @@ pub(crate) async fn restore(
+     descriptor.process_port = running.process_addr.port();
+     let mut record = old.record;
+     record.descriptor = serde_json::to_value(&descriptor).unwrap_or_default();
+-    register(
++    if let Err((status, error)) = register(
+         &state,
+         old._slot,
+         running,
+@@ -285,9 +285,15 @@ pub(crate) async fn restore(
+         record.clone(),
+         old.lifecycle,
+         old.network_request,
+-        Some("sandbox-updated"),
++        RegistrationContext {
++            event: Some("sandbox-updated"),
++            ..RegistrationContext::default()
++        },
+     )
+-    .await;
++    .await
++    {
++        return api_error(status, error);
++    }
+     telemetry::log(
+         &state,
+         &sandbox_id,
+diff --git a/crates/hv2-sandboxd/src/main.rs b/crates/hv2-sandboxd/src/main.rs
+index 6da56c6..03f2f84 100644
+--- a/crates/hv2-sandboxd/src/main.rs
++++ b/crates/hv2-sandboxd/src/main.rs
+@@ -95,7 +95,7 @@ use std::sync::Arc;
+ use std::time::Duration;
+ 
+ use axum::extract::{Path, Query, Request, State};
+-use axum::http::StatusCode;
++use axum::http::{HeaderMap, StatusCode};
+ use axum::middleware::Next;
+ use axum::response::{IntoResponse, Response};
+ use axum::routing::{get, post, put};
+@@ -111,6 +111,7 @@ use hv2_cluster::metrics::{Counter, Exposition, Histogram};
+ use hv2_cluster::model::{
+     metadata_matches, now_ms, parse_metadata_query, ClusterEvent, SandboxRecord,
+ };
++use hv2_cluster::names::{NameReservation, SandboxName, NAME_OPERATION_HEADER};
+ use hv2_cluster::node::{NodeAgent, NodeConfig};
+ use hv2_net::gateway::socks::Socks5Proxy;
+ use hv2_net::gateway::{mitm::Authority, Gateway, GatewayConfig, GatewayHandle};
+@@ -1022,18 +1023,31 @@ struct ExecResponse {
+ }
+ 
+ /// `POST /sandboxes`: E2B's v1 route, whose default lifetime is 15 seconds.
+-async fn create_v1(State(state): State<Arc<AppState>>, Json(req): Json<NewSandbox>) -> Response {
+-    counted_create(state, req, 15).await
++async fn create_v1(
++    State(state): State<Arc<AppState>>,
++    headers: HeaderMap,
++    Json(req): Json<NewSandbox>,
++) -> Response {
++    counted_create(state, req, 15, headers).await
+ }
+ 
+ /// `POST /v2/sandboxes`: what current SDKs call, default lifetime 300 s.
+-async fn create_v2(State(state): State<Arc<AppState>>, Json(req): Json<NewSandbox>) -> Response {
+-    counted_create(state, req, 300).await
++async fn create_v2(
++    State(state): State<Arc<AppState>>,
++    headers: HeaderMap,
++    Json(req): Json<NewSandbox>,
++) -> Response {
++    counted_create(state, req, 300, headers).await
+ }
+ 
+-async fn counted_create(state: Arc<AppState>, req: NewSandbox, default_timeout: u64) -> Response {
++async fn counted_create(
++    state: Arc<AppState>,
++    req: NewSandbox,
++    default_timeout: u64,
++    headers: HeaderMap,
++) -> Response {
+     let started = std::time::Instant::now();
+-    let response = create_sandbox(Arc::clone(&state), req, default_timeout).await;
++    let response = create_sandbox(Arc::clone(&state), req, default_timeout, headers).await;
+     let m = &state.metrics;
+     match response.status() {
+         StatusCode::CREATED => {
+@@ -1443,6 +1457,12 @@ fn new_sandbox_id() -> String {
+     format!("sbx-{}", &uuid::Uuid::new_v4().simple().to_string()[..20])
+ }
+ 
++#[derive(Default)]
++struct RegistrationContext<'a> {
++    event: Option<&'a str>,
++    name_operation: Option<&'a NameReservation>,
++}
++
+ /// Make a running sandbox reachable and known: routed, listed, recorded.
+ async fn register(
+     state: &AppState,
+@@ -1452,8 +1472,9 @@ async fn register(
+     record: SandboxRecord,
+     lifecycle: Lifecycle,
+     network_request: Option<NetworkRequest>,
+-    event: Option<&str>,
+-) {
++    context: RegistrationContext<'_>,
++) -> Result<(), (StatusCode, String)> {
++    let event = context.event;
+     let sandbox_id = record.sandbox_id.clone();
+     telemetry::log(
+         state,
+@@ -1503,7 +1524,54 @@ async fn register(
+     };
+     // Recorded before answering, so a control plane that routes the next
+     // call by the store finds it.
+-    record_event(state, &record, event.unwrap_or("sandbox-created"), count).await;
++    if let Some(operation) = context.name_operation {
++        let Some(node) = &state.node else {
++            return Err((
++                StatusCode::SERVICE_UNAVAILABLE,
++                "named registration needs a cluster node".into(),
++            ));
++        };
++        match node.created_named(&record, count, operation).await {
++            Ok(Some(event)) => state.events.deliver(&event),
++            Ok(None) => {
++                // Registration was refused before any shared writes. Remove
++                // only this local guest; never delete another owner's record
++                // or release uncertain pending ownership.
++                let live = state.sandboxes.lock().remove(&sandbox_id);
++                state.routes.remove_sandbox(&sandbox_id);
++                telemetry::forget(state, &sandbox_id);
++                state.transitions.lock().remove(&sandbox_id);
++                if let Some(live) = live {
++                    let _ = live.process_shutdown.send(());
++                    if let Some(network) = live.network {
++                        network.bridge.abort();
++                    }
++                    if let Err(error) = live.vm.stop().await {
++                        tracing::warn!(%sandbox_id,%error,"stopping refused named guest failed");
++                    }
++                }
++                if let Err(error) = node.announce(state.running()).await {
++                    tracing::warn!(%error,"announcing named registration refusal failed");
++                }
++                return Err((
++                    StatusCode::CONFLICT,
++                    "named sandbox registration refused".into(),
++                ));
++            }
++            Err(error) => {
++                // The atomic write may have committed before a later failure.
++                // Preserve the guest so a completed binding remains usable.
++                tracing::warn!(%sandbox_id,%error,"named registration outcome requires reconciliation");
++                return Err((
++                    StatusCode::SERVICE_UNAVAILABLE,
++                    "named registration outcome requires reconciliation".into(),
++                ));
++            }
++        }
++    } else {
++        record_event(state, &record, event.unwrap_or("sandbox-created"), count).await;
++    }
++    Ok(())
+ }
+ 
+ /// Record a sandbox's lifecycle event -- in the cluster store, with its
+@@ -1565,7 +1633,86 @@ async fn ended(
+     state.events.deliver(&event);
+ }
+ 
+-async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: u64) -> Response {
++fn named_creation_operation(
++    headers: &HeaderMap,
++    metadata: &BTreeMap<String, String>,
++    clustered: bool,
++    authenticated_cluster: bool,
++) -> Result<Option<NameReservation>, (StatusCode, &'static str)> {
++    let header = headers.get(NAME_OPERATION_HEADER);
++    let Some(name) = metadata.get("hm.name") else {
++        return if header.is_some() {
++            Err((
++                StatusCode::BAD_REQUEST,
++                "name operation requires named metadata",
++            ))
++        } else {
++            Ok(None)
++        };
++    };
++    let name =
++        SandboxName::parse(name).map_err(|_| (StatusCode::BAD_REQUEST, "invalid sandbox name"))?;
++    if !clustered {
++        return if header.is_some() {
++            Err((
++                StatusCode::BAD_REQUEST,
++                "name operation requires a cluster node",
++            ))
++        } else {
++            Ok(None)
++        };
++    }
++    let header = header.ok_or((
++        StatusCode::CONFLICT,
++        "named cluster creation requires reserved operation context",
++    ))?;
++    if !authenticated_cluster {
++        return Err((
++            StatusCode::SERVICE_UNAVAILABLE,
++            "named cluster creation requires cluster authentication",
++        ));
++    }
++    let token = header
++        .to_str()
++        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid name operation context"))?;
++    NameReservation::from_operation(name, token)
++        .map(Some)
++        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid name operation context"))
++}
++
++async fn create_sandbox(
++    state: Arc<AppState>,
++    req: NewSandbox,
++    default_timeout: u64,
++    headers: HeaderMap,
++) -> Response {
++    let operation = match named_creation_operation(
++        &headers,
++        &req.metadata,
++        state.node.is_some(),
++        state.opts.cluster_token.is_some(),
++    ) {
++        Ok(operation) => operation,
++        Err((status, error)) => return api_error(status, error),
++    };
++    drop(headers);
++    if let (Some(node), Some(operation)) = (&state.node, &operation) {
++        match node.name_operation_pending(operation).await {
++            Ok(true) => {}
++            Ok(false) => {
++                return api_error(
++                    StatusCode::CONFLICT,
++                    "name operation is not pending for this owner",
++                )
++            }
++            Err(_) => {
++                return api_error(
++                    StatusCode::SERVICE_UNAVAILABLE,
++                    "name operation store unavailable",
++                )
++            }
++        }
++    }
+     // A template this node does not have is the caller's mistake, answered
+     // before a slot is taken -- as E2B answers an unknown template.
+     // A snapshot is created from as a fork is: its template restored, its
+@@ -1715,7 +1862,9 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout:
+         portable: false,
+         volume_mounts: mounts,
+     };
+-    register(
++    let registration_lock = transition_lock(&state, &sandbox_id);
++    let _held = registration_lock.lock().await;
++    if let Err((status, error)) = register(
+         &state,
+         slot,
+         running,
+@@ -1723,9 +1872,15 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout:
+         record,
+         lifecycle,
+         network_request,
+-        None,
++        RegistrationContext {
++            name_operation: operation.as_ref(),
++            ..RegistrationContext::default()
++        },
+     )
+-    .await;
++    .await
++    {
++        return api_error(status, error);
++    }
+ 
+     (StatusCode::CREATED, Json(descriptor)).into_response()
+ }
+@@ -2198,9 +2353,12 @@ async fn resume_sandbox(
+         record,
+         paused.lifecycle,
+         paused.network_request,
+-        Some("sandbox-resumed"),
++        RegistrationContext {
++            event: Some("sandbox-resumed"),
++            ..RegistrationContext::default()
++        },
+     )
+-    .await;
++    .await?;
+     state.metrics.resumes.inc();
+     state.metrics.resume_latency.observe(started.elapsed());
+     Ok(Some(descriptor))
+@@ -2425,9 +2583,9 @@ async fn fork_route(
+                     record,
+                     lifecycle,
+                     network_request,
+-                    None,
++                    RegistrationContext::default(),
+                 )
+-                .await;
++                .await?;
+                 Ok::<_, (StatusCode, String)>(descriptor)
+             }
+         })
+@@ -4464,4 +4622,71 @@ mod tests {
+             AddressVerdict::Allow("allowOut address")
+         );
+     }
++    #[test]
++    fn named_cluster_creation_requires_valid_authenticated_operation_context() {
++        let metadata = BTreeMap::from([("hm.name".into(), "guest".into())]);
++        let mut headers = HeaderMap::new();
++        assert_eq!(
++            named_creation_operation(&headers, &metadata, true, true)
++                .unwrap_err()
++                .0,
++            StatusCode::CONFLICT
++        );
++        headers.insert(
++            NAME_OPERATION_HEADER,
++            "invalid-private-token".parse().unwrap(),
++        );
++        let error = named_creation_operation(&headers, &metadata, true, true).unwrap_err();
++        assert_eq!(error.0, StatusCode::BAD_REQUEST);
++        assert!(!error.1.contains("invalid-private-token"));
++        let owner = NameReservation::pending(SandboxName::parse("guest").unwrap());
++        headers.insert(
++            NAME_OPERATION_HEADER,
++            owner.operation_token().parse().unwrap(),
++        );
++        assert_eq!(
++            named_creation_operation(&headers, &metadata, true, false)
++                .unwrap_err()
++                .0,
++            StatusCode::SERVICE_UNAVAILABLE
++        );
++        let operation = named_creation_operation(&headers, &metadata, true, true)
++            .unwrap()
++            .unwrap();
++        assert!(owner.matches_pending_operation(&operation));
++        assert_eq!(
++            named_creation_operation(&headers, &BTreeMap::new(), true, true)
++                .unwrap_err()
++                .0,
++            StatusCode::BAD_REQUEST
++        );
++        let invalid = BTreeMap::from([("hm.name".into(), "bad name".into())]);
++        assert_eq!(
++            named_creation_operation(&headers, &invalid, true, true)
++                .unwrap_err()
++                .0,
++            StatusCode::BAD_REQUEST
++        );
++    }
++
++    #[test]
++    fn standalone_metadata_names_and_unnamed_cluster_requests_keep_their_protocol() {
++        let metadata = BTreeMap::from([("hm.name".into(), "guest".into())]);
++        let mut headers = HeaderMap::new();
++        assert!(named_creation_operation(&headers, &metadata, false, false)
++            .unwrap()
++            .is_none());
++        assert!(
++            named_creation_operation(&headers, &BTreeMap::new(), true, false)
++                .unwrap()
++                .is_none()
++        );
++        headers.insert(NAME_OPERATION_HEADER, "untrusted".parse().unwrap());
++        assert_eq!(
++            named_creation_operation(&headers, &metadata, false, false)
++                .unwrap_err()
++                .0,
++            StatusCode::BAD_REQUEST
++        );
++    }
+ }
