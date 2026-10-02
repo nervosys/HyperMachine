@@ -41,6 +41,7 @@ def main():
     parser.add_argument("--kernel", type=Path)
     parser.add_argument("--initrd", type=Path)
     parser.add_argument("--multipart", action="store_true", help="exercise multipart upload for the KVM backup")
+    parser.add_argument("--compression-level", type=int, choices=range(1, 10), default=1)
     args = parser.parse_args()
     require(all([args.daemon, args.kernel, args.initrd]) or not any([args.daemon, args.kernel, args.initrd]), "KVM paths must be supplied together")
     os.umask(0o077)
@@ -82,6 +83,7 @@ def main():
         command = [sys.executable, str(tool), operation, "--bucket", bucket, "--object", object,
                    "--endpoint", endpoint, "--key-file", str(key_file)]
         command += ["--store", str(store)] if operation == "backup" else ["--destination", str(destination)]
+        if operation == "backup": command += ["--compression-level", str(args.compression_level)]
         result = subprocess.run(command + list(extra), env=env, capture_output=True, timeout=180)
         for secret in [credential, aws_id, aws_secret, key.read_text()]:
             require(secret.encode() not in result.stdout + result.stderr, "secret leaked into tool output")

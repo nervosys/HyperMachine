@@ -174,12 +174,12 @@ class DigestReader:
         return value
 
 
-def make_bundle(root, output, maximum):
+def make_bundle(root, output, maximum, compression_level=1):
     manifest = scan(root, maximum)
     dependencies(root, manifest)
     encoded = canonical(manifest)
     require(len(encoded) <= MAX_MANIFEST, "manifest is oversized")
-    with tarfile.open(output, "w:gz", compresslevel=1) as archive:
+    with tarfile.open(output, "w:gz", compresslevel=compression_level) as archive:
         entry = tarfile.TarInfo(MANIFEST)
         entry.size, entry.mode = len(encoded), 0o600
         archive.addfile(entry, io.BytesIO(encoded))
@@ -410,12 +410,13 @@ def backup(args):
         scratch = Path(scratch)
         require(not scratch.resolve().is_relative_to(root), "temporary work directory must be outside the store")
         bundle, encrypted = scratch / "bundle.tar.gz", scratch / "bundle.hmb"
-        manifest = make_bundle(root, bundle, args.max_expanded_bytes)
+        manifest = make_bundle(root, bundle, args.max_expanded_bytes, args.compression_level)
         encrypt(bundle, encrypted, key)
         with encrypted.open("rb") as stream:
             digest = hashlib.file_digest(stream, "sha256").digest(); stream.seek(0)
             receipt = {"operation": "backup", "object": args.object, "encrypted_bytes": encrypted.stat().st_size,
-                       "sha256": digest.hex(), "files": len(manifest["files"]), "expanded_bytes": manifest["expanded_bytes"]}
+                       "sha256": digest.hex(), "files": len(manifest["files"]), "expanded_bytes": manifest["expanded_bytes"],
+                       "compression_level": args.compression_level}
             upload_ciphertext(s3, stream, args.bucket, args.object, receipt,
                               args.multipart_threshold_mib * 1024**2, args.multipart_part_mib * 1024**2)
         return receipt
@@ -472,6 +473,7 @@ def main():
         command.add_argument("--max-expanded-bytes", type=int, default=64 * 1024**3)
         command.add_argument("--store" if name == "backup" else "--destination", type=Path, required=True)
         if name == "backup":
+            command.add_argument("--compression-level", type=int, default=1, help="gzip level 1 to 9; default 1 favors capture speed")
             command.add_argument("--multipart-threshold-mib", type=int, default=64, help="multipart upload threshold, 1 to 4096 MiB")
             command.add_argument("--multipart-part-mib", type=int, default=64, help="encrypted part buffer, 8 to 128 MiB")
         if name == "restore":
@@ -483,6 +485,7 @@ def main():
     os.umask(0o077)
     try:
         if args.command == "backup":
+            require(1 <= args.compression_level <= 9, "compression level must be 1 to 9")
             require(1 <= args.multipart_threshold_mib <= 4096, "multipart threshold must be 1 to 4096 MiB")
             require(8 <= args.multipart_part_mib <= 128, "multipart part size must be 8 to 128 MiB")
         result = backup(args) if args.command == "backup" else restore(args)
