@@ -63,8 +63,24 @@ deletes or overwrites an existing backup as recovery from an upload error.
 S3 uses the SDK default endpoint. TLS verification stays enabled. HTTP is allowed
 only for loopback fixtures. `--region` defaults to `us-east-1`. Bucket policy,
 versioning, object lock, retention and independent replication remain operator
-responsibilities. This implementation uses one `PutObject` and refuses ciphertext
-larger than 5,000,000,000 bytes; multipart backups are not implemented.
+responsibilities. Ciphertext at or above 64 MiB uses multipart upload with
+64 MiB parts; smaller backups use `PutObject`. `--multipart-threshold-mib`
+(1–4096) and `--multipart-part-mib` (8–128) configure these values. Objects above
+5,000,000,000 bytes always use multipart upload. The encrypted format accepts
+at most 64 GiB of ciphertext, including its 36-byte framing, and refuses larger
+compressed plaintext before encryption.
+
+Multipart upload sends SHA-256 checksums for every part and conditions completion
+on the object being absent. The receipt's `sha256` remains the whole ciphertext
+digest used for recovery. `composite_sha256` is AWS's separate digest of the part
+digests, followed by the part count; it cannot replace the recovery digest.
+See [AWS multipart checksums](https://docs.aws.amazon.com/AmazonS3/latest/userguide/tutorial-s3-mpu-additional-checksums.html).
+On failure or an interrupt, the helper attempts to abort only its own known
+upload ID and reports `multipart_cleanup`. Lost creation responses or failed
+aborts can leave incomplete uploads requiring operator cleanup. Lost completion
+responses can leave a complete object: preserve the attempt receipt and inspect
+it before retrying. Configure bucket lifecycle cleanup for incomplete uploads;
+the helper never aborts uploads owned by other invocations.
 
 ## Restore
 
@@ -139,3 +155,8 @@ Moto S3 HTTP emulator and real nested KVM guests. It verifies wire operations,
 local recovery and the tested failure behavior; it does not establish managed
 S3 durability, IAM enforcement, cross-region recovery, backup scheduling,
 retention automation, service availability or a performance win.
+
+[Multipart evidence](benchmarks/2026-10-02/multipart-backup/README.md) additionally
+verifies a 75-part object of 5,002,521,063 ciphertext bytes, identical recovery of
+5,001,000,000 plaintext bytes, scoped failure cleanup and ambiguous completion,
+and five-part recovery of real KVM paused state, volumes and named snapshots.

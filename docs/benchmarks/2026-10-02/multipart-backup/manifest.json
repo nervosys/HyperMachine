@@ -1,0 +1,21 @@
+{
+  "sha256": {
+    "README.md": "aaedcab2d04ceea486683b9d9600cdfb44b17df42b42e90d1de0d741e444ec9a",
+    "backup-snapshot-store.py": "fa3c145c7628b96f028081daff71636992a11ef3432ba8bdadad948e2da222a0",
+    "check-multipart-backup.py": "fcdb79f45390cebd0a5d495f5613e1aedf14dec2c2870b988ad1d1feb2d27434",
+    "check-object-backup.py": "b31b4413b38412e1c64d3039946647675905db0a0e4b6ff2ba02ad029a32ba29",
+    "checksum-inspection/report.json": "60a6d5c7493854b204031bd52b67759ebc9e38e061704cbdde0fdc0d7aff13b3",
+    "checksum-inspection/s3.log": "5f91231e131f283a85f6d87274ab08291bec3108d051ee686ee529d613704a1a",
+    "checksum-inspection-coordinator.py": "130eeaa4279c6615b0d3cdbeb29a73dcfe1b8cecda109db5347430f7c97738e0",
+    "kvm/report.json": "431b0a5061b488461dee1eab620e18fea004f98adbb0b044f2c0bb15a6f857f5",
+    "kvm/s3.log": "70b09db2363df6b6b2a46dab79ff8b6b7bccc447900e7247f693f39249f6c55f",
+    "large/report.json": "7adb7b99ae57f3846626fa7ec7a98a08746fd82f65655afef907cf6eea959d62",
+    "large/s3.log": "6540ca5367fdc6a5718c1feb20e1c59f084f98a2d18e638c8e76770a5a035555",
+    "small/report.json": "a7b815a376dc749b93760711714989e91da3953abf5f0ff231aabced8aec5171",
+    "small/s3.log": "09b697213e46f24b996967e0c61c55374dfd61bcd9fffd40bbc9eb35892079eb",
+    "small-coordinator.py": "10420c62069581570c0f34b885aada76cd963fa178a0e3ece98f9eb42520ed9c",
+    "small-corrected/report.json": "410d26a26056fbebd542334224df252dafc6f6ea9b7928a3aeda262038749185",
+    "small-corrected/s3.log": "d6c6b7f37f7da880a4767254a61831cf9e819037d00766d02a4911311614f110",
+    "verify-multipart-backup.py": "762c5b209d45cfed6a48bf8c1c827c5f531b34e90ccca90bacc0e7f82723e421"
+  }
+}

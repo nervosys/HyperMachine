@@ -40,6 +40,7 @@ def main():
     parser.add_argument("--daemon", type=Path)
     parser.add_argument("--kernel", type=Path)
     parser.add_argument("--initrd", type=Path)
+    parser.add_argument("--multipart", action="store_true", help="exercise multipart upload for the KVM backup")
     args = parser.parse_args()
     require(all([args.daemon, args.kernel, args.initrd]) or not any([args.daemon, args.kernel, args.initrd]), "KVM paths must be supplied together")
     os.umask(0o077)
@@ -261,7 +262,8 @@ def main():
                 require(rejected.returncode != 0 and b"locked for offline" in rejected.stderr, "native daemon ignored offline lock")
                 (args.output / "locked-startup.log").write_bytes(rejected.stdout + rejected.stderr)
             require((store / "volumes" / volume["volumeID"] / "data/marker").read_text() == marker, "guest volume write not persisted")
-            receipt = invoke("backup", store=store, object="kvm.hmb")
+            receipt = invoke("backup", store=store, object="kvm.hmb", extra=["--multipart-threshold-mib", "8", "--multipart-part-mib", "8"] if args.multipart else [])
+            if args.multipart: require(receipt["upload_method"] == "multipart" and receipt["parts"] >= 2, "KVM multipart path not exercised")
             # Make original files unavailable; recovery must use the S3 object.
             original = args.output / "kvm-source-unavailable"
             store.rename(original)

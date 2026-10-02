@@ -86,6 +86,17 @@ attempts per engine: HyperMachine had lower P50 (3807 versus 5579 ms) and worse
 P99 (11741 versus 11042 ms) and held PSS (8658.38 versus 8361.85 MiB). These
 tradeoffs leave tail latency and held memory as performance gaps.
 
+The latest matched sixteen-slot C100 comparison is summarized below. Both engines
+used the same native host and guest inputs; these are local engine measurements,
+not managed-platform measurements. [Full evidence](benchmarks/2026-10-02/cold-budget-comparison/README.md).
+
+| Metric | HyperMachine, sixteen cold-start slots | Firecracker 1.17.0 | Better result |
+|---|---|---|---|
+| Successful attempts | 400/400 | 400/400 | Equal in this cohort |
+| Readiness P50 | 3806.696 ms | 5578.907 ms | HyperMachine |
+| Readiness P99 | 11741.469 ms | 11041.528 ms | Firecracker |
+| Held proportional memory | 8658.382 MiB | 8361.850 MiB | Firecracker |
+
 A subsequent [owned heap-reclamation diagnostic](benchmarks/2026-10-02/heap-reclaim/README.md)
 passed all 432 guest attempts and all post-probe guest checks. At C100, two pairs
 observed approximately 100–112 MiB reclaimable while guests remained running,
