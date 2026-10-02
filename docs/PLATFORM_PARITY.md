@@ -86,6 +86,13 @@ attempts per engine: HyperMachine had lower P50 (3807 versus 5579 ms) and worse
 P99 (11741 versus 11042 ms) and held PSS (8658.38 versus 8361.85 MiB). These
 tradeoffs leave tail latency and held memory as performance gaps.
 
+A [same-daemon jemalloc comparison](benchmarks/2026-10-02/allocator-comparison/README.md)
+retains 400/400 GNU-libc and 398/400 jemalloc attempts in its complete C100
+cohort. All three fully passing pairs reduce held memory but worsen mean,
+P50 and P99 readiness. An interrupted earlier cohort retains 38 candidate
+timeouts and failed cleanup evidence. The tested jemalloc defaults are rejected;
+the accepted daemon's allocator remains unchanged.
+
 The latest matched sixteen-slot C100 comparison is summarized below. Both engines
 used the same native host and guest inputs; these are local engine measurements,
 not managed-platform measurements. [Full evidence](benchmarks/2026-10-02/cold-budget-comparison/README.md).

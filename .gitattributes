@@ -113,3 +113,4 @@ docs/benchmarks/2026-10-02/object-backup/** -text whitespace=cr-at-eol,-blank-at
 docs/benchmarks/2026-10-02/multipart-backup/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
 docs/benchmarks/2026-10-02/backup-compression/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
 docs/benchmarks/2026-10-02/version-backup/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/allocator-comparison/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
