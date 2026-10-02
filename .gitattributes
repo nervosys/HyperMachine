@@ -61,3 +61,5 @@ docs/benchmarks/2026-10-01/calendar-planning-utc.patch -text whitespace=cr-at-eo
 
 docs/benchmarks/2026-10-01/calendar-batch-source.rs -text
 docs/benchmarks/2026-10-01/calendar-batch.patch -text whitespace=cr-at-eol,-blank-at-eol
+
+docs/benchmarks/2026-10-01/calendar-batch-kvm-coordinator.py -text

@@ -571,3 +571,5 @@ Existing API/type method names retain `interval` for compatibility; their shared
 publication path now accepts calendar recurrence too.
 
 Calendar catch-up now enumerates non-UTC civil days once per bounded batch. [Matched planner timings and exact UTC timestamp comparison](benchmarks/2026-10-01/calendar-batch.md) cover dense catch-up, folds and sparse calendars; these are local planner measurements, excluding storage and VM execution.
+
+[Real KVM bounded calendar batch verification](benchmarks/2026-10-01/calendar-batch-kvm.md) passed publication, folded-time worker restart, replay refusal and cancellation with the optimized CLI. This is functional evidence, with no calendar throughput score.

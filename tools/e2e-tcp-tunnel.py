@@ -124,7 +124,10 @@ def main():
     parser.add_argument("--scheduled-dispatch", action="store_true", help="verify explicit scheduled VM dispatch and durable receipts")
     parser.add_argument("--scheduled-worker", action="store_true", help="verify automatic VM worker continuation and durable receipts")
     parser.add_argument("--scheduled-calendar", action="store_true", help="verify cron fold occurrences through the VM worker")
+    parser.add_argument("--scheduled-calendar-batch", action="store_true", help="verify bounded calendar catch-up before VM dispatch")
     args = parser.parse_args()
+    if args.scheduled_calendar_batch and not args.scheduled_calendar:
+        parser.error("--scheduled-calendar-batch requires --scheduled-calendar")
     if args.scheduled_calendar and not args.scheduled_worker:
         parser.error("--scheduled-calendar requires --scheduled-worker")
     if args.ssh_by_name and not args.ssh_fixture:
@@ -372,6 +375,9 @@ def main():
 
                     jobs("create", "guest-job", str(spec))
                     jobs("publish", "guest-job", "--now-ms", str(times[0]), "--limit", "1")
+                    if args.scheduled_calendar_batch:
+                        jobs("publish", "guest-job", "--now-ms", str(times[2]), "--limit", "2")
+                        assert [row["scheduled_ms"] for row in jobs("occurrences", "guest-job")] == list(times)
                     api("POST", f"/sandboxes/{id}/pause", {}, expected=204)
                     result = jobs("worker", "guest-job", "--profiles", str(profiles), "--limit", "1", "--ticks", "1") if args.scheduled_worker else jobs("dispatch", "guest-job", str(times[0]), "--profiles", str(profiles))
                     assert result["exit_code"] == 7 and result["timed_out"] is False
@@ -393,7 +399,12 @@ def main():
                         assert command(id, "cat /tmp/scheduled-dispatch-count") == "xx"
                         assert jobs("receipt", "guest-job", str(times[1]))["completion"]["stdout"] == continued["stdout"]
                     if args.scheduled_worker:
-                        assert jobs("occurrences", "guest-job")[-1]["scheduled_ms"] == times[2]
+                        occurrences = jobs("occurrences", "guest-job")
+                        if args.scheduled_calendar_batch:
+                            assert [row["scheduled_ms"] for row in occurrences[:3]] == list(times)
+                            assert len(occurrences) == 5
+                        else:
+                            assert occurrences[-1]["scheduled_ms"] == times[2]
                     jobs("cancel", "guest-job")
                     jobs("publish", "guest-job", "--now-ms", str(times[1]), succeeds=False)
                     assert jobs("receipt", "guest-job", str(times[0]))["completion"] == receipt
@@ -407,6 +418,7 @@ def main():
                             "restart_continues_next_occurrence": args.scheduled_worker,
                             "cancelled_worker_leaves_pending_work_untouched": args.scheduled_worker,
                             "calendar_fold_distinct_utc_occurrences": args.scheduled_calendar,
+                            "bounded_calendar_batch_verified": args.scheduled_calendar_batch,
                             "scheduled_utc_ms": list(times) if args.scheduled_calendar else None}
                 case("scheduled-calendar-VM-worker-TLS-fold-resume-restart-and-no-replay" if args.scheduled_calendar else "scheduled-VM-worker-TLS-resume-restart-and-no-replay" if args.scheduled_worker else "scheduled-VM-dispatch-TLS-resume-receipt-and-no-replay", scheduled_dispatch)
 
