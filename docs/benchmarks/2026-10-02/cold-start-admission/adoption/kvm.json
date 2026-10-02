@@ -1,0 +1,68 @@
+{
+  "success": false,
+  "purpose": "functional verification, no performance comparison",
+  "artifact_sha256": {
+    "daemon": "b7d2aba8a9a21845e187a10dbeda10c0c10f43d6794160739888435723a77d95",
+    "control-plane": "d0757724cfcbacaeb80e64dade681a6299e7443f39bdda16bf458dd251bd00ef",
+    "cli": "c385bd2d2996c660d2e9e0a1f7387980339abbb19ee8fdec518890ec52dd6bd5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d520964ff11dff3bc7090af9ee988eedd3c5c5ffb23a5a3708250e3248a2cb17",
+    "coordinator": "eae5bc593211afb4e53f129044ebbde2e1416bed7c5056a59396b7edda2414d3",
+    "audit_verifier": "731162d8a9b9457c5a7f9eac972b7423b023732a0c991b98f65b192f54591b03"
+  },
+  "cases": [
+    {
+      "name": "observer-role-caps-admin-with-real-guest",
+      "success": true,
+      "result": {
+        "admin_scope_capped": true,
+        "inventory_without_guest_token": true,
+        "capability_reads_refused": true,
+        "mutations_refused": true,
+        "guest_intact": true
+      }
+    },
+    {
+      "name": "reserved-name-creation-and-duplicate-refusal",
+      "success": true,
+      "result": {
+        "creation_bound_name": true,
+        "CLI_inspection": true,
+        "both_create_routes_refuse_duplicate": true,
+        "inventory_creation_refused": true
+      }
+    },
+    {
+      "name": "node-name-operation-refused-before-boot",
+      "success": true,
+      "result": {
+        "missing_context_status": 409,
+        "invalid_context_status": 400,
+        "unowned_context_status": 409,
+        "cluster_authentication_status": 401,
+        "inventory_unchanged": true
+      }
+    }
+  ],
+  "cleanup_errors": [
+    "access audit verification: "
+  ],
+  "environment": "local WSL nested KVM; 1 vCPU / 1024 MiB guests",
+  "transport": "CLI -> verified API TLS -> control plane -> node mTLS plus cluster token -> vsock -> loopback guest TCP",
+  "error": "[Errno 20] Not a directory: '/var/tmp/hm-ssh/image-1/build.json/build.json'",
+  "remaining_sandboxes": 0,
+  "owned_processes_stopped": [
+    {
+      "name": "control",
+      "exit_code": -15
+    },
+    {
+      "name": "node",
+      "exit_code": 0
+    },
+    {
+      "name": "redis",
+      "exit_code": 0
+    }
+  ]
+}

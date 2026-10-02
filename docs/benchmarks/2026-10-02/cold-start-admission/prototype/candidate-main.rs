@@ -372,9 +372,7 @@ fn parse_options() -> Result<Options, String> {
             "--trust-domain" => opts.trust_domain = value(&mut i)?,
             "--identity-key" => opts.identity_key = Some(value(&mut i)?.into()),
             "--cold-start-concurrency" => {
-                let limit: usize = value(&mut i)?
-                    .parse()
-                    .map_err(|_| "--cold-start-concurrency requires 1..1024")?;
+                let limit: usize = value(&mut i)?.parse().map_err(|_| "--cold-start-concurrency requires 1..1024")?;
                 if !(1..=1024).contains(&limit) {
                     return Err("--cold-start-concurrency requires 1..1024".into());
                 }
@@ -1327,24 +1325,15 @@ async fn bring_up(
     let cold_boot_permit = if snapshot.is_none() {
         match &state.cold_boot_slots {
             Some(slots) => {
-                let permit = Arc::clone(slots).acquire_owned().await.map_err(|_| {
-                    (
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        "cold boot admission unavailable".to_string(),
-                    )
-                })?;
+                let permit = Arc::clone(slots).acquire_owned().await.map_err(|_| (
+                    StatusCode::SERVICE_UNAVAILABLE, "cold boot admission unavailable".to_string()))?;
                 tracing::debug!(target: "hv2_sandboxd::cold_admission", vm = sandbox_id,
                     queue_ms = t0.elapsed().as_secs_f64() * 1000.0, "cold boot admitted");
-                Some(ColdBootAdmission {
-                    _permit: permit,
-                    sandbox_id: sandbox_id.to_owned(),
-                })
+                Some(ColdBootAdmission { _permit: permit, sandbox_id: sandbox_id.to_owned() })
             }
             None => None,
         }
-    } else {
-        None
-    };
+    } else { None };
     let initrd = state
         .initrds
         .read()
@@ -4415,9 +4404,7 @@ async fn main() -> std::process::ExitCode {
 
     let routes = Arc::new(PortMap::new());
     let opts_capacity = opts.capacity as usize;
-    let cold_boot_slots = opts
-        .cold_start_concurrency
-        .map(|limit| Arc::new(tokio::sync::Semaphore::new(limit)));
+    let cold_boot_slots = opts.cold_start_concurrency.map(|limit| Arc::new(tokio::sync::Semaphore::new(limit)));
     let event_store: Arc<dyn hv2_cluster::store::ClusterStore> = match &node {
         Some(node) => Arc::clone(node.store()),
         None => Arc::new(hv2_cluster::store::MemoryStore::new()),
@@ -4572,10 +4559,7 @@ async fn main() -> std::process::ExitCode {
         .route("/sandboxes/{sandboxID}/connect", post(connect_sandbox))
         .route("/v2/sandboxes/{sandboxID}/connect", post(connect_sandbox))
         .route("/sandboxes/{sandboxID}/timeout", post(set_timeout))
-        .route(
-            "/sandboxes/{sandboxID}/registration/reconcile",
-            post(reconcile_registration),
-        )
+        .route("/sandboxes/{sandboxID}/registration/reconcile", post(reconcile_registration))
         .route("/templates", get(list_templates).post(build_template_route))
         .route("/sandboxes/{sandboxID}/pause", post(pause_route))
         .route("/sandboxes/{sandboxID}/resume", post(resume_route))
@@ -4594,15 +4578,9 @@ async fn main() -> std::process::ExitCode {
             post(checkpoints::restore),
         )
         .route("/snapshots", get(snapshots::list))
-        .route(
-            "/templates/{templateID}",
-            axum::routing::delete(snapshots::delete),
-        )
+        .route("/templates/{templateID}", axum::routing::delete(snapshots::delete))
         .route("/v3/templates", post(builds::request))
-        .route(
-            "/templates/{templateID}/files/{hash}",
-            get(builds::file_link),
-        )
+        .route("/templates/{templateID}/files/{hash}", get(builds::file_link))
         .route(
             "/v2/templates/{templateID}/builds/{buildID}",
             post(builds::start),
@@ -4614,15 +4592,9 @@ async fn main() -> std::process::ExitCode {
         .route("/templates/aliases/{alias}", get(builds::alias))
         .merge(hv2_cluster::events::router(event_store))
         .route("/volumes", get(volumes::list).post(volumes::create))
-        .route(
-            "/volumes/{volumeID}",
-            get(volumes::get).delete(volumes::delete),
-        )
+        .route("/volumes/{volumeID}", get(volumes::get).delete(volumes::delete))
         .route("/sandboxes/{sandboxID}/exec", post(exec))
-        .route(
-            "/sandboxes/{sandboxID}/ports/{port}/tcp",
-            get(forwards::tcp_tunnel),
-        )
+        .route("/sandboxes/{sandboxID}/ports/{port}/tcp", get(forwards::tcp_tunnel))
         .route("/sandboxes/metrics", get(telemetry::latest))
         .route("/sandboxes/{sandboxID}/metrics", get(telemetry::metrics))
         .route("/sandboxes/{sandboxID}/logs", get(telemetry::logs_v1))
@@ -4643,7 +4615,10 @@ async fn main() -> std::process::ExitCode {
         .route("/metrics", get(node_metrics))
         // No API key: the SDK sends none with an upload. The URL's token,
         // from the authenticated `GET` of the same path, stands in.
-        .route("/templates/{templateID}/files/{hash}", put(builds::upload))
+        .route(
+            "/templates/{templateID}/files/{hash}",
+            put(builds::upload),
+        )
         // E2B's volume content API: each volume's own bearer token, which
         // the SDK's `Volume` sends in place of the API key.
         .route(

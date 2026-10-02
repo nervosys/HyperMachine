@@ -1,0 +1,32 @@
+hv2-sandboxd: listening on 0.0.0.0:49585, capacity 16
+  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)
+  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)
+  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls
+  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener
+  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules
+  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy
+  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies
+  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log
+sandboxes get no network interface (--network to change that)
+sandboxes boot from the kernel (no template snapshot)
+
+sandbox proxy on 0.0.0.0:46525 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>
+  grpcurl -plaintext -authority 49983-$SBX.local -H "X-Access-Token: $TOKEN" -import-path crates/hv2-api/proto -proto process.proto \
+      -d '{"process":{"cmd":"/bin/sh","args":["-c","echo hi"]}}' \
+      localhost:46525 process.Process/Start
+[2m2026-10-02T13:34:22.501045Z[0m [34mDEBUG[0m [2mhv2_sandboxd::cold_admission[0m[2m:[0m cold boot admitted [3mvm[0m[2m=[0m"sbx-b78da16bfde0485183fa" [3mqueue_ms[0m[2m=[0m0.000792
+[2m2026-10-02T13:34:22.525263Z[0m [34mDEBUG[0m [2mhv2_sandboxd::cold_admission[0m[2m:[0m cold boot admitted [3mvm[0m[2m=[0m"sbx-0a32923273ce4d208830" [3mqueue_ms[0m[2m=[0m0.000771
+[2m2026-10-02T13:34:22.876036Z[0m [34mDEBUG[0m [2mhv2_sandboxd::cold_admission[0m[2m:[0m cold boot admission released [3mvm[0m[2m=[0msbx-b78da16bfde0485183fa
+[2m2026-10-02T13:34:22.876238Z[0m [34mDEBUG[0m [2mhv2_sandboxd::cold_admission[0m[2m:[0m cold boot admitted [3mvm[0m[2m=[0m"sbx-e6562edf38954444bcc1" [3mqueue_ms[0m[2m=[0m350.976279
+[2m2026-10-02T13:34:22.890249Z[0m [34mDEBUG[0m [2mhv2_sandboxd::cold_admission[0m[2m:[0m cold boot admission released [3mvm[0m[2m=[0msbx-0a32923273ce4d208830
+[2m2026-10-02T13:34:22.890391Z[0m [34mDEBUG[0m [2mhv2_sandboxd::cold_admission[0m[2m:[0m cold boot admitted [3mvm[0m[2m=[0m"sbx-55c6173cbc444e84b04b" [3mqueue_ms[0m[2m=[0m365.129904
+[2m2026-10-02T13:34:23.239531Z[0m [34mDEBUG[0m [2mhv2_sandboxd::cold_admission[0m[2m:[0m cold boot admission released [3mvm[0m[2m=[0msbx-e6562edf38954444bcc1
+[2m2026-10-02T13:34:23.239761Z[0m [34mDEBUG[0m [2mhv2_sandboxd::cold_admission[0m[2m:[0m cold boot admitted [3mvm[0m[2m=[0m"sbx-152b9e0c91a14288b421" [3mqueue_ms[0m[2m=[0m714.491576
+[2m2026-10-02T13:34:23.243067Z[0m [34mDEBUG[0m [2mhv2_sandboxd::cold_admission[0m[2m:[0m cold boot admission released [3mvm[0m[2m=[0msbx-55c6173cbc444e84b04b
+[2m2026-10-02T13:34:23.243239Z[0m [34mDEBUG[0m [2mhv2_sandboxd::cold_admission[0m[2m:[0m cold boot admitted [3mvm[0m[2m=[0m"sbx-0e8e8257fef54a2389d0" [3mqueue_ms[0m[2m=[0m717.963743
+[2m2026-10-02T13:34:23.598730Z[0m [34mDEBUG[0m [2mhv2_sandboxd::cold_admission[0m[2m:[0m cold boot admission released [3mvm[0m[2m=[0msbx-152b9e0c91a14288b421
+[2m2026-10-02T13:34:23.598894Z[0m [34mDEBUG[0m [2mhv2_sandboxd::cold_admission[0m[2m:[0m cold boot admitted [3mvm[0m[2m=[0m"sbx-f4799e9e67b0436fb572" [3mqueue_ms[0m[2m=[0m1073.614979
+[2m2026-10-02T13:34:23.613508Z[0m [34mDEBUG[0m [2mhv2_sandboxd::cold_admission[0m[2m:[0m cold boot admission released [3mvm[0m[2m=[0msbx-0e8e8257fef54a2389d0
+[2m2026-10-02T13:34:23.613844Z[0m [34mDEBUG[0m [2mhv2_sandboxd::cold_admission[0m[2m:[0m cold boot admitted [3mvm[0m[2m=[0m"sbx-dd929efd46e0439289c6" [3mqueue_ms[0m[2m=[0m1088.518636
+[2m2026-10-02T13:34:23.987107Z[0m [34mDEBUG[0m [2mhv2_sandboxd::cold_admission[0m[2m:[0m cold boot admission released [3mvm[0m[2m=[0msbx-f4799e9e67b0436fb572
+[2m2026-10-02T13:34:23.998033Z[0m [34mDEBUG[0m [2mhv2_sandboxd::cold_admission[0m[2m:[0m cold boot admission released [3mvm[0m[2m=[0msbx-dd929efd46e0439289c6

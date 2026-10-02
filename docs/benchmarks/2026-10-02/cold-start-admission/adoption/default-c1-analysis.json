@@ -1,0 +1,58 @@
+{
+  "variants": {
+    "baseline": {
+      "planned": 4,
+      "attempted": 4,
+      "passed": 4,
+      "failed": 0,
+      "successful_p50_ms": 378.9576080016559,
+      "successful_p99_ms": 386.43735999357887,
+      "failed_runs": 0
+    },
+    "candidate": {
+      "planned": 4,
+      "attempted": 4,
+      "passed": 4,
+      "failed": 0,
+      "successful_p50_ms": 378.7301539996406,
+      "successful_p99_ms": 395.0229270121781,
+      "failed_runs": 0
+    }
+  },
+  "pairs": [
+    {
+      "pair": 0,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": -17.198071014718153
+    },
+    {
+      "pair": 1,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": 2.1238170011201873
+    },
+    {
+      "pair": 2,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": 0.7499110070057213
+    },
+    {
+      "pair": 3,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": 7.70720599393826
+    }
+  ],
+  "complete_successful_pairs": 4,
+  "candidate_faster_pairs": 3,
+  "median_paired_mean_reduction_ms": 1.4368640040629543,
+  "cleanup_verified": true,
+  "artifacts_unchanged": true,
+  "cohort_success": true,
+  "latencies_conditional_on_success": true,
+  "runtime_change_adopted": false,
+  "competitor_win_established": false,
+  "candidate_limit": null,
+  "same_binary": false,
+  "queue_included_in_ready_ms": true,
+  "experimental_candidate": true,
+  "note": "Incomplete pairs remain in failure totals; their mean latency difference is unavailable"
+}
