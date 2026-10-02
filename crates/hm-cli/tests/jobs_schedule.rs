@@ -418,3 +418,93 @@ async fn explicit_vm_dispatch_records_results_and_never_retries_uncertain_execut
     assert_eq!(calls.load(Ordering::SeqCst), 3);
     server.abort();
 }
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn vm_worker_sigint_waits_for_inflight_result_and_persists_receipt() {
+    use axum::{routing::post, Json, Router};
+    use std::{sync::Arc, time::Duration};
+    let started = Arc::new(tokio::sync::Notify::new());
+    let release = Arc::new(tokio::sync::Notify::new());
+    let (entered, gate) = (started.clone(), release.clone());
+    let app = Router::new()
+        .route("/sandboxes/guest/connect", post(|| async { Json(json!({})) }))
+        .route("/sandboxes/guest/exec", post(move || {
+            let (entered, gate) = (entered.clone(), gate.clone());
+            async move {
+                entered.notify_one();
+                gate.notified().await;
+                Json(json!({"exit_code":7,"timed_out":false,"stdout":"completed after interrupt","stderr":""}))
+            }
+        }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let store = hv2_jobs::Store::open(dir.path().join("store")).unwrap();
+    let schedule = serde_json::from_value(json!({"first_ms":100,"every_ms":10,
+        "vm":{"sandbox_id":"guest","connection_profile":"local","timeout_secs":30},
+        "job":{"command":["true"]}}))
+    .unwrap();
+    store
+        .create_interval_schedule("interrupt", &schedule)
+        .unwrap();
+    let profiles = dir.path().join("profiles.json");
+    std::fs::write(
+        &profiles,
+        json!({"profiles":{"local":{"endpoint":format!("http://{address}")}}}).to_string(),
+    )
+    .unwrap();
+    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+        .args(["jobs", "--store"])
+        .arg(store.root())
+        .args([
+            "schedule",
+            "worker",
+            "interrupt",
+            "--limit",
+            "1",
+            "--profiles",
+        ])
+        .arg(&profiles)
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), started.notified())
+        .await
+        .unwrap();
+    assert!(Command::new("/bin/kill")
+        .args(["-INT", &child.id().unwrap().to_string()])
+        .status()
+        .unwrap()
+        .success());
+    // Hold the response: interruption must not abandon accepted work.
+    assert!(
+        tokio::time::timeout(Duration::from_millis(150), child.wait())
+            .await
+            .is_err()
+    );
+    assert!(store
+        .vm_dispatch_state("interrupt", 100)
+        .unwrap()
+        .completion
+        .is_none());
+    release.notify_one();
+    assert!(tokio::time::timeout(Duration::from_secs(5), child.wait())
+        .await
+        .unwrap()
+        .unwrap()
+        .success());
+    let receipt = hv2_jobs::Store::open(store.root())
+        .unwrap()
+        .vm_dispatch_state("interrupt", 100)
+        .unwrap()
+        .completion
+        .unwrap();
+    assert_eq!(receipt.exit_code, Some(7));
+    assert_eq!(receipt.stdout.as_deref(), Some("completed after interrupt"));
+    assert!(store.vm_dispatch_state("interrupt", 110).is_err());
+    server.abort();
+}
