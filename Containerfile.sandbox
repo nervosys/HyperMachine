@@ -9,7 +9,7 @@
 # deploy/helm/hypermachine-sandbox runs both on Kubernetes.
 
 # --- Rust: the daemons and the guest agent -----------------------------------
-FROM rust:1.98-bookworm AS build
+FROM rust:1.99-bookworm AS build
 # libprotobuf-dev for the well-known types hv2-api's protos import
 # (google/protobuf/timestamp.proto); protobuf-compiler alone lacks them.
 RUN apt-get update \

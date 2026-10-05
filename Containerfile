@@ -10,7 +10,7 @@
 # that `--mount=type=secret` required is gone with it.
 
 # --- Build stage ---
-FROM rust:1.98-bookworm AS builder
+FROM rust:1.99-bookworm AS builder
 
 # Install protobuf compiler (required for hv2-api gRPC codegen)
 # `libprotobuf-dev` as well as `protobuf-compiler`, because the compiler alone
