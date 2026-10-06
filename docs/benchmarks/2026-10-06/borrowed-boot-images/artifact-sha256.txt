@@ -1,0 +1,4 @@
+2db3892d4c82e6e36214592153c77096cae617ae9809a4e317fad03d5bc256ab  hm-boot-baseline
+fd342c11e1bafadb5f7c9fcef3d370145fbc413f791833350cda87ac58c67408  hm-boot-candidate
+afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd  hm-competitive/bzImage-known-uart-irq
+1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c  hm-competitive/guest-output-drain.cpio.gz
