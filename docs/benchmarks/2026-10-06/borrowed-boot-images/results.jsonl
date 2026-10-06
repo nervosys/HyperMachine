@@ -1,0 +1,8 @@
+{"run": 1, "binary": "hm-boot-baseline", "creates": 8, "minor_faults_per_create_median": 28509, "min": 21333, "max": 28688}
+{"run": 1, "binary": "hm-boot-candidate", "creates": 8, "minor_faults_per_create_median": 21789, "min": 21316, "max": 25040}
+{"run": 1, "binary": "hm-boot-baseline", "creates": 8, "minor_faults_per_create_median": 24969, "min": 21312, "max": 28631}
+{"run": 1, "binary": "hm-boot-candidate", "creates": 8, "minor_faults_per_create_median": 21789, "min": 21313, "max": 25051}
+{"run": 2, "binary": "hm-boot-baseline", "creates": 8, "minor_faults_per_create_median": 21769, "min": 21313, "max": 28663, "daemon_rss_kib_after": 89440}
+{"run": 2, "binary": "hm-boot-candidate", "creates": 8, "minor_faults_per_create_median": 21761, "min": 21309, "max": 25059, "daemon_rss_kib_after": 60608}
+{"run": 2, "binary": "hm-boot-candidate", "creates": 8, "minor_faults_per_create_median": 21785, "min": 21314, "max": 25035, "daemon_rss_kib_after": 60596}
+{"run": 2, "binary": "hm-boot-baseline", "creates": 8, "minor_faults_per_create_median": 21803, "min": 21313, "max": 28665, "daemon_rss_kib_after": 118968}
