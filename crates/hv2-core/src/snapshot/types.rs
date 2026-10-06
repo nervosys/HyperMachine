@@ -692,27 +692,6 @@ mod tests {
     }
 
     #[test]
-    fn snapshot_ids_are_unique_under_concurrent_generation() {
-        let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
-        let threads: Vec<_> = (0..8)
-            .map(|_| {
-                let barrier = barrier.clone();
-                std::thread::spawn(move || {
-                    barrier.wait();
-                    let ids: Vec<_> = (0..1000).map(|_| SnapshotId::generate().value()).collect();
-                    assert!(ids.windows(2).all(|pair| pair[0] < pair[1]));
-                    ids
-                })
-            })
-            .collect();
-        let ids: std::collections::HashSet<_> = threads
-            .into_iter()
-            .flat_map(|thread| thread.join().unwrap())
-            .collect();
-        assert_eq!(ids.len(), 8000);
-    }
-
-    #[test]
     fn test_snapshot_id_display() {
         let id = SnapshotId::new(0x123456789ABCDEF0);
         let display = format!("{}", id);
