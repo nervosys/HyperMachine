@@ -558,18 +558,14 @@ mod tests {
         assert_eq!(roots.as_slice(), std::slice::from_ref(authority.ca_der()));
         assert!(upstream_config(&roots).is_ok());
         assert!(upstream_roots_from_pem(b"").is_err());
-        assert!(
-            upstream_roots_from_pem(
-                b"-----BEGIN CERTIFICATE-----\ninvalid\n-----END CERTIFICATE-----"
-            )
-            .is_err()
-        );
-        assert!(
-            upstream_roots_from_pem(
-                b"-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----"
-            )
-            .is_err()
-        );
+        assert!(upstream_roots_from_pem(
+            b"-----BEGIN CERTIFICATE-----\ninvalid\n-----END CERTIFICATE-----"
+        )
+        .is_err());
+        assert!(upstream_roots_from_pem(
+            b"-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----"
+        )
+        .is_err());
         assert!(upstream_roots_from_pem(&vec![b' '; 1024 * 1024 + 1]).is_err());
         assert_eq!(
             upstream_roots_from_pem(pem.repeat(128).as_bytes())

@@ -2,7 +2,7 @@
 //!
 //! This component grants no network access. Its caller must authenticate the
 //! upstream hostname before applying it. The gateway enforces this ordering.
-use base64::{Engine as _, engine::general_purpose::STANDARD};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use parking_lot::RwLock;
 use std::collections::{BTreeMap, HashSet};
 use std::io;
@@ -370,7 +370,7 @@ impl Bindings {
         authenticated_host: &str,
         request: &mut hyper::Request<Vec<u8>>,
     ) -> io::Result<()> {
-        use hyper::header::{CONTENT_LENGTH, HOST, HeaderValue};
+        use hyper::header::{HeaderValue, CONTENT_LENGTH, HOST};
         let name = host(authenticated_host)?;
         let authority = request
             .headers()
@@ -749,14 +749,12 @@ mod tests {
             .map(|index| Binding {
                 placeholder: format!("hms_{index:064x}"),
                 value: vec![index as u8],
-                hosts: vec![
-                    if index % 3 == 0 {
-                        "other.example.test"
-                    } else {
-                        "api.example.test"
-                    }
-                    .into(),
-                ],
+                hosts: vec![if index % 3 == 0 {
+                    "other.example.test"
+                } else {
+                    "api.example.test"
+                }
+                .into()],
             })
             .collect();
         let policy = Bindings::new(bindings).unwrap();
@@ -803,7 +801,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn private_policy_file_refuses_links_and_unsafe_modes() {
-        use std::os::unix::fs::{PermissionsExt, symlink};
+        use std::os::unix::fs::{symlink, PermissionsExt};
         let directory = std::env::temp_dir().join(format!(
             "hm-secret-policy-{}-{}",
             std::process::id(),
@@ -862,11 +860,9 @@ mod tests {
             .as_array_mut()
             .unwrap()
             .push(policy["sandboxes"][0].clone());
-        assert!(
-            scopes
-                .rotate_json(duplicates.to_string().as_bytes())
-                .is_err()
-        );
+        assert!(scopes
+            .rotate_json(duplicates.to_string().as_bytes())
+            .is_err());
         scopes
             .rotate_json(b"{\"version\":1,\"sandboxes\":[]}")
             .unwrap();
@@ -919,11 +915,9 @@ mod tests {
                 .headers_mut()
                 .insert("connection", invalid_connection.parse().unwrap());
             let before = request.headers().clone();
-            assert!(
-                bindings
-                    .rewrite_request("api.example.test", &mut request)
-                    .is_err()
-            );
+            assert!(bindings
+                .rewrite_request("api.example.test", &mut request)
+                .is_err());
             assert_eq!(request.headers(), &before);
         }
     }
@@ -976,11 +970,9 @@ mod tests {
             store.replace_json("other.test", input.as_bytes()).unwrap(),
             input.as_bytes()
         );
-        assert!(
-            store
-                .replace_json("api.example.test", b"{invalid}")
-                .is_err()
-        );
+        assert!(store
+            .replace_json("api.example.test", b"{invalid}")
+            .is_err());
         let mut request = hyper::Request::builder()
             .uri("/")
             .header("host", "api.example.test")
@@ -1061,11 +1053,9 @@ mod tests {
             .body(token.as_bytes().to_vec())
             .unwrap();
         let original_uri = request.uri().clone();
-        assert!(
-            store
-                .rewrite_request("api.example.test", &mut request)
-                .is_err()
-        );
+        assert!(store
+            .rewrite_request("api.example.test", &mut request)
+            .is_err());
         assert_eq!(request.uri(), &original_uri);
         assert_eq!(request.headers()["x-key"], token);
         assert_eq!(request.body(), token.as_bytes());
@@ -1073,11 +1063,9 @@ mod tests {
         request
             .headers_mut()
             .insert("content-encoding", "gzip".parse().unwrap());
-        assert!(
-            store
-                .rewrite_request("api.example.test", &mut request)
-                .is_err()
-        );
+        assert!(store
+            .rewrite_request("api.example.test", &mut request)
+            .is_err());
     }
     #[test]
     fn query_values_cannot_change_parameter_structure() {
@@ -1134,28 +1122,22 @@ mod tests {
                 .unwrap(),
             b"Bearer unchanged"
         );
-        assert!(
-            policy
-                .replace_basic_auth("api.example.test", b"Basic invalid")
-                .is_err()
-        );
+        assert!(policy
+            .replace_basic_auth("api.example.test", b"Basic invalid")
+            .is_err());
         let no_separator = format!("Basic {}", STANDARD.encode(b"not-a-credential"));
-        assert!(
-            policy
-                .replace_basic_auth("api.example.test", no_separator.as_bytes())
-                .is_err()
-        );
+        assert!(policy
+            .replace_basic_auth("api.example.test", no_separator.as_bytes())
+            .is_err());
     }
     #[test]
     fn rotation_is_validated_before_commit_and_revocation_removes_values() {
         let first = binding('a', b"old");
         let token = first.placeholder.clone();
         let store = Store::new(vec![first]).unwrap();
-        assert!(
-            store
-                .rotate(vec![binding('a', b"bad"), binding('a', b"duplicate")])
-                .is_err()
-        );
+        assert!(store
+            .rotate(vec![binding('a', b"bad"), binding('a', b"duplicate")])
+            .is_err());
         assert_eq!(
             store.replace("api.example.test", token.as_bytes()).unwrap(),
             b"old"
@@ -1225,23 +1207,17 @@ mod tests {
         let binary = binding('a', &vec![0xff; 65536]);
         let query = format!("key={}", binary.placeholder.repeat(6));
         let binary_policy = Bindings::new(vec![binary]).unwrap();
-        assert!(
-            binary_policy
-                .replace_query("api.example.test", query.as_bytes())
-                .is_err()
-        );
+        assert!(binary_policy
+            .replace_query("api.example.test", query.as_bytes())
+            .is_err());
         let b = binding('a', &vec![b'x'; 65536]);
         let token = b.placeholder.clone();
         let policy = Bindings::new(vec![b]).unwrap();
-        assert!(
-            policy
-                .replace("api.example.test", token.repeat(17).as_bytes())
-                .is_err()
-        );
-        assert!(
-            policy
-                .replace("api.example.test", &vec![0; LIMIT + 1])
-                .is_err()
-        );
+        assert!(policy
+            .replace("api.example.test", token.repeat(17).as_bytes())
+            .is_err());
+        assert!(policy
+            .replace("api.example.test", &vec![0; LIMIT + 1])
+            .is_err());
     }
 }

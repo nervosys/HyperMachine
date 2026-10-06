@@ -275,6 +275,13 @@ mod tests {
     }
     #[test]
     fn startup_requires_explicit_bind_store_identity_and_bounded_limits() {
+        // A Unix socket store where there are Unix sockets; Windows's Redis
+        // client cannot open one, so it gets a TCP URL. Nothing connects.
+        let socket_store = if cfg!(unix) {
+            "redis+unix:///owned.sock"
+        } else {
+            "redis://127.0.0.1:6379/"
+        };
         assert!(parse(vec!["--help".into()], None, None).unwrap().is_none());
         assert!(parse(args(&[]), None, Some("owned-token".into())).is_err());
         assert!(parse(
@@ -293,14 +300,14 @@ mod tests {
         ] {
             assert!(parse(
                 args(&extra),
-                Some("redis+unix:///owned.sock".into()),
+                Some(socket_store.into()),
                 Some("owned-token".into())
             )
             .is_err());
         }
         let options = parse(
             args(&["--namespace", "owned-test", "--check"]),
-            Some("redis+unix:///owned.sock".into()),
+            Some(socket_store.into()),
             Some("owned-token".into()),
         )
         .unwrap()

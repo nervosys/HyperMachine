@@ -1,7 +1,11 @@
 //! Bounded loopback UDP forwarding with one upstream session per local peer.
 use super::*;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
-use tokio::{io::{AsyncReadExt, AsyncWriteExt}, sync::mpsc, task::{Id, JoinError, JoinSet}};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    sync::mpsc,
+    task::{Id, JoinError, JoinSet},
+};
 const MAX_PAYLOAD: usize = 65_507;
 
 fn frame(payload: &[u8]) -> Vec<u8> {
@@ -11,12 +15,24 @@ fn frame(payload: &[u8]) -> Vec<u8> {
     bytes
 }
 
-pub(super) async fn run(api: Api, id: String, port: u16, listen: SocketAddr, max_peers: u32, ipv6: bool) -> Result<()> {
-    if !listen.ip().is_loopback() { bail!("UDP listener must use a loopback address"); }
+pub(super) async fn run(
+    api: Api,
+    id: String,
+    port: u16,
+    listen: SocketAddr,
+    max_peers: u32,
+    ipv6: bool,
+) -> Result<()> {
+    if !listen.ip().is_loopback() {
+        bail!("UDP listener must use a loopback address");
+    }
     // Validate the identifier before publishing a listener.
     api.url(&["sandboxes", &id])?;
     let socket = Arc::new(tokio::net::UdpSocket::bind(listen).await?);
-    println!("{}", json!({"listen": socket.local_addr()?.to_string(), "protocol":"udp", "sandboxID":id, "port":port}));
+    println!(
+        "{}",
+        json!({"listen": socket.local_addr()?.to_string(), "protocol":"udp", "sandboxID":id, "port":port})
+    );
     let mut peers: HashMap<SocketAddr, mpsc::Sender<Vec<u8>>> = HashMap::new();
     let mut sessions = JoinSet::new();
     let mut task_peers = HashMap::new();
@@ -56,21 +72,39 @@ pub(super) async fn run(api: Api, id: String, port: u16, listen: SocketAddr, max
 
 // Task identity remains available when a session panics or is cancelled.
 // Removing only successful results would permanently consume its peer slot.
-fn release_peer(peers: &mut HashMap<SocketAddr, mpsc::Sender<Vec<u8>>>,
-    task_peers: &mut HashMap<Id, SocketAddr>, completed: std::result::Result<(Id, ()), JoinError>) {
-    let task = match completed { Ok((task, ())) => task, Err(error) => error.id() };
-    if let Some(peer) = task_peers.remove(&task) { peers.remove(&peer); }
+fn release_peer(
+    peers: &mut HashMap<SocketAddr, mpsc::Sender<Vec<u8>>>,
+    task_peers: &mut HashMap<Id, SocketAddr>,
+    completed: std::result::Result<(Id, ()), JoinError>,
+) {
+    let task = match completed {
+        Ok((task, ())) => task,
+        Err(error) => error.id(),
+    };
+    if let Some(peer) = task_peers.remove(&task) {
+        peers.remove(&peer);
+    }
 }
 
-async fn session(api: Api, id: String, port: u16, socket: Arc<tokio::net::UdpSocket>, peer: SocketAddr,
-    mut messages: mpsc::Receiver<Vec<u8>>, ipv6: bool) -> Result<()> {
+async fn session(
+    api: Api,
+    id: String,
+    port: u16,
+    socket: Arc<tokio::net::UdpSocket>,
+    peer: SocketAddr,
+    mut messages: mpsc::Receiver<Vec<u8>>,
+    ipv6: bool,
+) -> Result<()> {
     let stream = api.port_tunnel(&id, port, true, ipv6).await?;
     let (mut reader, mut writer) = tokio::io::split(stream);
     let outbound = async {
-        while let Some(payload) = tokio::time::timeout(Duration::from_secs(30), messages.recv()).await? {
+        while let Some(payload) =
+            tokio::time::timeout(Duration::from_secs(30), messages.recv()).await?
+        {
             tokio::time::timeout(Duration::from_secs(5), async {
                 writer.write_all(&payload).await
-            }).await??;
+            })
+            .await??;
         }
         Ok::<(), anyhow::Error>(())
     };
@@ -78,11 +112,17 @@ async fn session(api: Api, id: String, port: u16, socket: Arc<tokio::net::UdpSoc
         loop {
             let payload = tokio::time::timeout(Duration::from_secs(35), async {
                 let size = reader.read_u16().await? as usize;
-                if size > MAX_PAYLOAD { return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "oversized UDP frame")); }
+                if size > MAX_PAYLOAD {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "oversized UDP frame",
+                    ));
+                }
                 let mut payload = vec![0; size];
                 reader.read_exact(&mut payload).await?;
                 Ok::<_, std::io::Error>(payload)
-            }).await??;
+            })
+            .await??;
             tokio::time::timeout(Duration::from_secs(5), socket.send_to(&payload, peer)).await??;
         }
         #[allow(unreachable_code)]
@@ -104,7 +144,10 @@ mod tests {
         let panicked = tasks.spawn(async { panic!("owned session failure") });
         let cancelled = tasks.spawn(std::future::pending::<()>());
         let completed = tasks.spawn(async {});
-        for (index, task) in [panicked, cancelled.clone(), completed].into_iter().enumerate() {
+        for (index, task) in [panicked, cancelled.clone(), completed]
+            .into_iter()
+            .enumerate()
+        {
             let address = SocketAddr::from(([127, 0, 0, 1], 30000 + index as u16));
             let (sender, _receiver) = mpsc::channel(8);
             peers.insert(address, sender);
@@ -121,7 +164,10 @@ mod tests {
             release_peer(&mut peers, &mut task_peers, result);
         }
         assert_eq!((panics, cancellations), (1, 1));
-        assert!(peers.is_empty(), "failed sessions must not consume peer capacity");
+        assert!(
+            peers.is_empty(),
+            "failed sessions must not consume peer capacity"
+        );
         assert!(task_peers.is_empty(), "task identities must not leak");
     }
 }

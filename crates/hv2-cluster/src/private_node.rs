@@ -5,7 +5,7 @@ use crate::{
     mtls::Mtls,
     native_tcp::NativeTunnel,
     private_networks::{
-        NetworkTag, PRIVATE_ROUTE_HEADER, PRIVATE_SOURCE_NODE_HEADER, PrivateRouteClaim,
+        NetworkTag, PrivateRouteClaim, PRIVATE_ROUTE_HEADER, PRIVATE_SOURCE_NODE_HEADER,
     },
     store::ClusterStore,
 };
@@ -42,7 +42,7 @@ pub(crate) async fn validate_source(
     loop {
         match lease.validate(source) {
             Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                tokio::time::sleep(Duration::from_millis(1)).await
+                tokio::time::sleep(Duration::from_millis(1)).await;
             }
             result => return result,
         }
@@ -300,7 +300,9 @@ impl PrivateNodeConnector {
         };
         tokio::time::timeout(Duration::from_secs(15), attempt)
             .await
-            .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "private tunnel setup timed out"))?
+            .map_err(|_| {
+                io::Error::new(io::ErrorKind::TimedOut, "private tunnel setup timed out")
+            })?
     }
 }
 struct LeasedStream {
@@ -579,7 +581,17 @@ mod tests {
         wrong_token: bool,
         bound: bool,
     ) -> io::Result<()> {
-        transport_case_protocol(change, certificate_name, response, anonymous, wrong_token, bound, false, false).await
+        transport_case_protocol(
+            change,
+            certificate_name,
+            response,
+            anonymous,
+            wrong_token,
+            bound,
+            false,
+            false,
+        )
+        .await
     }
     async fn transport_case_protocol(
         change: Change,
@@ -665,7 +677,7 @@ mod tests {
                         "x-hv2-private-route" => {
                             route = Some(
                                 serde_json::from_str::<PrivateRouteClaim>(value.trim()).unwrap(),
-                            )
+                            );
                         }
                         "x-hv2-private-source-node" => source_node = Some(value.trim().to_owned()),
                         "x-hv2-cluster-token" => credential = Some(value.trim().to_owned()),
@@ -674,8 +686,14 @@ mod tests {
                 }
             }
             let transport = if udp { "udp" } else { "tcp" };
-            assert!(text.starts_with(&format!("GET /sandboxes/destination/private-ports/18082/{transport} HTTP/1.1\r\n")));
-            assert!(text.to_ascii_lowercase().contains(if udp { "upgrade: hv2-udp/1" } else { "upgrade: hv2-tcp/1" }));
+            assert!(text.starts_with(&format!(
+                "GET /sandboxes/destination/private-ports/18082/{transport} HTTP/1.1\r\n"
+            )));
+            assert!(text.to_ascii_lowercase().contains(if udp {
+                "upgrade: hv2-udp/1"
+            } else {
+                "upgrade: hv2-tcp/1"
+            }));
             assert!(!text.to_ascii_lowercase().contains("x-api-key:"));
             assert_eq!(source_node.as_deref(), Some("source-node"));
             let route = route.unwrap();
@@ -783,17 +801,34 @@ mod tests {
             dropped: dropped.clone(),
         });
         let result = if router {
-            use crate::private_router::{PrivateSourceRouter, PrivateSourceLeaseFactory};
-            struct Factory { active: Arc<AtomicBool>, dropped: Arc<AtomicUsize> }
+            use crate::private_router::{PrivateSourceLeaseFactory, PrivateSourceRouter};
+            struct Factory {
+                active: Arc<AtomicBool>,
+                dropped: Arc<AtomicUsize>,
+            }
             impl PrivateSourceLeaseFactory for Factory {
                 fn acquire(&self) -> io::Result<Box<dyn PrivateSourceLease>> {
-                    Ok(Box::new(Lease { active: self.active.clone(), dropped: self.dropped.clone() }))
+                    Ok(Box::new(Lease {
+                        active: self.active.clone(),
+                        dropped: self.dropped.clone(),
+                    }))
                 }
             }
             drop(lease);
-            let router = PrivateSourceRouter::new(Arc::new(connector), Arc::new(Factory { active: router_active, dropped: dropped.clone() }));
-            let address = router.resolve("destination.team.hv2.internal").await.unwrap()[0];
-            router.dial_udp(std::net::SocketAddr::new(address, 18082)).await
+            let router = PrivateSourceRouter::new(
+                Arc::new(connector),
+                Arc::new(Factory {
+                    active: router_active,
+                    dropped: dropped.clone(),
+                }),
+            );
+            let address = router
+                .resolve("destination.team.hv2.internal")
+                .await
+                .unwrap()[0];
+            router
+                .dial_udp(std::net::SocketAddr::new(address, 18082))
+                .await
         } else if udp {
             assert!(bound);
             connector.open_bound_udp(bound_claim, lease).await
@@ -806,9 +841,18 @@ mod tests {
             Ok(mut stream) => {
                 let mut early = [0; 7];
                 stream.read_exact(&mut early).await.unwrap();
-                assert_eq!(&early[..], if udp { &b"\0\x05ready"[..] } else { &b"ready\0\xff"[..] });
+                assert_eq!(
+                    &early[..],
+                    if udp {
+                        &b"\0\x05ready"[..]
+                    } else {
+                        &b"ready\0\xff"[..]
+                    }
+                );
                 let mut payload: Vec<u8> = (0..8192).map(|i| (i % 256) as u8).collect();
-                if udp { payload[..2].copy_from_slice(&8190u16.to_be_bytes()); }
+                if udp {
+                    payload[..2].copy_from_slice(&8190u16.to_be_bytes());
+                }
                 stream.write_all(&payload).await.unwrap();
                 let mut echoed = vec![0; payload.len()];
                 stream.read_exact(&mut echoed).await.unwrap();
@@ -829,23 +873,76 @@ mod tests {
     }
     #[tokio::test]
     async fn private_udp_router_commits_dns_binding_and_dispatches_framed_transport() {
-        transport_case_protocol(Change::None, crate::mtls::DEFAULT_NODE_NAME, PRIVATE_UDP_SUCCESS, false, false, true, true, true).await.unwrap();
+        transport_case_protocol(
+            Change::None,
+            crate::mtls::DEFAULT_NODE_NAME,
+            PRIVATE_UDP_SUCCESS,
+            false,
+            false,
+            true,
+            true,
+            true,
+        )
+        .await
+        .unwrap();
     }
     const PRIVATE_UDP_SUCCESS: &[u8] = b"HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: hv2-udp/1\r\n\r\n\0\x05ready";
     #[tokio::test]
     async fn bound_private_udp_preserves_framed_early_and_binary_bytes() {
-        transport_case_protocol(Change::None, crate::mtls::DEFAULT_NODE_NAME, PRIVATE_UDP_SUCCESS, false, false, true, true, false).await.unwrap();
+        transport_case_protocol(
+            Change::None,
+            crate::mtls::DEFAULT_NODE_NAME,
+            PRIVATE_UDP_SUCCESS,
+            false,
+            false,
+            true,
+            true,
+            false,
+        )
+        .await
+        .unwrap();
     }
     #[tokio::test]
     async fn bound_private_udp_refuses_setup_generation_placement_and_lease_races() {
-        for change in [Change::SourceRejoin, Change::DestinationRemove, Change::DestinationMove, Change::LeaseRevoke] {
-            assert!(transport_case_protocol(change, crate::mtls::DEFAULT_NODE_NAME, PRIVATE_UDP_SUCCESS, false, false, true, true, false).await.is_err());
+        for change in [
+            Change::SourceRejoin,
+            Change::DestinationRemove,
+            Change::DestinationMove,
+            Change::LeaseRevoke,
+        ] {
+            assert!(transport_case_protocol(
+                change,
+                crate::mtls::DEFAULT_NODE_NAME,
+                PRIVATE_UDP_SUCCESS,
+                false,
+                false,
+                true,
+                true,
+                false
+            )
+            .await
+            .is_err());
         }
     }
     #[tokio::test]
     async fn bound_private_udp_refuses_tcp_upgrade_bad_token_and_anonymous_tls() {
-        for (response, anonymous, wrong_token) in [(PRIVATE_SUCCESS,false,false),(PRIVATE_UDP_SUCCESS,false,true),(PRIVATE_UDP_SUCCESS,true,false)] {
-            assert!(transport_case_protocol(Change::None, crate::mtls::DEFAULT_NODE_NAME, response, anonymous, wrong_token, true, true, false).await.is_err());
+        for (response, anonymous, wrong_token) in [
+            (PRIVATE_SUCCESS, false, false),
+            (PRIVATE_UDP_SUCCESS, false, true),
+            (PRIVATE_UDP_SUCCESS, true, false),
+        ] {
+            assert!(transport_case_protocol(
+                Change::None,
+                crate::mtls::DEFAULT_NODE_NAME,
+                response,
+                anonymous,
+                wrong_token,
+                true,
+                true,
+                false
+            )
+            .await
+            .is_err());
         }
     }
     const PRIVATE_SUCCESS:&[u8]=b"HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: hv2-tcp/1\r\n\r\nready\0\xff";
@@ -981,18 +1078,16 @@ mod tests {
             Change::DestinationMove,
             Change::LeaseRevoke,
         ] {
-            assert!(
-                transport_case_mode(
-                    change,
-                    crate::mtls::DEFAULT_NODE_NAME,
-                    PRIVATE_SUCCESS,
-                    false,
-                    false,
-                    true
-                )
-                .await
-                .is_err()
-            );
+            assert!(transport_case_mode(
+                change,
+                crate::mtls::DEFAULT_NODE_NAME,
+                PRIVATE_SUCCESS,
+                false,
+                false,
+                true
+            )
+            .await
+            .is_err());
         }
     }
     #[tokio::test]

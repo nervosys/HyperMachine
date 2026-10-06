@@ -544,24 +544,35 @@ impl AgentVM {
         port: u16,
         timeout: Duration,
     ) -> Result<(crate::guest_agent::VsockStream, Vec<u8>)> {
-        if port == 0 { return Err(AgentError::Script("UDP port must be nonzero".into())); }
+        if port == 0 {
+            return Err(AgentError::Script("UDP port must be nonzero".into()));
+        }
         let device = self.file_channel()?;
         tokio::task::spawn_blocking(move || {
             GuestAgent::over_vsock(device, timeout)?.forward_udp(port, timeout)
-        }).await.map_err(|e| AgentError::Script(format!("guest UDP forward task failed: {e}")))?
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest UDP forward task failed: {e}")))?
     }
 
     /// Open a framed IPv6 loopback UDP connection over vsock.
     ///
     /// # Errors
     /// Requires GuestExec, a nonzero port and guest IPv6 socket support.
-    pub async fn forward_udp_port_ipv6(&self, port: u16, timeout: Duration)
-        -> Result<(crate::guest_agent::VsockStream, Vec<u8>)> {
-        if port == 0 { return Err(AgentError::Script("UDP port must be nonzero".into())); }
+    pub async fn forward_udp_port_ipv6(
+        &self,
+        port: u16,
+        timeout: Duration,
+    ) -> Result<(crate::guest_agent::VsockStream, Vec<u8>)> {
+        if port == 0 {
+            return Err(AgentError::Script("UDP port must be nonzero".into()));
+        }
         let device = self.file_channel()?;
         tokio::task::spawn_blocking(move || {
             GuestAgent::over_vsock(device, timeout)?.forward_udp_ipv6(port, timeout)
-        }).await.map_err(|e| AgentError::Script(format!("guest IPv6 UDP forward task failed: {e}")))?
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest IPv6 UDP forward task failed: {e}")))?
     }
 
     /// Have the guest mount a volume at `path`, served over a connection of

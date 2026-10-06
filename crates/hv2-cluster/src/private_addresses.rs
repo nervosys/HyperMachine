@@ -134,11 +134,20 @@ impl PrivateAddressBook {
         serde_json::to_vec(&*self.0.lock()).map_err(|_| "address snapshot failed")
     }
     /// Store-side validation: existing indexes can never change or disappear.
-    pub(crate) fn canonical_append(current: Option<&[u8]>, next: &[u8], source: &SandboxRecord) -> Result<Vec<u8>, &'static str> {
+    pub(crate) fn canonical_append(
+        current: Option<&[u8]>,
+        next: &[u8],
+        source: &SandboxRecord,
+    ) -> Result<Vec<u8>, &'static str> {
         let proposed = Self::restore(next, source)?;
         if let Some(bytes) = current {
             let previous = Self::restore(bytes, source)?;
-            if !proposed.0.lock().entries.starts_with(&previous.0.lock().entries) {
+            if !proposed
+                .0
+                .lock()
+                .entries
+                .starts_with(&previous.0.lock().entries)
+            {
                 return Err("private address ledger cannot replace or remove bindings");
             }
         }
@@ -231,11 +240,9 @@ mod tests {
                 .port,
             8080
         );
-        assert!(
-            restored
-                .authorize(addresses[0], 0, &view, 50, false, false)
-                .is_err()
-        );
+        assert!(restored
+            .authorize(addresses[0], 0, &view, 50, false, false)
+            .is_err());
     }
     #[test]
     fn rejoin_and_source_replacement_never_retarget_old_addresses() {
@@ -245,19 +252,16 @@ mod tests {
         let first = book.allocate(&old, tag(), 50, false, false).unwrap();
         let second = book.allocate(&fresh, tag(), 50, false, false).unwrap();
         assert_ne!(first, second);
-        assert!(
-            book.authorize(first, 8080, &fresh, 50, false, false)
-                .is_err()
-        );
-        assert!(
-            book.authorize(second, 8080, &fresh, 50, false, false)
-                .is_ok()
-        );
+        assert!(book
+            .authorize(first, 8080, &fresh, 50, false, false)
+            .is_err());
+        assert!(book
+            .authorize(second, 8080, &fresh, 50, false, false)
+            .is_ok());
         assert!(book.allocate(&fresh, tag(), 50, true, false).is_err());
-        assert!(
-            book.authorize(second, 8080, &fresh, 100, false, false)
-                .is_err()
-        );
+        assert!(book
+            .authorize(second, 8080, &fresh, 100, false, false)
+            .is_err());
         let mut other = old.source_record.clone();
         other.started_at_ms += 1;
         assert!(PrivateAddressBook::restore(&book.snapshot().unwrap(), &other).is_err());
@@ -278,23 +282,26 @@ mod tests {
         let mut raw: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         let original = raw.clone();
         raw["entries"][0]["port"] = 8080.into();
-        assert!(
-            PrivateAddressBook::restore(&serde_json::to_vec(&raw).unwrap(), &view.source_record)
-                .is_err()
-        );
+        assert!(PrivateAddressBook::restore(
+            &serde_json::to_vec(&raw).unwrap(),
+            &view.source_record
+        )
+        .is_err());
         raw = original.clone();
         raw["entries"]
             .as_array_mut()
             .unwrap()
             .push(original["entries"][0].clone());
-        assert!(
-            PrivateAddressBook::restore(&serde_json::to_vec(&raw).unwrap(), &view.source_record)
-                .is_err()
-        );
-        assert!(
-            PrivateAddressBook::restore(&vec![b' '; MAX_SNAPSHOT_BYTES + 1], &view.source_record)
-                .is_err()
-        );
+        assert!(PrivateAddressBook::restore(
+            &serde_json::to_vec(&raw).unwrap(),
+            &view.source_record
+        )
+        .is_err());
+        assert!(PrivateAddressBook::restore(
+            &vec![b' '; MAX_SNAPSHOT_BYTES + 1],
+            &view.source_record
+        )
+        .is_err());
         for _ in 1..MAX_PRIVATE_ADDRESSES {
             let mut claim = book.binding(address(0), 1).unwrap();
             claim.destination_generation = uuid::Uuid::new_v4().to_string();

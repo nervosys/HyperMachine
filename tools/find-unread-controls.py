@@ -207,6 +207,10 @@ def rule_c(sources):
 # Reviewed and accepted, each with the reason it is not a defect. An entry
 # that does not say why is an entry nobody can check.
 ACCEPTED = {
+    'MissedOccurrencePolicy::CatchUp': (
+        'The fall-through of `== MissedOccurrencePolicy::Coalesce` in '
+        'IntervalSchedule::due_occurrences: every path but Coalesce returns '
+        'oldest-first bounded batches, and a test sets CatchUp explicitly.'),
     # --- A: refusals nothing returns -----------------------------------------
     'RegistryError::Denied': (
         'Image admission refuses through AdmissionDecision::Denied, a separate '

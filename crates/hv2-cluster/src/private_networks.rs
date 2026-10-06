@@ -525,14 +525,12 @@ mod tests {
         let m = state.membership().unwrap();
         let mut reused = r.clone();
         reused.started_at_ms = 2;
-        assert!(
-            !NetworkEndpoint {
-                membership: m,
-                record: &reused,
-                registration_pending: false
-            }
-            .active(50)
-        );
+        assert!(!NetworkEndpoint {
+            membership: m,
+            record: &reused,
+            registration_pending: false
+        }
+        .active(50));
     }
     #[test]
     fn tags_are_dns_labels_and_membership_wire_shape_is_strict() {
@@ -648,24 +646,22 @@ mod tests {
                 );
             }
         }
-        assert!(
-            authorize_private_route(
-                "source",
-                &c,
-                NetworkEndpoint {
-                    membership: &sm,
-                    record: &s,
-                    registration_pending: true
-                },
-                NetworkEndpoint {
-                    membership: &dm,
-                    record: &d,
-                    registration_pending: false
-                },
-                50
-            )
-            .is_err()
-        );
+        assert!(authorize_private_route(
+            "source",
+            &c,
+            NetworkEndpoint {
+                membership: &sm,
+                record: &s,
+                registration_pending: true
+            },
+            NetworkEndpoint {
+                membership: &dm,
+                record: &d,
+                registration_pending: false
+            },
+            50
+        )
+        .is_err());
     }
 
     #[test]
@@ -682,7 +678,7 @@ mod tests {
                 2 => invalid.source_generation = "00000000-0000-0000-0000-000000000000".into(),
                 3 => {
                     invalid.destination_generation =
-                        uuid::Uuid::new_v4().to_string().replace('-', "")
+                        uuid::Uuid::new_v4().to_string().replace('-', "");
                 }
                 _ => invalid.port = 0,
             }
@@ -696,24 +692,22 @@ mod tests {
         let sm = member(&s, "team");
         let dm = member(&d, "team");
         let mut c = claim(&sm, &dm);
-        assert!(
-            authorize_private_route(
-                "intruder",
-                &c,
-                NetworkEndpoint {
-                    membership: &sm,
-                    record: &s,
-                    registration_pending: false
-                },
-                NetworkEndpoint {
-                    membership: &dm,
-                    record: &d,
-                    registration_pending: false
-                },
-                50
-            )
-            .is_err()
-        );
+        assert!(authorize_private_route(
+            "intruder",
+            &c,
+            NetworkEndpoint {
+                membership: &sm,
+                record: &s,
+                registration_pending: false
+            },
+            NetworkEndpoint {
+                membership: &dm,
+                record: &d,
+                registration_pending: false
+            },
+            50
+        )
+        .is_err());
         c.port = 0;
         assert!(!allowed(&c, &sm, &s, &dm, &d, false));
         c.port = 8080;

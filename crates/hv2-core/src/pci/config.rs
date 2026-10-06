@@ -1057,10 +1057,10 @@ mod tests {
     fn snapshots_preserve_command_bar_and_probe_state_and_reject_layout_changes() {
         let mut source =
             ConfigSpace::with_device(VendorId::INTEL, DeviceId(0x1237), ClassCode::HOST_BRIDGE, 2);
-        source.write_u16(u16::from(u16::from(registers::COMMAND)), 7);
+        source.write_u16(u16::from(registers::COMMAND), 7);
         source.bars[0] = BarConfig::new_memory32(0x4000, false);
-        source.write_u32(u16::from(u16::from(registers::BAR0)), 0xd0010000);
-        source.write_u32(u16::from(u16::from(registers::BAR0)), u32::MAX);
+        source.write_u32(u16::from(registers::BAR0), 0xd0010000);
+        source.write_u32(u16::from(registers::BAR0), u32::MAX);
         let saved = source.save_state();
         let mut target =
             ConfigSpace::with_device(VendorId::INTEL, DeviceId(0x1237), ClassCode::HOST_BRIDGE, 2);

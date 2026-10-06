@@ -118,8 +118,12 @@ async fn private_guest_urls_authenticate_before_open_and_strip_credentials_over_
         ) -> Result<(), hv2_api::sandbox_proxy::ProxyAccessDenied> {
             self.inner.authorize_request(sandbox, port, headers)
         }
-        async fn admit_request(&self, sandbox: &str, port: u16, headers: &mut HeaderMap)
-            -> Result<(), hv2_api::sandbox_proxy::ProxyAccessDenied> {
+        async fn admit_request(
+            &self,
+            sandbox: &str,
+            port: u16,
+            headers: &mut HeaderMap,
+        ) -> Result<(), hv2_api::sandbox_proxy::ProxyAccessDenied> {
             self.inner.admit_request(sandbox, port, headers).await
         }
         async fn resolve(&self, sandbox: &str, port: u16) -> Option<SocketAddr> {
@@ -139,7 +143,8 @@ async fn private_guest_urls_authenticate_before_open_and_strip_credentials_over_
     }
     let opens = Arc::new(AtomicUsize::new(0));
     let routes = Arc::new(CountedRoutes {
-        inner: ClusterRoutes::new(store.clone(), Duration::from_secs(30)).with_web_access(policy.clone()),
+        inner: ClusterRoutes::new(store.clone(), Duration::from_secs(30))
+            .with_web_access(policy.clone()),
         opens: opens.clone(),
     });
     let cert = rcgen::generate_simple_self_signed(vec![
@@ -341,50 +346,125 @@ async fn private_guest_urls_authenticate_before_open_and_strip_credentials_over_
     assert!(response.bytes().await.unwrap().is_empty());
     // Stored sharing is opt-in per credential; exact-ID grants exclude aliases
     // rebound to a different sandbox and strip browser secrets on both protocols.
-    use hv2_cluster::web_sharing::{WebGrant, WebSharingState, SharingChange};
+    use hv2_cluster::web_sharing::{SharingChange, WebGrant, WebSharingState};
     let mut record = store.sandbox(&id).await.unwrap().unwrap();
     record.owner_id = Some(hv2_cluster::ownership::OwnerId::parse("sharing-owner").unwrap());
     store.put_sandbox(&record).await.unwrap();
     let expiry = chrono::Utc::now().timestamp() + 600;
-    let shared = WebSharingState::new(&record, vec![WebGrant::new("alice@example.test", expiry).unwrap()]).unwrap();
-    assert_eq!(store.compare_web_sharing(None, &shared).await.unwrap(), SharingChange::Applied);
+    let shared = WebSharingState::new(
+        &record,
+        vec![WebGrant::new("alice@example.test", expiry).unwrap()],
+    )
+    .unwrap();
+    assert_eq!(
+        store.compare_web_sharing(None, &shared).await.unwrap(),
+        SharingChange::Applied
+    );
     let mut delegated: Value = serde_json::from_str(&policy_json("web-secret", expiry)).unwrap();
     delegated[0]["sandboxes"] = json!([]);
     policy.replace(&delegated.to_string()).unwrap();
     let before = opens.load(Ordering::SeqCst);
-    assert_eq!(clients[0].get(&url).basic_auth("alice@example.test",Some("web-secret")).send().await.unwrap().status(),401);
-    assert_eq!(opens.load(Ordering::SeqCst),before);
+    assert_eq!(
+        clients[0]
+            .get(&url)
+            .basic_auth("alice@example.test", Some("web-secret"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    assert_eq!(opens.load(Ordering::SeqCst), before);
     delegated[0]["allow_owner_grants"] = json!(true);
     policy.replace(&delegated.to_string()).unwrap();
     for http in &clients {
-        let response = http.post(&url).basic_auth("alice@example.test",Some("web-secret"))
-            .header("x-hypermachine-user","forged").body("shared body").send().await.unwrap();
-        assert_eq!(response.status(),200);
-        assert_eq!(response.headers()["cache-control"],"private, no-store");
+        let response = http
+            .post(&url)
+            .basic_auth("alice@example.test", Some("web-secret"))
+            .header("x-hypermachine-user", "forged")
+            .body("shared body")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        assert_eq!(response.headers()["cache-control"], "private, no-store");
         let response: Value = response.json().await.unwrap();
-        assert_eq!(response["identity"],"alice@example.test");
-        assert_eq!(response["authorization_present"],false);
-        assert_eq!(response["body"],"shared body");
-        let before=opens.load(Ordering::SeqCst);
-        for request in [http.get(&denied_url), http.get(&url).header("e2b-sandbox-id",&other_id).header("e2b-sandbox-port","8080")] {
-            assert_eq!(request.basic_auth("alice@example.test",Some("web-secret")).send().await.unwrap().status(),401);
+        assert_eq!(response["identity"], "alice@example.test");
+        assert_eq!(response["authorization_present"], false);
+        assert_eq!(response["body"], "shared body");
+        let before = opens.load(Ordering::SeqCst);
+        for request in [
+            http.get(&denied_url),
+            http.get(&url)
+                .header("e2b-sandbox-id", &other_id)
+                .header("e2b-sandbox-port", "8080"),
+        ] {
+            assert_eq!(
+                request
+                    .basic_auth("alice@example.test", Some("web-secret"))
+                    .send()
+                    .await
+                    .unwrap()
+                    .status(),
+                401
+            );
         }
-        assert_eq!(opens.load(Ordering::SeqCst),before);
+        assert_eq!(opens.load(Ordering::SeqCst), before);
     }
-    let revoked = WebSharingState::new(&record,vec![]).unwrap();
-    assert_eq!(store.compare_web_sharing(Some(shared.revision()),&revoked).await.unwrap(),SharingChange::Applied);
+    let revoked = WebSharingState::new(&record, vec![]).unwrap();
+    assert_eq!(
+        store
+            .compare_web_sharing(Some(shared.revision()), &revoked)
+            .await
+            .unwrap(),
+        SharingChange::Applied
+    );
     for http in &clients {
-        let before=opens.load(Ordering::SeqCst);
-        assert_eq!(http.get(&url).basic_auth("alice@example.test",Some("web-secret")).send().await.unwrap().status(),401);
-        let response=http.get(&url).header("content-type","application/grpc").basic_auth("alice@example.test",Some("web-secret")).send().await.unwrap();
-        assert_eq!(response.status(),200); assert_eq!(response.headers()["grpc-status"],"16");
-        assert_eq!(opens.load(Ordering::SeqCst),before);
+        let before = opens.load(Ordering::SeqCst);
+        assert_eq!(
+            http.get(&url)
+                .basic_auth("alice@example.test", Some("web-secret"))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            401
+        );
+        let response = http
+            .get(&url)
+            .header("content-type", "application/grpc")
+            .basic_auth("alice@example.test", Some("web-secret"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        assert_eq!(response.headers()["grpc-status"], "16");
+        assert_eq!(opens.load(Ordering::SeqCst), before);
     }
-    let expired=WebSharingState::new(&record,vec![WebGrant::new("alice@example.test",1).unwrap()]).unwrap();
-    assert_eq!(store.compare_web_sharing(Some(revoked.revision()),&expired).await.unwrap(),SharingChange::Applied);
-    let before=opens.load(Ordering::SeqCst);
-    assert_eq!(clients[0].get(&url).basic_auth("alice@example.test",Some("web-secret")).send().await.unwrap().status(),401);
-    assert_eq!(opens.load(Ordering::SeqCst),before);
+    let expired = WebSharingState::new(
+        &record,
+        vec![WebGrant::new("alice@example.test", 1).unwrap()],
+    )
+    .unwrap();
+    assert_eq!(
+        store
+            .compare_web_sharing(Some(revoked.revision()), &expired)
+            .await
+            .unwrap(),
+        SharingChange::Applied
+    );
+    let before = opens.load(Ordering::SeqCst);
+    assert_eq!(
+        clients[0]
+            .get(&url)
+            .basic_auth("alice@example.test", Some("web-secret"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    assert_eq!(opens.load(Ordering::SeqCst), before);
     let mut envd_headers = HeaderMap::new();
     envd_headers.insert("x-access-token", "retained-envd-token".parse().unwrap());
     envd_headers.insert("x-hypermachine-user", "spoofed".parse().unwrap());
@@ -817,7 +897,9 @@ async fn udp_ipv6_tunnels_require_scoped_keys_and_preserve_framed_bytes() {
         .map(|v| format!("{v:02x}"))
         .collect();
     let observer_hash: String = Sha256::digest(b"udp-observer-key")
-        .iter().map(|v| format!("{v:02x}")).collect();
+        .iter()
+        .map(|v| format!("{v:02x}"))
+        .collect();
     let policies = hv2_cluster::keys::ApiKeyPolicy::from_json(
         &json!([
             {"sha256":hash,"expires_at":chrono::Utc::now().timestamp()+600,"scopes":["inventory"]},
@@ -889,7 +971,11 @@ async fn udp_ipv6_tunnels_require_scoped_keys_and_preserve_framed_bytes() {
             .header("upgrade", hv2_api::udp_tunnel::PROTOCOL_IPV6)
     };
     let url = format!("{base}/sandboxes/{id}/ports/8080/udp6");
-    for (key, status) in [("wrong", 401), ("udp-inventory-key", 403), ("udp-observer-key", 403)] {
+    for (key, status) in [
+        ("wrong", 401),
+        ("udp-inventory-key", 403),
+        ("udp-observer-key", 403),
+    ] {
         assert_eq!(
             upgrade(url.clone(), key).send().await.unwrap().status(),
             status
@@ -2759,236 +2845,769 @@ async fn resource_audit_correlates_decoded_targets_without_recording_path_values
     assert!(records[18].event.get("sandbox_ref").is_none());
 }
 
-
 #[tokio::test]
 async fn creator_context_comes_from_current_policy_not_client_headers_or_metadata() {
     use hv2_cluster::ownership::OWNER_HEADER;
     use sha2::{Digest, Sha256};
     struct Owned(tokio::task::JoinHandle<()>);
-    impl Drop for Owned { fn drop(&mut self) { self.0.abort(); } }
+    impl Drop for Owned {
+        fn drop(&mut self) {
+            self.0.abort();
+        }
+    }
     let node_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let node_address = node_listener.local_addr().unwrap();
     let observed = Arc::new(Mutex::new(Vec::<Option<String>>::new()));
     let calls = observed.clone();
     let mut node = Owned(tokio::spawn(async move {
-        axum::serve(node_listener, Router::new().fallback(move |headers: HeaderMap| {
-            let calls = calls.clone();
-            async move {
-                assert_eq!(headers.get(CLUSTER_TOKEN_HEADER).unwrap(), TOKEN);
-                assert!(!headers.contains_key("x-api-key"));
-                calls.lock().push(headers.get(OWNER_HEADER).map(|value| value.to_str().unwrap().to_owned()));
-                (StatusCode::CREATED, Json(json!({"sandboxID":"owned-fixture"})))
-            }
-        })).await.unwrap();
+        axum::serve(
+            node_listener,
+            Router::new().fallback(move |headers: HeaderMap| {
+                let calls = calls.clone();
+                async move {
+                    assert_eq!(headers.get(CLUSTER_TOKEN_HEADER).unwrap(), TOKEN);
+                    assert!(!headers.contains_key("x-api-key"));
+                    calls.lock().push(
+                        headers
+                            .get(OWNER_HEADER)
+                            .map(|value| value.to_str().unwrap().to_owned()),
+                    );
+                    (
+                        StatusCode::CREATED,
+                        Json(json!({"sandboxID":"owned-fixture"})),
+                    )
+                }
+            }),
+        )
+        .await
+        .unwrap();
     }));
     let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
-    store.put_node(&hv2_cluster::model::NodeInfo { id: "owner-node".into(), api: format!("http://{node_address}"),
-        proxy: node_address, capacity: 8, running: 0, heartbeat_ms: now_ms(), version: "fixture".into(),
-        jwk: None, templates: vec!["base".into()], template_metadata: Default::default() }, Duration::from_secs(60)).await.unwrap();
+    store
+        .put_node(
+            &hv2_cluster::model::NodeInfo {
+                id: "owner-node".into(),
+                api: format!("http://{node_address}"),
+                proxy: node_address,
+                capacity: 8,
+                running: 0,
+                heartbeat_ms: now_ms(),
+                version: "fixture".into(),
+                jwk: None,
+                templates: vec!["base".into()],
+                template_metadata: Default::default(),
+            },
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
     let policies = |key: &str, principal: Option<&str>, role: &str| {
         let mut value = json!({"sha256":Sha256::digest(key.as_bytes()).iter().map(|byte| format!("{byte:02x}")).collect::<String>(),
             "expires_at":chrono::Utc::now().timestamp()+60,"scopes":["admin"],"role":role});
-        if let Some(principal) = principal { value["principal_id"] = json!(principal); }
+        if let Some(principal) = principal {
+            value["principal_id"] = json!(principal);
+        }
         json!([value]).to_string()
     };
-    let config = ControlConfig { api_key: Some(KEY.into()), api_keys: hv2_cluster::keys::ApiKeyPolicy::from_json(&policies("first",Some("principal-a"),"operator")).unwrap(),
-        access_audit: None, cluster_token: Some(TOKEN.into()), proxy_port: 3000, create_timeout: Duration::from_secs(5), identity_issuer: None };
+    let config = ControlConfig {
+        api_key: Some(KEY.into()),
+        api_keys: hv2_cluster::keys::ApiKeyPolicy::from_json(&policies(
+            "first",
+            Some("principal-a"),
+            "operator",
+        ))
+        .unwrap(),
+        access_audit: None,
+        cluster_token: Some(TOKEN.into()),
+        proxy_port: 3000,
+        create_timeout: Duration::from_secs(5),
+        identity_issuer: None,
+    };
     let control = ControlPlane::new(store.clone(), config.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let router = control::router(control.clone());
-    let mut server = Owned(tokio::spawn(async move { axum::serve(listener,router).await.unwrap(); }));
-    let send = |key: &str, version: &str| client().post(format!("{base}/{version}"))
+    let mut server = Owned(tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    }));
+    let send = |key: &str, version: &str| {
+        client().post(format!("{base}/{version}"))
         .header("x-api-key",key).header(OWNER_HEADER,"spoofed-principal")
-        .json(&json!({"templateID":"base","owner_id":"spoofed-principal","metadata":{"owner_id":"spoofed-principal"}}));
-    assert_eq!(send("first","sandboxes").send().await.unwrap().status(),201);
-    control.replace_api_key_policies(&policies("rotated",Some("principal-a"),"operator")).unwrap();
-    assert_eq!(send("first","sandboxes").send().await.unwrap().status(),401);
-    assert_eq!(send("rotated","v2/sandboxes").send().await.unwrap().status(),201);
-    assert_eq!(send(KEY,"sandboxes").send().await.unwrap().status(),201);
-    control.replace_api_key_policies(&policies("no-owner",None,"operator")).unwrap();
-    assert_eq!(send("no-owner","sandboxes").send().await.unwrap().status(),201);
-    control.replace_api_key_policies(&policies("observer",Some("principal-a"),"observer")).unwrap();
-    assert_eq!(send("observer","sandboxes").send().await.unwrap().status(),403);
-    assert_eq!(*observed.lock(),vec![Some("principal-a".into()),Some("principal-a".into()),None,None]);
+        .json(&json!({"templateID":"base","owner_id":"spoofed-principal","metadata":{"owner_id":"spoofed-principal"}}))
+    };
+    assert_eq!(
+        send("first", "sandboxes").send().await.unwrap().status(),
+        201
+    );
+    control
+        .replace_api_key_policies(&policies("rotated", Some("principal-a"), "operator"))
+        .unwrap();
+    assert_eq!(
+        send("first", "sandboxes").send().await.unwrap().status(),
+        401
+    );
+    assert_eq!(
+        send("rotated", "v2/sandboxes")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        201
+    );
+    assert_eq!(send(KEY, "sandboxes").send().await.unwrap().status(), 201);
+    control
+        .replace_api_key_policies(&policies("no-owner", None, "operator"))
+        .unwrap();
+    assert_eq!(
+        send("no-owner", "sandboxes").send().await.unwrap().status(),
+        201
+    );
+    control
+        .replace_api_key_policies(&policies("observer", Some("principal-a"), "observer"))
+        .unwrap();
+    assert_eq!(
+        send("observer", "sandboxes").send().await.unwrap().status(),
+        403
+    );
+    assert_eq!(
+        *observed.lock(),
+        vec![
+            Some("principal-a".into()),
+            Some("principal-a".into()),
+            None,
+            None
+        ]
+    );
     let mut unauthenticated_config = config;
     unauthenticated_config.cluster_token = None;
     let no_cluster = ControlPlane::new(store, unauthenticated_config);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let no_cluster_base = format!("http://{}", listener.local_addr().unwrap());
     let router = control::router(no_cluster);
-    let mut no_cluster_server = Owned(tokio::spawn(async move { axum::serve(listener,router).await.unwrap(); }));
-    assert_eq!(client().post(format!("{no_cluster_base}/sandboxes")).header("x-api-key","first")
-        .json(&json!({"templateID":"base"})).send().await.unwrap().status(),503);
-    assert_eq!(observed.lock().len(),4);
-    node.0.abort(); server.0.abort(); no_cluster_server.0.abort();
-    let _ = tokio::join!(&mut node.0,&mut server.0,&mut no_cluster_server.0);
+    let mut no_cluster_server = Owned(tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    }));
+    assert_eq!(
+        client()
+            .post(format!("{no_cluster_base}/sandboxes"))
+            .header("x-api-key", "first")
+            .json(&json!({"templateID":"base"}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        503
+    );
+    assert_eq!(observed.lock().len(), 4);
+    node.0.abort();
+    server.0.abort();
+    no_cluster_server.0.abort();
+    let _ = tokio::join!(&mut node.0, &mut server.0, &mut no_cluster_server.0);
 }
-
 
 #[tokio::test]
 async fn public_port_api_requires_stored_creator_and_preserves_stable_reservations() {
     use hv2_cluster::ports::PublicPortRange;
     use sha2::{Digest, Sha256};
     struct Owned(tokio::task::JoinHandle<()>);
-    impl Drop for Owned { fn drop(&mut self) { self.0.abort(); } }
-    let store: Arc<dyn ClusterStore>=Arc::new(MemoryStore::new());
-    for (id,owner) in [("owner-a-vm",Some("principal-a")),("owner-b-vm",Some("principal-b")),("legacy-vm",None)] {
+    impl Drop for Owned {
+        fn drop(&mut self) {
+            self.0.abort();
+        }
+    }
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    for (id, owner) in [
+        ("owner-a-vm", Some("principal-a")),
+        ("owner-b-vm", Some("principal-b")),
+        ("legacy-vm", None),
+    ] {
         let record: SandboxRecord=serde_json::from_value(json!({"sandbox_id":id,"node_id":"node","template_id":"base",
             "started_at_ms":1,"end_at_ms":600000,"cpu_count":1,"memory_mb":1024,"envd_version":"fixture","descriptor":{},"owner_id":owner})).unwrap();
         store.put_sandbox(&record).await.unwrap();
     }
-    let policy=|key:&str,principal:Option<&str>,role:&str,scope:&str|json!({"sha256":Sha256::digest(key.as_bytes()).iter().map(|v|format!("{v:02x}")).collect::<String>(),
-        "expires_at":chrono::Utc::now().timestamp()+60,"scopes":[scope],"role":role,"principal_id":principal});
-    let policies=json!([policy("owner-a",Some("principal-a"),"operator","sandboxes"),policy("owner-b",Some("principal-b"),"operator","admin"),
-        policy("observer",Some("principal-a"),"observer","admin"),policy("unassigned",None,"operator","admin"),policy("inventory",Some("principal-a"),"operator","inventory")]);
-    let control=ControlPlane::new(store.clone(),ControlConfig { api_key:Some(KEY.into()),api_keys:hv2_cluster::keys::ApiKeyPolicy::from_json(&policies.to_string()).unwrap(),
-        access_audit:None,cluster_token:Some(TOKEN.into()),proxy_port:3000,create_timeout:Duration::from_secs(5),identity_issuer:None });
-    let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let base=format!("http://{}",listener.local_addr().unwrap());let router=control::router(control.clone());
-    let mut server=Owned(tokio::spawn(async move { axum::serve(listener,router).await.unwrap(); }));
-    let send=|method:reqwest::Method,key:&str,path:&str,body:Value|client().request(method,format!("{base}{path}")).header("x-api-key",key)
-        .header(hv2_cluster::ownership::OWNER_HEADER,"principal-a").json(&body);
-    let endpoint="/sandboxes/owner-a-vm/public-ports/18082";
-    assert_eq!(send(reqwest::Method::PUT,"owner-a",endpoint,json!({})).send().await.unwrap().status(),503);
-    control.configure_public_ports(PublicPortRange::new(49000,49016).unwrap()).unwrap();
-    assert!(control.configure_public_ports(PublicPortRange::new(49010,49011).unwrap()).is_err());
-    for key in ["owner-b","observer","unassigned","inventory",KEY] {
-        for (method,path) in [(reqwest::Method::PUT,endpoint),(reqwest::Method::DELETE,endpoint),(reqwest::Method::GET,"/sandboxes/owner-a-vm/public-ports")] {
-            assert_eq!(send(method,key,path,json!({"protocol":"both"})).send().await.unwrap().status(),403,"{key}");
+    let policy = |key: &str, principal: Option<&str>, role: &str, scope: &str| {
+        json!({"sha256":Sha256::digest(key.as_bytes()).iter().map(|v|format!("{v:02x}")).collect::<String>(),
+        "expires_at":chrono::Utc::now().timestamp()+60,"scopes":[scope],"role":role,"principal_id":principal})
+    };
+    let policies = json!([
+        policy("owner-a", Some("principal-a"), "operator", "sandboxes"),
+        policy("owner-b", Some("principal-b"), "operator", "admin"),
+        policy("observer", Some("principal-a"), "observer", "admin"),
+        policy("unassigned", None, "operator", "admin"),
+        policy("inventory", Some("principal-a"), "operator", "inventory")
+    ]);
+    let control = ControlPlane::new(
+        store.clone(),
+        ControlConfig {
+            api_key: Some(KEY.into()),
+            api_keys: hv2_cluster::keys::ApiKeyPolicy::from_json(&policies.to_string()).unwrap(),
+            access_audit: None,
+            cluster_token: Some(TOKEN.into()),
+            proxy_port: 3000,
+            create_timeout: Duration::from_secs(5),
+            identity_issuer: None,
+        },
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let router = control::router(control.clone());
+    let mut server = Owned(tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    }));
+    let send = |method: reqwest::Method, key: &str, path: &str, body: Value| {
+        client()
+            .request(method, format!("{base}{path}"))
+            .header("x-api-key", key)
+            .header(hv2_cluster::ownership::OWNER_HEADER, "principal-a")
+            .json(&body)
+    };
+    let endpoint = "/sandboxes/owner-a-vm/public-ports/18082";
+    assert_eq!(
+        send(reqwest::Method::PUT, "owner-a", endpoint, json!({}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        503
+    );
+    control
+        .configure_public_ports(PublicPortRange::new(49000, 49016).unwrap())
+        .unwrap();
+    assert!(control
+        .configure_public_ports(PublicPortRange::new(49010, 49011).unwrap())
+        .is_err());
+    for key in ["owner-b", "observer", "unassigned", "inventory", KEY] {
+        for (method, path) in [
+            (reqwest::Method::PUT, endpoint),
+            (reqwest::Method::DELETE, endpoint),
+            (reqwest::Method::GET, "/sandboxes/owner-a-vm/public-ports"),
+        ] {
+            assert_eq!(
+                send(method, key, path, json!({"protocol":"both"}))
+                    .send()
+                    .await
+                    .unwrap()
+                    .status(),
+                403,
+                "{key}"
+            );
         }
     }
     assert!(store.port_allocations(None).await.unwrap().is_empty());
-    let response=send(reqwest::Method::PUT,"owner-a",endpoint,json!({})).send().await.unwrap();assert_eq!(response.status(),202);
-    let first:Value=response.json().await.unwrap();assert_eq!(first,json!({"machinePort":18082,"publicPort":49000,"protocol":"tcp"}));
-    let updated:Value=send(reqwest::Method::PUT,"owner-a",endpoint,json!({"protocol":"both"})).send().await.unwrap().json().await.unwrap();
-    assert_eq!(updated["publicPort"],first["publicPort"]);assert_eq!(updated["protocol"],"both");
-    assert_eq!(send(reqwest::Method::PUT,"owner-a",endpoint,json!({"protocol":"udp","owner_id":"principal-b"})).send().await.unwrap().status(),422);
-    assert_eq!(send(reqwest::Method::PUT,"owner-a","/sandboxes/owner-a-vm/public-ports/0",json!({})).send().await.unwrap().status(),400);
-    assert_eq!(send(reqwest::Method::PUT,"owner-a","/sandboxes/legacy-vm/public-ports/1",json!({})).send().await.unwrap().status(),403);
-    assert_eq!(send(reqwest::Method::PUT,"owner-a","/sandboxes/missing-vm/public-ports/1",json!({})).send().await.unwrap().status(),404);
-    let rows:Value=send(reqwest::Method::GET,"owner-a","/sandboxes/owner-a-vm/public-ports",json!({})).send().await.unwrap().json().await.unwrap();
-    assert_eq!(rows,json!([updated]));
-    assert_eq!(send(reqwest::Method::PUT,"owner-b","/sandboxes/owner-b-vm/public-ports/22",json!({"protocol":"udp"})).send().await.unwrap().status(),202);
+    let response = send(reqwest::Method::PUT, "owner-a", endpoint, json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 202);
+    let first: Value = response.json().await.unwrap();
+    assert_eq!(
+        first,
+        json!({"machinePort":18082,"publicPort":49000,"protocol":"tcp"})
+    );
+    let updated: Value = send(
+        reqwest::Method::PUT,
+        "owner-a",
+        endpoint,
+        json!({"protocol":"both"}),
+    )
+    .send()
+    .await
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+    assert_eq!(updated["publicPort"], first["publicPort"]);
+    assert_eq!(updated["protocol"], "both");
+    assert_eq!(
+        send(
+            reqwest::Method::PUT,
+            "owner-a",
+            endpoint,
+            json!({"protocol":"udp","owner_id":"principal-b"})
+        )
+        .send()
+        .await
+        .unwrap()
+        .status(),
+        422
+    );
+    assert_eq!(
+        send(
+            reqwest::Method::PUT,
+            "owner-a",
+            "/sandboxes/owner-a-vm/public-ports/0",
+            json!({})
+        )
+        .send()
+        .await
+        .unwrap()
+        .status(),
+        400
+    );
+    assert_eq!(
+        send(
+            reqwest::Method::PUT,
+            "owner-a",
+            "/sandboxes/legacy-vm/public-ports/1",
+            json!({})
+        )
+        .send()
+        .await
+        .unwrap()
+        .status(),
+        403
+    );
+    assert_eq!(
+        send(
+            reqwest::Method::PUT,
+            "owner-a",
+            "/sandboxes/missing-vm/public-ports/1",
+            json!({})
+        )
+        .send()
+        .await
+        .unwrap()
+        .status(),
+        404
+    );
+    let rows: Value = send(
+        reqwest::Method::GET,
+        "owner-a",
+        "/sandboxes/owner-a-vm/public-ports",
+        json!({}),
+    )
+    .send()
+    .await
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+    assert_eq!(rows, json!([updated]));
+    assert_eq!(
+        send(
+            reqwest::Method::PUT,
+            "owner-b",
+            "/sandboxes/owner-b-vm/public-ports/22",
+            json!({"protocol":"udp"})
+        )
+        .send()
+        .await
+        .unwrap()
+        .status(),
+        202
+    );
     for port in 1..16 {
-        assert_eq!(send(reqwest::Method::PUT,"owner-a",&format!("/sandboxes/owner-a-vm/public-ports/{port}"),json!({})).send().await.unwrap().status(),202);
+        assert_eq!(
+            send(
+                reqwest::Method::PUT,
+                "owner-a",
+                &format!("/sandboxes/owner-a-vm/public-ports/{port}"),
+                json!({})
+            )
+            .send()
+            .await
+            .unwrap()
+            .status(),
+            202
+        );
     }
-    assert_eq!(send(reqwest::Method::PUT,"owner-a","/sandboxes/owner-a-vm/public-ports/18083",json!({})).send().await.unwrap().status(),409);
-    assert_eq!(send(reqwest::Method::PUT,"owner-b","/sandboxes/owner-b-vm/public-ports/23",json!({})).send().await.unwrap().status(),503);
-    assert_eq!(send(reqwest::Method::PUT,"owner-a",endpoint,json!({"protocol":"udp"})).send().await.unwrap().status(),202);
-    assert_eq!(send(reqwest::Method::DELETE,"owner-b",endpoint,json!({})).send().await.unwrap().status(),403);
-    assert_eq!(send(reqwest::Method::DELETE,"owner-a",endpoint,json!({})).send().await.unwrap().status(),204);
-    assert_eq!(send(reqwest::Method::DELETE,"owner-a",endpoint,json!({})).send().await.unwrap().status(),404);
-    let recycled:Value=send(reqwest::Method::PUT,"owner-b","/sandboxes/owner-b-vm/public-ports/23",json!({})).send().await.unwrap().json().await.unwrap();
-    assert_eq!(recycled["publicPort"],49000);
+    assert_eq!(
+        send(
+            reqwest::Method::PUT,
+            "owner-a",
+            "/sandboxes/owner-a-vm/public-ports/18083",
+            json!({})
+        )
+        .send()
+        .await
+        .unwrap()
+        .status(),
+        409
+    );
+    assert_eq!(
+        send(
+            reqwest::Method::PUT,
+            "owner-b",
+            "/sandboxes/owner-b-vm/public-ports/23",
+            json!({})
+        )
+        .send()
+        .await
+        .unwrap()
+        .status(),
+        503
+    );
+    assert_eq!(
+        send(
+            reqwest::Method::PUT,
+            "owner-a",
+            endpoint,
+            json!({"protocol":"udp"})
+        )
+        .send()
+        .await
+        .unwrap()
+        .status(),
+        202
+    );
+    assert_eq!(
+        send(reqwest::Method::DELETE, "owner-b", endpoint, json!({}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    assert_eq!(
+        send(reqwest::Method::DELETE, "owner-a", endpoint, json!({}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        204
+    );
+    assert_eq!(
+        send(reqwest::Method::DELETE, "owner-a", endpoint, json!({}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
+    let recycled: Value = send(
+        reqwest::Method::PUT,
+        "owner-b",
+        "/sandboxes/owner-b-vm/public-ports/23",
+        json!({}),
+    )
+    .send()
+    .await
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+    assert_eq!(recycled["publicPort"], 49000);
     for port in 1..16 {
-        assert_eq!(send(reqwest::Method::DELETE,"owner-a",&format!("/sandboxes/owner-a-vm/public-ports/{port}"),json!({})).send().await.unwrap().status(),204);
+        assert_eq!(
+            send(
+                reqwest::Method::DELETE,
+                "owner-a",
+                &format!("/sandboxes/owner-a-vm/public-ports/{port}"),
+                json!({})
+            )
+            .send()
+            .await
+            .unwrap()
+            .status(),
+            204
+        );
     }
-    assert_eq!(store.port_allocations(Some("owner-a-vm")).await.unwrap().len(),0);
-    server.0.abort();let _=(&mut server.0).await;
+    assert_eq!(
+        store
+            .port_allocations(Some("owner-a-vm"))
+            .await
+            .unwrap()
+            .len(),
+        0
+    );
+    server.0.abort();
+    let _ = (&mut server.0).await;
 }
 
 #[tokio::test]
 async fn legacy_owner_adoption_requires_administrator_before_node_dispatch() {
-    use sha2::{Digest,Sha256};
-    use std::sync::atomic::{AtomicUsize,Ordering};
+    use sha2::{Digest, Sha256};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     struct Owned(tokio::task::JoinHandle<()>);
-    impl Drop for Owned { fn drop(&mut self) {self.0.abort();} }
-    let store:Arc<dyn ClusterStore>=Arc::new(MemoryStore::new());
-    let calls=Arc::new(AtomicUsize::new(0));
-    let node_listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let node_api=format!("http://{}",node_listener.local_addr().unwrap());
-    let node_store=store.clone();let node_calls=calls.clone();
-    let node_router=Router::new().route("/sandboxes/{id}/owner",post(move |Path(id):Path<String>,headers:HeaderMap,Json(body):Json<Value>| {
-        let store=node_store.clone();let calls=node_calls.clone();async move {
-            assert_eq!(headers.get(CLUSTER_TOKEN_HEADER).unwrap(),TOKEN);
-            assert!(headers.get("x-api-key").is_none());
-            assert!(headers.get(hv2_cluster::ownership::OWNER_HEADER).is_none());
-            calls.fetch_add(1,Ordering::SeqCst);
-            let owner=hv2_cluster::ownership::OwnerId::parse(body["principalId"].as_str().unwrap()).unwrap();
-            match store.adopt_sandbox_owner(&id,&owner).await.unwrap() {
-                hv2_cluster::ownership::OwnerAdoption::Adopted|hv2_cluster::ownership::OwnerAdoption::AlreadyOwned=>StatusCode::NO_CONTENT,
-                _=>StatusCode::CONFLICT,
-            }
+    impl Drop for Owned {
+        fn drop(&mut self) {
+            self.0.abort();
         }
+    }
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let calls = Arc::new(AtomicUsize::new(0));
+    let node_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let node_api = format!("http://{}", node_listener.local_addr().unwrap());
+    let node_store = store.clone();
+    let node_calls = calls.clone();
+    let node_router = Router::new().route(
+        "/sandboxes/{id}/owner",
+        post(
+            move |Path(id): Path<String>, headers: HeaderMap, Json(body): Json<Value>| {
+                let store = node_store.clone();
+                let calls = node_calls.clone();
+                async move {
+                    assert_eq!(headers.get(CLUSTER_TOKEN_HEADER).unwrap(), TOKEN);
+                    assert!(headers.get("x-api-key").is_none());
+                    assert!(headers.get(hv2_cluster::ownership::OWNER_HEADER).is_none());
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    let owner = hv2_cluster::ownership::OwnerId::parse(
+                        body["principalId"].as_str().unwrap(),
+                    )
+                    .unwrap();
+                    match store.adopt_sandbox_owner(&id, &owner).await.unwrap() {
+                        hv2_cluster::ownership::OwnerAdoption::Adopted
+                        | hv2_cluster::ownership::OwnerAdoption::AlreadyOwned => {
+                            StatusCode::NO_CONTENT
+                        }
+                        _ => StatusCode::CONFLICT,
+                    }
+                }
+            },
+        ),
+    );
+    let _node = Owned(tokio::spawn(async move {
+        axum::serve(node_listener, node_router).await.unwrap();
     }));
-    let _node=Owned(tokio::spawn(async move {axum::serve(node_listener,node_router).await.unwrap();}));
     let node:hv2_cluster::model::NodeInfo=serde_json::from_value(json!({"id":"adoption-node","api":node_api,"proxy":"127.0.0.1:3000","capacity":4,"running":1,"heartbeat_ms":1,"version":"fixture"})).unwrap();
-    store.put_node(&node,Duration::from_secs(60)).await.unwrap();
+    store
+        .put_node(&node, Duration::from_secs(60))
+        .await
+        .unwrap();
     let record:SandboxRecord=serde_json::from_value(json!({"sandbox_id":"legacy-adoption-http","node_id":"adoption-node","template_id":"base","started_at_ms":1,"end_at_ms":600000,"cpu_count":1,"memory_mb":1024,"envd_version":"fixture","descriptor":{}})).unwrap();
     store.put_sandbox(&record).await.unwrap();
-    let policy=|key:&str,scope:&str,role:&str|json!({"sha256":Sha256::digest(key.as_bytes()).iter().map(|v|format!("{v:02x}")).collect::<String>(),"expires_at":chrono::Utc::now().timestamp()+60,"scopes":[scope],"role":role});
-    let policies=json!([policy("adoption-admin","admin","operator"),policy("adoption-user","sandboxes","operator"),policy("adoption-observer","admin","observer"),policy("adoption-inventory","inventory","operator")]);
-    let control=ControlPlane::new(store.clone(),ControlConfig{api_key:Some(KEY.into()),api_keys:hv2_cluster::keys::ApiKeyPolicy::from_json(&policies.to_string()).unwrap(),access_audit:None,cluster_token:Some(TOKEN.into()),proxy_port:3000,create_timeout:Duration::from_secs(5),identity_issuer:None});
-    let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();let base=format!("http://{}",listener.local_addr().unwrap());let router=control::router(control);
-    let _server=Owned(tokio::spawn(async move {axum::serve(listener,router).await.unwrap();}));
-    let url=format!("{base}/sandboxes/legacy-adoption-http/owner");
-    for (key,status) in [("adoption-user",403),("adoption-observer",403),("adoption-inventory",403),("wrong",401)] {
-        assert_eq!(client().post(&url).header("x-api-key",key).header(hv2_cluster::ownership::OWNER_HEADER,"forged-owner").json(&json!({"principalId":"target-owner"})).send().await.unwrap().status(),status);
+    let policy = |key: &str, scope: &str, role: &str| json!({"sha256":Sha256::digest(key.as_bytes()).iter().map(|v|format!("{v:02x}")).collect::<String>(),"expires_at":chrono::Utc::now().timestamp()+60,"scopes":[scope],"role":role});
+    let policies = json!([
+        policy("adoption-admin", "admin", "operator"),
+        policy("adoption-user", "sandboxes", "operator"),
+        policy("adoption-observer", "admin", "observer"),
+        policy("adoption-inventory", "inventory", "operator")
+    ]);
+    let control = ControlPlane::new(
+        store.clone(),
+        ControlConfig {
+            api_key: Some(KEY.into()),
+            api_keys: hv2_cluster::keys::ApiKeyPolicy::from_json(&policies.to_string()).unwrap(),
+            access_audit: None,
+            cluster_token: Some(TOKEN.into()),
+            proxy_port: 3000,
+            create_timeout: Duration::from_secs(5),
+            identity_issuer: None,
+        },
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let router = control::router(control);
+    let _server = Owned(tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    }));
+    let url = format!("{base}/sandboxes/legacy-adoption-http/owner");
+    for (key, status) in [
+        ("adoption-user", 403),
+        ("adoption-observer", 403),
+        ("adoption-inventory", 403),
+        ("wrong", 401),
+    ] {
+        assert_eq!(
+            client()
+                .post(&url)
+                .header("x-api-key", key)
+                .header(hv2_cluster::ownership::OWNER_HEADER, "forged-owner")
+                .json(&json!({"principalId":"target-owner"}))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            status
+        );
     }
-    assert_eq!(calls.load(Ordering::SeqCst),0);
-    for body in [json!({}),json!({"principalId":"invalid owner"}),json!({"principalId":"target-owner","owner":"extra"})] {
-        assert_eq!(client().post(&url).header("x-api-key","adoption-admin").json(&body).send().await.unwrap().status(),400);
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    for body in [
+        json!({}),
+        json!({"principalId":"invalid owner"}),
+        json!({"principalId":"target-owner","owner":"extra"}),
+    ] {
+        assert_eq!(
+            client()
+                .post(&url)
+                .header("x-api-key", "adoption-admin")
+                .json(&body)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            400
+        );
     }
-    assert_eq!(calls.load(Ordering::SeqCst),0);
-    for key in ["adoption-admin",KEY] {
-        let response=client().post(&url).header("x-api-key",key).header(hv2_cluster::ownership::OWNER_HEADER,"forged-owner").json(&json!({"principalId":"target-owner"})).send().await.unwrap();
-        assert_eq!(response.status(),204);assert!(response.bytes().await.unwrap().is_empty());
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    for key in ["adoption-admin", KEY] {
+        let response = client()
+            .post(&url)
+            .header("x-api-key", key)
+            .header(hv2_cluster::ownership::OWNER_HEADER, "forged-owner")
+            .json(&json!({"principalId":"target-owner"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 204);
+        assert!(response.bytes().await.unwrap().is_empty());
     }
-    assert_eq!(calls.load(Ordering::SeqCst),2);
-    assert_eq!(store.sandbox("legacy-adoption-http").await.unwrap().unwrap().owner_id.unwrap().as_str(),"target-owner");
-    assert_eq!(client().post(&url).header("x-api-key","adoption-admin").json(&json!({"principalId":"different-owner"})).send().await.unwrap().status(),409);
-    let anonymous=ControlPlane::new(store,ControlConfig{api_key:None,api_keys:vec![],access_audit:None,cluster_token:Some(TOKEN.into()),proxy_port:3000,create_timeout:Duration::from_secs(5),identity_issuer:None});
-    let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();let base=format!("http://{}",listener.local_addr().unwrap());let router=control::router(anonymous);
-    let _anonymous=Owned(tokio::spawn(async move {axum::serve(listener,router).await.unwrap();}));
-    assert_eq!(client().post(format!("{base}/sandboxes/legacy-adoption-http/owner")).json(&json!({"principalId":"target-owner"})).send().await.unwrap().status(),403);
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert_eq!(
+        store
+            .sandbox("legacy-adoption-http")
+            .await
+            .unwrap()
+            .unwrap()
+            .owner_id
+            .unwrap()
+            .as_str(),
+        "target-owner"
+    );
+    assert_eq!(
+        client()
+            .post(&url)
+            .header("x-api-key", "adoption-admin")
+            .json(&json!({"principalId":"different-owner"}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        409
+    );
+    let anonymous = ControlPlane::new(
+        store,
+        ControlConfig {
+            api_key: None,
+            api_keys: vec![],
+            access_audit: None,
+            cluster_token: Some(TOKEN.into()),
+            proxy_port: 3000,
+            create_timeout: Duration::from_secs(5),
+            identity_issuer: None,
+        },
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let router = control::router(anonymous);
+    let _anonymous = Owned(tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    }));
+    assert_eq!(
+        client()
+            .post(format!("{base}/sandboxes/legacy-adoption-http/owner"))
+            .json(&json!({"principalId":"target-owner"}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
 }
 
 #[tokio::test]
 async fn creator_bound_keys_filter_inventory_and_deny_cross_owner_routes() {
     use sha2::{Digest, Sha256};
     let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
-    for (id, owner) in [("a-vm", Some("principal-a")), ("b-vm", Some("principal-b")), ("legacy-vm", None)] {
+    for (id, owner) in [
+        ("a-vm", Some("principal-a")),
+        ("b-vm", Some("principal-b")),
+        ("legacy-vm", None),
+    ] {
         let record: SandboxRecord = serde_json::from_value(json!({"sandbox_id":id,"node_id":"missing-node","template_id":"base",
             "started_at_ms":1,"end_at_ms":600000,"cpu_count":1,"memory_mb":1024,"envd_version":"fixture","descriptor":{},"owner_id":owner})).unwrap();
         store.put_sandbox(&record).await.unwrap();
     }
-    let policy = |key: &str, principal: Option<&str>, role: &str| json!({
+    let policy = |key: &str, principal: Option<&str>, role: &str| {
+        json!({
         "sha256":Sha256::digest(key.as_bytes()).iter().map(|v|format!("{v:02x}")).collect::<String>(),
-        "expires_at":chrono::Utc::now().timestamp()+60,"scopes":[if key.starts_with("creator") { "sandboxes" } else { "admin" }],"role":role,"principal_id":principal});
-    let policies = json!([policy("creator",Some("principal-a"),"operator"),
-        policy("administrator",Some("principal-a"),"operator"),policy("unassigned",None,"operator")]);
-    let control = ControlPlane::new(store.clone(), ControlConfig { api_key:Some(KEY.into()),
-        api_keys:hv2_cluster::keys::ApiKeyPolicy::from_json(&policies.to_string()).unwrap(),
-        access_audit:None,cluster_token:Some(TOKEN.into()),proxy_port:3000,create_timeout:Duration::from_secs(5),identity_issuer:None });
+        "expires_at":chrono::Utc::now().timestamp()+60,"scopes":[if key.starts_with("creator") { "sandboxes" } else { "admin" }],"role":role,"principal_id":principal})
+    };
+    let policies = json!([
+        policy("creator", Some("principal-a"), "operator"),
+        policy("administrator", Some("principal-a"), "operator"),
+        policy("unassigned", None, "operator")
+    ]);
+    let control = ControlPlane::new(
+        store.clone(),
+        ControlConfig {
+            api_key: Some(KEY.into()),
+            api_keys: hv2_cluster::keys::ApiKeyPolicy::from_json(&policies.to_string()).unwrap(),
+            access_audit: None,
+            cluster_token: Some(TOKEN.into()),
+            proxy_port: 3000,
+            create_timeout: Duration::from_secs(5),
+            identity_issuer: None,
+        },
+    );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let base = format!("http://{}",listener.local_addr().unwrap());
+    let base = format!("http://{}", listener.local_addr().unwrap());
     let router = control::router(control.clone());
-    let server = tokio::spawn(async move { axum::serve(listener,router).await.unwrap(); });
+    let server = tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    });
     for path in ["/sandboxes", "/v2/sandboxes?limit=1"] {
-        let response = client().get(format!("{base}{path}")).header("x-api-key","creator").send().await.unwrap();
-        assert_eq!(response.status(),200);
+        let response = client()
+            .get(format!("{base}{path}"))
+            .header("x-api-key", "creator")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
         assert!(!response.headers().contains_key("x-next-token"));
         let rows: Value = response.json().await.unwrap();
-        assert_eq!(rows.as_array().unwrap().len(),1);
-        assert_eq!(rows[0]["sandboxID"],"a-vm");
+        assert_eq!(rows.as_array().unwrap().len(), 1);
+        assert_eq!(rows[0]["sandboxID"], "a-vm");
     }
-    for id in ["b-vm","legacy-vm"] {
-        for (method, suffix) in [(reqwest::Method::GET,""),(reqwest::Method::DELETE,""),
-            (reqwest::Method::POST,"/pause"),(reqwest::Method::POST,"/resume"),
-            (reqwest::Method::POST,"/fork"),(reqwest::Method::GET,"/ports/80/tcp"),(reqwest::Method::GET,"/ports/80/udp"),(reqwest::Method::GET,"/ports/80/udp6"),(reqwest::Method::POST,"/exec"),(reqwest::Method::POST,"/connect"),(reqwest::Method::GET,"/checkpoints")] {
-            assert_eq!(client().request(method,format!("{base}/sandboxes/{id}{suffix}"))
-                .header("x-api-key","creator").header(hv2_cluster::ownership::OWNER_HEADER,"principal-b")
-                .send().await.unwrap().status(),403);
+    for id in ["b-vm", "legacy-vm"] {
+        for (method, suffix) in [
+            (reqwest::Method::GET, ""),
+            (reqwest::Method::DELETE, ""),
+            (reqwest::Method::POST, "/pause"),
+            (reqwest::Method::POST, "/resume"),
+            (reqwest::Method::POST, "/fork"),
+            (reqwest::Method::GET, "/ports/80/tcp"),
+            (reqwest::Method::GET, "/ports/80/udp"),
+            (reqwest::Method::GET, "/ports/80/udp6"),
+            (reqwest::Method::POST, "/exec"),
+            (reqwest::Method::POST, "/connect"),
+            (reqwest::Method::GET, "/checkpoints"),
+        ] {
+            assert_eq!(
+                client()
+                    .request(method, format!("{base}/sandboxes/{id}{suffix}"))
+                    .header("x-api-key", "creator")
+                    .header(hv2_cluster::ownership::OWNER_HEADER, "principal-b")
+                    .send()
+                    .await
+                    .unwrap()
+                    .status(),
+                403
+            );
         }
-        assert!(store.sandbox(id).await.unwrap().is_some(),"denied delete must not remove record");
+        assert!(
+            store.sandbox(id).await.unwrap().is_some(),
+            "denied delete must not remove record"
+        );
     }
-    for key in ["administrator","unassigned",KEY] {
-        assert_eq!(client().get(format!("{base}/sandboxes/b-vm")).header("x-api-key",key).send().await.unwrap().status(),200);
+    for key in ["administrator", "unassigned", KEY] {
+        assert_eq!(
+            client()
+                .get(format!("{base}/sandboxes/b-vm"))
+                .header("x-api-key", key)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            200
+        );
     }
-    assert_eq!(client().get(format!("{base}/sandboxes/a-vm")).header("x-api-key","creator").send().await.unwrap().status(),200);
+    assert_eq!(
+        client()
+            .get(format!("{base}/sandboxes/a-vm"))
+            .header("x-api-key", "creator")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
     // Filter before pagination, including foreign cursor and descending order.
-    for (id, owner) in [("a-second", "principal-a"), ("b-between", "principal-b"), ("a-third", "principal-a")] {
+    for (id, owner) in [
+        ("a-second", "principal-a"),
+        ("b-between", "principal-b"),
+        ("a-third", "principal-a"),
+    ] {
         let mut record = store.sandbox("a-vm").await.unwrap().unwrap();
         record.sandbox_id = id.into();
         record.owner_id = Some(hv2_cluster::ownership::OwnerId::parse(owner).unwrap());
@@ -2998,25 +3617,88 @@ async fn creator_bound_keys_filter_inventory_and_deny_cross_owner_routes() {
         let mut cursor = "b-between".to_owned();
         let mut seen = std::collections::BTreeSet::new();
         for _ in 0..4 {
-            let response = client().get(format!("{base}/v2/sandboxes?limit=1&order={order}&nextToken={cursor}"))
-                .header("x-api-key","creator").send().await.unwrap();
-            assert_eq!(response.status(),200);
-            let next = response.headers().get("x-next-token").map(|v|v.to_str().unwrap().to_owned());
+            let response = client()
+                .get(format!(
+                    "{base}/v2/sandboxes?limit=1&order={order}&nextToken={cursor}"
+                ))
+                .header("x-api-key", "creator")
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), 200);
+            let next = response
+                .headers()
+                .get("x-next-token")
+                .map(|v| v.to_str().unwrap().to_owned());
             let rows: Value = response.json().await.unwrap();
-            assert_eq!(rows.as_array().unwrap().len(),1);
+            assert_eq!(rows.as_array().unwrap().len(), 1);
             assert!(seen.insert(rows[0]["sandboxID"].as_str().unwrap().to_owned()));
-            match next { Some(next) => cursor = next, None => break }
+            match next {
+                Some(next) => cursor = next,
+                None => break,
+            }
         }
-        assert_eq!(seen, ["a-vm","a-second","a-third"].into_iter().map(str::to_owned).collect());
+        assert_eq!(
+            seen,
+            ["a-vm", "a-second", "a-third"]
+                .into_iter()
+                .map(str::to_owned)
+                .collect()
+        );
     }
-    control.replace_api_key_policies(&json!([policy("creator-rotated",Some("principal-a"),"operator")]).to_string()).unwrap();
-    assert_eq!(client().get(format!("{base}/sandboxes/a-vm")).header("x-api-key","creator").send().await.unwrap().status(),401);
-    assert_eq!(client().get(format!("{base}/sandboxes/a-vm")).header("x-api-key","creator-rotated").send().await.unwrap().status(),200);
+    control
+        .replace_api_key_policies(
+            &json!([policy("creator-rotated", Some("principal-a"), "operator")]).to_string(),
+        )
+        .unwrap();
+    assert_eq!(
+        client()
+            .get(format!("{base}/sandboxes/a-vm"))
+            .header("x-api-key", "creator")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    assert_eq!(
+        client()
+            .get(format!("{base}/sandboxes/a-vm"))
+            .header("x-api-key", "creator-rotated")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
     let mut record = store.sandbox("a-vm").await.unwrap().unwrap();
     record.owner_id = Some(hv2_cluster::ownership::OwnerId::parse("principal-b").unwrap());
     store.put_sandbox(&record).await.unwrap();
-    assert_eq!(client().get(format!("{base}/sandboxes/a-vm")).header("x-api-key","creator-rotated").send().await.unwrap().status(),403);
-    control.replace_api_key_policies(&json!([policy("creator-rotated",Some("principal-b"),"operator")]).to_string()).unwrap();
-    assert_eq!(client().get(format!("{base}/sandboxes/a-vm")).header("x-api-key","creator-rotated").send().await.unwrap().status(),200);
-    server.abort(); let _ = server.await;
+    assert_eq!(
+        client()
+            .get(format!("{base}/sandboxes/a-vm"))
+            .header("x-api-key", "creator-rotated")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    control
+        .replace_api_key_policies(
+            &json!([policy("creator-rotated", Some("principal-b"), "operator")]).to_string(),
+        )
+        .unwrap();
+    assert_eq!(
+        client()
+            .get(format!("{base}/sandboxes/a-vm"))
+            .header("x-api-key", "creator-rotated")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    server.abort();
+    let _ = server.await;
 }

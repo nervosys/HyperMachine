@@ -87,11 +87,20 @@ fn parse() -> Result<Options, String> {
             "--api-key" => opts.api_key = Some(value()?),
             "--api-keys-file" => opts.api_keys_file = Some(value()?),
             "--native-port-range" => {
-                let raw=value()?;
-                let (first,last)=raw.split_once('-').ok_or("--native-port-range requires FIRST-LAST")?;
-                let first=first.parse::<u16>().map_err(|_|"invalid native port range")?;
-                let last=last.parse::<u16>().map_err(|_|"invalid native port range")?;
-                opts.native_port_range=Some(hv2_cluster::ports::PublicPortRange::new(first,last).map_err(|_|"invalid native port range")?);
+                let raw = value()?;
+                let (first, last) = raw
+                    .split_once('-')
+                    .ok_or("--native-port-range requires FIRST-LAST")?;
+                let first = first
+                    .parse::<u16>()
+                    .map_err(|_| "invalid native port range")?;
+                let last = last
+                    .parse::<u16>()
+                    .map_err(|_| "invalid native port range")?;
+                opts.native_port_range = Some(
+                    hv2_cluster::ports::PublicPortRange::new(first, last)
+                        .map_err(|_| "invalid native port range")?,
+                );
             }
             "--web-access-file" => opts.web_access_file = Some(value()?),
             "--domain-verification-file" => opts.domain_verification_file = Some(value()?),
@@ -365,8 +374,8 @@ async fn main() -> std::process::ExitCode {
             }
         },
     };
-    if let Some(range)=opts.native_port_range {
-        if let Err(error)=control.configure_public_ports(range) {
+    if let Some(range) = opts.native_port_range {
+        if let Err(error) = control.configure_public_ports(range) {
             eprintln!("hv2-control-plane: {error}");
             return std::process::ExitCode::FAILURE;
         }

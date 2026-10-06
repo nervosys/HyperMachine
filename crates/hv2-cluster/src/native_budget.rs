@@ -64,10 +64,7 @@ mod tests {
             let (client, mut server) = tokio::io::duplex(8192);
             self.tasks.lock().await.spawn(async move {
                 let mut bytes = [0; 8192];
-                loop {
-                    let Ok(n) = server.read(&mut bytes).await else {
-                        break;
-                    };
+                while let Ok(n) = server.read(&mut bytes).await {
                     if n == 0 || server.write_all(&bytes[..n]).await.is_err() {
                         break;
                     }

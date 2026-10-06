@@ -59,8 +59,8 @@
 //!   through this. (`hv2-api`'s sandbox proxy is the inbound path, over vsock.)
 
 pub mod dns;
-pub mod private_udp;
 pub mod mitm;
+pub mod private_udp;
 pub mod sniff;
 pub mod socks;
 
@@ -68,8 +68,8 @@ use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::pin::Pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
 
@@ -667,7 +667,9 @@ struct PrivateUdpSession {
     task: tokio::task::JoinHandle<()>,
 }
 impl Drop for PrivateUdpSession {
-    fn drop(&mut self) { self.task.abort(); }
+    fn drop(&mut self) {
+        self.task.abort();
+    }
 }
 struct PrivateUdpSocket {
     handle: SocketHandle,
@@ -806,19 +808,46 @@ impl Stack {
     }
 
     fn on_private_udp(&mut self, destination: SocketAddr) {
-        if self.udp_sockets.contains_key(&destination) { return; }
+        if self.udp_sockets.contains_key(&destination) {
+            return;
+        }
         if destination.port() == 0
             || self.conns.len() + self.udp_sockets.len() >= self.shared.config.max_connections
-            || !self.shared.private_network.as_ref().is_some_and(|p| p.owns_address(destination.ip()))
-        { return; }
-        let IpAddr::V4(ip) = destination.ip() else { return; };
+            || !self
+                .shared
+                .private_network
+                .as_ref()
+                .is_some_and(|p| p.owns_address(destination.ip()))
+        {
+            return;
+        }
+        let IpAddr::V4(ip) = destination.ip() else {
+            return;
+        };
         let mut socket = udp::Socket::new(
-            udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; private_udp::QUEUE_DEPTH], vec![0; private_udp::MAX_PAYLOAD * private_udp::QUEUE_DEPTH]),
-            udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; private_udp::QUEUE_DEPTH], vec![0; private_udp::MAX_PAYLOAD * private_udp::QUEUE_DEPTH]),
+            udp::PacketBuffer::new(
+                vec![udp::PacketMetadata::EMPTY; private_udp::QUEUE_DEPTH],
+                vec![0; private_udp::MAX_PAYLOAD * private_udp::QUEUE_DEPTH],
+            ),
+            udp::PacketBuffer::new(
+                vec![udp::PacketMetadata::EMPTY; private_udp::QUEUE_DEPTH],
+                vec![0; private_udp::MAX_PAYLOAD * private_udp::QUEUE_DEPTH],
+            ),
         );
-        if socket.bind((IpAddress::Ipv4(ip), destination.port())).is_err() { return; }
+        if socket
+            .bind((IpAddress::Ipv4(ip), destination.port()))
+            .is_err()
+        {
+            return;
+        }
         let handle = self.sockets.add(socket);
-        self.udp_sockets.insert(destination, PrivateUdpSocket { handle, last_used: std::time::Instant::now() });
+        self.udp_sockets.insert(
+            destination,
+            PrivateUdpSocket {
+                handle,
+                last_used: std::time::Instant::now(),
+            },
+        );
     }
 
     fn service_private_udp(&mut self) {
@@ -826,31 +855,72 @@ impl Stack {
         for destination in destinations {
             let handle = self.udp_sockets[&destination].handle;
             for _ in 0..private_udp::QUEUE_DEPTH {
-                let received = self.sockets.get_mut::<udp::Socket>(handle).recv()
+                let received = self
+                    .sockets
+                    .get_mut::<udp::Socket>(handle)
+                    .recv()
                     .map(|(data, meta)| (data.to_vec(), meta.endpoint));
-                let Ok((payload, endpoint)) = received else { break; };
+                let Ok((payload, endpoint)) = received else {
+                    break;
+                };
                 let IpAddress::Ipv4(source_ip) = endpoint.addr;
                 let source = SocketAddr::new(IpAddr::V4(source_ip), endpoint.port);
                 let key = (source, destination);
                 if !self.udp_sessions.contains_key(&key) {
-                    if self.conns.len() + self.udp_sessions.len() >= self.shared.config.max_connections { continue; }
-                    let Some(private) = self.shared.private_network.clone() else { continue; };
+                    if self.conns.len() + self.udp_sessions.len()
+                        >= self.shared.config.max_connections
+                    {
+                        continue;
+                    }
+                    let Some(private) = self.shared.private_network.clone() else {
+                        continue;
+                    };
                     let (to_peer, input) = mpsc::channel(private_udp::QUEUE_DEPTH);
                     let (output, from_peer) = mpsc::channel(private_udp::QUEUE_DEPTH);
                     let shared = self.shared.clone();
                     let task = tokio::spawn(async move {
-                        let stream = match tokio::time::timeout(shared.config.connect_timeout, private.dial_udp(destination)).await {
+                        let stream = match tokio::time::timeout(
+                            shared.config.connect_timeout,
+                            private.dial_udp(destination),
+                        )
+                        .await
+                        {
                             Ok(Ok(stream)) => stream,
-                            _ => { shared.record("udp", destination, None, Verdict::Deny, "private network refused"); return; }
+                            _ => {
+                                shared.record(
+                                    "udp",
+                                    destination,
+                                    None,
+                                    Verdict::Deny,
+                                    "private network refused",
+                                );
+                                return;
+                            }
                         };
                         shared.record("udp", destination, None, Verdict::Allow, "private network");
-                        let _ = private_udp::relay(stream, input, output, Duration::from_secs(30), Duration::from_secs(600)).await;
+                        let _ = private_udp::relay(
+                            stream,
+                            input,
+                            output,
+                            Duration::from_secs(30),
+                            Duration::from_secs(600),
+                        )
+                        .await;
                     });
-                    self.udp_sessions.insert(key, PrivateUdpSession { to_peer, from_peer, pending: None, task });
+                    self.udp_sessions.insert(
+                        key,
+                        PrivateUdpSession {
+                            to_peer,
+                            from_peer,
+                            pending: None,
+                            task,
+                        },
+                    );
                 }
                 // UDP pressure drops whole packets, never partial frame bytes.
                 let _ = self.udp_sessions[&key].to_peer.try_send(payload);
-                self.udp_sockets.get_mut(&destination).unwrap().last_used = std::time::Instant::now();
+                self.udp_sockets.get_mut(&destination).unwrap().last_used =
+                    std::time::Instant::now();
             }
         }
         let keys: Vec<_> = self.udp_sessions.keys().copied().collect();
@@ -858,27 +928,49 @@ impl Stack {
             let session = self.udp_sessions.get_mut(&key).unwrap();
             let handle = self.udp_sockets[&destination].handle;
             for _ in 0..private_udp::QUEUE_DEPTH {
-                let payload = match session.pending.take().or_else(|| session.from_peer.try_recv().ok()) {
-                    Some(payload) => payload, None => break,
+                let payload = match session
+                    .pending
+                    .take()
+                    .or_else(|| session.from_peer.try_recv().ok())
+                {
+                    Some(payload) => payload,
+                    None => break,
                 };
-                let IpAddr::V4(ip) = source.ip() else { break; };
-                if self.sockets.get_mut::<udp::Socket>(handle).send_slice(&payload, (IpAddress::Ipv4(ip), source.port())).is_err() {
-                    session.pending = Some(payload); break;
+                let IpAddr::V4(ip) = source.ip() else {
+                    break;
+                };
+                if self
+                    .sockets
+                    .get_mut::<udp::Socket>(handle)
+                    .send_slice(&payload, (IpAddress::Ipv4(ip), source.port()))
+                    .is_err()
+                {
+                    session.pending = Some(payload);
+                    break;
                 }
-                self.udp_sockets.get_mut(&destination).unwrap().last_used = std::time::Instant::now();
+                self.udp_sockets.get_mut(&destination).unwrap().last_used =
+                    std::time::Instant::now();
             }
-            if session.task.is_finished() && session.pending.is_none() && session.from_peer.is_empty() {
+            if session.task.is_finished()
+                && session.pending.is_none()
+                && session.from_peer.is_empty()
+            {
                 self.udp_sessions.remove(&key);
             }
         }
-        let unused: Vec<_> = self.udp_sockets.iter().filter_map(|(destination, socket)| {
-            (!self.udp_sessions.keys().any(|(_, to)| to == destination)
-                && socket.last_used.elapsed() > Duration::from_secs(5)
-                && self.sockets.get::<udp::Socket>(socket.handle).send_queue() == 0)
-                .then_some(*destination)
-        }).collect();
+        let unused: Vec<_> = self
+            .udp_sockets
+            .iter()
+            .filter_map(|(destination, socket)| {
+                (!self.udp_sessions.keys().any(|(_, to)| to == destination)
+                    && socket.last_used.elapsed() > Duration::from_secs(5)
+                    && self.sockets.get::<udp::Socket>(socket.handle).send_queue() == 0)
+                    .then_some(*destination)
+            })
+            .collect();
         for destination in unused {
-            let socket = self.udp_sockets.remove(&destination).unwrap();self.sockets.remove(socket.handle);
+            let socket = self.udp_sockets.remove(&destination).unwrap();
+            self.sockets.remove(socket.handle);
         }
     }
 
@@ -1137,13 +1229,19 @@ impl Stack {
 /// validates checksums before delivering their payload; other UDP stays dropped.
 fn udp_destination_of(frame: &[u8]) -> Option<SocketAddr> {
     let eth = EthernetFrame::new_checked(frame).ok()?;
-    if eth.ethertype() != EthernetProtocol::Ipv4 { return None; }
+    if eth.ethertype() != EthernetProtocol::Ipv4 {
+        return None;
+    }
     let ip = Ipv4Packet::new_checked(eth.payload()).ok()?;
-    if ip.next_header() != IpProtocol::Udp || ip.frag_offset() != 0 { return None; }
+    if ip.next_header() != IpProtocol::Udp || ip.frag_offset() != 0 {
+        return None;
+    }
     // The first fragment contains the UDP header but not its declared whole
     // payload. Create only the bounded destination socket; the interface must
     // reassemble and validate the complete packet before session admission.
-    if ip.payload().len() < 8 { return None; }
+    if ip.payload().len() < 8 {
+        return None;
+    }
     let udp = UdpPacket::new_unchecked(ip.payload());
     Some(SocketAddr::new(IpAddr::V4(ip.dst_addr()), udp.dst_port()))
 }

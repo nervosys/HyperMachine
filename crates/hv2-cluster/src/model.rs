@@ -373,10 +373,16 @@ mod tests {
         owned.owner_id = Some(crate::ownership::OwnerId::parse("principal-a").unwrap());
         let encoded = serde_json::to_value(&owned).unwrap();
         assert_eq!(encoded["owner_id"], "principal-a");
-        assert_eq!(serde_json::from_value::<SandboxRecord>(encoded.clone()).unwrap(), owned);
+        assert_eq!(
+            serde_json::from_value::<SandboxRecord>(encoded.clone()).unwrap(),
+            owned
+        );
         let mut legacy = encoded;
         legacy.as_object_mut().unwrap().remove("owner_id");
-        assert!(serde_json::from_value::<SandboxRecord>(legacy).unwrap().owner_id.is_none());
+        assert!(serde_json::from_value::<SandboxRecord>(legacy)
+            .unwrap()
+            .owner_id
+            .is_none());
         let mut malformed = serde_json::to_value(&owned).unwrap();
         malformed["owner_id"] = json!("untrusted/owner");
         assert!(serde_json::from_value::<SandboxRecord>(malformed).is_err());

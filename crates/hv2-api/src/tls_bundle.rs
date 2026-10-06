@@ -303,9 +303,13 @@ mod tests {
             .next()
             .unwrap()
             .unwrap();
-        assert!(valid_certificates(&[der.clone()], x509_parser::time::ASN1Time::now()).is_ok());
         assert!(valid_certificates(
-            &[der.clone()],
+            std::slice::from_ref(&der),
+            x509_parser::time::ASN1Time::now()
+        )
+        .is_ok());
+        assert!(valid_certificates(
+            std::slice::from_ref(&der),
             x509_parser::time::ASN1Time::from_timestamp(0).unwrap()
         )
         .is_err());

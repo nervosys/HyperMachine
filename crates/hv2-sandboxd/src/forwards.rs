@@ -51,7 +51,11 @@ pub(crate) async fn udp_tunnel_ipv6(
 use hv2_cluster::private_networks::{
     PRIVATE_ROUTE_HEADER as PRIVATE_CLAIM_HEADER, PRIVATE_SOURCE_NODE_HEADER,
 };
-pub(super) fn private_transport_enabled(clustered: bool, token: Option<&str>, tls: [bool; 3]) -> bool {
+pub(super) fn private_transport_enabled(
+    clustered: bool,
+    token: Option<&str>,
+    tls: [bool; 3],
+) -> bool {
     clustered
         && token.is_some_and(|token| !token.trim().is_empty() && token.len() <= 4096)
         && tls.into_iter().all(|enabled| enabled)
@@ -176,10 +180,17 @@ async fn authorize_private(
     let lookup = async {
         // Redis reads all route and live-node records in one atomic command.
         // Each setup barrier still requests a fresh view, as does revocation.
-        let snapshot = node.store().private_route_snapshot_with_live_nodes(
-            &incoming.claim.source_id, &incoming.claim.destination_id,
-            &incoming.source_node, node.id(),
-        ).await.map_err(|_| unavailable)?.ok_or(refused)?;
+        let snapshot = node
+            .store()
+            .private_route_snapshot_with_live_nodes(
+                &incoming.claim.source_id,
+                &incoming.claim.destination_id,
+                &incoming.source_node,
+                node.id(),
+            )
+            .await
+            .map_err(|_| unavailable)?
+            .ok_or(refused)?;
         if snapshot.source_record.node_id != incoming.source_node
             || snapshot.destination_record.node_id != node.id()
         {

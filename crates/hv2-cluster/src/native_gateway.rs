@@ -286,10 +286,10 @@ impl NativeGateway {
                     return Ok(());
                 }
                 Some(Err(_)) => {
-                    tracing::warn!("native gateway snapshot unavailable; listeners closed")
+                    tracing::warn!("native gateway snapshot unavailable; listeners closed");
                 }
                 Some(Ok(failed)) if !failed.is_empty() => {
-                    tracing::debug!(count = failed.len(), "native gateway ports unavailable")
+                    tracing::debug!(count = failed.len(), "native gateway ports unavailable");
                 }
                 _ => {}
             }
@@ -318,10 +318,7 @@ mod tests {
             let (client, mut server) = tokio::io::duplex(131072);
             self.tasks.lock().await.spawn(async move {
                 let mut bytes = [0; 8192];
-                loop {
-                    let Ok(n) = server.read(&mut bytes).await else {
-                        break;
-                    };
+                while let Ok(n) = server.read(&mut bytes).await {
                     if n == 0 || server.write_all(&bytes[..n]).await.is_err() {
                         break;
                     }

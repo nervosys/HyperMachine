@@ -287,10 +287,7 @@ mod tests {
                     let _ = server.write_all(&[0]).await;
                     return;
                 }
-                loop {
-                    let Ok(size) = server.read_u16().await else {
-                        break;
-                    };
+                while let Ok(size) = server.read_u16().await {
                     let mut bytes = vec![0; size as usize];
                     if server.read_exact(&mut bytes).await.is_err()
                         || server.write_all(&frame(&bytes)).await.is_err()

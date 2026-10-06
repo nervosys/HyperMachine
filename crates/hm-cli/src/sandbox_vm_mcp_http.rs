@@ -269,6 +269,57 @@ async fn endpoint(State(server): State<Arc<Server>>, request: Request) -> Respon
     response
 }
 
+pub(super) async fn serve(
+    api: Api,
+    deadline: u64,
+    listen: SocketAddr,
+    origins: Vec<String>,
+    envd_endpoint: Option<String>,
+    envd_domain: Option<String>,
+    envd_ca_cert: Option<std::path::PathBuf>,
+) -> Result<()> {
+    if !listen.ip().is_loopback() {
+        bail!("MCP HTTP must bind to loopback behind an operator TLS proxy");
+    }
+    let token = std::env::var("HM_MCP_TOKEN").unwrap_or_default();
+    if token.len() < 32 || token.len() > 4096 || !token.bytes().all(|byte| byte.is_ascii_graphic())
+    {
+        bail!("HM_MCP_TOKEN must contain 32-4096 visible ASCII bytes");
+    }
+    for origin in &origins {
+        let parsed = reqwest::Url::parse(origin)?;
+        if parsed.scheme() != "https" || parsed.origin().ascii_serialization() != *origin {
+            bail!("allowed origins must be exact HTTPS origins");
+        }
+    }
+    let prototype = mcp::Session::configured(
+        envd_endpoint,
+        envd_domain,
+        deadline,
+        envd_ca_cert.as_deref(),
+    )?;
+    let state = Arc::new(Server {
+        api,
+        prototype,
+        deadline,
+        token,
+        origins,
+        sessions: Mutex::new(HashMap::new()),
+        body_slots: Arc::new(Semaphore::new(CONCURRENT_LIMIT)),
+        operation_slots: Arc::new(Semaphore::new(CONCURRENT_LIMIT)),
+    });
+    let router = Router::new()
+        .route("/mcp", post(endpoint).get(endpoint).delete(endpoint))
+        .with_state(state);
+    let listener = tokio::net::TcpListener::bind(listen).await?;
+    axum::serve(listener, router)
+        .with_graceful_shutdown(async {
+            let _ = tokio::signal::ctrl_c().await;
+        })
+        .await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -789,55 +840,4 @@ mod tests {
             assert_eq!(call.await.unwrap().status(), 200);
         }
     }
-}
-
-pub(super) async fn serve(
-    api: Api,
-    deadline: u64,
-    listen: SocketAddr,
-    origins: Vec<String>,
-    envd_endpoint: Option<String>,
-    envd_domain: Option<String>,
-    envd_ca_cert: Option<std::path::PathBuf>,
-) -> Result<()> {
-    if !listen.ip().is_loopback() {
-        bail!("MCP HTTP must bind to loopback behind an operator TLS proxy");
-    }
-    let token = std::env::var("HM_MCP_TOKEN").unwrap_or_default();
-    if token.len() < 32 || token.len() > 4096 || !token.bytes().all(|byte| byte.is_ascii_graphic())
-    {
-        bail!("HM_MCP_TOKEN must contain 32-4096 visible ASCII bytes");
-    }
-    for origin in &origins {
-        let parsed = reqwest::Url::parse(origin)?;
-        if parsed.scheme() != "https" || parsed.origin().ascii_serialization() != *origin {
-            bail!("allowed origins must be exact HTTPS origins");
-        }
-    }
-    let prototype = mcp::Session::configured(
-        envd_endpoint,
-        envd_domain,
-        deadline,
-        envd_ca_cert.as_deref(),
-    )?;
-    let state = Arc::new(Server {
-        api,
-        prototype,
-        deadline,
-        token,
-        origins,
-        sessions: Mutex::new(HashMap::new()),
-        body_slots: Arc::new(Semaphore::new(CONCURRENT_LIMIT)),
-        operation_slots: Arc::new(Semaphore::new(CONCURRENT_LIMIT)),
-    });
-    let router = Router::new()
-        .route("/mcp", post(endpoint).get(endpoint).delete(endpoint))
-        .with_state(state);
-    let listener = tokio::net::TcpListener::bind(listen).await?;
-    axum::serve(listener, router)
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
-        .await?;
-    Ok(())
 }

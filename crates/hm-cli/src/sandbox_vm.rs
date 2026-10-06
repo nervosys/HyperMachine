@@ -30,8 +30,13 @@ pub struct VmArgs {
     pub command: VmCommand,
 }
 
-fn parse_owner_label(value: &str) -> std::result::Result<String,String> {
-    if value.is_empty() || value.len()>128 || !value.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b,b'-'|b'_'|b'.')) {
+fn parse_owner_label(value: &str) -> std::result::Result<String, String> {
+    if value.is_empty()
+        || value.len() > 128
+        || !value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+    {
         return Err("principal ID must be a bounded opaque ASCII label".into());
     }
     Ok(value.to_owned())
@@ -42,9 +47,11 @@ fn parse_owner_label(value: &str) -> std::result::Result<String,String> {
 pub enum VmCommand {
     /// Administrator discovery of uncertain registrations on a node
     PendingRegistrations {
-        #[arg(long)] node_id: String,
+        #[arg(long)]
+        node_id: String,
         /// Cursor from the preceding page
-        #[arg(long)] after: Option<String>,
+        #[arg(long)]
+        after: Option<String>,
     },
     /// Administrator recovery of a preserved guest with uncertain registration
     ReconcileRegistration {
@@ -74,10 +81,14 @@ pub enum VmCommand {
     Udp {
         id: String,
         /// Select IPv6 guest loopback (::1), without IPv4 fallback
-        #[arg(long)] guest_ipv6: bool,
-        #[arg(long, value_parser = clap::value_parser!(u16).range(1..))] port: u16,
-        #[arg(long, default_value = "127.0.0.1:0")] listen: std::net::SocketAddr,
-        #[arg(long, default_value_t = 64, value_parser = clap::value_parser!(u32).range(1..=1024))] max_peers: u32,
+        #[arg(long)]
+        guest_ipv6: bool,
+        #[arg(long, value_parser = clap::value_parser!(u16).range(1..))]
+        port: u16,
+        #[arg(long, default_value = "127.0.0.1:0")]
+        listen: std::net::SocketAddr,
+        #[arg(long, default_value_t = 64, value_parser = clap::value_parser!(u32).range(1..=1024))]
+        max_peers: u32,
     },
     /// Manage persistent volumes through the node or control-plane API
     Volume {
@@ -219,10 +230,18 @@ pub enum VmCommand {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum PublicPortProtocol { Tcp, Udp, Both }
+pub enum PublicPortProtocol {
+    Tcp,
+    Udp,
+    Both,
+}
 impl PublicPortProtocol {
     fn as_str(self) -> &'static str {
-        match self { Self::Tcp => "tcp", Self::Udp => "udp", Self::Both => "both" }
+        match self {
+            Self::Tcp => "tcp",
+            Self::Udp => "udp",
+            Self::Both => "both",
+        }
     }
 }
 
@@ -247,7 +266,9 @@ pub enum PublicPortCommand {
 }
 
 fn parse_sharing_revision(value: &str) -> std::result::Result<String, String> {
-    if !uuid::Uuid::parse_str(value).is_ok_and(|id| id.get_version_num()==4 && id.to_string()==value) {
+    if !uuid::Uuid::parse_str(value)
+        .is_ok_and(|id| id.get_version_num() == 4 && id.to_string() == value)
+    {
         return Err("sharing revision must be a canonical UUIDv4".into());
     }
     Ok(value.into())
@@ -257,16 +278,22 @@ pub enum WebSharingCommand {
     /// Read the current revision and complete grant list
     Show { id: String },
     /// Replace grants from a bounded JSON request file; retain it for exact retries
-    Replace { id: String, #[arg(long)] request: std::path::PathBuf },
+    Replace {
+        id: String,
+        #[arg(long)]
+        request: std::path::PathBuf,
+    },
     /// Revoke stored grants with an explicit revision (operator scopes are independent)
     Revoke {
         id: String,
-        #[arg(long, value_parser = parse_sharing_revision)] expected_revision: Option<String>,
-        #[arg(long, value_parser = parse_sharing_revision)] revision: String,
+        #[arg(long, value_parser = parse_sharing_revision)]
+        expected_revision: Option<String>,
+        #[arg(long, value_parser = parse_sharing_revision)]
+        revision: String,
     },
 }
 #[derive(serde::Deserialize)]
-#[serde(rename_all="camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SharingRequest {
     expected_revision: Option<String>,
     revision: String,
@@ -274,36 +301,80 @@ struct SharingRequest {
 }
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-struct SharingGrant { subject: String, expires_at: i64 }
+struct SharingGrant {
+    subject: String,
+    expires_at: i64,
+}
 fn validate_sharing_request(bytes: &[u8]) -> Result<Value> {
-    if bytes.len()>65536 { bail!("sharing request exceeds 64 KiB"); }
-    let body: SharingRequest = serde_json::from_slice(bytes).map_err(|_|anyhow::anyhow!("invalid sharing request JSON"))?;
-    parse_sharing_revision(&body.revision).map_err(anyhow::Error::msg)?;
-    if let Some(expected)=&body.expected_revision { parse_sharing_revision(expected).map_err(anyhow::Error::msg)?; }
-    if body.grants.len()>256 { bail!("sharing allows at most 256 subjects"); }
-    let mut seen=std::collections::BTreeSet::new();
-    for grant in &body.grants {
-        if grant.subject.is_empty() || grant.subject.len()>128 || grant.expires_at<=0
-            || !grant.subject.bytes().all(|b|b.is_ascii_alphanumeric() || b"._@+-".contains(&b))
-            || !seen.insert(&grant.subject) { bail!("invalid or duplicate sharing subject/expiry"); }
+    if bytes.len() > 65536 {
+        bail!("sharing request exceeds 64 KiB");
     }
-    Ok(json!({"expectedRevision":body.expected_revision,"revision":body.revision,
-        "grants":body.grants.iter().map(|g|json!({"subject":g.subject,"expires_at":g.expires_at})).collect::<Vec<_>>()}))
+    let body: SharingRequest = serde_json::from_slice(bytes)
+        .map_err(|_| anyhow::anyhow!("invalid sharing request JSON"))?;
+    parse_sharing_revision(&body.revision).map_err(anyhow::Error::msg)?;
+    if let Some(expected) = &body.expected_revision {
+        parse_sharing_revision(expected).map_err(anyhow::Error::msg)?;
+    }
+    if body.grants.len() > 256 {
+        bail!("sharing allows at most 256 subjects");
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for grant in &body.grants {
+        if grant.subject.is_empty()
+            || grant.subject.len() > 128
+            || grant.expires_at <= 0
+            || !grant
+                .subject
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._@+-".contains(&b))
+            || !seen.insert(&grant.subject)
+        {
+            bail!("invalid or duplicate sharing subject/expiry");
+        }
+    }
+    Ok(
+        json!({"expectedRevision":body.expected_revision,"revision":body.revision,
+        "grants":body.grants.iter().map(|g|json!({"subject":g.subject,"expires_at":g.expires_at})).collect::<Vec<_>>()}),
+    )
 }
 async fn web_sharing(api: &Api, command: WebSharingCommand) -> Result<Value> {
     match command {
-        WebSharingCommand::Show { id } => api.request_bounded(Method::GET,&["sandboxes",&id,"web-sharing"],None,65536).await,
+        WebSharingCommand::Show { id } => {
+            api.request_bounded(Method::GET, &["sandboxes", &id, "web-sharing"], None, 65536)
+                .await
+        }
         WebSharingCommand::Replace { id, request } => {
             use std::io::Read;
-            let file=std::fs::File::open(&request).context("opening sharing request file")?;
-            if !file.metadata()?.is_file() { bail!("sharing request must be a regular file"); }
-            let mut bytes=Vec::new();file.take(65537).read_to_end(&mut bytes)?;
-            let body=validate_sharing_request(&bytes)?;
-            api.request_bounded(Method::PUT,&["sandboxes",&id,"web-sharing"],Some(body),65536).await
+            let file = std::fs::File::open(&request).context("opening sharing request file")?;
+            if !file.metadata()?.is_file() {
+                bail!("sharing request must be a regular file");
+            }
+            let mut bytes = Vec::new();
+            file.take(65537).read_to_end(&mut bytes)?;
+            let body = validate_sharing_request(&bytes)?;
+            api.request_bounded(
+                Method::PUT,
+                &["sandboxes", &id, "web-sharing"],
+                Some(body),
+                65536,
+            )
+            .await
         }
-        WebSharingCommand::Revoke { id, expected_revision, revision } => {
-            let body=validate_sharing_request(&serde_json::to_vec(&json!({"expectedRevision":expected_revision,"revision":revision,"grants":[]}))?)?;
-            api.request_bounded(Method::PUT,&["sandboxes",&id,"web-sharing"],Some(body),65536).await
+        WebSharingCommand::Revoke {
+            id,
+            expected_revision,
+            revision,
+        } => {
+            let body = validate_sharing_request(&serde_json::to_vec(
+                &json!({"expectedRevision":expected_revision,"revision":revision,"grants":[]}),
+            )?)?;
+            api.request_bounded(
+                Method::PUT,
+                &["sandboxes", &id, "web-sharing"],
+                Some(body),
+                65536,
+            )
+            .await
         }
     }
 }
@@ -312,21 +383,29 @@ async fn web_sharing(api: &Api, command: WebSharingCommand) -> Result<Value> {
 pub enum VolumeCommand {
     /// Create a volume directory using HV2_VOLUME_TOKEN
     Mkdir {
-        #[arg(value_parser = volume_name)] id: String,
-        #[arg(long)] path: String,
+        #[arg(value_parser = volume_name)]
+        id: String,
+        #[arg(long)]
+        path: String,
         /// Create missing parents and accept an existing directory
-        #[arg(long)] force: bool,
+        #[arg(long)]
+        force: bool,
     },
     /// List volume directory entries using HV2_VOLUME_TOKEN
     Ls {
-        #[arg(value_parser = volume_name)] id: String,
-        #[arg(long, default_value = "/")] path: String,
-        #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..=32))] depth: u32,
+        #[arg(value_parser = volume_name)]
+        id: String,
+        #[arg(long, default_value = "/")]
+        path: String,
+        #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..=32))]
+        depth: u32,
     },
     /// Inspect a volume path using HV2_VOLUME_TOKEN
     Stat {
-        #[arg(value_parser = volume_name)] id: String,
-        #[arg(long)] path: String,
+        #[arg(value_parser = volume_name)]
+        id: String,
+        #[arg(long)]
+        path: String,
     },
     /// Stream a volume file to a new local destination using HV2_VOLUME_TOKEN
     Download {
@@ -351,49 +430,123 @@ pub enum VolumeCommand {
         no_clobber: bool,
     },
     /// Create a named volume; returns its content bearer token
-    Create { #[arg(value_parser = volume_name)] name: String },
+    Create {
+        #[arg(value_parser = volume_name)]
+        name: String,
+    },
     /// List volumes visible through this endpoint
     List,
     /// Inspect a volume, including its content bearer token
-    Inspect { #[arg(value_parser = volume_name)] id: String },
+    Inspect {
+        #[arg(value_parser = volume_name)]
+        id: String,
+    },
     /// Delete a volume and its contents
-    Delete { #[arg(value_parser = volume_name)] id: String },
+    Delete {
+        #[arg(value_parser = volume_name)]
+        id: String,
+    },
 }
 
-async fn browse_volume(api: &Api, id: &str, path: &str, depth: Option<u32>, create: Option<bool>) -> Result<Value> {
-    if api.base.scheme() != "https" && !api.base.host_str().is_some_and(|host|
-        host == "localhost" || host.trim_matches(['[', ']']).parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback())) {
+async fn browse_volume(
+    api: &Api,
+    id: &str,
+    path: &str,
+    depth: Option<u32>,
+    create: Option<bool>,
+) -> Result<Value> {
+    if api.base.scheme() != "https"
+        && !api.base.host_str().is_some_and(|host| {
+            host == "localhost"
+                || host
+                    .trim_matches(['[', ']'])
+                    .parse::<std::net::IpAddr>()
+                    .is_ok_and(|ip| ip.is_loopback())
+        })
+    {
         bail!("volume content requires HTTPS or loopback HTTP");
     }
     let token = std::env::var("HV2_VOLUME_TOKEN").context("HV2_VOLUME_TOKEN is required")?;
-    if token.is_empty() { bail!("HV2_VOLUME_TOKEN is required"); }
+    if token.is_empty() {
+        bail!("HV2_VOLUME_TOKEN is required");
+    }
     let mut bearer = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}"))
         .map_err(|_| anyhow::anyhow!("invalid volume bearer token"))?;
     bearer.set_sensitive(true);
-    let mut url = api.url(&["volumecontent", id, if depth.is_some() || create.is_some() { "dir" } else { "path" }])?;
+    let mut url = api.url(&[
+        "volumecontent",
+        id,
+        if depth.is_some() || create.is_some() {
+            "dir"
+        } else {
+            "path"
+        },
+    ])?;
     url.query_pairs_mut().append_pair("path", path);
-    if let Some(depth) = depth { url.query_pairs_mut().append_pair("depth", &depth.to_string()); }
-    if let Some(force) = create { url.query_pairs_mut().append_pair("force", if force { "true" } else { "false" }); }
-    let mut response = api.client.request(if create.is_some() { Method::POST } else { Method::GET }, url).header(reqwest::header::AUTHORIZATION, bearer)
-        .send().await.context("volume browse request failed")?;
-    let expected = if create.is_some() { reqwest::StatusCode::CREATED } else { reqwest::StatusCode::OK };
-    if response.status() != expected { bail!("volume path operation returned {}", response.status()); }
+    if let Some(depth) = depth {
+        url.query_pairs_mut()
+            .append_pair("depth", &depth.to_string());
+    }
+    if let Some(force) = create {
+        url.query_pairs_mut()
+            .append_pair("force", if force { "true" } else { "false" });
+    }
+    let mut response = api
+        .client
+        .request(
+            if create.is_some() {
+                Method::POST
+            } else {
+                Method::GET
+            },
+            url,
+        )
+        .header(reqwest::header::AUTHORIZATION, bearer)
+        .send()
+        .await
+        .context("volume browse request failed")?;
+    let expected = if create.is_some() {
+        reqwest::StatusCode::CREATED
+    } else {
+        reqwest::StatusCode::OK
+    };
+    if response.status() != expected {
+        bail!("volume path operation returned {}", response.status());
+    }
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await? {
-        if chunk.len() > (1024 * 1024usize).saturating_sub(bytes.len()) { bail!("volume browse response exceeds byte limit"); }
+        if chunk.len() > (1024 * 1024usize).saturating_sub(bytes.len()) {
+            bail!("volume browse response exceeds byte limit");
+        }
         bytes.extend_from_slice(&chunk);
     }
     serde_json::from_slice(&bytes).context("invalid volume browse response")
 }
 
-async fn upload_volume(api: &Api, id: &str, source: std::path::PathBuf, path: &str,
-    force: bool, in_place: bool, no_clobber: bool) -> Result<Value> {
-    if api.base.scheme() != "https" && !api.base.host_str().is_some_and(|host|
-        host == "localhost" || host.trim_matches(['[', ']']).parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback())) {
+async fn upload_volume(
+    api: &Api,
+    id: &str,
+    source: std::path::PathBuf,
+    path: &str,
+    force: bool,
+    in_place: bool,
+    no_clobber: bool,
+) -> Result<Value> {
+    if api.base.scheme() != "https"
+        && !api.base.host_str().is_some_and(|host| {
+            host == "localhost"
+                || host
+                    .trim_matches(['[', ']'])
+                    .parse::<std::net::IpAddr>()
+                    .is_ok_and(|ip| ip.is_loopback())
+        })
+    {
         bail!("volume content requires HTTPS or loopback HTTP");
     }
     let token = std::env::var("HV2_VOLUME_TOKEN").context("HV2_VOLUME_TOKEN is required")?;
-    if token.is_empty() { bail!("HV2_VOLUME_TOKEN is required"); }
+    if token.is_empty() {
+        bail!("HV2_VOLUME_TOKEN is required");
+    }
     let mut bearer = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}"))
         .map_err(|_| anyhow::anyhow!("invalid volume bearer token"))?;
     bearer.set_sensitive(true);
@@ -402,73 +555,129 @@ async fn upload_volume(api: &Api, id: &str, source: std::path::PathBuf, path: &s
     // A FIFO must not wait for a writer before we can reject its file type.
     #[cfg(unix)]
     options.custom_flags(libc::O_NONBLOCK);
-    let file = options.open(source).await.context("could not open volume upload source")?;
+    let file = options
+        .open(source)
+        .await
+        .context("could not open volume upload source")?;
     let metadata = file.metadata().await?;
     if !metadata.is_file() || metadata.len() > 4 * 1024 * 1024 * 1024 {
         bail!("volume upload source must be a regular file of at most 4 GiB");
     }
     let mut url = api.url(&["volumecontent", id, "file"])?;
-    url.query_pairs_mut().append_pair("path", path).append_pair("force", if force { "true" } else { "false" })
+    url.query_pairs_mut()
+        .append_pair("path", path)
+        .append_pair("force", if force { "true" } else { "false" })
         .append_pair("atomic", if in_place { "false" } else { "true" })
         .append_pair("overwrite", if no_clobber { "false" } else { "true" });
-    let mut response = api.client.put(url).header(reqwest::header::AUTHORIZATION, bearer)
+    let mut response = api
+        .client
+        .put(url)
+        .header(reqwest::header::AUTHORIZATION, bearer)
         .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
         .header(reqwest::header::CONTENT_LENGTH, metadata.len())
-        .body(reqwest::Body::from(file)).send().await.context("volume upload request failed")?;
-    if response.status() != reqwest::StatusCode::CREATED { bail!("volume upload returned {}", response.status()); }
+        .body(reqwest::Body::from(file))
+        .send()
+        .await
+        .context("volume upload request failed")?;
+    if response.status() != reqwest::StatusCode::CREATED {
+        bail!("volume upload returned {}", response.status());
+    }
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await? {
-        if chunk.len() > 65536usize.saturating_sub(bytes.len()) { bail!("volume upload response exceeds byte limit"); }
+        if chunk.len() > 65536usize.saturating_sub(bytes.len()) {
+            bail!("volume upload response exceeds byte limit");
+        }
         bytes.extend_from_slice(&chunk);
     }
     let result: Value = serde_json::from_slice(&bytes).context("invalid volume upload response")?;
-    if result["size"].as_u64() != Some(metadata.len()) { bail!("volume upload size differs"); }
+    if result["size"].as_u64() != Some(metadata.len()) {
+        bail!("volume upload size differs");
+    }
     Ok(result)
 }
 
-async fn download_volume(api: &Api, id: &str, destination: std::path::PathBuf, path: &str) -> Result<Value> {
+async fn download_volume(
+    api: &Api,
+    id: &str,
+    destination: std::path::PathBuf,
+    path: &str,
+) -> Result<Value> {
     use tokio::io::AsyncWriteExt;
-    if api.base.scheme() != "https" && !api.base.host_str().is_some_and(|host|
-        host == "localhost" || host.trim_matches(['[', ']']).parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback())) {
+    if api.base.scheme() != "https"
+        && !api.base.host_str().is_some_and(|host| {
+            host == "localhost"
+                || host
+                    .trim_matches(['[', ']'])
+                    .parse::<std::net::IpAddr>()
+                    .is_ok_and(|ip| ip.is_loopback())
+        })
+    {
         bail!("volume content requires HTTPS or loopback HTTP");
     }
     match std::fs::symlink_metadata(&destination) {
         Ok(_) => bail!("volume download destination already exists"),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => return Err(error.into()),
     }
     let token = std::env::var("HV2_VOLUME_TOKEN").context("HV2_VOLUME_TOKEN is required")?;
-    if token.is_empty() { bail!("HV2_VOLUME_TOKEN is required"); }
+    if token.is_empty() {
+        bail!("HV2_VOLUME_TOKEN is required");
+    }
     let mut bearer = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}"))
         .map_err(|_| anyhow::anyhow!("invalid volume bearer token"))?;
     bearer.set_sensitive(true);
     let mut url = api.url(&["volumecontent", id, "file"])?;
     url.query_pairs_mut().append_pair("path", path);
-    let mut response = api.client.get(url).header(reqwest::header::AUTHORIZATION, bearer)
-        .send().await.context("volume download request failed")?;
-    if response.status() != reqwest::StatusCode::OK { bail!("volume download returned {}", response.status()); }
+    let mut response = api
+        .client
+        .get(url)
+        .header(reqwest::header::AUTHORIZATION, bearer)
+        .send()
+        .await
+        .context("volume download request failed")?;
+    if response.status() != reqwest::StatusCode::OK {
+        bail!("volume download returned {}", response.status());
+    }
     const LIMIT: u64 = 4 * 1024 * 1024 * 1024;
-    if response.content_length().is_some_and(|size| size > LIMIT) { bail!("volume download exceeds 4 GiB"); }
-    let parent = destination.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(std::path::Path::new("."));
-    let temporary = tempfile::NamedTempFile::new_in(parent).context("could not stage volume download")?;
+    if response.content_length().is_some_and(|size| size > LIMIT) {
+        bail!("volume download exceeds 4 GiB");
+    }
+    let parent = destination
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(std::path::Path::new("."));
+    let temporary =
+        tempfile::NamedTempFile::new_in(parent).context("could not stage volume download")?;
     let mut file = tokio::fs::File::from_std(temporary.reopen()?);
     let mut size = 0u64;
     while let Some(chunk) = response.chunk().await? {
-        if chunk.len() as u64 > LIMIT - size { bail!("volume download exceeds 4 GiB"); }
+        if chunk.len() as u64 > LIMIT - size {
+            bail!("volume download exceeds 4 GiB");
+        }
         file.write_all(&chunk).await?;
         size += chunk.len() as u64;
     }
     file.flush().await?;
     file.sync_all().await?;
     drop(file);
-    temporary.persist_noclobber(&destination).map_err(|error| error.error)
+    temporary
+        .persist_noclobber(&destination)
+        .map_err(|error| error.error)
         .context("could not publish volume download without replacing destination")?;
     Ok(json!({"path":destination,"size":size}))
 }
 
 fn volume_name(value: &str) -> std::result::Result<String, String> {
-    if value.is_empty() || value.len() > 64 || !value.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-') {
-        return Err("volume names and IDs require 1-64 ASCII letters, digits, underscores or hyphens".into());
+    if value.is_empty()
+        || value.len() > 64
+        || !value
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
+    {
+        return Err(
+            "volume names and IDs require 1-64 ASCII letters, digits, underscores or hyphens"
+                .into(),
+        );
     }
     Ok(value.into())
 }
@@ -613,12 +822,36 @@ impl Api {
         self.port_tunnel(id, port, false, false).await
     }
 
-    async fn port_tunnel(&self, id: &str, port: u16, udp: bool, ipv6: bool) -> Result<reqwest::Upgraded> {
-        let protocol = if ipv6 { "hv2-udp6/1" } else if udp { "hv2-udp/1" } else { "hv2-tcp/1" };
+    async fn port_tunnel(
+        &self,
+        id: &str,
+        port: u16,
+        udp: bool,
+        ipv6: bool,
+    ) -> Result<reqwest::Upgraded> {
+        let protocol = if ipv6 {
+            "hv2-udp6/1"
+        } else if udp {
+            "hv2-udp/1"
+        } else {
+            "hv2-tcp/1"
+        };
         let port = port.to_string();
         let response = self
             .tcp_client
-            .get(self.url(&["sandboxes", id, "ports", &port, if ipv6 { "udp6" } else if udp { "udp" } else { "tcp" }])?)
+            .get(self.url(&[
+                "sandboxes",
+                id,
+                "ports",
+                &port,
+                if ipv6 {
+                    "udp6"
+                } else if udp {
+                    "udp"
+                } else {
+                    "tcp"
+                },
+            ])?)
             .version(reqwest::Version::HTTP_11)
             .header("connection", "upgrade")
             .header("upgrade", protocol)
@@ -730,11 +963,21 @@ impl Api {
         body: Option<Value>,
         limit: usize,
     ) -> Result<Value> {
-        self.request_bounded_query(method,path,body,limit,&[]).await
+        self.request_bounded_query(method, path, body, limit, &[])
+            .await
     }
-    async fn request_bounded_query(&self,method:Method,path:&[&str],body:Option<Value>,limit:usize,query:&[(&str,&str)]) -> Result<Value> {
+    async fn request_bounded_query(
+        &self,
+        method: Method,
+        path: &[&str],
+        body: Option<Value>,
+        limit: usize,
+        query: &[(&str, &str)],
+    ) -> Result<Value> {
         let mut request = self.client.request(method, self.url(path)?).query(query);
-        if let Some(body) = body { request = request.json(&body); }
+        if let Some(body) = body {
+            request = request.json(&body);
+        }
         let mut response = request.send().await.context("sandbox API request failed")?;
         if !response.status().is_success() {
             bail!("sandbox API returned {}", response.status());
@@ -789,39 +1032,121 @@ pub async fn run(args: VmArgs) -> Result<i32> {
         .endpoint
         .or_else(|| std::env::var("HV2_SANDBOX_URL").ok())
         .unwrap_or_else(|| "http://127.0.0.1:3980".into());
-    let content_only = matches!(&args.command, VmCommand::Volume { command: VolumeCommand::Upload { .. } | VolumeCommand::Download { .. } | VolumeCommand::Ls { .. } | VolumeCommand::Stat { .. } | VolumeCommand::Mkdir { .. } });
+    let content_only = matches!(
+        &args.command,
+        VmCommand::Volume {
+            command: VolumeCommand::Upload { .. }
+                | VolumeCommand::Download { .. }
+                | VolumeCommand::Ls { .. }
+                | VolumeCommand::Stat { .. }
+                | VolumeCommand::Mkdir { .. }
+        }
+    );
     let api = Api::with_ca(
         &endpoint,
         args.request_timeout,
-        if content_only { None } else { std::env::var("HV2_API_KEY").ok() },
+        if content_only {
+            None
+        } else {
+            std::env::var("HV2_API_KEY").ok()
+        },
         args.api_ca_cert.as_deref(),
     )?;
     let value = match args.command {
         VmCommand::PendingRegistrations { node_id, after } => {
-            let query=after.as_deref().map(|after|vec![("after",after)]).unwrap_or_default();
-            api.request_bounded_query(Method::GET,&["cluster","nodes",&node_id,"registrations","pending"],None,16384,&query).await?
-        },
-        VmCommand::ReconcileRegistration { id, node_id } => api.request_bounded(Method::POST,
-            &["cluster","nodes",&node_id,"sandboxes",&id,"registration","reconcile"],Some(json!({})),16384).await?,
-        VmCommand::AdoptOwner { id, principal_id } => api.request_bounded(Method::POST,&["sandboxes",&id,"owner"],Some(json!({"principalId":principal_id})),16384).await?,
+            let query = after
+                .as_deref()
+                .map(|after| vec![("after", after)])
+                .unwrap_or_default();
+            api.request_bounded_query(
+                Method::GET,
+                &["cluster", "nodes", &node_id, "registrations", "pending"],
+                None,
+                16384,
+                &query,
+            )
+            .await?
+        }
+        VmCommand::ReconcileRegistration { id, node_id } => {
+            api.request_bounded(
+                Method::POST,
+                &[
+                    "cluster",
+                    "nodes",
+                    &node_id,
+                    "sandboxes",
+                    &id,
+                    "registration",
+                    "reconcile",
+                ],
+                Some(json!({})),
+                16384,
+            )
+            .await?
+        }
+        VmCommand::AdoptOwner { id, principal_id } => {
+            api.request_bounded(
+                Method::POST,
+                &["sandboxes", &id, "owner"],
+                Some(json!({"principalId":principal_id})),
+                16384,
+            )
+            .await?
+        }
         VmCommand::PublicPorts { command } => public_ports(&api, command).await?,
         VmCommand::WebSharing { command } => web_sharing(&api, command).await?,
-        VmCommand::Udp { id, port, listen, max_peers, guest_ipv6 } => {
+        VmCommand::Udp {
+            id,
+            port,
+            listen,
+            max_peers,
+            guest_ipv6,
+        } => {
             udp::run(api, id, port, listen, max_peers, guest_ipv6).await?;
             return Ok(0);
         }
         VmCommand::Volume { command } => match command {
-            VolumeCommand::Ls { id, path, depth } => browse_volume(&api, &id, &path, Some(depth), None).await?,
+            VolumeCommand::Ls { id, path, depth } => {
+                browse_volume(&api, &id, &path, Some(depth), None).await?
+            }
             VolumeCommand::Stat { id, path } => browse_volume(&api, &id, &path, None, None).await?,
-            VolumeCommand::Mkdir { id, path, force } => browse_volume(&api, &id, &path, None, Some(force)).await?,
-            VolumeCommand::Download { id, destination, path } => download_volume(&api, &id, destination, &path).await?,
-            VolumeCommand::Upload { id, source, path, force, in_place, no_clobber } =>
-                upload_volume(&api, &id, source, &path, force, in_place, no_clobber).await?,
-            VolumeCommand::Create { name } => api.request_bounded(Method::POST, &["volumes"],
-                Some(json!({"name":name})), 65536).await?,
-            VolumeCommand::List => api.request_bounded(Method::GET, &["volumes"], None, 1024 * 1024).await?,
-            VolumeCommand::Inspect { id } => api.request_bounded(Method::GET, &["volumes", &id], None, 65536).await?,
-            VolumeCommand::Delete { id } => api.request_bounded(Method::DELETE, &["volumes", &id], None, 65536).await?,
+            VolumeCommand::Mkdir { id, path, force } => {
+                browse_volume(&api, &id, &path, None, Some(force)).await?
+            }
+            VolumeCommand::Download {
+                id,
+                destination,
+                path,
+            } => download_volume(&api, &id, destination, &path).await?,
+            VolumeCommand::Upload {
+                id,
+                source,
+                path,
+                force,
+                in_place,
+                no_clobber,
+            } => upload_volume(&api, &id, source, &path, force, in_place, no_clobber).await?,
+            VolumeCommand::Create { name } => {
+                api.request_bounded(
+                    Method::POST,
+                    &["volumes"],
+                    Some(json!({"name":name})),
+                    65536,
+                )
+                .await?
+            }
+            VolumeCommand::List => {
+                api.request_bounded(Method::GET, &["volumes"], None, 1024 * 1024)
+                    .await?
+            }
+            VolumeCommand::Inspect { id } => {
+                api.request_bounded(Method::GET, &["volumes", &id], None, 65536)
+                    .await?
+            }
+            VolumeCommand::Delete { id } => {
+                api.request_bounded(Method::DELETE, &["volumes", &id], None, 65536)
+                    .await?
+            }
         },
         VmCommand::TcpStdio { id, name, port } => {
             let id = match id {
@@ -1349,15 +1674,33 @@ fn exec_exit_code(value: &Value, timed_out: bool) -> Result<i32> {
 async fn public_ports(api: &Api, command: PublicPortCommand) -> Result<Value> {
     match command {
         PublicPortCommand::Expose { id, port, protocol } => {
-            let port=port.to_string();
-            api.request_bounded(Method::PUT,&["sandboxes",&id,"public-ports",&port],
-                Some(json!({"protocol":protocol.as_str()})),16384).await
+            let port = port.to_string();
+            api.request_bounded(
+                Method::PUT,
+                &["sandboxes", &id, "public-ports", &port],
+                Some(json!({"protocol":protocol.as_str()})),
+                16384,
+            )
+            .await
         }
-        PublicPortCommand::List { id } =>
-            api.request_bounded(Method::GET,&["sandboxes",&id,"public-ports"],None,16384).await,
+        PublicPortCommand::List { id } => {
+            api.request_bounded(
+                Method::GET,
+                &["sandboxes", &id, "public-ports"],
+                None,
+                16384,
+            )
+            .await
+        }
         PublicPortCommand::Remove { id, port } => {
-            let port=port.to_string();
-            api.request_bounded(Method::DELETE,&["sandboxes",&id,"public-ports",&port],None,16384).await
+            let port = port.to_string();
+            api.request_bounded(
+                Method::DELETE,
+                &["sandboxes", &id, "public-ports", &port],
+                None,
+                16384,
+            )
+            .await
         }
     }
 }
@@ -1547,33 +1890,76 @@ mod tests {
     fn pending_discovery_cli_requires_node_and_accepts_cursor() {
         use clap::Parser;
         #[derive(Parser)]
-        struct Command { #[command(flatten)] vm: VmArgs }
-        assert!(Command::try_parse_from(["hm","pending-registrations"]).is_err());
-        let parsed=Command::try_parse_from(["hm","pending-registrations","--node-id","node-a","--after","sbx-001"]).unwrap();
-        assert!(matches!(parsed.vm.command,VmCommand::PendingRegistrations { node_id,after } if node_id=="node-a" && after.as_deref()==Some("sbx-001")));
+        struct Command {
+            #[command(flatten)]
+            vm: VmArgs,
+        }
+        assert!(Command::try_parse_from(["hm", "pending-registrations"]).is_err());
+        let parsed = Command::try_parse_from([
+            "hm",
+            "pending-registrations",
+            "--node-id",
+            "node-a",
+            "--after",
+            "sbx-001",
+        ])
+        .unwrap();
+        assert!(
+            matches!(parsed.vm.command,VmCommand::PendingRegistrations { node_id,after } if node_id=="node-a" && after.as_deref()==Some("sbx-001"))
+        );
     }
 
     #[test]
     fn reconciliation_cli_requires_explicit_node() {
         use clap::Parser;
         #[derive(Parser)]
-        struct Command { #[command(flatten)] vm: VmArgs }
-        assert!(Command::try_parse_from(["hm","reconcile-registration","sandbox-a"]).is_err());
-        let parsed=Command::try_parse_from(["hm","reconcile-registration","sandbox-a","--node-id","node-a"]).unwrap();
-        assert!(matches!(parsed.vm.command,VmCommand::ReconcileRegistration { id,node_id } if id=="sandbox-a" && node_id=="node-a"));
+        struct Command {
+            #[command(flatten)]
+            vm: VmArgs,
+        }
+        assert!(Command::try_parse_from(["hm", "reconcile-registration", "sandbox-a"]).is_err());
+        let parsed = Command::try_parse_from([
+            "hm",
+            "reconcile-registration",
+            "sandbox-a",
+            "--node-id",
+            "node-a",
+        ])
+        .unwrap();
+        assert!(
+            matches!(parsed.vm.command,VmCommand::ReconcileRegistration { id,node_id } if id=="sandbox-a" && node_id=="node-a")
+        );
     }
-
 
     #[test]
     fn owner_adoption_cli_requires_valid_explicit_principal() {
         use clap::Parser;
         #[derive(Parser)]
-        struct Command { #[command(flatten)] vm: VmArgs }
-        let parsed=Command::try_parse_from(["hm","adopt-owner","sandbox-a","--principal-id","team.user-1_2"]).unwrap();
-        assert!(matches!(parsed.vm.command,VmCommand::AdoptOwner { principal_id,.. } if principal_id=="team.user-1_2"));
-        assert!(Command::try_parse_from(["hm","adopt-owner","sandbox-a"]).is_err());
+        struct Command {
+            #[command(flatten)]
+            vm: VmArgs,
+        }
+        let parsed = Command::try_parse_from([
+            "hm",
+            "adopt-owner",
+            "sandbox-a",
+            "--principal-id",
+            "team.user-1_2",
+        ])
+        .unwrap();
+        assert!(
+            matches!(parsed.vm.command,VmCommand::AdoptOwner { principal_id,.. } if principal_id=="team.user-1_2")
+        );
+        assert!(Command::try_parse_from(["hm", "adopt-owner", "sandbox-a"]).is_err());
         for value in ["", "a/b", "a b", "alice@example.com", "é"] {
-            assert!(Command::try_parse_from(["hm","adopt-owner","sandbox-a","--principal-id",value]).is_err());
+            assert!(Command::try_parse_from([
+                "hm",
+                "adopt-owner",
+                "sandbox-a",
+                "--principal-id",
+                value
+            ])
+            .is_err());
         }
         assert!(parse_owner_label(&"a".repeat(129)).is_err());
         assert!(parse_owner_label(&"a".repeat(128)).is_ok());
@@ -1582,93 +1968,281 @@ mod tests {
     #[test]
     fn web_sharing_cli_validates_revision_grants_and_no_owner_override() {
         use clap::Parser;
-        #[derive(clap::Parser)] struct Command { #[command(flatten)] vm:VmArgs }
-        let revision="12345678-1234-4234-8234-123456789abc";
-        assert!(Command::try_parse_from(["hm","web-sharing","show","guest"]).is_ok());
-        assert!(Command::try_parse_from(["hm","web-sharing","replace","guest","--request","sharing.json"]).is_ok());
-        assert!(Command::try_parse_from(["hm","web-sharing","revoke","guest","--revision",revision]).is_ok());
-        for args in [vec!["hm","web-sharing","revoke","guest","--revision","bad"],
-            vec!["hm","web-sharing","revoke","guest","--revision",revision,"--owner-id","other"]] {
+        #[derive(clap::Parser)]
+        struct Command {
+            #[command(flatten)]
+            vm: VmArgs,
+        }
+        let revision = "12345678-1234-4234-8234-123456789abc";
+        assert!(Command::try_parse_from(["hm", "web-sharing", "show", "guest"]).is_ok());
+        assert!(Command::try_parse_from([
+            "hm",
+            "web-sharing",
+            "replace",
+            "guest",
+            "--request",
+            "sharing.json"
+        ])
+        .is_ok());
+        assert!(Command::try_parse_from([
+            "hm",
+            "web-sharing",
+            "revoke",
+            "guest",
+            "--revision",
+            revision
+        ])
+        .is_ok());
+        for args in [
+            vec!["hm", "web-sharing", "revoke", "guest", "--revision", "bad"],
+            vec![
+                "hm",
+                "web-sharing",
+                "revoke",
+                "guest",
+                "--revision",
+                revision,
+                "--owner-id",
+                "other",
+            ],
+        ] {
             assert!(Command::try_parse_from(args).is_err());
         }
-        let body=json!({"expectedRevision":null,"revision":revision,"grants":[{"subject":"alice","expires_at":100}]});
-        assert_eq!(validate_sharing_request(&serde_json::to_vec(&body).unwrap()).unwrap(),body);
-        for grant in [json!({"subject":"*","expires_at":100}),json!({"subject":"alice","expires_at":0}),json!({"subject":"alice","expires_at":100,"owner":"other"})] {
-            let mut bad=body.clone();bad["grants"]=json!([grant]);assert!(validate_sharing_request(&serde_json::to_vec(&bad).unwrap()).is_err());
+        let body = json!({"expectedRevision":null,"revision":revision,"grants":[{"subject":"alice","expires_at":100}]});
+        assert_eq!(
+            validate_sharing_request(&serde_json::to_vec(&body).unwrap()).unwrap(),
+            body
+        );
+        for grant in [
+            json!({"subject":"*","expires_at":100}),
+            json!({"subject":"alice","expires_at":0}),
+            json!({"subject":"alice","expires_at":100,"owner":"other"}),
+        ] {
+            let mut bad = body.clone();
+            bad["grants"] = json!([grant]);
+            assert!(validate_sharing_request(&serde_json::to_vec(&bad).unwrap()).is_err());
         }
-        let mut bad=body.clone();bad["grants"]=json!([body["grants"][0],body["grants"][0]]);
+        let mut bad = body.clone();
+        bad["grants"] = json!([body["grants"][0], body["grants"][0]]);
         assert!(validate_sharing_request(&serde_json::to_vec(&bad).unwrap()).is_err());
-        assert!(validate_sharing_request(&vec![b' ';65537]).is_err());
+        assert!(validate_sharing_request(&vec![b' '; 65537]).is_err());
     }
     #[tokio::test]
     async fn web_sharing_cli_sends_exact_retry_payload_and_hides_server_errors() {
-        use axum::{extract::Json,http::HeaderMap,routing::put,Router};
+        use axum::{extract::Json, http::HeaderMap, routing::put, Router};
         struct Owned(tokio::task::JoinHandle<()>);
-        impl Drop for Owned { fn drop(&mut self) { self.0.abort(); } }
-        let revision="12345678-1234-4234-8234-123456789abc";
-        let expected=json!({"expectedRevision":null,"revision":revision,"grants":[{"subject":"alice","expires_at":100}]});
-        let stored=expected.clone();
-        let app=Router::new().route("/sandboxes/guest/web-sharing",put(move |headers:HeaderMap,Json(body):Json<Value>| {
-            let expected=stored.clone();async move {
-                assert_eq!(headers["x-api-key"],"cli-secret");assert!(!headers.contains_key("x-hv2-sandbox-owner"));
-                if body["grants"].as_array().unwrap().is_empty() {
-                    (axum::http::StatusCode::FORBIDDEN,Json(json!({"error":"cli-secret reflected"})))
-                } else { assert_eq!(body,expected);(axum::http::StatusCode::OK,Json(body)) }
+        impl Drop for Owned {
+            fn drop(&mut self) {
+                self.0.abort();
             }
-        }).get(||async { Json(json!({"padding":"x".repeat(65536)})) }));
-        let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();let address=listener.local_addr().unwrap();
-        let mut server=Owned(tokio::spawn(async move { axum::serve(listener,app).await.unwrap(); }));
-        let api=Api::new(&format!("http://{address}"),5,Some("cli-secret".into())).unwrap();
-        let dir=tempfile::tempdir().unwrap();let request=dir.path().join("request.json");std::fs::write(&request,serde_json::to_vec(&expected).unwrap()).unwrap();
-        for _ in 0..2 { assert_eq!(web_sharing(&api,WebSharingCommand::Replace { id:"guest".into(),request:request.clone() }).await.unwrap(),expected); }
-        let error=web_sharing(&api,WebSharingCommand::Revoke { id:"guest".into(),expected_revision:None,revision:revision.into() }).await.unwrap_err().to_string();
-        assert!(error.contains("403"));assert!(!error.contains("cli-secret"));
-        let error=web_sharing(&api,WebSharingCommand::Show { id:"guest".into() }).await.unwrap_err().to_string();
+        }
+        let revision = "12345678-1234-4234-8234-123456789abc";
+        let expected = json!({"expectedRevision":null,"revision":revision,"grants":[{"subject":"alice","expires_at":100}]});
+        let stored = expected.clone();
+        let app = Router::new().route(
+            "/sandboxes/guest/web-sharing",
+            put(move |headers: HeaderMap, Json(body): Json<Value>| {
+                let expected = stored.clone();
+                async move {
+                    assert_eq!(headers["x-api-key"], "cli-secret");
+                    assert!(!headers.contains_key("x-hv2-sandbox-owner"));
+                    if body["grants"].as_array().unwrap().is_empty() {
+                        (
+                            axum::http::StatusCode::FORBIDDEN,
+                            Json(json!({"error":"cli-secret reflected"})),
+                        )
+                    } else {
+                        assert_eq!(body, expected);
+                        (axum::http::StatusCode::OK, Json(body))
+                    }
+                }
+            })
+            .get(|| async { Json(json!({"padding":"x".repeat(65536)})) }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut server = Owned(tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        }));
+        let api = Api::new(&format!("http://{address}"), 5, Some("cli-secret".into())).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let request = dir.path().join("request.json");
+        std::fs::write(&request, serde_json::to_vec(&expected).unwrap()).unwrap();
+        for _ in 0..2 {
+            assert_eq!(
+                web_sharing(
+                    &api,
+                    WebSharingCommand::Replace {
+                        id: "guest".into(),
+                        request: request.clone()
+                    }
+                )
+                .await
+                .unwrap(),
+                expected
+            );
+        }
+        let error = web_sharing(
+            &api,
+            WebSharingCommand::Revoke {
+                id: "guest".into(),
+                expected_revision: None,
+                revision: revision.into(),
+            },
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("403"));
+        assert!(!error.contains("cli-secret"));
+        let error = web_sharing(&api, WebSharingCommand::Show { id: "guest".into() })
+            .await
+            .unwrap_err()
+            .to_string();
         assert!(error.contains("byte limit"));
-        server.0.abort();let _=(&mut server.0).await;
+        server.0.abort();
+        let _ = (&mut server.0).await;
     }
 
     #[test]
     fn public_port_cli_validates_destination_and_protocol_without_owner_override() {
         use clap::Parser;
         #[derive(Parser)]
-        struct Command { #[command(flatten)] vm: VmArgs }
-        let parsed=Command::try_parse_from(["hm","public-ports","expose","sandbox-a","--port","18082"]).unwrap();
-        assert!(matches!(parsed.vm.command,VmCommand::PublicPorts { command:PublicPortCommand::Expose { port:18082,protocol:PublicPortProtocol::Tcp,.. } }));
-        for protocol in ["tcp","udp","both"] {
-            assert!(Command::try_parse_from(["hm","public-ports","expose","sandbox-a","--port","65535","--protocol",protocol]).is_ok());
+        struct Command {
+            #[command(flatten)]
+            vm: VmArgs,
         }
-        for arguments in [vec!["hm","public-ports","expose","sandbox-a","--port","0"],
-            vec!["hm","public-ports","remove","sandbox-a","--port","65536"],
-            vec!["hm","public-ports","expose","sandbox-a","--port","1","--protocol","udp6"],
-            vec!["hm","public-ports","expose","sandbox-a","--port","1","--owner-id","other"]] {
+        let parsed = Command::try_parse_from([
+            "hm",
+            "public-ports",
+            "expose",
+            "sandbox-a",
+            "--port",
+            "18082",
+        ])
+        .unwrap();
+        assert!(matches!(
+            parsed.vm.command,
+            VmCommand::PublicPorts {
+                command: PublicPortCommand::Expose {
+                    port: 18082,
+                    protocol: PublicPortProtocol::Tcp,
+                    ..
+                }
+            }
+        ));
+        for protocol in ["tcp", "udp", "both"] {
+            assert!(Command::try_parse_from([
+                "hm",
+                "public-ports",
+                "expose",
+                "sandbox-a",
+                "--port",
+                "65535",
+                "--protocol",
+                protocol
+            ])
+            .is_ok());
+        }
+        for arguments in [
+            vec!["hm", "public-ports", "expose", "sandbox-a", "--port", "0"],
+            vec![
+                "hm",
+                "public-ports",
+                "remove",
+                "sandbox-a",
+                "--port",
+                "65536",
+            ],
+            vec![
+                "hm",
+                "public-ports",
+                "expose",
+                "sandbox-a",
+                "--port",
+                "1",
+                "--protocol",
+                "udp6",
+            ],
+            vec![
+                "hm",
+                "public-ports",
+                "expose",
+                "sandbox-a",
+                "--port",
+                "1",
+                "--owner-id",
+                "other",
+            ],
+        ] {
             assert!(Command::try_parse_from(arguments).is_err());
         }
-        assert!(Command::try_parse_from(["hm","public-ports","list","sandbox-a"]).is_ok());
+        assert!(Command::try_parse_from(["hm", "public-ports", "list", "sandbox-a"]).is_ok());
     }
 
     #[tokio::test]
     async fn public_port_cli_uses_bounded_json_and_does_not_echo_server_error_bodies() {
-        use axum::{extract::Json,http::HeaderMap,routing::put,Router};
+        use axum::{extract::Json, http::HeaderMap, routing::put, Router};
         struct Owned(tokio::task::JoinHandle<()>);
-        impl Drop for Owned { fn drop(&mut self) { self.0.abort(); } }
-        let app=Router::new().route("/sandboxes/sandbox-a/public-ports/18082",put(|headers:HeaderMap,Json(body):Json<Value>|async move {
-            assert_eq!(headers["x-api-key"],"owned-cli-secret");
-            assert!(!headers.contains_key("x-hv2-sandbox-owner"));
-            assert_eq!(body,json!({"protocol":"both"}));
-            (axum::http::StatusCode::FORBIDDEN,"owned-cli-secret reflected by server")
-        })).route("/sandboxes/sandbox-a/public-ports",axum::routing::get(||async {
-            Json(json!({"padding":"x".repeat(16384)}))
+        impl Drop for Owned {
+            fn drop(&mut self) {
+                self.0.abort();
+            }
+        }
+        let app = Router::new()
+            .route(
+                "/sandboxes/sandbox-a/public-ports/18082",
+                put(|headers: HeaderMap, Json(body): Json<Value>| async move {
+                    assert_eq!(headers["x-api-key"], "owned-cli-secret");
+                    assert!(!headers.contains_key("x-hv2-sandbox-owner"));
+                    assert_eq!(body, json!({"protocol":"both"}));
+                    (
+                        axum::http::StatusCode::FORBIDDEN,
+                        "owned-cli-secret reflected by server",
+                    )
+                }),
+            )
+            .route(
+                "/sandboxes/sandbox-a/public-ports",
+                axum::routing::get(|| async { Json(json!({"padding":"x".repeat(16384)})) }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut server = Owned(tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
         }));
-        let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address=listener.local_addr().unwrap();
-        let mut server=Owned(tokio::spawn(async move { axum::serve(listener,app).await.unwrap(); }));
-        let api=Api::new(&format!("http://{address}"),5,Some("owned-cli-secret".into())).unwrap();
-        let error=public_ports(&api,PublicPortCommand::Expose { id:"sandbox-a".into(),port:18082,protocol:PublicPortProtocol::Both }).await.unwrap_err().to_string();
-        assert!(error.contains("403"));assert!(!error.contains("owned-cli-secret"));
-        let oversized=public_ports(&api,PublicPortCommand::List { id:"sandbox-a".into() }).await.unwrap_err().to_string();
-        assert!(oversized.contains("byte limit"));assert!(!oversized.contains("owned-cli-secret"));
-        server.0.abort();let _=(&mut server.0).await;
+        let api = Api::new(
+            &format!("http://{address}"),
+            5,
+            Some("owned-cli-secret".into()),
+        )
+        .unwrap();
+        let error = public_ports(
+            &api,
+            PublicPortCommand::Expose {
+                id: "sandbox-a".into(),
+                port: 18082,
+                protocol: PublicPortProtocol::Both,
+            },
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("403"));
+        assert!(!error.contains("owned-cli-secret"));
+        let oversized = public_ports(
+            &api,
+            PublicPortCommand::List {
+                id: "sandbox-a".into(),
+            },
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+        assert!(oversized.contains("byte limit"));
+        assert!(!oversized.contains("owned-cli-secret"));
+        server.0.abort();
+        let _ = (&mut server.0).await;
     }
 
     #[test]

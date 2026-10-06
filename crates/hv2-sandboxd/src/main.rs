@@ -109,12 +109,12 @@ use hv2_api::sandbox_proxy::{self, PortMap};
 use hv2_cluster::control::CLUSTER_TOKEN_HEADER;
 use hv2_cluster::metrics::{Counter, Exposition, Histogram};
 use hv2_cluster::model::{
-    ClusterEvent, SandboxRecord, metadata_matches, now_ms, parse_metadata_query,
+    metadata_matches, now_ms, parse_metadata_query, ClusterEvent, SandboxRecord,
 };
-use hv2_cluster::names::{NAME_OPERATION_HEADER, NameReservation, SandboxName};
+use hv2_cluster::names::{NameReservation, SandboxName, NAME_OPERATION_HEADER};
 use hv2_cluster::node::{NodeAgent, NodeConfig};
 use hv2_net::gateway::socks::Socks5Proxy;
-use hv2_net::gateway::{Gateway, GatewayConfig, GatewayHandle, mitm::Authority};
+use hv2_net::gateway::{mitm::Authority, Gateway, GatewayConfig, GatewayHandle};
 use hv2_net::network_policy::{Cidr, Headers, NetworkPolicy, Verdict};
 
 mod boot_diagnostics;
@@ -123,10 +123,10 @@ mod checkpoints;
 mod cloud_login;
 mod env_vars;
 mod forwards;
-mod private_source;
 mod identity;
 mod idle;
 mod initramfs;
+mod private_source;
 // Volumes are served with openat2 and O_PATH, which only Linux has; see
 // volumes_unsupported.rs for what other hosts answer.
 #[cfg(target_os = "linux")]
@@ -368,7 +368,9 @@ fn parse_options() -> Result<Options, String> {
             }
             "--memory-mb" => opts.memory_mb = parse_guest_memory(&value(&mut i)?, 1)?,
             "--cpu-cores" => {
-                opts.cpu_cores = value(&mut i)?.parse().map_err(|_| "--cpu-cores requires a positive u32 integer".to_string())?;
+                opts.cpu_cores = value(&mut i)?
+                    .parse()
+                    .map_err(|_| "--cpu-cores requires a positive u32 integer".to_string())?;
                 if opts.cpu_cores == 0 {
                     return Err("--cpu-cores requires a positive u32 integer".to_string());
                 }
@@ -426,7 +428,8 @@ fn parse_options() -> Result<Options, String> {
             }
             "--cluster-token" => opts.cluster_token = Some(value(&mut i)?),
             "--registration-reconcile-interval" => {
-                opts.registration_reconcile_interval = Some(parse_registration_reconcile_interval(&value(&mut i)?)?);
+                opts.registration_reconcile_interval =
+                    Some(parse_registration_reconcile_interval(&value(&mut i)?)?);
             }
             "--node-ttl" => {
                 opts.node_ttl =
@@ -484,7 +487,9 @@ fn parse_options() -> Result<Options, String> {
 }
 
 fn parse_registration_reconcile_interval(value: &str) -> Result<Duration, String> {
-    let seconds: u64 = value.parse().map_err(|_| "--registration-reconcile-interval requires 1..3600 seconds".to_string())?;
+    let seconds: u64 = value
+        .parse()
+        .map_err(|_| "--registration-reconcile-interval requires 1..3600 seconds".to_string())?;
     if !(1..=3600).contains(&seconds) {
         return Err("--registration-reconcile-interval requires 1..3600 seconds".into());
     }
@@ -492,9 +497,14 @@ fn parse_registration_reconcile_interval(value: &str) -> Result<Duration, String
 }
 
 fn parse_guest_memory(value: &str, multiplier: u64) -> Result<u64, String> {
-    value.parse::<u64>().ok().filter(|amount| *amount > 0)
+    value
+        .parse::<u64>()
+        .ok()
+        .filter(|amount| *amount > 0)
         .and_then(|amount| amount.checked_mul(multiplier))
-        .ok_or_else(|| "guest memory requires a positive integer with a representable MiB size".to_string())
+        .ok_or_else(|| {
+            "guest memory requires a positive integer with a representable MiB size".to_string()
+        })
 }
 
 #[cfg(test)]
@@ -505,16 +515,28 @@ mod guest_transport_tests {
         assert_eq!(GuestTransport::default(), GuestTransport::Mmio);
         assert_eq!(GuestTransport::parse("mmio").unwrap(), GuestTransport::Mmio);
         assert_eq!(GuestTransport::parse("pci").unwrap(), GuestTransport::Pci);
-        for value in ["", "PCI", "automatic", "none"] { assert!(GuestTransport::parse(value).is_err()); }
+        for value in ["", "PCI", "automatic", "none"] {
+            assert!(GuestTransport::parse(value).is_err());
+        }
     }
     #[test]
     fn equal_boot_arguments_cannot_share_cross_transport_templates() {
-        let historical = format!("{}\0{}\0{}\0{}\0{}", guest_cmdline(false, GuestTransport::Mmio), 1024, 1, false, "");
+        let historical = format!(
+            "{}\0{}\0{}\0{}\0{}",
+            guest_cmdline(false, GuestTransport::Mmio),
+            1024,
+            1,
+            false,
+            ""
+        );
         let mut mmio = historical.clone();
         let mut pci = historical.clone();
         super::append_template_transport(&mut mmio, GuestTransport::Mmio);
         super::append_template_transport(&mut pci, GuestTransport::Pci);
-        assert_eq!(mmio, historical, "existing MMIO cache identity must remain stable");
+        assert_eq!(
+            mmio, historical,
+            "existing MMIO cache identity must remain stable"
+        );
         assert_ne!(mmio, pci, "PCI snapshots cannot be used by MMIO guests");
     }
     #[test]
@@ -522,13 +544,26 @@ mod guest_transport_tests {
         let mmio = guest_cmdline(false, GuestTransport::Mmio);
         let pci = guest_cmdline(false, GuestTransport::Pci);
         assert!(mmio.contains(hv2_core::BootSource::MICROVM_FAST_BOOT_ARGS));
-        for option in ["8250.nr_uarts=1", "i8042.noaux", "i8042.nomux", "i8042.nopnp", "i8042.dumbkbd"] {
-            assert!(pci.split_whitespace().any(|arg| arg == option), "missing {option}");
+        for option in [
+            "8250.nr_uarts=1",
+            "i8042.noaux",
+            "i8042.nomux",
+            "i8042.nopnp",
+            "i8042.dumbkbd",
+        ] {
+            assert!(
+                pci.split_whitespace().any(|arg| arg == option),
+                "missing {option}"
+            );
         }
         for option in ["pci=off", "noapic", "nolapic"] {
-            assert!(!pci.split_whitespace().any(|arg| arg == option), "PCI requires enumeration and interrupts: {option}");
+            assert!(
+                !pci.split_whitespace().any(|arg| arg == option),
+                "PCI requires enumeration and interrupts: {option}"
+            );
         }
-        assert!(guest_cmdline(true, GuestTransport::Pci).contains(&super::GatewayConfig::default().kernel_ip_arg()));
+        assert!(guest_cmdline(true, GuestTransport::Pci)
+            .contains(&super::GatewayConfig::default().kernel_ip_arg()));
     }
 }
 
@@ -543,7 +578,10 @@ mod guest_sizing_tests {
             assert!(parse_guest_memory(value, 1024).is_err());
         }
         assert!(parse_guest_memory("18014398509481984", 1024).is_err());
-        assert_eq!(parse_guest_memory("18014398509481983", 1024).unwrap(), u64::MAX - 1023);
+        assert_eq!(
+            parse_guest_memory("18014398509481983", 1024).unwrap(),
+            u64::MAX - 1023
+        );
         assert_eq!(parse_guest_memory("2", 1024).unwrap(), 2048);
         assert_eq!(parse_guest_memory("512", 1).unwrap(), 512);
     }
@@ -847,9 +885,7 @@ async fn resolve_egress_proxy(
     if addresses.is_empty() {
         return Err(format!("egress proxy {} does not resolve", proxy.address));
     }
-    if !allow_private
-        && addresses.iter().any(|a| NetworkPolicy::is_reserved(a.ip()))
-    {
+    if !allow_private && addresses.iter().any(|a| NetworkPolicy::is_reserved(a.ip())) {
         return Err(format!(
             "egress proxy {} resolves into a private or internal range \
              (start the server with --allow-private-egress-proxy if that is intended)",
@@ -1415,20 +1451,36 @@ struct StartupVmCleanup {
 }
 
 impl StartupVmCleanup {
-    fn new(vm: Arc<AgentVM>) -> Self { Self { vm: Some(vm), network_abort: None } }
-    fn disarm(&mut self) { self.vm = None; self.network_abort = None; }
+    fn new(vm: Arc<AgentVM>) -> Self {
+        Self {
+            vm: Some(vm),
+            network_abort: None,
+        }
+    }
+    fn disarm(&mut self) {
+        self.vm = None;
+        self.network_abort = None;
+    }
     async fn stop(&mut self) {
-        if let Some(bridge) = self.network_abort.take() { bridge.abort(); }
+        if let Some(bridge) = self.network_abort.take() {
+            bridge.abort();
+        }
         if let Some(vm) = &self.vm {
-            if vm.stop().await.is_ok() { self.disarm(); }
+            if vm.stop().await.is_ok() {
+                self.disarm();
+            }
         }
     }
 }
 
 impl Drop for StartupVmCleanup {
     fn drop(&mut self) {
-        if let Some(bridge) = self.network_abort.take() { bridge.abort(); }
-        let Some(vm) = self.vm.take() else { return; };
+        if let Some(bridge) = self.network_abort.take() {
+            bridge.abort();
+        }
+        let Some(vm) = self.vm.take() else {
+            return;
+        };
         match tokio::runtime::Handle::try_current() {
             Ok(runtime) => {
                 runtime.spawn(async move {
@@ -1437,7 +1489,9 @@ impl Drop for StartupVmCleanup {
                     }
                 });
             }
-            Err(error) => tracing::warn!(%error, "unregistered guest cleanup requires a live runtime"),
+            Err(error) => {
+                tracing::warn!(%error, "unregistered guest cleanup requires a live runtime");
+            }
         }
     }
 }
@@ -1590,7 +1644,9 @@ async fn bring_up(
         _ => None,
     };
 
-    startup_cleanup.network_abort = network.as_ref().map(|network| network.bridge.abort_handle());
+    startup_cleanup.network_abort = network
+        .as_ref()
+        .map(|network| network.bridge.abort_handle());
 
     // Its volumes, mounted before anyone can run a command that expects
     // them. After a restore, a mount the snapshot held is detached and
@@ -1769,10 +1825,15 @@ async fn register(
                 descriptor,
                 network: running.network,
                 record: record.clone(),
-                pending_registration: context.name_operation.cloned().map(PendingRegistration::Named)
-                    .or_else(|| state.node.as_ref().map(|_| PendingRegistration::Unnamed {
-                        event: event.unwrap_or("sandbox-created").to_string(),
-                    })),
+                pending_registration: context
+                    .name_operation
+                    .cloned()
+                    .map(PendingRegistration::Named)
+                    .or_else(|| {
+                        state.node.as_ref().map(|_| PendingRegistration::Unnamed {
+                            event: event.unwrap_or("sandbox-created").to_string(),
+                        })
+                    }),
                 lifecycle,
                 network_request,
                 activity: Activity::new(),
@@ -1848,8 +1909,10 @@ async fn register(
             }
             Err(error) => {
                 tracing::warn!(%sandbox_id,%error,"registration outcome requires reconciliation");
-                return Err((StatusCode::SERVICE_UNAVAILABLE,
-                    "registration outcome requires reconciliation".into()));
+                return Err((
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "registration outcome requires reconciliation".into(),
+                ));
             }
         }
     } else {
@@ -1889,29 +1952,61 @@ fn authorize_registration_reconciliation(
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct PendingQuery { after: Option<String> }
-
-async fn pending_registrations(State(state): State<Arc<AppState>>, headers: HeaderMap, Query(query): Query<PendingQuery>) -> Response {
-    if let Err((status,message)) = authorize_registration_reconciliation(&headers,state.node.is_some(),state.opts.cluster_token.as_deref()) {
-        return api_error(status,message);
-    }
-    if query.after.as_ref().is_some_and(|id| !valid_sandbox_id(id)) {
-        return api_error(StatusCode::BAD_REQUEST,"invalid registration cursor");
-    }
-    let rows:Vec<_>=state.sandboxes.lock().iter().filter_map(|(id,live)| {
-        live.pending_registration.as_ref().map(|pending| (id.clone(),match pending {
-            PendingRegistration::Named(_)=>"named",PendingRegistration::Unnamed { .. }=>"unnamed",
-        }))
-    }).collect();
-    Json(pending_registration_page(rows,query.after.as_deref())).into_response()
+struct PendingQuery {
+    after: Option<String>,
 }
 
-fn pending_registration_page(mut rows: Vec<(String, &'static str)>, after: Option<&str>) -> serde_json::Value {
-    rows.retain(|(id,_)|after.is_none_or(|after|id.as_str()>after));
-    rows.sort_by(|a,b|a.0.cmp(&b.0));
-    let more=rows.len()>32;rows.truncate(32);
-    let next=if more { rows.last().map(|row|row.0.clone()) } else { None };
-    let rows:Vec<_>=rows.into_iter().map(|(id,kind)|json!({"sandboxID":id,"kind":kind})).collect();
+async fn pending_registrations(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(query): Query<PendingQuery>,
+) -> Response {
+    if let Err((status, message)) = authorize_registration_reconciliation(
+        &headers,
+        state.node.is_some(),
+        state.opts.cluster_token.as_deref(),
+    ) {
+        return api_error(status, message);
+    }
+    if query.after.as_ref().is_some_and(|id| !valid_sandbox_id(id)) {
+        return api_error(StatusCode::BAD_REQUEST, "invalid registration cursor");
+    }
+    let rows: Vec<_> = state
+        .sandboxes
+        .lock()
+        .iter()
+        .filter_map(|(id, live)| {
+            live.pending_registration.as_ref().map(|pending| {
+                (
+                    id.clone(),
+                    match pending {
+                        PendingRegistration::Named(_) => "named",
+                        PendingRegistration::Unnamed { .. } => "unnamed",
+                    },
+                )
+            })
+        })
+        .collect();
+    Json(pending_registration_page(rows, query.after.as_deref())).into_response()
+}
+
+fn pending_registration_page(
+    mut rows: Vec<(String, &'static str)>,
+    after: Option<&str>,
+) -> serde_json::Value {
+    rows.retain(|(id, _)| after.is_none_or(|after| id.as_str() > after));
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+    let more = rows.len() > 32;
+    rows.truncate(32);
+    let next = if more {
+        rows.last().map(|row| row.0.clone())
+    } else {
+        None
+    };
+    let rows: Vec<_> = rows
+        .into_iter()
+        .map(|(id, kind)| json!({"sandboxID":id,"kind":kind}))
+        .collect();
     json!({"registrations":rows,"nextCursor":next})
 }
 
@@ -1956,12 +2051,17 @@ async fn reconcile_local_registration(state: Arc<AppState>, sandbox_id: String) 
         )
     };
     let published = match operation {
-        PendingRegistration::Named(operation) => node.created_named(&record, state.running(), &operation).await,
+        PendingRegistration::Named(operation) => {
+            node.created_named(&record, state.running(), &operation)
+                .await
+        }
         PendingRegistration::Unnamed { event } => {
             if event == "sandbox-created" {
                 node.created(&record, state.running()).await.map(Some)
             } else {
-                node.transitioned(&record, &event, state.running()).await.map(Some)
+                node.transitioned(&record, &event, state.running())
+                    .await
+                    .map(Some)
             }
         }
     };
@@ -2004,15 +2104,25 @@ async fn reconcile_pending_registrations(state: std::sync::Weak<AppState>, inter
     let mut cursor: Option<String> = None;
     loop {
         ticker.tick().await;
-        let Some(state) = state.upgrade() else { return; };
-        let ids = state.sandboxes.lock().iter()
+        let Some(state) = state.upgrade() else {
+            return;
+        };
+        let ids = state
+            .sandboxes
+            .lock()
+            .iter()
             .filter(|(_, live)| live.pending_registration.is_some())
-            .map(|(id, _)| id.clone()).collect();
+            .map(|(id, _)| id.clone())
+            .collect();
         let batch = registration_reconcile_batch(ids, cursor.as_deref());
         for id in batch {
             cursor = Some(id.clone());
-            if tokio::time::timeout(Duration::from_secs(5),
-                reconcile_local_registration(Arc::clone(&state), id.clone())).await.is_err()
+            if tokio::time::timeout(
+                Duration::from_secs(5),
+                reconcile_local_registration(Arc::clone(&state), id.clone()),
+            )
+            .await
+            .is_err()
             {
                 tracing::warn!(sandbox_id = %id, "automatic registration reconciliation timed out");
             }
@@ -2126,17 +2236,31 @@ fn named_creation_operation(
         .map_err(|_| (StatusCode::BAD_REQUEST, "invalid name operation context"))
 }
 
-fn creator_owner(headers: &HeaderMap, clustered: bool, authenticated_cluster: bool)
-    -> Result<Option<hv2_cluster::ownership::OwnerId>, (StatusCode, &'static str)> {
+fn creator_owner(
+    headers: &HeaderMap,
+    clustered: bool,
+    authenticated_cluster: bool,
+) -> Result<Option<hv2_cluster::ownership::OwnerId>, (StatusCode, &'static str)> {
     use hv2_cluster::ownership::{OwnerId, OWNER_HEADER};
     let mut values = headers.get_all(OWNER_HEADER).iter();
-    let Some(value) = values.next() else { return Ok(None); };
+    let Some(value) = values.next() else {
+        return Ok(None);
+    };
     if !clustered || !authenticated_cluster {
-        return Err((StatusCode::SERVICE_UNAVAILABLE, "owner attribution requires an authenticated cluster node"));
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "owner attribution requires an authenticated cluster node",
+        ));
     }
-    if values.next().is_some() { return Err((StatusCode::BAD_REQUEST, "duplicate owner context")); }
-    let value = value.to_str().map_err(|_| (StatusCode::BAD_REQUEST, "invalid owner context"))?;
-    OwnerId::parse(value).map(Some).map_err(|_| (StatusCode::BAD_REQUEST, "invalid owner context"))
+    if values.next().is_some() {
+        return Err((StatusCode::BAD_REQUEST, "duplicate owner context"));
+    }
+    let value = value
+        .to_str()
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid owner context"))?;
+    OwnerId::parse(value)
+        .map(Some)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid owner context"))
 }
 
 async fn create_sandbox(
@@ -2154,7 +2278,15 @@ async fn create_sandbox(
         Ok(operation) => operation,
         Err((status, error)) => return api_error(status, error),
     };
-    let owner_id = match creator_owner(&headers, state.node.is_some(), state.opts.cluster_token.as_ref().is_some_and(|token| !token.is_empty())) {
+    let owner_id = match creator_owner(
+        &headers,
+        state.node.is_some(),
+        state
+            .opts
+            .cluster_token
+            .as_ref()
+            .is_some_and(|token| !token.is_empty()),
+    ) {
         Ok(owner) => owner,
         Err((status, error)) => return api_error(status, error),
     };
@@ -2793,23 +2925,43 @@ async fn resume_sandbox(
             state.paused.lock().insert(sandbox_id.to_string(), paused);
         }
     };
-    if let Some(node)=&state.node {
+    if let Some(node) = &state.node {
         let lookup_claim = match (&state.store, &claim) {
             (Some(store), Some(path)) => Some(SnapshotClaim {
-                store, id: sandbox_id, path: path.clone(), released: false,
+                store,
+                id: sandbox_id,
+                path: path.clone(),
+                released: false,
             }),
             _ => None,
         };
-        let (returned_paused, ownership) = protected_paused_lookup(paused, |paused| {
-            if state.store.is_none() {
-                state.paused.lock().insert(sandbox_id.to_string(), paused);
-            }
-        }, protected_snapshot_lookup(lookup_claim, node.store().sandbox(sandbox_id))).await;
+        let (returned_paused, ownership) = protected_paused_lookup(
+            paused,
+            |paused| {
+                if state.store.is_none() {
+                    state.paused.lock().insert(sandbox_id.to_string(), paused);
+                }
+            },
+            protected_snapshot_lookup(lookup_claim, node.store().sandbox(sandbox_id)),
+        )
+        .await;
         paused = returned_paused;
         match ownership {
-            Ok(Some(record))=>paused.record.owner_id=record.owner_id,
-            Ok(None)=>{give_back(paused);return Err((StatusCode::NOT_FOUND,"resume ownership record missing".into()));},
-            Err(_)=>{give_back(paused);return Err((StatusCode::SERVICE_UNAVAILABLE,"resume ownership unavailable".into()));},
+            Ok(Some(record)) => paused.record.owner_id = record.owner_id,
+            Ok(None) => {
+                give_back(paused);
+                return Err((
+                    StatusCode::NOT_FOUND,
+                    "resume ownership record missing".into(),
+                ));
+            }
+            Err(_) => {
+                give_back(paused);
+                return Err((
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "resume ownership unavailable".into(),
+                ));
+            }
         }
     }
     // Decided here when this node did not pause it: the description holds
@@ -2820,15 +2972,23 @@ async fn resume_sandbox(
             let request = request.clone();
             let lookup_claim = match (&state.store, &claim) {
                 (Some(store), Some(path)) => Some(SnapshotClaim {
-                    store, id: sandbox_id, path: path.clone(), released: false,
+                    store,
+                    id: sandbox_id,
+                    path: path.clone(),
+                    released: false,
                 }),
                 _ => None,
             };
-            let (returned_paused, decision) = protected_paused_lookup(paused, |paused| {
-                if state.store.is_none() {
-                    state.paused.lock().insert(sandbox_id.to_string(), paused);
-                }
-            }, protected_snapshot_lookup(lookup_claim, request.decide(&state.opts))).await;
+            let (returned_paused, decision) = protected_paused_lookup(
+                paused,
+                |paused| {
+                    if state.store.is_none() {
+                        state.paused.lock().insert(sandbox_id.to_string(), paused);
+                    }
+                },
+                protected_snapshot_lookup(lookup_claim, request.decide(&state.opts)),
+            )
+            .await;
             paused = returned_paused;
             match decision {
                 Ok(spec) => Some(spec),
@@ -2837,7 +2997,7 @@ async fn resume_sandbox(
                     return Err((StatusCode::INTERNAL_SERVER_ERROR, e));
                 }
             }
-        },
+        }
         (None, Some(_)) => {
             give_back(paused);
             return Err((
@@ -2910,91 +3070,206 @@ struct PauseRequest {
 
 /// `POST /sandboxes/{id}/pause`.
 /// Return shared paused metadata when a protected store operation is cancelled.
-struct SnapshotClaim<'a> { store: &'a SnapshotStore, id: &'a str, path: std::path::PathBuf, released: bool }
+struct SnapshotClaim<'a> {
+    store: &'a SnapshotStore,
+    id: &'a str,
+    path: std::path::PathBuf,
+    released: bool,
+}
 impl SnapshotClaim<'_> {
     fn release(&mut self) -> std::io::Result<()> {
-        std::fs::rename(&self.path,self.store.meta(self.id))?;
-        self.released=true;Ok(())
+        std::fs::rename(&self.path, self.store.meta(self.id))?;
+        self.released = true;
+        Ok(())
     }
 }
 impl Drop for SnapshotClaim<'_> {
-    fn drop(&mut self) { if !self.released { self.store.release(self.id,&self.path); } }
-}
-
-struct LookupRollback<P, F: FnMut(P)> { value: Option<P>, restore: F }
-impl<P, F: FnMut(P)> Drop for LookupRollback<P, F> {
     fn drop(&mut self) {
-        if let Some(value) = self.value.take() { (self.restore)(value); }
+        if !self.released {
+            self.store.release(self.id, &self.path);
+        }
     }
 }
-async fn protected_paused_lookup<P, T>(paused: P, restore: impl FnMut(P), lookup: impl std::future::Future<Output = T>) -> (P, T) {
-    let mut rollback = LookupRollback { value: Some(paused), restore };
+
+struct LookupRollback<P, F: FnMut(P)> {
+    value: Option<P>,
+    restore: F,
+}
+impl<P, F: FnMut(P)> Drop for LookupRollback<P, F> {
+    fn drop(&mut self) {
+        if let Some(value) = self.value.take() {
+            (self.restore)(value);
+        }
+    }
+}
+async fn protected_paused_lookup<P, T>(
+    paused: P,
+    restore: impl FnMut(P),
+    lookup: impl std::future::Future<Output = T>,
+) -> (P, T) {
+    let mut rollback = LookupRollback {
+        value: Some(paused),
+        restore,
+    };
     let result = lookup.await;
-    (rollback.value.take().expect("paused state retained during lookup"), result)
+    (
+        rollback
+            .value
+            .take()
+            .expect("paused state retained during lookup"),
+        result,
+    )
 }
 
 // Protect pre-startup ownership/network decisions, before VM startup side effects.
 // Completed lookups leave the claim with the caller's existing success/error path.
-async fn protected_snapshot_lookup<T>(mut claim: Option<SnapshotClaim<'_>>, lookup: impl std::future::Future<Output = T>) -> T {
+async fn protected_snapshot_lookup<T>(
+    mut claim: Option<SnapshotClaim<'_>>,
+    lookup: impl std::future::Future<Output = T>,
+) -> T {
     let result = lookup.await;
-    if let Some(claim) = claim.as_mut() { claim.released = true; }
+    if let Some(claim) = claim.as_mut() {
+        claim.released = true;
+    }
     result
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-struct AdoptOwnerRequest { principal_id: hv2_cluster::ownership::OwnerId }
+struct AdoptOwnerRequest {
+    principal_id: hv2_cluster::ownership::OwnerId,
+}
 
-async fn adopt_owner_route(State(state): State<Arc<AppState>>, Path(id): Path<String>, Json(body): Json<AdoptOwnerRequest>) -> Response {
+async fn adopt_owner_route(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<AdoptOwnerRequest>,
+) -> Response {
     use hv2_cluster::ownership::OwnerAdoption;
-    if !valid_sandbox_id(&id) { return api_error(StatusCode::BAD_REQUEST,"invalid sandbox ID"); }
-    let Some(node)=&state.node else { return api_error(StatusCode::SERVICE_UNAVAILABLE,"clustered owner adoption required"); };
-    if state.opts.cluster_token.as_ref().is_none_or(|token|token.is_empty()) {
-        return api_error(StatusCode::SERVICE_UNAVAILABLE,"authenticated cluster required");
+    if !valid_sandbox_id(&id) {
+        return api_error(StatusCode::BAD_REQUEST, "invalid sandbox ID");
     }
-    let lock=transition_lock(&state,&id);let _held=lock.lock().await;
-    let running={
-        let live=state.sandboxes.lock();
-        if live.get(&id).is_some_and(|live|live.pending_registration.is_some()) {
-            return api_error(StatusCode::CONFLICT,"reconcile registration before adoption");
+    let Some(node) = &state.node else {
+        return api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "clustered owner adoption required",
+        );
+    };
+    if state
+        .opts
+        .cluster_token
+        .as_ref()
+        .is_none_or(|token| token.is_empty())
+    {
+        return api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "authenticated cluster required",
+        );
+    }
+    let lock = transition_lock(&state, &id);
+    let _held = lock.lock().await;
+    let running = {
+        let live = state.sandboxes.lock();
+        if live
+            .get(&id)
+            .is_some_and(|live| live.pending_registration.is_some())
+        {
+            return api_error(
+                StatusCode::CONFLICT,
+                "reconcile registration before adoption",
+            );
         }
         live.contains_key(&id)
     };
-    let mut claim=if !running {
+    let mut claim = if !running {
         match &state.store {
-            Some(store)=>match store.claim(&id,&state.node_id) {
-                Some((path,meta))=>Some((SnapshotClaim{store,id:&id,path,released:false},meta)),
-                None=>return api_error(StatusCode::CONFLICT,"paused sandbox must be available for adoption"),
+            Some(store) => match store.claim(&id, &state.node_id) {
+                Some((path, meta)) => Some((
+                    SnapshotClaim {
+                        store,
+                        id: &id,
+                        path,
+                        released: false,
+                    },
+                    meta,
+                )),
+                None => {
+                    return api_error(
+                        StatusCode::CONFLICT,
+                        "paused sandbox must be available for adoption",
+                    )
+                }
             },
-            None=>{
-                if !state.paused.lock().contains_key(&id) { return api_error(StatusCode::NOT_FOUND,"sandbox not present on node"); }
+            None => {
+                if !state.paused.lock().contains_key(&id) {
+                    return api_error(StatusCode::NOT_FOUND, "sandbox not present on node");
+                }
                 None
-            },
+            }
         }
-    } else { None };
-    let outcome=node.store().adopt_sandbox_owner(&id,&body.principal_id).await;
-    let success=matches!(outcome,Ok(OwnerAdoption::Adopted|OwnerAdoption::AlreadyOwned));
-    let mut metadata_error=false;
+    } else {
+        None
+    };
+    let outcome = node
+        .store()
+        .adopt_sandbox_owner(&id, &body.principal_id)
+        .await;
+    let success = matches!(
+        outcome,
+        Ok(OwnerAdoption::Adopted | OwnerAdoption::AlreadyOwned)
+    );
+    let mut metadata_error = false;
     if success {
-        if let Some(live)=state.sandboxes.lock().get_mut(&id) { live.record.owner_id=Some(body.principal_id.clone()); }
-        if let Some(paused)=state.paused.lock().get_mut(&id) { paused.record.owner_id=Some(body.principal_id.clone()); }
-        if let Some((claim,meta))=&mut claim {
-            let claimed=&claim.path;
-            meta.record.owner_id=Some(body.principal_id.clone());
-            let temporary=claimed.with_extension(format!("{}.tmp",uuid::Uuid::new_v4().simple()));
-            let written=serde_json::to_vec(meta).map_err(|_|()).and_then(|bytes|write_private(&temporary,&bytes).map_err(|_|()))
-                .and_then(|()|std::fs::rename(&temporary,claimed).map_err(|_|()));
-            if written.is_err() { metadata_error=true;let _=std::fs::remove_file(&temporary); }
+        if let Some(live) = state.sandboxes.lock().get_mut(&id) {
+            live.record.owner_id = Some(body.principal_id.clone());
+        }
+        if let Some(paused) = state.paused.lock().get_mut(&id) {
+            paused.record.owner_id = Some(body.principal_id.clone());
+        }
+        if let Some((claim, meta)) = &mut claim {
+            let claimed = &claim.path;
+            meta.record.owner_id = Some(body.principal_id.clone());
+            let temporary =
+                claimed.with_extension(format!("{}.tmp", uuid::Uuid::new_v4().simple()));
+            let written = serde_json::to_vec(meta)
+                .map_err(|_| ())
+                .and_then(|bytes| write_private(&temporary, &bytes).map_err(|_| ()))
+                .and_then(|()| std::fs::rename(&temporary, claimed).map_err(|_| ()));
+            if written.is_err() {
+                metadata_error = true;
+                let _ = std::fs::remove_file(&temporary);
+            }
         }
     }
-    if let Some((claim,_))=&mut claim { if claim.release().is_err() { metadata_error=true; } }
-    if metadata_error { return api_error(StatusCode::SERVICE_UNAVAILABLE,"ownership committed; paused metadata update failed; retry same adoption"); }
+    if let Some((claim, _)) = &mut claim {
+        if claim.release().is_err() {
+            metadata_error = true;
+        }
+    }
+    if metadata_error {
+        return api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "ownership committed; paused metadata update failed; retry same adoption",
+        );
+    }
     match outcome {
-        Ok(OwnerAdoption::Adopted|OwnerAdoption::AlreadyOwned)=>StatusCode::NO_CONTENT.into_response(),
-        Ok(OwnerAdoption::OwnerConflict)=>api_error(StatusCode::CONFLICT,"existing owner cannot be transferred"),
-        Ok(OwnerAdoption::PortsPresent)=>api_error(StatusCode::CONFLICT,"remove legacy public-port reservations before adoption"),
-        Ok(OwnerAdoption::SandboxMissing)=>api_error(StatusCode::NOT_FOUND,"sandbox record missing"),
-        Err(_)=>api_error(StatusCode::SERVICE_UNAVAILABLE,"owner adoption store unavailable; outcome may be committed; retry same adoption"),
+        Ok(OwnerAdoption::Adopted | OwnerAdoption::AlreadyOwned) => {
+            StatusCode::NO_CONTENT.into_response()
+        }
+        Ok(OwnerAdoption::OwnerConflict) => {
+            api_error(StatusCode::CONFLICT, "existing owner cannot be transferred")
+        }
+        Ok(OwnerAdoption::PortsPresent) => api_error(
+            StatusCode::CONFLICT,
+            "remove legacy public-port reservations before adoption",
+        ),
+        Ok(OwnerAdoption::SandboxMissing) => {
+            api_error(StatusCode::NOT_FOUND, "sandbox record missing")
+        }
+        Err(_) => api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "owner adoption store unavailable; outcome may be committed; retry same adoption",
+        ),
     }
 }
 
@@ -3116,7 +3391,8 @@ async fn fork_route(
                 )
             })
         };
-        let Some((vm, template_id, metadata, network, source_request, volume_mounts, owner_id)) = source
+        let Some((vm, template_id, metadata, network, source_request, volume_mounts, owner_id)) =
+            source
         else {
             return if state.paused.lock().contains_key(&sandbox_id) {
                 api_error(
@@ -3127,13 +3403,20 @@ async fn fork_route(
                 api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}"))
             };
         };
-        let owner_id = if let Some(node)=&state.node {
+        let owner_id = if let Some(node) = &state.node {
             match node.store().sandbox(&sandbox_id).await {
-                Ok(Some(record))=>record.owner_id,
-                Ok(None)=>return api_error(StatusCode::NOT_FOUND,"fork source record missing"),
-                Err(_)=>return api_error(StatusCode::SERVICE_UNAVAILABLE,"fork source ownership unavailable"),
+                Ok(Some(record)) => record.owner_id,
+                Ok(None) => return api_error(StatusCode::NOT_FOUND, "fork source record missing"),
+                Err(_) => {
+                    return api_error(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "fork source ownership unavailable",
+                    )
+                }
             }
-        } else { owner_id };
+        } else {
+            owner_id
+        };
         let started = std::time::Instant::now();
         if let Err(e) = vm.checkpoint_to(&checkpoint).await {
             let _ = std::fs::remove_file(&checkpoint);
@@ -4133,7 +4416,8 @@ fn guest_cmdline(network: bool, transport: GuestTransport) -> String {
             GuestTransport::Mmio => hv2_core::BootSource::MICROVM_FAST_BOOT_ARGS,
             // Keep PCI and APIC available for enumeration and level INTx.
             // This headless machine has one UART and no auxiliary input device.
-            GuestTransport::Pci => "8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd",
+            GuestTransport::Pci =>
+                "8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd",
         },
         // The guest configures its NIC from this before init runs.
         if network {
@@ -4162,14 +4446,27 @@ async fn new_vm(
         .cpu_cores(opts.cpu_cores)
         .memory_mb(opts.memory_mb)
         .capabilities(capabilities)
-        .boot_linux(&opts.kernel, Some(initrd), guest_cmdline(mac.is_some(), opts.guest_transport))
+        .boot_linux(
+            &opts.kernel,
+            Some(initrd),
+            guest_cmdline(mac.is_some(), opts.guest_transport),
+        )
         .build()
         .await
         .map_err(|e| format!("building the VM: {e}"))?;
     match opts.guest_transport {
-        GuestTransport::Mmio => vm.attach_guest_channel(cid).await.map_err(|e| e.to_string()),
-        GuestTransport::Pci => vm.vm().attach_vsock_pci(cid).await.map(|_| ()).map_err(|e| e.to_string()),
-    }.map_err(|e| format!("attaching the guest channel: {e}"))?;
+        GuestTransport::Mmio => vm
+            .attach_guest_channel(cid)
+            .await
+            .map_err(|e| e.to_string()),
+        GuestTransport::Pci => vm
+            .vm()
+            .attach_vsock_pci(cid)
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
+    }
+    .map_err(|e| format!("attaching the guest channel: {e}"))?;
     // Attached before launch: virtio-mmio has no hotplug, and the kernel
     // learns where to probe from the command line `attach_net` extends.
     let nic = match mac {
@@ -5038,7 +5335,10 @@ async fn main() -> std::process::ExitCode {
         });
     }
     if let Some(interval) = state.opts.registration_reconcile_interval {
-        tokio::spawn(reconcile_pending_registrations(Arc::downgrade(&state), interval));
+        tokio::spawn(reconcile_pending_registrations(
+            Arc::downgrade(&state),
+            interval,
+        ));
     }
     tokio::spawn(expire(Arc::clone(&state)));
     tokio::spawn(adopt_built(Arc::clone(&state)));
@@ -5385,15 +5685,31 @@ mod tests {
         assert!(creator_owner(&headers, false, false).unwrap().is_none());
         headers.insert(OWNER_HEADER, "principal-a".parse().unwrap());
         for (clustered, authenticated) in [(false, false), (false, true), (true, false)] {
-            assert_eq!(creator_owner(&headers, clustered, authenticated).unwrap_err().0, StatusCode::SERVICE_UNAVAILABLE);
+            assert_eq!(
+                creator_owner(&headers, clustered, authenticated)
+                    .unwrap_err()
+                    .0,
+                StatusCode::SERVICE_UNAVAILABLE
+            );
         }
-        assert_eq!(creator_owner(&headers, true, true).unwrap().unwrap().as_str(), "principal-a");
+        assert_eq!(
+            creator_owner(&headers, true, true)
+                .unwrap()
+                .unwrap()
+                .as_str(),
+            "principal-a"
+        );
         headers.append(OWNER_HEADER, "principal-b".parse().unwrap());
-        assert_eq!(creator_owner(&headers, true, true).unwrap_err().0, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            creator_owner(&headers, true, true).unwrap_err().0,
+            StatusCode::BAD_REQUEST
+        );
         headers.insert(OWNER_HEADER, "bad/owner".parse().unwrap());
-        assert_eq!(creator_owner(&headers, true, true).unwrap_err().0, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            creator_owner(&headers, true, true).unwrap_err().0,
+            StatusCode::BAD_REQUEST
+        );
     }
-
 
     #[test]
     fn registration_reconciliation_requires_each_requests_cluster_credential() {
@@ -5511,11 +5827,9 @@ mod tests {
     fn standalone_metadata_names_and_unnamed_cluster_requests_keep_their_protocol() {
         let metadata = BTreeMap::from([("hm.name".into(), "guest".into())]);
         let mut headers = HeaderMap::new();
-        assert!(
-            named_creation_operation(&headers, &metadata, false, false)
-                .unwrap()
-                .is_none()
-        );
+        assert!(named_creation_operation(&headers, &metadata, false, false)
+            .unwrap()
+            .is_none());
         assert!(
             named_creation_operation(&headers, &BTreeMap::new(), true, false)
                 .unwrap()
@@ -5572,92 +5886,161 @@ mod adoption_claim_tests {
     use super::*;
     #[test]
     fn pending_pages_preserve_all_ids_and_exclude_capability_fields() {
-        let rows:Vec<_>=(0..65).rev().map(|i|(format!("sbx-{i:03}"),"unnamed")).collect();
-        let mut cursor=None;let mut ids=Vec::new();let mut lengths=Vec::new();
+        let rows: Vec<_> = (0..65)
+            .rev()
+            .map(|i| (format!("sbx-{i:03}"), "unnamed"))
+            .collect();
+        let mut cursor = None;
+        let mut ids = Vec::new();
+        let mut lengths = Vec::new();
         loop {
-            let page=pending_registration_page(rows.clone(),cursor.as_deref());
-            let values=page["registrations"].as_array().unwrap();lengths.push(values.len());
+            let page = pending_registration_page(rows.clone(), cursor.as_deref());
+            let values = page["registrations"].as_array().unwrap();
+            lengths.push(values.len());
             for row in values {
-                assert_eq!(row.as_object().unwrap().len(),2);
+                assert_eq!(row.as_object().unwrap().len(), 2);
                 ids.push(row["sandboxID"].as_str().unwrap().to_owned());
             }
-            cursor=page["nextCursor"].as_str().map(str::to_owned);
-            if cursor.is_none() { break; }
+            cursor = page["nextCursor"].as_str().map(str::to_owned);
+            if cursor.is_none() {
+                break;
+            }
         }
-        assert_eq!(lengths,vec![32,32,1]);
-        assert_eq!(ids,(0..65).map(|i|format!("sbx-{i:03}")).collect::<Vec<_>>());
+        assert_eq!(lengths, vec![32, 32, 1]);
+        assert_eq!(
+            ids,
+            (0..65).map(|i| format!("sbx-{i:03}")).collect::<Vec<_>>()
+        );
     }
 
     #[tokio::test]
     async fn real_proxy_resolution_refusal_preserves_paused_value() {
-        let network=SandboxNetworkConfig {
-            egress_proxy:Some(SandboxEgressProxyConfig { address:"localhost:1080".into(),username:None,password:None }),
+        let network = SandboxNetworkConfig {
+            egress_proxy: Some(SandboxEgressProxyConfig {
+                address: "localhost:1080".into(),
+                username: None,
+                password: None,
+            }),
             ..SandboxNetworkConfig::default()
         };
-        let (paused,result)=protected_paused_lookup(vec![0,255,42], |_| panic!("completed refusal must use caller cleanup"),resolve_egress_proxy(false,Some(&network))).await;
-        assert_eq!(paused,vec![0,255,42]);
+        let (paused, result) = protected_paused_lookup(
+            vec![0, 255, 42],
+            |_| panic!("completed refusal must use caller cleanup"),
+            resolve_egress_proxy(false, Some(&network)),
+        )
+        .await;
+        assert_eq!(paused, vec![0, 255, 42]);
         assert!(result.err().unwrap().contains("private or internal range"));
     }
     #[tokio::test]
     async fn real_proxy_resolution_operator_override_preserves_paused_value() {
-        let network=SandboxNetworkConfig {
-            egress_proxy:Some(SandboxEgressProxyConfig { address:"localhost:1080".into(),username:None,password:None }),
+        let network = SandboxNetworkConfig {
+            egress_proxy: Some(SandboxEgressProxyConfig {
+                address: "localhost:1080".into(),
+                username: None,
+                password: None,
+            }),
             ..SandboxNetworkConfig::default()
         };
-        let (paused,result)=protected_paused_lookup(vec![0,255,42], |_| panic!("completed lookup must not roll back"),resolve_egress_proxy(true,Some(&network))).await;
-        assert_eq!(paused,vec![0,255,42]);assert!(result.unwrap().is_some());
+        let (paused, result) = protected_paused_lookup(
+            vec![0, 255, 42],
+            |_| panic!("completed lookup must not roll back"),
+            resolve_egress_proxy(true, Some(&network)),
+        )
+        .await;
+        assert_eq!(paused, vec![0, 255, 42]);
+        assert!(result.unwrap().is_some());
     }
 
     #[tokio::test]
     async fn cancelled_lookup_restores_owned_paused_value() {
-        let restored=Arc::new(Mutex::new(None));
-        let output=restored.clone();
-        let ready=Arc::new(tokio::sync::Notify::new());let signal=ready.clone();
-        let task=tokio::spawn(async move {
-            protected_paused_lookup(vec![0,255,42],move |value| { *output.lock()=Some(value); },async {
-                signal.notify_one();std::future::pending::<()>().await;
-            }).await
+        let restored = Arc::new(Mutex::new(None));
+        let output = restored.clone();
+        let ready = Arc::new(tokio::sync::Notify::new());
+        let signal = ready.clone();
+        let task = tokio::spawn(async move {
+            protected_paused_lookup(
+                vec![0, 255, 42],
+                move |value| {
+                    *output.lock() = Some(value);
+                },
+                async {
+                    signal.notify_one();
+                    std::future::pending::<()>().await;
+                },
+            )
+            .await
         });
-        ready.notified().await;task.abort();assert!(task.await.unwrap_err().is_cancelled());
-        assert_eq!(*restored.lock(),Some(vec![0,255,42]));
+        ready.notified().await;
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        assert_eq!(*restored.lock(), Some(vec![0, 255, 42]));
     }
     #[tokio::test]
     async fn completed_lookup_returns_paused_value_without_rollback() {
-        let (value,result)=protected_paused_lookup(vec![0,255,42], |_| panic!("completion must not roll back"),async { Err::<(),_>("unavailable") }).await;
-        assert_eq!(value,vec![0,255,42]);assert_eq!(result,Err("unavailable"));
+        let (value, result) = protected_paused_lookup(
+            vec![0, 255, 42],
+            |_| panic!("completion must not roll back"),
+            async { Err::<(), _>("unavailable") },
+        )
+        .await;
+        assert_eq!(value, vec![0, 255, 42]);
+        assert_eq!(result, Err("unavailable"));
     }
 
     #[tokio::test]
     async fn completed_lookup_keeps_claim_for_caller_cleanup() {
-        let directory=tempfile::tempdir().unwrap();
-        let store=SnapshotStore::open(directory.path()).unwrap();
-        let path=store.paused_dir().join("sbx-lookup.json.claimed-node");
-        std::fs::write(&path,b"preserved-description").unwrap();
-        let claim=SnapshotClaim{store:&store,id:"sbx-lookup",path:path.clone(),released:false};
-        let result=protected_snapshot_lookup(Some(claim),async { Err::<(),_>("lookup failed") }).await;
-        assert_eq!(result,Err("lookup failed"));
+        let directory = tempfile::tempdir().unwrap();
+        let store = SnapshotStore::open(directory.path()).unwrap();
+        let path = store.paused_dir().join("sbx-lookup.json.claimed-node");
+        std::fs::write(&path, b"preserved-description").unwrap();
+        let claim = SnapshotClaim {
+            store: &store,
+            id: "sbx-lookup",
+            path: path.clone(),
+            released: false,
+        };
+        let result =
+            protected_snapshot_lookup(Some(claim), async { Err::<(), _>("lookup failed") }).await;
+        assert_eq!(result, Err("lookup failed"));
         assert!(!store.meta("sbx-lookup").exists());
-        assert_eq!(std::fs::read(&path).unwrap(),b"preserved-description");
-        store.release("sbx-lookup",&path);
-        assert_eq!(std::fs::read(store.meta("sbx-lookup")).unwrap(),b"preserved-description");
+        assert_eq!(std::fs::read(&path).unwrap(), b"preserved-description");
+        store.release("sbx-lookup", &path);
+        assert_eq!(
+            std::fs::read(store.meta("sbx-lookup")).unwrap(),
+            b"preserved-description"
+        );
     }
 
     #[tokio::test]
     async fn cancelled_protected_lookup_returns_paused_description() {
-        let directory=tempfile::tempdir().unwrap();
-        let store=Arc::new(SnapshotStore::open(directory.path()).unwrap());
-        let path=store.paused_dir().join("sbx-adoption.json.claimed-node");
-        std::fs::write(&path,b"preserved-description").unwrap();
-        let ready=Arc::new(tokio::sync::Notify::new());
-        let task_store=store.clone();let task_ready=ready.clone();
-        let task=tokio::spawn(async move {
-            let claim=SnapshotClaim{store:&task_store,id:"sbx-adoption",path,released:false};
+        let directory = tempfile::tempdir().unwrap();
+        let store = Arc::new(SnapshotStore::open(directory.path()).unwrap());
+        let path = store.paused_dir().join("sbx-adoption.json.claimed-node");
+        std::fs::write(&path, b"preserved-description").unwrap();
+        let ready = Arc::new(tokio::sync::Notify::new());
+        let task_store = store.clone();
+        let task_ready = ready.clone();
+        let task = tokio::spawn(async move {
+            let claim = SnapshotClaim {
+                store: &task_store,
+                id: "sbx-adoption",
+                path,
+                released: false,
+            };
             protected_snapshot_lookup(Some(claim), async {
-                task_ready.notify_one();std::future::pending::<()>().await;
-            }).await;
+                task_ready.notify_one();
+                std::future::pending::<()>().await;
+            })
+            .await;
         });
-        ready.notified().await;task.abort();assert!(task.await.unwrap_err().is_cancelled());
-        assert_eq!(std::fs::read(store.meta("sbx-adoption")).unwrap(),b"preserved-description");
+        ready.notified().await;
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        assert_eq!(
+            std::fs::read(store.meta("sbx-adoption")).unwrap(),
+            b"preserved-description"
+        );
     }
 }
 
@@ -5670,8 +6053,14 @@ mod registration_worker_tests {
         for invalid in ["0", "3601", "-1", "abc", "18446744073709551616"] {
             assert!(parse_registration_reconcile_interval(invalid).is_err());
         }
-        assert_eq!(parse_registration_reconcile_interval("1").unwrap(), Duration::from_secs(1));
-        assert_eq!(parse_registration_reconcile_interval("3600").unwrap(), Duration::from_secs(3600));
+        assert_eq!(
+            parse_registration_reconcile_interval("1").unwrap(),
+            Duration::from_secs(1)
+        );
+        assert_eq!(
+            parse_registration_reconcile_interval("3600").unwrap(),
+            Duration::from_secs(3600)
+        );
     }
 
     #[test]
@@ -5684,7 +6073,8 @@ mod registration_worker_tests {
         assert_eq!(second.len(), 32);
         assert_eq!(third[0], "sandbox-064");
         assert_eq!(third[1], "sandbox-000");
-        let seen: std::collections::HashSet<_> = first.into_iter().chain(second).chain(third).collect();
+        let seen: std::collections::HashSet<_> =
+            first.into_iter().chain(second).chain(third).collect();
         assert_eq!(seen.len(), 65);
         assert!(registration_reconcile_batch(Vec::new(), Some("gone")).is_empty());
     }
@@ -5702,7 +6092,10 @@ mod startup_cleanup_tests {
             std::future::pending::<()>().await;
         });
         waiting.await.unwrap();
-        let cleanup = StartupVmCleanup { vm: None, network_abort: Some(task.abort_handle()) };
+        let cleanup = StartupVmCleanup {
+            vm: None,
+            network_abort: Some(task.abort_handle()),
+        };
         drop(cleanup);
         assert!(task.await.unwrap_err().is_cancelled());
     }
@@ -5710,7 +6103,10 @@ mod startup_cleanup_tests {
     #[tokio::test]
     async fn handoff_retains_registered_network_task() {
         let task = tokio::spawn(std::future::pending::<()>());
-        let mut cleanup = StartupVmCleanup { vm: None, network_abort: Some(task.abort_handle()) };
+        let mut cleanup = StartupVmCleanup {
+            vm: None,
+            network_abort: Some(task.abort_handle()),
+        };
         cleanup.disarm();
         drop(cleanup);
         tokio::task::yield_now().await;
@@ -5719,21 +6115,39 @@ mod startup_cleanup_tests {
         assert!(task.await.unwrap_err().is_cancelled());
     }
 
-
     async fn guest(name: &str) -> Arc<AgentVM> {
-        let kernel = std::env::var("HM_STARTUP_CLEANUP_KERNEL").expect("owned test kernel required");
+        let kernel =
+            std::env::var("HM_STARTUP_CLEANUP_KERNEL").expect("owned test kernel required");
         let initrd = std::env::var("HM_STARTUP_CLEANUP_INITRD").expect("owned test image required");
         let mut capabilities = CapabilitySet::default();
         capabilities.add(Capability::GuestExec);
-        let vm = AgentVM::builder().name(name.to_string()).cpu_cores(1).memory_mb(1024)
-            .capabilities(capabilities).boot_linux(&kernel, Some(&initrd), guest_cmdline(false, GuestTransport::Mmio))
-            .build().await.expect("build owned KVM guest");
+        let vm = AgentVM::builder()
+            .name(name.to_string())
+            .cpu_cores(1)
+            .memory_mb(1024)
+            .capabilities(capabilities)
+            .boot_linux(
+                &kernel,
+                Some(&initrd),
+                guest_cmdline(false, GuestTransport::Mmio),
+            )
+            .build()
+            .await
+            .expect("build owned KVM guest");
         vm.attach_guest_channel(42).await.unwrap();
         use hv2_core::{Device, SerialDevice};
         let mut console = SerialDevice::new("COM1".to_string(), 0x3F8);
         console.init().await.unwrap();
-        vm.vm().devices().register_device("COM1", Arc::new(tokio::sync::RwLock::new(console))).await.unwrap();
-        vm.vm().devices().register_io_port_range("COM1".to_string(), 0x3F8, 0x3FF).await.unwrap();
+        vm.vm()
+            .devices()
+            .register_device("COM1", Arc::new(tokio::sync::RwLock::new(console)))
+            .await
+            .unwrap();
+        vm.vm()
+            .devices()
+            .register_io_port_range("COM1".to_string(), 0x3F8, 0x3FF)
+            .await
+            .unwrap();
         vm.launch().await.unwrap();
         Arc::new(vm)
     }
@@ -5742,8 +6156,15 @@ mod startup_cleanup_tests {
     #[ignore = "requires explicit owned Linux/KVM kernel and image"]
     async fn startup_cleanup_kvm_cancellation_stops_unregistered_guests() {
         for ready in [false, true] {
-            let vm = guest(if ready { "cleanup-ready" } else { "cleanup-launching" }).await;
-            if ready { vm.ping_guest(Duration::from_secs(15)).await.unwrap(); }
+            let vm = guest(if ready {
+                "cleanup-ready"
+            } else {
+                "cleanup-launching"
+            })
+            .await;
+            if ready {
+                vm.ping_guest(Duration::from_secs(15)).await.unwrap();
+            }
             let cleanup = StartupVmCleanup::new(Arc::clone(&vm));
             let (entered, waiting) = tokio::sync::oneshot::channel();
             let task = tokio::spawn(async move {
@@ -5758,7 +6179,9 @@ mod startup_cleanup_tests {
                 while vm.state() != hv2_core::VMState::Stopped {
                     tokio::time::sleep(Duration::from_millis(10)).await;
                 }
-            }).await.expect("canceled guest stopped");
+            })
+            .await
+            .expect("canceled guest stopped");
         }
     }
 

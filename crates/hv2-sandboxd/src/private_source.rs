@@ -133,7 +133,7 @@ impl GatewayPrivateRouter {
                 let (source, lease) = loop {
                     match self.factory.source() {
                         Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                            tokio::time::sleep(std::time::Duration::from_millis(1)).await
+                            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
                         }
                         result => break result?,
                     }
@@ -147,7 +147,7 @@ impl GatewayPrivateRouter {
                 loop {
                     match lease.validate(&source) {
                         Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                            tokio::time::sleep(std::time::Duration::from_millis(1)).await
+                            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
                         }
                         result => {
                             result?;
@@ -190,7 +190,6 @@ impl hv2_net::gateway::PrivateNetwork for GatewayPrivateRouter {
     ) -> io::Result<Box<dyn hv2_net::gateway::Upstream>> {
         Ok(Box::new(self.router().await?.dial_udp(destination).await?))
     }
-
 }
 /// Install private routing for authenticated mTLS cluster guests. Source state
 /// comes from the fixed gateway VM, never its packets, DNS or caller headers.

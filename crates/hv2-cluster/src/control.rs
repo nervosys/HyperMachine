@@ -90,9 +90,14 @@ struct ControlMetrics {
 impl ControlPlane {
     /// Enable owner-only reservation APIs for one fixed operator allocation window.
     /// The gateway publishes these reservations asynchronously.
-    pub fn configure_public_ports(&self, range: crate::ports::PublicPortRange) -> Result<(), String> {
+    pub fn configure_public_ports(
+        &self,
+        range: crate::ports::PublicPortRange,
+    ) -> Result<(), String> {
         let mut active = self.native_port_range.write();
-        if active.is_some() { return Err("public port range already configured".into()); }
+        if active.is_some() {
+            return Err("public port range already configured".into());
+        }
         *active = Some(range);
         Ok(())
     }
@@ -207,14 +212,23 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/sandboxes/{id}/resume", post(forward))
         .route("/sandboxes/{id}/fork", post(forward))
         .route("/sandboxes/{id}/owner", post(adopt_owner))
-        .route("/sandboxes/{id}/private-networks",
-            get(get_private_membership).put(update_private_membership)
-                .layer(axum::extract::DefaultBodyLimit::max(4096)))
-        .route("/sandboxes/{id}/web-sharing",
-            get(get_web_sharing).put(update_web_sharing)
-                .layer(axum::extract::DefaultBodyLimit::max(65536)))
+        .route(
+            "/sandboxes/{id}/private-networks",
+            get(get_private_membership)
+                .put(update_private_membership)
+                .layer(axum::extract::DefaultBodyLimit::max(4096)),
+        )
+        .route(
+            "/sandboxes/{id}/web-sharing",
+            get(get_web_sharing)
+                .put(update_web_sharing)
+                .layer(axum::extract::DefaultBodyLimit::max(65536)),
+        )
         .route("/sandboxes/{id}/public-ports", get(list_public_ports))
-        .route("/sandboxes/{id}/public-ports/{port}", axum::routing::put(reserve_public_port).delete(remove_public_port))
+        .route(
+            "/sandboxes/{id}/public-ports/{port}",
+            axum::routing::put(reserve_public_port).delete(remove_public_port),
+        )
         .route("/sandboxes/{id}/domains", get(list_domains))
         .route(
             "/sandboxes/{id}/domains/{domain}/challenge",
@@ -253,8 +267,14 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/sandboxes/{id}/ports/{port}/udp", get(udp_tunnel))
         .route("/sandboxes/{id}/ports/{port}/udp6", get(udp_tunnel_ipv6))
         .route("/cluster/nodes", get(cluster_nodes))
-        .route("/cluster/nodes/{node}/registrations/pending", get(pending_on_node))
-        .route("/cluster/nodes/{node}/sandboxes/{id}/registration/reconcile", post(reconcile_on_node))
+        .route(
+            "/cluster/nodes/{node}/registrations/pending",
+            get(pending_on_node),
+        )
+        .route(
+            "/cluster/nodes/{node}/sandboxes/{id}/registration/reconcile",
+            post(reconcile_on_node),
+        )
         .route("/templates", get(templates).post(build_templates))
         .route("/cluster/events", get(cluster_events))
         .route_layer(axum::middleware::from_fn_with_state(
@@ -329,7 +349,6 @@ async fn domain_challenge(
     }
 }
 
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct PrivateMembershipRequest {
@@ -337,60 +356,134 @@ struct PrivateMembershipRequest {
     revision: String,
     tags: Vec<crate::private_networks::NetworkTag>,
 }
-fn private_membership_context(principal: &CreatorPrincipal, id: &str)
-    -> Result<crate::ownership::OwnerId, Response> {
-    let owner = principal.0.clone().ok_or_else(|| api_error(StatusCode::FORBIDDEN, "configured creator identity required"))?;
+// Handlers answer with a Response; see events.rs for the same allowance.
+#[allow(clippy::result_large_err)]
+fn private_membership_context(
+    principal: &CreatorPrincipal,
+    id: &str,
+) -> Result<crate::ownership::OwnerId, Response> {
+    let owner = principal.0.clone().ok_or_else(|| {
+        api_error(
+            StatusCode::FORBIDDEN,
+            "configured creator identity required",
+        )
+    })?;
     crate::ports::validate_request(id, 1, owner.as_str())
         .map_err(|_| api_error(StatusCode::BAD_REQUEST, "invalid sandbox ID"))?;
     Ok(owner)
 }
-fn private_membership_json(state: Option<&crate::private_networks::NetworkMembershipState>) -> Value {
-    let tags: Vec<_> = state.and_then(|state| state.membership())
-        .map(|member| member.tags().iter().map(|tag| tag.as_str()).collect()).unwrap_or_default();
+fn private_membership_json(
+    state: Option<&crate::private_networks::NetworkMembershipState>,
+) -> Value {
+    let tags: Vec<_> = state
+        .and_then(|state| state.membership())
+        .map(|member| member.tags().iter().map(|tag| tag.as_str()).collect())
+        .unwrap_or_default();
     json!({"revision":state.map(|state|state.revision()),"tags":tags})
 }
-async fn private_membership_store<T>(future: impl std::future::Future<Output=crate::store::Result<T>>) -> Result<T,Response> {
-    match tokio::time::timeout(Duration::from_secs(5),future).await {
+// Handlers answer with a Response; see events.rs for the same allowance.
+#[allow(clippy::result_large_err)]
+async fn private_membership_store<T>(
+    future: impl std::future::Future<Output = crate::store::Result<T>>,
+) -> Result<T, Response> {
+    match tokio::time::timeout(Duration::from_secs(5), future).await {
         Ok(Ok(value)) => Ok(value),
-        Ok(Err(_)) => Err(api_error(StatusCode::SERVICE_UNAVAILABLE,"private membership store unavailable; read current state before retrying")),
-        Err(_) => Err(api_error(StatusCode::SERVICE_UNAVAILABLE,"private membership outcome uncertain; retry the exact revision and request")),
+        Ok(Err(_)) => Err(api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "private membership store unavailable; read current state before retrying",
+        )),
+        Err(_) => Err(api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "private membership outcome uncertain; retry the exact revision and request",
+        )),
     }
 }
-async fn get_private_membership(State(control): State<Arc<ControlPlane>>, Extension(principal): Extension<CreatorPrincipal>,
-    Path(id): Path<String>) -> Response {
+async fn get_private_membership(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(principal): Extension<CreatorPrincipal>,
+    Path(id): Path<String>,
+) -> Response {
     use crate::private_networks::MembershipAccess;
-    let owner = match private_membership_context(&principal, &id) { Ok(owner)=>owner,Err(response)=>return response };
+    let owner = match private_membership_context(&principal, &id) {
+        Ok(owner) => owner,
+        Err(response) => return response,
+    };
     match private_membership_store(control.store.private_membership(&id, &owner)).await {
-        Ok(MembershipAccess::Granted(state)) => Json(private_membership_json(state.as_ref())).into_response(),
-        Ok(MembershipAccess::OwnerConflict) => api_error(StatusCode::FORBIDDEN,"sandbox belongs to a different or unassigned creator"),
-        Ok(MembershipAccess::SandboxMissing) => api_error(StatusCode::NOT_FOUND,"sandbox does not exist"),
+        Ok(MembershipAccess::Granted(state)) => {
+            Json(private_membership_json(state.as_ref())).into_response()
+        }
+        Ok(MembershipAccess::OwnerConflict) => api_error(
+            StatusCode::FORBIDDEN,
+            "sandbox belongs to a different or unassigned creator",
+        ),
+        Ok(MembershipAccess::SandboxMissing) => {
+            api_error(StatusCode::NOT_FOUND, "sandbox does not exist")
+        }
         Err(response) => response,
     }
 }
-async fn update_private_membership(State(control): State<Arc<ControlPlane>>, Extension(principal): Extension<CreatorPrincipal>,
-    Path(id): Path<String>, Json(body): Json<PrivateMembershipRequest>) -> Response {
-    use crate::private_networks::{NetworkMembershipState, MembershipChange};
-    let owner = match private_membership_context(&principal, &id) { Ok(owner)=>owner,Err(response)=>return response };
-    if body.expected_revision.as_ref().is_some_and(|revision|
-        !uuid::Uuid::parse_str(revision).is_ok_and(|id| id.get_version_num()==4 && id.to_string()==*revision)) {
-        return api_error(StatusCode::BAD_REQUEST,"invalid expected membership revision");
-    }
-    let record = match private_membership_store(control.store.sandbox(&id)).await {
-        Ok(Some(record)) if record.sandbox_id != id => return api_error(StatusCode::SERVICE_UNAVAILABLE,"sandbox identity mismatch"),
-        Ok(Some(record)) if record.owner_id.as_ref()==Some(&owner) => record,
-        Ok(Some(_)) => return api_error(StatusCode::FORBIDDEN,"sandbox belongs to a different or unassigned creator"),
-        Ok(None) => return api_error(StatusCode::NOT_FOUND,"sandbox does not exist"),
+async fn update_private_membership(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(principal): Extension<CreatorPrincipal>,
+    Path(id): Path<String>,
+    Json(body): Json<PrivateMembershipRequest>,
+) -> Response {
+    use crate::private_networks::{MembershipChange, NetworkMembershipState};
+    let owner = match private_membership_context(&principal, &id) {
+        Ok(owner) => owner,
         Err(response) => return response,
     };
-    let tags = if body.tags.is_empty() { None } else { Some(body.tags) };
-    let next = match NetworkMembershipState::with_revision(&record,tags,&body.revision) {
-        Ok(next)=>next,Err(error)=>return api_error(StatusCode::BAD_REQUEST,error),
+    if body.expected_revision.as_ref().is_some_and(|revision| {
+        !uuid::Uuid::parse_str(revision)
+            .is_ok_and(|id| id.get_version_num() == 4 && id.to_string() == *revision)
+    }) {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "invalid expected membership revision",
+        );
+    }
+    let record = match private_membership_store(control.store.sandbox(&id)).await {
+        Ok(Some(record)) if record.sandbox_id != id => {
+            return api_error(StatusCode::SERVICE_UNAVAILABLE, "sandbox identity mismatch")
+        }
+        Ok(Some(record)) if record.owner_id.as_ref() == Some(&owner) => record,
+        Ok(Some(_)) => {
+            return api_error(
+                StatusCode::FORBIDDEN,
+                "sandbox belongs to a different or unassigned creator",
+            )
+        }
+        Ok(None) => return api_error(StatusCode::NOT_FOUND, "sandbox does not exist"),
+        Err(response) => return response,
     };
-    match private_membership_store(control.store.compare_private_membership(body.expected_revision.as_deref(),&next)).await {
+    let tags = if body.tags.is_empty() {
+        None
+    } else {
+        Some(body.tags)
+    };
+    let next = match NetworkMembershipState::with_revision(&record, tags, &body.revision) {
+        Ok(next) => next,
+        Err(error) => return api_error(StatusCode::BAD_REQUEST, error),
+    };
+    match private_membership_store(
+        control
+            .store
+            .compare_private_membership(body.expected_revision.as_deref(), &next),
+    )
+    .await
+    {
         Ok(MembershipChange::Applied) => Json(private_membership_json(Some(&next))).into_response(),
-        Ok(MembershipChange::RevisionConflict | MembershipChange::RecordChanged) => api_error(StatusCode::CONFLICT,"membership revision or sandbox incarnation changed; read current state"),
-        Ok(MembershipChange::OwnerConflict) => api_error(StatusCode::FORBIDDEN,"sandbox belongs to a different or unassigned creator"),
-        Ok(MembershipChange::SandboxMissing) => api_error(StatusCode::NOT_FOUND,"sandbox does not exist"),
+        Ok(MembershipChange::RevisionConflict | MembershipChange::RecordChanged) => api_error(
+            StatusCode::CONFLICT,
+            "membership revision or sandbox incarnation changed; read current state",
+        ),
+        Ok(MembershipChange::OwnerConflict) => api_error(
+            StatusCode::FORBIDDEN,
+            "sandbox belongs to a different or unassigned creator",
+        ),
+        Ok(MembershipChange::SandboxMissing) => {
+            api_error(StatusCode::NOT_FOUND, "sandbox does not exist")
+        }
         Err(response) => response,
     }
 }
@@ -402,9 +495,18 @@ struct WebSharingRequest {
     revision: String,
     grants: Vec<crate::web_sharing::WebGrant>,
 }
-fn web_sharing_context(principal: &CreatorPrincipal, id: &str)
-    -> Result<crate::ownership::OwnerId, Response> {
-    let owner = principal.0.clone().ok_or_else(|| api_error(StatusCode::FORBIDDEN, "configured creator identity required"))?;
+// Handlers answer with a Response; see events.rs for the same allowance.
+#[allow(clippy::result_large_err)]
+fn web_sharing_context(
+    principal: &CreatorPrincipal,
+    id: &str,
+) -> Result<crate::ownership::OwnerId, Response> {
+    let owner = principal.0.clone().ok_or_else(|| {
+        api_error(
+            StatusCode::FORBIDDEN,
+            "configured creator identity required",
+        )
+    })?;
     crate::ports::validate_request(id, 1, owner.as_str())
         .map_err(|_| api_error(StatusCode::BAD_REQUEST, "invalid sandbox ID"))?;
     Ok(owner)
@@ -413,47 +515,99 @@ fn web_sharing_json(state: Option<&crate::web_sharing::WebSharingState>) -> Valu
     json!({"revision":state.map(|state|state.revision()),
         "grants":state.map(|state|state.grants()).unwrap_or_default()})
 }
-async fn web_sharing_store<T>(future: impl std::future::Future<Output=crate::store::Result<T>>) -> Result<T,Response> {
-    match tokio::time::timeout(Duration::from_secs(5),future).await {
+// Handlers answer with a Response; see events.rs for the same allowance.
+#[allow(clippy::result_large_err)]
+async fn web_sharing_store<T>(
+    future: impl std::future::Future<Output = crate::store::Result<T>>,
+) -> Result<T, Response> {
+    match tokio::time::timeout(Duration::from_secs(5), future).await {
         Ok(Ok(value)) => Ok(value),
-        Ok(Err(_)) => Err(api_error(StatusCode::SERVICE_UNAVAILABLE,"web sharing store unavailable; read current state before retrying")),
-        Err(_) => Err(api_error(StatusCode::SERVICE_UNAVAILABLE,"web sharing outcome uncertain; retry the exact revision and request")),
+        Ok(Err(_)) => Err(api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "web sharing store unavailable; read current state before retrying",
+        )),
+        Err(_) => Err(api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "web sharing outcome uncertain; retry the exact revision and request",
+        )),
     }
 }
-async fn get_web_sharing(State(control): State<Arc<ControlPlane>>, Extension(principal): Extension<CreatorPrincipal>,
-    Path(id): Path<String>) -> Response {
+async fn get_web_sharing(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(principal): Extension<CreatorPrincipal>,
+    Path(id): Path<String>,
+) -> Response {
     use crate::web_sharing::SharingAccess;
-    let owner = match web_sharing_context(&principal, &id) { Ok(owner)=>owner,Err(response)=>return response };
+    let owner = match web_sharing_context(&principal, &id) {
+        Ok(owner) => owner,
+        Err(response) => return response,
+    };
     match web_sharing_store(control.store.web_sharing(&id, &owner)).await {
         Ok(SharingAccess::Granted(state)) => Json(web_sharing_json(state.as_ref())).into_response(),
-        Ok(SharingAccess::OwnerConflict) => api_error(StatusCode::FORBIDDEN,"sandbox belongs to a different or unassigned creator"),
-        Ok(SharingAccess::SandboxMissing) => api_error(StatusCode::NOT_FOUND,"sandbox does not exist"),
+        Ok(SharingAccess::OwnerConflict) => api_error(
+            StatusCode::FORBIDDEN,
+            "sandbox belongs to a different or unassigned creator",
+        ),
+        Ok(SharingAccess::SandboxMissing) => {
+            api_error(StatusCode::NOT_FOUND, "sandbox does not exist")
+        }
         Err(response) => response,
     }
 }
-async fn update_web_sharing(State(control): State<Arc<ControlPlane>>, Extension(principal): Extension<CreatorPrincipal>,
-    Path(id): Path<String>, Json(body): Json<WebSharingRequest>) -> Response {
-    use crate::web_sharing::{WebSharingState, SharingChange};
-    let owner = match web_sharing_context(&principal, &id) { Ok(owner)=>owner,Err(response)=>return response };
-    if body.expected_revision.as_ref().is_some_and(|revision|
-        !uuid::Uuid::parse_str(revision).is_ok_and(|id| id.get_version_num()==4 && id.to_string()==*revision)) {
-        return api_error(StatusCode::BAD_REQUEST,"invalid expected sharing revision");
-    }
-    let record = match web_sharing_store(control.store.sandbox(&id)).await {
-        Ok(Some(record)) if record.sandbox_id != id => return api_error(StatusCode::SERVICE_UNAVAILABLE,"sandbox identity mismatch"),
-        Ok(Some(record)) if record.owner_id.as_ref()==Some(&owner) => record,
-        Ok(Some(_)) => return api_error(StatusCode::FORBIDDEN,"sandbox belongs to a different or unassigned creator"),
-        Ok(None) => return api_error(StatusCode::NOT_FOUND,"sandbox does not exist"),
+async fn update_web_sharing(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(principal): Extension<CreatorPrincipal>,
+    Path(id): Path<String>,
+    Json(body): Json<WebSharingRequest>,
+) -> Response {
+    use crate::web_sharing::{SharingChange, WebSharingState};
+    let owner = match web_sharing_context(&principal, &id) {
+        Ok(owner) => owner,
         Err(response) => return response,
     };
-    let next = match WebSharingState::with_revision(&record,body.grants,&body.revision) {
-        Ok(next)=>next,Err(error)=>return api_error(StatusCode::BAD_REQUEST,error),
+    if body.expected_revision.as_ref().is_some_and(|revision| {
+        !uuid::Uuid::parse_str(revision)
+            .is_ok_and(|id| id.get_version_num() == 4 && id.to_string() == *revision)
+    }) {
+        return api_error(StatusCode::BAD_REQUEST, "invalid expected sharing revision");
+    }
+    let record = match web_sharing_store(control.store.sandbox(&id)).await {
+        Ok(Some(record)) if record.sandbox_id != id => {
+            return api_error(StatusCode::SERVICE_UNAVAILABLE, "sandbox identity mismatch")
+        }
+        Ok(Some(record)) if record.owner_id.as_ref() == Some(&owner) => record,
+        Ok(Some(_)) => {
+            return api_error(
+                StatusCode::FORBIDDEN,
+                "sandbox belongs to a different or unassigned creator",
+            )
+        }
+        Ok(None) => return api_error(StatusCode::NOT_FOUND, "sandbox does not exist"),
+        Err(response) => return response,
     };
-    match web_sharing_store(control.store.compare_web_sharing(body.expected_revision.as_deref(),&next)).await {
+    let next = match WebSharingState::with_revision(&record, body.grants, &body.revision) {
+        Ok(next) => next,
+        Err(error) => return api_error(StatusCode::BAD_REQUEST, error),
+    };
+    match web_sharing_store(
+        control
+            .store
+            .compare_web_sharing(body.expected_revision.as_deref(), &next),
+    )
+    .await
+    {
         Ok(SharingChange::Applied) => Json(web_sharing_json(Some(&next))).into_response(),
-        Ok(SharingChange::RevisionConflict | SharingChange::RecordChanged) => api_error(StatusCode::CONFLICT,"sharing revision or sandbox incarnation changed; read current state"),
-        Ok(SharingChange::OwnerConflict) => api_error(StatusCode::FORBIDDEN,"sandbox belongs to a different or unassigned creator"),
-        Ok(SharingChange::SandboxMissing) => api_error(StatusCode::NOT_FOUND,"sandbox does not exist"),
+        Ok(SharingChange::RevisionConflict | SharingChange::RecordChanged) => api_error(
+            StatusCode::CONFLICT,
+            "sharing revision or sandbox incarnation changed; read current state",
+        ),
+        Ok(SharingChange::OwnerConflict) => api_error(
+            StatusCode::FORBIDDEN,
+            "sandbox belongs to a different or unassigned creator",
+        ),
+        Ok(SharingChange::SandboxMissing) => {
+            api_error(StatusCode::NOT_FOUND, "sandbox does not exist")
+        }
         Err(response) => response,
     }
 }
@@ -464,58 +618,143 @@ struct PublicPortRequest {
     #[serde(default = "default_public_protocol")]
     protocol: crate::ports::PortProtocol,
 }
-fn default_public_protocol() -> crate::ports::PortProtocol { crate::ports::PortProtocol::Tcp }
+fn default_public_protocol() -> crate::ports::PortProtocol {
+    crate::ports::PortProtocol::Tcp
+}
 fn public_port_json(row: &crate::ports::PortAllocation) -> Value {
     json!({"machinePort":row.machine_port(),"publicPort":row.public_port(),"protocol":row.protocol()})
 }
-fn public_port_context(control: &ControlPlane, principal: &CreatorPrincipal, id: &str, port: u16)
-    -> Result<(crate::ownership::OwnerId, crate::ports::PublicPortRange), Response> {
-    let owner = principal.0.clone().ok_or_else(||api_error(StatusCode::FORBIDDEN,"configured creator identity required"))?;
-    crate::ports::validate_request(id,port,owner.as_str()).map_err(|_|api_error(StatusCode::BAD_REQUEST,"invalid sandbox or destination port"))?;
-    let range = (*control.native_port_range.read()).ok_or_else(||api_error(StatusCode::SERVICE_UNAVAILABLE,"public port management is not enabled"))?;
-    Ok((owner,range))
+// Handlers answer with a Response; see events.rs for the same allowance.
+#[allow(clippy::result_large_err)]
+fn public_port_context(
+    control: &ControlPlane,
+    principal: &CreatorPrincipal,
+    id: &str,
+    port: u16,
+) -> Result<(crate::ownership::OwnerId, crate::ports::PublicPortRange), Response> {
+    let owner = principal.0.clone().ok_or_else(|| {
+        api_error(
+            StatusCode::FORBIDDEN,
+            "configured creator identity required",
+        )
+    })?;
+    crate::ports::validate_request(id, port, owner.as_str()).map_err(|_| {
+        api_error(
+            StatusCode::BAD_REQUEST,
+            "invalid sandbox or destination port",
+        )
+    })?;
+    let range = (*control.native_port_range.read()).ok_or_else(|| {
+        api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "public port management is not enabled",
+        )
+    })?;
+    Ok((owner, range))
 }
-async fn public_port_store<T>(future: impl std::future::Future<Output=crate::store::Result<T>>) -> Result<T,Response> {
-    match tokio::time::timeout(Duration::from_secs(5),future).await {
-        Ok(Ok(value))=>Ok(value),
-        Ok(Err(_))=>Err(api_error(StatusCode::SERVICE_UNAVAILABLE,"public port store unavailable")),
-        Err(_)=>Err(api_error(StatusCode::SERVICE_UNAVAILABLE,"public port operation timed out; outcome may be committed; retry the same request")),
+// Handlers answer with a Response; see events.rs for the same allowance.
+#[allow(clippy::result_large_err)]
+async fn public_port_store<T>(
+    future: impl std::future::Future<Output = crate::store::Result<T>>,
+) -> Result<T, Response> {
+    match tokio::time::timeout(Duration::from_secs(5), future).await {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(_)) => Err(api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "public port store unavailable",
+        )),
+        Err(_) => Err(api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "public port operation timed out; outcome may be committed; retry the same request",
+        )),
     }
 }
-async fn reserve_public_port(State(control): State<Arc<ControlPlane>>, Extension(principal): Extension<CreatorPrincipal>,
-    Path((id,port)): Path<(String,u16)>, Json(body): Json<PublicPortRequest>) -> Response {
+async fn reserve_public_port(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(principal): Extension<CreatorPrincipal>,
+    Path((id, port)): Path<(String, u16)>,
+    Json(body): Json<PublicPortRequest>,
+) -> Response {
     use crate::ports::PortClaim;
-    let (owner,range)=match public_port_context(&control,&principal,&id,port) { Ok(value)=>value,Err(response)=>return response };
-    match public_port_store(control.store.claim_owned_port(&id,port,owner.as_str(),body.protocol,range)).await {
-        Ok(PortClaim::Allocated(row))=>(StatusCode::ACCEPTED,Json(public_port_json(&row))).into_response(),
-        Ok(PortClaim::OwnerConflict)=>api_error(StatusCode::FORBIDDEN,"sandbox belongs to a different or unassigned creator"),
-        Ok(PortClaim::SandboxMissing)=>api_error(StatusCode::NOT_FOUND,"sandbox does not exist"),
-        Ok(PortClaim::LimitReached)=>api_error(StatusCode::CONFLICT,"sandbox public port limit reached"),
-        Ok(PortClaim::PoolExhausted)=>api_error(StatusCode::SERVICE_UNAVAILABLE,"public port pool exhausted"),
-        Err(response)=>response,
+    let (owner, range) = match public_port_context(&control, &principal, &id, port) {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    match public_port_store(control.store.claim_owned_port(
+        &id,
+        port,
+        owner.as_str(),
+        body.protocol,
+        range,
+    ))
+    .await
+    {
+        Ok(PortClaim::Allocated(row)) => {
+            (StatusCode::ACCEPTED, Json(public_port_json(&row))).into_response()
+        }
+        Ok(PortClaim::OwnerConflict) => api_error(
+            StatusCode::FORBIDDEN,
+            "sandbox belongs to a different or unassigned creator",
+        ),
+        Ok(PortClaim::SandboxMissing) => api_error(StatusCode::NOT_FOUND, "sandbox does not exist"),
+        Ok(PortClaim::LimitReached) => {
+            api_error(StatusCode::CONFLICT, "sandbox public port limit reached")
+        }
+        Ok(PortClaim::PoolExhausted) => api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "public port pool exhausted",
+        ),
+        Err(response) => response,
     }
 }
-async fn list_public_ports(State(control): State<Arc<ControlPlane>>, Extension(principal): Extension<CreatorPrincipal>,
-    Path(id): Path<String>) -> Response {
+async fn list_public_ports(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(principal): Extension<CreatorPrincipal>,
+    Path(id): Path<String>,
+) -> Response {
     use crate::ports::OwnedPortAccess;
-    let (owner,_)=match public_port_context(&control,&principal,&id,1) { Ok(value)=>value,Err(response)=>return response };
-    match public_port_store(control.store.owned_ports(&id,owner.as_str())).await {
-        Ok(OwnedPortAccess::Granted(rows))=>Json(rows.iter().map(public_port_json).collect::<Vec<_>>()).into_response(),
-        Ok(OwnedPortAccess::OwnerConflict)=>api_error(StatusCode::FORBIDDEN,"sandbox belongs to a different or unassigned creator"),
-        Ok(OwnedPortAccess::SandboxMissing)=>api_error(StatusCode::NOT_FOUND,"sandbox does not exist"),
-        Err(response)=>response,
+    let (owner, _) = match public_port_context(&control, &principal, &id, 1) {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    match public_port_store(control.store.owned_ports(&id, owner.as_str())).await {
+        Ok(OwnedPortAccess::Granted(rows)) => {
+            Json(rows.iter().map(public_port_json).collect::<Vec<_>>()).into_response()
+        }
+        Ok(OwnedPortAccess::OwnerConflict) => api_error(
+            StatusCode::FORBIDDEN,
+            "sandbox belongs to a different or unassigned creator",
+        ),
+        Ok(OwnedPortAccess::SandboxMissing) => {
+            api_error(StatusCode::NOT_FOUND, "sandbox does not exist")
+        }
+        Err(response) => response,
     }
 }
-async fn remove_public_port(State(control): State<Arc<ControlPlane>>, Extension(principal): Extension<CreatorPrincipal>,
-    Path((id,port)): Path<(String,u16)>) -> Response {
+async fn remove_public_port(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(principal): Extension<CreatorPrincipal>,
+    Path((id, port)): Path<(String, u16)>,
+) -> Response {
     use crate::ports::OwnedPortAccess;
-    let (owner,_)=match public_port_context(&control,&principal,&id,port) { Ok(value)=>value,Err(response)=>return response };
-    match public_port_store(control.store.delete_owned_port(&id,port,owner.as_str())).await {
-        Ok(OwnedPortAccess::Granted(true))=>StatusCode::NO_CONTENT.into_response(),
-        Ok(OwnedPortAccess::Granted(false))=>api_error(StatusCode::NOT_FOUND,"public port reservation does not exist"),
-        Ok(OwnedPortAccess::OwnerConflict)=>api_error(StatusCode::FORBIDDEN,"sandbox belongs to a different or unassigned creator"),
-        Ok(OwnedPortAccess::SandboxMissing)=>api_error(StatusCode::NOT_FOUND,"sandbox does not exist"),
-        Err(response)=>response,
+    let (owner, _) = match public_port_context(&control, &principal, &id, port) {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    match public_port_store(control.store.delete_owned_port(&id, port, owner.as_str())).await {
+        Ok(OwnedPortAccess::Granted(true)) => StatusCode::NO_CONTENT.into_response(),
+        Ok(OwnedPortAccess::Granted(false)) => api_error(
+            StatusCode::NOT_FOUND,
+            "public port reservation does not exist",
+        ),
+        Ok(OwnedPortAccess::OwnerConflict) => api_error(
+            StatusCode::FORBIDDEN,
+            "sandbox belongs to a different or unassigned creator",
+        ),
+        Ok(OwnedPortAccess::SandboxMissing) => {
+            api_error(StatusCode::NOT_FOUND, "sandbox does not exist")
+        }
+        Err(response) => response,
     }
 }
 
@@ -749,7 +988,9 @@ async fn resolve_sandbox_name(
         }
     }
     match control.store.sandbox(id).await {
-        Ok(Some(record)) if access.allows(&record) => Json(json!({"name": name.as_str(), "sandboxID": id})).into_response(),
+        Ok(Some(record)) if access.allows(&record) => {
+            Json(json!({"name": name.as_str(), "sandboxID": id})).into_response()
+        }
         Ok(Some(_)) => api_error(StatusCode::FORBIDDEN, "sandbox owner required"),
         Ok(None) => api_error(StatusCode::NOT_FOUND, "named sandbox is missing"),
         Err(_) => api_error(
@@ -765,7 +1006,9 @@ struct CreatorPrincipal(Option<crate::ownership::OwnerId>);
 struct SandboxAccess(Option<crate::ownership::OwnerId>);
 impl SandboxAccess {
     fn allows(&self, record: &SandboxRecord) -> bool {
-        self.0.as_ref().is_none_or(|owner| record.owner_id.as_ref() == Some(owner))
+        self.0
+            .as_ref()
+            .is_none_or(|owner| record.owner_id.as_ref() == Some(owner))
     }
 }
 #[derive(Clone, Copy)]
@@ -807,37 +1050,74 @@ async fn require_api_key(
         let (kind, key_id, rejection) = authorize(&control.config, &policies, &request);
         let principal = if kind == "scoped" && rejection.is_none() {
             use sha2::{Digest, Sha256};
-            let digest = Sha256::digest(request.headers().get("x-api-key")
-                .map(HeaderValue::as_bytes).unwrap_or_default()).into();
-            policies.iter().find(|policy| policy.has_digest(&digest))
-                .and_then(|policy| policy.principal_id()).cloned()
-        } else { None };
-        let administrator = rejection.is_none() && (kind == "legacy_admin" || (kind == "scoped" && {
-            use sha2::{Digest,Sha256};
-            let digest=Sha256::digest(request.headers().get("x-api-key").map(HeaderValue::as_bytes).unwrap_or_default()).into();
-            policies.iter().find(|policy|policy.has_digest(&digest)).is_some_and(|policy|policy.is_administrator())
-        }));
+            let digest = Sha256::digest(
+                request
+                    .headers()
+                    .get("x-api-key")
+                    .map(HeaderValue::as_bytes)
+                    .unwrap_or_default(),
+            )
+            .into();
+            policies
+                .iter()
+                .find(|policy| policy.has_digest(&digest))
+                .and_then(|policy| policy.principal_id())
+                .cloned()
+        } else {
+            None
+        };
+        let administrator = rejection.is_none()
+            && (kind == "legacy_admin"
+                || (kind == "scoped" && {
+                    use sha2::{Digest, Sha256};
+                    let digest = Sha256::digest(
+                        request
+                            .headers()
+                            .get("x-api-key")
+                            .map(HeaderValue::as_bytes)
+                            .unwrap_or_default(),
+                    )
+                    .into();
+                    policies
+                        .iter()
+                        .find(|policy| policy.has_digest(&digest))
+                        .is_some_and(|policy| policy.is_administrator())
+                }));
         (kind, key_id, rejection, principal, administrator)
     };
     // Authentication supplies this context. A client cannot choose its owner.
     request.headers_mut().remove(crate::ownership::OWNER_HEADER);
     let access = SandboxAccess(principal.clone().filter(|_| !administrator));
-    if rejection.is_none() && access.0.is_some()
+    if rejection.is_none()
+        && access.0.is_some()
         && (route.starts_with("/sandboxes/{id}") || route.starts_with("/v2/sandboxes/{id}"))
     {
         use axum::extract::FromRequestParts;
         let (mut parts, body) = request.into_parts();
         let id = Path::<HashMap<String, String>>::from_request_parts(&mut parts, &())
-            .await.ok().and_then(|Path(params)| params.get("id").cloned());
+            .await
+            .ok()
+            .and_then(|Path(params)| params.get("id").cloned());
         request = Request::from_parts(parts, body);
         rejection = match id {
             Some(id) if crate::ports::validate_request(&id, 1, "access").is_ok() => {
-                match tokio::time::timeout(Duration::from_secs(5), control.store.sandbox(&id)).await {
-                    Ok(Ok(Some(record))) if record.sandbox_id != id => Some(api_error(StatusCode::SERVICE_UNAVAILABLE, "sandbox ownership lookup unavailable")),
+                match tokio::time::timeout(Duration::from_secs(5), control.store.sandbox(&id)).await
+                {
+                    Ok(Ok(Some(record))) if record.sandbox_id != id => Some(api_error(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "sandbox ownership lookup unavailable",
+                    )),
                     Ok(Ok(Some(record))) if access.allows(&record) => None,
-                    Ok(Ok(Some(_))) => Some(api_error(StatusCode::FORBIDDEN, "sandbox owner required")),
-                    Ok(Ok(None)) => Some(api_error(StatusCode::NOT_FOUND, "sandbox does not exist")),
-                    _ => Some(api_error(StatusCode::SERVICE_UNAVAILABLE, "sandbox ownership lookup unavailable")),
+                    Ok(Ok(Some(_))) => {
+                        Some(api_error(StatusCode::FORBIDDEN, "sandbox owner required"))
+                    }
+                    Ok(Ok(None)) => {
+                        Some(api_error(StatusCode::NOT_FOUND, "sandbox does not exist"))
+                    }
+                    _ => Some(api_error(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "sandbox ownership lookup unavailable",
+                    )),
                 }
             }
             _ => Some(api_error(StatusCode::BAD_REQUEST, "invalid sandbox ID")),
@@ -845,7 +1125,9 @@ async fn require_api_key(
     }
     request.extensions_mut().insert(access);
     request.extensions_mut().insert(CreatorPrincipal(principal));
-    request.extensions_mut().insert(AdministratorContext(administrator));
+    request
+        .extensions_mut()
+        .insert(AdministratorContext(administrator));
     let allowed = rejection.is_none();
     let sandbox_ref = if let Some(audit) = &control.config.access_audit {
         if audit.resource_attribution_enabled()
@@ -982,8 +1264,24 @@ fn authorize(
             }
         }
     }
-    if matches!(request.uri().path().trim_start_matches('/').split('/').collect::<Vec<_>>().as_slice(), ["sandboxes", _, "owner"]) {
-        return ("anonymous", "none".into(), Some(api_error(StatusCode::FORBIDDEN,"administrator credential required")));
+    if matches!(
+        request
+            .uri()
+            .path()
+            .trim_start_matches('/')
+            .split('/')
+            .collect::<Vec<_>>()
+            .as_slice(),
+        ["sandboxes", _, "owner"]
+    ) {
+        return (
+            "anonymous",
+            "none".into(),
+            Some(api_error(
+                StatusCode::FORBIDDEN,
+                "administrator credential required",
+            )),
+        );
     }
     ("anonymous", "none".into(), None)
 }
@@ -997,11 +1295,19 @@ async fn health(State(control): State<Arc<ControlPlane>>) -> Response {
 
 // ── Creation ────────────────────────────────────────────────────────────────
 
-async fn create_v1(State(control): State<Arc<ControlPlane>>, Extension(principal): Extension<CreatorPrincipal>, body: Bytes) -> Response {
+async fn create_v1(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(principal): Extension<CreatorPrincipal>,
+    body: Bytes,
+) -> Response {
     create(&control, "/sandboxes", body, principal.0.as_ref()).await
 }
 
-async fn create_v2(State(control): State<Arc<ControlPlane>>, Extension(principal): Extension<CreatorPrincipal>, body: Bytes) -> Response {
+async fn create_v2(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(principal): Extension<CreatorPrincipal>,
+    body: Bytes,
+) -> Response {
     create(&control, "/v2/sandboxes", body, principal.0.as_ref()).await
 }
 
@@ -1013,7 +1319,12 @@ fn rewrite_descriptor(control: &ControlPlane, descriptor: &mut Value, node: &str
     }
 }
 
-async fn create(control: &ControlPlane, path: &str, body: Bytes, principal: Option<&crate::ownership::OwnerId>) -> Response {
+async fn create(
+    control: &ControlPlane,
+    path: &str,
+    body: Bytes,
+    principal: Option<&crate::ownership::OwnerId>,
+) -> Response {
     let started = Instant::now();
     let response = create_inner(control, path, body, principal).await;
     let m = &control.metrics;
@@ -1029,9 +1340,23 @@ async fn create(control: &ControlPlane, path: &str, body: Bytes, principal: Opti
     response
 }
 
-async fn create_inner(control: &ControlPlane, path: &str, body: Bytes, principal: Option<&crate::ownership::OwnerId>) -> Response {
-    if principal.is_some() && control.config.cluster_token.as_ref().is_none_or(String::is_empty) {
-        return api_error(StatusCode::SERVICE_UNAVAILABLE, "owner attribution requires authenticated cluster creation");
+async fn create_inner(
+    control: &ControlPlane,
+    path: &str,
+    body: Bytes,
+    principal: Option<&crate::ownership::OwnerId>,
+) -> Response {
+    if principal.is_some()
+        && control
+            .config
+            .cluster_token
+            .as_ref()
+            .is_none_or(String::is_empty)
+    {
+        return api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "owner attribution requires authenticated cluster creation",
+        );
     }
     let nodes = match control.store.nodes().await {
         Ok(nodes) => nodes,
@@ -1326,7 +1651,11 @@ async fn list_v2(
     response
 }
 
-async fn detail(State(control): State<Arc<ControlPlane>>, Extension(access): Extension<SandboxAccess>, Path(id): Path<String>) -> Response {
+async fn detail(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(access): Extension<SandboxAccess>,
+    Path(id): Path<String>,
+) -> Response {
     match control.store.sandbox(&id).await {
         Ok(Some(record)) if access.allows(&record) => Json(record.detail()).into_response(),
         Ok(Some(_)) => api_error(StatusCode::FORBIDDEN, "sandbox owner required"),
@@ -1361,10 +1690,28 @@ async fn udp_tunnel_ipv6(
     port_tunnel(control, id, port, request, true, true).await
 }
 
-async fn port_tunnel(control: Arc<ControlPlane>, id: String, port: u16,
-    request: Request, udp: bool, ipv6: bool) -> Response {
-    let protocol = if ipv6 { hv2_api::udp_tunnel::PROTOCOL_IPV6 } else if udp { hv2_api::udp_tunnel::PROTOCOL } else { hv2_api::tcp_tunnel::PROTOCOL };
-    let negotiation = if ipv6 { hv2_api::udp_tunnel::validate_ipv6(&request) } else if udp { hv2_api::udp_tunnel::validate(&request) } else { hv2_api::tcp_tunnel::validate(&request) };
+async fn port_tunnel(
+    control: Arc<ControlPlane>,
+    id: String,
+    port: u16,
+    request: Request,
+    udp: bool,
+    ipv6: bool,
+) -> Response {
+    let protocol = if ipv6 {
+        hv2_api::udp_tunnel::PROTOCOL_IPV6
+    } else if udp {
+        hv2_api::udp_tunnel::PROTOCOL
+    } else {
+        hv2_api::tcp_tunnel::PROTOCOL
+    };
+    let negotiation = if ipv6 {
+        hv2_api::udp_tunnel::validate_ipv6(&request)
+    } else if udp {
+        hv2_api::udp_tunnel::validate(&request)
+    } else {
+        hv2_api::tcp_tunnel::validate(&request)
+    };
     if let Err(message) = negotiation {
         return api_error(StatusCode::BAD_REQUEST, message);
     }
@@ -1372,10 +1719,15 @@ async fn port_tunnel(control: Arc<ControlPlane>, id: String, port: u16,
         return api_error(StatusCode::BAD_REQUEST, "guest port must be nonzero");
     }
     let Some(access) = request.extensions().get::<SandboxAccess>() else {
-        return api_error(StatusCode::SERVICE_UNAVAILABLE, "sandbox access context unavailable");
+        return api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "sandbox access context unavailable",
+        );
     };
     let record = match control.store.sandbox(&id).await {
-        Ok(Some(record)) if !access.allows(&record) => return api_error(StatusCode::FORBIDDEN, "sandbox owner required"),
+        Ok(Some(record)) if !access.allows(&record) => {
+            return api_error(StatusCode::FORBIDDEN, "sandbox owner required")
+        }
         Ok(Some(record)) if !record.paused => record,
         Ok(Some(_)) => {
             return api_error(
@@ -1424,13 +1776,22 @@ async fn port_tunnel(control: Arc<ControlPlane>, id: String, port: u16,
     })
     .await;
     match result {
-        Ok(Ok(Ok(stream))) => if ipv6 { hv2_api::udp_tunnel::accept_ipv6(request, stream) }
-            else if udp { hv2_api::udp_tunnel::accept(request, stream) }
-            else { hv2_api::tcp_tunnel::accept(request, stream) },
+        Ok(Ok(Ok(stream))) => {
+            if ipv6 {
+                hv2_api::udp_tunnel::accept_ipv6(request, stream)
+            } else if udp {
+                hv2_api::udp_tunnel::accept(request, stream)
+            } else {
+                hv2_api::tcp_tunnel::accept(request, stream)
+            }
+        }
         Ok(Ok(Err(status))) => api_error(status, "node could not open the guest port"),
         Ok(Err(error)) => {
             tracing::debug!(%id, %error, "port tunnel node connection failed");
-            api_error(StatusCode::BAD_GATEWAY, "port tunnel node connection failed")
+            api_error(
+                StatusCode::BAD_GATEWAY,
+                "port tunnel node connection failed",
+            )
         }
         Err(_) => api_error(
             StatusCode::GATEWAY_TIMEOUT,
@@ -1441,24 +1802,59 @@ async fn port_tunnel(control: Arc<ControlPlane>, id: String, port: u16,
 
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-struct AdoptOwnerRequest { principal_id: crate::ownership::OwnerId }
+struct AdoptOwnerRequest {
+    principal_id: crate::ownership::OwnerId,
+}
 
-async fn adopt_owner(State(control): State<Arc<ControlPlane>>, Extension(admin): Extension<AdministratorContext>, Path(parameters): Path<BTreeMap<String,String>>,
-    method: Method, uri: axum::http::Uri, mut headers: HeaderMap, body: Bytes) -> Response {
-    if !admin.0 { return api_error(StatusCode::FORBIDDEN,"administrator credential required"); }
-    if control.config.cluster_token.as_ref().is_none_or(|token| token.is_empty()) {
-        return api_error(StatusCode::SERVICE_UNAVAILABLE, "owner adoption requires authenticated cluster nodes");
+async fn adopt_owner(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(admin): Extension<AdministratorContext>,
+    Path(parameters): Path<BTreeMap<String, String>>,
+    method: Method,
+    uri: axum::http::Uri,
+    mut headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    if !admin.0 {
+        return api_error(StatusCode::FORBIDDEN, "administrator credential required");
+    }
+    if control
+        .config
+        .cluster_token
+        .as_ref()
+        .is_none_or(|token| token.is_empty())
+    {
+        return api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "owner adoption requires authenticated cluster nodes",
+        );
     }
     let parsed: AdoptOwnerRequest = match serde_json::from_slice(&body) {
         Ok(value) => value,
-        Err(_) => return api_error(StatusCode::BAD_REQUEST, "valid principalId required; unknown fields refused"),
+        Err(_) => {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                "valid principalId required; unknown fields refused",
+            )
+        }
     };
-    let Some(id)=parameters.get("id") else { return api_error(StatusCode::BAD_REQUEST,"missing sandbox ID"); };
-    if crate::ports::validate_request(id,1,parsed.principal_id.as_str()).is_err() {
-        return api_error(StatusCode::BAD_REQUEST,"invalid sandbox ID");
+    let Some(id) = parameters.get("id") else {
+        return api_error(StatusCode::BAD_REQUEST, "missing sandbox ID");
+    };
+    if crate::ports::validate_request(id, 1, parsed.principal_id.as_str()).is_err() {
+        return api_error(StatusCode::BAD_REQUEST, "invalid sandbox ID");
     }
-    headers.insert("content-type",HeaderValue::from_static("application/json"));
-    forward(State(control),Extension(SandboxAccess(None)),Path(parameters),method,uri,headers,body).await
+    headers.insert("content-type", HeaderValue::from_static("application/json"));
+    forward(
+        State(control),
+        Extension(SandboxAccess(None)),
+        Path(parameters),
+        method,
+        uri,
+        headers,
+        body,
+    )
+    .await
 }
 
 async fn forward(
@@ -1478,7 +1874,9 @@ async fn forward(
         Ok(None) => return api_error(StatusCode::NOT_FOUND, format!("no sandbox {id}")),
         Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
     };
-    if !access.allows(&record) { return api_error(StatusCode::FORBIDDEN, "sandbox owner required"); }
+    if !access.allows(&record) {
+        return api_error(StatusCode::FORBIDDEN, "sandbox owner required");
+    }
     // Where to send it: the sandbox's node -- or, for one paused into
     // shared storage whose node is gone, any node with room, since any of
     // them can resume it.
@@ -1616,63 +2014,141 @@ async fn forward(
 // ── Operations ──────────────────────────────────────────────────────────────
 
 fn valid_pending_page(value: &Value, after: Option<&str>) -> bool {
-    let Some(object)=value.as_object() else { return false; };
-    if object.len()!=2 || !object.contains_key("nextCursor") { return false; }
-    let Some(rows)=object.get("registrations").and_then(Value::as_array) else { return false; };
-    if rows.len()>32 { return false; }
-    let mut previous=after;
+    let Some(object) = value.as_object() else {
+        return false;
+    };
+    if object.len() != 2 || !object.contains_key("nextCursor") {
+        return false;
+    }
+    let Some(rows) = object.get("registrations").and_then(Value::as_array) else {
+        return false;
+    };
+    if rows.len() > 32 {
+        return false;
+    }
+    let mut previous = after;
     for row in rows {
-        let Some(object)=row.as_object() else { return false; };
-        if object.len()!=2 { return false; }
-        let Some(id)=object.get("sandboxID").and_then(Value::as_str) else { return false; };
-        if crate::ports::validate_request(id,1,"discovery").is_err() || previous.is_some_and(|previous|id<=previous) { return false; }
-        if !matches!(object.get("kind").and_then(Value::as_str),Some("named"|"unnamed")) { return false; }
-        previous=Some(id);
+        let Some(object) = row.as_object() else {
+            return false;
+        };
+        if object.len() != 2 {
+            return false;
+        }
+        let Some(id) = object.get("sandboxID").and_then(Value::as_str) else {
+            return false;
+        };
+        if crate::ports::validate_request(id, 1, "discovery").is_err()
+            || previous.is_some_and(|previous| id <= previous)
+        {
+            return false;
+        }
+        if !matches!(
+            object.get("kind").and_then(Value::as_str),
+            Some("named" | "unnamed")
+        ) {
+            return false;
+        }
+        previous = Some(id);
     }
     match &value["nextCursor"] {
-        Value::Null=>true,
-        Value::String(cursor)=>rows.len()==32 && previous==Some(cursor.as_str()),
-        _=>false,
+        Value::Null => true,
+        Value::String(cursor) => rows.len() == 32 && previous == Some(cursor.as_str()),
+        _ => false,
     }
 }
 
-async fn pending_on_node(State(control): State<Arc<ControlPlane>>, Extension(admin): Extension<AdministratorContext>,
-    Path(node_id): Path<String>, Query(query): Query<BTreeMap<String,String>>) -> Response {
-    if !admin.0 { return api_error(StatusCode::FORBIDDEN,"administrator credential required"); }
-    let Some(token)=control.config.cluster_token.as_ref().filter(|token| !token.is_empty()) else {
-        return api_error(StatusCode::SERVICE_UNAVAILABLE,"authenticated cluster required");
-    };
-    if query.keys().any(|key|key!="after") || query.get("after").is_some_and(|id|crate::ports::validate_request(id,1,"cursor").is_err()) {
-        return api_error(StatusCode::BAD_REQUEST,"invalid registration cursor");
+async fn pending_on_node(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(admin): Extension<AdministratorContext>,
+    Path(node_id): Path<String>,
+    Query(query): Query<BTreeMap<String, String>>,
+) -> Response {
+    if !admin.0 {
+        return api_error(StatusCode::FORBIDDEN, "administrator credential required");
     }
-    let node=match control.store.node(&node_id).await {
-        Ok(Some(node))=>node,Ok(None)=>return api_error(StatusCode::NOT_FOUND,"no registered node"),
-        Err(_)=>return api_error(StatusCode::SERVICE_UNAVAILABLE,"node inventory unavailable"),
+    let Some(token) = control
+        .config
+        .cluster_token
+        .as_ref()
+        .filter(|token| !token.is_empty())
+    else {
+        return api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "authenticated cluster required",
+        );
     };
-    let mut response=match control.http.get(format!("{}/registrations/pending",node.api)).query(&query).header(CLUSTER_TOKEN_HEADER,token).send().await {
-        Ok(response)=>response,Err(_)=>return api_error(StatusCode::BAD_GATEWAY,"node discovery unavailable"),
+    if query.keys().any(|key| key != "after")
+        || query
+            .get("after")
+            .is_some_and(|id| crate::ports::validate_request(id, 1, "cursor").is_err())
+    {
+        return api_error(StatusCode::BAD_REQUEST, "invalid registration cursor");
+    }
+    let node = match control.store.node(&node_id).await {
+        Ok(Some(node)) => node,
+        Ok(None) => return api_error(StatusCode::NOT_FOUND, "no registered node"),
+        Err(_) => {
+            return api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "node inventory unavailable",
+            )
+        }
     };
-    let status=StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    if !status.is_success() { return api_error(status,"node discovery refused"); }
-    let mut bytes=Vec::new();
-    loop { match response.chunk().await {
-        Ok(Some(chunk)) if chunk.len()<=16384usize.saturating_sub(bytes.len())=>bytes.extend_from_slice(&chunk),
-        Ok(Some(_))|Err(_)=>return api_error(StatusCode::BAD_GATEWAY,"invalid discovery response"),Ok(None)=>break,
-    }}
+    let mut response = match control
+        .http
+        .get(format!("{}/registrations/pending", node.api))
+        .query(&query)
+        .header(CLUSTER_TOKEN_HEADER, token)
+        .send()
+        .await
+    {
+        Ok(response) => response,
+        Err(_) => return api_error(StatusCode::BAD_GATEWAY, "node discovery unavailable"),
+    };
+    let status =
+        StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    if !status.is_success() {
+        return api_error(status, "node discovery refused");
+    }
+    let mut bytes = Vec::new();
+    loop {
+        match response.chunk().await {
+            Ok(Some(chunk)) if chunk.len() <= 16384usize.saturating_sub(bytes.len()) => {
+                bytes.extend_from_slice(&chunk);
+            }
+            Ok(Some(_)) | Err(_) => {
+                return api_error(StatusCode::BAD_GATEWAY, "invalid discovery response")
+            }
+            Ok(None) => break,
+        }
+    }
     match serde_json::from_slice::<Value>(&bytes) {
-        Ok(value) if valid_pending_page(&value,query.get("after").map(String::as_str))=>Json(value).into_response(),
-        _=>api_error(StatusCode::BAD_GATEWAY,"invalid discovery response"),
+        Ok(value) if valid_pending_page(&value, query.get("after").map(String::as_str)) => {
+            Json(value).into_response()
+        }
+        _ => api_error(StatusCode::BAD_GATEWAY, "invalid discovery response"),
     }
 }
 
 /// Recovery targets a registered node explicitly: initial publication may have no record.
 async fn reconcile_on_node(
-    State(control): State<Arc<ControlPlane>>, Extension(admin): Extension<AdministratorContext>,
+    State(control): State<Arc<ControlPlane>>,
+    Extension(admin): Extension<AdministratorContext>,
     Path((node_id, id)): Path<(String, String)>,
 ) -> Response {
-    if !admin.0 { return api_error(StatusCode::FORBIDDEN, "administrator credential required"); }
-    let Some(token) = control.config.cluster_token.as_ref().filter(|token| !token.is_empty()) else {
-        return api_error(StatusCode::SERVICE_UNAVAILABLE, "authenticated cluster required");
+    if !admin.0 {
+        return api_error(StatusCode::FORBIDDEN, "administrator credential required");
+    }
+    let Some(token) = control
+        .config
+        .cluster_token
+        .as_ref()
+        .filter(|token| !token.is_empty())
+    else {
+        return api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "authenticated cluster required",
+        );
     };
     if crate::ports::validate_request(&id, 1, "reconciliation").is_err() {
         return api_error(StatusCode::BAD_REQUEST, "invalid sandbox ID");
@@ -1680,20 +2156,41 @@ async fn reconcile_on_node(
     let node = match control.store.node(&node_id).await {
         Ok(Some(node)) => node,
         Ok(None) => return api_error(StatusCode::NOT_FOUND, "no registered node"),
-        Err(_) => return api_error(StatusCode::SERVICE_UNAVAILABLE, "node inventory unavailable"),
+        Err(_) => {
+            return api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "node inventory unavailable",
+            )
+        }
     };
-    let mut response = match control.http.post(format!("{}/sandboxes/{id}/registration/reconcile", node.api))
-        .header(CLUSTER_TOKEN_HEADER, token).json(&serde_json::json!({})).send().await {
+    let mut response = match control
+        .http
+        .post(format!(
+            "{}/sandboxes/{id}/registration/reconcile",
+            node.api
+        ))
+        .header(CLUSTER_TOKEN_HEADER, token)
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+    {
         Ok(response) => response,
         Err(_) => return api_error(StatusCode::BAD_GATEWAY, "node reconciliation unavailable"),
     };
-    let status = StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    if !status.is_success() { return api_error(status, "node reconciliation refused or remains uncertain"); }
+    let status =
+        StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    if !status.is_success() {
+        return api_error(status, "node reconciliation refused or remains uncertain");
+    }
     let mut bytes = Vec::new();
     loop {
         match response.chunk().await {
-            Ok(Some(chunk)) if bytes.len() + chunk.len() <= 16384 => bytes.extend_from_slice(&chunk),
-            Ok(Some(_)) | Err(_) => return api_error(StatusCode::BAD_GATEWAY, "invalid reconciliation response"),
+            Ok(Some(chunk)) if bytes.len() + chunk.len() <= 16384 => {
+                bytes.extend_from_slice(&chunk);
+            }
+            Ok(Some(_)) | Err(_) => {
+                return api_error(StatusCode::BAD_GATEWAY, "invalid reconciliation response")
+            }
             Ok(None) => break,
         }
     }
@@ -1702,7 +2199,10 @@ async fn reconcile_on_node(
         Err(_) => return api_error(StatusCode::BAD_GATEWAY, "invalid reconciliation descriptor"),
     };
     if descriptor.get("sandboxID").and_then(Value::as_str) != Some(id.as_str()) {
-        return api_error(StatusCode::BAD_GATEWAY, "reconciliation descriptor identity differs");
+        return api_error(
+            StatusCode::BAD_GATEWAY,
+            "reconciliation descriptor identity differs",
+        );
     }
     rewrite_descriptor(&control, &mut descriptor, &node.id);
     (status, Json(descriptor)).into_response()
@@ -2392,19 +2892,32 @@ impl hv2_api::sandbox_proxy::SandboxRoutes for ClusterRoutes {
             Ok(()) => return Ok(()),
             Err(denied) => denied,
         };
-        let Some(policy) = &self.web_access else { return Err(denied); };
-        let Some(subject) = policy.grant_identity(headers, chrono::Utc::now().timestamp()) else { return Err(denied); };
-        let snapshot = tokio::time::timeout(Duration::from_secs(5), self.store.web_sharing_snapshot(sandbox)).await;
-        let Ok(Ok(Some((record, sharing)))) = snapshot else { return Err(denied); };
+        let Some(policy) = &self.web_access else {
+            return Err(denied);
+        };
+        let Some(subject) = policy.grant_identity(headers, chrono::Utc::now().timestamp()) else {
+            return Err(denied);
+        };
+        let snapshot = tokio::time::timeout(
+            Duration::from_secs(5),
+            self.store.web_sharing_snapshot(sandbox),
+        )
+        .await;
+        let Ok(Ok(Some((record, sharing)))) = snapshot else {
+            return Err(denied);
+        };
         let now = chrono::Utc::now().timestamp();
         // Rotation, expiry and delegation changes during the await must deny.
         if policy.grant_identity(headers, now).as_deref() != Some(subject.as_str())
-            || !sharing.allows(&record, &subject, now) {
+            || !sharing.allows(&record, &subject, now)
+        {
             return Err(denied);
         }
-        let identity = subject.parse().map_err(|_| hv2_api::sandbox_proxy::ProxyAccessDenied {
-            challenge: Some("Basic realm=\"HyperMachine sandbox\", charset=\"UTF-8\""),
-        })?;
+        let identity = subject
+            .parse()
+            .map_err(|_| hv2_api::sandbox_proxy::ProxyAccessDenied {
+                challenge: Some("Basic realm=\"HyperMachine sandbox\", charset=\"UTF-8\""),
+            })?;
         headers.remove(axum::http::header::AUTHORIZATION);
         headers.insert(crate::web_access::IDENTITY_HEADER, identity);
         Ok(())
@@ -2469,42 +2982,89 @@ mod access_audit_tests {
     use super::*;
     #[test]
     fn pending_page_refuses_capabilities_and_malformed_pagination() {
-        let page=json!({"registrations":[{"sandboxID":"sbx-001","kind":"unnamed"}],"nextCursor":null});
-        assert!(valid_pending_page(&page,None));
-        assert!(valid_pending_page(&json!({"registrations":[],"nextCursor":null}),None));
-        let mut cases=Vec::new();
-        let mut value=page.clone();value["envdAccessToken"]=json!("secret");cases.push(value);
-        let mut value=page.clone();value["registrations"][0]["envdAccessToken"]=json!("secret");cases.push(value);
-        let mut value=page.clone();value["registrations"][0]["kind"]=json!("other");cases.push(value);
-        let mut value=page.clone();value["registrations"][0]["sandboxID"]=json!("bad/id");cases.push(value);
-        let mut value=page.clone();value["nextCursor"]=json!("sbx-001");cases.push(value);
+        let page =
+            json!({"registrations":[{"sandboxID":"sbx-001","kind":"unnamed"}],"nextCursor":null});
+        assert!(valid_pending_page(&page, None));
+        assert!(valid_pending_page(
+            &json!({"registrations":[],"nextCursor":null}),
+            None
+        ));
+        let mut cases = Vec::new();
+        let mut value = page.clone();
+        value["envdAccessToken"] = json!("secret");
+        cases.push(value);
+        let mut value = page.clone();
+        value["registrations"][0]["envdAccessToken"] = json!("secret");
+        cases.push(value);
+        let mut value = page.clone();
+        value["registrations"][0]["kind"] = json!("other");
+        cases.push(value);
+        let mut value = page.clone();
+        value["registrations"][0]["sandboxID"] = json!("bad/id");
+        cases.push(value);
+        let mut value = page.clone();
+        value["nextCursor"] = json!("sbx-001");
+        cases.push(value);
         cases.push(json!({"registrations":[]}));
         cases.push(json!({"registrations":[{"sandboxID":"sbx-001","kind":"unnamed"},{"sandboxID":"sbx-001","kind":"named"}],"nextCursor":null}));
         cases.push(json!({"registrations":(0..33).map(|i|json!({"sandboxID":format!("sbx-{i:03}"),"kind":"unnamed"})).collect::<Vec<_>>(),"nextCursor":null}));
-        for value in cases { assert!(!valid_pending_page(&value,None)); }
-        assert!(!valid_pending_page(&page,Some("sbx-001")));
-        let full=json!({"registrations":(0..32).map(|i|json!({"sandboxID":format!("sbx-{i:03}"),"kind":"unnamed"})).collect::<Vec<_>>(),"nextCursor":"sbx-031"});
-        assert!(valid_pending_page(&full,None));
-        let mut wrong=full;wrong["nextCursor"]=json!("sbx-030");assert!(!valid_pending_page(&wrong,None));
+        for value in cases {
+            assert!(!valid_pending_page(&value, None));
+        }
+        assert!(!valid_pending_page(&page, Some("sbx-001")));
+        let full = json!({"registrations":(0..32).map(|i|json!({"sandboxID":format!("sbx-{i:03}"),"kind":"unnamed"})).collect::<Vec<_>>(),"nextCursor":"sbx-031"});
+        assert!(valid_pending_page(&full, None));
+        let mut wrong = full;
+        wrong["nextCursor"] = json!("sbx-030");
+        assert!(!valid_pending_page(&wrong, None));
     }
 
     #[tokio::test]
     async fn reconciliation_requires_administrator_cluster_auth_and_registered_node() {
-        for (admin, token, expected) in [(false,Some("cluster"),StatusCode::FORBIDDEN),(true,None,StatusCode::SERVICE_UNAVAILABLE),(true,Some("cluster"),StatusCode::NOT_FOUND)] {
-            let control=ControlPlane::new(Arc::new(crate::store::MemoryStore::new()),ControlConfig {
-                api_key:Some("admin".into()),api_keys:Vec::new(),access_audit:None,
-                cluster_token:token.map(str::to_owned),proxy_port:5981,
-                create_timeout:Duration::from_secs(1),identity_issuer:None,
-            });
-            let response=reconcile_on_node(State(control),Extension(AdministratorContext(admin)),Path(("missing-node".into(),"sandbox-a".into()))).await;
-            assert_eq!(response.status(),expected);
-            let control=ControlPlane::new(Arc::new(crate::store::MemoryStore::new()),ControlConfig {
-                api_key:Some("admin".into()),api_keys:Vec::new(),access_audit:None,
-                cluster_token:token.map(str::to_owned),proxy_port:5981,
-                create_timeout:Duration::from_secs(1),identity_issuer:None,
-            });
-            let response=pending_on_node(State(control),Extension(AdministratorContext(admin)),Path("missing-node".into()),Query(BTreeMap::new())).await;
-            assert_eq!(response.status(),expected);
+        for (admin, token, expected) in [
+            (false, Some("cluster"), StatusCode::FORBIDDEN),
+            (true, None, StatusCode::SERVICE_UNAVAILABLE),
+            (true, Some("cluster"), StatusCode::NOT_FOUND),
+        ] {
+            let control = ControlPlane::new(
+                Arc::new(crate::store::MemoryStore::new()),
+                ControlConfig {
+                    api_key: Some("admin".into()),
+                    api_keys: Vec::new(),
+                    access_audit: None,
+                    cluster_token: token.map(str::to_owned),
+                    proxy_port: 5981,
+                    create_timeout: Duration::from_secs(1),
+                    identity_issuer: None,
+                },
+            );
+            let response = reconcile_on_node(
+                State(control),
+                Extension(AdministratorContext(admin)),
+                Path(("missing-node".into(), "sandbox-a".into())),
+            )
+            .await;
+            assert_eq!(response.status(), expected);
+            let control = ControlPlane::new(
+                Arc::new(crate::store::MemoryStore::new()),
+                ControlConfig {
+                    api_key: Some("admin".into()),
+                    api_keys: Vec::new(),
+                    access_audit: None,
+                    cluster_token: token.map(str::to_owned),
+                    proxy_port: 5981,
+                    create_timeout: Duration::from_secs(1),
+                    identity_issuer: None,
+                },
+            );
+            let response = pending_on_node(
+                State(control),
+                Extension(AdministratorContext(admin)),
+                Path("missing-node".into()),
+                Query(BTreeMap::new()),
+            )
+            .await;
+            assert_eq!(response.status(), expected);
         }
     }
 
@@ -2603,17 +3163,30 @@ mod access_audit_tests {
     }
 }
 
-
 #[cfg(test)]
 mod private_membership_http_tests {
     use super::*;
     use sha2::{Digest, Sha256};
     struct Server(tokio::task::JoinHandle<()>);
-    impl Drop for Server { fn drop(&mut self) { self.0.abort(); } }
-    async fn put(client: &reqwest::Client, url: &str, key: &str, body: &Value) -> reqwest::Response {
-        client.put(url).header("x-api-key",key)
-            .header(crate::ownership::OWNER_HEADER,"network-alice")
-            .json(body).send().await.unwrap()
+    impl Drop for Server {
+        fn drop(&mut self) {
+            self.0.abort();
+        }
+    }
+    async fn put(
+        client: &reqwest::Client,
+        url: &str,
+        key: &str,
+        body: &Value,
+    ) -> reqwest::Response {
+        client
+            .put(url)
+            .header("x-api-key", key)
+            .header(crate::ownership::OWNER_HEADER, "network-alice")
+            .json(body)
+            .send()
+            .await
+            .unwrap()
     }
     async fn http_contract(store: Arc<dyn ClusterStore>) {
         let mut record = crate::store::tests::sandbox("network-api", "network-node");
@@ -2621,71 +3194,243 @@ mod private_membership_http_tests {
         store.put_sandbox(&record).await.unwrap();
         let legacy = crate::store::tests::sandbox("network-legacy", "network-node");
         store.put_sandbox(&legacy).await.unwrap();
-        let expires = (crate::model::now_ms()/1000 + 3600) as i64;
-        let entry = |key: &str, owner: Option<&str>, scope: &str, role: &str| json!({
+        let expires = (crate::model::now_ms() / 1000 + 3600) as i64;
+        let entry = |key: &str, owner: Option<&str>, scope: &str, role: &str| {
+            json!({
             "sha256":Sha256::digest(key.as_bytes()).iter().map(|b|format!("{b:02x}")).collect::<String>(),
-            "expires_at":expires,"scopes":[scope],"role":role,"principal_id":owner});
-        let policies = crate::keys::ApiKeyPolicy::from_json(&json!([
-            entry("alice",Some("network-alice"),"sandboxes","operator"),
-            entry("alice-rotated",Some("network-alice"),"sandboxes","operator"),
-            entry("bob",Some("network-bob"),"sandboxes","operator"),
-            entry("observer",Some("network-alice"),"admin","observer"),
-            entry("inventory",Some("network-alice"),"inventory","operator"),
-            entry("unassigned",None,"sandboxes","operator"),
-        ]).to_string()).unwrap();
-        let control = ControlPlane::new(store.clone(), ControlConfig {
-            api_key:Some("legacy-admin".into()), api_keys:policies, access_audit:None,
-            cluster_token:Some("owned-cluster".into()),proxy_port:5981,
-            create_timeout:Duration::from_secs(1),identity_issuer:None,
-        });
+            "expires_at":expires,"scopes":[scope],"role":role,"principal_id":owner})
+        };
+        let policies = crate::keys::ApiKeyPolicy::from_json(
+            &json!([
+                entry("alice", Some("network-alice"), "sandboxes", "operator"),
+                entry(
+                    "alice-rotated",
+                    Some("network-alice"),
+                    "sandboxes",
+                    "operator"
+                ),
+                entry("bob", Some("network-bob"), "sandboxes", "operator"),
+                entry("observer", Some("network-alice"), "admin", "observer"),
+                entry("inventory", Some("network-alice"), "inventory", "operator"),
+                entry("unassigned", None, "sandboxes", "operator"),
+            ])
+            .to_string(),
+        )
+        .unwrap();
+        let control = ControlPlane::new(
+            store.clone(),
+            ControlConfig {
+                api_key: Some("legacy-admin".into()),
+                api_keys: policies,
+                access_audit: None,
+                cluster_token: Some("owned-cluster".into()),
+                proxy_port: 5981,
+                create_timeout: Duration::from_secs(1),
+                identity_issuer: None,
+            },
+        );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap(); let app=router(control);
-        let mut server = Server(tokio::spawn(async move { axum::serve(listener,app).await.unwrap(); }));
-        let client = reqwest::Client::builder().timeout(Duration::from_secs(5)).build().unwrap();
+        let addr = listener.local_addr().unwrap();
+        let app = router(control);
+        let mut server = Server(tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        }));
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
         let url = format!("http://{addr}/sandboxes/network-api/private-networks");
         let revision = uuid::Uuid::new_v4().to_string();
         let initial = json!({"expectedRevision":null,"revision":revision,"tags":["team"]});
-        for (key,code) in [("bad-key",401),("bob",403),("observer",403),("inventory",403),("unassigned",403),("legacy-admin",403)] {
-            assert_eq!(put(&client,&url,key,&initial).await.status().as_u16(),code,"{key} PUT");
-            assert_eq!(client.get(&url).header("x-api-key",key)
-                .header(crate::ownership::OWNER_HEADER,"network-alice").send().await.unwrap().status().as_u16(),code,"{key} GET");
+        for (key, code) in [
+            ("bad-key", 401),
+            ("bob", 403),
+            ("observer", 403),
+            ("inventory", 403),
+            ("unassigned", 403),
+            ("legacy-admin", 403),
+        ] {
+            assert_eq!(
+                put(&client, &url, key, &initial).await.status().as_u16(),
+                code,
+                "{key} PUT"
+            );
+            assert_eq!(
+                client
+                    .get(&url)
+                    .header("x-api-key", key)
+                    .header(crate::ownership::OWNER_HEADER, "network-alice")
+                    .send()
+                    .await
+                    .unwrap()
+                    .status()
+                    .as_u16(),
+                code,
+                "{key} GET"
+            );
         }
-        assert_eq!(client.get(&url).header("x-api-key","alice").send().await.unwrap().json::<Value>().await.unwrap(),json!({"revision":null,"tags":[]}));
-        assert_eq!(put(&client,&url.replace("network-api","network-legacy"),"alice",&initial).await.status().as_u16(),403);
-        assert_eq!(put(&client,&url.replace("network-api","missing"),"alice",&initial).await.status().as_u16(),404);
-        assert_eq!(put(&client,&url,"alice",&initial).await.status().as_u16(),200);
-        let replay=put(&client,&url,"alice-rotated",&initial).await;
-        assert_eq!(replay.status().as_u16(),200);
-        assert_eq!(replay.json::<Value>().await.unwrap(),json!({"revision":revision,"tags":["team"]}));
+        assert_eq!(
+            client
+                .get(&url)
+                .header("x-api-key", "alice")
+                .send()
+                .await
+                .unwrap()
+                .json::<Value>()
+                .await
+                .unwrap(),
+            json!({"revision":null,"tags":[]})
+        );
+        assert_eq!(
+            put(
+                &client,
+                &url.replace("network-api", "network-legacy"),
+                "alice",
+                &initial
+            )
+            .await
+            .status()
+            .as_u16(),
+            403
+        );
+        assert_eq!(
+            put(
+                &client,
+                &url.replace("network-api", "missing"),
+                "alice",
+                &initial
+            )
+            .await
+            .status()
+            .as_u16(),
+            404
+        );
+        assert_eq!(
+            put(&client, &url, "alice", &initial)
+                .await
+                .status()
+                .as_u16(),
+            200
+        );
+        let replay = put(&client, &url, "alice-rotated", &initial).await;
+        assert_eq!(replay.status().as_u16(), 200);
+        assert_eq!(
+            replay.json::<Value>().await.unwrap(),
+            json!({"revision":revision,"tags":["team"]})
+        );
         // Strict JSON, canonical revisions and bounded/tag-validated input.
-        for (body,code) in [
-            (json!({"expectedRevision":revision,"revision":"invalid","tags":["team"]}),400),
-            (json!({"expectedRevision":"invalid","revision":uuid::Uuid::new_v4().to_string(),"tags":["team"]}),400),
-            (json!({"expectedRevision":revision,"revision":uuid::Uuid::new_v4().to_string(),"tags":["team","team"]}),400),
-            (json!({"expectedRevision":revision,"revision":uuid::Uuid::new_v4().to_string(),"tags":["a","b","c","d","e","f","g","h","i"]}),400),
-            (json!({"revision":uuid::Uuid::new_v4().to_string()}),422),
-            (json!({"revision":uuid::Uuid::new_v4().to_string(),"tags":["TEAM"]}),422),
-            (json!({"revision":uuid::Uuid::new_v4().to_string(),"tags":["team"],"owner_id":"network-bob"}),422),
-        ] { assert_eq!(put(&client,&url,"alice",&body).await.status().as_u16(),code); }
-        assert_eq!(client.put(&url).header("x-api-key","alice").header("content-type","application/json")
-            .body("x".repeat(5000)).send().await.unwrap().status().as_u16(),413);
-        let left=json!({"expectedRevision":revision,"revision":uuid::Uuid::new_v4().to_string(),"tags":["left"]});
-        let right=json!({"expectedRevision":revision,"revision":uuid::Uuid::new_v4().to_string(),"tags":["right"]});
-        let (a,b)=tokio::join!(put(&client,&url,"alice",&left),put(&client,&url,"alice-rotated",&right));
-        let (a,b)=(a.status().as_u16(),b.status().as_u16());
-        assert!(matches!((a,b),(200,409)|(409,200)),"{a}/{b}");
-        let winner=if a==200 {&left} else {&right};
-        let state=client.get(&url).header("x-api-key","alice").send().await.unwrap().json::<Value>().await.unwrap();
-        assert_eq!(state,json!({"revision":winner["revision"],"tags":winner["tags"]}));
-        let removed=json!({"expectedRevision":winner["revision"],"revision":uuid::Uuid::new_v4().to_string(),"tags":[]});
-        assert_eq!(put(&client,&url,"alice",&removed).await.status().as_u16(),200);
-        assert_eq!(put(&client,&url,"alice",&initial).await.status().as_u16(),409);
-        assert_eq!(put(&client,&url,"alice-rotated",&removed).await.status().as_u16(),200);
-        assert_eq!(client.get(&url).header("x-api-key","alice").send().await.unwrap().json::<Value>().await.unwrap(),json!({"revision":removed["revision"],"tags":[]}));
+        for (body, code) in [
+            (
+                json!({"expectedRevision":revision,"revision":"invalid","tags":["team"]}),
+                400,
+            ),
+            (
+                json!({"expectedRevision":"invalid","revision":uuid::Uuid::new_v4().to_string(),"tags":["team"]}),
+                400,
+            ),
+            (
+                json!({"expectedRevision":revision,"revision":uuid::Uuid::new_v4().to_string(),"tags":["team","team"]}),
+                400,
+            ),
+            (
+                json!({"expectedRevision":revision,"revision":uuid::Uuid::new_v4().to_string(),"tags":["a","b","c","d","e","f","g","h","i"]}),
+                400,
+            ),
+            (json!({"revision":uuid::Uuid::new_v4().to_string()}), 422),
+            (
+                json!({"revision":uuid::Uuid::new_v4().to_string(),"tags":["TEAM"]}),
+                422,
+            ),
+            (
+                json!({"revision":uuid::Uuid::new_v4().to_string(),"tags":["team"],"owner_id":"network-bob"}),
+                422,
+            ),
+        ] {
+            assert_eq!(
+                put(&client, &url, "alice", &body).await.status().as_u16(),
+                code
+            );
+        }
+        assert_eq!(
+            client
+                .put(&url)
+                .header("x-api-key", "alice")
+                .header("content-type", "application/json")
+                .body("x".repeat(5000))
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16(),
+            413
+        );
+        let left = json!({"expectedRevision":revision,"revision":uuid::Uuid::new_v4().to_string(),"tags":["left"]});
+        let right = json!({"expectedRevision":revision,"revision":uuid::Uuid::new_v4().to_string(),"tags":["right"]});
+        let (a, b) = tokio::join!(
+            put(&client, &url, "alice", &left),
+            put(&client, &url, "alice-rotated", &right)
+        );
+        let (a, b) = (a.status().as_u16(), b.status().as_u16());
+        assert!(matches!((a, b), (200, 409) | (409, 200)), "{a}/{b}");
+        let winner = if a == 200 { &left } else { &right };
+        let state = client
+            .get(&url)
+            .header("x-api-key", "alice")
+            .send()
+            .await
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap();
+        assert_eq!(
+            state,
+            json!({"revision":winner["revision"],"tags":winner["tags"]})
+        );
+        let removed = json!({"expectedRevision":winner["revision"],"revision":uuid::Uuid::new_v4().to_string(),"tags":[]});
+        assert_eq!(
+            put(&client, &url, "alice", &removed)
+                .await
+                .status()
+                .as_u16(),
+            200
+        );
+        assert_eq!(
+            put(&client, &url, "alice", &initial)
+                .await
+                .status()
+                .as_u16(),
+            409
+        );
+        assert_eq!(
+            put(&client, &url, "alice-rotated", &removed)
+                .await
+                .status()
+                .as_u16(),
+            200
+        );
+        assert_eq!(
+            client
+                .get(&url)
+                .header("x-api-key", "alice")
+                .send()
+                .await
+                .unwrap()
+                .json::<Value>()
+                .await
+                .unwrap(),
+            json!({"revision":removed["revision"],"tags":[]})
+        );
         store.delete_sandbox(&record.sandbox_id).await.unwrap();
-        assert_eq!(put(&client,&url,"alice",&removed).await.status().as_u16(),404);
+        assert_eq!(
+            put(&client, &url, "alice", &removed)
+                .await
+                .status()
+                .as_u16(),
+            404
+        );
         store.delete_sandbox(&legacy.sandbox_id).await.unwrap();
-        server.0.abort(); let _=(&mut server.0).await;
+        server.0.abort();
+        let _ = (&mut server.0).await;
     }
     #[tokio::test]
     async fn memory_membership_api_enforces_owners_revisions_and_request_bounds() {
@@ -2693,24 +3438,42 @@ mod private_membership_http_tests {
     }
     #[tokio::test]
     async fn redis_membership_api_enforces_owners_revisions_and_request_bounds() {
-        let Ok(url)=std::env::var("HV2_TEST_REDIS") else { eprintln!("skipped: set HV2_TEST_REDIS for owned Redis HTTP checks");return; };
-        let namespace=format!("private-http-{}",uuid::Uuid::new_v4().simple());
-        let store=crate::store::RedisStore::connect(&url,&namespace).await.unwrap();
+        let Ok(url) = std::env::var("HV2_TEST_REDIS") else {
+            eprintln!("skipped: set HV2_TEST_REDIS for owned Redis HTTP checks");
+            return;
+        };
+        let namespace = format!("private-http-{}", uuid::Uuid::new_v4().simple());
+        let store = crate::store::RedisStore::connect(&url, &namespace)
+            .await
+            .unwrap();
         http_contract(Arc::new(store)).await;
     }
 }
-
 
 #[cfg(test)]
 mod web_sharing_http_tests {
     use super::*;
     use sha2::{Digest, Sha256};
     struct Server(tokio::task::JoinHandle<()>);
-    impl Drop for Server { fn drop(&mut self) { self.0.abort(); } }
-    async fn put(client: &reqwest::Client, url: &str, key: &str, body: &Value) -> reqwest::Response {
-        client.put(url).header("x-api-key",key)
-            .header(crate::ownership::OWNER_HEADER,"network-alice")
-            .json(body).send().await.unwrap()
+    impl Drop for Server {
+        fn drop(&mut self) {
+            self.0.abort();
+        }
+    }
+    async fn put(
+        client: &reqwest::Client,
+        url: &str,
+        key: &str,
+        body: &Value,
+    ) -> reqwest::Response {
+        client
+            .put(url)
+            .header("x-api-key", key)
+            .header(crate::ownership::OWNER_HEADER, "network-alice")
+            .json(body)
+            .send()
+            .await
+            .unwrap()
     }
     async fn http_contract(store: Arc<dyn ClusterStore>) {
         let mut record = crate::store::tests::sandbox("sharing-api", "network-node");
@@ -2718,77 +3481,261 @@ mod web_sharing_http_tests {
         store.put_sandbox(&record).await.unwrap();
         let legacy = crate::store::tests::sandbox("sharing-legacy", "network-node");
         store.put_sandbox(&legacy).await.unwrap();
-        let expires = (crate::model::now_ms()/1000 + 3600) as i64;
-        let entry = |key: &str, owner: Option<&str>, scope: &str, role: &str| json!({
+        let expires = (crate::model::now_ms() / 1000 + 3600) as i64;
+        let entry = |key: &str, owner: Option<&str>, scope: &str, role: &str| {
+            json!({
             "sha256":Sha256::digest(key.as_bytes()).iter().map(|b|format!("{b:02x}")).collect::<String>(),
-            "expires_at":expires,"scopes":[scope],"role":role,"principal_id":owner});
-        let policies = crate::keys::ApiKeyPolicy::from_json(&json!([
-            entry("alice",Some("network-alice"),"sandboxes","operator"),
-            entry("alice-rotated",Some("network-alice"),"sandboxes","operator"),
-            entry("bob",Some("network-bob"),"sandboxes","operator"),
-            entry("observer",Some("network-alice"),"admin","observer"),
-            entry("inventory",Some("network-alice"),"inventory","operator"),
-            entry("unassigned",None,"sandboxes","operator"),
-        ]).to_string()).unwrap();
-        let control = ControlPlane::new(store.clone(), ControlConfig {
-            api_key:Some("legacy-admin".into()), api_keys:policies, access_audit:None,
-            cluster_token:Some("owned-cluster".into()),proxy_port:5981,
-            create_timeout:Duration::from_secs(1),identity_issuer:None,
-        });
+            "expires_at":expires,"scopes":[scope],"role":role,"principal_id":owner})
+        };
+        let policies = crate::keys::ApiKeyPolicy::from_json(
+            &json!([
+                entry("alice", Some("network-alice"), "sandboxes", "operator"),
+                entry(
+                    "alice-rotated",
+                    Some("network-alice"),
+                    "sandboxes",
+                    "operator"
+                ),
+                entry("bob", Some("network-bob"), "sandboxes", "operator"),
+                entry("observer", Some("network-alice"), "admin", "observer"),
+                entry("inventory", Some("network-alice"), "inventory", "operator"),
+                entry("unassigned", None, "sandboxes", "operator"),
+            ])
+            .to_string(),
+        )
+        .unwrap();
+        let control = ControlPlane::new(
+            store.clone(),
+            ControlConfig {
+                api_key: Some("legacy-admin".into()),
+                api_keys: policies,
+                access_audit: None,
+                cluster_token: Some("owned-cluster".into()),
+                proxy_port: 5981,
+                create_timeout: Duration::from_secs(1),
+                identity_issuer: None,
+            },
+        );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap(); let app=router(control);
-        let mut server = Server(tokio::spawn(async move { axum::serve(listener,app).await.unwrap(); }));
-        let client = reqwest::Client::builder().timeout(Duration::from_secs(5)).build().unwrap();
+        let addr = listener.local_addr().unwrap();
+        let app = router(control);
+        let mut server = Server(tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        }));
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
         let url = format!("http://{addr}/sandboxes/sharing-api/web-sharing");
         let revision = uuid::Uuid::new_v4().to_string();
         let initial = json!({"expectedRevision":null,"revision":revision,"grants":[{"subject":"alice","expires_at":100}]});
-        for (key,code) in [("bad-key",401),("bob",403),("observer",403),("inventory",403),("unassigned",403),("legacy-admin",403)] {
-            assert_eq!(put(&client,&url,key,&initial).await.status().as_u16(),code,"{key} PUT");
-            assert_eq!(client.get(&url).header("x-api-key",key)
-                .header(crate::ownership::OWNER_HEADER,"network-alice").send().await.unwrap().status().as_u16(),code,"{key} GET");
+        for (key, code) in [
+            ("bad-key", 401),
+            ("bob", 403),
+            ("observer", 403),
+            ("inventory", 403),
+            ("unassigned", 403),
+            ("legacy-admin", 403),
+        ] {
+            assert_eq!(
+                put(&client, &url, key, &initial).await.status().as_u16(),
+                code,
+                "{key} PUT"
+            );
+            assert_eq!(
+                client
+                    .get(&url)
+                    .header("x-api-key", key)
+                    .header(crate::ownership::OWNER_HEADER, "network-alice")
+                    .send()
+                    .await
+                    .unwrap()
+                    .status()
+                    .as_u16(),
+                code,
+                "{key} GET"
+            );
         }
-        assert_eq!(client.get(&url).header("x-api-key","alice").send().await.unwrap().json::<Value>().await.unwrap(),json!({"revision":null,"grants":[]}));
-        assert_eq!(put(&client,&url.replace("sharing-api","sharing-legacy"),"alice",&initial).await.status().as_u16(),403);
-        assert_eq!(put(&client,&url.replace("sharing-api","missing"),"alice",&initial).await.status().as_u16(),404);
-        assert_eq!(put(&client,&url,"alice",&initial).await.status().as_u16(),200);
-        let replay=put(&client,&url,"alice-rotated",&initial).await;
-        assert_eq!(replay.status().as_u16(),200);
-        assert_eq!(replay.json::<Value>().await.unwrap(),json!({"revision":revision,"grants":[{"subject":"alice","expires_at":100}]}));
+        assert_eq!(
+            client
+                .get(&url)
+                .header("x-api-key", "alice")
+                .send()
+                .await
+                .unwrap()
+                .json::<Value>()
+                .await
+                .unwrap(),
+            json!({"revision":null,"grants":[]})
+        );
+        assert_eq!(
+            put(
+                &client,
+                &url.replace("sharing-api", "sharing-legacy"),
+                "alice",
+                &initial
+            )
+            .await
+            .status()
+            .as_u16(),
+            403
+        );
+        assert_eq!(
+            put(
+                &client,
+                &url.replace("sharing-api", "missing"),
+                "alice",
+                &initial
+            )
+            .await
+            .status()
+            .as_u16(),
+            404
+        );
+        assert_eq!(
+            put(&client, &url, "alice", &initial)
+                .await
+                .status()
+                .as_u16(),
+            200
+        );
+        let replay = put(&client, &url, "alice-rotated", &initial).await;
+        assert_eq!(replay.status().as_u16(), 200);
+        assert_eq!(
+            replay.json::<Value>().await.unwrap(),
+            json!({"revision":revision,"grants":[{"subject":"alice","expires_at":100}]})
+        );
         // Strict JSON, canonical revisions and bounded validated grant input.
-        for (body,code) in [
-            (json!({"expectedRevision":revision,"revision":"invalid","grants":[{"subject":"alice","expires_at":100}]}),400),
-            (json!({"expectedRevision":"invalid","revision":uuid::Uuid::new_v4().to_string(),"grants":[{"subject":"alice","expires_at":100}]}),400),
-            (json!({"expectedRevision":revision,"revision":uuid::Uuid::new_v4().to_string(),"grants":[{"subject":"alice","expires_at":100},{"subject":"alice","expires_at":200}]}),400),
-            (json!({"expectedRevision":revision,"revision":uuid::Uuid::new_v4().to_string(),"grants":(0..257).map(|i|json!({"subject":format!("user{i}"),"expires_at":100})).collect::<Vec<_>>()}),400),
-            (json!({"revision":uuid::Uuid::new_v4().to_string()}),422),
-            (json!({"revision":uuid::Uuid::new_v4().to_string(),"grants":[{"subject":"*","expires_at":100}]}),422),
-            (json!({"revision":uuid::Uuid::new_v4().to_string(),"grants":[{"subject":"alice","expires_at":100}],"owner_id":"network-bob"}),422),
-        ] { assert_eq!(put(&client,&url,"alice",&body).await.status().as_u16(),code); }
-        assert_eq!(client.put(&url).header("x-api-key","alice").header("content-type","application/json")
-            .body("x".repeat(65537)).send().await.unwrap().status().as_u16(),413);
-        let changed=json!({"expectedRevision":revision,"revision":revision,"grants":[]});
-        assert_eq!(put(&client,&url,"alice",&changed).await.status().as_u16(),409);
-        for expiry in [0, -1] {
-            let invalid=json!({"expectedRevision":revision,"revision":uuid::Uuid::new_v4().to_string(),"grants":[{"subject":"alice","expires_at":expiry}]});
-            assert_eq!(put(&client,&url,"alice",&invalid).await.status().as_u16(),422);
+        for (body, code) in [
+            (
+                json!({"expectedRevision":revision,"revision":"invalid","grants":[{"subject":"alice","expires_at":100}]}),
+                400,
+            ),
+            (
+                json!({"expectedRevision":"invalid","revision":uuid::Uuid::new_v4().to_string(),"grants":[{"subject":"alice","expires_at":100}]}),
+                400,
+            ),
+            (
+                json!({"expectedRevision":revision,"revision":uuid::Uuid::new_v4().to_string(),"grants":[{"subject":"alice","expires_at":100},{"subject":"alice","expires_at":200}]}),
+                400,
+            ),
+            (
+                json!({"expectedRevision":revision,"revision":uuid::Uuid::new_v4().to_string(),"grants":(0..257).map(|i|json!({"subject":format!("user{i}"),"expires_at":100})).collect::<Vec<_>>()}),
+                400,
+            ),
+            (json!({"revision":uuid::Uuid::new_v4().to_string()}), 422),
+            (
+                json!({"revision":uuid::Uuid::new_v4().to_string(),"grants":[{"subject":"*","expires_at":100}]}),
+                422,
+            ),
+            (
+                json!({"revision":uuid::Uuid::new_v4().to_string(),"grants":[{"subject":"alice","expires_at":100}],"owner_id":"network-bob"}),
+                422,
+            ),
+        ] {
+            assert_eq!(
+                put(&client, &url, "alice", &body).await.status().as_u16(),
+                code
+            );
         }
-        let left=json!({"expectedRevision":revision,"revision":uuid::Uuid::new_v4().to_string(),"grants":[{"subject":"left","expires_at":100}]});
-        let right=json!({"expectedRevision":revision,"revision":uuid::Uuid::new_v4().to_string(),"grants":[{"subject":"right","expires_at":100}]});
-        let (a,b)=tokio::join!(put(&client,&url,"alice",&left),put(&client,&url,"alice-rotated",&right));
-        let (a,b)=(a.status().as_u16(),b.status().as_u16());
-        assert!(matches!((a,b),(200,409)|(409,200)),"{a}/{b}");
-        let winner=if a==200 {&left} else {&right};
-        let state=client.get(&url).header("x-api-key","alice").send().await.unwrap().json::<Value>().await.unwrap();
-        assert_eq!(state,json!({"revision":winner["revision"],"grants":winner["grants"]}));
-        let removed=json!({"expectedRevision":winner["revision"],"revision":uuid::Uuid::new_v4().to_string(),"grants":[]});
-        assert_eq!(put(&client,&url,"alice",&removed).await.status().as_u16(),200);
-        assert_eq!(put(&client,&url,"alice",&initial).await.status().as_u16(),409);
-        assert_eq!(put(&client,&url,"alice-rotated",&removed).await.status().as_u16(),200);
-        assert_eq!(client.get(&url).header("x-api-key","alice").send().await.unwrap().json::<Value>().await.unwrap(),json!({"revision":removed["revision"],"grants":[]}));
+        assert_eq!(
+            client
+                .put(&url)
+                .header("x-api-key", "alice")
+                .header("content-type", "application/json")
+                .body("x".repeat(65537))
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16(),
+            413
+        );
+        let changed = json!({"expectedRevision":revision,"revision":revision,"grants":[]});
+        assert_eq!(
+            put(&client, &url, "alice", &changed)
+                .await
+                .status()
+                .as_u16(),
+            409
+        );
+        for expiry in [0, -1] {
+            let invalid = json!({"expectedRevision":revision,"revision":uuid::Uuid::new_v4().to_string(),"grants":[{"subject":"alice","expires_at":expiry}]});
+            assert_eq!(
+                put(&client, &url, "alice", &invalid)
+                    .await
+                    .status()
+                    .as_u16(),
+                422
+            );
+        }
+        let left = json!({"expectedRevision":revision,"revision":uuid::Uuid::new_v4().to_string(),"grants":[{"subject":"left","expires_at":100}]});
+        let right = json!({"expectedRevision":revision,"revision":uuid::Uuid::new_v4().to_string(),"grants":[{"subject":"right","expires_at":100}]});
+        let (a, b) = tokio::join!(
+            put(&client, &url, "alice", &left),
+            put(&client, &url, "alice-rotated", &right)
+        );
+        let (a, b) = (a.status().as_u16(), b.status().as_u16());
+        assert!(matches!((a, b), (200, 409) | (409, 200)), "{a}/{b}");
+        let winner = if a == 200 { &left } else { &right };
+        let state = client
+            .get(&url)
+            .header("x-api-key", "alice")
+            .send()
+            .await
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap();
+        assert_eq!(
+            state,
+            json!({"revision":winner["revision"],"grants":winner["grants"]})
+        );
+        let removed = json!({"expectedRevision":winner["revision"],"revision":uuid::Uuid::new_v4().to_string(),"grants":[]});
+        assert_eq!(
+            put(&client, &url, "alice", &removed)
+                .await
+                .status()
+                .as_u16(),
+            200
+        );
+        assert_eq!(
+            put(&client, &url, "alice", &initial)
+                .await
+                .status()
+                .as_u16(),
+            409
+        );
+        assert_eq!(
+            put(&client, &url, "alice-rotated", &removed)
+                .await
+                .status()
+                .as_u16(),
+            200
+        );
+        assert_eq!(
+            client
+                .get(&url)
+                .header("x-api-key", "alice")
+                .send()
+                .await
+                .unwrap()
+                .json::<Value>()
+                .await
+                .unwrap(),
+            json!({"revision":removed["revision"],"grants":[]})
+        );
         store.delete_sandbox(&record.sandbox_id).await.unwrap();
-        assert_eq!(put(&client,&url,"alice",&removed).await.status().as_u16(),404);
+        assert_eq!(
+            put(&client, &url, "alice", &removed)
+                .await
+                .status()
+                .as_u16(),
+            404
+        );
         store.delete_sandbox(&legacy.sandbox_id).await.unwrap();
-        server.0.abort(); let _=(&mut server.0).await;
+        server.0.abort();
+        let _ = (&mut server.0).await;
     }
     #[tokio::test]
     async fn memory_sharing_api_enforces_owners_revisions_and_request_bounds() {
@@ -2796,13 +3743,17 @@ mod web_sharing_http_tests {
     }
     #[tokio::test]
     async fn redis_sharing_api_enforces_owners_revisions_and_request_bounds() {
-        let Ok(url)=std::env::var("HV2_TEST_REDIS") else { eprintln!("skipped: set HV2_TEST_REDIS for owned Redis HTTP checks");return; };
-        let namespace=format!("sharing-http-{}",uuid::Uuid::new_v4().simple());
-        let store=crate::store::RedisStore::connect(&url,&namespace).await.unwrap();
+        let Ok(url) = std::env::var("HV2_TEST_REDIS") else {
+            eprintln!("skipped: set HV2_TEST_REDIS for owned Redis HTTP checks");
+            return;
+        };
+        let namespace = format!("sharing-http-{}", uuid::Uuid::new_v4().simple());
+        let store = crate::store::RedisStore::connect(&url, &namespace)
+            .await
+            .unwrap();
         http_contract(Arc::new(store)).await;
     }
 }
-
 
 #[cfg(test)]
 mod private_membership_failure_tests {
@@ -2819,128 +3770,338 @@ mod private_membership_failure_tests {
         cancelled: Arc<AtomicUsize>,
     }
     struct Pending(Arc<AtomicUsize>);
-    impl Drop for Pending { fn drop(&mut self) { self.0.fetch_add(1,Ordering::SeqCst); } }
+    impl Drop for Pending {
+        fn drop(&mut self) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
     impl FaultStore {
         async fn hang<T>(&self) -> T {
-            let _pending=Pending(self.cancelled.clone());
+            let _pending = Pending(self.cancelled.clone());
             std::future::pending().await
         }
-        fn error<T>() -> StoreResult<T> { Err(StoreError("injected store fault with private internal detail".into())) }
+        fn error<T>() -> StoreResult<T> {
+            Err(StoreError(
+                "injected store fault with private internal detail".into(),
+            ))
+        }
     }
     #[async_trait::async_trait]
     impl ClusterStore for FaultStore {
-    async fn put_node(&self, node: &NodeInfo, ttl: Duration) -> StoreResult<()> { self.inner.put_node(node, ttl).await }
-    async fn nodes(&self) -> StoreResult<Vec<NodeInfo>> { self.inner.nodes().await }
-    async fn node(&self, id: &str) -> StoreResult<Option<NodeInfo>> { self.inner.node(id).await }
-    async fn remove_node(&self, id: &str) -> StoreResult<()> { self.inner.remove_node(id).await }
-    async fn put_sandbox(&self, record: &SandboxRecord) -> StoreResult<()> { self.inner.put_sandbox(record).await }
-    async fn register_named_sandbox(
-        &self,
-        record: &SandboxRecord,
-        reservation: &NameReservation,
-    ) -> StoreResult<bool> { self.inner.register_named_sandbox(record, reservation).await }
-    async fn delete_sandbox(&self, id: &str) -> StoreResult<bool> { self.inner.delete_sandbox(id).await }
-    async fn sandboxes(&self) -> StoreResult<Vec<SandboxRecord>> { self.inner.sandboxes().await }
-    async fn reserve_name(&self, reservation: &NameReservation) -> StoreResult<bool> { self.inner.reserve_name(reservation).await }
-    async fn name_reservation(&self, name: &SandboxName) -> StoreResult<Option<NameReservation>> { self.inner.name_reservation(name).await }
-    async fn bind_name(&self, name: &SandboxName, token: &str, sandbox: &str) -> StoreResult<bool> { self.inner.bind_name(name, token, sandbox).await }
-    async fn release_pending_name(&self, name: &SandboxName, token: &str) -> StoreResult<bool> { self.inner.release_pending_name(name, token).await }
-    async fn claim_domain(&self, binding: &DomainBinding) -> StoreResult<DomainClaim> { self.inner.claim_domain(binding).await }
-    async fn domain(&self, name: &DomainName) -> StoreResult<Option<DomainBinding>> { self.inner.domain(name).await }
-    async fn domains(&self, sandbox: &str) -> StoreResult<Vec<DomainBinding>> { self.inner.domains(sandbox).await }
-    async fn delete_domain(&self, name: &DomainName, sandbox: &str) -> StoreResult<bool> { self.inner.delete_domain(name, sandbox).await }
-    async fn publish(&self, event: &ClusterEvent) -> StoreResult<()> { self.inner.publish(event).await }
-    async fn events(&self, count: usize) -> StoreResult<Vec<ClusterEvent>> { self.inner.events(count).await }
-    async fn put_webhook(&self, hook: &Webhook) -> StoreResult<()> { self.inner.put_webhook(hook).await }
-    async fn webhooks(&self) -> StoreResult<Vec<Webhook>> { self.inner.webhooks().await }
-    async fn delete_webhook(&self, id: &str) -> StoreResult<bool> { self.inner.delete_webhook(id).await }
-    async fn record_delivery(&self, delivery: &Delivery) -> StoreResult<()> { self.inner.record_delivery(delivery).await }
-    async fn deliveries(&self, webhook_id: &str, count: usize) -> StoreResult<Vec<Delivery>> { self.inner.deliveries(webhook_id, count).await }
+        async fn put_node(&self, node: &NodeInfo, ttl: Duration) -> StoreResult<()> {
+            self.inner.put_node(node, ttl).await
+        }
+        async fn nodes(&self) -> StoreResult<Vec<NodeInfo>> {
+            self.inner.nodes().await
+        }
+        async fn node(&self, id: &str) -> StoreResult<Option<NodeInfo>> {
+            self.inner.node(id).await
+        }
+        async fn remove_node(&self, id: &str) -> StoreResult<()> {
+            self.inner.remove_node(id).await
+        }
+        async fn put_sandbox(&self, record: &SandboxRecord) -> StoreResult<()> {
+            self.inner.put_sandbox(record).await
+        }
+        async fn register_named_sandbox(
+            &self,
+            record: &SandboxRecord,
+            reservation: &NameReservation,
+        ) -> StoreResult<bool> {
+            self.inner.register_named_sandbox(record, reservation).await
+        }
+        async fn delete_sandbox(&self, id: &str) -> StoreResult<bool> {
+            self.inner.delete_sandbox(id).await
+        }
+        async fn sandboxes(&self) -> StoreResult<Vec<SandboxRecord>> {
+            self.inner.sandboxes().await
+        }
+        async fn reserve_name(&self, reservation: &NameReservation) -> StoreResult<bool> {
+            self.inner.reserve_name(reservation).await
+        }
+        async fn name_reservation(
+            &self,
+            name: &SandboxName,
+        ) -> StoreResult<Option<NameReservation>> {
+            self.inner.name_reservation(name).await
+        }
+        async fn bind_name(
+            &self,
+            name: &SandboxName,
+            token: &str,
+            sandbox: &str,
+        ) -> StoreResult<bool> {
+            self.inner.bind_name(name, token, sandbox).await
+        }
+        async fn release_pending_name(&self, name: &SandboxName, token: &str) -> StoreResult<bool> {
+            self.inner.release_pending_name(name, token).await
+        }
+        async fn claim_domain(&self, binding: &DomainBinding) -> StoreResult<DomainClaim> {
+            self.inner.claim_domain(binding).await
+        }
+        async fn domain(&self, name: &DomainName) -> StoreResult<Option<DomainBinding>> {
+            self.inner.domain(name).await
+        }
+        async fn domains(&self, sandbox: &str) -> StoreResult<Vec<DomainBinding>> {
+            self.inner.domains(sandbox).await
+        }
+        async fn delete_domain(&self, name: &DomainName, sandbox: &str) -> StoreResult<bool> {
+            self.inner.delete_domain(name, sandbox).await
+        }
+        async fn publish(&self, event: &ClusterEvent) -> StoreResult<()> {
+            self.inner.publish(event).await
+        }
+        async fn events(&self, count: usize) -> StoreResult<Vec<ClusterEvent>> {
+            self.inner.events(count).await
+        }
+        async fn put_webhook(&self, hook: &Webhook) -> StoreResult<()> {
+            self.inner.put_webhook(hook).await
+        }
+        async fn webhooks(&self) -> StoreResult<Vec<Webhook>> {
+            self.inner.webhooks().await
+        }
+        async fn delete_webhook(&self, id: &str) -> StoreResult<bool> {
+            self.inner.delete_webhook(id).await
+        }
+        async fn record_delivery(&self, delivery: &Delivery) -> StoreResult<()> {
+            self.inner.record_delivery(delivery).await
+        }
+        async fn deliveries(&self, webhook_id: &str, count: usize) -> StoreResult<Vec<Delivery>> {
+            self.inner.deliveries(webhook_id, count).await
+        }
         async fn sandbox(&self, id: &str) -> StoreResult<Option<SandboxRecord>> {
             match self.mode.load(Ordering::SeqCst) {
-                3 => Self::error(), 4 => self.hang().await,
+                3 => Self::error(),
+                4 => self.hang().await,
                 _ => self.inner.sandbox(id).await,
             }
         }
-        async fn private_membership(&self, sandbox: &str, owner: &crate::ownership::OwnerId)
-            -> StoreResult<MembershipAccess<Option<NetworkMembershipState>>> {
+        async fn private_membership(
+            &self,
+            sandbox: &str,
+            owner: &crate::ownership::OwnerId,
+        ) -> StoreResult<MembershipAccess<Option<NetworkMembershipState>>> {
             match self.mode.load(Ordering::SeqCst) {
-                1 => Self::error(), 2 => self.hang().await,
-                _ => self.inner.private_membership(sandbox,owner).await,
+                1 => Self::error(),
+                2 => self.hang().await,
+                _ => self.inner.private_membership(sandbox, owner).await,
             }
         }
-        async fn compare_private_membership(&self, expected: Option<&str>, next: &NetworkMembershipState)
-            -> StoreResult<MembershipChange> {
-            let mode=self.mode.load(Ordering::SeqCst);
-            match mode { 5 => return Self::error(), 6 => return self.hang().await, _=>{} }
-            let result=self.inner.compare_private_membership(expected,next).await?;
-            if result==MembershipChange::Applied {
-                match mode { 7 => return self.hang().await, 8 => return Self::error(), _=>{} }
+        async fn compare_private_membership(
+            &self,
+            expected: Option<&str>,
+            next: &NetworkMembershipState,
+        ) -> StoreResult<MembershipChange> {
+            let mode = self.mode.load(Ordering::SeqCst);
+            match mode {
+                5 => return Self::error(),
+                6 => return self.hang().await,
+                _ => {}
+            }
+            let result = self
+                .inner
+                .compare_private_membership(expected, next)
+                .await?;
+            if result == MembershipChange::Applied {
+                match mode {
+                    7 => return self.hang().await,
+                    8 => return Self::error(),
+                    _ => {}
+                }
             }
             Ok(result)
         }
     }
     struct Server(tokio::task::JoinHandle<()>);
-    impl Drop for Server { fn drop(&mut self) { self.0.abort(); } }
+    impl Drop for Server {
+        fn drop(&mut self) {
+            self.0.abort();
+        }
+    }
     #[tokio::test]
     async fn http_store_failures_preserve_uncertainty_and_exact_replay_after_commit() {
-        let store=Arc::new(FaultStore { inner:MemoryStore::new(), mode:AtomicU8::new(0),cancelled:Arc::new(AtomicUsize::new(0)) });
-        let owner=crate::ownership::OwnerId::parse("fault-owner").unwrap();
-        let mut record=crate::store::tests::sandbox("fault-member","fault-node");
-        record.owner_id=Some(owner.clone());store.inner.put_sandbox(&record).await.unwrap();
-        let hash=Sha256::digest(b"owned-fault-key").iter().map(|b|format!("{b:02x}")).collect::<String>();
+        let store = Arc::new(FaultStore {
+            inner: MemoryStore::new(),
+            mode: AtomicU8::new(0),
+            cancelled: Arc::new(AtomicUsize::new(0)),
+        });
+        let owner = crate::ownership::OwnerId::parse("fault-owner").unwrap();
+        let mut record = crate::store::tests::sandbox("fault-member", "fault-node");
+        record.owner_id = Some(owner.clone());
+        store.inner.put_sandbox(&record).await.unwrap();
+        let hash = Sha256::digest(b"owned-fault-key")
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>();
         let policies=crate::keys::ApiKeyPolicy::from_json(&json!([{
             "sha256":hash,"expires_at":crate::model::now_ms()/1000+3600,"scopes":["sandboxes"],"principal_id":"fault-owner"
         }]).to_string()).unwrap();
-        let control=ControlPlane::new(store.clone(),ControlConfig {
-            api_key:Some("fault-admin".into()),api_keys:policies,access_audit:None,
-            cluster_token:None,proxy_port:5981,create_timeout:Duration::from_secs(1),identity_issuer:None,
-        });
-        let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();let address=listener.local_addr().unwrap();
-        let app=router(control);let mut server=Server(tokio::spawn(async move { axum::serve(listener,app).await.unwrap(); }));
-        let client=reqwest::Client::builder().timeout(Duration::from_secs(8)).build().unwrap();
-        let url=format!("http://{address}/sandboxes/fault-member/private-networks");
-        let request=json!({"expectedRevision":null,"revision":uuid::Uuid::new_v4().to_string(),"tags":["team"]});
+        let control = ControlPlane::new(
+            store.clone(),
+            ControlConfig {
+                api_key: Some("fault-admin".into()),
+                api_keys: policies,
+                access_audit: None,
+                cluster_token: None,
+                proxy_port: 5981,
+                create_timeout: Duration::from_secs(1),
+                identity_issuer: None,
+            },
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let app = router(control);
+        let mut server = Server(tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        }));
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(8))
+            .build()
+            .unwrap();
+        let url = format!("http://{address}/sandboxes/fault-member/private-networks");
+        let request = json!({"expectedRevision":null,"revision":uuid::Uuid::new_v4().to_string(),"tags":["team"]});
         for mode in 1..=6 {
-            store.mode.store(mode,Ordering::SeqCst);
-            let started=Instant::now();
-            let response=if mode<=2 { client.get(&url).header("x-api-key","owned-fault-key").send().await.unwrap() }
-                else { client.put(&url).header("x-api-key","owned-fault-key").json(&request).send().await.unwrap() };
-            assert_eq!(response.status(),StatusCode::SERVICE_UNAVAILABLE,"mode {mode}");
-            eprintln!("fault mode={mode} status=503 elapsed_ms={}",started.elapsed().as_millis());
-            let text=response.text().await.unwrap();
+            store.mode.store(mode, Ordering::SeqCst);
+            let started = Instant::now();
+            let response = if mode <= 2 {
+                client
+                    .get(&url)
+                    .header("x-api-key", "owned-fault-key")
+                    .send()
+                    .await
+                    .unwrap()
+            } else {
+                client
+                    .put(&url)
+                    .header("x-api-key", "owned-fault-key")
+                    .json(&request)
+                    .send()
+                    .await
+                    .unwrap()
+            };
+            assert_eq!(
+                response.status(),
+                StatusCode::SERVICE_UNAVAILABLE,
+                "mode {mode}"
+            );
+            eprintln!(
+                "fault mode={mode} status=503 elapsed_ms={}",
+                started.elapsed().as_millis()
+            );
+            let text = response.text().await.unwrap();
             assert!(!text.contains("private internal detail"));
-            if [2,4,6].contains(&mode) { assert!(started.elapsed()>=Duration::from_secs(5));assert!(text.contains("outcome uncertain")); }
-            assert_eq!(store.inner.private_membership(&record.sandbox_id,&owner).await.unwrap(),MembershipAccess::Granted(None));
+            if [2, 4, 6].contains(&mode) {
+                assert!(started.elapsed() >= Duration::from_secs(5));
+            }
+            // A hung store call may have committed, so its outcome is
+            // uncertain. A hung ownership lookup (mode 4) comes before any
+            // write, so nothing is uncertain: the lookup was unavailable.
+            if [2, 6].contains(&mode) {
+                assert!(text.contains("outcome uncertain"), "mode {mode}: {text}");
+            }
+            if mode == 4 {
+                assert!(text.contains("lookup unavailable"), "mode {mode}: {text}");
+            }
+            assert_eq!(
+                store
+                    .inner
+                    .private_membership(&record.sandbox_id, &owner)
+                    .await
+                    .unwrap(),
+                MembershipAccess::Granted(None)
+            );
         }
-        let mut expected:Option<String>=None;
-        for mode in [8,7] {
-            let revision=uuid::Uuid::new_v4().to_string();
-            let request=json!({"expectedRevision":expected,"revision":revision,"tags":["team"]});
-            store.mode.store(mode,Ordering::SeqCst);
-            let started=Instant::now();
-            let response=client.put(&url).header("x-api-key","owned-fault-key").json(&request).send().await.unwrap();
-            assert_eq!(response.status(),StatusCode::SERVICE_UNAVAILABLE);
-            let text=response.text().await.unwrap();assert!(!text.contains("private internal detail"));
-            if mode==7 { assert!(started.elapsed()>=Duration::from_secs(5));assert!(text.contains("outcome uncertain")); }
-            eprintln!("fault mode={mode} status=503 elapsed_ms={} committed=true",started.elapsed().as_millis());
-            let MembershipAccess::Granted(Some(committed))=store.inner.private_membership(&record.sandbox_id,&owner).await.unwrap() else { panic!("committed membership missing"); };
-            assert_eq!(committed.revision(),revision);
-            store.mode.store(0,Ordering::SeqCst);
-            let mut changed=request.clone();changed["tags"]=json!(["changed"]);
-            assert_eq!(client.put(&url).header("x-api-key","owned-fault-key").json(&changed).send().await.unwrap().status(),StatusCode::CONFLICT);
-            let mut changed_revision=request.clone();changed_revision["revision"]=json!(uuid::Uuid::new_v4().to_string());
-            assert_eq!(client.put(&url).header("x-api-key","owned-fault-key").json(&changed_revision).send().await.unwrap().status(),StatusCode::CONFLICT);
-            let replay=client.put(&url).header("x-api-key","owned-fault-key").json(&request).send().await.unwrap();
-            assert_eq!(replay.status(),StatusCode::OK);
-            assert_eq!(replay.json::<Value>().await.unwrap(),json!({"revision":revision,"tags":["team"]}));
-            assert_eq!(store.inner.private_membership(&record.sandbox_id,&owner).await.unwrap(),MembershipAccess::Granted(Some(committed)));
-            expected=Some(revision);
+        let mut expected: Option<String> = None;
+        for mode in [8, 7] {
+            let revision = uuid::Uuid::new_v4().to_string();
+            let request = json!({"expectedRevision":expected,"revision":revision,"tags":["team"]});
+            store.mode.store(mode, Ordering::SeqCst);
+            let started = Instant::now();
+            let response = client
+                .put(&url)
+                .header("x-api-key", "owned-fault-key")
+                .json(&request)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+            let text = response.text().await.unwrap();
+            assert!(!text.contains("private internal detail"));
+            if mode == 7 {
+                assert!(started.elapsed() >= Duration::from_secs(5));
+                assert!(text.contains("outcome uncertain"));
+            }
+            eprintln!(
+                "fault mode={mode} status=503 elapsed_ms={} committed=true",
+                started.elapsed().as_millis()
+            );
+            let MembershipAccess::Granted(Some(committed)) = store
+                .inner
+                .private_membership(&record.sandbox_id, &owner)
+                .await
+                .unwrap()
+            else {
+                panic!("committed membership missing");
+            };
+            assert_eq!(committed.revision(), revision);
+            store.mode.store(0, Ordering::SeqCst);
+            let mut changed = request.clone();
+            changed["tags"] = json!(["changed"]);
+            assert_eq!(
+                client
+                    .put(&url)
+                    .header("x-api-key", "owned-fault-key")
+                    .json(&changed)
+                    .send()
+                    .await
+                    .unwrap()
+                    .status(),
+                StatusCode::CONFLICT
+            );
+            let mut changed_revision = request.clone();
+            changed_revision["revision"] = json!(uuid::Uuid::new_v4().to_string());
+            assert_eq!(
+                client
+                    .put(&url)
+                    .header("x-api-key", "owned-fault-key")
+                    .json(&changed_revision)
+                    .send()
+                    .await
+                    .unwrap()
+                    .status(),
+                StatusCode::CONFLICT
+            );
+            let replay = client
+                .put(&url)
+                .header("x-api-key", "owned-fault-key")
+                .json(&request)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(replay.status(), StatusCode::OK);
+            assert_eq!(
+                replay.json::<Value>().await.unwrap(),
+                json!({"revision":revision,"tags":["team"]})
+            );
+            assert_eq!(
+                store
+                    .inner
+                    .private_membership(&record.sandbox_id, &owner)
+                    .await
+                    .unwrap(),
+                MembershipAccess::Granted(Some(committed))
+            );
+            expected = Some(revision);
         }
-        assert_eq!(store.cancelled.load(Ordering::SeqCst),4);
+        assert_eq!(store.cancelled.load(Ordering::SeqCst), 4);
         eprintln!("fault recovery exact_replays=2 changed_payload_refusals=2 changed_revision_refusals=2 cancelled_store_futures=4");
-        assert!(store.inner.delete_sandbox(&record.sandbox_id).await.unwrap());
-        server.0.abort();let _=(&mut server.0).await;
+        assert!(store
+            .inner
+            .delete_sandbox(&record.sandbox_id)
+            .await
+            .unwrap());
+        server.0.abort();
+        let _ = (&mut server.0).await;
     }
 }
 
@@ -2949,8 +4110,8 @@ mod web_sharing_failure_tests {
     use super::*;
     use crate::domains::{DomainBinding, DomainName};
     use crate::model::{ClusterEvent, Delivery, Webhook};
-    use crate::web_sharing::{SharingAccess, SharingChange, WebSharingState};
     use crate::store::{MemoryStore, Result as StoreResult, StoreError};
+    use crate::web_sharing::{SharingAccess, SharingChange, WebSharingState};
     use sha2::{Digest, Sha256};
     use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
     struct FaultStore {
@@ -2961,50 +4122,116 @@ mod web_sharing_failure_tests {
         release: tokio::sync::Notify,
     }
     struct Pending(Arc<AtomicUsize>);
-    impl Drop for Pending { fn drop(&mut self) { self.0.fetch_add(1,Ordering::SeqCst); } }
+    impl Drop for Pending {
+        fn drop(&mut self) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
     impl FaultStore {
         async fn hang<T>(&self) -> T {
-            let _pending=Pending(self.cancelled.clone());
+            let _pending = Pending(self.cancelled.clone());
             std::future::pending().await
         }
-        fn error<T>() -> StoreResult<T> { Err(StoreError("injected store fault with private internal detail".into())) }
+        fn error<T>() -> StoreResult<T> {
+            Err(StoreError(
+                "injected store fault with private internal detail".into(),
+            ))
+        }
     }
     #[async_trait::async_trait]
     impl ClusterStore for FaultStore {
-    async fn put_node(&self, node: &NodeInfo, ttl: Duration) -> StoreResult<()> { self.inner.put_node(node, ttl).await }
-    async fn nodes(&self) -> StoreResult<Vec<NodeInfo>> { self.inner.nodes().await }
-    async fn node(&self, id: &str) -> StoreResult<Option<NodeInfo>> { self.inner.node(id).await }
-    async fn remove_node(&self, id: &str) -> StoreResult<()> { self.inner.remove_node(id).await }
-    async fn put_sandbox(&self, record: &SandboxRecord) -> StoreResult<()> { self.inner.put_sandbox(record).await }
-    async fn register_named_sandbox(
-        &self,
-        record: &SandboxRecord,
-        reservation: &NameReservation,
-    ) -> StoreResult<bool> { self.inner.register_named_sandbox(record, reservation).await }
-    async fn delete_sandbox(&self, id: &str) -> StoreResult<bool> { self.inner.delete_sandbox(id).await }
-    async fn sandboxes(&self) -> StoreResult<Vec<SandboxRecord>> { self.inner.sandboxes().await }
-    async fn reserve_name(&self, reservation: &NameReservation) -> StoreResult<bool> { self.inner.reserve_name(reservation).await }
-    async fn name_reservation(&self, name: &SandboxName) -> StoreResult<Option<NameReservation>> { self.inner.name_reservation(name).await }
-    async fn bind_name(&self, name: &SandboxName, token: &str, sandbox: &str) -> StoreResult<bool> { self.inner.bind_name(name, token, sandbox).await }
-    async fn release_pending_name(&self, name: &SandboxName, token: &str) -> StoreResult<bool> { self.inner.release_pending_name(name, token).await }
-    async fn claim_domain(&self, binding: &DomainBinding) -> StoreResult<DomainClaim> { self.inner.claim_domain(binding).await }
-    async fn domain(&self, name: &DomainName) -> StoreResult<Option<DomainBinding>> { self.inner.domain(name).await }
-    async fn domains(&self, sandbox: &str) -> StoreResult<Vec<DomainBinding>> { self.inner.domains(sandbox).await }
-    async fn delete_domain(&self, name: &DomainName, sandbox: &str) -> StoreResult<bool> { self.inner.delete_domain(name, sandbox).await }
-    async fn publish(&self, event: &ClusterEvent) -> StoreResult<()> { self.inner.publish(event).await }
-    async fn events(&self, count: usize) -> StoreResult<Vec<ClusterEvent>> { self.inner.events(count).await }
-    async fn put_webhook(&self, hook: &Webhook) -> StoreResult<()> { self.inner.put_webhook(hook).await }
-    async fn webhooks(&self) -> StoreResult<Vec<Webhook>> { self.inner.webhooks().await }
-    async fn delete_webhook(&self, id: &str) -> StoreResult<bool> { self.inner.delete_webhook(id).await }
-    async fn record_delivery(&self, delivery: &Delivery) -> StoreResult<()> { self.inner.record_delivery(delivery).await }
-    async fn deliveries(&self, webhook_id: &str, count: usize) -> StoreResult<Vec<Delivery>> { self.inner.deliveries(webhook_id, count).await }
+        async fn put_node(&self, node: &NodeInfo, ttl: Duration) -> StoreResult<()> {
+            self.inner.put_node(node, ttl).await
+        }
+        async fn nodes(&self) -> StoreResult<Vec<NodeInfo>> {
+            self.inner.nodes().await
+        }
+        async fn node(&self, id: &str) -> StoreResult<Option<NodeInfo>> {
+            self.inner.node(id).await
+        }
+        async fn remove_node(&self, id: &str) -> StoreResult<()> {
+            self.inner.remove_node(id).await
+        }
+        async fn put_sandbox(&self, record: &SandboxRecord) -> StoreResult<()> {
+            self.inner.put_sandbox(record).await
+        }
+        async fn register_named_sandbox(
+            &self,
+            record: &SandboxRecord,
+            reservation: &NameReservation,
+        ) -> StoreResult<bool> {
+            self.inner.register_named_sandbox(record, reservation).await
+        }
+        async fn delete_sandbox(&self, id: &str) -> StoreResult<bool> {
+            self.inner.delete_sandbox(id).await
+        }
+        async fn sandboxes(&self) -> StoreResult<Vec<SandboxRecord>> {
+            self.inner.sandboxes().await
+        }
+        async fn reserve_name(&self, reservation: &NameReservation) -> StoreResult<bool> {
+            self.inner.reserve_name(reservation).await
+        }
+        async fn name_reservation(
+            &self,
+            name: &SandboxName,
+        ) -> StoreResult<Option<NameReservation>> {
+            self.inner.name_reservation(name).await
+        }
+        async fn bind_name(
+            &self,
+            name: &SandboxName,
+            token: &str,
+            sandbox: &str,
+        ) -> StoreResult<bool> {
+            self.inner.bind_name(name, token, sandbox).await
+        }
+        async fn release_pending_name(&self, name: &SandboxName, token: &str) -> StoreResult<bool> {
+            self.inner.release_pending_name(name, token).await
+        }
+        async fn claim_domain(&self, binding: &DomainBinding) -> StoreResult<DomainClaim> {
+            self.inner.claim_domain(binding).await
+        }
+        async fn domain(&self, name: &DomainName) -> StoreResult<Option<DomainBinding>> {
+            self.inner.domain(name).await
+        }
+        async fn domains(&self, sandbox: &str) -> StoreResult<Vec<DomainBinding>> {
+            self.inner.domains(sandbox).await
+        }
+        async fn delete_domain(&self, name: &DomainName, sandbox: &str) -> StoreResult<bool> {
+            self.inner.delete_domain(name, sandbox).await
+        }
+        async fn publish(&self, event: &ClusterEvent) -> StoreResult<()> {
+            self.inner.publish(event).await
+        }
+        async fn events(&self, count: usize) -> StoreResult<Vec<ClusterEvent>> {
+            self.inner.events(count).await
+        }
+        async fn put_webhook(&self, hook: &Webhook) -> StoreResult<()> {
+            self.inner.put_webhook(hook).await
+        }
+        async fn webhooks(&self) -> StoreResult<Vec<Webhook>> {
+            self.inner.webhooks().await
+        }
+        async fn delete_webhook(&self, id: &str) -> StoreResult<bool> {
+            self.inner.delete_webhook(id).await
+        }
+        async fn record_delivery(&self, delivery: &Delivery) -> StoreResult<()> {
+            self.inner.record_delivery(delivery).await
+        }
+        async fn deliveries(&self, webhook_id: &str, count: usize) -> StoreResult<Vec<Delivery>> {
+            self.inner.deliveries(webhook_id, count).await
+        }
         async fn sandbox(&self, id: &str) -> StoreResult<Option<SandboxRecord>> {
             match self.mode.load(Ordering::SeqCst) {
-                3 => Self::error(), 4 => self.hang().await,
+                3 => Self::error(),
+                4 => self.hang().await,
                 _ => self.inner.sandbox(id).await,
             }
         }
-        async fn web_sharing_snapshot(&self, sandbox: &str) -> StoreResult<Option<(SandboxRecord, WebSharingState)>> {
+        async fn web_sharing_snapshot(
+            &self,
+            sandbox: &str,
+        ) -> StoreResult<Option<(SandboxRecord, WebSharingState)>> {
             match self.mode.load(Ordering::SeqCst) {
                 9 => return Self::error(),
                 10 => return self.hang().await,
@@ -3016,133 +4243,339 @@ mod web_sharing_failure_tests {
             }
             self.inner.web_sharing_snapshot(sandbox).await
         }
-        async fn web_sharing(&self, sandbox: &str, owner: &crate::ownership::OwnerId)
-            -> StoreResult<SharingAccess<Option<WebSharingState>>> {
+        async fn web_sharing(
+            &self,
+            sandbox: &str,
+            owner: &crate::ownership::OwnerId,
+        ) -> StoreResult<SharingAccess<Option<WebSharingState>>> {
             match self.mode.load(Ordering::SeqCst) {
-                1 => Self::error(), 2 => self.hang().await,
-                _ => self.inner.web_sharing(sandbox,owner).await,
+                1 => Self::error(),
+                2 => self.hang().await,
+                _ => self.inner.web_sharing(sandbox, owner).await,
             }
         }
-        async fn compare_web_sharing(&self, expected: Option<&str>, next: &WebSharingState)
-            -> StoreResult<SharingChange> {
-            let mode=self.mode.load(Ordering::SeqCst);
-            match mode { 5 => return Self::error(), 6 => return self.hang().await, _=>{} }
-            let result=self.inner.compare_web_sharing(expected,next).await?;
-            if result==SharingChange::Applied {
-                match mode { 7 => return self.hang().await, 8 => return Self::error(), _=>{} }
+        async fn compare_web_sharing(
+            &self,
+            expected: Option<&str>,
+            next: &WebSharingState,
+        ) -> StoreResult<SharingChange> {
+            let mode = self.mode.load(Ordering::SeqCst);
+            match mode {
+                5 => return Self::error(),
+                6 => return self.hang().await,
+                _ => {}
+            }
+            let result = self.inner.compare_web_sharing(expected, next).await?;
+            if result == SharingChange::Applied {
+                match mode {
+                    7 => return self.hang().await,
+                    8 => return Self::error(),
+                    _ => {}
+                }
             }
             Ok(result)
         }
     }
     struct Server(tokio::task::JoinHandle<()>);
-    impl Drop for Server { fn drop(&mut self) { self.0.abort(); } }
+    impl Drop for Server {
+        fn drop(&mut self) {
+            self.0.abort();
+        }
+    }
     #[tokio::test]
     async fn http_store_failures_preserve_uncertainty_and_exact_replay_after_commit() {
-        let store=Arc::new(FaultStore { inner:MemoryStore::new(), mode:AtomicU8::new(0),cancelled:Arc::new(AtomicUsize::new(0)), entered:tokio::sync::Notify::new(), release:tokio::sync::Notify::new() });
-        let owner=crate::ownership::OwnerId::parse("fault-owner").unwrap();
-        let mut record=crate::store::tests::sandbox("fault-sharing","fault-node");
-        record.owner_id=Some(owner.clone());store.inner.put_sandbox(&record).await.unwrap();
-        let hash=Sha256::digest(b"owned-fault-key").iter().map(|b|format!("{b:02x}")).collect::<String>();
+        let store = Arc::new(FaultStore {
+            inner: MemoryStore::new(),
+            mode: AtomicU8::new(0),
+            cancelled: Arc::new(AtomicUsize::new(0)),
+            entered: tokio::sync::Notify::new(),
+            release: tokio::sync::Notify::new(),
+        });
+        let owner = crate::ownership::OwnerId::parse("fault-owner").unwrap();
+        let mut record = crate::store::tests::sandbox("fault-sharing", "fault-node");
+        record.owner_id = Some(owner.clone());
+        store.inner.put_sandbox(&record).await.unwrap();
+        let hash = Sha256::digest(b"owned-fault-key")
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>();
         let policies=crate::keys::ApiKeyPolicy::from_json(&json!([{
             "sha256":hash,"expires_at":crate::model::now_ms()/1000+3600,"scopes":["sandboxes"],"principal_id":"fault-owner"
         }]).to_string()).unwrap();
-        let control=ControlPlane::new(store.clone(),ControlConfig {
-            api_key:Some("fault-admin".into()),api_keys:policies,access_audit:None,
-            cluster_token:None,proxy_port:5981,create_timeout:Duration::from_secs(1),identity_issuer:None,
-        });
-        let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();let address=listener.local_addr().unwrap();
-        let app=router(control);let mut server=Server(tokio::spawn(async move { axum::serve(listener,app).await.unwrap(); }));
-        let client=reqwest::Client::builder().timeout(Duration::from_secs(8)).build().unwrap();
-        let url=format!("http://{address}/sandboxes/fault-sharing/web-sharing");
-        let request=json!({"expectedRevision":null,"revision":uuid::Uuid::new_v4().to_string(),"grants":[{"subject":"alice","expires_at":100}]});
+        let control = ControlPlane::new(
+            store.clone(),
+            ControlConfig {
+                api_key: Some("fault-admin".into()),
+                api_keys: policies,
+                access_audit: None,
+                cluster_token: None,
+                proxy_port: 5981,
+                create_timeout: Duration::from_secs(1),
+                identity_issuer: None,
+            },
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let app = router(control);
+        let mut server = Server(tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        }));
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(8))
+            .build()
+            .unwrap();
+        let url = format!("http://{address}/sandboxes/fault-sharing/web-sharing");
+        let request = json!({"expectedRevision":null,"revision":uuid::Uuid::new_v4().to_string(),"grants":[{"subject":"alice","expires_at":100}]});
         for mode in 1..=6 {
-            store.mode.store(mode,Ordering::SeqCst);
-            let started=Instant::now();
-            let response=if mode<=2 { client.get(&url).header("x-api-key","owned-fault-key").send().await.unwrap() }
-                else { client.put(&url).header("x-api-key","owned-fault-key").json(&request).send().await.unwrap() };
-            assert_eq!(response.status(),StatusCode::SERVICE_UNAVAILABLE,"mode {mode}");
-            eprintln!("fault mode={mode} status=503 elapsed_ms={}",started.elapsed().as_millis());
-            let text=response.text().await.unwrap();
+            store.mode.store(mode, Ordering::SeqCst);
+            let started = Instant::now();
+            let response = if mode <= 2 {
+                client
+                    .get(&url)
+                    .header("x-api-key", "owned-fault-key")
+                    .send()
+                    .await
+                    .unwrap()
+            } else {
+                client
+                    .put(&url)
+                    .header("x-api-key", "owned-fault-key")
+                    .json(&request)
+                    .send()
+                    .await
+                    .unwrap()
+            };
+            assert_eq!(
+                response.status(),
+                StatusCode::SERVICE_UNAVAILABLE,
+                "mode {mode}"
+            );
+            eprintln!(
+                "fault mode={mode} status=503 elapsed_ms={}",
+                started.elapsed().as_millis()
+            );
+            let text = response.text().await.unwrap();
             assert!(!text.contains("private internal detail"));
-            if [2,4,6].contains(&mode) { assert!(started.elapsed()>=Duration::from_secs(5));assert!(text.contains("outcome uncertain")); }
-            assert_eq!(store.inner.web_sharing(&record.sandbox_id,&owner).await.unwrap(),SharingAccess::Granted(None));
+            if [2, 4, 6].contains(&mode) {
+                assert!(started.elapsed() >= Duration::from_secs(5));
+            }
+            // A hung store call may have committed, so its outcome is
+            // uncertain. A hung ownership lookup (mode 4) comes before any
+            // write, so nothing is uncertain: the lookup was unavailable.
+            if [2, 6].contains(&mode) {
+                assert!(text.contains("outcome uncertain"), "mode {mode}: {text}");
+            }
+            if mode == 4 {
+                assert!(text.contains("lookup unavailable"), "mode {mode}: {text}");
+            }
+            assert_eq!(
+                store
+                    .inner
+                    .web_sharing(&record.sandbox_id, &owner)
+                    .await
+                    .unwrap(),
+                SharingAccess::Granted(None)
+            );
         }
-        let mut expected:Option<String>=None;
-        for mode in [8,7] {
-            let revision=uuid::Uuid::new_v4().to_string();
-            let request=json!({"expectedRevision":expected,"revision":revision,"grants":[{"subject":"alice","expires_at":100}]});
-            store.mode.store(mode,Ordering::SeqCst);
-            let started=Instant::now();
-            let response=client.put(&url).header("x-api-key","owned-fault-key").json(&request).send().await.unwrap();
-            assert_eq!(response.status(),StatusCode::SERVICE_UNAVAILABLE);
-            let text=response.text().await.unwrap();assert!(!text.contains("private internal detail"));
-            if mode==7 { assert!(started.elapsed()>=Duration::from_secs(5));assert!(text.contains("outcome uncertain")); }
-            eprintln!("fault mode={mode} status=503 elapsed_ms={} committed=true",started.elapsed().as_millis());
-            let SharingAccess::Granted(Some(committed))=store.inner.web_sharing(&record.sandbox_id,&owner).await.unwrap() else { panic!("committed membership missing"); };
-            assert_eq!(committed.revision(),revision);
-            store.mode.store(0,Ordering::SeqCst);
-            let mut changed=request.clone();changed["grants"]=json!([{"subject":"changed","expires_at":100}]);
-            assert_eq!(client.put(&url).header("x-api-key","owned-fault-key").json(&changed).send().await.unwrap().status(),StatusCode::CONFLICT);
-            let mut changed_revision=request.clone();changed_revision["revision"]=json!(uuid::Uuid::new_v4().to_string());
-            assert_eq!(client.put(&url).header("x-api-key","owned-fault-key").json(&changed_revision).send().await.unwrap().status(),StatusCode::CONFLICT);
-            let replay=client.put(&url).header("x-api-key","owned-fault-key").json(&request).send().await.unwrap();
-            assert_eq!(replay.status(),StatusCode::OK);
-            assert_eq!(replay.json::<Value>().await.unwrap(),json!({"revision":revision,"grants":[{"subject":"alice","expires_at":100}]}));
-            assert_eq!(store.inner.web_sharing(&record.sandbox_id,&owner).await.unwrap(),SharingAccess::Granted(Some(committed)));
-            expected=Some(revision);
+        let mut expected: Option<String> = None;
+        for mode in [8, 7] {
+            let revision = uuid::Uuid::new_v4().to_string();
+            let request = json!({"expectedRevision":expected,"revision":revision,"grants":[{"subject":"alice","expires_at":100}]});
+            store.mode.store(mode, Ordering::SeqCst);
+            let started = Instant::now();
+            let response = client
+                .put(&url)
+                .header("x-api-key", "owned-fault-key")
+                .json(&request)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+            let text = response.text().await.unwrap();
+            assert!(!text.contains("private internal detail"));
+            if mode == 7 {
+                assert!(started.elapsed() >= Duration::from_secs(5));
+                assert!(text.contains("outcome uncertain"));
+            }
+            eprintln!(
+                "fault mode={mode} status=503 elapsed_ms={} committed=true",
+                started.elapsed().as_millis()
+            );
+            let SharingAccess::Granted(Some(committed)) = store
+                .inner
+                .web_sharing(&record.sandbox_id, &owner)
+                .await
+                .unwrap()
+            else {
+                panic!("committed membership missing");
+            };
+            assert_eq!(committed.revision(), revision);
+            store.mode.store(0, Ordering::SeqCst);
+            let mut changed = request.clone();
+            changed["grants"] = json!([{"subject":"changed","expires_at":100}]);
+            assert_eq!(
+                client
+                    .put(&url)
+                    .header("x-api-key", "owned-fault-key")
+                    .json(&changed)
+                    .send()
+                    .await
+                    .unwrap()
+                    .status(),
+                StatusCode::CONFLICT
+            );
+            let mut changed_revision = request.clone();
+            changed_revision["revision"] = json!(uuid::Uuid::new_v4().to_string());
+            assert_eq!(
+                client
+                    .put(&url)
+                    .header("x-api-key", "owned-fault-key")
+                    .json(&changed_revision)
+                    .send()
+                    .await
+                    .unwrap()
+                    .status(),
+                StatusCode::CONFLICT
+            );
+            let replay = client
+                .put(&url)
+                .header("x-api-key", "owned-fault-key")
+                .json(&request)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(replay.status(), StatusCode::OK);
+            assert_eq!(
+                replay.json::<Value>().await.unwrap(),
+                json!({"revision":revision,"grants":[{"subject":"alice","expires_at":100}]})
+            );
+            assert_eq!(
+                store
+                    .inner
+                    .web_sharing(&record.sandbox_id, &owner)
+                    .await
+                    .unwrap(),
+                SharingAccess::Granted(Some(committed))
+            );
+            expected = Some(revision);
         }
-        assert_eq!(store.cancelled.load(Ordering::SeqCst),4);
+        assert_eq!(store.cancelled.load(Ordering::SeqCst), 4);
         eprintln!("fault recovery exact_replays=2 changed_payload_refusals=2 changed_revision_refusals=2 cancelled_store_futures=4");
-        assert!(store.inner.delete_sandbox(&record.sandbox_id).await.unwrap());
-        server.0.abort();let _=(&mut server.0).await;
+        assert!(store
+            .inner
+            .delete_sandbox(&record.sandbox_id)
+            .await
+            .unwrap());
+        server.0.abort();
+        let _ = (&mut server.0).await;
     }
 
     #[tokio::test]
     async fn stored_grant_admission_denies_store_faults_and_credential_changes_during_lookup() {
-        use hv2_api::sandbox_proxy::SandboxRoutes;
         use base64::Engine;
-        let store=Arc::new(FaultStore { inner:MemoryStore::new(), mode:AtomicU8::new(0),cancelled:Arc::new(AtomicUsize::new(0)),
-            entered:tokio::sync::Notify::new(), release:tokio::sync::Notify::new() });
-        let mut record=crate::store::tests::sandbox("admission-guest","node");
-        record.owner_id=Some(crate::ownership::OwnerId::parse("owner").unwrap());
+        use hv2_api::sandbox_proxy::SandboxRoutes;
+        let store = Arc::new(FaultStore {
+            inner: MemoryStore::new(),
+            mode: AtomicU8::new(0),
+            cancelled: Arc::new(AtomicUsize::new(0)),
+            entered: tokio::sync::Notify::new(),
+            release: tokio::sync::Notify::new(),
+        });
+        let mut record = crate::store::tests::sandbox("admission-guest", "node");
+        record.owner_id = Some(crate::ownership::OwnerId::parse("owner").unwrap());
         store.inner.put_sandbox(&record).await.unwrap();
-        let expiry=chrono::Utc::now().timestamp()+600;
-        let sharing=WebSharingState::new(&record,vec![crate::web_sharing::WebGrant::new("alice",expiry).unwrap()]).unwrap();
-        assert_eq!(store.inner.compare_web_sharing(None,&sharing).await.unwrap(),SharingChange::Applied);
-        let document=|password:&str,expires:i64,delegation:bool|json!([{
+        let expiry = chrono::Utc::now().timestamp() + 600;
+        let sharing = WebSharingState::new(
+            &record,
+            vec![crate::web_sharing::WebGrant::new("alice", expiry).unwrap()],
+        )
+        .unwrap();
+        assert_eq!(
+            store
+                .inner
+                .compare_web_sharing(None, &sharing)
+                .await
+                .unwrap(),
+            SharingChange::Applied
+        );
+        let document = |password: &str, expires: i64, delegation: bool| {
+            json!([{
             "subject":"alice","sha256":Sha256::digest(password.as_bytes()).iter().map(|b|format!("{b:02x}")).collect::<String>(),
             "expires_at":expires,"sandboxes":[],"allow_owner_grants":delegation
-        }]).to_string();
-        let policy=Arc::new(crate::web_access::WebAccessPolicy::from_json(&document("secret",expiry,true)).unwrap());
-        let routes=Arc::new(ClusterRoutes::new(store.clone(),Duration::from_secs(30)).with_web_access(policy.clone()));
-        let headers=|| {
-            let mut headers=HeaderMap::new();
-            headers.insert("authorization",format!("Basic {}",base64::engine::general_purpose::STANDARD.encode("alice:secret")).parse().unwrap());
-            headers.insert(crate::web_access::IDENTITY_HEADER,"forged".parse().unwrap());
+        }]).to_string()
+        };
+        let policy = Arc::new(
+            crate::web_access::WebAccessPolicy::from_json(&document("secret", expiry, true))
+                .unwrap(),
+        );
+        let routes = Arc::new(
+            ClusterRoutes::new(store.clone(), Duration::from_secs(30))
+                .with_web_access(policy.clone()),
+        );
+        let headers = || {
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                "authorization",
+                format!(
+                    "Basic {}",
+                    base64::engine::general_purpose::STANDARD.encode("alice:secret")
+                )
+                .parse()
+                .unwrap(),
+            );
+            headers.insert(
+                crate::web_access::IDENTITY_HEADER,
+                "forged".parse().unwrap(),
+            );
             headers
         };
-        for mode in [9,10] {
-            store.mode.store(mode,Ordering::SeqCst);
-            let mut h=headers();let started=Instant::now();
-            assert!(routes.admit_request(&record.sandbox_id,8080,&mut h).await.is_err());
+        for mode in [9, 10] {
+            store.mode.store(mode, Ordering::SeqCst);
+            let mut h = headers();
+            let started = Instant::now();
+            assert!(routes
+                .admit_request(&record.sandbox_id, 8080, &mut h)
+                .await
+                .is_err());
             assert!(!h.contains_key(crate::web_access::IDENTITY_HEADER));
-            if mode==10 { assert!(started.elapsed()>=Duration::from_secs(5)); }
+            if mode == 10 {
+                assert!(started.elapsed() >= Duration::from_secs(5));
+            }
         }
-        assert_eq!(store.cancelled.load(Ordering::SeqCst),1);
-        for replacement in [document("rotated",expiry,true),document("secret",1,true),document("secret",expiry,false)] {
-            policy.replace(&document("secret",expiry,true)).unwrap();
-            store.mode.store(11,Ordering::SeqCst);
-            let r=routes.clone();let id=record.sandbox_id.clone();let mut h=headers();
-            let pending=tokio::spawn(async move { let result=r.admit_request(&id,8080,&mut h).await; (result,h) });
-            tokio::time::timeout(Duration::from_secs(1),store.entered.notified()).await.unwrap();
+        assert_eq!(store.cancelled.load(Ordering::SeqCst), 1);
+        for replacement in [
+            document("rotated", expiry, true),
+            document("secret", 1, true),
+            document("secret", expiry, false),
+        ] {
+            policy.replace(&document("secret", expiry, true)).unwrap();
+            store.mode.store(11, Ordering::SeqCst);
+            let r = routes.clone();
+            let id = record.sandbox_id.clone();
+            let mut h = headers();
+            let pending = tokio::spawn(async move {
+                let result = r.admit_request(&id, 8080, &mut h).await;
+                (result, h)
+            });
+            tokio::time::timeout(Duration::from_secs(1), store.entered.notified())
+                .await
+                .unwrap();
             assert!(!pending.is_finished());
-            policy.replace(&replacement).unwrap();store.release.notify_one();
-            let (result,h)=pending.await.unwrap();assert!(result.is_err());
+            policy.replace(&replacement).unwrap();
+            store.release.notify_one();
+            let (result, h) = pending.await.unwrap();
+            assert!(result.is_err());
             assert!(!h.contains_key(crate::web_access::IDENTITY_HEADER));
         }
-        policy.replace(&document("secret",expiry,true)).unwrap();store.mode.store(0,Ordering::SeqCst);
-        let mut h=headers();routes.admit_request(&record.sandbox_id,8080,&mut h).await.unwrap();
-        assert_eq!(h[crate::web_access::IDENTITY_HEADER],"alice");assert!(!h.contains_key("authorization"));
+        policy.replace(&document("secret", expiry, true)).unwrap();
+        store.mode.store(0, Ordering::SeqCst);
+        let mut h = headers();
+        routes
+            .admit_request(&record.sandbox_id, 8080, &mut h)
+            .await
+            .unwrap();
+        assert_eq!(h[crate::web_access::IDENTITY_HEADER], "alice");
+        assert!(!h.contains_key("authorization"));
         eprintln!("stored grant admission: store error and stall deny; cancelled=1; rotation expiry delegation races deny; current grant admits");
     }
 }

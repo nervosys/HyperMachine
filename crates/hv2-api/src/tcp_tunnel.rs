@@ -43,7 +43,9 @@ pub(crate) fn validate_protocol(request: &Request, protocol: &str) -> Result<(),
         || !connection
         || has_body
     {
-        return Err("use a bodyless HTTP/1.1 GET with Connection: Upgrade and the required tunnel protocol");
+        return Err(
+            "use a bodyless HTTP/1.1 GET with Connection: Upgrade and the required tunnel protocol",
+        );
     }
     Ok(())
 }
@@ -56,7 +58,11 @@ where
     accept_protocol(request, backend, PROTOCOL)
 }
 
-pub(crate) fn accept_protocol<T>(mut request: Request, mut backend: T, protocol: &'static str) -> Response
+pub(crate) fn accept_protocol<T>(
+    mut request: Request,
+    mut backend: T,
+    protocol: &'static str,
+) -> Response
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {

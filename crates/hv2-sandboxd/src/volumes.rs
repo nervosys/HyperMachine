@@ -18,14 +18,14 @@ use std::time::Duration;
 
 use axum::body::Body;
 use axum::http::HeaderMap;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use hv2_agent::AgentVM;
 use hv2_cluster::model::VolumeMount;
 
 use super::{
-    AppState, Arc, Deserialize, IntoResponse, Json, Path, Query, Response, Serialize, State,
-    StatusCode, api_error, new_access_token,
+    api_error, new_access_token, AppState, Arc, Deserialize, IntoResponse, Json, Path, Query,
+    Response, Serialize, State, StatusCode,
 };
 use crate::ninep::{self, Beneath};
 
@@ -116,8 +116,11 @@ fn create_metadata_with_sync(
     let mut published = false;
     let result = std::fs::create_dir(&data).and_then(|()| {
         let bytes = serde_json::to_vec(meta).map_err(std::io::Error::other)?;
-        let mut file = std::fs::OpenOptions::new().write(true).create_new(true)
-            .mode(0o600).open(&temporary)?;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&temporary)?;
         file.write_all(&bytes)?;
         sync(&temporary)?;
         sync(&data)?;
@@ -201,7 +204,10 @@ mod creation_tests {
         {
             let (mut stage, mut file) = AtomicUpload::new(&fs, &parts).unwrap();
             file.write_all(b"must not replace").unwrap();
-            assert_eq!(stage.publish(false).unwrap_err().kind(), std::io::ErrorKind::AlreadyExists);
+            assert_eq!(
+                stage.publish(false).unwrap_err().kind(),
+                std::io::ErrorKind::AlreadyExists
+            );
         }
         assert_eq!(std::fs::read(root.join("target")).unwrap(), b"replacement");
         {
@@ -219,21 +225,36 @@ mod creation_tests {
     #[test]
     fn sync_failures_preserve_published_metadata_and_data() {
         for failed_stage in 1..=4 {
-            let root = std::env::temp_dir().join(format!("hm-volume-sync-{}", uuid::Uuid::new_v4()));
-            let meta = Meta { id: "vol-owned".into(), name: "owned".into(), token: "owned-token".into() };
+            let root =
+                std::env::temp_dir().join(format!("hm-volume-sync-{}", uuid::Uuid::new_v4()));
+            let meta = Meta {
+                id: "vol-owned".into(),
+                name: "owned".into(),
+                token: "owned-token".into(),
+            };
             let mut stage = 0;
             let result = create_metadata_with_sync(&root, &meta, |_| {
                 stage += 1;
-                if stage == failed_stage { Err(std::io::Error::other("injected sync failure")) } else { Ok(()) }
+                if stage == failed_stage {
+                    Err(std::io::Error::other("injected sync failure"))
+                } else {
+                    Ok(())
+                }
             });
             assert!(result.is_err());
             let directory = root.join(&meta.id);
             if failed_stage < 3 {
                 assert!(!directory.exists());
             } else {
-                assert_eq!(std::fs::read(directory.join("meta.json")).unwrap(), serde_json::to_vec(&meta).unwrap());
+                assert_eq!(
+                    std::fs::read(directory.join("meta.json")).unwrap(),
+                    serde_json::to_vec(&meta).unwrap()
+                );
                 assert!(directory.join("data").is_dir());
-                assert_eq!(create_metadata(&root, &meta).unwrap_err().kind(), std::io::ErrorKind::AlreadyExists);
+                assert_eq!(
+                    create_metadata(&root, &meta).unwrap_err().kind(),
+                    std::io::ErrorKind::AlreadyExists
+                );
             }
             std::fs::remove_dir_all(root).unwrap();
         }
@@ -270,7 +291,10 @@ mod creation_tests {
         }
         let metadata = root.join("vol-owned/meta.json");
         use std::os::unix::fs::PermissionsExt;
-        assert_eq!(std::fs::metadata(&metadata).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            std::fs::metadata(&metadata).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         let before = std::fs::read(&metadata).unwrap();
         let meta: Meta = serde_json::from_slice(&before).unwrap();
         assert_eq!(Some(meta.token), winner);
@@ -466,7 +490,9 @@ pub(crate) struct At {
     depth: Option<u32>,
 }
 
-fn overwrite_default() -> bool { true }
+fn overwrite_default() -> bool {
+    true
+}
 
 /// A replacement staged beside its destination; dropping before publication
 /// removes only the exclusively-created temporary name through a pinned parent.
@@ -481,24 +507,54 @@ impl AtomicUpload {
     fn new(fs: &Beneath, parts: &[String]) -> std::io::Result<(Self, std::fs::File)> {
         use std::os::fd::FromRawFd;
         match fs.entry(parts) {
-            Ok(entry) if entry.stat.st_mode & libc::S_IFMT != libc::S_IFREG =>
-                return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
+            Ok(entry) if entry.stat.st_mode & libc::S_IFMT != libc::S_IFREG => {
+                return Err(std::io::Error::from_raw_os_error(libc::EINVAL))
+            }
             Err(error) if error.raw_os_error() != Some(libc::ENOENT) => return Err(error),
             _ => {}
         }
-        let (name, parents) = parts.split_last().ok_or_else(|| std::io::Error::from_raw_os_error(libc::EINVAL))?;
-        let parent = std::fs::File::from(fs.open_at(parents, libc::O_RDONLY | libc::O_DIRECTORY, 0)?);
-        let temporary = std::ffi::CString::new(format!(".hm-upload-{}", uuid::Uuid::new_v4())).unwrap();
-        let destination = std::ffi::CString::new(name.as_str()).map_err(|_| std::io::Error::from_raw_os_error(libc::EINVAL))?;
-        let fd = unsafe { libc::openat(parent.as_raw_fd(), temporary.as_ptr(),
-            libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC, 0o600) };
-        if fd < 0 { return Err(std::io::Error::last_os_error()); }
-        Ok((Self { parent, temporary, destination, published: false }, unsafe { std::fs::File::from_raw_fd(fd) }))
+        let (name, parents) = parts
+            .split_last()
+            .ok_or_else(|| std::io::Error::from_raw_os_error(libc::EINVAL))?;
+        let parent =
+            std::fs::File::from(fs.open_at(parents, libc::O_RDONLY | libc::O_DIRECTORY, 0)?);
+        let temporary =
+            std::ffi::CString::new(format!(".hm-upload-{}", uuid::Uuid::new_v4())).unwrap();
+        let destination = std::ffi::CString::new(name.as_str())
+            .map_err(|_| std::io::Error::from_raw_os_error(libc::EINVAL))?;
+        let fd = unsafe {
+            libc::openat(
+                parent.as_raw_fd(),
+                temporary.as_ptr(),
+                libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                0o600,
+            )
+        };
+        if fd < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok((
+            Self {
+                parent,
+                temporary,
+                destination,
+                published: false,
+            },
+            unsafe { std::fs::File::from_raw_fd(fd) },
+        ))
     }
 
     fn publish(&mut self, overwrite: bool) -> std::io::Result<()> {
-        if unsafe { libc::renameat2(self.parent.as_raw_fd(), self.temporary.as_ptr(),
-            self.parent.as_raw_fd(), self.destination.as_ptr(), if overwrite { 0 } else { libc::RENAME_NOREPLACE }) } < 0 {
+        if unsafe {
+            libc::renameat2(
+                self.parent.as_raw_fd(),
+                self.temporary.as_ptr(),
+                self.parent.as_raw_fd(),
+                self.destination.as_ptr(),
+                if overwrite { 0 } else { libc::RENAME_NOREPLACE },
+            )
+        } < 0
+        {
             return Err(std::io::Error::last_os_error());
         }
         self.published = true;
@@ -509,7 +565,9 @@ impl AtomicUpload {
 impl Drop for AtomicUpload {
     fn drop(&mut self) {
         if !self.published {
-            unsafe { libc::unlinkat(self.parent.as_raw_fd(), self.temporary.as_ptr(), 0); }
+            unsafe {
+                libc::unlinkat(self.parent.as_raw_fd(), self.temporary.as_ptr(), 0);
+            }
         }
     }
 }
@@ -749,7 +807,13 @@ pub(crate) async fn write_file(
             Err(e) => return io_error(&e),
         }
     } else {
-        let flags = libc::O_WRONLY | libc::O_CREAT | if at.overwrite { libc::O_TRUNC } else { libc::O_EXCL };
+        let flags = libc::O_WRONLY
+            | libc::O_CREAT
+            | if at.overwrite {
+                libc::O_TRUNC
+            } else {
+                libc::O_EXCL
+            };
         match fs.open_at(&parts, flags, at.mode.unwrap_or(0o644)) {
             Ok(fd) => (None, std::fs::File::from(fd)),
             Err(e) => return io_error(&e),
@@ -788,7 +852,9 @@ pub(crate) async fn write_file(
             }
             Ok::<_, std::io::Error>(())
         })();
-        if let Err(e) = metadata { return io_error(&e); }
+        if let Err(e) = metadata {
+            return io_error(&e);
+        }
     } else if let Err(e) = apply(&fs, &parts, at.uid, at.gid, at.mode) {
         return io_error(&e);
     }
@@ -796,12 +862,16 @@ pub(crate) async fn write_file(
         return io_error(&e);
     }
     if let Some(stage) = atomic.as_mut() {
-        if let Err(e) = stage.publish(at.overwrite) { return io_error(&e); }
+        if let Err(e) = stage.publish(at.overwrite) {
+            return io_error(&e);
+        }
         let parent = match stage.parent.try_clone() {
             Ok(file) => file,
             Err(e) => return io_error(&e),
         };
-        if let Err(e) = tokio::fs::File::from_std(parent).sync_all().await { return io_error(&e); }
+        if let Err(e) = tokio::fs::File::from_std(parent).sync_all().await {
+            return io_error(&e);
+        }
     }
     // Sync each containing directory, including parents made by force=true.
     // O_PATH descriptors cannot be fsynced; open real directory descriptors
@@ -826,7 +896,9 @@ pub(crate) async fn write_file(
 async fn sync_directories(fs: &Beneath, parts: &[String], count: usize) -> std::io::Result<()> {
     for depth in (0..count).rev() {
         let fd = fs.open_at(&parts[..depth], libc::O_RDONLY | libc::O_DIRECTORY, 0)?;
-        tokio::fs::File::from_std(std::fs::File::from(fd)).sync_all().await?;
+        tokio::fs::File::from_std(std::fs::File::from(fd))
+            .sync_all()
+            .await?;
     }
     Ok(())
 }

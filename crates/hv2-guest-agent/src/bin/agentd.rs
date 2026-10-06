@@ -236,23 +236,38 @@ mod linux {
                     splice(fd, tcp, &buf);
                     return Ok(());
                 }
-                if let Operation::ForwardUdp { port } | Operation::ForwardUdp6 { port } = request.op {
-                    let host = if matches!(request.op, Operation::ForwardUdp6 { .. }) { "::1" } else { "127.0.0.1" };
+                if let Operation::ForwardUdp { port } | Operation::ForwardUdp6 { port } = request.op
+                {
+                    let host = if matches!(request.op, Operation::ForwardUdp6 { .. }) {
+                        "::1"
+                    } else {
+                        "127.0.0.1"
+                    };
                     let target = if port == 0 {
-                        Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "UDP port must be nonzero"))
+                        Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            "UDP port must be nonzero",
+                        ))
                     } else {
                         std::net::UdpSocket::bind((host, 0)).and_then(|socket| {
                             socket.connect((host, port))?;
                             Ok(socket)
                         })
                     };
-                    let response = Response { id: request.id, version: PROTOCOL_VERSION,
+                    let response = Response {
+                        id: request.id,
+                        version: PROTOCOL_VERSION,
                         result: match &target {
                             Ok(_) => OpResult::Acknowledged,
-                            Err(error) => OpResult::Failed { message: format!("UDP socket setup failed: {error}") },
-                        } };
+                            Err(error) => OpResult::Failed {
+                                message: format!("UDP socket setup failed: {error}"),
+                            },
+                        },
+                    };
                     write_all_fd(fd, &encode(&response).map_err(std::io::Error::other)?)?;
-                    if let Ok(socket) = target { relay_udp(fd, socket, &buf)?; }
+                    if let Ok(socket) = target {
+                        relay_udp(fd, socket, &buf)?;
+                    }
                     return Ok(());
                 }
                 // A volume mount takes the connection itself: answered here,
@@ -343,19 +358,23 @@ mod linux {
     #[cfg(test)]
     #[test]
     fn udp_relay_preserves_empty_binary_and_early_frames_and_stops_on_eof() {
-        use std::os::fd::AsRawFd;
         use hv2_guest_agent::datagram::{read_frame, write_frame};
+        use std::os::fd::AsRawFd;
         let peer = std::net::UdpSocket::bind(("127.0.0.1", 0)).unwrap();
         peer.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
         let socket = std::net::UdpSocket::bind(("127.0.0.1", 0)).unwrap();
         socket.connect(peer.local_addr().unwrap()).unwrap();
         let (mut client, server) = std::os::unix::net::UnixStream::pair().unwrap();
-        client.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
         let mut early = Vec::new();
         write_frame(&mut early, &[0, 255]).unwrap();
         let relay = std::thread::spawn(move || relay_udp(server.as_raw_fd(), socket, &early));
         for payload in [vec![0, 255], Vec::new(), vec![13, 10, 0, 255]] {
-            if payload != [0, 255] { write_frame(&mut client, &payload).unwrap(); }
+            if payload != [0, 255] {
+                write_frame(&mut client, &payload).unwrap();
+            }
             let mut bytes = [0; 16];
             let (size, sender) = peer.recv_from(&mut bytes).unwrap();
             assert_eq!(&bytes[..size], payload);
@@ -366,12 +385,18 @@ mod linux {
         relay.join().unwrap().unwrap();
     }
 
-    fn relay_udp(fd: libc::c_int, socket: std::net::UdpSocket, early: &[u8]) -> std::io::Result<()> {
+    fn relay_udp(
+        fd: libc::c_int,
+        socket: std::net::UdpSocket,
+        early: &[u8],
+    ) -> std::io::Result<()> {
+        use hv2_guest_agent::datagram::{read_frame, write_frame, MAX_PAYLOAD};
         use std::os::fd::FromRawFd;
         use std::sync::atomic::{AtomicBool, Ordering};
-        use hv2_guest_agent::datagram::{read_frame, write_frame, MAX_PAYLOAD};
         let duplicate = unsafe { libc::dup(fd) };
-        if duplicate < 0 { return Err(std::io::Error::last_os_error()); }
+        if duplicate < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
         let mut transport = unsafe { std::os::unix::net::UnixStream::from_raw_fd(duplicate) };
         transport.set_read_timeout(Some(Duration::from_secs(30)))?;
         transport.set_write_timeout(Some(Duration::from_secs(5)))?;
@@ -387,7 +412,9 @@ mod linux {
             let mut reader = std::io::Cursor::new(early).chain(from_host);
             let result = (|| -> std::io::Result<()> {
                 while let Some(payload) = read_frame(&mut reader)? {
-                    if sender.send(&payload)? != payload.len() { return Err(std::io::ErrorKind::WriteZero.into()); }
+                    if sender.send(&payload)? != payload.len() {
+                        return Err(std::io::ErrorKind::WriteZero.into());
+                    }
                 }
                 Ok(())
             })();
@@ -400,14 +427,20 @@ mod linux {
             while !stopped.load(Ordering::Acquire) {
                 match socket.recv(&mut payload) {
                     Ok(size) => write_frame(&mut transport, &payload[..size])?,
-                    Err(error) if matches!(error.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {},
+                    Err(error)
+                        if matches!(
+                            error.kind(),
+                            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                        ) => {}
                     Err(error) => return Err(error),
                 }
             }
             Ok(())
         })();
         let _ = transport.shutdown(std::net::Shutdown::Both);
-        let reader_result = upstream.join().map_err(|_| std::io::Error::other("UDP relay reader failed"))?;
+        let reader_result = upstream
+            .join()
+            .map_err(|_| std::io::Error::other("UDP relay reader failed"))?;
         result.and(reader_result)
     }
 
@@ -623,7 +656,9 @@ mod linux {
             } => read_file(&path, offset, length),
             Operation::Stats => OpResult::Stats(stats()),
             // Served in `serve`, which owns the connection it takes.
-            Operation::Forward { .. } | Operation::ForwardUdp { .. } | Operation::ForwardUdp6 { .. } => OpResult::Failed {
+            Operation::Forward { .. }
+            | Operation::ForwardUdp { .. }
+            | Operation::ForwardUdp6 { .. } => OpResult::Failed {
                 message: "a forward must be the connection's own request".into(),
             },
             // Served in `serve`, which owns the connection it takes.

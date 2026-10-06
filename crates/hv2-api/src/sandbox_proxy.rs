@@ -873,8 +873,8 @@ mod tests {
 
     #[tokio::test]
     async fn asynchronous_admission_finishes_before_any_backend_open() {
-        use std::time::Duration;
         use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::time::Duration;
         struct DelayedDeny {
             entered: Arc<tokio::sync::Notify>,
             release: Arc<tokio::sync::Notify>,
@@ -882,13 +882,19 @@ mod tests {
         }
         #[async_trait::async_trait]
         impl SandboxRoutes for DelayedDeny {
-            async fn admit_request(&self, sandbox: &str, port: u16, _headers: &mut hyper::HeaderMap)
-                -> Result<(), ProxyAccessDenied> {
+            async fn admit_request(
+                &self,
+                sandbox: &str,
+                port: u16,
+                _headers: &mut hyper::HeaderMap,
+            ) -> Result<(), ProxyAccessDenied> {
                 assert_eq!(sandbox, "sbx_owned");
                 assert_eq!(port, 9000);
                 self.entered.notify_one();
                 self.release.notified().await;
-                Err(ProxyAccessDenied { challenge: Some("Basic realm=\"owned\"") })
+                Err(ProxyAccessDenied {
+                    challenge: Some("Basic realm=\"owned\""),
+                })
             }
             async fn resolve(&self, _sandbox: &str, _port: u16) -> Option<SocketAddr> {
                 self.resolves.fetch_add(1, Ordering::SeqCst);
@@ -900,7 +906,9 @@ mod tests {
             let release = Arc::new(tokio::sync::Notify::new());
             let resolves = Arc::new(AtomicUsize::new(0));
             let routes: Arc<dyn SandboxRoutes> = Arc::new(DelayedDeny {
-                entered: Arc::clone(&entered), release: Arc::clone(&release), resolves: Arc::clone(&resolves),
+                entered: Arc::clone(&entered),
+                release: Arc::clone(&release),
+                resolves: Arc::clone(&resolves),
             });
             let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
             let address = listener.local_addr().unwrap();
@@ -909,20 +917,44 @@ mod tests {
                 serve_one(stream, routes, peer).await;
             });
             let request = tokio::spawn(async move {
-                let mut request = reqwest::Client::new().get(format!("http://{address}/"))
+                let mut request = reqwest::Client::new()
+                    .get(format!("http://{address}/"))
                     .header("host", "9000-sbx_owned.test");
-                if grpc { request = request.header("content-type", "application/grpc"); }
+                if grpc {
+                    request = request.header("content-type", "application/grpc");
+                }
                 request.send().await.unwrap()
             });
-            tokio::time::timeout(Duration::from_secs(2), entered.notified()).await.unwrap();
-            assert_eq!(resolves.load(Ordering::SeqCst), 0, "pending admission must not open a route");
-            assert!(!request.is_finished(), "pending admission must not answer early");
+            tokio::time::timeout(Duration::from_secs(2), entered.notified())
+                .await
+                .unwrap();
+            assert_eq!(
+                resolves.load(Ordering::SeqCst),
+                0,
+                "pending admission must not open a route"
+            );
+            assert!(
+                !request.is_finished(),
+                "pending admission must not answer early"
+            );
             release.notify_one();
-            let response = tokio::time::timeout(Duration::from_secs(2), request).await.unwrap().unwrap();
+            let response = tokio::time::timeout(Duration::from_secs(2), request)
+                .await
+                .unwrap()
+                .unwrap();
             assert_eq!(response.status().as_u16(), if grpc { 200 } else { 401 });
-            if grpc { assert_eq!(response.headers()["grpc-status"], "16"); }
-            assert_eq!(response.headers()["www-authenticate"], "Basic realm=\"owned\"");
-            assert_eq!(resolves.load(Ordering::SeqCst), 0, "denied admission must not open a route");
+            if grpc {
+                assert_eq!(response.headers()["grpc-status"], "16");
+            }
+            assert_eq!(
+                response.headers()["www-authenticate"],
+                "Basic realm=\"owned\""
+            );
+            assert_eq!(
+                resolves.load(Ordering::SeqCst),
+                0,
+                "denied admission must not open a route"
+            );
             server.abort();
             let _ = server.await;
         }

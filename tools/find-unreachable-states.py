@@ -109,6 +109,10 @@ for path, text in sources:
 # one place a real finding could hide, so an entry that does not say why is an
 # entry nobody can check.
 ACCEPTED = {
+    ('ApiRole', 'Operator'): (
+        'The #[default] role: serde builds it for every key policy that names no '
+        'role, which this script cannot see. Its guard (operator admin) is reachable.'
+    ),
     ('VCpuState', 'Running'): (
         'True, and known. Nothing ever marks a vCPU Running, so VM::pause could '
         'never succeed -- it now returns NotSupported and says so. The variant '

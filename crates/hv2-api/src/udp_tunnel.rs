@@ -12,7 +12,9 @@ pub fn validate(request: &Request) -> Result<(), &'static str> {
 }
 
 pub fn accept<T>(request: Request, backend: T) -> Response
-where T: AsyncRead + AsyncWrite + Unpin + Send + 'static {
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
     crate::tcp_tunnel::accept_protocol(request, backend, PROTOCOL)
 }
 
@@ -24,7 +26,9 @@ pub fn validate_ipv6(request: &Request) -> Result<(), &'static str> {
 }
 
 pub fn accept_ipv6<T>(request: Request, backend: T) -> Response
-where T: AsyncRead + AsyncWrite + Unpin + Send + 'static {
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
     crate::tcp_tunnel::accept_protocol(request, backend, PROTOCOL_IPV6)
 }
 
@@ -37,8 +41,11 @@ mod tests {
     #[test]
     fn udp_address_families_require_their_exact_protocol() {
         for protocol in [PROTOCOL, PROTOCOL_IPV6] {
-            let request = Request::builder().header("connection", "upgrade")
-                .header("upgrade", protocol).body(Body::empty()).unwrap();
+            let request = Request::builder()
+                .header("connection", "upgrade")
+                .header("upgrade", protocol)
+                .body(Body::empty())
+                .unwrap();
             assert_eq!(validate(&request).is_ok(), protocol == PROTOCOL);
             assert_eq!(validate_ipv6(&request).is_ok(), protocol == PROTOCOL_IPV6);
         }
@@ -48,14 +55,25 @@ mod tests {
     fn udp_negotiation_refuses_tcp_body_and_wrong_http_version() {
         for (protocol, method, version, length, valid) in [
             (PROTOCOL, Method::GET, Version::HTTP_11, "0", true),
-            (crate::tcp_tunnel::PROTOCOL, Method::GET, Version::HTTP_11, "0", false),
+            (
+                crate::tcp_tunnel::PROTOCOL,
+                Method::GET,
+                Version::HTTP_11,
+                "0",
+                false,
+            ),
             (PROTOCOL, Method::POST, Version::HTTP_11, "0", false),
             (PROTOCOL, Method::GET, Version::HTTP_2, "0", false),
             (PROTOCOL, Method::GET, Version::HTTP_11, "1", false),
         ] {
-            let request = Request::builder().method(method).version(version)
-                .header("connection", "upgrade").header("upgrade", protocol)
-                .header("content-length", length).body(Body::empty()).unwrap();
+            let request = Request::builder()
+                .method(method)
+                .version(version)
+                .header("connection", "upgrade")
+                .header("upgrade", protocol)
+                .header("content-length", length)
+                .body(Body::empty())
+                .unwrap();
             assert_eq!(validate(&request).is_ok(), valid);
         }
     }

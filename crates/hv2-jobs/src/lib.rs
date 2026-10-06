@@ -45,12 +45,12 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+pub mod cron;
+pub mod dispatch;
 #[cfg(feature = "http")]
 pub mod http;
-pub mod cron;
-pub mod worker;
 pub mod schedule;
-pub mod dispatch;
+pub mod worker;
 
 /// Why a store operation failed.
 #[derive(Debug, thiserror::Error)]

@@ -16,11 +16,16 @@ use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 
-use crate::web_sharing::{WebSharingState, SharingAccess, SharingChange};
 use crate::domains::{DomainBinding, DomainName};
 use crate::names::{NameReservation, SandboxName};
-use crate::private_networks::{NetworkMembershipState, MembershipAccess, MembershipChange, PrivateRouteSnapshot};
-use crate::ports::{PortAllocation, PortClaim, PortProtocol, PublicPortRange, OwnedPortAccess, MAX_PORTS_PER_SANDBOX};
+use crate::ports::{
+    OwnedPortAccess, PortAllocation, PortClaim, PortProtocol, PublicPortRange,
+    MAX_PORTS_PER_SANDBOX,
+};
+use crate::private_networks::{
+    MembershipAccess, MembershipChange, NetworkMembershipState, PrivateRouteSnapshot,
+};
+use crate::web_sharing::{SharingAccess, SharingChange, WebSharingState};
 
 use crate::model::{ClusterEvent, Delivery, NodeInfo, SandboxRecord, Webhook};
 
@@ -41,8 +46,10 @@ pub enum DomainClaim {
 }
 
 fn private_address_source_matches(source: &SandboxRecord, current: &SandboxRecord) -> bool {
-    source.sandbox_id == current.sandbox_id && source.owner_id == current.owner_id
-        && source.started_at_ms == current.started_at_ms && source.node_id == current.node_id
+    source.sandbox_id == current.sandbox_id
+        && source.owner_id == current.owner_id
+        && source.started_at_ms == current.started_at_ms
+        && source.node_id == current.node_id
 }
 
 /// The shared state of a cluster.
@@ -57,80 +64,131 @@ pub trait ClusterStore: Send + Sync {
     /// Remove a node's record now, as it shuts down cleanly.
     async fn remove_node(&self, id: &str) -> Result<()>;
 
-
-
     /// Read both endpoint records and memberships in one atomic view. Missing,
     /// removed, owner-mismatched or migrated memberships cannot yield a route.
     /// The caller must still authenticate its source and enforce node liveness,
     /// local pending registration, generation, network and lifecycle state.
-    async fn private_route_snapshot(&self, _source: &str, _destination: &str)
-        -> Result<Option<PrivateRouteSnapshot>> {
-        Err(StoreError("atomic private routes unsupported by this store".into()))
+    async fn private_route_snapshot(
+        &self,
+        _source: &str,
+        _destination: &str,
+    ) -> Result<Option<PrivateRouteSnapshot>> {
+        Err(StoreError(
+            "atomic private routes unsupported by this store".into(),
+        ))
     }
 
     /// Fresh route records/memberships plus both requested live nodes. The
     /// caller still checks placement, local VM identity and authorization.
     /// Stores may combine these reads atomically; the fallback preserves all
     /// checks without caching or removing either authorization barrier.
-    async fn private_route_snapshot_with_live_nodes(&self, source: &str, destination: &str,
-        source_node: &str, destination_node: &str) -> Result<Option<PrivateRouteSnapshot>> {
-        let (snapshot, source_live, destination_live)=tokio::join!(
-            self.private_route_snapshot(source,destination),self.node(source_node),self.node(destination_node));
-        let Some(snapshot)=snapshot? else { return Ok(None); };
-        if source_live?.is_none() || destination_live?.is_none() { return Ok(None); }
+    async fn private_route_snapshot_with_live_nodes(
+        &self,
+        source: &str,
+        destination: &str,
+        source_node: &str,
+        destination_node: &str,
+    ) -> Result<Option<PrivateRouteSnapshot>> {
+        let (snapshot, source_live, destination_live) = tokio::join!(
+            self.private_route_snapshot(source, destination),
+            self.node(source_node),
+            self.node(destination_node)
+        );
+        let Some(snapshot) = snapshot? else {
+            return Ok(None);
+        };
+        if source_live?.is_none() || destination_live?.is_none() {
+            return Ok(None);
+        }
         Ok(Some(snapshot))
     }
 
     /// Owner-authorized membership snapshot; includes a removal tombstone.
-    async fn private_membership(&self, _sandbox: &str, _owner: &crate::ownership::OwnerId)
-        -> Result<MembershipAccess<Option<NetworkMembershipState>>> {
-        Err(StoreError("private membership unsupported by this store".into()))
+    async fn private_membership(
+        &self,
+        _sandbox: &str,
+        _owner: &crate::ownership::OwnerId,
+    ) -> Result<MembershipAccess<Option<NetworkMembershipState>>> {
+        Err(StoreError(
+            "private membership unsupported by this store".into(),
+        ))
     }
     /// Atomic revision replacement against the current trusted VM incarnation.
     /// None expects no prior row. Exact replay succeeds; removed rows retain a
     /// revision and cannot be recreated by replaying an earlier None request.
-    async fn compare_private_membership(&self, _expected: Option<&str>, _next: &NetworkMembershipState)
-        -> Result<MembershipChange> {
-        Err(StoreError("private membership unsupported by this store".into()))
+    async fn compare_private_membership(
+        &self,
+        _expected: Option<&str>,
+        _next: &NetworkMembershipState,
+    ) -> Result<MembershipChange> {
+        Err(StoreError(
+            "private membership unsupported by this store".into(),
+        ))
     }
 
     /// Owner-authorized sharing state, including retained revocation revisions.
     /// Admission must use the atomic record/state snapshot below.
-    async fn web_sharing(&self, _sandbox: &str, _owner: &crate::ownership::OwnerId)
-        -> Result<SharingAccess<Option<WebSharingState>>> {
+    async fn web_sharing(
+        &self,
+        _sandbox: &str,
+        _owner: &crate::ownership::OwnerId,
+    ) -> Result<SharingAccess<Option<WebSharingState>>> {
         Err(StoreError("web sharing unsupported by this store".into()))
     }
     /// Atomic revision replacement against the current trusted VM incarnation.
     /// None expects no prior row. Exact replay succeeds; removed rows retain a
     /// revision and cannot be recreated by replaying an earlier None request.
-    async fn compare_web_sharing(&self, _expected: Option<&str>, _next: &WebSharingState)
-        -> Result<SharingChange> {
+    async fn compare_web_sharing(
+        &self,
+        _expected: Option<&str>,
+        _next: &WebSharingState,
+    ) -> Result<SharingChange> {
         Err(StoreError("web sharing unsupported by this store".into()))
     }
 
     /// Source-incarnation-scoped append-only address ledger. Returned bytes are
     /// canonical snapshots; retain them as the expected CAS version.
-    async fn private_address_ledger(&self, _source: &SandboxRecord) -> Result<MembershipAccess<Option<Vec<u8>>>> {
-        Err(StoreError("private address ledgers unsupported by this store".into()))
+    async fn private_address_ledger(
+        &self,
+        _source: &SandboxRecord,
+    ) -> Result<MembershipAccess<Option<Vec<u8>>>> {
+        Err(StoreError(
+            "private address ledgers unsupported by this store".into(),
+        ))
     }
     /// Exact replay succeeds; a stale expected snapshot or changed VM refuses.
     /// Stored bindings can only be appended, never changed or removed. Publish
     /// an address to a guest only after Applied (including exact retry recovery).
-    async fn compare_private_address_ledger(&self, _source: &SandboxRecord, _expected: Option<&[u8]>, _next: &[u8]) -> Result<MembershipChange> {
-        Err(StoreError("private address ledgers unsupported by this store".into()))
+    async fn compare_private_address_ledger(
+        &self,
+        _source: &SandboxRecord,
+        _expected: Option<&[u8]>,
+        _next: &[u8],
+    ) -> Result<MembershipChange> {
+        Err(StoreError(
+            "private address ledgers unsupported by this store".into(),
+        ))
     }
 
     /// Atomic authoritative record and grant read; missing state denies admission.
-    async fn web_sharing_snapshot(&self, _sandbox: &str) -> Result<Option<(SandboxRecord, WebSharingState)>> {
+    async fn web_sharing_snapshot(
+        &self,
+        _sandbox: &str,
+    ) -> Result<Option<(SandboxRecord, WebSharingState)>> {
         Err(StoreError("web sharing unsupported by this store".into()))
     }
 
     async fn put_sandbox(&self, record: &SandboxRecord) -> Result<()>;
     /// Assign an owner only to an existing ownerless VM without port reservations.
     /// Caller must authorize an administrator and serialize node lifecycle updates.
-    async fn adopt_sandbox_owner(&self, _sandbox: &str, _owner: &crate::ownership::OwnerId)
-        -> Result<crate::ownership::OwnerAdoption> {
-        Err(StoreError("owner adoption unsupported by this store".into()))
+    async fn adopt_sandbox_owner(
+        &self,
+        _sandbox: &str,
+        _owner: &crate::ownership::OwnerId,
+    ) -> Result<crate::ownership::OwnerAdoption> {
+        Err(StoreError(
+            "owner adoption unsupported by this store".into(),
+        ))
     }
 
     /// Publish a new sandbox and bind its pending name in one transaction.
@@ -166,8 +224,14 @@ pub trait ClusterStore: Send + Sync {
 
     /// Reserve or update a VM destination atomically. Replay/protocol updates keep its public port.
     /// The caller must authorize the VM owner before its first reservation; owner IDs are not secrets.
-    async fn claim_port(&self, _sandbox: &str, _machine_port: u16, _owner: &str,
-        _protocol: PortProtocol, _range: PublicPortRange) -> Result<PortClaim> {
+    async fn claim_port(
+        &self,
+        _sandbox: &str,
+        _machine_port: u16,
+        _owner: &str,
+        _protocol: PortProtocol,
+        _range: PublicPortRange,
+    ) -> Result<PortClaim> {
         Err(StoreError("managed ports unsupported by this store".into()))
     }
     async fn port_allocations(&self, _sandbox: Option<&str>) -> Result<Vec<PortAllocation>> {
@@ -179,15 +243,36 @@ pub trait ClusterStore: Send + Sync {
     }
 
     /// Require the stored VM creator and reserve/update in the same transaction.
-    async fn claim_owned_port(&self, _sandbox: &str, _machine_port: u16, _owner: &str,
-        _protocol: PortProtocol, _range: PublicPortRange) -> Result<PortClaim> {
-        Err(StoreError("owner port management unsupported by this store".into()))
+    async fn claim_owned_port(
+        &self,
+        _sandbox: &str,
+        _machine_port: u16,
+        _owner: &str,
+        _protocol: PortProtocol,
+        _range: PublicPortRange,
+    ) -> Result<PortClaim> {
+        Err(StoreError(
+            "owner port management unsupported by this store".into(),
+        ))
     }
-    async fn owned_ports(&self, _sandbox: &str, _owner: &str) -> Result<OwnedPortAccess<Vec<PortAllocation>>> {
-        Err(StoreError("owner port management unsupported by this store".into()))
+    async fn owned_ports(
+        &self,
+        _sandbox: &str,
+        _owner: &str,
+    ) -> Result<OwnedPortAccess<Vec<PortAllocation>>> {
+        Err(StoreError(
+            "owner port management unsupported by this store".into(),
+        ))
     }
-    async fn delete_owned_port(&self, _sandbox: &str, _machine_port: u16, _owner: &str) -> Result<OwnedPortAccess<bool>> {
-        Err(StoreError("owner port management unsupported by this store".into()))
+    async fn delete_owned_port(
+        &self,
+        _sandbox: &str,
+        _machine_port: u16,
+        _owner: &str,
+    ) -> Result<OwnedPortAccess<bool>> {
+        Err(StoreError(
+            "owner port management unsupported by this store".into(),
+        ))
     }
 
     /// Append to the event stream, which keeps a bounded tail.
@@ -238,50 +323,91 @@ struct SandboxState {
 }
 
 impl MemoryStore {
-    fn delete_port_inner(&self, sandbox: &str, machine_port: u16, owner: &str, owned: bool) -> Result<OwnedPortAccess<bool>> {
+    fn delete_port_inner(
+        &self,
+        sandbox: &str,
+        machine_port: u16,
+        owner: &str,
+        owned: bool,
+    ) -> Result<OwnedPortAccess<bool>> {
         crate::ports::validate_request(sandbox, machine_port, owner)?;
         let mut state = self.sandboxes.lock();
         if owned {
-            let Some(record) = state.records.get(sandbox) else { return Ok(OwnedPortAccess::SandboxMissing); };
-            if record.owner_id.as_ref().map(|id| id.as_str()) != Some(owner) { return Ok(OwnedPortAccess::OwnerConflict); }
+            let Some(record) = state.records.get(sandbox) else {
+                return Ok(OwnedPortAccess::SandboxMissing);
+            };
+            if record.owner_id.as_ref().map(|id| id.as_str()) != Some(owner) {
+                return Ok(OwnedPortAccess::OwnerConflict);
+            }
         }
         let key = (sandbox.to_owned(), machine_port);
-        let Some(row) = state.ports.get(&key) else { return Ok(OwnedPortAccess::Granted(false)) };
-        if row.owner_id != owner { return Ok(if owned { OwnedPortAccess::OwnerConflict } else { OwnedPortAccess::Granted(false) }); }
+        let Some(row) = state.ports.get(&key) else {
+            return Ok(OwnedPortAccess::Granted(false));
+        };
+        if row.owner_id != owner {
+            return Ok(if owned {
+                OwnedPortAccess::OwnerConflict
+            } else {
+                OwnedPortAccess::Granted(false)
+            });
+        }
         let public_port = row.public_port;
         state.ports.remove(&key);
         state.public_ports.remove(&public_port);
         Ok(OwnedPortAccess::Granted(true))
     }
 
-
-    fn claim_port_inner(&self, sandbox: &str, machine_port: u16, owner: &str,
-        protocol: PortProtocol, range: PublicPortRange, owned: bool) -> Result<PortClaim> {
+    fn claim_port_inner(
+        &self,
+        sandbox: &str,
+        machine_port: u16,
+        owner: &str,
+        protocol: PortProtocol,
+        range: PublicPortRange,
+        owned: bool,
+    ) -> Result<PortClaim> {
         crate::ports::validate_request(sandbox, machine_port, owner)?;
         let mut state = self.sandboxes.lock();
-        if !state.records.contains_key(sandbox) { return Ok(PortClaim::SandboxMissing); }
-        if owned && state.records.get(sandbox).and_then(|row| row.owner_id.as_ref()).map(|id| id.as_str()) != Some(owner) {
+        if !state.records.contains_key(sandbox) {
+            return Ok(PortClaim::SandboxMissing);
+        }
+        if owned
+            && state
+                .records
+                .get(sandbox)
+                .and_then(|row| row.owner_id.as_ref())
+                .map(|id| id.as_str())
+                != Some(owner)
+        {
             return Ok(PortClaim::OwnerConflict);
         }
         let key = (sandbox.to_owned(), machine_port);
         if let Some(existing) = state.ports.get_mut(&key) {
-            if existing.owner_id != owner { return Ok(PortClaim::OwnerConflict); }
+            if existing.owner_id != owner {
+                return Ok(PortClaim::OwnerConflict);
+            }
             existing.protocol = protocol;
             return Ok(PortClaim::Allocated(existing.clone()));
         }
         if state.ports.keys().filter(|(id, _)| id == sandbox).count() >= MAX_PORTS_PER_SANDBOX {
             return Ok(PortClaim::LimitReached);
         }
-        let Some(public_port) = (range.first()..=range.last()).find(|p| !state.public_ports.contains_key(p)) else {
+        let Some(public_port) =
+            (range.first()..=range.last()).find(|p| !state.public_ports.contains_key(p))
+        else {
             return Ok(PortClaim::PoolExhausted);
         };
-        let allocation = PortAllocation { sandbox_id: sandbox.into(), machine_port,
-            public_port, owner_id: owner.into(), protocol };
+        let allocation = PortAllocation {
+            sandbox_id: sandbox.into(),
+            machine_port,
+            public_port,
+            owner_id: owner.into(),
+            protocol,
+        };
         state.public_ports.insert(public_port, key.clone());
         state.ports.insert(key, allocation.clone());
         Ok(PortClaim::Allocated(allocation))
     }
-
 
     #[must_use]
     pub fn new() -> Self {
@@ -322,121 +448,239 @@ impl ClusterStore for MemoryStore {
         Ok(())
     }
 
-    async fn adopt_sandbox_owner(&self, sandbox: &str, owner: &crate::ownership::OwnerId)
-        -> Result<crate::ownership::OwnerAdoption> {
+    async fn adopt_sandbox_owner(
+        &self,
+        sandbox: &str,
+        owner: &crate::ownership::OwnerId,
+    ) -> Result<crate::ownership::OwnerAdoption> {
         use crate::ownership::OwnerAdoption;
         crate::ports::validate_request(sandbox, 1, owner.as_str())?;
         let mut state = self.sandboxes.lock();
-        let Some(record) = state.records.get(sandbox) else { return Ok(OwnerAdoption::SandboxMissing); };
+        let Some(record) = state.records.get(sandbox) else {
+            return Ok(OwnerAdoption::SandboxMissing);
+        };
         if let Some(current) = &record.owner_id {
-            return Ok(if current == owner { OwnerAdoption::AlreadyOwned } else { OwnerAdoption::OwnerConflict });
+            return Ok(if current == owner {
+                OwnerAdoption::AlreadyOwned
+            } else {
+                OwnerAdoption::OwnerConflict
+            });
         }
-        if state.ports.keys().any(|(id, _)| id == sandbox) { return Ok(OwnerAdoption::PortsPresent); }
+        if state.ports.keys().any(|(id, _)| id == sandbox) {
+            return Ok(OwnerAdoption::PortsPresent);
+        }
         state.records.get_mut(sandbox).unwrap().owner_id = Some(owner.clone());
         Ok(OwnerAdoption::Adopted)
     }
 
-
-
-    async fn private_address_ledger(&self, source: &SandboxRecord) -> Result<MembershipAccess<Option<Vec<u8>>>> {
-        crate::private_addresses::PrivateAddressBook::new(source).map_err(|e|StoreError(e.into()))?;
+    async fn private_address_ledger(
+        &self,
+        source: &SandboxRecord,
+    ) -> Result<MembershipAccess<Option<Vec<u8>>>> {
+        crate::private_addresses::PrivateAddressBook::new(source)
+            .map_err(|e| StoreError(e.into()))?;
         let state = self.sandboxes.lock();
-        let Some(record) = state.records.get(&source.sandbox_id) else { return Ok(MembershipAccess::SandboxMissing); };
-        if record.owner_id != source.owner_id { return Ok(MembershipAccess::OwnerConflict); }
-        if !private_address_source_matches(source, record) { return Err(StoreError("private address source changed".into())); }
-        let row = state.private_addresses.get(&(source.sandbox_id.clone(),source.started_at_ms)).cloned();
-        if let Some(bytes) = &row { crate::private_addresses::PrivateAddressBook::restore(bytes, source).map_err(|e|StoreError(e.into()))?; }
+        let Some(record) = state.records.get(&source.sandbox_id) else {
+            return Ok(MembershipAccess::SandboxMissing);
+        };
+        if record.owner_id != source.owner_id {
+            return Ok(MembershipAccess::OwnerConflict);
+        }
+        if !private_address_source_matches(source, record) {
+            return Err(StoreError("private address source changed".into()));
+        }
+        let row = state
+            .private_addresses
+            .get(&(source.sandbox_id.clone(), source.started_at_ms))
+            .cloned();
+        if let Some(bytes) = &row {
+            crate::private_addresses::PrivateAddressBook::restore(bytes, source)
+                .map_err(|e| StoreError(e.into()))?;
+        }
         Ok(MembershipAccess::Granted(row))
     }
-    async fn compare_private_address_ledger(&self, source: &SandboxRecord, expected: Option<&[u8]>, next: &[u8]) -> Result<MembershipChange> {
+    async fn compare_private_address_ledger(
+        &self,
+        source: &SandboxRecord,
+        expected: Option<&[u8]>,
+        next: &[u8],
+    ) -> Result<MembershipChange> {
         // Validate input before taking the registry mutex.
-        let canonical = crate::private_addresses::PrivateAddressBook::canonical_append(None,next,source).map_err(|e|StoreError(e.into()))?;
+        let canonical =
+            crate::private_addresses::PrivateAddressBook::canonical_append(None, next, source)
+                .map_err(|e| StoreError(e.into()))?;
         let mut state = self.sandboxes.lock();
-        let Some(record) = state.records.get(&source.sandbox_id) else { return Ok(MembershipChange::SandboxMissing); };
-        if record.owner_id != source.owner_id { return Ok(MembershipChange::OwnerConflict); }
-        if !private_address_source_matches(source,record) { return Ok(MembershipChange::RecordChanged); }
-        let key = (source.sandbox_id.clone(),source.started_at_ms);
+        let Some(record) = state.records.get(&source.sandbox_id) else {
+            return Ok(MembershipChange::SandboxMissing);
+        };
+        if record.owner_id != source.owner_id {
+            return Ok(MembershipChange::OwnerConflict);
+        }
+        if !private_address_source_matches(source, record) {
+            return Ok(MembershipChange::RecordChanged);
+        }
+        let key = (source.sandbox_id.clone(), source.started_at_ms);
         let current = state.private_addresses.get(&key);
-        if current.is_some_and(|bytes|bytes==&canonical) { return Ok(MembershipChange::Applied); }
-        if current.map(Vec::as_slice) != expected { return Ok(MembershipChange::RevisionConflict); }
-        crate::private_addresses::PrivateAddressBook::canonical_append(current.map(Vec::as_slice),&canonical,source).map_err(|e|StoreError(e.into()))?;
-        state.private_addresses.insert(key,canonical);
+        if current.is_some_and(|bytes| bytes == &canonical) {
+            return Ok(MembershipChange::Applied);
+        }
+        if current.map(Vec::as_slice) != expected {
+            return Ok(MembershipChange::RevisionConflict);
+        }
+        crate::private_addresses::PrivateAddressBook::canonical_append(
+            current.map(Vec::as_slice),
+            &canonical,
+            source,
+        )
+        .map_err(|e| StoreError(e.into()))?;
+        state.private_addresses.insert(key, canonical);
         Ok(MembershipChange::Applied)
     }
 
-    async fn private_route_snapshot(&self, source: &str, destination: &str)
-        -> Result<Option<PrivateRouteSnapshot>> {
-        crate::ports::validate_request(source,1,"private-route")?;
-        crate::ports::validate_request(destination,1,"private-route")?;
-        let state=self.sandboxes.lock();
-        let (Some(sr),Some(dr),Some(sm),Some(dm))=(state.records.get(source),state.records.get(destination),
-            state.private_memberships.get(source),state.private_memberships.get(destination)) else { return Ok(None); };
-        Ok(PrivateRouteSnapshot::checked(source,destination,sr.clone(),dr.clone(),sm.clone(),dm.clone()))
+    async fn private_route_snapshot(
+        &self,
+        source: &str,
+        destination: &str,
+    ) -> Result<Option<PrivateRouteSnapshot>> {
+        crate::ports::validate_request(source, 1, "private-route")?;
+        crate::ports::validate_request(destination, 1, "private-route")?;
+        let state = self.sandboxes.lock();
+        let (Some(sr), Some(dr), Some(sm), Some(dm)) = (
+            state.records.get(source),
+            state.records.get(destination),
+            state.private_memberships.get(source),
+            state.private_memberships.get(destination),
+        ) else {
+            return Ok(None);
+        };
+        Ok(PrivateRouteSnapshot::checked(
+            source,
+            destination,
+            sr.clone(),
+            dr.clone(),
+            sm.clone(),
+            dm.clone(),
+        ))
     }
 
-    async fn private_membership(&self, sandbox: &str, owner: &crate::ownership::OwnerId)
-        -> Result<MembershipAccess<Option<NetworkMembershipState>>> {
+    async fn private_membership(
+        &self,
+        sandbox: &str,
+        owner: &crate::ownership::OwnerId,
+    ) -> Result<MembershipAccess<Option<NetworkMembershipState>>> {
         crate::ports::validate_request(sandbox, 1, owner.as_str())?;
         let state = self.sandboxes.lock();
-        let Some(record) = state.records.get(sandbox) else { return Ok(MembershipAccess::SandboxMissing); };
-        if record.owner_id.as_ref() != Some(owner) { return Ok(MembershipAccess::OwnerConflict); }
+        let Some(record) = state.records.get(sandbox) else {
+            return Ok(MembershipAccess::SandboxMissing);
+        };
+        if record.owner_id.as_ref() != Some(owner) {
+            return Ok(MembershipAccess::OwnerConflict);
+        }
         let row = state.private_memberships.get(sandbox).cloned();
         if row.as_ref().is_some_and(|row| row.owner_id() != owner) {
             return Ok(MembershipAccess::OwnerConflict);
         }
         Ok(MembershipAccess::Granted(row))
     }
-    async fn compare_private_membership(&self, expected: Option<&str>, next: &NetworkMembershipState)
-        -> Result<MembershipChange> {
+    async fn compare_private_membership(
+        &self,
+        expected: Option<&str>,
+        next: &NetworkMembershipState,
+    ) -> Result<MembershipChange> {
         let mut state = self.sandboxes.lock();
-        let Some(record) = state.records.get(next.sandbox_id()) else { return Ok(MembershipChange::SandboxMissing); };
-        if record.owner_id.as_ref() != Some(next.owner_id()) { return Ok(MembershipChange::OwnerConflict); }
-        if !next.matches_record(record) { return Ok(MembershipChange::RecordChanged); }
+        let Some(record) = state.records.get(next.sandbox_id()) else {
+            return Ok(MembershipChange::SandboxMissing);
+        };
+        if record.owner_id.as_ref() != Some(next.owner_id()) {
+            return Ok(MembershipChange::OwnerConflict);
+        }
+        if !next.matches_record(record) {
+            return Ok(MembershipChange::RecordChanged);
+        }
         let current = state.private_memberships.get(next.sandbox_id());
-        if current.is_some_and(|row| row.owner_id() != next.owner_id()) { return Ok(MembershipChange::OwnerConflict); }
-        if current == Some(next) { return Ok(MembershipChange::Applied); }
+        if current.is_some_and(|row| row.owner_id() != next.owner_id()) {
+            return Ok(MembershipChange::OwnerConflict);
+        }
+        if current == Some(next) {
+            return Ok(MembershipChange::Applied);
+        }
         if current.map(|row| row.revision()) != expected
-            || current.is_some_and(|row| row.revision() == next.revision()) {
+            || current.is_some_and(|row| row.revision() == next.revision())
+        {
             return Ok(MembershipChange::RevisionConflict);
         }
-        state.private_memberships.insert(next.sandbox_id().into(), next.clone());
+        state
+            .private_memberships
+            .insert(next.sandbox_id().into(), next.clone());
         Ok(MembershipChange::Applied)
     }
 
-    async fn web_sharing(&self, sandbox: &str, owner: &crate::ownership::OwnerId)
-        -> Result<SharingAccess<Option<WebSharingState>>> {
+    async fn web_sharing(
+        &self,
+        sandbox: &str,
+        owner: &crate::ownership::OwnerId,
+    ) -> Result<SharingAccess<Option<WebSharingState>>> {
         crate::ports::validate_request(sandbox, 1, owner.as_str())?;
         let state = self.sandboxes.lock();
-        let Some(record) = state.records.get(sandbox) else { return Ok(SharingAccess::SandboxMissing); };
-        if record.owner_id.as_ref() != Some(owner) { return Ok(SharingAccess::OwnerConflict); }
+        let Some(record) = state.records.get(sandbox) else {
+            return Ok(SharingAccess::SandboxMissing);
+        };
+        if record.owner_id.as_ref() != Some(owner) {
+            return Ok(SharingAccess::OwnerConflict);
+        }
         let row = state.web_sharing.get(sandbox).cloned();
         if row.as_ref().is_some_and(|row| row.owner_id() != owner) {
             return Ok(SharingAccess::OwnerConflict);
         }
         Ok(SharingAccess::Granted(row))
     }
-    async fn compare_web_sharing(&self, expected: Option<&str>, next: &WebSharingState)
-        -> Result<SharingChange> {
+    async fn compare_web_sharing(
+        &self,
+        expected: Option<&str>,
+        next: &WebSharingState,
+    ) -> Result<SharingChange> {
         let mut state = self.sandboxes.lock();
-        let Some(record) = state.records.get(next.sandbox_id()) else { return Ok(SharingChange::SandboxMissing); };
-        if record.owner_id.as_ref() != Some(next.owner_id()) { return Ok(SharingChange::OwnerConflict); }
-        if !next.matches_record(record) { return Ok(SharingChange::RecordChanged); }
+        let Some(record) = state.records.get(next.sandbox_id()) else {
+            return Ok(SharingChange::SandboxMissing);
+        };
+        if record.owner_id.as_ref() != Some(next.owner_id()) {
+            return Ok(SharingChange::OwnerConflict);
+        }
+        if !next.matches_record(record) {
+            return Ok(SharingChange::RecordChanged);
+        }
         let current = state.web_sharing.get(next.sandbox_id());
-        if current.is_some_and(|row| row.owner_id() != next.owner_id()) { return Ok(SharingChange::OwnerConflict); }
-        if current == Some(next) { return Ok(SharingChange::Applied); }
+        if current.is_some_and(|row| row.owner_id() != next.owner_id()) {
+            return Ok(SharingChange::OwnerConflict);
+        }
+        if current == Some(next) {
+            return Ok(SharingChange::Applied);
+        }
         if current.map(|row| row.revision()) != expected
-            || current.is_some_and(|row| row.revision() == next.revision()) {
+            || current.is_some_and(|row| row.revision() == next.revision())
+        {
             return Ok(SharingChange::RevisionConflict);
         }
-        state.web_sharing.insert(next.sandbox_id().into(), next.clone());
+        state
+            .web_sharing
+            .insert(next.sandbox_id().into(), next.clone());
         Ok(SharingChange::Applied)
     }
 
-    async fn web_sharing_snapshot(&self, sandbox: &str) -> Result<Option<(SandboxRecord, WebSharingState)>> {
+    async fn web_sharing_snapshot(
+        &self,
+        sandbox: &str,
+    ) -> Result<Option<(SandboxRecord, WebSharingState)>> {
         crate::ports::validate_request(sandbox, 1, "web-sharing")?;
         let state = self.sandboxes.lock();
-        let (Some(record), Some(row)) = (state.records.get(sandbox), state.web_sharing.get(sandbox)) else { return Ok(None); };
-        if !row.matches_record(record) { return Ok(None); }
+        let (Some(record), Some(row)) =
+            (state.records.get(sandbox), state.web_sharing.get(sandbox))
+        else {
+            return Ok(None);
+        };
+        if !row.matches_record(record) {
+            return Ok(None);
+        }
         Ok(Some((record.clone(), row.clone())))
     }
 
@@ -444,7 +688,10 @@ impl ClusterStore for MemoryStore {
         let mut state = self.sandboxes.lock();
         let mut updated = record.clone();
         if updated.owner_id.is_none() {
-            updated.owner_id = state.records.get(&record.sandbox_id).and_then(|current| current.owner_id.clone());
+            updated.owner_id = state
+                .records
+                .get(&record.sandbox_id)
+                .and_then(|current| current.owner_id.clone());
         }
         state.records.insert(record.sandbox_id.clone(), updated);
         Ok(())
@@ -599,38 +846,77 @@ impl ClusterStore for MemoryStore {
         }
     }
 
-    async fn claim_port(&self, sandbox: &str, machine_port: u16, owner: &str,
-        protocol: PortProtocol, range: PublicPortRange) -> Result<PortClaim> {
+    async fn claim_port(
+        &self,
+        sandbox: &str,
+        machine_port: u16,
+        owner: &str,
+        protocol: PortProtocol,
+        range: PublicPortRange,
+    ) -> Result<PortClaim> {
         self.claim_port_inner(sandbox, machine_port, owner, protocol, range, false)
     }
-    async fn claim_owned_port(&self, sandbox: &str, machine_port: u16, owner: &str,
-        protocol: PortProtocol, range: PublicPortRange) -> Result<PortClaim> {
+    async fn claim_owned_port(
+        &self,
+        sandbox: &str,
+        machine_port: u16,
+        owner: &str,
+        protocol: PortProtocol,
+        range: PublicPortRange,
+    ) -> Result<PortClaim> {
         self.claim_port_inner(sandbox, machine_port, owner, protocol, range, true)
     }
 
     async fn port_allocations(&self, sandbox: Option<&str>) -> Result<Vec<PortAllocation>> {
-        let mut rows: Vec<_> = self.sandboxes.lock().ports.values()
-            .filter(|row| sandbox.is_none_or(|id| row.sandbox_id == id)).cloned().collect();
+        let mut rows: Vec<_> = self
+            .sandboxes
+            .lock()
+            .ports
+            .values()
+            .filter(|row| sandbox.is_none_or(|id| row.sandbox_id == id))
+            .cloned()
+            .collect();
         rows.sort_by_key(|row| row.public_port);
         Ok(rows)
     }
 
     async fn delete_port(&self, sandbox: &str, machine_port: u16, owner: &str) -> Result<bool> {
         match self.delete_port_inner(sandbox, machine_port, owner, false)? {
-            OwnedPortAccess::Granted(value) => Ok(value), _ => Ok(false),
+            OwnedPortAccess::Granted(value) => Ok(value),
+            _ => Ok(false),
         }
     }
-    async fn delete_owned_port(&self, sandbox: &str, machine_port: u16, owner: &str) -> Result<OwnedPortAccess<bool>> {
+    async fn delete_owned_port(
+        &self,
+        sandbox: &str,
+        machine_port: u16,
+        owner: &str,
+    ) -> Result<OwnedPortAccess<bool>> {
         self.delete_port_inner(sandbox, machine_port, owner, true)
     }
 
-    async fn owned_ports(&self, sandbox: &str, owner: &str) -> Result<OwnedPortAccess<Vec<PortAllocation>>> {
+    async fn owned_ports(
+        &self,
+        sandbox: &str,
+        owner: &str,
+    ) -> Result<OwnedPortAccess<Vec<PortAllocation>>> {
         crate::ports::validate_request(sandbox, 1, owner)?;
         let state = self.sandboxes.lock();
-        let Some(record) = state.records.get(sandbox) else { return Ok(OwnedPortAccess::SandboxMissing); };
-        if record.owner_id.as_ref().map(|id| id.as_str()) != Some(owner) { return Ok(OwnedPortAccess::OwnerConflict); }
-        let mut rows: Vec<_> = state.ports.values().filter(|row| row.sandbox_id == sandbox).cloned().collect();
-        if rows.len()>MAX_PORTS_PER_SANDBOX || rows.iter().any(|row| row.owner_id!=owner) { return Err(StoreError("invalid owned-port snapshot".into())); }
+        let Some(record) = state.records.get(sandbox) else {
+            return Ok(OwnedPortAccess::SandboxMissing);
+        };
+        if record.owner_id.as_ref().map(|id| id.as_str()) != Some(owner) {
+            return Ok(OwnedPortAccess::OwnerConflict);
+        }
+        let mut rows: Vec<_> = state
+            .ports
+            .values()
+            .filter(|row| row.sandbox_id == sandbox)
+            .cloned()
+            .collect();
+        if rows.len() > MAX_PORTS_PER_SANDBOX || rows.iter().any(|row| row.owner_id != owner) {
+            return Err(StoreError("invalid owned-port snapshot".into()));
+        }
         rows.sort_by_key(|row| row.public_port);
         Ok(OwnedPortAccess::Granted(rows))
     }
@@ -723,7 +1009,13 @@ fn json_error(e: serde_json::Error) -> StoreError {
 }
 
 impl RedisStore {
-    async fn delete_port_inner(&self, sandbox: &str, machine_port: u16, owner: &str, owned: bool) -> Result<OwnedPortAccess<bool>> {
+    async fn delete_port_inner(
+        &self,
+        sandbox: &str,
+        machine_port: u16,
+        owner: &str,
+        owned: bool,
+    ) -> Result<OwnedPortAccess<bool>> {
         crate::ports::validate_request(sandbox, machine_port, owner)?;
         let mut c = self.connection.clone();
         let removed: i64 = redis::cmd("EVAL").arg(r#"
@@ -753,14 +1045,21 @@ redis.call('HDEL',KEYS[1],ARGV[2]); redis.call('HDEL',KEYS[2],field); return 1
             .arg(sandbox).arg(machine_port).arg(owner).arg(u8::from(owned)).query_async(&mut c).await.map_err(redis_error)?;
         match removed {
             0 | 1 => Ok(OwnedPortAccess::Granted(removed == 1)),
-            2 => Ok(OwnedPortAccess::OwnerConflict), 3 => Ok(OwnedPortAccess::SandboxMissing),
+            2 => Ok(OwnedPortAccess::OwnerConflict),
+            3 => Ok(OwnedPortAccess::SandboxMissing),
             _ => Err(StoreError("unexpected owned-port deletion result".into())),
         }
     }
 
-
-    async fn claim_port_inner(&self, sandbox: &str, machine_port: u16, owner: &str,
-        protocol: PortProtocol, range: PublicPortRange, owned: bool) -> Result<PortClaim> {
+    async fn claim_port_inner(
+        &self,
+        sandbox: &str,
+        machine_port: u16,
+        owner: &str,
+        protocol: PortProtocol,
+        range: PublicPortRange,
+        owned: bool,
+    ) -> Result<PortClaim> {
         crate::ports::validate_request(sandbox, machine_port, owner)?;
         let mut c = self.connection.clone();
         let (status, json): (i64, String) = redis::cmd("EVAL").arg(r#"
@@ -814,13 +1113,17 @@ return {1,encoded}
             .query_async(&mut c).await.map_err(redis_error)?;
         match status {
             0 => Ok(PortClaim::SandboxMissing),
-            1 => { let row: PortAllocation = serde_json::from_str(&json).map_err(json_error)?;
-                row.validate()?; Ok(PortClaim::Allocated(row)) },
-            2 => Ok(PortClaim::OwnerConflict), 3 => Ok(PortClaim::LimitReached),
-            4 => Ok(PortClaim::PoolExhausted), _ => Err(StoreError("unexpected managed-port claim result".into())),
+            1 => {
+                let row: PortAllocation = serde_json::from_str(&json).map_err(json_error)?;
+                row.validate()?;
+                Ok(PortClaim::Allocated(row))
+            }
+            2 => Ok(PortClaim::OwnerConflict),
+            3 => Ok(PortClaim::LimitReached),
+            4 => Ok(PortClaim::PoolExhausted),
+            _ => Err(StoreError("unexpected managed-port claim result".into())),
         }
     }
-
 
     /// Connect to `url` (`redis://host:6379/0`), keeping keys under
     /// `namespace`.
@@ -966,8 +1269,11 @@ impl ClusterStore for RedisStore {
             .map_err(redis_error)
     }
 
-    async fn adopt_sandbox_owner(&self, sandbox: &str, owner: &crate::ownership::OwnerId)
-        -> Result<crate::ownership::OwnerAdoption> {
+    async fn adopt_sandbox_owner(
+        &self,
+        sandbox: &str,
+        owner: &crate::ownership::OwnerId,
+    ) -> Result<crate::ownership::OwnerAdoption> {
         use crate::ownership::OwnerAdoption;
         crate::ports::validate_request(sandbox, 1, owner.as_str())?;
         let mut c = self.connection.clone();
@@ -975,14 +1281,27 @@ impl ClusterStore for RedisStore {
         // Decode/validate outside Lua; compare exact bytes before the single write.
         // Preserve unknown JSON fields instead of reconstructing the typed record.
         for _ in 0..16 {
-            let original: Option<String> = redis::cmd("GET").arg(&key).query_async(&mut c).await.map_err(redis_error)?;
-            let Some(original) = original else { return Ok(OwnerAdoption::SandboxMissing); };
+            let original: Option<String> = redis::cmd("GET")
+                .arg(&key)
+                .query_async(&mut c)
+                .await
+                .map_err(redis_error)?;
+            let Some(original) = original else {
+                return Ok(OwnerAdoption::SandboxMissing);
+            };
             let record: SandboxRecord = serde_json::from_str(&original).map_err(json_error)?;
-            if record.sandbox_id != sandbox { return Err(StoreError("invalid sandbox adoption record".into())); }
-            if let Some(current) = record.owner_id {
-                return Ok(if current == *owner { OwnerAdoption::AlreadyOwned } else { OwnerAdoption::OwnerConflict });
+            if record.sandbox_id != sandbox {
+                return Err(StoreError("invalid sandbox adoption record".into()));
             }
-            let mut value: serde_json::Value = serde_json::from_str(&original).map_err(json_error)?;
+            if let Some(current) = record.owner_id {
+                return Ok(if current == *owner {
+                    OwnerAdoption::AlreadyOwned
+                } else {
+                    OwnerAdoption::OwnerConflict
+                });
+            }
+            let mut value: serde_json::Value =
+                serde_json::from_str(&original).map_err(json_error)?;
             value["owner_id"] = serde_json::json!(owner);
             let replacement = serde_json::to_string(&value).map_err(json_error)?;
             let result: i64 = redis::cmd("EVAL").arg(r#"
@@ -1002,41 +1321,88 @@ redis.call('SET',KEYS[1],ARGV[2]); return 3
                 _ => return Err(StoreError("invalid owner adoption result".into())),
             }
         }
-        Err(StoreError("sandbox owner adoption contention; retry".into()))
+        Err(StoreError(
+            "sandbox owner adoption contention; retry".into(),
+        ))
     }
 
-
-
-    async fn private_address_ledger(&self, source: &SandboxRecord) -> Result<MembershipAccess<Option<Vec<u8>>>> {
-        crate::private_addresses::PrivateAddressBook::new(source).map_err(|e|StoreError(e.into()))?;
+    async fn private_address_ledger(
+        &self,
+        source: &SandboxRecord,
+    ) -> Result<MembershipAccess<Option<Vec<u8>>>> {
+        crate::private_addresses::PrivateAddressBook::new(source)
+            .map_err(|e| StoreError(e.into()))?;
         let mut c = self.connection.clone();
-        let (vm,row):(Option<String>,Option<Vec<u8>>) = redis::cmd("EVAL")
-            .arg("return {redis.call('GET',KEYS[1]),redis.call('GET',KEYS[2])}").arg(2)
-            .arg(self.key(&format!("sandbox:{}",source.sandbox_id)))
-            .arg(self.key(&format!("private-addresses:{}:{}",source.sandbox_id,source.started_at_ms)))
-            .query_async(&mut c).await.map_err(redis_error)?;
-        let Some(vm)=vm else { return Ok(MembershipAccess::SandboxMissing); };
-        let record:SandboxRecord=serde_json::from_str(&vm).map_err(json_error)?;
-        if record.owner_id!=source.owner_id { return Ok(MembershipAccess::OwnerConflict); }
-        if !private_address_source_matches(source,&record) { return Err(StoreError("private address source changed".into())); }
-        if let Some(bytes)=&row { crate::private_addresses::PrivateAddressBook::restore(bytes,source).map_err(|e|StoreError(e.into()))?; }
+        let (vm, row): (Option<String>, Option<Vec<u8>>) = redis::cmd("EVAL")
+            .arg("return {redis.call('GET',KEYS[1]),redis.call('GET',KEYS[2])}")
+            .arg(2)
+            .arg(self.key(&format!("sandbox:{}", source.sandbox_id)))
+            .arg(self.key(&format!(
+                "private-addresses:{}:{}",
+                source.sandbox_id, source.started_at_ms
+            )))
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        let Some(vm) = vm else {
+            return Ok(MembershipAccess::SandboxMissing);
+        };
+        let record: SandboxRecord = serde_json::from_str(&vm).map_err(json_error)?;
+        if record.owner_id != source.owner_id {
+            return Ok(MembershipAccess::OwnerConflict);
+        }
+        if !private_address_source_matches(source, &record) {
+            return Err(StoreError("private address source changed".into()));
+        }
+        if let Some(bytes) = &row {
+            crate::private_addresses::PrivateAddressBook::restore(bytes, source)
+                .map_err(|e| StoreError(e.into()))?;
+        }
         Ok(MembershipAccess::Granted(row))
     }
-    async fn compare_private_address_ledger(&self, source: &SandboxRecord, expected: Option<&[u8]>, next: &[u8]) -> Result<MembershipChange> {
-        let canonical=crate::private_addresses::PrivateAddressBook::canonical_append(None,next,source).map_err(|e|StoreError(e.into()))?;
-        let vm_key=self.key(&format!("sandbox:{}",source.sandbox_id));
-        let row_key=self.key(&format!("private-addresses:{}:{}",source.sandbox_id,source.started_at_ms));
-        let mut c=self.connection.clone();
-        let (vm,row):(Option<String>,Option<Vec<u8>>)=redis::cmd("EVAL")
-            .arg("return {redis.call('GET',KEYS[1]),redis.call('GET',KEYS[2])}").arg(2).arg(&vm_key).arg(&row_key)
-            .query_async(&mut c).await.map_err(redis_error)?;
-        let Some(vm)=vm else { return Ok(MembershipChange::SandboxMissing); };
-        let record:SandboxRecord=serde_json::from_str(&vm).map_err(json_error)?;
-        if record.owner_id!=source.owner_id { return Ok(MembershipChange::OwnerConflict); }
-        if !private_address_source_matches(source,&record) { return Ok(MembershipChange::RecordChanged); }
-        let replay=row.as_ref()==Some(&canonical);
-        if !replay && row.as_deref()!=expected { return Ok(MembershipChange::RevisionConflict); }
-        crate::private_addresses::PrivateAddressBook::canonical_append(row.as_deref(),&canonical,source).map_err(|e|StoreError(e.into()))?;
+    async fn compare_private_address_ledger(
+        &self,
+        source: &SandboxRecord,
+        expected: Option<&[u8]>,
+        next: &[u8],
+    ) -> Result<MembershipChange> {
+        let canonical =
+            crate::private_addresses::PrivateAddressBook::canonical_append(None, next, source)
+                .map_err(|e| StoreError(e.into()))?;
+        let vm_key = self.key(&format!("sandbox:{}", source.sandbox_id));
+        let row_key = self.key(&format!(
+            "private-addresses:{}:{}",
+            source.sandbox_id, source.started_at_ms
+        ));
+        let mut c = self.connection.clone();
+        let (vm, row): (Option<String>, Option<Vec<u8>>) = redis::cmd("EVAL")
+            .arg("return {redis.call('GET',KEYS[1]),redis.call('GET',KEYS[2])}")
+            .arg(2)
+            .arg(&vm_key)
+            .arg(&row_key)
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        let Some(vm) = vm else {
+            return Ok(MembershipChange::SandboxMissing);
+        };
+        let record: SandboxRecord = serde_json::from_str(&vm).map_err(json_error)?;
+        if record.owner_id != source.owner_id {
+            return Ok(MembershipChange::OwnerConflict);
+        }
+        if !private_address_source_matches(source, &record) {
+            return Ok(MembershipChange::RecordChanged);
+        }
+        let replay = row.as_ref() == Some(&canonical);
+        if !replay && row.as_deref() != expected {
+            return Ok(MembershipChange::RevisionConflict);
+        }
+        crate::private_addresses::PrivateAddressBook::canonical_append(
+            row.as_deref(),
+            &canonical,
+            source,
+        )
+        .map_err(|e| StoreError(e.into()))?;
         let result:i64=redis::cmd("EVAL").arg(r#"
 local vm=redis.call('GET',KEYS[1])
 if not vm then return 3 end
@@ -1049,37 +1415,70 @@ if ARGV[4]=='0' then redis.call('SET',KEYS[2],ARGV[3]) end
 return 0
 "#).arg(2).arg(vm_key).arg(row_key).arg(vm).arg(row.unwrap_or_default()).arg(canonical).arg(u8::from(replay))
             .query_async(&mut c).await.map_err(redis_error)?;
-        match result { 0=>Ok(MembershipChange::Applied),1=>Ok(MembershipChange::RevisionConflict),3=>Ok(MembershipChange::SandboxMissing),4=>Ok(MembershipChange::RecordChanged),_=>Err(StoreError("invalid address ledger transaction result".into())) }
+        match result {
+            0 => Ok(MembershipChange::Applied),
+            1 => Ok(MembershipChange::RevisionConflict),
+            3 => Ok(MembershipChange::SandboxMissing),
+            4 => Ok(MembershipChange::RecordChanged),
+            _ => Err(StoreError(
+                "invalid address ledger transaction result".into(),
+            )),
+        }
     }
 
-    async fn private_route_snapshot_with_live_nodes(&self, source: &str, destination: &str,
-        source_node: &str, destination_node: &str) -> Result<Option<PrivateRouteSnapshot>> {
-        crate::ports::validate_request(source,1,"private-route")?;
-        crate::ports::validate_request(destination,1,"private-route")?;
-        let mut c=self.connection.clone();
+    async fn private_route_snapshot_with_live_nodes(
+        &self,
+        source: &str,
+        destination: &str,
+        source_node: &str,
+        destination_node: &str,
+    ) -> Result<Option<PrivateRouteSnapshot>> {
+        crate::ports::validate_request(source, 1, "private-route")?;
+        crate::ports::validate_request(destination, 1, "private-route")?;
+        let mut c = self.connection.clone();
         let (sr,dr,sm,dm,sn,dn):(Option<String>,Option<String>,Option<String>,Option<String>,Option<String>,Option<String>)=redis::cmd("EVAL")
             .arg("return {redis.call('GET',KEYS[1]),redis.call('GET',KEYS[2]),redis.call('GET',KEYS[3]),redis.call('GET',KEYS[4]),redis.call('GET',KEYS[5]),redis.call('GET',KEYS[6])}")
             .arg(6).arg(self.key(&format!("sandbox:{source}"))).arg(self.key(&format!("sandbox:{destination}")))
             .arg(self.key(&format!("private-membership:{source}"))).arg(self.key(&format!("private-membership:{destination}")))
             .arg(self.key(&format!("node:{source_node}"))).arg(self.key(&format!("node:{destination_node}")))
             .query_async(&mut c).await.map_err(redis_error)?;
-        let (Some(sr),Some(dr),Some(sm),Some(dm))=(sr,dr,sm,dm) else { return Ok(None); };
-        let Some(snapshot)=PrivateRouteSnapshot::checked(source,destination,
-            serde_json::from_str(&sr).map_err(json_error)?,serde_json::from_str(&dr).map_err(json_error)?,
-            serde_json::from_str(&sm).map_err(json_error)?,serde_json::from_str(&dm).map_err(json_error)?) else { return Ok(None); };
+        let (Some(sr), Some(dr), Some(sm), Some(dm)) = (sr, dr, sm, dm) else {
+            return Ok(None);
+        };
+        let Some(snapshot) = PrivateRouteSnapshot::checked(
+            source,
+            destination,
+            serde_json::from_str(&sr).map_err(json_error)?,
+            serde_json::from_str(&dr).map_err(json_error)?,
+            serde_json::from_str(&sm).map_err(json_error)?,
+            serde_json::from_str(&dm).map_err(json_error)?,
+        ) else {
+            return Ok(None);
+        };
         // Decode node JSON exactly as node(); malformed live records fail closed.
-        let source_live:Option<NodeInfo>=sn.map(|value|serde_json::from_str(&value).map_err(json_error)).transpose()?;
-        if source_live.is_none() { return Ok(None); }
-        let destination_live:Option<NodeInfo>=dn.map(|value|serde_json::from_str(&value).map_err(json_error)).transpose()?;
-        if destination_live.is_none() { return Ok(None); }
+        let source_live: Option<NodeInfo> = sn
+            .map(|value| serde_json::from_str(&value).map_err(json_error))
+            .transpose()?;
+        if source_live.is_none() {
+            return Ok(None);
+        }
+        let destination_live: Option<NodeInfo> = dn
+            .map(|value| serde_json::from_str(&value).map_err(json_error))
+            .transpose()?;
+        if destination_live.is_none() {
+            return Ok(None);
+        }
         Ok(Some(snapshot))
     }
 
-    async fn private_route_snapshot(&self, source: &str, destination: &str)
-        -> Result<Option<PrivateRouteSnapshot>> {
-        crate::ports::validate_request(source,1,"private-route")?;
-        crate::ports::validate_request(destination,1,"private-route")?;
-        let mut c=self.connection.clone();
+    async fn private_route_snapshot(
+        &self,
+        source: &str,
+        destination: &str,
+    ) -> Result<Option<PrivateRouteSnapshot>> {
+        crate::ports::validate_request(source, 1, "private-route")?;
+        crate::ports::validate_request(destination, 1, "private-route")?;
+        let mut c = self.connection.clone();
         let (sr,dr,sm,dm):(Option<String>,Option<String>,Option<String>,Option<String>)=redis::cmd("EVAL")
             .arg("return {redis.call('GET',KEYS[1]),redis.call('GET',KEYS[2]),redis.call('GET',KEYS[3]),redis.call('GET',KEYS[4])}")
             .arg(4).arg(self.key(&format!("sandbox:{source}")))
@@ -1087,34 +1486,62 @@ return 0
             .arg(self.key(&format!("private-membership:{source}")))
             .arg(self.key(&format!("private-membership:{destination}")))
             .query_async(&mut c).await.map_err(redis_error)?;
-        let (Some(sr),Some(dr),Some(sm),Some(dm))=(sr,dr,sm,dm) else { return Ok(None); };
-        Ok(PrivateRouteSnapshot::checked(source,destination,
-            serde_json::from_str(&sr).map_err(json_error)?,serde_json::from_str(&dr).map_err(json_error)?,
-            serde_json::from_str(&sm).map_err(json_error)?,serde_json::from_str(&dm).map_err(json_error)?))
+        let (Some(sr), Some(dr), Some(sm), Some(dm)) = (sr, dr, sm, dm) else {
+            return Ok(None);
+        };
+        Ok(PrivateRouteSnapshot::checked(
+            source,
+            destination,
+            serde_json::from_str(&sr).map_err(json_error)?,
+            serde_json::from_str(&dr).map_err(json_error)?,
+            serde_json::from_str(&sm).map_err(json_error)?,
+            serde_json::from_str(&dm).map_err(json_error)?,
+        ))
     }
 
-    async fn private_membership(&self, sandbox: &str, owner: &crate::ownership::OwnerId)
-        -> Result<MembershipAccess<Option<NetworkMembershipState>>> {
+    async fn private_membership(
+        &self,
+        sandbox: &str,
+        owner: &crate::ownership::OwnerId,
+    ) -> Result<MembershipAccess<Option<NetworkMembershipState>>> {
         crate::ports::validate_request(sandbox, 1, owner.as_str())?;
         let mut c = self.connection.clone();
         let (vm, row): (Option<String>, Option<String>) = redis::cmd("EVAL")
             .arg("return {redis.call('GET',KEYS[1]),redis.call('GET',KEYS[2])}")
-            .arg(2).arg(self.key(&format!("sandbox:{sandbox}")))
+            .arg(2)
+            .arg(self.key(&format!("sandbox:{sandbox}")))
             .arg(self.key(&format!("private-membership:{sandbox}")))
-            .query_async(&mut c).await.map_err(redis_error)?;
-        let Some(vm) = vm else { return Ok(MembershipAccess::SandboxMissing); };
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        let Some(vm) = vm else {
+            return Ok(MembershipAccess::SandboxMissing);
+        };
         let record: SandboxRecord = serde_json::from_str(&vm).map_err(json_error)?;
-        if record.sandbox_id != sandbox { return Err(StoreError("invalid private membership sandbox record".into())); }
-        if record.owner_id.as_ref() != Some(owner) { return Ok(MembershipAccess::OwnerConflict); }
-        let row: Option<NetworkMembershipState> = row.map(|row| serde_json::from_str(&row).map_err(json_error)).transpose()?;
+        if record.sandbox_id != sandbox {
+            return Err(StoreError(
+                "invalid private membership sandbox record".into(),
+            ));
+        }
+        if record.owner_id.as_ref() != Some(owner) {
+            return Ok(MembershipAccess::OwnerConflict);
+        }
+        let row: Option<NetworkMembershipState> = row
+            .map(|row| serde_json::from_str(&row).map_err(json_error))
+            .transpose()?;
         if row.as_ref().is_some_and(|row| row.sandbox_id() != sandbox) {
             return Err(StoreError("invalid private membership identity".into()));
         }
-        if row.as_ref().is_some_and(|row| row.owner_id() != owner) { return Ok(MembershipAccess::OwnerConflict); }
+        if row.as_ref().is_some_and(|row| row.owner_id() != owner) {
+            return Ok(MembershipAccess::OwnerConflict);
+        }
         Ok(MembershipAccess::Granted(row))
     }
-    async fn compare_private_membership(&self, expected: Option<&str>, next: &NetworkMembershipState)
-        -> Result<MembershipChange> {
+    async fn compare_private_membership(
+        &self,
+        expected: Option<&str>,
+        next: &NetworkMembershipState,
+    ) -> Result<MembershipChange> {
         let mut c = self.connection.clone();
         let vm_key = self.key(&format!("sandbox:{}", next.sandbox_id()));
         let row_key = self.key(&format!("private-membership:{}", next.sandbox_id()));
@@ -1122,24 +1549,51 @@ return 0
         // against concurrent writers. JSON numbers are never compared in Lua.
         let (vm, row): (Option<String>, Option<String>) = redis::cmd("EVAL")
             .arg("return {redis.call('GET',KEYS[1]),redis.call('GET',KEYS[2])}")
-            .arg(2).arg(&vm_key).arg(&row_key).query_async(&mut c).await.map_err(redis_error)?;
-        let Some(vm) = vm else { return Ok(MembershipChange::SandboxMissing); };
+            .arg(2)
+            .arg(&vm_key)
+            .arg(&row_key)
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        let Some(vm) = vm else {
+            return Ok(MembershipChange::SandboxMissing);
+        };
         let record: SandboxRecord = serde_json::from_str(&vm).map_err(json_error)?;
-        if record.owner_id.as_ref() != Some(next.owner_id()) { return Ok(MembershipChange::OwnerConflict); }
-        if !next.matches_record(&record) { return Ok(MembershipChange::RecordChanged); }
-        let current: Option<NetworkMembershipState> = row.as_ref()
-            .map(|row| serde_json::from_str(row).map_err(json_error)).transpose()?;
-        if current.as_ref().is_some_and(|row| row.sandbox_id() != next.sandbox_id()) {
+        if record.owner_id.as_ref() != Some(next.owner_id()) {
+            return Ok(MembershipChange::OwnerConflict);
+        }
+        if !next.matches_record(&record) {
+            return Ok(MembershipChange::RecordChanged);
+        }
+        let current: Option<NetworkMembershipState> = row
+            .as_ref()
+            .map(|row| serde_json::from_str(row).map_err(json_error))
+            .transpose()?;
+        if current
+            .as_ref()
+            .is_some_and(|row| row.sandbox_id() != next.sandbox_id())
+        {
             return Err(StoreError("invalid private membership identity".into()));
         }
-        if current.as_ref().is_some_and(|row| row.owner_id() != next.owner_id()) { return Ok(MembershipChange::OwnerConflict); }
+        if current
+            .as_ref()
+            .is_some_and(|row| row.owner_id() != next.owner_id())
+        {
+            return Ok(MembershipChange::OwnerConflict);
+        }
         let replay = current.as_ref() == Some(next);
-        if !replay && (current.as_ref().map(|row| row.revision()) != expected
-            || current.as_ref().is_some_and(|row| row.revision() == next.revision())) {
+        if !replay
+            && (current.as_ref().map(|row| row.revision()) != expected
+                || current
+                    .as_ref()
+                    .is_some_and(|row| row.revision() == next.revision()))
+        {
             return Ok(MembershipChange::RevisionConflict);
         }
         let encoded = serde_json::to_string(next).map_err(json_error)?;
-        let result: i64 = redis::cmd("EVAL").arg(r#"
+        let result: i64 = redis::cmd("EVAL")
+            .arg(
+                r#"
 local vm=redis.call('GET',KEYS[1])
 if not vm then return 3 end
 if vm~=ARGV[1] then return 4 end
@@ -1148,38 +1602,70 @@ if (row or '')~=ARGV[2] then return 1 end
 if ARGV[4]=='1' then return 0 end
 redis.call('SET',KEYS[2],ARGV[3])
 return 0
-"#).arg(2).arg(&vm_key).arg(&row_key)
-            .arg(vm).arg(row.unwrap_or_default()).arg(encoded).arg(u8::from(replay))
-            .query_async(&mut c).await.map_err(redis_error)?;
+"#,
+            )
+            .arg(2)
+            .arg(&vm_key)
+            .arg(&row_key)
+            .arg(vm)
+            .arg(row.unwrap_or_default())
+            .arg(encoded)
+            .arg(u8::from(replay))
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
         match result {
-            0 => Ok(MembershipChange::Applied), 1 => Ok(MembershipChange::RevisionConflict),
-            3 => Ok(MembershipChange::SandboxMissing), 4 => Ok(MembershipChange::RecordChanged),
-            _ => Err(StoreError("invalid private membership transaction result".into())),
+            0 => Ok(MembershipChange::Applied),
+            1 => Ok(MembershipChange::RevisionConflict),
+            3 => Ok(MembershipChange::SandboxMissing),
+            4 => Ok(MembershipChange::RecordChanged),
+            _ => Err(StoreError(
+                "invalid private membership transaction result".into(),
+            )),
         }
     }
 
-    async fn web_sharing(&self, sandbox: &str, owner: &crate::ownership::OwnerId)
-        -> Result<SharingAccess<Option<WebSharingState>>> {
+    async fn web_sharing(
+        &self,
+        sandbox: &str,
+        owner: &crate::ownership::OwnerId,
+    ) -> Result<SharingAccess<Option<WebSharingState>>> {
         crate::ports::validate_request(sandbox, 1, owner.as_str())?;
         let mut c = self.connection.clone();
         let (vm, row): (Option<String>, Option<String>) = redis::cmd("EVAL")
             .arg("return {redis.call('GET',KEYS[1]),redis.call('GET',KEYS[2])}")
-            .arg(2).arg(self.key(&format!("sandbox:{sandbox}")))
+            .arg(2)
+            .arg(self.key(&format!("sandbox:{sandbox}")))
             .arg(self.key(&format!("web-sharing:{sandbox}")))
-            .query_async(&mut c).await.map_err(redis_error)?;
-        let Some(vm) = vm else { return Ok(SharingAccess::SandboxMissing); };
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        let Some(vm) = vm else {
+            return Ok(SharingAccess::SandboxMissing);
+        };
         let record: SandboxRecord = serde_json::from_str(&vm).map_err(json_error)?;
-        if record.sandbox_id != sandbox { return Err(StoreError("invalid web sharing sandbox record".into())); }
-        if record.owner_id.as_ref() != Some(owner) { return Ok(SharingAccess::OwnerConflict); }
-        let row: Option<WebSharingState> = row.map(|row| serde_json::from_str(&row).map_err(json_error)).transpose()?;
+        if record.sandbox_id != sandbox {
+            return Err(StoreError("invalid web sharing sandbox record".into()));
+        }
+        if record.owner_id.as_ref() != Some(owner) {
+            return Ok(SharingAccess::OwnerConflict);
+        }
+        let row: Option<WebSharingState> = row
+            .map(|row| serde_json::from_str(&row).map_err(json_error))
+            .transpose()?;
         if row.as_ref().is_some_and(|row| row.sandbox_id() != sandbox) {
             return Err(StoreError("invalid web sharing identity".into()));
         }
-        if row.as_ref().is_some_and(|row| row.owner_id() != owner) { return Ok(SharingAccess::OwnerConflict); }
+        if row.as_ref().is_some_and(|row| row.owner_id() != owner) {
+            return Ok(SharingAccess::OwnerConflict);
+        }
         Ok(SharingAccess::Granted(row))
     }
-    async fn compare_web_sharing(&self, expected: Option<&str>, next: &WebSharingState)
-        -> Result<SharingChange> {
+    async fn compare_web_sharing(
+        &self,
+        expected: Option<&str>,
+        next: &WebSharingState,
+    ) -> Result<SharingChange> {
         let mut c = self.connection.clone();
         let vm_key = self.key(&format!("sandbox:{}", next.sandbox_id()));
         let row_key = self.key(&format!("web-sharing:{}", next.sandbox_id()));
@@ -1187,24 +1673,51 @@ return 0
         // against concurrent writers. JSON numbers are never compared in Lua.
         let (vm, row): (Option<String>, Option<String>) = redis::cmd("EVAL")
             .arg("return {redis.call('GET',KEYS[1]),redis.call('GET',KEYS[2])}")
-            .arg(2).arg(&vm_key).arg(&row_key).query_async(&mut c).await.map_err(redis_error)?;
-        let Some(vm) = vm else { return Ok(SharingChange::SandboxMissing); };
+            .arg(2)
+            .arg(&vm_key)
+            .arg(&row_key)
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        let Some(vm) = vm else {
+            return Ok(SharingChange::SandboxMissing);
+        };
         let record: SandboxRecord = serde_json::from_str(&vm).map_err(json_error)?;
-        if record.owner_id.as_ref() != Some(next.owner_id()) { return Ok(SharingChange::OwnerConflict); }
-        if !next.matches_record(&record) { return Ok(SharingChange::RecordChanged); }
-        let current: Option<WebSharingState> = row.as_ref()
-            .map(|row| serde_json::from_str(row).map_err(json_error)).transpose()?;
-        if current.as_ref().is_some_and(|row| row.sandbox_id() != next.sandbox_id()) {
+        if record.owner_id.as_ref() != Some(next.owner_id()) {
+            return Ok(SharingChange::OwnerConflict);
+        }
+        if !next.matches_record(&record) {
+            return Ok(SharingChange::RecordChanged);
+        }
+        let current: Option<WebSharingState> = row
+            .as_ref()
+            .map(|row| serde_json::from_str(row).map_err(json_error))
+            .transpose()?;
+        if current
+            .as_ref()
+            .is_some_and(|row| row.sandbox_id() != next.sandbox_id())
+        {
             return Err(StoreError("invalid web sharing identity".into()));
         }
-        if current.as_ref().is_some_and(|row| row.owner_id() != next.owner_id()) { return Ok(SharingChange::OwnerConflict); }
+        if current
+            .as_ref()
+            .is_some_and(|row| row.owner_id() != next.owner_id())
+        {
+            return Ok(SharingChange::OwnerConflict);
+        }
         let replay = current.as_ref() == Some(next);
-        if !replay && (current.as_ref().map(|row| row.revision()) != expected
-            || current.as_ref().is_some_and(|row| row.revision() == next.revision())) {
+        if !replay
+            && (current.as_ref().map(|row| row.revision()) != expected
+                || current
+                    .as_ref()
+                    .is_some_and(|row| row.revision() == next.revision()))
+        {
             return Ok(SharingChange::RevisionConflict);
         }
         let encoded = serde_json::to_string(next).map_err(json_error)?;
-        let result: i64 = redis::cmd("EVAL").arg(r#"
+        let result: i64 = redis::cmd("EVAL")
+            .arg(
+                r#"
 local vm=redis.call('GET',KEYS[1])
 if not vm then return 3 end
 if vm~=ARGV[1] then return 4 end
@@ -1213,31 +1726,52 @@ if (row or '')~=ARGV[2] then return 1 end
 if ARGV[4]=='1' then return 0 end
 redis.call('SET',KEYS[2],ARGV[3])
 return 0
-"#).arg(2).arg(&vm_key).arg(&row_key)
-            .arg(vm).arg(row.unwrap_or_default()).arg(encoded).arg(u8::from(replay))
-            .query_async(&mut c).await.map_err(redis_error)?;
+"#,
+            )
+            .arg(2)
+            .arg(&vm_key)
+            .arg(&row_key)
+            .arg(vm)
+            .arg(row.unwrap_or_default())
+            .arg(encoded)
+            .arg(u8::from(replay))
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
         match result {
-            0 => Ok(SharingChange::Applied), 1 => Ok(SharingChange::RevisionConflict),
-            3 => Ok(SharingChange::SandboxMissing), 4 => Ok(SharingChange::RecordChanged),
+            0 => Ok(SharingChange::Applied),
+            1 => Ok(SharingChange::RevisionConflict),
+            3 => Ok(SharingChange::SandboxMissing),
+            4 => Ok(SharingChange::RecordChanged),
             _ => Err(StoreError("invalid web sharing transaction result".into())),
         }
     }
 
-    async fn web_sharing_snapshot(&self, sandbox: &str) -> Result<Option<(SandboxRecord, WebSharingState)>> {
+    async fn web_sharing_snapshot(
+        &self,
+        sandbox: &str,
+    ) -> Result<Option<(SandboxRecord, WebSharingState)>> {
         crate::ports::validate_request(sandbox, 1, "web-sharing")?;
         let mut c = self.connection.clone();
         let (vm, row): (Option<String>, Option<String>) = redis::cmd("EVAL")
             .arg("return {redis.call('GET',KEYS[1]),redis.call('GET',KEYS[2])}")
-            .arg(2).arg(self.key(&format!("sandbox:{sandbox}")))
+            .arg(2)
+            .arg(self.key(&format!("sandbox:{sandbox}")))
             .arg(self.key(&format!("web-sharing:{sandbox}")))
-            .query_async(&mut c).await.map_err(redis_error)?;
-        let (Some(vm), Some(row)) = (vm, row) else { return Ok(None); };
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        let (Some(vm), Some(row)) = (vm, row) else {
+            return Ok(None);
+        };
         let record: SandboxRecord = serde_json::from_str(&vm).map_err(json_error)?;
         let row: WebSharingState = serde_json::from_str(&row).map_err(json_error)?;
         if record.sandbox_id != sandbox || row.sandbox_id() != sandbox {
             return Err(StoreError("invalid web sharing identity".into()));
         }
-        if !row.matches_record(&record) { return Ok(None); }
+        if !row.matches_record(&record) {
+            return Ok(None);
+        }
         Ok(Some((record, row)))
     }
 
@@ -1649,26 +2183,55 @@ return 1
         Ok(all)
     }
 
-    async fn claim_port(&self, sandbox: &str, machine_port: u16, owner: &str,
-        protocol: PortProtocol, range: PublicPortRange) -> Result<PortClaim> {
-        self.claim_port_inner(sandbox, machine_port, owner, protocol, range, false).await
+    async fn claim_port(
+        &self,
+        sandbox: &str,
+        machine_port: u16,
+        owner: &str,
+        protocol: PortProtocol,
+        range: PublicPortRange,
+    ) -> Result<PortClaim> {
+        self.claim_port_inner(sandbox, machine_port, owner, protocol, range, false)
+            .await
     }
-    async fn claim_owned_port(&self, sandbox: &str, machine_port: u16, owner: &str,
-        protocol: PortProtocol, range: PublicPortRange) -> Result<PortClaim> {
-        self.claim_port_inner(sandbox, machine_port, owner, protocol, range, true).await
+    async fn claim_owned_port(
+        &self,
+        sandbox: &str,
+        machine_port: u16,
+        owner: &str,
+        protocol: PortProtocol,
+        range: PublicPortRange,
+    ) -> Result<PortClaim> {
+        self.claim_port_inner(sandbox, machine_port, owner, protocol, range, true)
+            .await
     }
 
     async fn port_allocations(&self, sandbox: Option<&str>) -> Result<Vec<PortAllocation>> {
         let mut c = self.connection.clone();
-        let key = sandbox.map_or_else(|| self.key("public-ports"), |id| self.key(&format!("ports:{id}")));
-        let values: HashMap<String, String> = redis::cmd("HGETALL").arg(key).query_async(&mut c).await.map_err(redis_error)?;
+        let key = sandbox.map_or_else(
+            || self.key("public-ports"),
+            |id| self.key(&format!("ports:{id}")),
+        );
+        let values: HashMap<String, String> = redis::cmd("HGETALL")
+            .arg(key)
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
         let mut rows = Vec::with_capacity(values.len());
         for (field, value) in values {
             let row: PortAllocation = serde_json::from_str(&value).map_err(json_error)?;
             row.validate()?;
-            let expected = if sandbox.is_some() { row.machine_port } else { row.public_port };
-            if field != expected.to_string() { return Err(StoreError("managed-port field index disagrees".into())); }
-            if sandbox.is_some_and(|id| row.sandbox_id != id) { return Err(StoreError("managed-port owner index disagrees".into())); }
+            let expected = if sandbox.is_some() {
+                row.machine_port
+            } else {
+                row.public_port
+            };
+            if field != expected.to_string() {
+                return Err(StoreError("managed-port field index disagrees".into()));
+            }
+            if sandbox.is_some_and(|id| row.sandbox_id != id) {
+                return Err(StoreError("managed-port owner index disagrees".into()));
+            }
             rows.push(row);
         }
         rows.sort_by_key(|row| row.public_port);
@@ -1676,15 +2239,29 @@ return 1
     }
 
     async fn delete_port(&self, sandbox: &str, machine_port: u16, owner: &str) -> Result<bool> {
-        match self.delete_port_inner(sandbox, machine_port, owner, false).await? {
-            OwnedPortAccess::Granted(value) => Ok(value), _ => Ok(false),
+        match self
+            .delete_port_inner(sandbox, machine_port, owner, false)
+            .await?
+        {
+            OwnedPortAccess::Granted(value) => Ok(value),
+            _ => Ok(false),
         }
     }
-    async fn delete_owned_port(&self, sandbox: &str, machine_port: u16, owner: &str) -> Result<OwnedPortAccess<bool>> {
-        self.delete_port_inner(sandbox, machine_port, owner, true).await
+    async fn delete_owned_port(
+        &self,
+        sandbox: &str,
+        machine_port: u16,
+        owner: &str,
+    ) -> Result<OwnedPortAccess<bool>> {
+        self.delete_port_inner(sandbox, machine_port, owner, true)
+            .await
     }
 
-    async fn owned_ports(&self, sandbox: &str, owner: &str) -> Result<OwnedPortAccess<Vec<PortAllocation>>> {
+    async fn owned_ports(
+        &self,
+        sandbox: &str,
+        owner: &str,
+    ) -> Result<OwnedPortAccess<Vec<PortAllocation>>> {
         crate::ports::validate_request(sandbox, 1, owner)?;
         let mut connection = self.connection.clone();
         let (status, values): (i64, Vec<String>) = redis::cmd("EVAL").arg(r#"
@@ -1705,17 +2282,25 @@ return {1,values}
             .arg(self.key("public-ports")).arg(sandbox).arg(owner).arg(MAX_PORTS_PER_SANDBOX)
             .query_async(&mut connection).await.map_err(redis_error)?;
         match status {
-            0 => Ok(OwnedPortAccess::SandboxMissing), 2 => Ok(OwnedPortAccess::OwnerConflict),
+            0 => Ok(OwnedPortAccess::SandboxMissing),
+            2 => Ok(OwnedPortAccess::OwnerConflict),
             1 => {
-                if values.len()%2!=0 { return Err(StoreError("invalid owned-port snapshot".into())); }
-                let mut rows=Vec::with_capacity(values.len()/2);
-                for pair in values.chunks_exact(2) {
-                    let row: PortAllocation=serde_json::from_str(&pair[1]).map_err(json_error)?;
+                if values.len() % 2 != 0 {
+                    return Err(StoreError("invalid owned-port snapshot".into()));
+                }
+                let mut rows = Vec::with_capacity(values.len() / 2);
+                for pair in values.as_chunks::<2>().0 {
+                    let row: PortAllocation = serde_json::from_str(&pair[1]).map_err(json_error)?;
                     row.validate()?;
-                    if row.sandbox_id!=sandbox || row.owner_id!=owner || pair[0]!=row.machine_port.to_string() { return Err(StoreError("invalid owned-port snapshot".into())); }
+                    if row.sandbox_id != sandbox
+                        || row.owner_id != owner
+                        || pair[0] != row.machine_port.to_string()
+                    {
+                        return Err(StoreError("invalid owned-port snapshot".into()));
+                    }
                     rows.push(row);
                 }
-                rows.sort_by_key(|row|row.public_port);
+                rows.sort_by_key(|row| row.public_port);
                 Ok(OwnedPortAccess::Granted(rows))
             }
             _ => Err(StoreError("unexpected owned-port listing result".into())),
@@ -1928,284 +2513,873 @@ pub(crate) mod tests {
         }
     }
 
-
     async fn private_address_ledger_contract(store: &dyn ClusterStore) {
-        use crate::{private_addresses::PrivateAddressBook, private_networks::NetworkTag, ownership::OwnerId};
-        let mut source=sandbox("address-source","address-node"); source.owner_id=Some(OwnerId::parse("address-owner").unwrap());
-        let mut destination=sandbox("address-destination","address-node"); destination.owner_id=source.owner_id.clone();
-        let book=PrivateAddressBook::new(&source).unwrap(); let empty=book.snapshot().unwrap();
-        assert_eq!(store.private_address_ledger(&source).await.unwrap(),MembershipAccess::SandboxMissing);
-        assert_eq!(store.compare_private_address_ledger(&source,None,&empty).await.unwrap(),MembershipChange::SandboxMissing);
-        for record in [&source,&destination] { store.put_sandbox(record).await.unwrap(); }
-        let tags=||vec![NetworkTag::parse("team").unwrap(),NetworkTag::parse("dev").unwrap()];
-        for record in [&source,&destination] {
-            let m=NetworkMembershipState::new(record,Some(tags())).unwrap();
-            assert_eq!(store.compare_private_membership(None,&m).await.unwrap(),MembershipChange::Applied);
+        use crate::{
+            ownership::OwnerId, private_addresses::PrivateAddressBook, private_networks::NetworkTag,
+        };
+        let mut source = sandbox("address-source", "address-node");
+        source.owner_id = Some(OwnerId::parse("address-owner").unwrap());
+        let mut destination = sandbox("address-destination", "address-node");
+        destination.owner_id = source.owner_id.clone();
+        let book = PrivateAddressBook::new(&source).unwrap();
+        let empty = book.snapshot().unwrap();
+        assert_eq!(
+            store.private_address_ledger(&source).await.unwrap(),
+            MembershipAccess::SandboxMissing
+        );
+        assert_eq!(
+            store
+                .compare_private_address_ledger(&source, None, &empty)
+                .await
+                .unwrap(),
+            MembershipChange::SandboxMissing
+        );
+        for record in [&source, &destination] {
+            store.put_sandbox(record).await.unwrap();
         }
-        assert_eq!(store.private_address_ledger(&source).await.unwrap(),MembershipAccess::Granted(None));
-        assert_eq!(store.compare_private_address_ledger(&source,None,&empty).await.unwrap(),MembershipChange::Applied);
-        assert_eq!(store.compare_private_address_ledger(&source,None,&empty).await.unwrap(),MembershipChange::Applied);
-        let mut forged=source.clone(); forged.owner_id=Some(OwnerId::parse("other-owner").unwrap());
-        let forged_bytes=PrivateAddressBook::new(&forged).unwrap().snapshot().unwrap();
-        assert_eq!(store.private_address_ledger(&forged).await.unwrap(),MembershipAccess::OwnerConflict);
-        assert_eq!(store.compare_private_address_ledger(&forged,None,&forged_bytes).await.unwrap(),MembershipChange::OwnerConflict);
-        let view=store.private_route_snapshot(&source.sandbox_id,&destination.sandbox_id).await.unwrap().unwrap();
-        let left=PrivateAddressBook::restore(&empty,&source).unwrap(); let right=PrivateAddressBook::restore(&empty,&source).unwrap();
-        let ip=left.allocate(&view,NetworkTag::parse("team").unwrap(),crate::model::now_ms(),false,false).unwrap();
-        right.allocate(&view,NetworkTag::parse("dev").unwrap(),crate::model::now_ms(),false,false).unwrap();
-        let l=left.snapshot().unwrap(); let r=right.snapshot().unwrap();
-        let (a,b)=tokio::join!(store.compare_private_address_ledger(&source,Some(&empty),&l),store.compare_private_address_ledger(&source,Some(&empty),&r));
-        let (a,b)=(a.unwrap(),b.unwrap());
-        assert!(matches!((a,b),(MembershipChange::Applied,MembershipChange::RevisionConflict)|(MembershipChange::RevisionConflict,MembershipChange::Applied)));
-        let winner=if a==MembershipChange::Applied { l } else { r };
-        assert_eq!(store.private_address_ledger(&source).await.unwrap(),MembershipAccess::Granted(Some(winner.clone())));
-        assert_eq!(store.compare_private_address_ledger(&source,Some(&empty),&winner).await.unwrap(),MembershipChange::Applied);
-        assert_eq!(store.compare_private_address_ledger(&source,None,&empty).await.unwrap(),MembershipChange::RevisionConflict);
-        assert!(store.compare_private_address_ledger(&source,Some(&winner),&empty).await.is_err());
-        let restored=PrivateAddressBook::restore(&winner,&source).unwrap();
-        let original=restored.binding(ip,8080).unwrap();
-        let next_tag=if original.network.as_str()=="team" { "dev" } else { "team" };
-        let second=restored.allocate(&view,NetworkTag::parse(next_tag).unwrap(),crate::model::now_ms(),false,false).unwrap();
-        assert_ne!(ip,second);
-        let next=restored.snapshot().unwrap();
-        assert_eq!(store.compare_private_address_ledger(&source,Some(&winner),&next).await.unwrap(),MembershipChange::Applied);
-        assert_eq!(store.compare_private_address_ledger(&source,Some(&empty),&winner).await.unwrap(),MembershipChange::RevisionConflict);
-        let mut corrupt:serde_json::Value=serde_json::from_slice(&next).unwrap();
-        corrupt["entries"][0]["destination_generation"]=uuid::Uuid::new_v4().to_string().into();
-        assert!(store.compare_private_address_ledger(&source,Some(&next),&serde_json::to_vec(&corrupt).unwrap()).await.is_err());
+        let tags = || {
+            vec![
+                NetworkTag::parse("team").unwrap(),
+                NetworkTag::parse("dev").unwrap(),
+            ]
+        };
+        for record in [&source, &destination] {
+            let m = NetworkMembershipState::new(record, Some(tags())).unwrap();
+            assert_eq!(
+                store.compare_private_membership(None, &m).await.unwrap(),
+                MembershipChange::Applied
+            );
+        }
+        assert_eq!(
+            store.private_address_ledger(&source).await.unwrap(),
+            MembershipAccess::Granted(None)
+        );
+        assert_eq!(
+            store
+                .compare_private_address_ledger(&source, None, &empty)
+                .await
+                .unwrap(),
+            MembershipChange::Applied
+        );
+        assert_eq!(
+            store
+                .compare_private_address_ledger(&source, None, &empty)
+                .await
+                .unwrap(),
+            MembershipChange::Applied
+        );
+        let mut forged = source.clone();
+        forged.owner_id = Some(OwnerId::parse("other-owner").unwrap());
+        let forged_bytes = PrivateAddressBook::new(&forged)
+            .unwrap()
+            .snapshot()
+            .unwrap();
+        assert_eq!(
+            store.private_address_ledger(&forged).await.unwrap(),
+            MembershipAccess::OwnerConflict
+        );
+        assert_eq!(
+            store
+                .compare_private_address_ledger(&forged, None, &forged_bytes)
+                .await
+                .unwrap(),
+            MembershipChange::OwnerConflict
+        );
+        let view = store
+            .private_route_snapshot(&source.sandbox_id, &destination.sandbox_id)
+            .await
+            .unwrap()
+            .unwrap();
+        let left = PrivateAddressBook::restore(&empty, &source).unwrap();
+        let right = PrivateAddressBook::restore(&empty, &source).unwrap();
+        let ip = left
+            .allocate(
+                &view,
+                NetworkTag::parse("team").unwrap(),
+                crate::model::now_ms(),
+                false,
+                false,
+            )
+            .unwrap();
+        right
+            .allocate(
+                &view,
+                NetworkTag::parse("dev").unwrap(),
+                crate::model::now_ms(),
+                false,
+                false,
+            )
+            .unwrap();
+        let l = left.snapshot().unwrap();
+        let r = right.snapshot().unwrap();
+        let (a, b) = tokio::join!(
+            store.compare_private_address_ledger(&source, Some(&empty), &l),
+            store.compare_private_address_ledger(&source, Some(&empty), &r)
+        );
+        let (a, b) = (a.unwrap(), b.unwrap());
+        assert!(matches!(
+            (a, b),
+            (
+                MembershipChange::Applied,
+                MembershipChange::RevisionConflict
+            ) | (
+                MembershipChange::RevisionConflict,
+                MembershipChange::Applied
+            )
+        ));
+        let winner = if a == MembershipChange::Applied { l } else { r };
+        assert_eq!(
+            store.private_address_ledger(&source).await.unwrap(),
+            MembershipAccess::Granted(Some(winner.clone()))
+        );
+        assert_eq!(
+            store
+                .compare_private_address_ledger(&source, Some(&empty), &winner)
+                .await
+                .unwrap(),
+            MembershipChange::Applied
+        );
+        assert_eq!(
+            store
+                .compare_private_address_ledger(&source, None, &empty)
+                .await
+                .unwrap(),
+            MembershipChange::RevisionConflict
+        );
+        assert!(store
+            .compare_private_address_ledger(&source, Some(&winner), &empty)
+            .await
+            .is_err());
+        let restored = PrivateAddressBook::restore(&winner, &source).unwrap();
+        let original = restored.binding(ip, 8080).unwrap();
+        let next_tag = if original.network.as_str() == "team" {
+            "dev"
+        } else {
+            "team"
+        };
+        let second = restored
+            .allocate(
+                &view,
+                NetworkTag::parse(next_tag).unwrap(),
+                crate::model::now_ms(),
+                false,
+                false,
+            )
+            .unwrap();
+        assert_ne!(ip, second);
+        let next = restored.snapshot().unwrap();
+        assert_eq!(
+            store
+                .compare_private_address_ledger(&source, Some(&winner), &next)
+                .await
+                .unwrap(),
+            MembershipChange::Applied
+        );
+        assert_eq!(
+            store
+                .compare_private_address_ledger(&source, Some(&empty), &winner)
+                .await
+                .unwrap(),
+            MembershipChange::RevisionConflict
+        );
+        let mut corrupt: serde_json::Value = serde_json::from_slice(&next).unwrap();
+        corrupt["entries"][0]["destination_generation"] = uuid::Uuid::new_v4().to_string().into();
+        assert!(store
+            .compare_private_address_ledger(
+                &source,
+                Some(&next),
+                &serde_json::to_vec(&corrupt).unwrap()
+            )
+            .await
+            .is_err());
         // Placement change refuses old-node writers while preserving the ledger.
-        let mut moved=source.clone();moved.node_id="moved-address-node".into();store.put_sandbox(&moved).await.unwrap();
-        assert_eq!(store.compare_private_address_ledger(&source,Some(&next),&next).await.unwrap(),MembershipChange::RecordChanged);
-        assert_eq!(store.private_address_ledger(&moved).await.unwrap(),MembershipAccess::Granted(Some(next.clone())));
-        store.delete_sandbox(&source.sandbox_id).await.unwrap();
-        assert_eq!(store.private_address_ledger(&moved).await.unwrap(),MembershipAccess::SandboxMissing);
-        assert_eq!(store.compare_private_address_ledger(&moved,Some(&next),&next).await.unwrap(),MembershipChange::SandboxMissing);
+        let mut moved = source.clone();
+        moved.node_id = "moved-address-node".into();
         store.put_sandbox(&moved).await.unwrap();
-        assert_eq!(store.private_address_ledger(&moved).await.unwrap(),MembershipAccess::Granted(Some(next.clone())));
-        let mut replacement=moved.clone();replacement.started_at_ms+=1;store.put_sandbox(&replacement).await.unwrap();
-        assert_eq!(store.private_address_ledger(&replacement).await.unwrap(),MembershipAccess::Granted(None));
-        assert_eq!(store.compare_private_address_ledger(&moved,Some(&next),&next).await.unwrap(),MembershipChange::RecordChanged);
-        let fresh=PrivateAddressBook::new(&replacement).unwrap().snapshot().unwrap();
-        assert_eq!(store.compare_private_address_ledger(&replacement,None,&fresh).await.unwrap(),MembershipChange::Applied);
+        assert_eq!(
+            store
+                .compare_private_address_ledger(&source, Some(&next), &next)
+                .await
+                .unwrap(),
+            MembershipChange::RecordChanged
+        );
+        assert_eq!(
+            store.private_address_ledger(&moved).await.unwrap(),
+            MembershipAccess::Granted(Some(next.clone()))
+        );
+        store.delete_sandbox(&source.sandbox_id).await.unwrap();
+        assert_eq!(
+            store.private_address_ledger(&moved).await.unwrap(),
+            MembershipAccess::SandboxMissing
+        );
+        assert_eq!(
+            store
+                .compare_private_address_ledger(&moved, Some(&next), &next)
+                .await
+                .unwrap(),
+            MembershipChange::SandboxMissing
+        );
+        store.put_sandbox(&moved).await.unwrap();
+        assert_eq!(
+            store.private_address_ledger(&moved).await.unwrap(),
+            MembershipAccess::Granted(Some(next.clone()))
+        );
+        let mut replacement = moved.clone();
+        replacement.started_at_ms += 1;
+        store.put_sandbox(&replacement).await.unwrap();
+        assert_eq!(
+            store.private_address_ledger(&replacement).await.unwrap(),
+            MembershipAccess::Granted(None)
+        );
+        assert_eq!(
+            store
+                .compare_private_address_ledger(&moved, Some(&next), &next)
+                .await
+                .unwrap(),
+            MembershipChange::RecordChanged
+        );
+        let fresh = PrivateAddressBook::new(&replacement)
+            .unwrap()
+            .snapshot()
+            .unwrap();
+        assert_eq!(
+            store
+                .compare_private_address_ledger(&replacement, None, &fresh)
+                .await
+                .unwrap(),
+            MembershipChange::Applied
+        );
         store.delete_sandbox(&source.sandbox_id).await.unwrap();
         store.delete_sandbox(&destination.sandbox_id).await.unwrap();
         eprintln!("private_address_ledger_contract completed concurrent_single_winner=true rollback=refused replay=exact migration=preserved deleted=refused replacement=separate");
     }
 
     async fn private_membership_contract(store: &dyn ClusterStore) {
-        use crate::private_networks::{NetworkMembershipState as State, NetworkTag};
         use crate::ownership::OwnerId;
+        use crate::private_networks::{NetworkMembershipState as State, NetworkTag};
         let owner = OwnerId::parse("network-owner").unwrap();
         let other = OwnerId::parse("network-other").unwrap();
         let mut r = sandbox("private-member", "network-node");
         let tags = || Some(vec![NetworkTag::parse("team").unwrap()]);
-        assert_eq!(store.private_membership(&r.sandbox_id, &owner).await.unwrap(), MembershipAccess::SandboxMissing);
+        assert_eq!(
+            store
+                .private_membership(&r.sandbox_id, &owner)
+                .await
+                .unwrap(),
+            MembershipAccess::SandboxMissing
+        );
         store.put_sandbox(&r).await.unwrap();
         assert!(State::new(&r, tags()).is_err());
-        assert_eq!(store.private_membership(&r.sandbox_id, &owner).await.unwrap(), MembershipAccess::OwnerConflict);
-        r.owner_id = Some(owner.clone()); store.put_sandbox(&r).await.unwrap();
+        assert_eq!(
+            store
+                .private_membership(&r.sandbox_id, &owner)
+                .await
+                .unwrap(),
+            MembershipAccess::OwnerConflict
+        );
+        r.owner_id = Some(owner.clone());
+        store.put_sandbox(&r).await.unwrap();
         let initial = State::new(&r, tags()).unwrap();
-        assert_eq!(store.compare_private_membership(None, &initial).await.unwrap(), MembershipChange::Applied);
-        assert_eq!(store.compare_private_membership(None, &initial).await.unwrap(), MembershipChange::Applied);
-        assert_eq!(store.private_membership(&r.sandbox_id, &other).await.unwrap(), MembershipAccess::OwnerConflict);
-        assert_eq!(store.private_membership(&r.sandbox_id, &owner).await.unwrap(), MembershipAccess::Granted(Some(initial.clone())));
-        let mut forged = r.clone(); forged.owner_id = Some(other);
-        assert_eq!(store.compare_private_membership(Some(initial.revision()), &State::new(&forged, tags()).unwrap()).await.unwrap(), MembershipChange::OwnerConflict);
-        let left = State::new(&r, tags()).unwrap(); let right = State::new(&r, tags()).unwrap();
-        let (a,b) = tokio::join!(store.compare_private_membership(Some(initial.revision()), &left),
-            store.compare_private_membership(Some(initial.revision()), &right));
-        let (a,b) = (a.unwrap(), b.unwrap());
-        assert!(matches!((a,b), (MembershipChange::Applied, MembershipChange::RevisionConflict)
-            | (MembershipChange::RevisionConflict, MembershipChange::Applied)));
-        let winner = if a == MembershipChange::Applied { &left } else { &right };
+        assert_eq!(
+            store
+                .compare_private_membership(None, &initial)
+                .await
+                .unwrap(),
+            MembershipChange::Applied
+        );
+        assert_eq!(
+            store
+                .compare_private_membership(None, &initial)
+                .await
+                .unwrap(),
+            MembershipChange::Applied
+        );
+        assert_eq!(
+            store
+                .private_membership(&r.sandbox_id, &other)
+                .await
+                .unwrap(),
+            MembershipAccess::OwnerConflict
+        );
+        assert_eq!(
+            store
+                .private_membership(&r.sandbox_id, &owner)
+                .await
+                .unwrap(),
+            MembershipAccess::Granted(Some(initial.clone()))
+        );
+        let mut forged = r.clone();
+        forged.owner_id = Some(other);
+        assert_eq!(
+            store
+                .compare_private_membership(
+                    Some(initial.revision()),
+                    &State::new(&forged, tags()).unwrap()
+                )
+                .await
+                .unwrap(),
+            MembershipChange::OwnerConflict
+        );
+        let left = State::new(&r, tags()).unwrap();
+        let right = State::new(&r, tags()).unwrap();
+        let (a, b) = tokio::join!(
+            store.compare_private_membership(Some(initial.revision()), &left),
+            store.compare_private_membership(Some(initial.revision()), &right)
+        );
+        let (a, b) = (a.unwrap(), b.unwrap());
+        assert!(matches!(
+            (a, b),
+            (
+                MembershipChange::Applied,
+                MembershipChange::RevisionConflict
+            ) | (
+                MembershipChange::RevisionConflict,
+                MembershipChange::Applied
+            )
+        ));
+        let winner = if a == MembershipChange::Applied {
+            &left
+        } else {
+            &right
+        };
         let removed = State::new(&r, None).unwrap();
-        assert_eq!(store.compare_private_membership(Some(winner.revision()), &removed).await.unwrap(), MembershipChange::Applied);
+        assert_eq!(
+            store
+                .compare_private_membership(Some(winner.revision()), &removed)
+                .await
+                .unwrap(),
+            MembershipChange::Applied
+        );
         assert!(removed.membership().is_none());
-        assert_eq!(store.compare_private_membership(None, &initial).await.unwrap(), MembershipChange::RevisionConflict);
-        assert_eq!(store.compare_private_membership(Some(initial.revision()), &left).await.unwrap(), MembershipChange::RevisionConflict);
-        assert_eq!(store.private_membership(&r.sandbox_id, &owner).await.unwrap(), MembershipAccess::Granted(Some(removed.clone())));
-        let mut migrated = r.clone(); migrated.node_id = "network-node-2".into();
+        assert_eq!(
+            store
+                .compare_private_membership(None, &initial)
+                .await
+                .unwrap(),
+            MembershipChange::RevisionConflict
+        );
+        assert_eq!(
+            store
+                .compare_private_membership(Some(initial.revision()), &left)
+                .await
+                .unwrap(),
+            MembershipChange::RevisionConflict
+        );
+        assert_eq!(
+            store
+                .private_membership(&r.sandbox_id, &owner)
+                .await
+                .unwrap(),
+            MembershipAccess::Granted(Some(removed.clone()))
+        );
+        let mut migrated = r.clone();
+        migrated.node_id = "network-node-2".into();
         store.put_sandbox(&migrated).await.unwrap();
-        assert_eq!(store.compare_private_membership(Some(removed.revision()), &left).await.unwrap(), MembershipChange::RecordChanged);
+        assert_eq!(
+            store
+                .compare_private_membership(Some(removed.revision()), &left)
+                .await
+                .unwrap(),
+            MembershipChange::RecordChanged
+        );
         let joined = State::new(&migrated, tags()).unwrap();
-        assert_eq!(store.compare_private_membership(Some(removed.revision()), &joined).await.unwrap(), MembershipChange::Applied);
+        assert_eq!(
+            store
+                .compare_private_membership(Some(removed.revision()), &joined)
+                .await
+                .unwrap(),
+            MembershipChange::Applied
+        );
         assert!(store.delete_sandbox(&r.sandbox_id).await.unwrap());
-        assert_eq!(store.private_membership(&r.sandbox_id, &owner).await.unwrap(), MembershipAccess::SandboxMissing);
-        assert_eq!(store.compare_private_membership(Some(joined.revision()), &removed).await.unwrap(), MembershipChange::SandboxMissing);
+        assert_eq!(
+            store
+                .private_membership(&r.sandbox_id, &owner)
+                .await
+                .unwrap(),
+            MembershipAccess::SandboxMissing
+        );
+        assert_eq!(
+            store
+                .compare_private_membership(Some(joined.revision()), &removed)
+                .await
+                .unwrap(),
+            MembershipChange::SandboxMissing
+        );
         // Even deliberate ID reuse cannot replay the old VM incarnation.
-        migrated.started_at_ms += 1; store.put_sandbox(&migrated).await.unwrap();
-        assert_eq!(store.compare_private_membership(Some(joined.revision()), &joined).await.unwrap(), MembershipChange::RecordChanged);
+        migrated.started_at_ms += 1;
+        store.put_sandbox(&migrated).await.unwrap();
+        assert_eq!(
+            store
+                .compare_private_membership(Some(joined.revision()), &joined)
+                .await
+                .unwrap(),
+            MembershipChange::RecordChanged
+        );
         let fresh = State::new(&migrated, tags()).unwrap();
-        assert_eq!(store.compare_private_membership(None, &fresh).await.unwrap(), MembershipChange::RevisionConflict);
-        assert_eq!(store.compare_private_membership(Some(joined.revision()), &fresh).await.unwrap(), MembershipChange::Applied);
+        assert_eq!(
+            store
+                .compare_private_membership(None, &fresh)
+                .await
+                .unwrap(),
+            MembershipChange::RevisionConflict
+        );
+        assert_eq!(
+            store
+                .compare_private_membership(Some(joined.revision()), &fresh)
+                .await
+                .unwrap(),
+            MembershipChange::Applied
+        );
         assert!(store.delete_sandbox(&r.sandbox_id).await.unwrap());
     }
 
-
     async fn private_route_live_snapshot_contract(store: &dyn ClusterStore) {
-        use crate::private_networks::{NetworkMembershipState as State, NetworkTag};
         use crate::ownership::OwnerId;
-        let mut source=sandbox("live-route-source","live-route-node-a");
-        let mut destination=sandbox("live-route-destination","live-route-node-b");
-        source.owner_id=Some(OwnerId::parse("live-route-owner").unwrap());destination.owner_id=source.owner_id.clone();
-        for record in [&source,&destination] {
+        use crate::private_networks::{NetworkMembershipState as State, NetworkTag};
+        let mut source = sandbox("live-route-source", "live-route-node-a");
+        let mut destination = sandbox("live-route-destination", "live-route-node-b");
+        source.owner_id = Some(OwnerId::parse("live-route-owner").unwrap());
+        destination.owner_id = source.owner_id.clone();
+        for record in [&source, &destination] {
             store.put_sandbox(record).await.unwrap();
-            let member=State::new(record,Some(vec![NetworkTag::parse("team").unwrap()])).unwrap();
-            assert_eq!(store.compare_private_membership(None,&member).await.unwrap(),MembershipChange::Applied);
+            let member =
+                State::new(record, Some(vec![NetworkTag::parse("team").unwrap()])).unwrap();
+            assert_eq!(
+                store
+                    .compare_private_membership(None, &member)
+                    .await
+                    .unwrap(),
+                MembershipChange::Applied
+            );
         }
-        let view=||store.private_route_snapshot_with_live_nodes(&source.sandbox_id,&destination.sandbox_id,&source.node_id,&destination.node_id);
+        let view = || {
+            store.private_route_snapshot_with_live_nodes(
+                &source.sandbox_id,
+                &destination.sandbox_id,
+                &source.node_id,
+                &destination.node_id,
+            )
+        };
         assert!(view().await.unwrap().is_none());
-        let sn=node(&source.node_id,1,10);let dn=node(&destination.node_id,1,10);
-        store.put_node(&sn,Duration::from_secs(60)).await.unwrap();assert!(view().await.unwrap().is_none());
-        store.put_node(&dn,Duration::from_secs(60)).await.unwrap();
-        let snapshot=view().await.unwrap().unwrap();
-        assert!(snapshot.claim(NetworkTag::parse("team").unwrap(),8080,now_ms(),false,false).is_ok());
-        store.remove_node(&source.node_id).await.unwrap();assert!(view().await.unwrap().is_none());
-        store.put_node(&sn,Duration::from_secs(1)).await.unwrap();tokio::time::sleep(Duration::from_millis(1100)).await;
+        let sn = node(&source.node_id, 1, 10);
+        let dn = node(&destination.node_id, 1, 10);
+        store.put_node(&sn, Duration::from_secs(60)).await.unwrap();
         assert!(view().await.unwrap().is_none());
-        store.put_node(&sn,Duration::from_secs(60)).await.unwrap();store.remove_node(&destination.node_id).await.unwrap();
+        store.put_node(&dn, Duration::from_secs(60)).await.unwrap();
+        let snapshot = view().await.unwrap().unwrap();
+        assert!(snapshot
+            .claim(
+                NetworkTag::parse("team").unwrap(),
+                8080,
+                now_ms(),
+                false,
+                false
+            )
+            .is_ok());
+        store.remove_node(&source.node_id).await.unwrap();
         assert!(view().await.unwrap().is_none());
-        store.put_node(&dn,Duration::from_secs(60)).await.unwrap();assert!(view().await.unwrap().is_some());
-        assert!(store.private_route_snapshot_with_live_nodes("missing-live-source",&destination.sandbox_id,&source.node_id,&destination.node_id).await.unwrap().is_none());
-        store.remove_node(&source.node_id).await.unwrap();store.remove_node(&destination.node_id).await.unwrap();
-        store.delete_sandbox(&source.sandbox_id).await.unwrap();store.delete_sandbox(&destination.sandbox_id).await.unwrap();
+        store.put_node(&sn, Duration::from_secs(1)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        assert!(view().await.unwrap().is_none());
+        store.put_node(&sn, Duration::from_secs(60)).await.unwrap();
+        store.remove_node(&destination.node_id).await.unwrap();
+        assert!(view().await.unwrap().is_none());
+        store.put_node(&dn, Duration::from_secs(60)).await.unwrap();
+        assert!(view().await.unwrap().is_some());
+        assert!(store
+            .private_route_snapshot_with_live_nodes(
+                "missing-live-source",
+                &destination.sandbox_id,
+                &source.node_id,
+                &destination.node_id
+            )
+            .await
+            .unwrap()
+            .is_none());
+        store.remove_node(&source.node_id).await.unwrap();
+        store.remove_node(&destination.node_id).await.unwrap();
+        store.delete_sandbox(&source.sandbox_id).await.unwrap();
+        store.delete_sandbox(&destination.sandbox_id).await.unwrap();
         println!("private_route_live_snapshot_contract completed");
     }
 
     async fn private_route_snapshot_contract(store: &dyn ClusterStore) {
-        use crate::private_networks::{NetworkMembershipState as State, NetworkTag};
         use crate::ownership::OwnerId;
-        let now=now_ms();
-        let mut source=sandbox("route-source","route-node-a");
-        let mut destination=sandbox("route-destination","route-node-b");
-        source.owner_id=Some(OwnerId::parse("route-alice").unwrap());
-        destination.owner_id=source.owner_id.clone();
-        let mut other=sandbox("route-other-owner","route-node-b");
-        other.owner_id=Some(OwnerId::parse("route-bob").unwrap());
-        for r in [&source,&destination,&other] { store.put_sandbox(r).await.unwrap(); }
-        let tag=|| NetworkTag::parse("team").unwrap();
-        let member=|r:&SandboxRecord| State::new(r,Some(vec![tag()])).unwrap();
-        assert!(store.private_route_snapshot(&source.sandbox_id,&destination.sandbox_id).await.unwrap().is_none());
-        let sm=member(&source);let dm=member(&destination);let om=member(&other);
-        for m in [&sm,&dm,&om] { assert_eq!(store.compare_private_membership(None,m).await.unwrap(),MembershipChange::Applied); }
-        let view=store.private_route_snapshot(&source.sandbox_id,&destination.sandbox_id).await.unwrap().unwrap();
-        let claim=view.claim(tag(),8080,now_ms(),false,false).unwrap();
-        assert!(view.authorize(&source.sandbox_id,&claim,now_ms(),false,false).is_ok());
-        assert!(view.authorize("forged-source",&claim,now_ms(),false,false).is_err());
-        assert!(view.authorize(&source.sandbox_id,&claim,now_ms(),true,false).is_err());
-        assert!(view.authorize(&source.sandbox_id,&claim,now_ms(),false,true).is_err());
-        assert!(view.claim(tag(),0,now_ms(),false,false).is_err());
-        assert!(view.claim(NetworkTag::parse("other").unwrap(),8080,now_ms(),false,false).is_err());
-        assert!(store.private_route_snapshot(&source.sandbox_id,&other.sandbox_id).await.unwrap().is_none());
-        assert!(store.private_route_snapshot("missing-source",&destination.sandbox_id).await.unwrap().is_none());
-        assert!(store.private_route_snapshot("bad/source",&destination.sandbox_id).await.is_err());
+        use crate::private_networks::{NetworkMembershipState as State, NetworkTag};
+        let now = now_ms();
+        let mut source = sandbox("route-source", "route-node-a");
+        let mut destination = sandbox("route-destination", "route-node-b");
+        source.owner_id = Some(OwnerId::parse("route-alice").unwrap());
+        destination.owner_id = source.owner_id.clone();
+        let mut other = sandbox("route-other-owner", "route-node-b");
+        other.owner_id = Some(OwnerId::parse("route-bob").unwrap());
+        for r in [&source, &destination, &other] {
+            store.put_sandbox(r).await.unwrap();
+        }
+        let tag = || NetworkTag::parse("team").unwrap();
+        let member = |r: &SandboxRecord| State::new(r, Some(vec![tag()])).unwrap();
+        assert!(store
+            .private_route_snapshot(&source.sandbox_id, &destination.sandbox_id)
+            .await
+            .unwrap()
+            .is_none());
+        let sm = member(&source);
+        let dm = member(&destination);
+        let om = member(&other);
+        for m in [&sm, &dm, &om] {
+            assert_eq!(
+                store.compare_private_membership(None, m).await.unwrap(),
+                MembershipChange::Applied
+            );
+        }
+        let view = store
+            .private_route_snapshot(&source.sandbox_id, &destination.sandbox_id)
+            .await
+            .unwrap()
+            .unwrap();
+        let claim = view.claim(tag(), 8080, now_ms(), false, false).unwrap();
+        assert!(view
+            .authorize(&source.sandbox_id, &claim, now_ms(), false, false)
+            .is_ok());
+        assert!(view
+            .authorize("forged-source", &claim, now_ms(), false, false)
+            .is_err());
+        assert!(view
+            .authorize(&source.sandbox_id, &claim, now_ms(), true, false)
+            .is_err());
+        assert!(view
+            .authorize(&source.sandbox_id, &claim, now_ms(), false, true)
+            .is_err());
+        assert!(view.claim(tag(), 0, now_ms(), false, false).is_err());
+        assert!(view
+            .claim(
+                NetworkTag::parse("other").unwrap(),
+                8080,
+                now_ms(),
+                false,
+                false
+            )
+            .is_err());
+        assert!(store
+            .private_route_snapshot(&source.sandbox_id, &other.sandbox_id)
+            .await
+            .unwrap()
+            .is_none());
+        assert!(store
+            .private_route_snapshot("missing-source", &destination.sandbox_id)
+            .await
+            .unwrap()
+            .is_none());
+        assert!(store
+            .private_route_snapshot("bad/source", &destination.sandbox_id)
+            .await
+            .is_err());
         // Even rejoining the same tag invalidates the previous route claim.
-        let rejoined=member(&source);
-        assert_eq!(store.compare_private_membership(Some(sm.revision()),&rejoined).await.unwrap(),MembershipChange::Applied);
-        let fresh=store.private_route_snapshot(&source.sandbox_id,&destination.sandbox_id).await.unwrap().unwrap();
-        assert!(fresh.authorize(&source.sandbox_id,&claim,now_ms(),false,false).is_err());
-        let claim=fresh.claim(tag(),8080,now_ms(),false,false).unwrap();
-        source.paused=true;store.put_sandbox(&source).await.unwrap();
-        let paused=store.private_route_snapshot(&source.sandbox_id,&destination.sandbox_id).await.unwrap().unwrap();
-        assert!(paused.authorize(&source.sandbox_id,&claim,now_ms(),false,false).is_err());
-        source.paused=false;store.put_sandbox(&source).await.unwrap();
-        destination.end_at_ms=now;store.put_sandbox(&destination).await.unwrap();
-        let expired=store.private_route_snapshot(&source.sandbox_id,&destination.sandbox_id).await.unwrap().unwrap();
-        assert!(expired.authorize(&source.sandbox_id,&claim,now_ms(),false,false).is_err());
-        destination.end_at_ms=now_ms()+60_000;destination.node_id="route-node-c".into();store.put_sandbox(&destination).await.unwrap();
-        assert!(store.private_route_snapshot(&source.sandbox_id,&destination.sandbox_id).await.unwrap().is_none());
-        let moved=member(&destination);
-        assert_eq!(store.compare_private_membership(Some(dm.revision()),&moved).await.unwrap(),MembershipChange::Applied);
-        let migrated=store.private_route_snapshot(&source.sandbox_id,&destination.sandbox_id).await.unwrap().unwrap();
-        assert!(migrated.authorize(&source.sandbox_id,&claim,now_ms(),false,false).is_err());
-        assert!(migrated.claim(tag(),8080,now_ms(),false,false).is_ok());
-        let isolated=State::new(&destination,Some(vec![NetworkTag::parse("other").unwrap()])).unwrap();
-        assert_eq!(store.compare_private_membership(Some(moved.revision()),&isolated).await.unwrap(),MembershipChange::Applied);
-        let separated=store.private_route_snapshot(&source.sandbox_id,&destination.sandbox_id).await.unwrap().unwrap();
-        assert!(separated.claim(tag(),8080,now_ms(),false,false).is_err());
-        assert!(separated.claim(NetworkTag::parse("other").unwrap(),8080,now_ms(),false,false).is_err());
-        let removed=State::new(&destination,None).unwrap();
-        assert_eq!(store.compare_private_membership(Some(isolated.revision()),&removed).await.unwrap(),MembershipChange::Applied);
-        assert!(store.private_route_snapshot(&source.sandbox_id,&destination.sandbox_id).await.unwrap().is_none());
-        for r in [&source,&destination,&other] { assert!(store.delete_sandbox(&r.sandbox_id).await.unwrap()); }
-        assert!(store.private_route_snapshot(&source.sandbox_id,&destination.sandbox_id).await.unwrap().is_none());
+        let rejoined = member(&source);
+        assert_eq!(
+            store
+                .compare_private_membership(Some(sm.revision()), &rejoined)
+                .await
+                .unwrap(),
+            MembershipChange::Applied
+        );
+        let fresh = store
+            .private_route_snapshot(&source.sandbox_id, &destination.sandbox_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(fresh
+            .authorize(&source.sandbox_id, &claim, now_ms(), false, false)
+            .is_err());
+        let claim = fresh.claim(tag(), 8080, now_ms(), false, false).unwrap();
+        source.paused = true;
+        store.put_sandbox(&source).await.unwrap();
+        let paused = store
+            .private_route_snapshot(&source.sandbox_id, &destination.sandbox_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(paused
+            .authorize(&source.sandbox_id, &claim, now_ms(), false, false)
+            .is_err());
+        source.paused = false;
+        store.put_sandbox(&source).await.unwrap();
+        destination.end_at_ms = now;
+        store.put_sandbox(&destination).await.unwrap();
+        let expired = store
+            .private_route_snapshot(&source.sandbox_id, &destination.sandbox_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(expired
+            .authorize(&source.sandbox_id, &claim, now_ms(), false, false)
+            .is_err());
+        destination.end_at_ms = now_ms() + 60_000;
+        destination.node_id = "route-node-c".into();
+        store.put_sandbox(&destination).await.unwrap();
+        assert!(store
+            .private_route_snapshot(&source.sandbox_id, &destination.sandbox_id)
+            .await
+            .unwrap()
+            .is_none());
+        let moved = member(&destination);
+        assert_eq!(
+            store
+                .compare_private_membership(Some(dm.revision()), &moved)
+                .await
+                .unwrap(),
+            MembershipChange::Applied
+        );
+        let migrated = store
+            .private_route_snapshot(&source.sandbox_id, &destination.sandbox_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(migrated
+            .authorize(&source.sandbox_id, &claim, now_ms(), false, false)
+            .is_err());
+        assert!(migrated.claim(tag(), 8080, now_ms(), false, false).is_ok());
+        let isolated = State::new(
+            &destination,
+            Some(vec![NetworkTag::parse("other").unwrap()]),
+        )
+        .unwrap();
+        assert_eq!(
+            store
+                .compare_private_membership(Some(moved.revision()), &isolated)
+                .await
+                .unwrap(),
+            MembershipChange::Applied
+        );
+        let separated = store
+            .private_route_snapshot(&source.sandbox_id, &destination.sandbox_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(separated
+            .claim(tag(), 8080, now_ms(), false, false)
+            .is_err());
+        assert!(separated
+            .claim(
+                NetworkTag::parse("other").unwrap(),
+                8080,
+                now_ms(),
+                false,
+                false
+            )
+            .is_err());
+        let removed = State::new(&destination, None).unwrap();
+        assert_eq!(
+            store
+                .compare_private_membership(Some(isolated.revision()), &removed)
+                .await
+                .unwrap(),
+            MembershipChange::Applied
+        );
+        assert!(store
+            .private_route_snapshot(&source.sandbox_id, &destination.sandbox_id)
+            .await
+            .unwrap()
+            .is_none());
+        for r in [&source, &destination, &other] {
+            assert!(store.delete_sandbox(&r.sandbox_id).await.unwrap());
+        }
+        assert!(store
+            .private_route_snapshot(&source.sandbox_id, &destination.sandbox_id)
+            .await
+            .unwrap()
+            .is_none());
         eprintln!("private_route_contract completed source_rejoin=refused cross_owner=refused cross_network=refused pause=refused expiration=refused stale_migration=refused removal=absent deletion=absent");
     }
 
     async fn web_sharing_contract(store: &dyn ClusterStore) {
-        use crate::web_sharing::WebGrant;
         use crate::ownership::OwnerId;
+        use crate::web_sharing::WebGrant;
         let mut record = sandbox("sharing-guest", "node-a");
         record.started_at_ms = 9007199254740993;
         record.owner_id = Some(OwnerId::parse("sharing-owner").unwrap());
         let owner = record.owner_id.as_ref().unwrap().clone();
         let grants = || vec![WebGrant::new("alice", 100).unwrap()];
         let initial = WebSharingState::new(&record, grants()).unwrap();
-        assert_eq!(store.compare_web_sharing(None, &initial).await.unwrap(), SharingChange::SandboxMissing);
-        assert!(store.web_sharing_snapshot(&record.sandbox_id).await.unwrap().is_none());
+        assert_eq!(
+            store.compare_web_sharing(None, &initial).await.unwrap(),
+            SharingChange::SandboxMissing
+        );
+        assert!(store
+            .web_sharing_snapshot(&record.sandbox_id)
+            .await
+            .unwrap()
+            .is_none());
         store.put_sandbox(&record).await.unwrap();
-        assert_eq!(store.web_sharing(&record.sandbox_id, &owner).await.unwrap(), SharingAccess::Granted(None));
-        assert_eq!(store.compare_web_sharing(None, &initial).await.unwrap(), SharingChange::Applied);
-        assert_eq!(store.compare_web_sharing(None, &initial).await.unwrap(), SharingChange::Applied);
-        let (vm, row) = store.web_sharing_snapshot(&record.sandbox_id).await.unwrap().unwrap();
+        assert_eq!(
+            store.web_sharing(&record.sandbox_id, &owner).await.unwrap(),
+            SharingAccess::Granted(None)
+        );
+        assert_eq!(
+            store.compare_web_sharing(None, &initial).await.unwrap(),
+            SharingChange::Applied
+        );
+        assert_eq!(
+            store.compare_web_sharing(None, &initial).await.unwrap(),
+            SharingChange::Applied
+        );
+        let (vm, row) = store
+            .web_sharing_snapshot(&record.sandbox_id)
+            .await
+            .unwrap()
+            .unwrap();
         assert!(row.allows(&vm, "alice", 99));
         assert!(!row.allows(&vm, "alice", 100));
         let other = OwnerId::parse("other-owner").unwrap();
-        assert_eq!(store.web_sharing(&record.sandbox_id, &other).await.unwrap(), SharingAccess::OwnerConflict);
-        let mut forged = record.clone(); forged.owner_id = Some(other);
-        assert_eq!(store.compare_web_sharing(Some(initial.revision()), &WebSharingState::new(&forged, grants()).unwrap()).await.unwrap(), SharingChange::OwnerConflict);
+        assert_eq!(
+            store.web_sharing(&record.sandbox_id, &other).await.unwrap(),
+            SharingAccess::OwnerConflict
+        );
+        let mut forged = record.clone();
+        forged.owner_id = Some(other);
+        assert_eq!(
+            store
+                .compare_web_sharing(
+                    Some(initial.revision()),
+                    &WebSharingState::new(&forged, grants()).unwrap()
+                )
+                .await
+                .unwrap(),
+            SharingChange::OwnerConflict
+        );
         let a = WebSharingState::new(&record, grants()).unwrap();
         let b = WebSharingState::new(&record, vec![]).unwrap();
-        let (left, right) = tokio::join!(store.compare_web_sharing(Some(initial.revision()), &a), store.compare_web_sharing(Some(initial.revision()), &b));
-        let (left,right) = (left.unwrap(),right.unwrap());
-        assert!(matches!((left,right),(SharingChange::Applied,SharingChange::RevisionConflict)|(SharingChange::RevisionConflict,SharingChange::Applied)));
+        let (left, right) = tokio::join!(
+            store.compare_web_sharing(Some(initial.revision()), &a),
+            store.compare_web_sharing(Some(initial.revision()), &b)
+        );
+        let (left, right) = (left.unwrap(), right.unwrap());
+        assert!(matches!(
+            (left, right),
+            (SharingChange::Applied, SharingChange::RevisionConflict)
+                | (SharingChange::RevisionConflict, SharingChange::Applied)
+        ));
         let winner = if left == SharingChange::Applied { a } else { b };
-        assert_eq!(store.compare_web_sharing(Some(initial.revision()), &winner).await.unwrap(), SharingChange::Applied);
+        assert_eq!(
+            store
+                .compare_web_sharing(Some(initial.revision()), &winner)
+                .await
+                .unwrap(),
+            SharingChange::Applied
+        );
         let revoked = WebSharingState::new(&record, vec![]).unwrap();
-        assert_eq!(store.compare_web_sharing(Some(winner.revision()), &revoked).await.unwrap(), SharingChange::Applied);
-        assert_eq!(store.compare_web_sharing(None, &initial).await.unwrap(), SharingChange::RevisionConflict);
-        let (vm,row) = store.web_sharing_snapshot(&record.sandbox_id).await.unwrap().unwrap();
+        assert_eq!(
+            store
+                .compare_web_sharing(Some(winner.revision()), &revoked)
+                .await
+                .unwrap(),
+            SharingChange::Applied
+        );
+        assert_eq!(
+            store.compare_web_sharing(None, &initial).await.unwrap(),
+            SharingChange::RevisionConflict
+        );
+        let (vm, row) = store
+            .web_sharing_snapshot(&record.sandbox_id)
+            .await
+            .unwrap()
+            .unwrap();
         assert!(!row.allows(&vm, "alice", 99));
         // Same revision with changed contents is never an exact retry.
         let mut changed = serde_json::to_value(&revoked).unwrap();
         changed["grants"] = serde_json::to_value(grants()).unwrap();
         let changed: WebSharingState = serde_json::from_value(changed).unwrap();
-        assert_eq!(store.compare_web_sharing(Some(revoked.revision()), &changed).await.unwrap(), SharingChange::RevisionConflict);
-        record.node_id = "node-b".into(); store.put_sandbox(&record).await.unwrap();
-        assert!(store.web_sharing_snapshot(&record.sandbox_id).await.unwrap().is_some());
-        record.started_at_ms += 1; store.put_sandbox(&record).await.unwrap();
-        assert!(store.web_sharing_snapshot(&record.sandbox_id).await.unwrap().is_none());
-        assert_eq!(store.compare_web_sharing(Some(revoked.revision()), &initial).await.unwrap(), SharingChange::RecordChanged);
-        assert!(store.delete_sandbox(&record.sandbox_id).await.unwrap());
-        assert!(store.web_sharing_snapshot(&record.sandbox_id).await.unwrap().is_none());
+        assert_eq!(
+            store
+                .compare_web_sharing(Some(revoked.revision()), &changed)
+                .await
+                .unwrap(),
+            SharingChange::RevisionConflict
+        );
+        record.node_id = "node-b".into();
         store.put_sandbox(&record).await.unwrap();
-        assert!(store.web_sharing_snapshot(&record.sandbox_id).await.unwrap().is_none());
-        assert_eq!(store.compare_web_sharing(None, &initial).await.unwrap(), SharingChange::RecordChanged);
+        assert!(store
+            .web_sharing_snapshot(&record.sandbox_id)
+            .await
+            .unwrap()
+            .is_some());
+        record.started_at_ms += 1;
+        store.put_sandbox(&record).await.unwrap();
+        assert!(store
+            .web_sharing_snapshot(&record.sandbox_id)
+            .await
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            store
+                .compare_web_sharing(Some(revoked.revision()), &initial)
+                .await
+                .unwrap(),
+            SharingChange::RecordChanged
+        );
+        assert!(store.delete_sandbox(&record.sandbox_id).await.unwrap());
+        assert!(store
+            .web_sharing_snapshot(&record.sandbox_id)
+            .await
+            .unwrap()
+            .is_none());
+        store.put_sandbox(&record).await.unwrap();
+        assert!(store
+            .web_sharing_snapshot(&record.sandbox_id)
+            .await
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            store.compare_web_sharing(None, &initial).await.unwrap(),
+            SharingChange::RecordChanged
+        );
         // Retained tombstone is explicit: replacement requires its current revision.
         let replacement = WebSharingState::new(&record, grants()).unwrap();
-        assert_eq!(store.compare_web_sharing(Some(revoked.revision()), &replacement).await.unwrap(), SharingChange::Applied);
+        assert_eq!(
+            store
+                .compare_web_sharing(Some(revoked.revision()), &replacement)
+                .await
+                .unwrap(),
+            SharingChange::Applied
+        );
         store.delete_sandbox(&record.sandbox_id).await.unwrap();
     }
     #[tokio::test]
-    async fn memory_web_sharing_contract() { web_sharing_contract(&MemoryStore::new()).await; }
+    async fn memory_web_sharing_contract() {
+        web_sharing_contract(&MemoryStore::new()).await;
+    }
     #[tokio::test]
     async fn redis_web_sharing_contract() {
         let Ok(url) = std::env::var("HV2_TEST_REDIS") else {
-            eprintln!("skipped: HV2_TEST_REDIS is unset"); return;
+            eprintln!("skipped: HV2_TEST_REDIS is unset");
+            return;
         };
         let namespace = format!("sharing-test-{}", uuid::Uuid::new_v4());
         let store = RedisStore::connect(&url, &namespace).await.unwrap();
         web_sharing_contract(&store).await;
         // A new connection sees the persisted tombstone after record deletion.
         let reconnected = RedisStore::connect(&url, &namespace).await.unwrap();
-        assert!(reconnected.web_sharing_snapshot("sharing-guest").await.unwrap().is_none());
+        assert!(reconnected
+            .web_sharing_snapshot("sharing-guest")
+            .await
+            .unwrap()
+            .is_none());
         let mut record = sandbox("sharing-reconnect", "node-a");
         record.owner_id = Some(crate::ownership::OwnerId::parse("sharing-owner").unwrap());
         let grants = vec![crate::web_sharing::WebGrant::new("alice", 100).unwrap()];
         let state = WebSharingState::new(&record, grants).unwrap();
         store.put_sandbox(&record).await.unwrap();
-        assert_eq!(store.compare_web_sharing(None, &state).await.unwrap(), SharingChange::Applied);
-        assert_eq!(reconnected.web_sharing_snapshot(&record.sandbox_id).await.unwrap(), Some((record.clone(), state)));
+        assert_eq!(
+            store.compare_web_sharing(None, &state).await.unwrap(),
+            SharingChange::Applied
+        );
+        assert_eq!(
+            reconnected
+                .web_sharing_snapshot(&record.sandbox_id)
+                .await
+                .unwrap(),
+            Some((record.clone(), state))
+        );
         store.delete_sandbox(&record.sandbox_id).await.unwrap();
         eprintln!("owned Redis sharing contract completed; active grants visible across connections; deletion denies admission");
     }
@@ -2847,7 +4021,10 @@ pub(crate) mod tests {
         assert!(store.name_reservation(&name).await.unwrap().is_none());
     }
     fn allocated(claim: PortClaim) -> PortAllocation {
-        match claim { PortClaim::Allocated(row) => row, other => panic!("unexpected claim: {other:?}") }
+        match claim {
+            PortClaim::Allocated(row) => row,
+            other => panic!("unexpected claim: {other:?}"),
+        }
     }
 
     async fn managed_port_contract(store: std::sync::Arc<dyn ClusterStore>) {
@@ -2855,62 +4032,199 @@ pub(crate) mod tests {
         assert!(PublicPortRange::new(0, 10).is_err());
         assert!(PublicPortRange::new(10, 9).is_err());
         assert!(PublicPortRange::new(1, 4097).is_err());
-        assert_eq!(store.claim_port("absent", 5353, "owner-a", PortProtocol::Udp, range).await.unwrap(), PortClaim::SandboxMissing);
-        store.put_sandbox(&sandbox("ports-a", "node")).await.unwrap();
-        store.put_sandbox(&sandbox("ports-b", "node")).await.unwrap();
-        let first = allocated(store.claim_port("ports-a", 5353, "owner-a", PortProtocol::Tcp, range).await.unwrap());
-        let both = allocated(store.claim_port("ports-a", 5353, "owner-a", PortProtocol::Both, range).await.unwrap());
+        assert_eq!(
+            store
+                .claim_port("absent", 5353, "owner-a", PortProtocol::Udp, range)
+                .await
+                .unwrap(),
+            PortClaim::SandboxMissing
+        );
+        store
+            .put_sandbox(&sandbox("ports-a", "node"))
+            .await
+            .unwrap();
+        store
+            .put_sandbox(&sandbox("ports-b", "node"))
+            .await
+            .unwrap();
+        let first = allocated(
+            store
+                .claim_port("ports-a", 5353, "owner-a", PortProtocol::Tcp, range)
+                .await
+                .unwrap(),
+        );
+        let both = allocated(
+            store
+                .claim_port("ports-a", 5353, "owner-a", PortProtocol::Both, range)
+                .await
+                .unwrap(),
+        );
         assert_eq!(first.public_port(), both.public_port());
         assert_eq!(both.protocol(), PortProtocol::Both);
-        assert_eq!(store.claim_port("ports-a", 5353, "owner-b", PortProtocol::Udp, range).await.unwrap(), PortClaim::OwnerConflict);
+        assert_eq!(
+            store
+                .claim_port("ports-a", 5353, "owner-b", PortProtocol::Udp, range)
+                .await
+                .unwrap(),
+            PortClaim::OwnerConflict
+        );
         assert!(!store.delete_port("ports-a", 5353, "owner-b").await.unwrap());
-        assert_eq!(store.port_allocations(Some("ports-a")).await.unwrap(), vec![both.clone()]);
-        let second = allocated(store.claim_port("ports-b", 5353, "owner-b", PortProtocol::Udp, range).await.unwrap());
+        assert_eq!(
+            store.port_allocations(Some("ports-a")).await.unwrap(),
+            vec![both.clone()]
+        );
+        let second = allocated(
+            store
+                .claim_port("ports-b", 5353, "owner-b", PortProtocol::Udp, range)
+                .await
+                .unwrap(),
+        );
         assert_ne!(first.public_port(), second.public_port());
-        let mut updated = sandbox("ports-a", "new-node"); updated.paused = true;
+        let mut updated = sandbox("ports-a", "new-node");
+        updated.paused = true;
         store.put_sandbox(&updated).await.unwrap();
-        let retained = allocated(store.claim_port("ports-a", 5353, "owner-a", PortProtocol::Udp, PublicPortRange::new(40000, 40001).unwrap()).await.unwrap());
-        assert_eq!(first.public_port(), retained.public_port(), "record/config updates must not remap reservations");
+        let retained = allocated(
+            store
+                .claim_port(
+                    "ports-a",
+                    5353,
+                    "owner-a",
+                    PortProtocol::Udp,
+                    PublicPortRange::new(40000, 40001).unwrap(),
+                )
+                .await
+                .unwrap(),
+        );
+        assert_eq!(
+            first.public_port(),
+            retained.public_port(),
+            "record/config updates must not remap reservations"
+        );
         assert!(store.delete_port("ports-a", 5353, "owner-a").await.unwrap());
         assert!(!store.delete_port("ports-a", 5353, "owner-a").await.unwrap());
-        let recycled = allocated(store.claim_port("ports-a", 5354, "owner-a", PortProtocol::Udp, range).await.unwrap());
+        let recycled = allocated(
+            store
+                .claim_port("ports-a", 5354, "owner-a", PortProtocol::Udp, range)
+                .await
+                .unwrap(),
+        );
         assert_eq!(recycled.public_port(), first.public_port());
         assert!(store.delete_sandbox("ports-a").await.unwrap());
-        assert!(store.port_allocations(Some("ports-a")).await.unwrap().is_empty());
+        assert!(store
+            .port_allocations(Some("ports-a"))
+            .await
+            .unwrap()
+            .is_empty());
         assert_eq!(store.port_allocations(None).await.unwrap(), vec![second]);
-        assert!(store.claim_port("ports-b", 0, "owner-b", PortProtocol::Udp, range).await.is_err());
-        assert!(store.claim_port("ports-b", 1, "bad/owner", PortProtocol::Udp, range).await.is_err());
+        assert!(store
+            .claim_port("ports-b", 0, "owner-b", PortProtocol::Udp, range)
+            .await
+            .is_err());
+        assert!(store
+            .claim_port("ports-b", 1, "bad/owner", PortProtocol::Udp, range)
+            .await
+            .is_err());
         store.delete_sandbox("ports-b").await.unwrap();
 
-        store.put_sandbox(&sandbox("ports-concurrent", "node")).await.unwrap();
+        store
+            .put_sandbox(&sandbox("ports-concurrent", "node"))
+            .await
+            .unwrap();
         let mut jobs = tokio::task::JoinSet::new();
         for _ in 0..32 {
             let store = store.clone();
-            jobs.spawn(async move { allocated(store.claim_port("ports-concurrent", 9000, "owner-a", PortProtocol::Both, range).await.unwrap()) });
+            jobs.spawn(async move {
+                allocated(
+                    store
+                        .claim_port(
+                            "ports-concurrent",
+                            9000,
+                            "owner-a",
+                            PortProtocol::Both,
+                            range,
+                        )
+                        .await
+                        .unwrap(),
+                )
+            });
         }
-        while let Some(result) = jobs.join_next().await { assert_eq!(result.unwrap().public_port(), range.first()); }
+        while let Some(result) = jobs.join_next().await {
+            assert_eq!(result.unwrap().public_port(), range.first());
+        }
         assert_eq!(store.port_allocations(None).await.unwrap().len(), 1);
         store.delete_sandbox("ports-concurrent").await.unwrap();
 
         let wide = PublicPortRange::new(35000, 35063).unwrap();
-        store.put_sandbox(&sandbox("ports-limit", "node")).await.unwrap();
+        store
+            .put_sandbox(&sandbox("ports-limit", "node"))
+            .await
+            .unwrap();
         for n in 0..16u16 {
             let store = store.clone();
-            jobs.spawn(async move { allocated(store.claim_port("ports-limit", 10000+n, "owner-a", PortProtocol::Tcp, wide).await.unwrap()) });
+            jobs.spawn(async move {
+                allocated(
+                    store
+                        .claim_port("ports-limit", 10000 + n, "owner-a", PortProtocol::Tcp, wide)
+                        .await
+                        .unwrap(),
+                )
+            });
         }
         let mut ports = std::collections::HashSet::new();
-        while let Some(result) = jobs.join_next().await { assert!(ports.insert(result.unwrap().public_port()), "concurrent destinations collided"); }
+        while let Some(result) = jobs.join_next().await {
+            assert!(
+                ports.insert(result.unwrap().public_port()),
+                "concurrent destinations collided"
+            );
+        }
         assert_eq!(ports.len(), 16);
-        assert_eq!(store.claim_port("ports-limit", 20000, "owner-a", PortProtocol::Udp, wide).await.unwrap(), PortClaim::LimitReached);
+        assert_eq!(
+            store
+                .claim_port("ports-limit", 20000, "owner-a", PortProtocol::Udp, wide)
+                .await
+                .unwrap(),
+            PortClaim::LimitReached
+        );
         let existing = store.port_allocations(Some("ports-limit")).await.unwrap()[0].clone();
-        assert_eq!(allocated(store.claim_port("ports-limit", existing.machine_port(), "owner-a", PortProtocol::Both, wide).await.unwrap()).public_port(), existing.public_port());
+        assert_eq!(
+            allocated(
+                store
+                    .claim_port(
+                        "ports-limit",
+                        existing.machine_port(),
+                        "owner-a",
+                        PortProtocol::Both,
+                        wide
+                    )
+                    .await
+                    .unwrap()
+            )
+            .public_port(),
+            existing.public_port()
+        );
         store.delete_sandbox("ports-limit").await.unwrap();
         assert!(store.port_allocations(None).await.unwrap().is_empty());
 
-        store.put_sandbox(&sandbox("ports-pool", "node")).await.unwrap();
+        store
+            .put_sandbox(&sandbox("ports-pool", "node"))
+            .await
+            .unwrap();
         let small = PublicPortRange::new(37000, 37001).unwrap();
-        for port in [1, 2] { allocated(store.claim_port("ports-pool", port, "owner-a", PortProtocol::Udp, small).await.unwrap()); }
-        assert_eq!(store.claim_port("ports-pool", 3, "owner-a", PortProtocol::Udp, small).await.unwrap(), PortClaim::PoolExhausted);
+        for port in [1, 2] {
+            allocated(
+                store
+                    .claim_port("ports-pool", port, "owner-a", PortProtocol::Udp, small)
+                    .await
+                    .unwrap(),
+            );
+        }
+        assert_eq!(
+            store
+                .claim_port("ports-pool", 3, "owner-a", PortProtocol::Udp, small)
+                .await
+                .unwrap(),
+            PortClaim::PoolExhausted
+        );
         store.delete_sandbox("ports-pool").await.unwrap();
     }
 
@@ -2925,12 +4239,33 @@ pub(crate) mod tests {
     }
     impl OwnedPortRedis {
         fn launch(directory: &std::path::Path) -> std::process::Child {
-            let log = std::fs::OpenOptions::new().create(true).append(true).open(directory.join("redis.log")).unwrap();
+            let log = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(directory.join("redis.log"))
+                .unwrap();
             std::process::Command::new("redis-server")
-                .args(["--port", "0", "--protected-mode", "yes", "--appendonly", "yes", "--appendfsync", "always", "--save", ""])
-                .arg("--dir").arg(directory).arg("--unixsocket").arg(directory.join("redis.sock"))
+                .args([
+                    "--port",
+                    "0",
+                    "--protected-mode",
+                    "yes",
+                    "--appendonly",
+                    "yes",
+                    "--appendfsync",
+                    "always",
+                    "--save",
+                    "",
+                ])
+                .arg("--dir")
+                .arg(directory)
+                .arg("--unixsocket")
+                .arg(directory.join("redis.sock"))
                 .args(["--unixsocketperm", "700"])
-                .stdout(std::process::Stdio::from(log.try_clone().unwrap())).stderr(std::process::Stdio::from(log)).spawn().unwrap()
+                .stdout(std::process::Stdio::from(log.try_clone().unwrap()))
+                .stderr(std::process::Stdio::from(log))
+                .spawn()
+                .unwrap()
         }
         fn new() -> Self {
             let directory = tempfile::tempdir().unwrap();
@@ -2938,22 +4273,41 @@ pub(crate) mod tests {
             Self { child, directory }
         }
         async fn store(&mut self, namespace: &str) -> RedisStore {
-            let url = format!("redis+unix://{}", self.directory.path().join("redis.sock").display());
+            let url = format!(
+                "redis+unix://{}",
+                self.directory.path().join("redis.sock").display()
+            );
             tokio::time::timeout(Duration::from_secs(15), async {
                 loop {
-                    assert!(self.child.try_wait().unwrap().is_none(), "owned Redis exited");
-                    if let Ok(Ok(store)) = tokio::time::timeout(Duration::from_secs(1), RedisStore::connect(&url, namespace)).await { return store; }
+                    assert!(
+                        self.child.try_wait().unwrap().is_none(),
+                        "owned Redis exited"
+                    );
+                    if let Ok(Ok(store)) = tokio::time::timeout(
+                        Duration::from_secs(1),
+                        RedisStore::connect(&url, namespace),
+                    )
+                    .await
+                    {
+                        return store;
+                    }
                     tokio::time::sleep(Duration::from_millis(20)).await;
                 }
-            }).await.expect("owned Redis readiness")
+            })
+            .await
+            .expect("owned Redis readiness")
         }
         fn restart(&mut self) {
-            self.child.kill().unwrap(); self.child.wait().unwrap();
+            self.child.kill().unwrap();
+            self.child.wait().unwrap();
             self.child = Self::launch(self.directory.path());
         }
     }
     impl Drop for OwnedPortRedis {
-        fn drop(&mut self) { let _ = self.child.kill(); let _ = self.child.wait(); }
+        fn drop(&mut self) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
     }
 
     #[tokio::test]
@@ -2961,39 +4315,80 @@ pub(crate) mod tests {
     async fn web_sharing_redis_owned_restart() {
         use crate::ownership::OwnerId;
         use crate::web_sharing::WebGrant;
-        use hv2_api::sandbox_proxy::SandboxRoutes;
         use base64::Engine;
+        use hv2_api::sandbox_proxy::SandboxRoutes;
         use sha2::{Digest, Sha256};
-        async fn admission(store: std::sync::Arc<RedisStore>, policy: std::sync::Arc<crate::web_access::WebAccessPolicy>, allowed: bool) {
-            let routes=crate::control::ClusterRoutes::new(store,Duration::from_secs(30)).with_web_access(policy);
-            let mut headers=axum::http::HeaderMap::new();
-            headers.insert("authorization",format!("Basic {}",base64::engine::general_purpose::STANDARD.encode("alice:owned-password")).parse().unwrap());
-            headers.insert(crate::web_access::IDENTITY_HEADER,"forged".parse().unwrap());
-            assert_eq!(routes.admit_request("sharing-persistent",8080,&mut headers).await.is_ok(),allowed);
+        async fn admission(
+            store: std::sync::Arc<RedisStore>,
+            policy: std::sync::Arc<crate::web_access::WebAccessPolicy>,
+            allowed: bool,
+        ) {
+            let routes = crate::control::ClusterRoutes::new(store, Duration::from_secs(30))
+                .with_web_access(policy);
+            let mut headers = axum::http::HeaderMap::new();
+            headers.insert(
+                "authorization",
+                format!(
+                    "Basic {}",
+                    base64::engine::general_purpose::STANDARD.encode("alice:owned-password")
+                )
+                .parse()
+                .unwrap(),
+            );
+            headers.insert(
+                crate::web_access::IDENTITY_HEADER,
+                "forged".parse().unwrap(),
+            );
+            assert_eq!(
+                routes
+                    .admit_request("sharing-persistent", 8080, &mut headers)
+                    .await
+                    .is_ok(),
+                allowed
+            );
             if allowed {
-                assert_eq!(headers[crate::web_access::IDENTITY_HEADER],"alice");
+                assert_eq!(headers[crate::web_access::IDENTITY_HEADER], "alice");
                 assert!(!headers.contains_key("authorization"));
-            } else { assert!(!headers.contains_key(crate::web_access::IDENTITY_HEADER)); }
+            } else {
+                assert!(!headers.contains_key(crate::web_access::IDENTITY_HEADER));
+            }
         }
-        let mut server=OwnedPortRedis::new();
-        let namespace=format!("sharing-restart-{}",uuid::Uuid::new_v4());
-        let store=std::sync::Arc::new(server.store(&namespace).await);
-        let mut record=sandbox("sharing-persistent","node");
-        record.owner_id=Some(OwnerId::parse("owner").unwrap());
-        record.started_at_ms=9007199254740993;
-        let owner=record.owner_id.clone().unwrap();
-        let expiry=(now_ms()/1000+600) as i64;
-        let digest=Sha256::digest(b"owned-password").iter().map(|b|format!("{b:02x}")).collect::<String>();
+        let mut server = OwnedPortRedis::new();
+        let namespace = format!("sharing-restart-{}", uuid::Uuid::new_v4());
+        let store = std::sync::Arc::new(server.store(&namespace).await);
+        let mut record = sandbox("sharing-persistent", "node");
+        record.owner_id = Some(OwnerId::parse("owner").unwrap());
+        record.started_at_ms = 9007199254740993;
+        let owner = record.owner_id.clone().unwrap();
+        let expiry = (now_ms() / 1000 + 600) as i64;
+        let digest = Sha256::digest(b"owned-password")
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>();
         let policy=std::sync::Arc::new(crate::web_access::WebAccessPolicy::from_json(&json!([{
             "subject":"alice","sha256":digest,"expires_at":expiry,"sandboxes":[],"allow_owner_grants":true
         }]).to_string()).unwrap());
-        let initial=WebSharingState::new(&record,vec![WebGrant::new("alice",expiry).unwrap()]).unwrap();
+        let initial =
+            WebSharingState::new(&record, vec![WebGrant::new("alice", expiry).unwrap()]).unwrap();
         store.put_sandbox(&record).await.unwrap();
-        assert_eq!(store.compare_web_sharing(None,&initial).await.unwrap(),SharingChange::Applied);
-        admission(store.clone(),policy.clone(),true).await;
-        server.restart();let recovered=std::sync::Arc::new(server.store(&namespace).await);
-        assert_eq!(recovered.sandbox(&record.sandbox_id).await.unwrap(),Some(record.clone()));
-        assert_eq!(recovered.web_sharing(&record.sandbox_id,&owner).await.unwrap(),SharingAccess::Granted(Some(initial.clone())));
+        assert_eq!(
+            store.compare_web_sharing(None, &initial).await.unwrap(),
+            SharingChange::Applied
+        );
+        admission(store.clone(), policy.clone(), true).await;
+        server.restart();
+        let recovered = std::sync::Arc::new(server.store(&namespace).await);
+        assert_eq!(
+            recovered.sandbox(&record.sandbox_id).await.unwrap(),
+            Some(record.clone())
+        );
+        assert_eq!(
+            recovered
+                .web_sharing(&record.sandbox_id, &owner)
+                .await
+                .unwrap(),
+            SharingAccess::Granted(Some(initial.clone()))
+        );
         // A killed connection may fail its first read; retry only this read,
         // boundedly, while the manager reconnects. Do not replay mutations.
         let old_connection=tokio::time::timeout(Duration::from_secs(15),async {
@@ -3006,118 +4401,425 @@ pub(crate) mod tests {
                 tokio::time::sleep(Duration::from_millis(20)).await;
             }
         }).await.expect("old Redis connection bounded recovery");
-        assert_eq!(old_connection,Some((record.clone(),initial.clone())));
-        admission(recovered.clone(),policy.clone(),true).await;
+        assert_eq!(old_connection, Some((record.clone(), initial.clone())));
+        admission(recovered.clone(), policy.clone(), true).await;
         eprintln!("sharing AOF restart=1 active grant and exact u64 incarnation retained; old/new connections agree; admission allowed");
 
-        let revoked=WebSharingState::new(&record,vec![]).unwrap();
-        assert_eq!(recovered.compare_web_sharing(Some(initial.revision()),&revoked).await.unwrap(),SharingChange::Applied);
-        server.restart();let recovered=std::sync::Arc::new(server.store(&namespace).await);
-        assert_eq!(recovered.web_sharing(&record.sandbox_id,&owner).await.unwrap(),SharingAccess::Granted(Some(revoked.clone())));
-        assert_eq!(recovered.compare_web_sharing(None,&initial).await.unwrap(),SharingChange::RevisionConflict);
-        assert_eq!(recovered.compare_web_sharing(Some(initial.revision()),&revoked).await.unwrap(),SharingChange::Applied);
-        admission(recovered.clone(),policy.clone(),false).await;
+        let revoked = WebSharingState::new(&record, vec![]).unwrap();
+        assert_eq!(
+            recovered
+                .compare_web_sharing(Some(initial.revision()), &revoked)
+                .await
+                .unwrap(),
+            SharingChange::Applied
+        );
+        server.restart();
+        let recovered = std::sync::Arc::new(server.store(&namespace).await);
+        assert_eq!(
+            recovered
+                .web_sharing(&record.sandbox_id, &owner)
+                .await
+                .unwrap(),
+            SharingAccess::Granted(Some(revoked.clone()))
+        );
+        assert_eq!(
+            recovered.compare_web_sharing(None, &initial).await.unwrap(),
+            SharingChange::RevisionConflict
+        );
+        assert_eq!(
+            recovered
+                .compare_web_sharing(Some(initial.revision()), &revoked)
+                .await
+                .unwrap(),
+            SharingChange::Applied
+        );
+        admission(recovered.clone(), policy.clone(), false).await;
         eprintln!("sharing AOF restart=2 revocation retained; stale grant replay refused; exact revocation retry succeeds; admission denied");
 
         // Corrupt persisted state must not be silently repaired by authorization.
-        let row_key=recovered.key("web-sharing:sharing-persistent");
-        let mut admin=recovered.connection.clone();
-        let original: String=redis::cmd("GET").arg(&row_key).query_async(&mut admin).await.unwrap();
-        let mut malformed=serde_json::to_value(&revoked).unwrap();malformed["unexpected"]=json!(true);
-        let malformed=serde_json::to_string(&malformed).unwrap();
-        redis::cmd("SET").arg(&row_key).arg(&malformed).query_async::<()>(&mut admin).await.unwrap();
-        assert!(recovered.web_sharing_snapshot(&record.sandbox_id).await.is_err());
-        assert!(recovered.compare_web_sharing(Some(revoked.revision()),&initial).await.is_err());
-        admission(recovered.clone(),policy.clone(),false).await;
-        let unchanged:String=redis::cmd("GET").arg(&row_key).query_async(&mut admin).await.unwrap();assert_eq!(unchanged,malformed);
-        redis::cmd("SET").arg(&row_key).arg(&original).query_async::<()>(&mut admin).await.unwrap();
-        redis::cmd("DEL").arg(&row_key).query_async::<u64>(&mut admin).await.unwrap();
-        redis::cmd("HSET").arg(&row_key).arg("bad").arg("type").query_async::<u64>(&mut admin).await.unwrap();
-        assert!(recovered.web_sharing_snapshot(&record.sandbox_id).await.is_err());
-        assert!(recovered.compare_web_sharing(Some(revoked.revision()),&initial).await.is_err());
-        admission(recovered.clone(),policy.clone(),false).await;
-        let unchanged:String=redis::cmd("HGET").arg(&row_key).arg("bad").query_async(&mut admin).await.unwrap();assert_eq!(unchanged,"type");
-        redis::cmd("DEL").arg(&row_key).query_async::<u64>(&mut admin).await.unwrap();
-        redis::cmd("SET").arg(&row_key).arg(&original).query_async::<()>(&mut admin).await.unwrap();
+        let row_key = recovered.key("web-sharing:sharing-persistent");
+        let mut admin = recovered.connection.clone();
+        let original: String = redis::cmd("GET")
+            .arg(&row_key)
+            .query_async(&mut admin)
+            .await
+            .unwrap();
+        let mut malformed = serde_json::to_value(&revoked).unwrap();
+        malformed["unexpected"] = json!(true);
+        let malformed = serde_json::to_string(&malformed).unwrap();
+        redis::cmd("SET")
+            .arg(&row_key)
+            .arg(&malformed)
+            .query_async::<()>(&mut admin)
+            .await
+            .unwrap();
+        assert!(recovered
+            .web_sharing_snapshot(&record.sandbox_id)
+            .await
+            .is_err());
+        assert!(recovered
+            .compare_web_sharing(Some(revoked.revision()), &initial)
+            .await
+            .is_err());
+        admission(recovered.clone(), policy.clone(), false).await;
+        let unchanged: String = redis::cmd("GET")
+            .arg(&row_key)
+            .query_async(&mut admin)
+            .await
+            .unwrap();
+        assert_eq!(unchanged, malformed);
+        redis::cmd("SET")
+            .arg(&row_key)
+            .arg(&original)
+            .query_async::<()>(&mut admin)
+            .await
+            .unwrap();
+        redis::cmd("DEL")
+            .arg(&row_key)
+            .query_async::<u64>(&mut admin)
+            .await
+            .unwrap();
+        redis::cmd("HSET")
+            .arg(&row_key)
+            .arg("bad")
+            .arg("type")
+            .query_async::<u64>(&mut admin)
+            .await
+            .unwrap();
+        assert!(recovered
+            .web_sharing_snapshot(&record.sandbox_id)
+            .await
+            .is_err());
+        assert!(recovered
+            .compare_web_sharing(Some(revoked.revision()), &initial)
+            .await
+            .is_err());
+        admission(recovered.clone(), policy.clone(), false).await;
+        let unchanged: String = redis::cmd("HGET")
+            .arg(&row_key)
+            .arg("bad")
+            .query_async(&mut admin)
+            .await
+            .unwrap();
+        assert_eq!(unchanged, "type");
+        redis::cmd("DEL")
+            .arg(&row_key)
+            .query_async::<u64>(&mut admin)
+            .await
+            .unwrap();
+        redis::cmd("SET")
+            .arg(&row_key)
+            .arg(&original)
+            .query_async::<()>(&mut admin)
+            .await
+            .unwrap();
         eprintln!("sharing corrupt JSON and wrong Redis type deny admission and updates without changing fault payloads");
 
         assert!(recovered.delete_sandbox(&record.sandbox_id).await.unwrap());
-        server.restart();let recovered=std::sync::Arc::new(server.store(&namespace).await);
-        assert!(recovered.sandbox(&record.sandbox_id).await.unwrap().is_none());
-        let retained:String=redis::cmd("GET").arg(&row_key).query_async(&mut recovered.connection.clone()).await.unwrap();
-        assert_eq!(retained,original);
-        admission(recovered.clone(),policy.clone(),false).await;
+        server.restart();
+        let recovered = std::sync::Arc::new(server.store(&namespace).await);
+        assert!(recovered
+            .sandbox(&record.sandbox_id)
+            .await
+            .unwrap()
+            .is_none());
+        let retained: String = redis::cmd("GET")
+            .arg(&row_key)
+            .query_async(&mut recovered.connection.clone())
+            .await
+            .unwrap();
+        assert_eq!(retained, original);
+        admission(recovered.clone(), policy.clone(), false).await;
         eprintln!("sharing AOF restart=3 deletion retained; revocation revision intentionally retained; admission denied");
 
-        record.started_at_ms+=1;recovered.put_sandbox(&record).await.unwrap();
-        assert!(recovered.web_sharing_snapshot(&record.sandbox_id).await.unwrap().is_none());
-        assert_eq!(recovered.compare_web_sharing(None,&initial).await.unwrap(),SharingChange::RecordChanged);
-        let replacement=WebSharingState::new(&record,vec![WebGrant::new("alice",expiry).unwrap()]).unwrap();
-        assert_eq!(recovered.compare_web_sharing(None,&replacement).await.unwrap(),SharingChange::RevisionConflict);
-        assert_eq!(recovered.compare_web_sharing(Some(revoked.revision()),&replacement).await.unwrap(),SharingChange::Applied);
-        server.restart();let recovered=std::sync::Arc::new(server.store(&namespace).await);
-        admission(recovered.clone(),policy.clone(),true).await;
-        assert_eq!(recovered.web_sharing_snapshot(&record.sandbox_id).await.unwrap(),Some((record.clone(),replacement.clone())));
+        record.started_at_ms += 1;
+        recovered.put_sandbox(&record).await.unwrap();
+        assert!(recovered
+            .web_sharing_snapshot(&record.sandbox_id)
+            .await
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            recovered.compare_web_sharing(None, &initial).await.unwrap(),
+            SharingChange::RecordChanged
+        );
+        let replacement =
+            WebSharingState::new(&record, vec![WebGrant::new("alice", expiry).unwrap()]).unwrap();
+        assert_eq!(
+            recovered
+                .compare_web_sharing(None, &replacement)
+                .await
+                .unwrap(),
+            SharingChange::RevisionConflict
+        );
+        assert_eq!(
+            recovered
+                .compare_web_sharing(Some(revoked.revision()), &replacement)
+                .await
+                .unwrap(),
+            SharingChange::Applied
+        );
+        server.restart();
+        let recovered = std::sync::Arc::new(server.store(&namespace).await);
+        admission(recovered.clone(), policy.clone(), true).await;
+        assert_eq!(
+            recovered
+                .web_sharing_snapshot(&record.sandbox_id)
+                .await
+                .unwrap(),
+            Some((record.clone(), replacement.clone()))
+        );
         eprintln!("sharing AOF restart=4 replacement requires retained revision; new incarnation and grant retained; admission allowed");
-        record.owner_id=Some(OwnerId::parse("other-owner").unwrap());recovered.put_sandbox(&record).await.unwrap();
-        server.restart();let recovered=std::sync::Arc::new(server.store(&namespace).await);
-        assert_eq!(recovered.web_sharing(&record.sandbox_id,&owner).await.unwrap(),SharingAccess::OwnerConflict);
-        admission(recovered.clone(),policy.clone(),false).await;
+        record.owner_id = Some(OwnerId::parse("other-owner").unwrap());
+        recovered.put_sandbox(&record).await.unwrap();
+        server.restart();
+        let recovered = std::sync::Arc::new(server.store(&namespace).await);
+        assert_eq!(
+            recovered
+                .web_sharing(&record.sandbox_id, &owner)
+                .await
+                .unwrap(),
+            SharingAccess::OwnerConflict
+        );
+        admission(recovered.clone(), policy.clone(), false).await;
         assert!(recovered.delete_sandbox(&record.sandbox_id).await.unwrap());
         assert!(recovered.sandboxes().await.unwrap().is_empty());
         eprintln!("sharing AOF restart=5 owner change retained; former-owner grants deny; final inventory empty; owned process/tempdir cleaned by RAII");
-        eprintln!("owned Redis fixture directory={} pid={}",server.directory.path().display(),server.child.id());
-        eprintln!("owned Redis AOF log:\n{}",std::fs::read_to_string(server.directory.path().join("redis.log")).unwrap());
+        eprintln!(
+            "owned Redis fixture directory={} pid={}",
+            server.directory.path().display(),
+            server.child.id()
+        );
+        eprintln!(
+            "owned Redis AOF log:\n{}",
+            std::fs::read_to_string(server.directory.path().join("redis.log")).unwrap()
+        );
     }
 
     async fn owned_port_contract(store: std::sync::Arc<dyn ClusterStore>) {
-        let range=PublicPortRange::new(48000,48031).unwrap();
-        let mut record=sandbox("owner-port-vm","node");
+        let range = PublicPortRange::new(48000, 48031).unwrap();
+        let mut record = sandbox("owner-port-vm", "node");
         store.put_sandbox(&record).await.unwrap();
-        assert_eq!(store.claim_owned_port(&record.sandbox_id,18082,"principal-a",PortProtocol::Both,range).await.unwrap(),PortClaim::OwnerConflict);
-        assert_eq!(store.owned_ports(&record.sandbox_id,"principal-a").await.unwrap(),OwnedPortAccess::OwnerConflict);
-        assert_eq!(store.delete_owned_port(&record.sandbox_id,18082,"principal-a").await.unwrap(),OwnedPortAccess::OwnerConflict);
-        record.owner_id=Some(crate::ownership::OwnerId::parse("principal-a").unwrap());
+        assert_eq!(
+            store
+                .claim_owned_port(
+                    &record.sandbox_id,
+                    18082,
+                    "principal-a",
+                    PortProtocol::Both,
+                    range
+                )
+                .await
+                .unwrap(),
+            PortClaim::OwnerConflict
+        );
+        assert_eq!(
+            store
+                .owned_ports(&record.sandbox_id, "principal-a")
+                .await
+                .unwrap(),
+            OwnedPortAccess::OwnerConflict
+        );
+        assert_eq!(
+            store
+                .delete_owned_port(&record.sandbox_id, 18082, "principal-a")
+                .await
+                .unwrap(),
+            OwnedPortAccess::OwnerConflict
+        );
+        record.owner_id = Some(crate::ownership::OwnerId::parse("principal-a").unwrap());
         store.put_sandbox(&record).await.unwrap();
-        assert_eq!(store.claim_owned_port(&record.sandbox_id,18082,"principal-b",PortProtocol::Both,range).await.unwrap(),PortClaim::OwnerConflict);
-        assert_eq!(store.owned_ports(&record.sandbox_id,"principal-b").await.unwrap(),OwnedPortAccess::OwnerConflict);
-        let mut jobs=tokio::task::JoinSet::new();
+        assert_eq!(
+            store
+                .claim_owned_port(
+                    &record.sandbox_id,
+                    18082,
+                    "principal-b",
+                    PortProtocol::Both,
+                    range
+                )
+                .await
+                .unwrap(),
+            PortClaim::OwnerConflict
+        );
+        assert_eq!(
+            store
+                .owned_ports(&record.sandbox_id, "principal-b")
+                .await
+                .unwrap(),
+            OwnedPortAccess::OwnerConflict
+        );
+        let mut jobs = tokio::task::JoinSet::new();
         for _ in 0..32 {
-            let store=store.clone();
-            jobs.spawn(async move { allocated(store.claim_owned_port("owner-port-vm",18082,"principal-a",PortProtocol::Both,range).await.unwrap()) });
+            let store = store.clone();
+            jobs.spawn(async move {
+                allocated(
+                    store
+                        .claim_owned_port(
+                            "owner-port-vm",
+                            18082,
+                            "principal-a",
+                            PortProtocol::Both,
+                            range,
+                        )
+                        .await
+                        .unwrap(),
+                )
+            });
         }
-        let mut first=None;
-        while let Some(result)=jobs.join_next().await {
-            let row=result.unwrap();
-            if let Some(first)=&first { assert_eq!(first,&row); } else { first=Some(row); }
+        let mut first = None;
+        while let Some(result) = jobs.join_next().await {
+            let row = result.unwrap();
+            if let Some(first) = &first {
+                assert_eq!(first, &row);
+            } else {
+                first = Some(row);
+            }
         }
-        let first=first.unwrap();
-        let updated=allocated(store.claim_owned_port(&record.sandbox_id,18082,"principal-a",PortProtocol::Udp,range).await.unwrap());
-        assert_eq!(updated.public_port(),first.public_port());
-        for port in 1..16 { allocated(store.claim_owned_port(&record.sandbox_id,port,"principal-a",PortProtocol::Tcp,range).await.unwrap()); }
-        assert_eq!(store.claim_owned_port(&record.sandbox_id,18083,"principal-a",PortProtocol::Both,range).await.unwrap(),PortClaim::LimitReached);
-        let OwnedPortAccess::Granted(rows)=store.owned_ports(&record.sandbox_id,"principal-a").await.unwrap() else { panic!("owner listing refused") };
-        assert_eq!(rows.len(),16);
-        assert_eq!(store.delete_owned_port(&record.sandbox_id,18082,"principal-b").await.unwrap(),OwnedPortAccess::OwnerConflict);
-        assert_eq!(store.delete_owned_port(&record.sandbox_id,18082,"principal-a").await.unwrap(),OwnedPortAccess::Granted(true));
-        assert_eq!(store.delete_owned_port(&record.sandbox_id,18082,"principal-a").await.unwrap(),OwnedPortAccess::Granted(false));
+        let first = first.unwrap();
+        let updated = allocated(
+            store
+                .claim_owned_port(
+                    &record.sandbox_id,
+                    18082,
+                    "principal-a",
+                    PortProtocol::Udp,
+                    range,
+                )
+                .await
+                .unwrap(),
+        );
+        assert_eq!(updated.public_port(), first.public_port());
+        for port in 1..16 {
+            allocated(
+                store
+                    .claim_owned_port(
+                        &record.sandbox_id,
+                        port,
+                        "principal-a",
+                        PortProtocol::Tcp,
+                        range,
+                    )
+                    .await
+                    .unwrap(),
+            );
+        }
+        assert_eq!(
+            store
+                .claim_owned_port(
+                    &record.sandbox_id,
+                    18083,
+                    "principal-a",
+                    PortProtocol::Both,
+                    range
+                )
+                .await
+                .unwrap(),
+            PortClaim::LimitReached
+        );
+        let OwnedPortAccess::Granted(rows) = store
+            .owned_ports(&record.sandbox_id, "principal-a")
+            .await
+            .unwrap()
+        else {
+            panic!("owner listing refused")
+        };
+        assert_eq!(rows.len(), 16);
+        assert_eq!(
+            store
+                .delete_owned_port(&record.sandbox_id, 18082, "principal-b")
+                .await
+                .unwrap(),
+            OwnedPortAccess::OwnerConflict
+        );
+        assert_eq!(
+            store
+                .delete_owned_port(&record.sandbox_id, 18082, "principal-a")
+                .await
+                .unwrap(),
+            OwnedPortAccess::Granted(true)
+        );
+        assert_eq!(
+            store
+                .delete_owned_port(&record.sandbox_id, 18082, "principal-a")
+                .await
+                .unwrap(),
+            OwnedPortAccess::Granted(false)
+        );
         // A trusted record change must be seen by each operation, not cached by the caller.
-        record.owner_id=Some(crate::ownership::OwnerId::parse("principal-b").unwrap());
+        record.owner_id = Some(crate::ownership::OwnerId::parse("principal-b").unwrap());
         store.put_sandbox(&record).await.unwrap();
-        assert_eq!(store.claim_owned_port(&record.sandbox_id,18083,"principal-a",PortProtocol::Both,range).await.unwrap(),PortClaim::OwnerConflict);
-        assert_eq!(store.delete_owned_port(&record.sandbox_id,1,"principal-a").await.unwrap(),OwnedPortAccess::OwnerConflict);
-        assert_eq!(store.owned_ports(&record.sandbox_id,"principal-a").await.unwrap(),OwnedPortAccess::OwnerConflict);
-        assert!(store.owned_ports(&record.sandbox_id,"principal-b").await.is_err());
+        assert_eq!(
+            store
+                .claim_owned_port(
+                    &record.sandbox_id,
+                    18083,
+                    "principal-a",
+                    PortProtocol::Both,
+                    range
+                )
+                .await
+                .unwrap(),
+            PortClaim::OwnerConflict
+        );
+        assert_eq!(
+            store
+                .delete_owned_port(&record.sandbox_id, 1, "principal-a")
+                .await
+                .unwrap(),
+            OwnedPortAccess::OwnerConflict
+        );
+        assert_eq!(
+            store
+                .owned_ports(&record.sandbox_id, "principal-a")
+                .await
+                .unwrap(),
+            OwnedPortAccess::OwnerConflict
+        );
+        assert!(store
+            .owned_ports(&record.sandbox_id, "principal-b")
+            .await
+            .is_err());
         store.delete_sandbox(&record.sandbox_id).await.unwrap();
-        assert_eq!(store.claim_owned_port(&record.sandbox_id,1,"principal-b",PortProtocol::Tcp,range).await.unwrap(),PortClaim::SandboxMissing);
-        assert_eq!(store.owned_ports(&record.sandbox_id,"principal-b").await.unwrap(),OwnedPortAccess::SandboxMissing);
-        assert_eq!(store.delete_owned_port(&record.sandbox_id,1,"principal-b").await.unwrap(),OwnedPortAccess::SandboxMissing);
+        assert_eq!(
+            store
+                .claim_owned_port(
+                    &record.sandbox_id,
+                    1,
+                    "principal-b",
+                    PortProtocol::Tcp,
+                    range
+                )
+                .await
+                .unwrap(),
+            PortClaim::SandboxMissing
+        );
+        assert_eq!(
+            store
+                .owned_ports(&record.sandbox_id, "principal-b")
+                .await
+                .unwrap(),
+            OwnedPortAccess::SandboxMissing
+        );
+        assert_eq!(
+            store
+                .delete_owned_port(&record.sandbox_id, 1, "principal-b")
+                .await
+                .unwrap(),
+            OwnedPortAccess::SandboxMissing
+        );
     }
 
     async fn owner_adoption_contract(store: std::sync::Arc<dyn ClusterStore>) {
         use crate::ownership::{OwnerAdoption, OwnerId};
         let first = OwnerId::parse("adopter-a").unwrap();
-        assert_eq!(store.adopt_sandbox_owner("absent-adoption", &first).await.unwrap(), OwnerAdoption::SandboxMissing);
+        assert_eq!(
+            store
+                .adopt_sandbox_owner("absent-adoption", &first)
+                .await
+                .unwrap(),
+            OwnerAdoption::SandboxMissing
+        );
         let record = sandbox("legacy-adoption", "node");
         store.put_sandbox(&record).await.unwrap();
         let mut jobs = tokio::task::JoinSet::new();
@@ -3125,35 +4827,88 @@ pub(crate) mod tests {
             let store = store.clone();
             jobs.spawn(async move {
                 let owner = OwnerId::parse(&format!("adopter-{index}")).unwrap();
-                let result = store.adopt_sandbox_owner("legacy-adoption", &owner).await.unwrap();
+                let result = store
+                    .adopt_sandbox_owner("legacy-adoption", &owner)
+                    .await
+                    .unwrap();
                 (owner, result)
             });
         }
         let mut winner = None;
         while let Some(result) = jobs.join_next().await {
             let (owner, outcome) = result.unwrap();
-            if outcome == OwnerAdoption::Adopted { assert!(winner.replace(owner).is_none()); }
-            else { assert_eq!(outcome, OwnerAdoption::OwnerConflict); }
+            if outcome == OwnerAdoption::Adopted {
+                assert!(winner.replace(owner).is_none());
+            } else {
+                assert_eq!(outcome, OwnerAdoption::OwnerConflict);
+            }
         }
         let winner = winner.unwrap();
         let mut expected = record;
         expected.owner_id = Some(winner.clone());
-        assert_eq!(store.sandbox("legacy-adoption").await.unwrap(), Some(expected));
-        assert_eq!(store.adopt_sandbox_owner("legacy-adoption", &winner).await.unwrap(), OwnerAdoption::AlreadyOwned);
+        assert_eq!(
+            store.sandbox("legacy-adoption").await.unwrap(),
+            Some(expected)
+        );
+        assert_eq!(
+            store
+                .adopt_sandbox_owner("legacy-adoption", &winner)
+                .await
+                .unwrap(),
+            OwnerAdoption::AlreadyOwned
+        );
         let mut stale = store.sandbox("legacy-adoption").await.unwrap().unwrap();
         stale.owner_id = None;
-        stale.metadata.insert("lifecycle-update".into(),"kept".into());
+        stale
+            .metadata
+            .insert("lifecycle-update".into(), "kept".into());
         store.put_sandbox(&stale).await.unwrap();
         let refreshed = store.sandbox("legacy-adoption").await.unwrap().unwrap();
-        assert_eq!(refreshed.owner_id,Some(winner.clone()));
-        assert_eq!(refreshed.metadata.get("lifecycle-update").map(String::as_str),Some("kept"));
+        assert_eq!(refreshed.owner_id, Some(winner.clone()));
+        assert_eq!(
+            refreshed
+                .metadata
+                .get("lifecycle-update")
+                .map(String::as_str),
+            Some("kept")
+        );
 
-        assert_eq!(store.adopt_sandbox_owner("legacy-adoption", &first).await.unwrap(), OwnerAdoption::OwnerConflict);
-        store.put_sandbox(&sandbox("legacy-adoption-ports", "node")).await.unwrap();
+        assert_eq!(
+            store
+                .adopt_sandbox_owner("legacy-adoption", &first)
+                .await
+                .unwrap(),
+            OwnerAdoption::OwnerConflict
+        );
+        store
+            .put_sandbox(&sandbox("legacy-adoption-ports", "node"))
+            .await
+            .unwrap();
         let range = PublicPortRange::new(46000, 46000).unwrap();
-        store.claim_port("legacy-adoption-ports", 8080, "legacy-owner", PortProtocol::Tcp, range).await.unwrap();
-        assert_eq!(store.adopt_sandbox_owner("legacy-adoption-ports", &first).await.unwrap(), OwnerAdoption::PortsPresent);
-        assert!(store.sandbox("legacy-adoption-ports").await.unwrap().unwrap().owner_id.is_none());
+        store
+            .claim_port(
+                "legacy-adoption-ports",
+                8080,
+                "legacy-owner",
+                PortProtocol::Tcp,
+                range,
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            store
+                .adopt_sandbox_owner("legacy-adoption-ports", &first)
+                .await
+                .unwrap(),
+            OwnerAdoption::PortsPresent
+        );
+        assert!(store
+            .sandbox("legacy-adoption-ports")
+            .await
+            .unwrap()
+            .unwrap()
+            .owner_id
+            .is_none());
         store.delete_sandbox("legacy-adoption-ports").await.unwrap();
         store.delete_sandbox("legacy-adoption").await.unwrap();
     }
@@ -3177,59 +4932,165 @@ pub(crate) mod tests {
         managed_port_contract(store.clone()).await;
         owned_port_contract(store.clone()).await;
         owner_adoption_contract(store.clone()).await;
-        let mut persistent=sandbox("ports-persistent","node");
-        persistent.owner_id=Some(crate::ownership::OwnerId::parse("owner-a").unwrap());
+        let mut persistent = sandbox("ports-persistent", "node");
+        persistent.owner_id = Some(crate::ownership::OwnerId::parse("owner-a").unwrap());
         store.put_sandbox(&persistent).await.unwrap();
         let range = PublicPortRange::new(45000, 45002).unwrap();
-        let before = allocated(store.claim_port("ports-persistent", 5353, "owner-a", PortProtocol::Both, range).await.unwrap());
+        let before = allocated(
+            store
+                .claim_port(
+                    "ports-persistent",
+                    5353,
+                    "owner-a",
+                    PortProtocol::Both,
+                    range,
+                )
+                .await
+                .unwrap(),
+        );
         // A bad second index must be detected before any global reservation is written.
-        store.put_sandbox(&sandbox("ports-type-fault", "node")).await.unwrap();
+        store
+            .put_sandbox(&sandbox("ports-type-fault", "node"))
+            .await
+            .unwrap();
         let mut admin = store.connection.clone();
         // Adoption preserves the complete raw record and survives owned AOF restart.
-        store.put_sandbox(&sandbox("adoption-persistent", "node")).await.unwrap();
+        store
+            .put_sandbox(&sandbox("adoption-persistent", "node"))
+            .await
+            .unwrap();
         let adoption_key = store.key("sandbox:adoption-persistent");
-        let original: String = redis::cmd("GET").arg(&adoption_key).query_async(&mut admin).await.unwrap();
+        let original: String = redis::cmd("GET")
+            .arg(&adoption_key)
+            .query_async(&mut admin)
+            .await
+            .unwrap();
         let mut adoption_record: serde_json::Value = serde_json::from_str(&original).unwrap();
         adoption_record["future_field"] = serde_json::json!({"keep": [1, "value", null]});
         let encoded = serde_json::to_string(&adoption_record).unwrap();
-        redis::cmd("SET").arg(&adoption_key).arg(&encoded).query_async::<()>(&mut admin).await.unwrap();
+        redis::cmd("SET")
+            .arg(&adoption_key)
+            .arg(&encoded)
+            .query_async::<()>(&mut admin)
+            .await
+            .unwrap();
         // A malformed inventory index must not commit the first SET before SADD fails.
-        let inventory_key=store.key("sandboxes");
-        let inventory: Vec<String>=redis::cmd("SMEMBERS").arg(&inventory_key).query_async(&mut admin).await.unwrap();
-        redis::cmd("DEL").arg(&inventory_key).query_async::<u64>(&mut admin).await.unwrap();
-        redis::cmd("SET").arg(&inventory_key).arg("wrong-type").query_async::<()>(&mut admin).await.unwrap();
-        let mut stale_record=store.sandbox("adoption-persistent").await.unwrap().unwrap();
-        stale_record.metadata.insert("must-not-commit".into(),"value".into());
+        let inventory_key = store.key("sandboxes");
+        let inventory: Vec<String> = redis::cmd("SMEMBERS")
+            .arg(&inventory_key)
+            .query_async(&mut admin)
+            .await
+            .unwrap();
+        redis::cmd("DEL")
+            .arg(&inventory_key)
+            .query_async::<u64>(&mut admin)
+            .await
+            .unwrap();
+        redis::cmd("SET")
+            .arg(&inventory_key)
+            .arg("wrong-type")
+            .query_async::<()>(&mut admin)
+            .await
+            .unwrap();
+        let mut stale_record = store.sandbox("adoption-persistent").await.unwrap().unwrap();
+        stale_record
+            .metadata
+            .insert("must-not-commit".into(), "value".into());
         assert!(store.put_sandbox(&stale_record).await.is_err());
-        let unchanged: String=redis::cmd("GET").arg(&adoption_key).query_async(&mut admin).await.unwrap();
-        assert_eq!(unchanged,encoded);
-        redis::cmd("DEL").arg(&inventory_key).query_async::<u64>(&mut admin).await.unwrap();
-        redis::cmd("SADD").arg(&inventory_key).arg(&inventory).query_async::<u64>(&mut admin).await.unwrap();
+        let unchanged: String = redis::cmd("GET")
+            .arg(&adoption_key)
+            .query_async(&mut admin)
+            .await
+            .unwrap();
+        assert_eq!(unchanged, encoded);
+        redis::cmd("DEL")
+            .arg(&inventory_key)
+            .query_async::<u64>(&mut admin)
+            .await
+            .unwrap();
+        redis::cmd("SADD")
+            .arg(&inventory_key)
+            .arg(&inventory)
+            .query_async::<u64>(&mut admin)
+            .await
+            .unwrap();
         let bad_adoption_index = store.key("ports:adoption-persistent");
-        redis::cmd("SET").arg(&bad_adoption_index).arg("wrong-type").query_async::<()>(&mut admin).await.unwrap();
+        redis::cmd("SET")
+            .arg(&bad_adoption_index)
+            .arg("wrong-type")
+            .query_async::<()>(&mut admin)
+            .await
+            .unwrap();
         let adopter = crate::ownership::OwnerId::parse("adopter-persistent").unwrap();
-        assert!(store.adopt_sandbox_owner("adoption-persistent", &adopter).await.is_err());
-        let after: String = redis::cmd("GET").arg(&adoption_key).query_async(&mut admin).await.unwrap();
+        assert!(store
+            .adopt_sandbox_owner("adoption-persistent", &adopter)
+            .await
+            .is_err());
+        let after: String = redis::cmd("GET")
+            .arg(&adoption_key)
+            .query_async(&mut admin)
+            .await
+            .unwrap();
         assert_eq!(after, encoded);
-        redis::cmd("DEL").arg(&bad_adoption_index).query_async::<u64>(&mut admin).await.unwrap();
-        assert_eq!(store.adopt_sandbox_owner("adoption-persistent", &adopter).await.unwrap(), crate::ownership::OwnerAdoption::Adopted);
+        redis::cmd("DEL")
+            .arg(&bad_adoption_index)
+            .query_async::<u64>(&mut admin)
+            .await
+            .unwrap();
+        assert_eq!(
+            store
+                .adopt_sandbox_owner("adoption-persistent", &adopter)
+                .await
+                .unwrap(),
+            crate::ownership::OwnerAdoption::Adopted
+        );
         adoption_record["owner_id"] = serde_json::json!(adopter);
-        let after: String = redis::cmd("GET").arg(&adoption_key).query_async(&mut admin).await.unwrap();
-        assert_eq!(serde_json::from_str::<serde_json::Value>(&after).unwrap(), adoption_record);
+        let after: String = redis::cmd("GET")
+            .arg(&adoption_key)
+            .query_async(&mut admin)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&after).unwrap(),
+            adoption_record
+        );
         let bad_index = store.key("ports:ports-type-fault");
-        redis::cmd("SET").arg(&bad_index).arg("wrong-type").query_async::<()>(&mut admin).await.unwrap();
+        redis::cmd("SET")
+            .arg(&bad_index)
+            .arg("wrong-type")
+            .query_async::<()>(&mut admin)
+            .await
+            .unwrap();
         let baseline = store.port_allocations(None).await.unwrap();
-        assert!(store.claim_port("ports-type-fault", 1234, "owner-a", PortProtocol::Udp, range).await.is_err());
+        assert!(store
+            .claim_port(
+                "ports-type-fault",
+                1234,
+                "owner-a",
+                PortProtocol::Udp,
+                range
+            )
+            .await
+            .is_err());
         assert!(store.delete_sandbox("ports-type-fault").await.is_err());
         assert!(store.sandbox("ports-type-fault").await.unwrap().is_some());
         assert_eq!(store.port_allocations(None).await.unwrap(), baseline);
-        redis::cmd("DEL").arg(&bad_index).query_async::<u64>(&mut admin).await.unwrap();
+        redis::cmd("DEL")
+            .arg(&bad_index)
+            .query_async::<u64>(&mut admin)
+            .await
+            .unwrap();
         store.delete_sandbox("ports-type-fault").await.unwrap();
 
         // Mutually agreeing malformed records must not be updated or removed.
         let local_key = store.key("ports:ports-persistent");
         let global_key = store.key("public-ports");
-        let original: String = redis::cmd("HGET").arg(&local_key).arg(5353).query_async(&mut admin).await.unwrap();
+        let original: String = redis::cmd("HGET")
+            .arg(&local_key)
+            .arg(5353)
+            .query_async(&mut admin)
+            .await
+            .unwrap();
         for fault in ["extra", "protocol", "owner", "array"] {
             let mut row: serde_json::Value = serde_json::from_str(&original).unwrap();
             match fault {
@@ -3241,107 +5102,351 @@ pub(crate) mod tests {
             }
             let corrupted = serde_json::to_string(&row).unwrap();
             for (key, field) in [(&local_key, 5353), (&global_key, before.public_port())] {
-                redis::cmd("HSET").arg(key).arg(field).arg(&corrupted).query_async::<u64>(&mut admin).await.unwrap();
+                redis::cmd("HSET")
+                    .arg(key)
+                    .arg(field)
+                    .arg(&corrupted)
+                    .query_async::<u64>(&mut admin)
+                    .await
+                    .unwrap();
             }
-            assert!(store.claim_owned_port("ports-persistent", 5353, "owner-a", PortProtocol::Udp, range).await.is_err(), "{fault}");
-            assert!(store.claim_port("ports-persistent", 5353, "owner-a", PortProtocol::Udp, range).await.is_err(), "{fault}");
-            assert!(store.delete_owned_port("ports-persistent", 5353, "owner-a").await.is_err(), "{fault}");
-            assert!(store.delete_port("ports-persistent", 5353, "owner-a").await.is_err(), "{fault}");
+            assert!(
+                store
+                    .claim_owned_port(
+                        "ports-persistent",
+                        5353,
+                        "owner-a",
+                        PortProtocol::Udp,
+                        range
+                    )
+                    .await
+                    .is_err(),
+                "{fault}"
+            );
+            assert!(
+                store
+                    .claim_port(
+                        "ports-persistent",
+                        5353,
+                        "owner-a",
+                        PortProtocol::Udp,
+                        range
+                    )
+                    .await
+                    .is_err(),
+                "{fault}"
+            );
+            assert!(
+                store
+                    .delete_owned_port("ports-persistent", 5353, "owner-a")
+                    .await
+                    .is_err(),
+                "{fault}"
+            );
+            assert!(
+                store
+                    .delete_port("ports-persistent", 5353, "owner-a")
+                    .await
+                    .is_err(),
+                "{fault}"
+            );
             for (key, field) in [(&local_key, 5353), (&global_key, before.public_port())] {
-                let after: String = redis::cmd("HGET").arg(key).arg(field).query_async(&mut admin).await.unwrap();
+                let after: String = redis::cmd("HGET")
+                    .arg(key)
+                    .arg(field)
+                    .query_async(&mut admin)
+                    .await
+                    .unwrap();
                 assert_eq!(after, corrupted, "{fault}");
             }
         }
         for (key, field) in [(&local_key, 5353), (&global_key, before.public_port())] {
-            redis::cmd("HSET").arg(key).arg(field).arg(&original).query_async::<u64>(&mut admin).await.unwrap();
+            redis::cmd("HSET")
+                .arg(key)
+                .arg(field)
+                .arg(&original)
+                .query_async::<u64>(&mut admin)
+                .await
+                .unwrap();
         }
 
         // A dedicated authenticated client checks denied writes before mutating either index.
         let username = format!("port-writer-{}", uuid::Uuid::new_v4().simple());
         let password = uuid::Uuid::new_v4().simple().to_string();
-        redis::cmd("ACL").arg("SETUSER").arg(&username).arg("on").arg(format!(">{password}"))
-            .arg(format!("~{}*", store.prefix)).arg("+@all").arg("-hset")
-            .query_async::<()>(&mut admin).await.unwrap();
-        let url = format!("redis+unix://{}", server.directory.path().join("redis.sock").display());
-        let info = redis::Client::open(url).unwrap().get_connection_info().clone();
-        let settings = info.redis_settings().clone().set_username(&username).set_password(password);
+        redis::cmd("ACL")
+            .arg("SETUSER")
+            .arg(&username)
+            .arg("on")
+            .arg(format!(">{password}"))
+            .arg(format!("~{}*", store.prefix))
+            .arg("+@all")
+            .arg("-hset")
+            .query_async::<()>(&mut admin)
+            .await
+            .unwrap();
+        let url = format!(
+            "redis+unix://{}",
+            server.directory.path().join("redis.sock").display()
+        );
+        let info = redis::Client::open(url)
+            .unwrap()
+            .get_connection_info()
+            .clone();
+        let settings = info
+            .redis_settings()
+            .clone()
+            .set_username(&username)
+            .set_password(password);
         let info = info.set_redis_settings(settings);
         let client = redis::Client::open(info).unwrap();
-        let restricted = RedisStore { connection: redis::aio::ConnectionManager::new(client).await.unwrap(), prefix: store.prefix.clone() };
-        let error = restricted.claim_port("ports-persistent", 7777, "owner-a", PortProtocol::Udp, range).await.unwrap_err();
+        let restricted = RedisStore {
+            connection: redis::aio::ConnectionManager::new(client).await.unwrap(),
+            prefix: store.prefix.clone(),
+        };
+        let error = restricted
+            .claim_port(
+                "ports-persistent",
+                7777,
+                "owner-a",
+                PortProtocol::Udp,
+                range,
+            )
+            .await
+            .unwrap_err();
         assert!(error.to_string().contains("write preflight denied"));
         assert_eq!(store.port_allocations(None).await.unwrap(), baseline);
-        redis::cmd("ACL").arg("SETUSER").arg(&username).arg("+hset").arg("-hdel")
-            .query_async::<()>(&mut admin).await.unwrap();
-        let error = restricted.delete_port("ports-persistent", 5353, "owner-a").await.unwrap_err();
+        redis::cmd("ACL")
+            .arg("SETUSER")
+            .arg(&username)
+            .arg("+hset")
+            .arg("-hdel")
+            .query_async::<()>(&mut admin)
+            .await
+            .unwrap();
+        let error = restricted
+            .delete_port("ports-persistent", 5353, "owner-a")
+            .await
+            .unwrap_err();
         assert!(error.to_string().contains("delete preflight denied"));
-        let error = restricted.delete_sandbox("ports-persistent").await.unwrap_err();
+        let error = restricted
+            .delete_sandbox("ports-persistent")
+            .await
+            .unwrap_err();
         assert!(error.to_string().contains("cleanup preflight denied"));
         assert!(store.sandbox("ports-persistent").await.unwrap().is_some());
         assert_eq!(store.port_allocations(None).await.unwrap(), baseline);
-        redis::cmd("ACL").arg("DELUSER").arg(&username).query_async::<u64>(&mut admin).await.unwrap();
+        redis::cmd("ACL")
+            .arg("DELUSER")
+            .arg(&username)
+            .query_async::<u64>(&mut admin)
+            .await
+            .unwrap();
         drop(restricted);
         drop(store);
         server.restart();
         let recovered = server.store(&namespace).await;
-        assert_eq!(recovered.sandbox("adoption-persistent").await.unwrap().unwrap().owner_id, Some(adopter.clone()));
-        assert_eq!(recovered.adopt_sandbox_owner("adoption-persistent", &adopter).await.unwrap(), crate::ownership::OwnerAdoption::AlreadyOwned);
+        assert_eq!(
+            recovered
+                .sandbox("adoption-persistent")
+                .await
+                .unwrap()
+                .unwrap()
+                .owner_id,
+            Some(adopter.clone())
+        );
+        assert_eq!(
+            recovered
+                .adopt_sandbox_owner("adoption-persistent", &adopter)
+                .await
+                .unwrap(),
+            crate::ownership::OwnerAdoption::AlreadyOwned
+        );
         let mut admin = recovered.connection.clone();
-        let recovered_raw: String = redis::cmd("GET").arg(&adoption_key).query_async(&mut admin).await.unwrap();
-        assert_eq!(serde_json::from_str::<serde_json::Value>(&recovered_raw).unwrap(), adoption_record);
-        recovered.delete_sandbox("adoption-persistent").await.unwrap();
-        assert_eq!(recovered.sandbox("ports-persistent").await.unwrap().unwrap().owner_id,persistent.owner_id);
-        assert!(matches!(recovered.owned_ports("ports-persistent","owner-a").await.unwrap(),OwnedPortAccess::Granted(_)));
-        assert_eq!(recovered.owned_ports("ports-persistent","owner-b").await.unwrap(),OwnedPortAccess::OwnerConflict);
-        assert_eq!(recovered.port_allocations(Some("ports-persistent")).await.unwrap(), vec![before.clone()]);
-        let after = allocated(recovered.claim_port("ports-persistent", 5353, "owner-a", PortProtocol::Udp, range).await.unwrap());
+        let recovered_raw: String = redis::cmd("GET")
+            .arg(&adoption_key)
+            .query_async(&mut admin)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&recovered_raw).unwrap(),
+            adoption_record
+        );
+        recovered
+            .delete_sandbox("adoption-persistent")
+            .await
+            .unwrap();
+        assert_eq!(
+            recovered
+                .sandbox("ports-persistent")
+                .await
+                .unwrap()
+                .unwrap()
+                .owner_id,
+            persistent.owner_id
+        );
+        assert!(matches!(
+            recovered
+                .owned_ports("ports-persistent", "owner-a")
+                .await
+                .unwrap(),
+            OwnedPortAccess::Granted(_)
+        ));
+        assert_eq!(
+            recovered
+                .owned_ports("ports-persistent", "owner-b")
+                .await
+                .unwrap(),
+            OwnedPortAccess::OwnerConflict
+        );
+        assert_eq!(
+            recovered
+                .port_allocations(Some("ports-persistent"))
+                .await
+                .unwrap(),
+            vec![before.clone()]
+        );
+        let after = allocated(
+            recovered
+                .claim_port(
+                    "ports-persistent",
+                    5353,
+                    "owner-a",
+                    PortProtocol::Udp,
+                    range,
+                )
+                .await
+                .unwrap(),
+        );
         assert_eq!(after.public_port(), before.public_port());
         assert_eq!(after.protocol(), PortProtocol::Udp);
-        assert_eq!(recovered.claim_port("ports-persistent", 5353, "owner-b", PortProtocol::Udp, range).await.unwrap(), PortClaim::OwnerConflict);
+        assert_eq!(
+            recovered
+                .claim_port(
+                    "ports-persistent",
+                    5353,
+                    "owner-b",
+                    PortProtocol::Udp,
+                    range
+                )
+                .await
+                .unwrap(),
+            PortClaim::OwnerConflict
+        );
         assert!(recovered.delete_sandbox("ports-persistent").await.unwrap());
         assert!(recovered.port_allocations(None).await.unwrap().is_empty());
 
         // Recover actual native listeners from this owned durable store, then
         // close them on corrupt snapshots and on reservation deletion.
         let probe = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = probe.local_addr().unwrap(); drop(probe);
-        recovered.put_sandbox(&sandbox("gateway-recovery", "node")).await.unwrap();
+        let address = probe.local_addr().unwrap();
+        drop(probe);
+        recovered
+            .put_sandbox(&sandbox("gateway-recovery", "node"))
+            .await
+            .unwrap();
         let gateway_range = PublicPortRange::new(address.port(), address.port()).unwrap();
-        let gateway_row = allocated(recovered.claim_port("gateway-recovery", 8080, "owner-a",
-            PortProtocol::Both, gateway_range).await.unwrap());
+        let gateway_row = allocated(
+            recovered
+                .claim_port(
+                    "gateway-recovery",
+                    8080,
+                    "owner-a",
+                    PortProtocol::Both,
+                    gateway_range,
+                )
+                .await
+                .unwrap(),
+        );
         let mut gateway = crate::native_ports::NativePortRegistry::new(address.ip(), 1).unwrap();
         assert!(gateway.refresh(&recovered).await.unwrap().is_empty());
-        assert_eq!(gateway.binding(address.port()).unwrap().allocation(), &gateway_row);
-        drop(gateway); drop(recovered);
+        assert_eq!(
+            gateway.binding(address.port()).unwrap().allocation(),
+            &gateway_row
+        );
+        drop(gateway);
+        drop(recovered);
         server.restart();
         let recovered = server.store(&namespace).await;
         let mut gateway = crate::native_ports::NativePortRegistry::new(address.ip(), 1).unwrap();
         assert!(gateway.refresh(&recovered).await.unwrap().is_empty());
-        assert_eq!(gateway.binding(address.port()).unwrap().allocation(), &gateway_row);
+        assert_eq!(
+            gateway.binding(address.port()).unwrap().allocation(),
+            &gateway_row
+        );
         assert!(tokio::net::TcpListener::bind(address).await.is_err());
         assert!(tokio::net::UdpSocket::bind(address).await.is_err());
         let mut admin = recovered.connection.clone();
         let global = recovered.key("public-ports");
-        let encoded: String = redis::cmd("HGET").arg(&global).arg(address.port()).query_async(&mut admin).await.unwrap();
+        let encoded: String = redis::cmd("HGET")
+            .arg(&global)
+            .arg(address.port())
+            .query_async(&mut admin)
+            .await
+            .unwrap();
         let invalid_field = "0";
-        redis::cmd("HSET").arg(&global).arg(invalid_field).arg(&encoded).query_async::<u64>(&mut admin).await.unwrap();
+        redis::cmd("HSET")
+            .arg(&global)
+            .arg(invalid_field)
+            .arg(&encoded)
+            .query_async::<u64>(&mut admin)
+            .await
+            .unwrap();
         assert!(gateway.refresh(&recovered).await.is_err());
         assert!(gateway.is_empty());
-        redis::cmd("HDEL").arg(&global).arg(invalid_field).query_async::<u64>(&mut admin).await.unwrap();
+        redis::cmd("HDEL")
+            .arg(&global)
+            .arg(invalid_field)
+            .query_async::<u64>(&mut admin)
+            .await
+            .unwrap();
         assert!(gateway.refresh(&recovered).await.unwrap().is_empty());
         let per_vm = recovered.key("ports:gateway-recovery");
-        redis::cmd("HSET").arg(&per_vm).arg(invalid_field).arg(&encoded).query_async::<u64>(&mut admin).await.unwrap();
-        assert!(recovered.port_allocations(Some("gateway-recovery")).await.is_err());
-        redis::cmd("HDEL").arg(&per_vm).arg(invalid_field).query_async::<u64>(&mut admin).await.unwrap();
-        redis::cmd("DEL").arg(&global).query_async::<u64>(&mut admin).await.unwrap();
-        redis::cmd("SET").arg(&global).arg("owned-type-fault").query_async::<()>(&mut admin).await.unwrap();
+        redis::cmd("HSET")
+            .arg(&per_vm)
+            .arg(invalid_field)
+            .arg(&encoded)
+            .query_async::<u64>(&mut admin)
+            .await
+            .unwrap();
+        assert!(recovered
+            .port_allocations(Some("gateway-recovery"))
+            .await
+            .is_err());
+        redis::cmd("HDEL")
+            .arg(&per_vm)
+            .arg(invalid_field)
+            .query_async::<u64>(&mut admin)
+            .await
+            .unwrap();
+        redis::cmd("DEL")
+            .arg(&global)
+            .query_async::<u64>(&mut admin)
+            .await
+            .unwrap();
+        redis::cmd("SET")
+            .arg(&global)
+            .arg("owned-type-fault")
+            .query_async::<()>(&mut admin)
+            .await
+            .unwrap();
         assert!(gateway.refresh(&recovered).await.is_err());
         assert!(gateway.is_empty());
         let tcp = tokio::net::TcpListener::bind(address).await.unwrap();
         let udp = tokio::net::UdpSocket::bind(address).await.unwrap();
-        drop(tcp); drop(udp);
-        redis::cmd("DEL").arg(&global).query_async::<u64>(&mut admin).await.unwrap();
-        redis::cmd("HSET").arg(&global).arg(address.port()).arg(encoded).query_async::<u64>(&mut admin).await.unwrap();
+        drop(tcp);
+        drop(udp);
+        redis::cmd("DEL")
+            .arg(&global)
+            .query_async::<u64>(&mut admin)
+            .await
+            .unwrap();
+        redis::cmd("HSET")
+            .arg(&global)
+            .arg(address.port())
+            .arg(encoded)
+            .query_async::<u64>(&mut admin)
+            .await
+            .unwrap();
         assert!(gateway.refresh(&recovered).await.unwrap().is_empty());
         assert!(recovered.delete_sandbox("gateway-recovery").await.unwrap());
         assert!(gateway.refresh(&recovered).await.unwrap().is_empty());
@@ -3349,5 +5454,4 @@ pub(crate) mod tests {
         let _tcp = tokio::net::TcpListener::bind(address).await.unwrap();
         let _udp = tokio::net::UdpSocket::bind(address).await.unwrap();
     }
-
 }

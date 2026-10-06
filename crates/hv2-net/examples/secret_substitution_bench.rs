@@ -32,7 +32,11 @@ fn input(size: usize, stride: Option<usize>, index: usize) -> Vec<u8> {
 }
 
 fn main() {
-    assert!(!cfg!(debug_assertions), "run this benchmark with --release");
+    // A debug build's timings mean nothing; refuse rather than print them.
+    if cfg!(debug_assertions) {
+        eprintln!("run this benchmark with --release");
+        std::process::exit(2);
+    }
     let cases = [
         ("small-header", 256, 1, Some(128), 0, "api.example.test"),
         ("plain-64k", 65536, 128, None, 0, "api.example.test"),

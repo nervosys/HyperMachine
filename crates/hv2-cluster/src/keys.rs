@@ -140,7 +140,9 @@ impl ApiKeyPolicy {
     }
 
     /// Operator-provisioned stable principal; not derived from credential bytes.
-    pub(crate) fn is_administrator(&self) -> bool { self.role == ApiRole::Operator && self.scopes.contains(&ApiScope::Admin) }
+    pub(crate) fn is_administrator(&self) -> bool {
+        self.role == ApiRole::Operator && self.scopes.contains(&ApiScope::Admin)
+    }
 
     pub fn principal_id(&self) -> Option<&crate::ownership::OwnerId> {
         self.principal_id.as_ref()
@@ -176,7 +178,9 @@ impl ApiKeyPolicy {
             return true;
         }
         let parts: Vec<_> = path.trim_start_matches('/').split('/').collect();
-        if matches!(parts.as_slice(), ["sandboxes", _, "owner"]) { return false; }
+        if matches!(parts.as_slice(), ["sandboxes", _, "owner"]) {
+            return false;
+        }
         let family = match parts.as_slice() {
             ["v2", "sandboxes", ..] | ["sandboxes" | "sandbox-names", ..] => ApiScope::Sandboxes,
             ["v2" | "v3", "templates", ..] | ["templates" | "snapshots", ..] => ApiScope::Templates,
@@ -235,16 +239,27 @@ mod tests {
     }
     #[test]
     fn configured_principal_survives_key_rotation_and_rejects_invalid_labels() {
-        let entry = |key: &str, principal: &str| serde_json::json!({
+        let entry = |key: &str, principal: &str| {
+            serde_json::json!({
             "sha256": Sha256::digest(key.as_bytes()).iter().map(|byte| format!("{byte:02x}")).collect::<String>(),
-            "expires_at": 100, "scopes": ["sandboxes"], "principal_id": principal});
-        let first = ApiKeyPolicy::from_json(&serde_json::json!([entry("first-key", "principal-a")]).to_string()).unwrap();
-        let rotated = ApiKeyPolicy::from_json(&serde_json::json!([entry("rotated-key", "principal-a")]).to_string()).unwrap();
+            "expires_at": 100, "scopes": ["sandboxes"], "principal_id": principal})
+        };
+        let first = ApiKeyPolicy::from_json(
+            &serde_json::json!([entry("first-key", "principal-a")]).to_string(),
+        )
+        .unwrap();
+        let rotated = ApiKeyPolicy::from_json(
+            &serde_json::json!([entry("rotated-key", "principal-a")]).to_string(),
+        )
+        .unwrap();
         assert_eq!(first[0].principal_id(), rotated[0].principal_id());
         assert!(!first[0].has_digest(&Sha256::digest(b"rotated-key").into()));
         assert!(rotated[0].has_digest(&Sha256::digest(b"rotated-key").into()));
         for invalid in ["", "a/b", "a b", "secret\n"] {
-            let error = ApiKeyPolicy::from_json(&serde_json::json!([entry("first-key", invalid)]).to_string()).unwrap_err();
+            let error = ApiKeyPolicy::from_json(
+                &serde_json::json!([entry("first-key", invalid)]).to_string(),
+            )
+            .unwrap_err();
             assert!(!error.contains("first-key"));
         }
         assert!(policy("sandboxes").principal_id().is_none());

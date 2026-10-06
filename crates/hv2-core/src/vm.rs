@@ -997,7 +997,7 @@ impl VM {
         if let Some(loaded) = boot {
             let boot_vcpu = &self.vcpus[0];
             self.backend.load_boot(boot_vcpu, &loaded).await?;
-            if loaded.protocol().to_string() == "linux" {
+            if loaded.protocol() == "linux" {
                 let pci_irq = self.vsock.read().as_ref().and_then(|attached| {
                     matches!(attached.transport, VsockTransport::Pci(_)).then_some(attached.irq)
                 });
@@ -4395,7 +4395,7 @@ mod tests {
     #[tokio::test]
     async fn pause_timeout_and_owner_exit_allow_rollback() {
         let (a, mut ar) = mpsc::channel(2);
-        let (rollback, replies) = prepare_pause(&[a.clone()]).unwrap();
+        let (rollback, replies) = prepare_pause(std::slice::from_ref(&a)).unwrap();
         assert!(wait_for_pause(replies, std::time::Duration::ZERO)
             .await
             .is_err());

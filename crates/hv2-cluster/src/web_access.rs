@@ -146,7 +146,9 @@ impl WebAccessPolicy {
     /// Authenticate HTTP Basic login, expiry and immutable sandbox-ID scope atomically.
     #[must_use]
     pub fn identity(&self, headers: &HeaderMap, sandbox: &str, now: i64) -> Option<String> {
-        self.authenticate(headers, now, |user| user.sandboxes.contains("*") || user.sandboxes.contains(sandbox))
+        self.authenticate(headers, now, |user| {
+            user.sandboxes.contains("*") || user.sandboxes.contains(sandbox)
+        })
     }
 
     /// Only explicitly delegable credentials may use an owner's stored grants.
@@ -155,8 +157,15 @@ impl WebAccessPolicy {
         self.authenticate(headers, now, |user| user.allow_owner_grants)
     }
 
-    fn authenticate(&self, headers: &HeaderMap, now: i64, allowed: impl Fn(&Credential) -> bool) -> Option<String> {
-        if now < 0 { return None; }
+    fn authenticate(
+        &self,
+        headers: &HeaderMap,
+        now: i64,
+        allowed: impl Fn(&Credential) -> bool,
+    ) -> Option<String> {
+        if now < 0 {
+            return None;
+        }
         let mut values = headers.get_all(axum::http::header::AUTHORIZATION).iter();
         let value = values.next()?.to_str().ok()?;
         if values.next().is_some() || value.len() > 8192 {
@@ -239,12 +248,19 @@ mod tests {
         json[0]["sandboxes"] = serde_json::json!([]);
         let active = WebAccessPolicy::from_json(&json.to_string()).unwrap();
         assert!(active.grant_identity(&headers("secret-a"), 99).is_none());
-        json[0]["allow_owner_grants"] = true.into(); active.replace(&json.to_string()).unwrap();
-        assert_eq!(active.grant_identity(&headers("secret-a"), 99).as_deref(), Some("alice@example.test"));
+        json[0]["allow_owner_grants"] = true.into();
+        active.replace(&json.to_string()).unwrap();
+        assert_eq!(
+            active.grant_identity(&headers("secret-a"), 99).as_deref(),
+            Some("alice@example.test")
+        );
         assert!(active.identity(&headers("secret-a"), "guest", 99).is_none());
-        for now in [-1, 100] { assert!(active.grant_identity(&headers("secret-a"), now).is_none()); }
+        for now in [-1, 100] {
+            assert!(active.grant_identity(&headers("secret-a"), now).is_none());
+        }
         assert!(active.grant_identity(&headers("wrong"), 99).is_none());
-        json[0]["allow_owner_grants"] = false.into(); active.replace(&json.to_string()).unwrap();
+        json[0]["allow_owner_grants"] = false.into();
+        active.replace(&json.to_string()).unwrap();
         assert!(active.grant_identity(&headers("secret-a"), 99).is_none());
         assert!(active.replace(&policy("secret-b")).is_ok());
         assert!(active.grant_identity(&headers("secret-a"), 99).is_none());

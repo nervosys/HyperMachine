@@ -66,7 +66,7 @@ impl PrivateSourceRouter {
         loop {
             match self.leases.acquire() {
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                    tokio::time::sleep(Duration::from_millis(1)).await
+                    tokio::time::sleep(Duration::from_millis(1)).await;
                 }
                 result => return result,
             }
@@ -166,7 +166,11 @@ impl PrivateSourceRouter {
     pub async fn dial_udp(&self, destination: SocketAddr) -> io::Result<Box<dyn NativeTunnel>> {
         self.dial_inner(destination, true).await
     }
-    async fn dial_inner(&self, destination: SocketAddr, udp: bool) -> io::Result<Box<dyn NativeTunnel>> {
+    async fn dial_inner(
+        &self,
+        destination: SocketAddr,
+        udp: bool,
+    ) -> io::Result<Box<dyn NativeTunnel>> {
         let IpAddr::V4(ip) = destination.ip() else {
             return Err(refused());
         };
@@ -313,12 +317,10 @@ mod tests {
         );
         let router = Arc::new(PrivateSourceRouter::new(connector, factory.clone()));
         factory.active.store(false, Ordering::SeqCst);
-        assert!(
-            router
-                .resolve("router-destination.team.hv2.internal")
-                .await
-                .is_err()
-        );
+        assert!(router
+            .resolve("router-destination.team.hv2.internal")
+            .await
+            .is_err());
         assert_eq!(
             store.private_address_ledger(&source).await.unwrap(),
             MembershipAccess::Granted(None)
@@ -368,9 +370,13 @@ mod tests {
         assert!(
             matches!(router.dial(SocketAddr::new(team,8080)).await,Err(ref e) if e.kind()==io::ErrorKind::PermissionDenied)
         );
-        assert!(matches!(router.dial_udp(SocketAddr::new(team,8080)).await,Err(ref e) if e.kind()==io::ErrorKind::PermissionDenied));
+        assert!(
+            matches!(router.dial_udp(SocketAddr::new(team,8080)).await,Err(ref e) if e.kind()==io::ErrorKind::PermissionDenied)
+        );
         for address in ["127.0.0.1:8080", "[::1]:8080", "198.18.0.1:0"] {
-            assert!(matches!(router.dial_udp(address.parse().unwrap()).await,Err(ref e) if e.kind()==io::ErrorKind::PermissionDenied));
+            assert!(
+                matches!(router.dial_udp(address.parse().unwrap()).await,Err(ref e) if e.kind()==io::ErrorKind::PermissionDenied)
+            );
         }
         let new_ip = router
             .resolve("router-destination.team.hv2.internal")
@@ -379,12 +385,10 @@ mod tests {
         assert_ne!(team, new_ip);
         assert_ne!(dev, new_ip);
         store.remove_node("router-node").await.unwrap();
-        assert!(
-            router
-                .resolve("router-destination.team.hv2.internal")
-                .await
-                .is_err()
-        );
+        assert!(router
+            .resolve("router-destination.team.hv2.internal")
+            .await
+            .is_err());
         assert_eq!(factory.dropped.load(Ordering::SeqCst), 11);
         eprintln!(
             "private_source_router_contract completed dns_commit_before_return=true concurrent_rebase=true cross_owner=refused stale_address=refused node_missing=refused"
