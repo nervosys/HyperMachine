@@ -34,7 +34,7 @@ reqwest = { workspace = true }
 flate2 = { workspace = true }
 tar = { version = "0.4", default-features = false }
 # zstd-compressed image layers; pure Rust, a decoder only.
-ruzstd = "0.8"
+ruzstd = "0.9"
 tokio-stream = "0.1"
 libc = "0.2"
 form_urlencoded = "1"
