@@ -18,14 +18,14 @@ use std::time::Duration;
 
 use axum::body::Body;
 use axum::http::HeaderMap;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use hv2_agent::AgentVM;
 use hv2_cluster::model::VolumeMount;
 
 use super::{
-    api_error, new_access_token, AppState, Arc, Deserialize, IntoResponse, Json, Path, Query,
-    Response, Serialize, State, StatusCode,
+    AppState, Arc, Deserialize, IntoResponse, Json, Path, Query, Response, Serialize, State,
+    StatusCode, api_error, new_access_token,
 };
 use crate::ninep::{self, Beneath};
 
@@ -93,6 +93,49 @@ fn with_token(meta: &Meta) -> Value {
     json!({ "volumeID": meta.id, "name": meta.name, "token": meta.token })
 }
 
+/// Reserve the deterministic ID before publishing metadata. An existing
+/// directory is never reused, including incomplete or concurrently-created
+/// volumes, so a duplicate cannot replace an owner's access token or data.
+fn create_metadata(root: &std::path::Path, meta: &Meta) -> std::io::Result<()> {
+    create_metadata_with_sync(root, meta, |path| std::fs::File::open(path)?.sync_all())
+}
+
+fn create_metadata_with_sync(
+    root: &std::path::Path,
+    meta: &Meta,
+    mut sync: impl FnMut(&std::path::Path) -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+
+    std::fs::create_dir_all(root)?;
+    let directory = root.join(&meta.id);
+    std::fs::create_dir(&directory)?;
+    let temporary = directory.join(".meta.json");
+    let data = directory.join("data");
+    let mut published = false;
+    let result = std::fs::create_dir(&data).and_then(|()| {
+        let bytes = serde_json::to_vec(meta).map_err(std::io::Error::other)?;
+        let mut file = std::fs::OpenOptions::new().write(true).create_new(true)
+            .mode(0o600).open(&temporary)?;
+        file.write_all(&bytes)?;
+        sync(&temporary)?;
+        sync(&data)?;
+        std::fs::rename(&temporary, directory.join("meta.json"))?;
+        published = true;
+        sync(&directory)?;
+        sync(root)
+    });
+    if result.is_err() && !published {
+        // Only our unpublished reservation; no recursive cleanup and no
+        // existing metadata/data is overwritten or removed on conflict.
+        let _ = std::fs::remove_file(&temporary);
+        let _ = std::fs::remove_dir(&data);
+        let _ = std::fs::remove_dir(&directory);
+    }
+    result
+}
+
 #[derive(Debug, Deserialize)]
 pub(crate) struct NewVolume {
     name: String,
@@ -118,18 +161,157 @@ pub(crate) async fn create(
         token: new_access_token(),
     };
     let dir = root(&state).join(&meta.id);
-    let made = std::fs::create_dir_all(dir.join("data")).and_then(|()| {
-        let tmp = dir.join(".meta.json");
-        std::fs::write(&tmp, serde_json::to_vec(&meta).unwrap_or_default())?;
-        std::fs::rename(&tmp, dir.join("meta.json"))
-    });
+    let made = create_metadata(&root(&state), &meta);
     if let Err(e) = made {
+        if e.kind() == std::io::ErrorKind::AlreadyExists {
+            return api_error(StatusCode::CONFLICT, format!("volume {} exists", meta.name));
+        }
         return api_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("{}: {e}", dir.display()),
         );
     }
     (StatusCode::CREATED, Json(with_token(&meta))).into_response()
+}
+
+#[cfg(test)]
+mod creation_tests {
+    use super::*;
+    #[test]
+    fn atomic_upload_preserves_previous_file_until_publication() {
+        use std::io::Write;
+        let root = std::env::temp_dir().join(format!("hm-atomic-upload-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        std::fs::write(root.join("target"), b"previous").unwrap();
+        let fs = Beneath::open(&root).unwrap();
+        let parts = vec!["target".to_string()];
+        {
+            let (_stage, mut file) = AtomicUpload::new(&fs, &parts).unwrap();
+            file.write_all(b"interrupted").unwrap();
+            assert_eq!(std::fs::read(root.join("target")).unwrap(), b"previous");
+        }
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+        {
+            let (mut stage, mut file) = AtomicUpload::new(&fs, &parts).unwrap();
+            file.write_all(b"replacement").unwrap();
+            file.sync_all().unwrap();
+            stage.publish(true).unwrap();
+        }
+        assert_eq!(std::fs::read(root.join("target")).unwrap(), b"replacement");
+        {
+            let (mut stage, mut file) = AtomicUpload::new(&fs, &parts).unwrap();
+            file.write_all(b"must not replace").unwrap();
+            assert_eq!(stage.publish(false).unwrap_err().kind(), std::io::ErrorKind::AlreadyExists);
+        }
+        assert_eq!(std::fs::read(root.join("target")).unwrap(), b"replacement");
+        {
+            let absent = vec!["new-file".into()];
+            let (mut stage, mut file) = AtomicUpload::new(&fs, &absent).unwrap();
+            file.write_all(b"new bytes").unwrap();
+            stage.publish(false).unwrap();
+        }
+        assert_eq!(std::fs::read(root.join("new-file")).unwrap(), b"new bytes");
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 2);
+        std::os::unix::fs::symlink("target", root.join("link")).unwrap();
+        assert!(AtomicUpload::new(&fs, &["link".into()]).is_err());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn sync_failures_preserve_published_metadata_and_data() {
+        for failed_stage in 1..=4 {
+            let root = std::env::temp_dir().join(format!("hm-volume-sync-{}", uuid::Uuid::new_v4()));
+            let meta = Meta { id: "vol-owned".into(), name: "owned".into(), token: "owned-token".into() };
+            let mut stage = 0;
+            let result = create_metadata_with_sync(&root, &meta, |_| {
+                stage += 1;
+                if stage == failed_stage { Err(std::io::Error::other("injected sync failure")) } else { Ok(()) }
+            });
+            assert!(result.is_err());
+            let directory = root.join(&meta.id);
+            if failed_stage < 3 {
+                assert!(!directory.exists());
+            } else {
+                assert_eq!(std::fs::read(directory.join("meta.json")).unwrap(), serde_json::to_vec(&meta).unwrap());
+                assert!(directory.join("data").is_dir());
+                assert_eq!(create_metadata(&root, &meta).unwrap_err().kind(), std::io::ErrorKind::AlreadyExists);
+            }
+            std::fs::remove_dir_all(root).unwrap();
+        }
+    }
+    #[test]
+    fn concurrent_creators_preserve_the_winning_token_and_data() {
+        let root = std::env::temp_dir().join(format!("hm-volume-create-{}", uuid::Uuid::new_v4()));
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(16));
+        let workers: Vec<_> = (0..16)
+            .map(|index| {
+                let root = root.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    let meta = Meta {
+                        id: "vol-owned".into(),
+                        name: "owned".into(),
+                        token: index.to_string(),
+                    };
+                    barrier.wait();
+                    (meta.token.clone(), create_metadata(&root, &meta))
+                })
+            })
+            .collect();
+        let mut winner = None;
+        for worker in workers {
+            let (token, result) = worker.join().unwrap();
+            match result {
+                Ok(()) => {
+                    assert!(winner.is_none());
+                    winner = Some(token);
+                }
+                Err(error) => assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists),
+            }
+        }
+        let metadata = root.join("vol-owned/meta.json");
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(std::fs::metadata(&metadata).unwrap().permissions().mode() & 0o777, 0o600);
+        let before = std::fs::read(&metadata).unwrap();
+        let meta: Meta = serde_json::from_slice(&before).unwrap();
+        assert_eq!(Some(meta.token), winner);
+        let marker = root.join("vol-owned/data/marker");
+        std::fs::write(&marker, b"owned bytes").unwrap();
+        let duplicate = Meta {
+            id: "vol-owned".into(),
+            name: "owned".into(),
+            token: "replacement".into(),
+        };
+        assert_eq!(
+            create_metadata(&root, &duplicate).unwrap_err().kind(),
+            std::io::ErrorKind::AlreadyExists
+        );
+        assert_eq!(std::fs::read(metadata).unwrap(), before);
+        assert_eq!(std::fs::read(marker).unwrap(), b"owned bytes");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn incomplete_reservations_are_never_overwritten() {
+        let root =
+            std::env::temp_dir().join(format!("hm-volume-incomplete-{}", uuid::Uuid::new_v4()));
+        let reserved = root.join("vol-owned");
+        std::fs::create_dir_all(&reserved).unwrap();
+        std::fs::write(reserved.join("marker"), b"existing reservation").unwrap();
+        let meta = Meta {
+            id: "vol-owned".into(),
+            name: "owned".into(),
+            token: "replacement".into(),
+        };
+        assert_eq!(
+            create_metadata(&root, &meta).unwrap_err().kind(),
+            std::io::ErrorKind::AlreadyExists
+        );
+        assert!(!reserved.join("meta.json").exists());
+        assert_eq!(
+            std::fs::read(reserved.join("marker")).unwrap(),
+            b"existing reservation"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
 
 /// `GET /volumes`.
@@ -277,7 +459,59 @@ pub(crate) struct At {
     mode: Option<u32>,
     #[serde(default)]
     force: bool,
+    #[serde(default)]
+    atomic: bool,
+    #[serde(default = "overwrite_default")]
+    overwrite: bool,
     depth: Option<u32>,
+}
+
+fn overwrite_default() -> bool { true }
+
+/// A replacement staged beside its destination; dropping before publication
+/// removes only the exclusively-created temporary name through a pinned parent.
+struct AtomicUpload {
+    parent: std::fs::File,
+    temporary: std::ffi::CString,
+    destination: std::ffi::CString,
+    published: bool,
+}
+
+impl AtomicUpload {
+    fn new(fs: &Beneath, parts: &[String]) -> std::io::Result<(Self, std::fs::File)> {
+        use std::os::fd::FromRawFd;
+        match fs.entry(parts) {
+            Ok(entry) if entry.stat.st_mode & libc::S_IFMT != libc::S_IFREG =>
+                return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
+            Err(error) if error.raw_os_error() != Some(libc::ENOENT) => return Err(error),
+            _ => {}
+        }
+        let (name, parents) = parts.split_last().ok_or_else(|| std::io::Error::from_raw_os_error(libc::EINVAL))?;
+        let parent = std::fs::File::from(fs.open_at(parents, libc::O_RDONLY | libc::O_DIRECTORY, 0)?);
+        let temporary = std::ffi::CString::new(format!(".hm-upload-{}", uuid::Uuid::new_v4())).unwrap();
+        let destination = std::ffi::CString::new(name.as_str()).map_err(|_| std::io::Error::from_raw_os_error(libc::EINVAL))?;
+        let fd = unsafe { libc::openat(parent.as_raw_fd(), temporary.as_ptr(),
+            libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC, 0o600) };
+        if fd < 0 { return Err(std::io::Error::last_os_error()); }
+        Ok((Self { parent, temporary, destination, published: false }, unsafe { std::fs::File::from_raw_fd(fd) }))
+    }
+
+    fn publish(&mut self, overwrite: bool) -> std::io::Result<()> {
+        if unsafe { libc::renameat2(self.parent.as_raw_fd(), self.temporary.as_ptr(),
+            self.parent.as_raw_fd(), self.destination.as_ptr(), if overwrite { 0 } else { libc::RENAME_NOREPLACE }) } < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        self.published = true;
+        Ok(())
+    }
+}
+
+impl Drop for AtomicUpload {
+    fn drop(&mut self) {
+        if !self.published {
+            unsafe { libc::unlinkat(self.parent.as_raw_fd(), self.temporary.as_ptr(), 0); }
+        }
+    }
 }
 
 /// E2B's `VolumeEntryStat` for what `parts` names.
@@ -509,12 +743,19 @@ pub(crate) async fn write_file(
             return io_error(&e);
         }
     }
-    let flags = libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC;
-    let fd = match fs.open_at(&parts, flags, at.mode.unwrap_or(0o644)) {
-        Ok(fd) => fd,
-        Err(e) => return io_error(&e),
+    let (mut atomic, file) = if at.atomic {
+        match AtomicUpload::new(&fs, &parts) {
+            Ok((stage, file)) => (Some(stage), file),
+            Err(e) => return io_error(&e),
+        }
+    } else {
+        let flags = libc::O_WRONLY | libc::O_CREAT | if at.overwrite { libc::O_TRUNC } else { libc::O_EXCL };
+        match fs.open_at(&parts, flags, at.mode.unwrap_or(0o644)) {
+            Ok(fd) => (None, std::fs::File::from(fd)),
+            Err(e) => return io_error(&e),
+        }
     };
-    let mut file = tokio::fs::File::from_std(std::fs::File::from(fd));
+    let mut file = tokio::fs::File::from_std(file);
     let mut stream = body.into_data_stream();
     let mut total = 0u64;
     while let Some(chunk) = stream.next().await {
@@ -536,13 +777,58 @@ pub(crate) async fn write_file(
     if let Err(e) = file.flush().await {
         return io_error(&e);
     }
-    if let Err(e) = apply(&fs, &parts, at.uid, at.gid, at.mode) {
+    if atomic.is_some() {
+        let metadata = (|| {
+            let fd = file.as_raw_fd();
+            ninep::chmod(fd, at.mode.unwrap_or(0o644))?;
+            if at.uid.is_some() || at.gid.is_some() {
+                let stat = ninep::fstat(fd)?;
+                let (uid, gid) = ninep::owner(fd, &stat, (0, 0));
+                ninep::set_owner(fd, at.uid.unwrap_or(uid), at.gid.unwrap_or(gid))?;
+            }
+            Ok::<_, std::io::Error>(())
+        })();
+        if let Err(e) = metadata { return io_error(&e); }
+    } else if let Err(e) = apply(&fs, &parts, at.uid, at.gid, at.mode) {
+        return io_error(&e);
+    }
+    if let Err(e) = file.sync_all().await {
+        return io_error(&e);
+    }
+    if let Some(stage) = atomic.as_mut() {
+        if let Err(e) = stage.publish(at.overwrite) { return io_error(&e); }
+        let parent = match stage.parent.try_clone() {
+            Ok(file) => file,
+            Err(e) => return io_error(&e),
+        };
+        if let Err(e) = tokio::fs::File::from_std(parent).sync_all().await { return io_error(&e); }
+    }
+    // Sync each containing directory, including parents made by force=true.
+    // O_PATH descriptors cannot be fsynced; open real directory descriptors
+    // through the same beneath-root, no-symlink resolver.
+    let unsynced_directories = if atomic.is_some() {
+        // Publication already flushed the pinned immediate parent. Continue
+        // with its ancestors without reopening and flushing it a second time.
+        parts.len() - 1
+    } else {
+        parts.len()
+    };
+    if let Err(e) = sync_directories(&fs, &parts, unsynced_directories).await {
         return io_error(&e);
     }
     match stat_json(&fs, &parts) {
         Ok(v) => (StatusCode::CREATED, Json(v)).into_response(),
         Err(e) => io_error(&e),
     }
+}
+
+/// Flush selected containing directories deepest-first, ending at the data root.
+async fn sync_directories(fs: &Beneath, parts: &[String], count: usize) -> std::io::Result<()> {
+    for depth in (0..count).rev() {
+        let fd = fs.open_at(&parts[..depth], libc::O_RDONLY | libc::O_DIRECTORY, 0)?;
+        tokio::fs::File::from_std(std::fs::File::from(fd)).sync_all().await?;
+    }
+    Ok(())
 }
 
 /// `GET /volumecontent/{id}/dir`: a directory's entries, to `depth`.
@@ -605,10 +891,20 @@ pub(crate) async fn make_dir(
     }
     match mkdir(&fs, &parts, at.mode.unwrap_or(0o755)) {
         Ok(()) => {}
-        Err(e) if at.force && e.raw_os_error() == Some(libc::EEXIST) => {}
+        Err(e) if at.force && e.raw_os_error() == Some(libc::EEXIST) => {
+            // Force accepts an existing directory, never a regular file or link.
+            if let Err(e) = fs.dir(&parts) {
+                return io_error(&e);
+            }
+        }
         Err(e) => return io_error(&e),
     }
     if let Err(e) = apply(&fs, &parts, at.uid, at.gid, at.mode) {
+        return io_error(&e);
+    }
+    // Flush the created/updated directory and its containing directories.
+    // Include parents created by force=true, all the way to the data root.
+    if let Err(e) = sync_directories(&fs, &parts, parts.len() + 1).await {
         return io_error(&e);
     }
     match stat_json(&fs, &parts) {

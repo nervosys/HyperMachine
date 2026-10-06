@@ -1,0 +1,15 @@
+{
+  "intervention": "sparse_named_snapshot_images",
+  "production_runtime_changed": false,
+  "image_base_retention": "online_retain_offline_dependency_gc",
+  "source_files_verified": 550,
+  "candidate_source_sha256": {
+    "crates/hv2-sandboxd/src/snapshots.rs": "5134ec3401366b66a1818f3950b2a5435b224e2dba9ae526100dba8e5271e530"
+  },
+  "adoption_requirements": [
+    "Matched restored state and latency/memory",
+    "Capture time and physical storage cost",
+    "Delete/replacement/failure sidecar cleanup",
+    "Shared-store create/delete races"
+  ]
+}

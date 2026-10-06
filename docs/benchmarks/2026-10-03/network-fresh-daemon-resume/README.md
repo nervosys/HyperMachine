@@ -1,0 +1,9 @@
+# Network reconstruction after daemon replacement
+
+The current daemon passes all 16 network-enabled owned KVM checks, including optional keepalive rotation and the new fresh-node-resume phase. The fixture pauses the guest, terminates and joins the original daemon with exit code zero, starts a distinct daemon process on the same API/shared snapshot store, waits for template readiness and resumes the same sandbox ID. The new daemon has no cached PausedSandbox, so it reconstructs NetworkSpec from the stored NetworkRequest. Exact scoped substitution through verified owned HTTPS succeeds after resume, then revocation and final guest deletion succeed. All owned processes/listeners are reaped.
+
+The original network request includes an allowOut rule for the owned upstream; it has no egress proxy. Therefore this verifies actual network reconstruction, not DNS proxy cancellation or an upstream proxy connection. Actual localhost proxy resolution and private-address policy are separately covered by the 53-test daemon suite. The daemon replacement is graceful, not a crash or claimed-description recovery test. Startup/registration cancellation and machine-crash recovery remain incomplete.
+
+The guest uses one vCPU and the accepted HTTPS-capable image. The optional keepalive checks verify guest connection reuse during rotation/revocation; they do not measure performance. No competitor endpoints or public production DNS/CA are used. Private keys, raw payloads and temporary policy files are excluded from this archive. The frozen daemon, kernel/image hashes, current source catalog, fixture/source snapshots and build log preserve provenance.
+
+Reproduce with the archived checker and recorded runtime paths: --fresh-node-resume --keepalive-rotation, a fresh --output path, and --daemon/--kernel/--initrd matching source-context.json.

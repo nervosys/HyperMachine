@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "files": {
+    "backup-snapshot-store.py": "ded00f18a08abd2d46b001afd54b5f97c2c0e3cbd082bd91802eba7b3f12877a",
+    "check-scheduled-backups.py": "2c6630fccc894dfc6b3db76f52b2d5216ae1fdcf9c1af2ce947b659d844d88e5",
+    "README.md": "2679b3f4ea26eb8511c5b12c9618756645c7cc589a3a790bdf5b37f99ba84b7d",
+    "report.json": "53b6686e3cd6c1769e3c4d7bff7ed3ec49969abb4e50dd67382b20d83cdc862e",
+    "retain-object-backups.py": "5dc3efa5ddfd9914ef5bb7b6cbe930a89bd39e13bf3d210339fb1af1028b9be2",
+    "schedule-object-backups.py": "0b6cc59c05ab3484f9c73c4c6a95d7bfaefbb3f74bb36798376833d2be7b639f"
+  }
+}

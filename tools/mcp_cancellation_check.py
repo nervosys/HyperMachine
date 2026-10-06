@@ -37,7 +37,7 @@ class ObservedWrite:
             self.sent.set()
 
 
-async def check_cancellation(session, writer, api_url, sandbox, key):
+async def check_cancellation(session, writer, api_url, sandbox, key, api_context=None):
     marker = "/tmp/mcp-cancellation-" + uuid.uuid4().hex
     start, finish = marker + "-start", marker + "-finish"
     writer.command = ["/bin/sh", "-c",
@@ -50,7 +50,7 @@ async def check_cancellation(session, writer, api_url, sandbox, key):
         if key: headers["X-API-Key"] = key
         request = urllib.request.Request(api_url.rstrip("/") + f"/sandboxes/{sandbox}/exec",
             data=json.dumps({"cmd":program,"timeout_secs":2}).encode(), headers=headers, method="POST")
-        with urllib.request.urlopen(request, timeout=5) as response:
+        with urllib.request.urlopen(request, timeout=5, context=api_context) as response:
             result = json.load(response)
         if result.get("exit_code") != 0 or result.get("timed_out"):
             raise RuntimeError("cancellation marker probe failed")

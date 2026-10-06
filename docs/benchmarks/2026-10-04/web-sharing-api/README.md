@@ -1,0 +1,9 @@
+# Owner sharing management API prerequisite
+
+GET and PUT `/sandboxes/{id}/web-sharing` require an authenticated configured creator matching the sandbox owner and existing API scopes/roles. Forged owner headers do not authorize requests. Strict bounded JSON accepts an expected revision, canonical client-generated UUIDv4 revision and entire desired grant list. Empty grants retain revocation state. Store calls each have a five-second timeout and errors disclose no internal detail.
+
+Real loopback HTTP contracts run against both Memory and fresh owned Redis: unknown/other/observer/inventory/unassigned/legacy keys refuse, ownerless and missing sandboxes refuse, rotated owner keys preserve exact retries, malformed/duplicate/oversized grants refuse, concurrent updates yield one 200 and one 409, revocation blocks old replay, and deletion returns 404. The new model constructor accepts a canonical client revision so retries preserve exact request identity.
+
+The first complete library run passed 129 tests with one ignored; its ACL fixture test explicitly skipped. Only a sharing fault-test module was then added. All ten final sharing tests passed, including eight injected error/stall modes, four cancelled store futures, two post-commit exact retry recoveries and changed-payload/revision refusal. Full-suite tested and final source snapshots are retained separately. Protected isolated hashes were verified before and after both builds.
+
+Owned Redis servers disabled disk persistence, terminated normally and used removed temporary directories. These tests prove HTTP management and connection consistency, not restart/crash durability or real KVM/TLS sharing. Browser credentials, proxy use and CLI support remain open. This does not change operator-file authorization and establishes no completed self-service feature or performance win.

@@ -1,0 +1,18 @@
+   Compiling rustix v1.1.4
+    Checking hv2-core v1.1.0 (/var/tmp/hm-domain-verification/source/crates/hv2-core)
+    Checking rhai v1.26.1
+    Checking backon v1.6.0
+    Checking tower-http v0.6.11
+    Checking hv2-jobs v1.1.0 (/var/tmp/hm-domain-verification/source/crates/hv2-jobs)
+    Checking redis v1.7.1
+    Checking reqwest v0.12.28
+   Compiling tempfile v3.27.0
+   Compiling prost-build v0.14.4
+   Compiling tonic-prost-build v0.14.6
+   Compiling pbjson-types v0.9.0
+   Compiling hv2-api v1.1.0 (/var/tmp/hm-domain-verification/source/crates/hv2-api)
+    Checking hv2-agent v1.1.0 (/var/tmp/hm-domain-verification/source/crates/hv2-agent)
+    Checking hv2-runtime v1.1.0 (/var/tmp/hm-domain-verification/source/crates/hv2-runtime)
+    Checking hm-cli v1.1.0 (/var/tmp/hm-domain-verification/source/crates/hm-cli)
+    Checking hv2-cluster v1.1.0 (/var/tmp/hm-domain-verification/source/crates/hv2-cluster)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 00s

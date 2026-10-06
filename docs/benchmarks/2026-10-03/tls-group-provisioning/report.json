@@ -1,0 +1,42 @@
+{
+  "functional_only": true,
+  "public_ca_contacted": false,
+  "hypermachine_deployment_verified": true,
+  "checks": [
+    "HTTP-01 issuance and issuer/hostname verification",
+    "Explicit new hostname group publishes even with the same initial leaf; default preserved",
+    "Actual control plane serves the issued ACME certificate",
+    "Forced renewal produces a different valid certificate",
+    "Certbot deploy hook activates the renewed leaf on actual control-plane TLS",
+    "Retrying an active immutable generation verifies TLS without rewriting or duplicating it",
+    "Untrusted certificate activation rolls back manifest and verified TLS leaf",
+    "Mismatched private key is refused before manifest publication",
+    "Wrong process executable is refused without signal or mutation",
+    "Wrong manifest is refused by checking the live process arguments",
+    "Concurrent deployment lock refuses overlapping publication",
+    "Already-expired active certificate recovers through verified ACME deployment",
+    "Unavailable HTTP-01 server refuses renewal and retains certificate"
+  ],
+  "new_hostname_group_verified": true,
+  "expired_active_leaf_sha256": "9e39ef66bdccd54638088385bb77baa5344d007bedf9ef023be5d25c0a3e48bc",
+  "initial_proxy_leaf_sha256": "dd5ed30654a67d4d026a3074f5dc3783ec7da3ee4f706017a3a0346c03bf84e4",
+  "renewed_proxy_leaf_sha256": "9d05c426d2d2182d55e292ab56828097ec0696dd7262760878ee6de15bf64b6b",
+  "control_plane_alive_after_deployment": true,
+  "guest_kvm_traffic_verified": false,
+  "initial_certificate_sha256": "f2c02f4c941d60776e1079d7224027e359b585e1311ad7bb54a89cafffa58388",
+  "renewed_certificate_sha256": "9d190fd829431a88e71918d92772c1592e46af2a713d50df63ac92a8123c80de",
+  "issuance_http01_successful_requests": 3,
+  "renewal_http01_successful_requests": 3,
+  "certbot_version": "certbot 5.8.0",
+  "pebble_version": "Pebble version: v2.10.1 (b1e1ca4f3c30abb64111adaca4544bc5374cc306)",
+  "processes_reaped": true,
+  "http_thread_stopped": true,
+  "input_sha256": {
+    "pebble": "4e35cad137f20f62a8e71fd104b98417daa592e901bb01ab4227074ee1990e3c",
+    "challenge_server": "00ec0f9680d5eecb23cb4073868a547db635775a52ba14e0392ed15c8004f1ed",
+    "certbot": "47a7758f3418a83e97f533fbeddcd40e0746ded2a628ca3965905cdfe8914561",
+    "control_plane": "958d30f3ab8dc3e83c0455179b8868ceb5fb3a57a5a2d6f472c4b846155fbe1e",
+    "deploy_hook": "09e9f6b7543cbe810b18c5db26306f2dee72cb733efd2d9bc3fd5f64bfe2189d"
+  },
+  "driver_sha256": "bbd5c5f826aec733dcfb353d3c967f4629c8f6407ed7ff511f8fd6e2c2d4be9d"
+}

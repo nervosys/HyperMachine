@@ -1,0 +1,11 @@
+# Reloadable workload-proxy certificate bundles
+
+The control plane accepts an opt-in SNI certificate manifest instead of its single static proxy certificate. It validates the complete proposed generation, then publishes one immutable resolver generation atomically. Certificate/key mismatch, invalid names/SANs, duplicate aliases, malformed files, invalid lifetimes and excessive inputs leave the old generation intact. Unix SIGHUP runs the reload outside the async request loop. New connections observe the active certificate; established connections continue. Server session resumption is disabled in bundle mode to prevent silently retaining an old certificate on new connections.
+
+All 1,067 API library tests pass, including actual TLS selection for two hostnames, certificate renewal, removal of a hostname, old-connection survival, rejected reloads, lifetime checks and alias-chain fanout bounds. Strict API/cluster lint and release build pass. Input bounds cover both PEM files and the DER copies rustls stores per SNI alias. Initial lint failure and earlier successful stages are retained.
+
+The actual control-plane binary passes the combined DNS/bundle real-KVM fixture. It activates a new leaf certificate while an existing 16 MiB guest download completes, rejects a mismatched key reload while preserving TLS identity and the guest route, and refuses unconfigured SNI without a default. The existing DNS, port-update, restart, auto-resume, unbind and replacement checks pass too. A separate legacy fixture passes without bundle or DNS policy. All owned services are reaped, guest inventory is empty and inputs stay unchanged.
+
+This is a verified certificate deploy-hook foundation. ACME account/order/challenge handling, issuance and renewal scheduling are still absent; automatic TLS and competitive performance wins are not claimed. Tests use owned certificates and a trusted owned DNS JSON fixture, not a managed CA or public DNS. See [operator setup and bounds](../../../CUSTOM_DOMAINS.md).
+
+Reconstruct the prior domain-verification source context, then apply these checksummed source-overlays. Compiled source hashes and the control-plane binary hash are recorded in build-context.json. The three provisional core files were excluded throughout.

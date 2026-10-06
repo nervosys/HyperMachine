@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "files": {
+    "clippy-linux.log": "9d965477063702bb118e74f28d6b2dbc33a79c5080cf9aeda853f3d1ab1d4d45",
+    "README.md": "8e335cfab262e201b2c298139fc6b0bc787d7f058253eb5faf649f94a7de7a32",
+    "sandbox_vm.rs": "bf305903b850a6343f14d79cfdc86561694ad5d833ae8a94e182acf6e377ecc4",
+    "sandbox_vm_mcp.rs": "fba0c4a19956a6cd70fc183d485831fb8a7e424ab66cc1774c529f6d912232bb",
+    "sandbox_vm_mcp_http.rs": "8df0c614af75d7e2787c858d611fa732cf9f4120ccb470fb7af96a90437b5054",
+    "source-context.json": "b9fe57a7def520e89217981779a437b4339b3844a04558a51eb6a2c79f40a9d3",
+    "tests-linux.log": "00fd0a83fd5cf75c161cea986df89036fac1c38d5a959c36d60846d4976661bf"
+  }
+}

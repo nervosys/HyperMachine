@@ -1,0 +1,13 @@
+# Real KVM private receiving TCP verification
+
+The corrected owned TLS/Redis/control/daemon/CLI/native-gateway fixture passes **21 checks** with zero remaining guests and all daemon, control/Redis, CLI and gateway processes reaped. The private phase creates source and other-owner KVM guests and connects an owned host mTLS client to the receiving node. The target TCP service runs inside a real KVM guest. Source guest gateway dialing is not involved.
+
+Exact target payload checks pass for 1,048,576 binary bytes and a 23-byte payload, followed by exact recovery payloads after source resume and store restoration. Wrong cluster authentication returns 401; duplicate context and a wrong path port return 400. Wrong source node, cross-owner/tag routes, stale source/target generations, removed membership and paused/deleted source identities return 403.
+
+Six live streams close after source rejoining, cross-network replacement, target membership removal, source pause, Redis GET refusal and source deletion. Measured waits from the completed mutation/API operation to observed stream closure range from 950.95 to 998.27 ms in this cohort. These are functional observations from one same-node cohort, not a revocation SLA or competitor performance benchmark. The Redis fault changes only the ephemeral owned server's default GET permission and restores it in a finally block.
+
+The run also retains the existing native public TCP/UDP and lifecycle checks. The final daemon is `/var/tmp/hm-private-receiving-node-v2`, SHA-256 `44e740b28b6c12a68eeb41832063c4c31f43d6ad937331cdbb878914ee6bc521`. The membership-capable control plane is `/var/tmp/hm-private-receiving-control-v1`, SHA-256 `23a0a1c13714bf8b3cbec8aa0b20d547194db3ca4db95631095f970f9daffad4`. Exact commands, input hashes, checker, logs and terminal cleanup report are retained here. The 134-file root/isolate source catalog and separately accepted isolated core hashes are revalidated; protected root core sources are neither read nor built.
+
+The first fixture attempt sent empty JSON lifecycle bodies and stopped with HTTP 400 at source pause. Its stdout is retained as excluded evidence; it has no terminal structured cleanup report and proves no full-cohort success. The corrected fixture supplies valid JSON and reruns the entire cohort.
+
+Remaining limits: no source guest gateway or private DNS/address allocation, cross-node private tunnel, private TLS half-close, 128-session saturation, relay task abort or managed fleet/crash durability proof. This verifies the receiving path and its same-node source identity checks; VM-to-VM tag networks remain absent as a complete guest-facing feature. No across-the-board feature/performance advantage is claimed.

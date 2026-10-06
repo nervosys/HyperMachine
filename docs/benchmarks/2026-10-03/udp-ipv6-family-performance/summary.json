@@ -1,0 +1,277 @@
+{
+  "inputs_sha256": {
+    "checker": "fee1275c7e65eed493870938f664546240c01b407b9e87972d271708f6e19e30",
+    "baseline": "096bc74df05b953b5a857bcd8b494630abf5f954ac3266a5e734bf102d34155e",
+    "candidate": "096bc74df05b953b5a857bcd8b494630abf5f954ac3266a5e734bf102d34155e",
+    "daemon": "209c7ea9fe95a0390f84f7201417877b1ad1306fe10cea1892a09c1806a55b3b",
+    "control_plane": "58a5363bc285aefb13e6f9ecfff6e129cc40da8daaba07c3c13b83a25532e82e",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "508d95c3a07849c72ab41b152e7dbaf5157f3eee446e0fbeffdc3e26353d9887"
+  },
+  "input_paths": {
+    "checker": "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py",
+    "baseline": "/var/tmp/hm-udp-ipv6-aligned-cli",
+    "candidate": "/var/tmp/hm-udp-ipv6-aligned-cli",
+    "daemon": "/var/tmp/hm-udp-ipv6-aligned-node",
+    "control_plane": "/var/tmp/hm-udp-ipv6-aligned-control",
+    "kernel": "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+    "initrd": "/var/tmp/hm-udp-ipv6-guest.cpio.gz"
+  },
+  "configurations": {
+    "baseline": {
+      "guest_ipv6": false,
+      "local_ipv6": false
+    },
+    "candidate": {
+      "guest_ipv6": true,
+      "local_ipv6": false
+    }
+  },
+  "comparison_kind": "configuration",
+  "peer_count": 8,
+  "payload_bytes": 4096,
+  "samples_per_peer": 1000,
+  "cohorts": [
+    {
+      "engine": "baseline",
+      "configuration": {
+        "guest_ipv6": false,
+        "local_ipv6": false
+      },
+      "cohort": "0-baseline",
+      "measured_rate": 3895.4071626934597,
+      "peers": [
+        {
+          "peer": 0,
+          "p50_ms": 1.999733,
+          "p95_ms": 2.654466,
+          "p99_ms": 3.111285
+        },
+        {
+          "peer": 1,
+          "p50_ms": 1.9951655000000001,
+          "p95_ms": 2.77474,
+          "p99_ms": 3.111288
+        },
+        {
+          "peer": 2,
+          "p50_ms": 2.0116959999999997,
+          "p95_ms": 2.74371,
+          "p99_ms": 3.268015
+        },
+        {
+          "peer": 3,
+          "p50_ms": 2.0040895,
+          "p95_ms": 2.722551,
+          "p99_ms": 3.127212
+        },
+        {
+          "peer": 4,
+          "p50_ms": 2.0143104999999997,
+          "p95_ms": 2.751532,
+          "p99_ms": 3.115177
+        },
+        {
+          "peer": 5,
+          "p50_ms": 1.9972375,
+          "p95_ms": 2.665822,
+          "p99_ms": 3.162215
+        },
+        {
+          "peer": 6,
+          "p50_ms": 2.000539,
+          "p95_ms": 2.711365,
+          "p99_ms": 3.083546
+        },
+        {
+          "peer": 7,
+          "p50_ms": 2.010052,
+          "p95_ms": 2.699076,
+          "p99_ms": 3.071062
+        }
+      ]
+    },
+    {
+      "engine": "candidate",
+      "configuration": {
+        "guest_ipv6": true,
+        "local_ipv6": false
+      },
+      "cohort": "1-candidate",
+      "measured_rate": 3952.9962673798204,
+      "peers": [
+        {
+          "peer": 0,
+          "p50_ms": 1.968433,
+          "p95_ms": 2.710322,
+          "p99_ms": 3.091851
+        },
+        {
+          "peer": 1,
+          "p50_ms": 1.9836475,
+          "p95_ms": 2.664228,
+          "p99_ms": 3.005076
+        },
+        {
+          "peer": 2,
+          "p50_ms": 1.9671105,
+          "p95_ms": 2.603775,
+          "p99_ms": 2.930515
+        },
+        {
+          "peer": 3,
+          "p50_ms": 1.9538125,
+          "p95_ms": 2.648886,
+          "p99_ms": 3.044786
+        },
+        {
+          "peer": 4,
+          "p50_ms": 1.9612384999999999,
+          "p95_ms": 2.671729,
+          "p99_ms": 3.081205
+        },
+        {
+          "peer": 5,
+          "p50_ms": 1.964542,
+          "p95_ms": 2.65976,
+          "p99_ms": 3.088179
+        },
+        {
+          "peer": 6,
+          "p50_ms": 1.999803,
+          "p95_ms": 2.650343,
+          "p99_ms": 3.055387
+        },
+        {
+          "peer": 7,
+          "p50_ms": 1.9882835,
+          "p95_ms": 2.664299,
+          "p99_ms": 3.056207
+        }
+      ]
+    },
+    {
+      "engine": "candidate",
+      "configuration": {
+        "guest_ipv6": true,
+        "local_ipv6": false
+      },
+      "cohort": "2-candidate",
+      "measured_rate": 3871.563250808023,
+      "peers": [
+        {
+          "peer": 0,
+          "p50_ms": 2.0031470000000002,
+          "p95_ms": 2.854231,
+          "p99_ms": 3.299254
+        },
+        {
+          "peer": 1,
+          "p50_ms": 2.010446,
+          "p95_ms": 2.777711,
+          "p99_ms": 3.299629
+        },
+        {
+          "peer": 2,
+          "p50_ms": 2.0218819999999997,
+          "p95_ms": 2.718848,
+          "p99_ms": 3.16529
+        },
+        {
+          "peer": 3,
+          "p50_ms": 2.0085759999999997,
+          "p95_ms": 2.786914,
+          "p99_ms": 3.309438
+        },
+        {
+          "peer": 4,
+          "p50_ms": 1.9991065,
+          "p95_ms": 2.701039,
+          "p99_ms": 3.09715
+        },
+        {
+          "peer": 5,
+          "p50_ms": 2.0031645,
+          "p95_ms": 2.769286,
+          "p99_ms": 3.2632
+        },
+        {
+          "peer": 6,
+          "p50_ms": 2.0101125,
+          "p95_ms": 2.727566,
+          "p99_ms": 3.221195
+        },
+        {
+          "peer": 7,
+          "p50_ms": 1.9921725000000001,
+          "p95_ms": 2.796272,
+          "p99_ms": 3.273417
+        }
+      ]
+    },
+    {
+      "engine": "baseline",
+      "configuration": {
+        "guest_ipv6": false,
+        "local_ipv6": false
+      },
+      "cohort": "3-baseline",
+      "measured_rate": 3936.8683496189888,
+      "peers": [
+        {
+          "peer": 0,
+          "p50_ms": 1.969839,
+          "p95_ms": 2.706771,
+          "p99_ms": 3.312207
+        },
+        {
+          "peer": 1,
+          "p50_ms": 1.9789595,
+          "p95_ms": 2.687823,
+          "p99_ms": 3.197765
+        },
+        {
+          "peer": 2,
+          "p50_ms": 1.9651450000000001,
+          "p95_ms": 2.70698,
+          "p99_ms": 3.223676
+        },
+        {
+          "peer": 3,
+          "p50_ms": 1.98212,
+          "p95_ms": 2.727525,
+          "p99_ms": 3.139003
+        },
+        {
+          "peer": 4,
+          "p50_ms": 1.965867,
+          "p95_ms": 2.708617,
+          "p99_ms": 3.209189
+        },
+        {
+          "peer": 5,
+          "p50_ms": 1.96018,
+          "p95_ms": 2.692253,
+          "p99_ms": 3.304276
+        },
+        {
+          "peer": 6,
+          "p50_ms": 1.9669775,
+          "p95_ms": 2.682795,
+          "p99_ms": 3.406892
+        },
+        {
+          "peer": 7,
+          "p50_ms": 1.9880045000000002,
+          "p95_ms": 2.68605,
+          "p99_ms": 3.166652
+        }
+      ]
+    }
+  ],
+  "average_rates": {
+    "baseline": 3916.137756156224,
+    "candidate": 3912.2797590939217
+  },
+  "rate_change_percent": -0.09851535626491659
+}

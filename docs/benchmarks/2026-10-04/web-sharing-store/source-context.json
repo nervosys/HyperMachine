@@ -1,0 +1,17 @@
+{
+  "candidate_sha256": {
+    "crates/hv2-cluster/src/store.rs": "b80f15b4e1f12b1d6c9c74a6d3fb2491a554697b9ab717d428dffef94a463187",
+    "crates/hv2-cluster/src/web_sharing.rs": "da4414e6bed69d84419a4b9de5fa9d53fd51af6637946e24ea4ab0825a53db37"
+  },
+  "tested_sha256": {
+    "crates/hv2-cluster/src/store.rs": "c8f97e15e36be337ed29b611e4a9696d5f990674dc8613d632a00c7a55c7f6cc",
+    "crates/hv2-cluster/src/web_sharing.rs": "da4414e6bed69d84419a4b9de5fa9d53fd51af6637946e24ea4ab0825a53db37"
+  },
+  "difference": "Only the sharing interface doc comment was corrected after the full test. Exact difference verified.",
+  "commands": [
+    "cargo test --locked -p hv2-cluster --lib web_sharing -- --nocapture",
+    "cargo test --locked -p hv2-cluster --lib -- --nocapture --test-threads=1"
+  ],
+  "isolated_tree": "/var/tmp/hm-egress-log-mA2CCL",
+  "protected_guards": "Accepted isolated protected hashes checked before/after each run. Root protected implementations not read or built."
+}

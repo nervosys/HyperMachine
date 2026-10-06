@@ -1,0 +1,21 @@
+{
+  "linux_tests_passed": 19,
+  "windows_portable_tests_passed": 17,
+  "windows_linux_only_skipped": 2,
+  "scheduled_emulator_checks": 16,
+  "manual_http_regression_checks": 14,
+  "managed_storage_verified": false,
+  "sha256": {
+    "backup-snapshot-store.py": "ded00f18a08abd2d46b001afd54b5f97c2c0e3cbd082bd91802eba7b3f12877a",
+    "check-object-backup.py": "ece179a42c4025e1f3c2cafaf717dcdb67fbd08fd54a8d58e0cbce7362203f32",
+    "check-scheduled-backups.py": "baff6f09c9c856d22b6d07df9b5a4004f96810393ab66963eac10b594efae093",
+    "manual-backup-report.json": "7c4bc0d9d50e606a3a1c895ee13df41b38db4eeffac45466b3b971f640c30834",
+    "README.md": "5faa287aa04fe5d560d278fbe0389e101e65f9632f11ffe7a4c8135cbc3dbac9",
+    "retain-object-backups.py": "5dc3efa5ddfd9914ef5bb7b6cbe930a89bd39e13bf3d210339fb1af1028b9be2",
+    "schedule-object-backups.py": "0b6cc59c05ab3484f9c73c4c6a95d7bfaefbb3f74bb36798376833d2be7b639f",
+    "scheduled-report.json": "8ffb909060a0f9caa08641ac258f84766efed3e816d8ccbb9d88d79da516ace3",
+    "test-schedule-object-backups.py": "1ab62c365307b96ebece88775f599fdb8cfa5dd6ecb861be1a230c03140d4b6f",
+    "tests-linux.log": "9e8167575aa23924f97ca73816625a720408f45b3d1ad5e9809ee3bea9234551",
+    "tests-windows.log": "10eb13f622bfeab702c2ce9ea14e06ab0dc398dd4a01a0436537f34c7c6da483"
+  }
+}

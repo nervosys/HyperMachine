@@ -1,0 +1,13 @@
+{
+  "sha256": {
+    "build-context.json": "e24e774e4da480afc98861b017b30e37a6a57e646e8e6b9e8e428b973f6f7e17",
+    "build.txt": "94c50ce824d97700ae16a4c3b6bcb58636b8657777cb225d3c6001abd28d759a",
+    "check-daemon-secret-policy.py": "4d04ab40e7b2608e1212a3f09fe59ba216282acd77642cdf88a85b4c78bd298e",
+    "gateway-mod.rs": "ac578baa79a2745ebee0b2e63859aa501ac41728d1063053dba381e1ac7ad0cd",
+    "main.rs": "434f17c83d3eaf2bcd7c23e1a2cc2b5f42730ae9eb358c19e7a331f7dd4f9675",
+    "mitm.rs": "51c721daa9467295ee1f7702faf504006d1eac73d7f55e08ea8d8a97cb749e65",
+    "README.md": "d7297fba1a0fe3cdbe7883c96d7f799afbf6339cb6ab8439821fd5fae6ffaf4c",
+    "result.json": "3335099fe303b6eb9e35ec84f56d44051eab8c825e1fb28b73ef51f938f8218d",
+    "secret_substitution.rs": "95c042e291ce78423050701cd318b8edc96cb9e8f2e46aa76ae4b8b257706b86"
+  }
+}

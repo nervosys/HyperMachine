@@ -145,6 +145,217 @@ paused sandbox IDs through the normal API. Layered VM snapshot headers point at
 the recovered base images; ordinary volume/application files ending in `.snap`
 are preserved as files rather than interpreted as VM snapshots.
 
+## Durable scheduled offline capture
+
+`tools/schedule-object-backups.py` is a Linux one-shot schedule runner. Invoke
+`run` periodically from an operator-owned timer or job worker. It evaluates a
+fixed UTC anchor and interval, captures the latest due slot once, and coalesces
+missed slots into one current backup. It never pretends to capture historical
+guest state. Keep clocks synchronized. It does **not** pause guests or stop nodes:
+participating live nodes retain their shared lock, and capture is refused until
+every store writer is offline. Arrange maintenance windows separately.
+
+Install the existing pinned backup dependencies. Use a version-enabled bucket
+and an operator profile/workload role with backup permissions plus
+`s3:GetBucketVersioning`; the runner requires an `Enabled` response from
+[GetBucketVersioning](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketVersioning.html).
+Reconciliation also reads an exact object version.
+Credentials stay in the SDK provider chain. Configure an absolute key-file path
+outside the store; never put the key bytes or credentials in configuration:
+
+```json
+{
+  "start_at": "2026-10-02T00:00:00Z",
+  "interval_seconds": 86400,
+  "store": "/srv/hypermachine/snapshots",
+  "bucket": "operator-backups",
+  "prefix": "cluster-a/",
+  "key_file": "/secure/operator/backup.key",
+  "region": "us-east-1",
+  "compression_level": 1
+}
+```
+
+`endpoint`, `work_dir`, `max_expanded_bytes`, `multipart_threshold_mib` and
+`multipart_part_mib` optionally use the same semantics/defaults as manual
+backup. Unknown fields and invalid policy values are refused. Changing any
+configuration value requires a separate state directory; this prevents silently
+mixing buckets, prefixes or schedules. Keep old state and receipts independently.
+
+```sh
+python3 tools/schedule-object-backups.py run \
+  --config /secure/operator/backup-schedule.json \
+  --state /var/lib/hypermachine-backups
+python3 tools/schedule-object-backups.py status \
+  --config /secure/operator/backup-schedule.json \
+  --state /var/lib/hypermachine-backups
+```
+
+The state directory's parent must already exist. The runner creates a private,
+operator-owned directory outside the snapshot store and refuses symlinks or
+unmanaged catalog files. Its persistent `.schedule.lock` prevents overlapping
+invocations on the tested local Linux filesystem. Journal writes are private,
+atomic and synced along with directory entries. No filesystem-independent or
+distributed-lock guarantee follows. `status` reports state and repairs the
+derived catalog locally; it does not contact S3.
+
+Run the same `run` command regularly, for example from a once-per-minute cron
+entry using absolute interpreter/script paths. Each eligible capture gets a
+new UUID object key and the manual helper's conditional upload. A known failure
+before upload can be retried at a later poll with a new key. The runner records
+the attempted ciphertext checksum and size **before** the first upload request.
+A pending or uncertain upload blocks later captures, including after restart.
+An upload reply or local publication failure is not treated as permission to
+send another backup automatically. Preserve each command's JSON result.
+
+After inspecting the uncertain object and its versions, reconcile a known exact
+version against the independently journaled ciphertext identity:
+
+```sh
+python3 tools/schedule-object-backups.py confirm \
+  --config /secure/operator/backup-schedule.json \
+  --state /var/lib/hypermachine-backups --version-id VERIFIED_VERSION_ID
+```
+
+Confirmation downloads that version and verifies its response ID, full byte count
+and checksum before registering it. It retains the original attempt time. If
+the object cannot be reconciled, an operator may explicitly advance the cursor:
+
+```sh
+python3 tools/schedule-object-backups.py skip \
+  --config /secure/operator/backup-schedule.json \
+  --state /var/lib/hypermachine-backups --attempt-sha256 REVIEWED_ATTEMPT_SHA256 \
+  --reason backup_unrecoverable
+```
+
+`object_absence_verified` is another operator-recorded reason after independent
+inspection. Skip requires the exact current attempt digest, retains its uncertain
+receipt in history, and deletes nothing. It does not automatically verify absence
+or register a recovery point. Only a later slot becomes eligible.
+
+Confirmed receipts produce `catalog.json` for the retention helper. `journal.json`
+is authoritative: a later invocation repairs catalog publication interrupted
+after journal commit. Do not edit the derived catalog. Manage pins durably:
+
+```sh
+python3 tools/schedule-object-backups.py pin \
+  --config /secure/operator/backup-schedule.json \
+  --state /var/lib/hypermachine-backups --object RECEIPT_OBJECT \
+  --version-id RECEIPT_VERSION_ID
+# The same exact identity with the unpin command explicitly removes its pin.
+```
+
+Use the scheduler's `retain` command for retention of its registered backups.
+It acquires the same persistent state lock as capture and pin changes, repairs
+the derived catalog from the journal, and holds the lock through verification
+and deletion. Planning is offline; deletion requires explicit `--apply`.
+
+```sh
+python3 tools/schedule-object-backups.py retain \
+  --config /secure/operator/backup-schedule.json \
+  --state /var/lib/hypermachine-backups \
+  --keep-newest 7 --older-than-days 30 --as-of 2026-10-02T00:00:00Z
+# Review the plan, then repeat the options with:
+# --apply --plan-sha256 PLAN_SHA256
+```
+
+A changed plan digest is refused before storage access. Capture does not run
+retention automatically. The standalone retention helper still requires external
+serialization when used with a scheduler catalog. Other clients and external S3
+lifecycle rules do not participate in this local lock. Protect and archive the
+journal; its history stops captures at 10,000 confirmed/skipped records.
+[Locked retention evidence](benchmarks/2026-10-02/locked-retention/README.md)
+covers offline planning, digest rejection, lock contention, exact-version deletion,
+pinned recovery, idempotence and continued capture in the owned emulator.
+
+[Scheduled capture verification](benchmarks/2026-10-02/scheduled-backups/README.md)
+covers actual encrypted CLI capture and restore, restart/coalescing, offline-lock
+refusal, ambiguous uploads, reconciliation, explicit skip, pins and catalog repair
+on owned S3 emulators. [Scheduled real KVM recovery](benchmarks/2026-10-02/scheduled-kvm/README.md) additionally verifies multipart capture, exact-version recovery, guest state, mounted volumes and named snapshots. Managed IAM/durability, coordinated guest maintenance and distributed filesystems remain unverified.
+
+## Receipt-driven version retention
+
+`tools/retain-object-backups.py` plans retention without contacting storage.
+`--apply` explicitly enables removal of expired **exact non-null versions**.
+This operator tool does not list the bucket or infer ownership from its contents:
+only confirmed, independently retained backup receipts enter its catalog.
+Unversioned/null IDs, uncertain upload receipts, duplicate versions, future or
+timezone-free dates and receipts outside the exact prefix are refused.
+
+Keep this catalog outside the store and bucket, protect it as operator state,
+and serialize catalog updates with retention runs. Register each confirmed
+backup receipt with its operator-recorded UTC creation time. Do not substitute
+an upload attempt receipt for a confirmed receipt. A catalog has this shape:
+
+```json
+{
+  "version": 1,
+  "bucket": "operator-backups",
+  "prefix": "cluster-a/",
+  "receipts": [
+    {
+      "created_at": "2026-10-02T00:00:00Z",
+      "pinned": true,
+      "receipt": {
+        "operation": "backup",
+        "success": true,
+        "object": "cluster-a/2026-10-02-unique.hmb",
+        "version_id": "RECEIPT_VERSION_ID",
+        "encrypted_bytes": 123456,
+        "sha256": "RECEIPT_SHA256"
+      }
+    }
+  ]
+}
+```
+
+The values in `receipt` come from the confirmed backup CLI output; replace the
+placeholders with its actual values. Retention keeps the newest configured
+count, all pinned recovery points, and all backups newer than the minimum age.
+Only entries outside all three protections expire. The count must be positive;
+an empty catalog is refused. Use a fixed `--as-of` when reviewing a plan:
+
+```sh
+python3 tools/retain-object-backups.py --catalog /secure/operator/catalog.json \
+  --keep-newest 7 --older-than-days 30 --as-of 2026-10-02T00:00:00Z
+# After reviewing the exact expired versions, repeat the same options and add:
+# --apply --plan-sha256 PLAN_SHA256
+```
+
+The optional plan digest rejects changed dates, receipts, pins or policies.
+Without `--as-of`, evaluation uses current UTC time; repeating the reviewed
+digest requires the same evaluation time. An operator scheduler may invoke
+`--apply` with its authorized policy and current catalog, retaining each result
+independently. This does not schedule backup capture, pause guests, or stop nodes.
+
+Before any deletion, the tool downloads every retained recovery point and every
+expired candidate, verifies the response version, byte count and full ciphertext
+SHA-256 against its receipt, then closes the stream. This needs download bandwidth
+and S3 read permissions even for large multipart backups; it does not decrypt or
+require the encryption key. A missing or damaged retained backup blocks all
+deletions. Only a candidate's `NoSuchVersion` response is treated as already absent
+for idempotent reruns. Other errors fail closed.
+
+Deletion sends `Bucket`, `Key` and the recorded `VersionId`, never an unversioned
+delete, a listing-derived target or a delete-marker removal. AWS documents that
+deleting a specific version requires `s3:DeleteObjectVersion` and permanently
+removes that version. See [DeleteObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObject.html).
+No object-lock governance bypass is requested. Configure bucket IAM, object lock,
+replication and lifecycle policies independently.
+
+Requests are not automatically retried. An exception, interrupt or mismatched
+delete acknowledgement stops the run and reports confirmed progress plus the
+exact `delete_unconfirmed` identity. The version might already be gone; preserve
+the result and inspect it before retrying. An interrupted deletion returns 130.
+Concurrent external lifecycle expiry or deletion can invalidate recovery points
+after preflight; this tool is not a transaction or durability guarantee.
+
+[Retention verification](benchmarks/2026-10-02/backup-retention/README.md) covers
+exact-version deletion, reused keys, delete markers, pins, adjacent-prefix and
+unregistered-version preservation, idempotence and failure handling. It uses an
+owned in-process Moto S3 emulator, not managed S3 or IAM enforcement. No existing
+backup format, guest state or accepted daemon is changed.
+
 ## Format and limits
 
 The v1 bundle is a gzip tar containing a bounded JSON manifest and regular file
@@ -186,3 +397,5 @@ retention automation, service availability or a performance win.
 verifies a 75-part object of 5,002,521,063 ciphertext bytes, identical recovery of
 5,001,000,000 plaintext bytes, scoped failure cleanup and ambiguous completion,
 and five-part recovery of real KVM paused state, volumes and named snapshots.
+
+The [scheduled retention lifecycle evidence](benchmarks/2026-10-02/scheduled-retention-lifecycle/README.md) verifies pruning through a scheduler-generated catalog, repeat cleanup, pinned restore after pruning, and subsequent capture in the owned S3 emulator. Historical deleted receipts remain in the journal; expired missing versions are idempotent cleanup outcomes.

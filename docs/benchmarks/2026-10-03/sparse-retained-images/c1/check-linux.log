@@ -1,0 +1,14 @@
+published-runtime-claim: rejected
+changed-artifact: rejected
+missing-outer-run: rejected
+wrong-order: rejected
+missing-source-binding: rejected
+diagnostic-scored: rejected
+wrong-binary: rejected
+missing-guest-sample: rejected
+failed-guest-cleanup: rejected
+unmatched-clock-rng: rejected
+missing-full-named-image: rejected
+invalid-capture-cost: rejected
+uncorrected-resource-phase: rejected
+real comparison accepted; 13 damaged contracts rejected

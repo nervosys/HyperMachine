@@ -1,0 +1,63 @@
+[package]
+name = "hm-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "HyperMachine CLI - Unified hypervisor management for Type 1 and Type 2 modes"
+
+[lib]
+name = "hm_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "hm"
+path = "src/main.rs"
+
+[[example]]
+name = "agent_vm_workflow"
+path = "examples/agent_vm_workflow.rs"
+
+[dependencies]
+hv2-core = { path = "../hv2-core", version = "1.1.0" }
+hv2-agent = { path = "../hv2-agent", version = "1.1.0" }
+hv2-sandbox = { path = "../hv2-sandbox", version = "1.1.0" }
+hv2-jobs = { path = "../hv2-jobs", version = "1.1.0" }
+# hv2-api = { path = "../hv2-api" }  # Requires protoc - enable when needed
+
+tokio = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }
+colored = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+dirs = "5.0"
+reqwest = { workspace = true, features = ["rustls-tls", "stream"] }
+
+# MCP HTTP server
+axum = { workspace = true }
+tower-http = { version = "0.7", features = ["cors"] }
+
+# Shell completions
+clap_complete = "4.5"
+tempfile = "3.10"
+base64 = "0.22"
+uuid = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+
+[lints]
+workspace = true

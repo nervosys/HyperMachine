@@ -3,6 +3,8 @@
 import argparse
 import asyncio
 import base64
+from contextlib import asynccontextmanager
+import ssl
 from datetime import timedelta
 import hashlib
 import importlib.metadata
@@ -22,12 +24,27 @@ async def check(args):
     cancellation = None
     key = os.environ.get("HV2_API_KEY", "")
     command = ["sandbox", "vm", "--endpoint", args.api_url, "mcp"]
+    if args.api_ca:
+        command.extend(["--api-ca-cert",str(args.api_ca)])
     if args.envd_proxy:
         command.extend(["--envd-endpoint", args.envd_proxy, "--envd-domain", "sandbox.local"])
     params = StdioServerParameters(command=str(args.binary.resolve()),
         args=command,
         env={"HV2_API_KEY": key})
-    async with stdio_client(params) as streams:
+    @asynccontextmanager
+    async def connection():
+        if args.http_url:
+            import httpx
+            from mcp.client.streamable_http import streamablehttp_client
+            context = ssl.create_default_context(cafile=str(args.http_ca))
+            def factory(headers=None, timeout=None, auth=None):
+                return httpx.AsyncClient(headers=headers, timeout=timeout, auth=auth, verify=context, follow_redirects=False)
+            async with streamablehttp_client(args.http_url, headers={"Authorization":"Bearer "+os.environ["HM_MCP_TOKEN"]}, httpx_client_factory=factory) as (read, write, _):
+                yield read, write
+        else:
+            async with stdio_client(params) as streams:
+                yield streams
+    async with connection() as streams:
         writer = ObservedWrite(streams[1])
         async with ClientSession(streams[0], writer, read_timeout_seconds=timedelta(seconds=150)) as session:
             await session.initialize()
@@ -72,7 +89,7 @@ async def check(args):
                     return value
                 await command(parent, f"printf '%s' '{marker}' > '{path}'; cat '{path}'", marker)
                 if args.check_cancellation:
-                    cancellation = await check_cancellation(session, writer, args.api_url, parent, key)
+                    cancellation = await check_cancellation(session, writer, args.api_url, parent, key, ssl.create_default_context(cafile=str(args.api_ca)) if args.api_ca else None)
                     events.extend(["sandbox_exec_cancelled", "ping_after_cancel"])
                 if args.envd_proxy:
                     payload = bytes(range(256)) * 1024
@@ -125,6 +142,7 @@ async def check(args):
                         errors.append("known sandbox cleanup failed")
     report = {"schema_version":1,"client":"official-mcp-python",
         "client_version":importlib.metadata.version("mcp"),
+        "transport":"verified-https-json" if args.http_url else "stdio",
         "harness_sha256":hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "binary_sha256":hashlib.sha256(args.binary.read_bytes()).hexdigest(),
         "environment":args.environment,"operations":events,"errors":errors,
@@ -142,4 +160,10 @@ if __name__ == "__main__":
     parser.add_argument("--environment", required=True)
     parser.add_argument("--envd-proxy", help="Enable binary file tools through this operator-selected proxy")
     parser.add_argument("--check-cancellation", action="store_true", help="Verify in-flight client cancellation and continued remote work")
-    raise SystemExit(asyncio.run(check(parser.parse_args())))
+    parser.add_argument("--api-ca", type=Path, help="Trusted CA for independent cancellation probes to the sandbox API")
+    parser.add_argument("--http-url", help="Use an already running MCP HTTP endpoint instead of stdio")
+    parser.add_argument("--http-ca", type=Path, help="Trusted CA for the MCP HTTPS endpoint")
+    args = parser.parse_args()
+    if args.http_url and not args.http_ca:
+        parser.error("HTTP verification requires --http-ca")
+    raise SystemExit(asyncio.run(check(args)))

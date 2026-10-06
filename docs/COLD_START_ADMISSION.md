@@ -25,3 +25,7 @@ retain two repeats: sixteen lowered pooled P99 in both, but paired tail improvem
 was inconsistent in the repeat and paired means split evenly overall. Both settings
 improved local median readiness over Firecracker in their respective cohorts, with
 worse P99 and held process memory. These measurements establish no universal budget.
+
+[Current optimized-binary uncapped/sixteen-slot repeats](benchmarks/2026-10-03/current-admission-sixteen/README.md) at 100 simultaneous one-vCPU starts passed 800/800 with sixteen slots versus 571/800 uncapped on eight allowed CPUs. Queueing is included. Sixteen improved paired mean/P50 in four of five fully successful pairs, but P99 in only two; pooled successful P99 was higher in both cohorts. This is a tested option for that workload, with a reliability/tail tradeoff, not a universal recommendation. The disabled default remains unchanged. Failed starts remain in the evidence, and successful-only latency summaries cannot establish a reliability SLA.
+
+Idle eviction (`--evict-idle-after`) excludes guests whose local registration is still pending. [Controlled KVM evidence](benchmarks/2026-10-03/pending-registration-idle-eviction/README.md) verifies that a newer eligible idle guest can release a slot while an older uncertain guest stays preserved for reconciliation. The cold-start boot budget and idle-eviction policy remain separate controls.

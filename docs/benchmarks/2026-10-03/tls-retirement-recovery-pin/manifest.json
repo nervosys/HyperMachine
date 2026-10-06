@@ -1,0 +1,8 @@
+{
+  "sha256": {
+    "check-acme-issuance.py": "5c250b132c6d7f8377658dbc7931f18b8cb3a8919141f56ab6f30de326fe6063",
+    "deploy-tls-certificate.py": "e4265ff40567a831abf387a5fad10e200ac6c32d7966c274953b7609c53c284c",
+    "README.md": "51f2104612e6b5bf42918822c71748713604fe202cbe65c9062784388e925a24",
+    "result.json": "14bc59e2fa087b47bad06e01e47d23fe8df8e54c230398a844a7eaf0a9eb5b36"
+  }
+}

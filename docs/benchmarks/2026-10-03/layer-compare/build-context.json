@@ -1,0 +1,17 @@
+{
+  "intervention": "layered_restore_compare_before_write",
+  "production_runtime_changed": false,
+  "source_files_verified": 550,
+  "candidate_source_sha256": {
+    "crates/hv2-core/src/vm.rs": "297c9a7c65a3ff753c53d158df377386d966aa93baafc8e24db9e62ca54677ca"
+  },
+  "adoption_requirements": [
+    "Layered guest state and lifecycle",
+    "Matched restore latency and held memory",
+    "No capture or snapshot format change"
+  ],
+  "baseline_sha256": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+  "candidate_sha256": "ba1eed2d5bbbd5a18bbfe5268d99280e635bd26ad6b9bf9b850e03fb0202e4e9",
+  "build_exit_code": 0,
+  "runtime_change_adopted": false
+}

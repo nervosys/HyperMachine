@@ -7,6 +7,7 @@ pub mod egress;
 pub mod gateway;
 pub mod nat;
 pub mod network_policy;
+pub mod secret_substitution;
 pub mod tap;
 pub mod virtio;
 pub mod vswitch;

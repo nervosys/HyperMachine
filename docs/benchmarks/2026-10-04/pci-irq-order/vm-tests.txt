@@ -1,0 +1,56 @@
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.14s
+     Running unittests src/lib.rs (/var/tmp/hm-object-backup/target/debug/deps/hv2_core-e659a1d473ebec97)
+
+running 49 tests
+test backends::kvm::tests::captured_kvm_events_restore_pending_handoffs ... ignored, requires /dev/kvm; run explicitly with --ignored --nocapture
+test backends::kvm::tests::event_payload_matches_the_x86_abi_and_rejects_truncation ... ok
+test backends::kvm::tests::interrupt_events_require_validity_flags_for_optional_fields ... ok
+test backends::kvm::tests::restored_deadline_timer_wakes_halted_guest ... ignored, requires /dev/kvm; run explicitly with --ignored --nocapture
+test backends::kvm::tests::resetting_guest_memory_without_a_vm_reports_false ... ok
+test backends::kvm::tests::singleton_topology_preserves_cache_geometry_and_level_terminators ... ok
+test vm::tests::a_forbidden_shared_region_is_refused ... ok
+test vm::tests::a_custom_network_window_is_the_one_the_guest_is_told_about ... ok
+test vm::tests::a_custom_window_is_the_one_the_guest_is_told_about ... ok
+test vm::tests::a_frame_queued_for_a_guest_with_no_buffers_is_kept_not_published ... ok
+test vm::tests::a_guest_enumerating_pci_finds_the_vsock_device ... ok
+test vm::tests::a_register_window_inside_guest_ram_is_refused ... ok
+test vm::tests::a_second_network_device_is_refused ... ok
+test vm::tests::a_network_device_and_a_vsock_device_do_not_collide ... ok
+test vm::tests::a_second_vsock_device_is_refused ... ok
+test vm::tests::a_network_window_inside_guest_ram_is_refused ... ok
+test vm::tests::aborting_pause_future_resumes_parked_owner_with_reserved_slot ... ok
+test vm::tests::affinity_empty_is_valid ... ok
+test vm::tests::a_vm_has_no_vsock_device_until_one_is_attached ... ok
+test vm::tests::affinity_rejects_duplicate_core ... ok
+test vm::tests::affinity_rejects_duplicate_vcpu ... ok
+test vm::tests::affinity_rejects_out_of_range_core ... ok
+test vm::tests::affinity_valid_mapping_passes ... ok
+test vm::tests::resolve_memory_node_prefers_explicit ... ok
+test vm::tests::a_second_vsock_device_is_refused_whichever_transport_asks ... ok
+test vm::tests::attaching_a_network_device_maps_it_where_the_guest_will_look ... ok
+test vm::tests::attaching_a_vsock_device_maps_it_where_the_guest_will_look ... ok
+test vm::tests::vm_new_rejects_invalid_memory_numa_node ... ok
+test vm::tests::attaching_over_pci_adds_no_kernel_argument ... ok
+test vm::tests::the_guest_reads_a_network_device_id_out_of_the_window ... ok
+test vm::tests::affinity_rejects_unknown_vcpu ... ok
+test vm::tests::test_vcpu_stats ... ok
+test vm::tests::test_parallel_config ... ok
+test vm::tests::test_vm_creation ... ok
+test vm::tests::notifying_a_vm_with_no_network_device_does_nothing ... ok
+test vm::tests::pause_requires_every_owner_and_reserves_cancellation_rollback ... ok
+test vm::tests::test_vm_lifecycle ... ok
+test vm::tests::resolve_memory_node_none_without_affinity_or_explicit ... ok
+test vm::tests::resolve_memory_node_derives_from_pinned_core ... ok
+test vm::tests::a_reserved_guest_context_id_is_refused ... ok
+test vm::tests::sharing_is_permitted_by_default ... ok
+test vm::tests::vm_new_rejects_invalid_affinity ... ok
+test vm::tests::pause_timeout_and_owner_exit_allow_rollback ... ok
+test vm::tests::a_vm_has_no_network_device_until_one_is_attached ... ok
+test vm::tests::failed_pause_reservation_sends_no_partial_commands ... ok
+test vm::tests::the_pci_vsock_bar_window_is_mapped_as_mmio ... ok
+test backends::kvm::tests::a_second_vm_on_one_backend_is_refused ... ok
+test backends::kvm::tests::resetting_guest_memory_really_zeroes_it ... ok
+test backends::kvm::tests::shutdown_frees_the_backend_to_own_a_vm_again ... ok
+
+test result: ok. 47 passed; 0 failed; 2 ignored; 0 measured; 2262 filtered out; finished in 0.17s
+

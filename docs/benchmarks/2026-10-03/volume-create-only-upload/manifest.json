@@ -1,0 +1,13 @@
+{
+  "sha256": {
+    "api.json": "fca8ce4e5d5ecb0e2075a836b99a457707300cd27dee63e2e7ee93c500905fc5",
+    "build.log": "d4783c3f0c6813d5006d546633a09dddfcaf4e0f208620a1b118deee2aa4c822",
+    "check-volume-creation.py": "78b75bcf930a3dc73544fc3d4b905cc0d4cf5d22ec0795f5d307bd98293b42d5",
+    "client-tests.log": "55fe4444ef46a89b79eec13e932635d17440a036c5402384c7a5adbbb8072316",
+    "daemon-tests.log": "fdecc2250c617c667a22486927c3ff45789b71af83a5ce4016ffbe04ec76c8e0",
+    "README.md": "e4f5ad87baa620ae378cc6f188afa2e3dd677dd01aa7f29a978b6af11db9c7d4",
+    "test-volume-upload-client.py": "1214c3315e6f77b64451761472b8aad03a50554d37a91bcee915e6913d5c9b3b",
+    "upload-volume-file.py": "cc56e80f8bc8ac8835f0dd1eac99e4a95e2c715a38a51273b700fd400b471fd6",
+    "volumes.rs": "be2fb15680e912b6c360fcc993dd4b8120c70f676556a862566d1d981bb578f9"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "diagnostic_only": true,
+  "runtime_change_adopted": false,
+  "performance_win_established": false,
+  "accepted_source_files": 550,
+  "changed_sha256": {
+    "crates/hv2-core/src/boot/source.rs": "83a2f81adbac4a2789161cdf4fc2058fc15e88b49a0ac1397df9c9ec04c26b3b",
+    "crates/hv2-core/src/boot/linux.rs": "790365b9deb31bfa6fc2493e3d796786e1f8c7ef608674401515037b729e2e56"
+  },
+  "limitations": [
+    "process-wide allocator totals; concurrent activity can confound deltas",
+    "logging affects allocations and timing; exclude from rankings",
+    "allocator bytes are not resident memory or PSS"
+  ]
+}

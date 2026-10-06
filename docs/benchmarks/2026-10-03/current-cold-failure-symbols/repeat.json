@@ -1,0 +1,3235 @@
+{
+  "diagnostic_only": true,
+  "performance_comparison": false,
+  "artifact_sha256": {
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "failure_report": "1bd7aa7ab80e8e1e3a84b65e421a298168c8fd5c8d3545ec8edd9d1a4317cb92",
+    "coordinator": "f931fbb97bc2e577601d2a72d9449b482ae5f33a8055a1c09a93a8ff51174f13",
+    "harness": "0bcdc13351d54d4c9658bf034aa97f7d86d96d99375a2df04e4c94eaf8d3b610"
+  },
+  "retained_snapshots": [
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 0,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda520",
+      "state": "Runnable",
+      "tsc": 70667998720,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 1,
+      "failure_phase": "create",
+      "rip": "ffffffff81039d54",
+      "state": "Runnable",
+      "tsc": 69191049092,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 2,
+      "failure_phase": "create",
+      "rip": "ffffffff810e3058",
+      "state": "Runnable",
+      "tsc": 68362770697,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 3,
+      "failure_phase": "create",
+      "rip": "ffffffff81ed150b",
+      "state": "Runnable",
+      "tsc": 69342819920,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 4,
+      "failure_phase": "create",
+      "rip": "ffffffff810785c2",
+      "state": "Runnable",
+      "tsc": 69442217861,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 5,
+      "failure_phase": "create",
+      "rip": "ffffffff811f9cfd",
+      "state": "Runnable",
+      "tsc": 69488434353,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 6,
+      "failure_phase": "create",
+      "rip": "ffffffff81001af8",
+      "state": "Runnable",
+      "tsc": 68248604598,
+      "tsc_deadline": 68005275974,
+      "deadline_nonzero_at_or_before_tsc": true
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 7,
+      "failure_phase": "create",
+      "rip": "ffffffff810e86ab",
+      "state": "Runnable",
+      "tsc": 80087053637,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 8,
+      "failure_phase": "create",
+      "rip": "ffffffff81039c18",
+      "state": "Runnable",
+      "tsc": 69533368572,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 9,
+      "failure_phase": "create",
+      "rip": "ffffffff8127cb00",
+      "state": "Runnable",
+      "tsc": 81536338930,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 10,
+      "failure_phase": "create",
+      "rip": "ffffffff81083f74",
+      "state": "Runnable",
+      "tsc": 70601663986,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 11,
+      "failure_phase": "create",
+      "rip": "ffffffff81ed150b",
+      "state": "Runnable",
+      "tsc": 69240221494,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 12,
+      "failure_phase": "create",
+      "rip": "ffffffff81119814",
+      "state": "Runnable",
+      "tsc": 68450997206,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 13,
+      "failure_phase": "create",
+      "rip": "ffffffff8325812a",
+      "state": "Runnable",
+      "tsc": 68242821618,
+      "tsc_deadline": 67944510770,
+      "deadline_nonzero_at_or_before_tsc": true
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 14,
+      "failure_phase": "create",
+      "rip": "ffffffff81ed150b",
+      "state": "Runnable",
+      "tsc": 69115884003,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 15,
+      "failure_phase": "create",
+      "rip": "ffffffff8103a758",
+      "state": "Runnable",
+      "tsc": 68357878310,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 16,
+      "failure_phase": "create",
+      "rip": "ffffffff8127cb00",
+      "state": "Runnable",
+      "tsc": 69738128804,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 17,
+      "failure_phase": "create",
+      "rip": "ffffffff81ec6310",
+      "state": "Runnable",
+      "tsc": 70043940715,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 18,
+      "failure_phase": "create",
+      "rip": "ffffffff8114fa90",
+      "state": "Runnable",
+      "tsc": 84075084318,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 19,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda52c",
+      "state": "Runnable",
+      "tsc": 68711569000,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 20,
+      "failure_phase": "create",
+      "rip": "ffffffff81ec5fd4",
+      "state": "Runnable",
+      "tsc": 68318059746,
+      "tsc_deadline": 68055686002,
+      "deadline_nonzero_at_or_before_tsc": true
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 21,
+      "failure_phase": "create",
+      "rip": "ffffffff8103a758",
+      "state": "Runnable",
+      "tsc": 68813131290,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 22,
+      "failure_phase": "create",
+      "rip": "ffffffff810613bc",
+      "state": "Runnable",
+      "tsc": 76383008924,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 23,
+      "failure_phase": "create",
+      "rip": "ffffffff81111c20",
+      "state": "Runnable",
+      "tsc": 69337178355,
+      "tsc_deadline": 69093231469,
+      "deadline_nonzero_at_or_before_tsc": true
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 24,
+      "failure_phase": "create",
+      "rip": "ffffffff8103a75a",
+      "state": "Runnable",
+      "tsc": 68492770587,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 25,
+      "failure_phase": "create",
+      "rip": "ffffffff8103a3cc",
+      "state": "Runnable",
+      "tsc": 70299112859,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 26,
+      "failure_phase": "create",
+      "rip": "ffffffff812b5ede",
+      "state": "Runnable",
+      "tsc": 81578965842,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 27,
+      "failure_phase": "create",
+      "rip": "ffffffff81ed93f7",
+      "state": "Runnable",
+      "tsc": 80597571097,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 28,
+      "failure_phase": "create",
+      "rip": "ffffffff81ed93a4",
+      "state": "Runnable",
+      "tsc": 68669698442,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 29,
+      "failure_phase": "create",
+      "rip": "ffffffff8113d5a0",
+      "state": "Runnable",
+      "tsc": 68261184333,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 30,
+      "failure_phase": "create",
+      "rip": "ffffffff8127cb19",
+      "state": "Runnable",
+      "tsc": 83930876638,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 31,
+      "failure_phase": "create",
+      "rip": "ffffffff810d0f30",
+      "state": "Runnable",
+      "tsc": 81987360797,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 32,
+      "failure_phase": "create",
+      "rip": "ffffffff810d58a7",
+      "state": "Runnable",
+      "tsc": 68858741557,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 33,
+      "failure_phase": "create",
+      "rip": "ffffffff81078847",
+      "state": "Runnable",
+      "tsc": 69976659719,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 34,
+      "failure_phase": "create",
+      "rip": "ffffffff810e84c3",
+      "state": "Runnable",
+      "tsc": 68357689046,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 35,
+      "failure_phase": "create",
+      "rip": "ffffffff81039de1",
+      "state": "Runnable",
+      "tsc": 68896320463,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 36,
+      "failure_phase": "create",
+      "rip": "ffffffff81039c18",
+      "state": "Runnable",
+      "tsc": 69212201364,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 37,
+      "failure_phase": "create",
+      "rip": "ffffffff8121add7",
+      "state": "Runnable",
+      "tsc": 69648509762,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 38,
+      "failure_phase": "create",
+      "rip": "ffffffff81039d17",
+      "state": "Runnable",
+      "tsc": 69293243017,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 39,
+      "failure_phase": "create",
+      "rip": "ffffffff8132f01e",
+      "state": "Runnable",
+      "tsc": 83908224425,
+      "tsc_deadline": 83929525341,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 40,
+      "failure_phase": "create",
+      "rip": "ffffffff8133a46e",
+      "state": "Runnable",
+      "tsc": 85532854704,
+      "tsc_deadline": 85535167652,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 41,
+      "failure_phase": "create",
+      "rip": "ffffffff81039de1",
+      "state": "Runnable",
+      "tsc": 68553350799,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 42,
+      "failure_phase": "create",
+      "rip": "ffffffff810784ca",
+      "state": "Runnable",
+      "tsc": 68363642270,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 43,
+      "failure_phase": "create",
+      "rip": "ffffffff81247eae",
+      "state": "Runnable",
+      "tsc": 68698711834,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 44,
+      "failure_phase": "create",
+      "rip": "ffffffff81ed150b",
+      "state": "Runnable",
+      "tsc": 69368746366,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 45,
+      "failure_phase": "create",
+      "rip": "ffffffff81ed150b",
+      "state": "Runnable",
+      "tsc": 75759511561,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 46,
+      "failure_phase": "create",
+      "rip": "ffffffff812568de",
+      "state": "Runnable",
+      "tsc": 81560819980,
+      "tsc_deadline": 81562374060,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 47,
+      "failure_phase": "create",
+      "rip": "ffffffff8103a3cc",
+      "state": "Runnable",
+      "tsc": 70532713328,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 48,
+      "failure_phase": "create",
+      "rip": "ffffffff81ee57f2",
+      "state": "Runnable",
+      "tsc": 68609622746,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 49,
+      "failure_phase": "create",
+      "rip": "ffffffff81ee5ea0",
+      "state": "Runnable",
+      "tsc": 80937515832,
+      "tsc_deadline": 80952109176,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 50,
+      "failure_phase": "create",
+      "rip": "ffffffff81130450",
+      "state": "Runnable",
+      "tsc": 69851970346,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 51,
+      "failure_phase": "create",
+      "rip": "ffffffff820014f0",
+      "state": "Runnable",
+      "tsc": 79078641196,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 52,
+      "failure_phase": "create",
+      "rip": "ffffffff81edfad6",
+      "state": "Runnable",
+      "tsc": 69216085030,
+      "tsc_deadline": 69147593486,
+      "deadline_nonzero_at_or_before_tsc": true
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 53,
+      "failure_phase": "create",
+      "rip": "ffffffff8103a758",
+      "state": "Runnable",
+      "tsc": 68816854743,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 54,
+      "failure_phase": "create",
+      "rip": "ffffffff8127cb00",
+      "state": "Runnable",
+      "tsc": 68490476146,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 55,
+      "failure_phase": "create",
+      "rip": "ffffffff81236ae0",
+      "state": "Runnable",
+      "tsc": 70200339720,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 56,
+      "failure_phase": "create",
+      "rip": "ffffffff810d1085",
+      "state": "Runnable",
+      "tsc": 73707221985,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 57,
+      "failure_phase": "create",
+      "rip": "ffffffff810e84ba",
+      "state": "Runnable",
+      "tsc": 83939906248,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 58,
+      "failure_phase": "create",
+      "rip": "ffffffff812b0826",
+      "state": "Runnable",
+      "tsc": 68225018287,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 59,
+      "failure_phase": "create",
+      "rip": "ffffffff82001774",
+      "state": "Runnable",
+      "tsc": 70067463530,
+      "tsc_deadline": 69963369994,
+      "deadline_nonzero_at_or_before_tsc": true
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 60,
+      "failure_phase": "create",
+      "rip": "ffffffff81ed150b",
+      "state": "Runnable",
+      "tsc": 68467987591,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 61,
+      "failure_phase": "create",
+      "rip": "ffffffff8127cb00",
+      "state": "Runnable",
+      "tsc": 70085481444,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 62,
+      "failure_phase": "create",
+      "rip": "ffffffff8121e479",
+      "state": "Runnable",
+      "tsc": 78290074895,
+      "tsc_deadline": 78292148923,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 63,
+      "failure_phase": "create",
+      "rip": "ffffffff810ec8c8",
+      "state": "Runnable",
+      "tsc": 70304530977,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 64,
+      "failure_phase": "create",
+      "rip": "ffffffff8127cb00",
+      "state": "Runnable",
+      "tsc": 69104213068,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 65,
+      "failure_phase": "create",
+      "rip": "ffffffff811f9ccd",
+      "state": "Runnable",
+      "tsc": 70470844866,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 66,
+      "failure_phase": "create",
+      "rip": "ffffffff8127cb00",
+      "state": "Runnable",
+      "tsc": 83865439743,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 67,
+      "failure_phase": "create",
+      "rip": "ffffffff811f9cc4",
+      "state": "Runnable",
+      "tsc": 69542555233,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 68,
+      "failure_phase": "create",
+      "rip": "ffffffff81258bc7",
+      "state": "Runnable",
+      "tsc": 85682263942,
+      "tsc_deadline": 85691644258,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 69,
+      "failure_phase": "create",
+      "rip": "ffffffff81ed9354",
+      "state": "Runnable",
+      "tsc": 70544549770,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 70,
+      "failure_phase": "create",
+      "rip": "ffffffff81ee57e4",
+      "state": "Runnable",
+      "tsc": 69395314867,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 71,
+      "failure_phase": "create",
+      "rip": "ffffffff81251260",
+      "state": "Runnable",
+      "tsc": 80075539259,
+      "tsc_deadline": 80076417851,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 72,
+      "failure_phase": "create",
+      "rip": "ffffffff810d059f",
+      "state": "Runnable",
+      "tsc": 68343933059,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 73,
+      "failure_phase": "create",
+      "rip": "ffffffff81083f74",
+      "state": "Runnable",
+      "tsc": 81432432755,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 74,
+      "failure_phase": "create",
+      "rip": "ffffffff8103a700",
+      "state": "Runnable",
+      "tsc": 68411930795,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 75,
+      "failure_phase": "create",
+      "rip": "ffffffff81ed3f7f",
+      "state": "Runnable",
+      "tsc": 68482269464,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 76,
+      "failure_phase": "create",
+      "rip": "ffffffff8103b6f2",
+      "state": "Runnable",
+      "tsc": 70177589971,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 77,
+      "failure_phase": "create",
+      "rip": "ffffffff81119814",
+      "state": "Runnable",
+      "tsc": 69846266445,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 78,
+      "failure_phase": "create",
+      "rip": "ffffffff81034c44",
+      "state": "Runnable",
+      "tsc": 68689952960,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 79,
+      "failure_phase": "create",
+      "rip": "ffffffff8103a700",
+      "state": "Runnable",
+      "tsc": 68287233080,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 80,
+      "failure_phase": "create",
+      "rip": "ffffffff811c7ef3",
+      "state": "Runnable",
+      "tsc": 83907440104,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 81,
+      "failure_phase": "create",
+      "rip": "ffffffff81ed150b",
+      "state": "Runnable",
+      "tsc": 69349697560,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 82,
+      "failure_phase": "create",
+      "rip": "ffffffff81ec12d4",
+      "state": "Runnable",
+      "tsc": 69683978846,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 83,
+      "failure_phase": "create",
+      "rip": "ffffffff83296b51",
+      "state": "Runnable",
+      "tsc": 68893621723,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 84,
+      "failure_phase": "create",
+      "rip": "ffffffff81133beb",
+      "state": "Runnable",
+      "tsc": 82343846900,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 85,
+      "failure_phase": "create",
+      "rip": "ffffffff81ed150b",
+      "state": "Runnable",
+      "tsc": 75739258744,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 86,
+      "failure_phase": "create",
+      "rip": "ffffffff81ed3f7f",
+      "state": "Runnable",
+      "tsc": 69796954498,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 87,
+      "failure_phase": "create",
+      "rip": "ffffffff81ed150b",
+      "state": "Runnable",
+      "tsc": 73136179005,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 88,
+      "failure_phase": "create",
+      "rip": "ffffffff810395ed",
+      "state": "Runnable",
+      "tsc": 69716432016,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 89,
+      "failure_phase": "create",
+      "rip": "ffffffff810613e2",
+      "state": "Runnable",
+      "tsc": 83385930451,
+      "tsc_deadline": 83318683359,
+      "deadline_nonzero_at_or_before_tsc": true
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 90,
+      "failure_phase": "create",
+      "rip": "ffffffff81034c44",
+      "state": "Runnable",
+      "tsc": 70530691573,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 91,
+      "failure_phase": "create",
+      "rip": "ffffffff81ed40a4",
+      "state": "Runnable",
+      "tsc": 69389180368,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 92,
+      "failure_phase": "create",
+      "rip": "ffffffff810e2df9",
+      "state": "Runnable",
+      "tsc": 68398143507,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 93,
+      "failure_phase": "create",
+      "rip": "ffffffff832aaab5",
+      "state": "Runnable",
+      "tsc": 73491179803,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 94,
+      "failure_phase": "create",
+      "rip": "ffffffff8127cb00",
+      "state": "Runnable",
+      "tsc": 78162072675,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 95,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda86f",
+      "state": "Runnable",
+      "tsc": 75773594577,
+      "tsc_deadline": 75773027373,
+      "deadline_nonzero_at_or_before_tsc": true
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 96,
+      "failure_phase": "create",
+      "rip": "ffffffff81eacdcd",
+      "state": "Runnable",
+      "tsc": 84036236523,
+      "tsc_deadline": 84060221043,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 97,
+      "failure_phase": "create",
+      "rip": "ffffffff8113c6d2",
+      "state": "Runnable",
+      "tsc": 68402659890,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 98,
+      "failure_phase": "create",
+      "rip": "ffffffff812b4ebe",
+      "state": "Runnable",
+      "tsc": 69812108256,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 2,
+      "variant": "baseline",
+      "index": 99,
+      "failure_phase": "create",
+      "rip": "ffffffff812b4ed7",
+      "state": "Runnable",
+      "tsc": 81345214896,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 2,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68182297719,
+      "tsc_deadline": 68746667628,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 3,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68225222886,
+      "tsc_deadline": 68604255838,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 5,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68278648414,
+      "tsc_deadline": 68508623464,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 9,
+      "failure_phase": "create",
+      "rip": "ffffffff81648115",
+      "state": "Runnable",
+      "tsc": 68319159927,
+      "tsc_deadline": 68127139099,
+      "deadline_nonzero_at_or_before_tsc": true
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 11,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68207362188,
+      "tsc_deadline": 69027933128,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 12,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68244592327,
+      "tsc_deadline": 68711112772,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 13,
+      "failure_phase": "create",
+      "rip": "ffffffff81ed150b",
+      "state": "Runnable",
+      "tsc": 68287329350,
+      "tsc_deadline": 0,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 18,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68366327060,
+      "tsc_deadline": 68399704464,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 24,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68268258206,
+      "tsc_deadline": 68824314318,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 25,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68216004230,
+      "tsc_deadline": 69424322406,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 30,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68267685620,
+      "tsc_deadline": 68365713326,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 33,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68252851898,
+      "tsc_deadline": 69728416558,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 34,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68256780680,
+      "tsc_deadline": 68712780958,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 42,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68242838204,
+      "tsc_deadline": 68733556316,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 47,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68229064994,
+      "tsc_deadline": 68864767034,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 49,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68243865449,
+      "tsc_deadline": 68752657394,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 51,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68314853155,
+      "tsc_deadline": 69341141994,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 58,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68287746582,
+      "tsc_deadline": 69067326506,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 61,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68272353710,
+      "tsc_deadline": 69680595534,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 71,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68264356404,
+      "tsc_deadline": 68910185168,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 74,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68310788938,
+      "tsc_deadline": 68323383980,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 75,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68318518621,
+      "tsc_deadline": 69881223968,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 76,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68274852446,
+      "tsc_deadline": 69443249510,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 79,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68263765373,
+      "tsc_deadline": 69390578365,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 81,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68238822188,
+      "tsc_deadline": 68797348518,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 82,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68196698793,
+      "tsc_deadline": 68920658785,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 95,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68278650918,
+      "tsc_deadline": 69177149368,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 97,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68336641271,
+      "tsc_deadline": 68925270824,
+      "deadline_nonzero_at_or_before_tsc": false
+    },
+    {
+      "pair": 3,
+      "variant": "baseline",
+      "index": 99,
+      "failure_phase": "create",
+      "rip": "ffffffff81eda95f",
+      "state": "Halted",
+      "tsc": 68304239980,
+      "tsc_deadline": 69155844664,
+      "deadline_nonzero_at_or_before_tsc": false
+    }
+  ],
+  "sample": {
+    "index": 0,
+    "success": true,
+    "cleanup_success": true,
+    "ready_ms": 1734.4334129999907
+  },
+  "symbol_queries": {
+    "ffffffff81001af8": {
+      "command": "awk '$1 <= \"ffffffff81001af8\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81001aa0 T do_one_initcall\nffffffff81001cd0 t __pfx_rootfs_init_fs_context\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81034c44": {
+      "command": "awk '$1 <= \"ffffffff81034c44\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81034c30 T switch_ldt\nffffffff81034ca0 T __pfx_ldt_dup_context\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff810395ed": {
+      "command": "awk '$1 <= \"ffffffff810395ed\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff810395e0 t optimize_nops\nffffffff810396b0 t __pfx_apply_relocation\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81039c18": {
+      "command": "awk '$1 <= \"ffffffff81039c18\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81039ac0 t __text_poke\nffffffff81039f30 t __pfx_text_poke_bp_batch\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81039d17": {
+      "command": "awk '$1 <= \"ffffffff81039d17\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81039ac0 t __text_poke\nffffffff81039f30 t __pfx_text_poke_bp_batch\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81039d54": {
+      "command": "awk '$1 <= \"ffffffff81039d54\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81039ac0 t __text_poke\nffffffff81039f30 t __pfx_text_poke_bp_batch\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81039de1": {
+      "command": "awk '$1 <= \"ffffffff81039de1\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81039ac0 t __text_poke\nffffffff81039f30 t __pfx_text_poke_bp_batch\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff8103a3cc": {
+      "command": "awk '$1 <= \"ffffffff8103a3cc\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff8103a2f0 T alternatives_smp_module_add\nffffffff8103a450 T __pfx_alternatives_smp_module_del\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff8103a700": {
+      "command": "awk '$1 <= \"ffffffff8103a700\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff8103a700 T text_poke_early\nffffffff8103a790 T __pfx_apply_alternatives\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff8103a758": {
+      "command": "awk '$1 <= \"ffffffff8103a758\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff8103a700 T text_poke_early\nffffffff8103a790 T __pfx_apply_alternatives\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff8103a75a": {
+      "command": "awk '$1 <= \"ffffffff8103a75a\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff8103a700 T text_poke_early\nffffffff8103a790 T __pfx_apply_alternatives\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff8103b6f2": {
+      "command": "awk '$1 <= \"ffffffff8103b6f2\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff8103b660 T apply_seal_endbr\nffffffff8103b810 T __pfx_text_poke\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff810613bc": {
+      "command": "awk '$1 <= \"ffffffff810613bc\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81061390 t __sysvec_apic_timer_interrupt\nffffffff810614d0 T __pfx_native_apic_icr_write\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff810613e2": {
+      "command": "awk '$1 <= \"ffffffff810613e2\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81061390 t __sysvec_apic_timer_interrupt\nffffffff810614d0 T __pfx_native_apic_icr_write\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff810784ca": {
+      "command": "awk '$1 <= \"ffffffff810784ca\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81078360 T switch_mm_irqs_off\nffffffff81078860 T __pfx_switch_mm\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff810785c2": {
+      "command": "awk '$1 <= \"ffffffff810785c2\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81078360 T switch_mm_irqs_off\nffffffff81078860 T __pfx_switch_mm\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81078847": {
+      "command": "awk '$1 <= \"ffffffff81078847\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81078360 T switch_mm_irqs_off\nffffffff81078860 T __pfx_switch_mm\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81083f74": {
+      "command": "awk '$1 <= \"ffffffff81083f74\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81083f70 t sighand_ctor\nffffffff81083fa0 t __pfx_copy_clone_args_from_user\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff810d059f": {
+      "command": "awk '$1 <= \"ffffffff810d059f\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff810d0500 T scheduler_tick\nffffffff810d0610 T __pfx_sched_mm_cid_before_execve\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff810d0f30": {
+      "command": "awk '$1 <= \"ffffffff810d0f30\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff810d0f30 t update_curr\nffffffff810d1170 t __pfx_update_curr_fair\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff810d1085": {
+      "command": "awk '$1 <= \"ffffffff810d1085\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff810d0f30 t update_curr\nffffffff810d1170 t __pfx_update_curr_fair\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff810d58a7": {
+      "command": "awk '$1 <= \"ffffffff810d58a7\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff810d5850 t task_tick_fair\nffffffff810d5990 t __pfx___sched_group_set_shares\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff810e2df9": {
+      "command": "awk '$1 <= \"ffffffff810e2df9\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff810e2df0 T account_system_time\nffffffff810e2e40 T __pfx_account_steal_time\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff810e3058": {
+      "command": "awk '$1 <= \"ffffffff810e3058\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff810e3010 T account_process_tick\nffffffff810e3100 T __pfx_account_idle_ticks\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff810e84ba": {
+      "command": "awk '$1 <= \"ffffffff810e84ba\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff810e8490 T sched_clock_tick\nffffffff810e8560 T __pfx_sched_clock_idle_wakeup_event\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff810e84c3": {
+      "command": "awk '$1 <= \"ffffffff810e84c3\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff810e8490 T sched_clock_tick\nffffffff810e8560 T __pfx_sched_clock_idle_wakeup_event\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff810e86ab": {
+      "command": "awk '$1 <= \"ffffffff810e86ab\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff810e86a0 T cpuacct_account_field\nffffffff810e86e0 T __pfx_cpufreq_this_cpu_can_update\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff810ec8c8": {
+      "command": "awk '$1 <= \"ffffffff810ec8c8\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff810ec8c0 T __mutex_init\nffffffff810ec8f0 T __pfx_mutex_is_locked\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81111c20": {
+      "command": "awk '$1 <= \"ffffffff81111c20\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81111c20 T finish_rcuwait\nffffffff81111c40 T __pfx_get_completed_synchronize_rcu\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81119814": {
+      "command": "awk '$1 <= \"ffffffff81119814\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81119810 T __rcu_read_lock\nffffffff81119840 t __pfx_rcu_preempt_deferred_qs_handler\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81130450": {
+      "command": "awk '$1 <= \"ffffffff81130450\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81130450 T is_module_text_address\nffffffff811304c0 T __pfx___module_text_address\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81133beb": {
+      "command": "awk '$1 <= \"ffffffff81133beb\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81133bc0 T profile_tick\nffffffff81133c20 T __pfx_create_prof_cpu_mask\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff8113c6d2": {
+      "command": "awk '$1 <= \"ffffffff8113c6d2\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff8113c6a0 T ktime_get\nffffffff8113c730 T __pfx_get_device_system_crosststamp\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff8113d5a0": {
+      "command": "awk '$1 <= \"ffffffff8113d5a0\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff8113d5a0 t timekeeping_advance\nffffffff8113db40 T __pfx_ktime_get_fast_timestamps\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff8114fa90": {
+      "command": "awk '$1 <= \"ffffffff8114fa90\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff8114fa90 T update_vsyscall\nffffffff8114fcf0 T __pfx_update_vsyscall_tz\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff811c7ef3": {
+      "command": "awk '$1 <= \"ffffffff811c7ef3\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff811c7ee0 T irq_work_tick\nffffffff811c7f40 T __pfx___bpf_call_base\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff811f9cc4": {
+      "command": "awk '$1 <= \"ffffffff811f9cc4\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff811f9ca0 T copy_from_kernel_nofault\nffffffff811f9d90 T __pfx_copy_to_kernel_nofault\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff811f9ccd": {
+      "command": "awk '$1 <= \"ffffffff811f9ccd\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff811f9ca0 T copy_from_kernel_nofault\nffffffff811f9d90 T __pfx_copy_to_kernel_nofault\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff811f9cfd": {
+      "command": "awk '$1 <= \"ffffffff811f9cfd\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff811f9ca0 T copy_from_kernel_nofault\nffffffff811f9d90 T __pfx_copy_to_kernel_nofault\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff8121add7": {
+      "command": "awk '$1 <= \"ffffffff8121add7\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff8121ac80 t pcpu_alloc\nffffffff8121b410 T __pfx___alloc_percpu_gfp\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff8121e479": {
+      "command": "awk '$1 <= \"ffffffff8121e479\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff8121e450 T kmalloc_trace\nffffffff8121e4e0 T __pfx_kmalloc_node_trace\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81236ae0": {
+      "command": "awk '$1 <= \"ffffffff81236ae0\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81236ae0 T __get_locked_pte\nffffffff81236b50 T __pfx_vm_insert_page\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81247eae": {
+      "command": "awk '$1 <= \"ffffffff81247eae\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81247e40 T __pte_offset_map_lock\nffffffff81247f40 T __pfx___traceiter_tlb_flush\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81251260": {
+      "command": "awk '$1 <= \"ffffffff81251260\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81251260 T __vmap_pages_range_noflush\nffffffff81251800 T __pfx_vm_map_ram\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff812568de": {
+      "command": "awk '$1 <= \"ffffffff812568de\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81256780 T __pageblock_pfn_to_page\nffffffff812569b0 T __pfx_post_alloc_hook\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81258bc7": {
+      "command": "awk '$1 <= \"ffffffff81258bc7\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81258960 t get_page_from_freelist\nffffffff81259a50 t __pfx___alloc_pages_direct_compact\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff8127cb00": {
+      "command": "awk '$1 <= \"ffffffff8127cb00\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff8127c990 t allocate_slab\nffffffff8127cd70 T __pfx_fixup_red_left\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff8127cb19": {
+      "command": "awk '$1 <= \"ffffffff8127cb19\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff8127c990 t allocate_slab\nffffffff8127cd70 T __pfx_fixup_red_left\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff812b0826": {
+      "command": "awk '$1 <= \"ffffffff812b0826\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff812b07c0 t __d_alloc\nffffffff812b0990 T __pfx_d_alloc\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff812b4ebe": {
+      "command": "awk '$1 <= \"ffffffff812b4ebe\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff812b4eb0 T inode_init_once\nffffffff812b4fb0 T __pfx_unlock_new_inode\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff812b4ed7": {
+      "command": "awk '$1 <= \"ffffffff812b4ed7\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff812b4eb0 T inode_init_once\nffffffff812b4fb0 T __pfx_unlock_new_inode\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff812b5ede": {
+      "command": "awk '$1 <= \"ffffffff812b5ede\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff812b5ed0 t init_once\nffffffff812b5fd0 t __pfx_inode_needs_update_time\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff8132f01e": {
+      "command": "awk '$1 <= \"ffffffff8132f01e\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff8132f010 t insert_header\nffffffff8132f630 t __pfx_proc_sys_call_handler\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff8133a46e": {
+      "command": "awk '$1 <= \"ffffffff8133a46e\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff8133a410 t sysfs_do_create_link_sd\nffffffff8133a4e0 T __pfx_sysfs_create_link_nowarn\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81648115": {
+      "command": "awk '$1 <= \"ffffffff81648115\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81648100 t io_serial_out\nffffffff81648120 t __pfx_set_io_from_upio\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81eacdcd": {
+      "command": "awk '$1 <= \"ffffffff81eacdcd\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81eacdc0 T kobject_get\nffffffff81eace30 T __pfx_kobject_get_unless_zero\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81ec12d4": {
+      "command": "awk '$1 <= \"ffffffff81ec12d4\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81ec12c0 t radix_tree_node_ctor\nffffffff81ec1310 T __pfx_radix_tree_node_rcu_free\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81ec5fd4": {
+      "command": "awk '$1 <= \"ffffffff81ec5fd4\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81ec5fd0 T strchr\nffffffff81ec6000 T __pfx_strchrnul\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81ec6310": {
+      "command": "awk '$1 <= \"ffffffff81ec6310\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81ec6310 T memcmp\nffffffff81ec6390 T __pfx_bcmp\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81ed150b": {
+      "command": "awk '$1 <= \"ffffffff81ed150b\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81ed1500 T clear_page_erms\nffffffff81ed1520 T __pfx_rep_stos_alternative\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81ed3f7f": {
+      "command": "awk '$1 <= \"ffffffff81ed3f7f\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81ed3f40 T insn_get_prefixes\nffffffff81ed4250 T __pfx_insn_get_opcode\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81ed40a4": {
+      "command": "awk '$1 <= \"ffffffff81ed40a4\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81ed3f40 T insn_get_prefixes\nffffffff81ed4250 T __pfx_insn_get_opcode\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81ed9354": {
+      "command": "awk '$1 <= \"ffffffff81ed9354\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81ed9350 t kvm_sched_clock_read\nffffffff81ed9370 T __pfx_paravirt_BUG\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81ed93a4": {
+      "command": "awk '$1 <= \"ffffffff81ed93a4\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81ed93a0 T pvclock_clocksource_read_nowd\nffffffff81ed9430 T __pfx_exc_control_protection\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81ed93f7": {
+      "command": "awk '$1 <= \"ffffffff81ed93f7\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81ed93a0 T pvclock_clocksource_read_nowd\nffffffff81ed9430 T __pfx_exc_control_protection\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81eda520": {
+      "command": "awk '$1 <= \"ffffffff81eda520\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81eda520 T __memcpy\nffffffff81eda540 t __pfx_memcpy_orig\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81eda52c": {
+      "command": "awk '$1 <= \"ffffffff81eda52c\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81eda520 T __memcpy\nffffffff81eda540 t __pfx_memcpy_orig\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81eda86f": {
+      "command": "awk '$1 <= \"ffffffff81eda86f\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81eda860 T __memset\nffffffff81eda880 t __pfx_memset_orig\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81eda95f": {
+      "command": "awk '$1 <= \"ffffffff81eda95f\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81eda950 T default_idle\nffffffff81eda970 t __pfx_mwait_idle\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81edfad6": {
+      "command": "awk '$1 <= \"ffffffff81edfad6\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81edfac0 T mutex_unlock\nffffffff81edfae0 T __pfx_ww_mutex_unlock\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81ee57e4": {
+      "command": "awk '$1 <= \"ffffffff81ee57e4\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81ee57e0 T _raw_spin_lock\nffffffff81ee5810 T __pfx__raw_spin_lock_bh\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81ee57f2": {
+      "command": "awk '$1 <= \"ffffffff81ee57f2\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81ee57e0 T _raw_spin_lock\nffffffff81ee5810 T __pfx__raw_spin_lock_bh\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff81ee5ea0": {
+      "command": "awk '$1 <= \"ffffffff81ee5ea0\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff81ee5ea0 T __x86_indirect_thunk_rax\nffffffff81ee5ec0 T __x86_indirect_thunk_rcx\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff820014f0": {
+      "command": "awk '$1 <= \"ffffffff820014f0\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff820014f0 T asm_sysvec_apic_timer_interrupt\nffffffff82001510 T asm_sysvec_x86_platform_ipi\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff82001774": {
+      "command": "awk '$1 <= \"ffffffff82001774\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff82001774 T native_irq_return_iret\nffffffff82001776 t native_irq_return_ldt\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff8325812a": {
+      "command": "awk '$1 <= \"ffffffff8325812a\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff83258100 t init_pod_type\nffffffff83258330 T __pfx_workqueue_init\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff83296b51": {
+      "command": "awk '$1 <= \"ffffffff83296b51\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff83296a10 T tcp_init\nffffffff83296d60 T __pfx_tcp_tasklet_init\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    },
+    "ffffffff832aaab5": {
+      "command": "awk '$1 <= \"ffffffff832aaab5\" {previous=$0; next} {print previous; print; exit}' /proc/kallsyms",
+      "response": {
+        "kind": "exited",
+        "exit_code": 0,
+        "signal": null,
+        "stdout": "ffffffff832aa4f1 T _einittext\nffffffff832ae000 d initcall_level_names\n",
+        "stderr": "",
+        "truncated": false,
+        "timed_out": false
+      }
+    }
+  },
+  "success": true,
+  "limitations": [
+    "Symbols are queried in a separately booted identical kernel, not the failed guests",
+    "Snapshots at timeout are not execution traces or simultaneous timer measurements",
+    "A deadline/TSC comparison does not prove a missed timer, listener backlog or failure cause",
+    "The extra guest queries affect sample timing; no scored latency or performance claim"
+  ],
+  "mappings": {
+    "ffffffff81001af8": {
+      "symbol": "do_one_initcall",
+      "symbol_address": "ffffffff81001aa0",
+      "offset": 88,
+      "next_symbol": "__pfx_rootfs_init_fs_context",
+      "next_address": "ffffffff81001cd0"
+    },
+    "ffffffff81034c44": {
+      "symbol": "switch_ldt",
+      "symbol_address": "ffffffff81034c30",
+      "offset": 20,
+      "next_symbol": "__pfx_ldt_dup_context",
+      "next_address": "ffffffff81034ca0"
+    },
+    "ffffffff810395ed": {
+      "symbol": "optimize_nops",
+      "symbol_address": "ffffffff810395e0",
+      "offset": 13,
+      "next_symbol": "__pfx_apply_relocation",
+      "next_address": "ffffffff810396b0"
+    },
+    "ffffffff81039c18": {
+      "symbol": "__text_poke",
+      "symbol_address": "ffffffff81039ac0",
+      "offset": 344,
+      "next_symbol": "__pfx_text_poke_bp_batch",
+      "next_address": "ffffffff81039f30"
+    },
+    "ffffffff81039d17": {
+      "symbol": "__text_poke",
+      "symbol_address": "ffffffff81039ac0",
+      "offset": 599,
+      "next_symbol": "__pfx_text_poke_bp_batch",
+      "next_address": "ffffffff81039f30"
+    },
+    "ffffffff81039d54": {
+      "symbol": "__text_poke",
+      "symbol_address": "ffffffff81039ac0",
+      "offset": 660,
+      "next_symbol": "__pfx_text_poke_bp_batch",
+      "next_address": "ffffffff81039f30"
+    },
+    "ffffffff81039de1": {
+      "symbol": "__text_poke",
+      "symbol_address": "ffffffff81039ac0",
+      "offset": 801,
+      "next_symbol": "__pfx_text_poke_bp_batch",
+      "next_address": "ffffffff81039f30"
+    },
+    "ffffffff8103a3cc": {
+      "symbol": "alternatives_smp_module_add",
+      "symbol_address": "ffffffff8103a2f0",
+      "offset": 220,
+      "next_symbol": "__pfx_alternatives_smp_module_del",
+      "next_address": "ffffffff8103a450"
+    },
+    "ffffffff8103a700": {
+      "symbol": "text_poke_early",
+      "symbol_address": "ffffffff8103a700",
+      "offset": 0,
+      "next_symbol": "__pfx_apply_alternatives",
+      "next_address": "ffffffff8103a790"
+    },
+    "ffffffff8103a758": {
+      "symbol": "text_poke_early",
+      "symbol_address": "ffffffff8103a700",
+      "offset": 88,
+      "next_symbol": "__pfx_apply_alternatives",
+      "next_address": "ffffffff8103a790"
+    },
+    "ffffffff8103a75a": {
+      "symbol": "text_poke_early",
+      "symbol_address": "ffffffff8103a700",
+      "offset": 90,
+      "next_symbol": "__pfx_apply_alternatives",
+      "next_address": "ffffffff8103a790"
+    },
+    "ffffffff8103b6f2": {
+      "symbol": "apply_seal_endbr",
+      "symbol_address": "ffffffff8103b660",
+      "offset": 146,
+      "next_symbol": "__pfx_text_poke",
+      "next_address": "ffffffff8103b810"
+    },
+    "ffffffff810613bc": {
+      "symbol": "__sysvec_apic_timer_interrupt",
+      "symbol_address": "ffffffff81061390",
+      "offset": 44,
+      "next_symbol": "__pfx_native_apic_icr_write",
+      "next_address": "ffffffff810614d0"
+    },
+    "ffffffff810613e2": {
+      "symbol": "__sysvec_apic_timer_interrupt",
+      "symbol_address": "ffffffff81061390",
+      "offset": 82,
+      "next_symbol": "__pfx_native_apic_icr_write",
+      "next_address": "ffffffff810614d0"
+    },
+    "ffffffff810784ca": {
+      "symbol": "switch_mm_irqs_off",
+      "symbol_address": "ffffffff81078360",
+      "offset": 362,
+      "next_symbol": "__pfx_switch_mm",
+      "next_address": "ffffffff81078860"
+    },
+    "ffffffff810785c2": {
+      "symbol": "switch_mm_irqs_off",
+      "symbol_address": "ffffffff81078360",
+      "offset": 610,
+      "next_symbol": "__pfx_switch_mm",
+      "next_address": "ffffffff81078860"
+    },
+    "ffffffff81078847": {
+      "symbol": "switch_mm_irqs_off",
+      "symbol_address": "ffffffff81078360",
+      "offset": 1255,
+      "next_symbol": "__pfx_switch_mm",
+      "next_address": "ffffffff81078860"
+    },
+    "ffffffff81083f74": {
+      "symbol": "sighand_ctor",
+      "symbol_address": "ffffffff81083f70",
+      "offset": 4,
+      "next_symbol": "__pfx_copy_clone_args_from_user",
+      "next_address": "ffffffff81083fa0"
+    },
+    "ffffffff810d059f": {
+      "symbol": "scheduler_tick",
+      "symbol_address": "ffffffff810d0500",
+      "offset": 159,
+      "next_symbol": "__pfx_sched_mm_cid_before_execve",
+      "next_address": "ffffffff810d0610"
+    },
+    "ffffffff810d0f30": {
+      "symbol": "update_curr",
+      "symbol_address": "ffffffff810d0f30",
+      "offset": 0,
+      "next_symbol": "__pfx_update_curr_fair",
+      "next_address": "ffffffff810d1170"
+    },
+    "ffffffff810d1085": {
+      "symbol": "update_curr",
+      "symbol_address": "ffffffff810d0f30",
+      "offset": 341,
+      "next_symbol": "__pfx_update_curr_fair",
+      "next_address": "ffffffff810d1170"
+    },
+    "ffffffff810d58a7": {
+      "symbol": "task_tick_fair",
+      "symbol_address": "ffffffff810d5850",
+      "offset": 87,
+      "next_symbol": "__pfx___sched_group_set_shares",
+      "next_address": "ffffffff810d5990"
+    },
+    "ffffffff810e2df9": {
+      "symbol": "account_system_time",
+      "symbol_address": "ffffffff810e2df0",
+      "offset": 9,
+      "next_symbol": "__pfx_account_steal_time",
+      "next_address": "ffffffff810e2e40"
+    },
+    "ffffffff810e3058": {
+      "symbol": "account_process_tick",
+      "symbol_address": "ffffffff810e3010",
+      "offset": 72,
+      "next_symbol": "__pfx_account_idle_ticks",
+      "next_address": "ffffffff810e3100"
+    },
+    "ffffffff810e84ba": {
+      "symbol": "sched_clock_tick",
+      "symbol_address": "ffffffff810e8490",
+      "offset": 42,
+      "next_symbol": "__pfx_sched_clock_idle_wakeup_event",
+      "next_address": "ffffffff810e8560"
+    },
+    "ffffffff810e84c3": {
+      "symbol": "sched_clock_tick",
+      "symbol_address": "ffffffff810e8490",
+      "offset": 51,
+      "next_symbol": "__pfx_sched_clock_idle_wakeup_event",
+      "next_address": "ffffffff810e8560"
+    },
+    "ffffffff810e86ab": {
+      "symbol": "cpuacct_account_field",
+      "symbol_address": "ffffffff810e86a0",
+      "offset": 11,
+      "next_symbol": "__pfx_cpufreq_this_cpu_can_update",
+      "next_address": "ffffffff810e86e0"
+    },
+    "ffffffff810ec8c8": {
+      "symbol": "__mutex_init",
+      "symbol_address": "ffffffff810ec8c0",
+      "offset": 8,
+      "next_symbol": "__pfx_mutex_is_locked",
+      "next_address": "ffffffff810ec8f0"
+    },
+    "ffffffff81111c20": {
+      "symbol": "finish_rcuwait",
+      "symbol_address": "ffffffff81111c20",
+      "offset": 0,
+      "next_symbol": "__pfx_get_completed_synchronize_rcu",
+      "next_address": "ffffffff81111c40"
+    },
+    "ffffffff81119814": {
+      "symbol": "__rcu_read_lock",
+      "symbol_address": "ffffffff81119810",
+      "offset": 4,
+      "next_symbol": "__pfx_rcu_preempt_deferred_qs_handler",
+      "next_address": "ffffffff81119840"
+    },
+    "ffffffff81130450": {
+      "symbol": "is_module_text_address",
+      "symbol_address": "ffffffff81130450",
+      "offset": 0,
+      "next_symbol": "__pfx___module_text_address",
+      "next_address": "ffffffff811304c0"
+    },
+    "ffffffff81133beb": {
+      "symbol": "profile_tick",
+      "symbol_address": "ffffffff81133bc0",
+      "offset": 43,
+      "next_symbol": "__pfx_create_prof_cpu_mask",
+      "next_address": "ffffffff81133c20"
+    },
+    "ffffffff8113c6d2": {
+      "symbol": "ktime_get",
+      "symbol_address": "ffffffff8113c6a0",
+      "offset": 50,
+      "next_symbol": "__pfx_get_device_system_crosststamp",
+      "next_address": "ffffffff8113c730"
+    },
+    "ffffffff8113d5a0": {
+      "symbol": "timekeeping_advance",
+      "symbol_address": "ffffffff8113d5a0",
+      "offset": 0,
+      "next_symbol": "__pfx_ktime_get_fast_timestamps",
+      "next_address": "ffffffff8113db40"
+    },
+    "ffffffff8114fa90": {
+      "symbol": "update_vsyscall",
+      "symbol_address": "ffffffff8114fa90",
+      "offset": 0,
+      "next_symbol": "__pfx_update_vsyscall_tz",
+      "next_address": "ffffffff8114fcf0"
+    },
+    "ffffffff811c7ef3": {
+      "symbol": "irq_work_tick",
+      "symbol_address": "ffffffff811c7ee0",
+      "offset": 19,
+      "next_symbol": "__pfx___bpf_call_base",
+      "next_address": "ffffffff811c7f40"
+    },
+    "ffffffff811f9cc4": {
+      "symbol": "copy_from_kernel_nofault",
+      "symbol_address": "ffffffff811f9ca0",
+      "offset": 36,
+      "next_symbol": "__pfx_copy_to_kernel_nofault",
+      "next_address": "ffffffff811f9d90"
+    },
+    "ffffffff811f9ccd": {
+      "symbol": "copy_from_kernel_nofault",
+      "symbol_address": "ffffffff811f9ca0",
+      "offset": 45,
+      "next_symbol": "__pfx_copy_to_kernel_nofault",
+      "next_address": "ffffffff811f9d90"
+    },
+    "ffffffff811f9cfd": {
+      "symbol": "copy_from_kernel_nofault",
+      "symbol_address": "ffffffff811f9ca0",
+      "offset": 93,
+      "next_symbol": "__pfx_copy_to_kernel_nofault",
+      "next_address": "ffffffff811f9d90"
+    },
+    "ffffffff8121add7": {
+      "symbol": "pcpu_alloc",
+      "symbol_address": "ffffffff8121ac80",
+      "offset": 343,
+      "next_symbol": "__pfx___alloc_percpu_gfp",
+      "next_address": "ffffffff8121b410"
+    },
+    "ffffffff8121e479": {
+      "symbol": "kmalloc_trace",
+      "symbol_address": "ffffffff8121e450",
+      "offset": 41,
+      "next_symbol": "__pfx_kmalloc_node_trace",
+      "next_address": "ffffffff8121e4e0"
+    },
+    "ffffffff81236ae0": {
+      "symbol": "__get_locked_pte",
+      "symbol_address": "ffffffff81236ae0",
+      "offset": 0,
+      "next_symbol": "__pfx_vm_insert_page",
+      "next_address": "ffffffff81236b50"
+    },
+    "ffffffff81247eae": {
+      "symbol": "__pte_offset_map_lock",
+      "symbol_address": "ffffffff81247e40",
+      "offset": 110,
+      "next_symbol": "__pfx___traceiter_tlb_flush",
+      "next_address": "ffffffff81247f40"
+    },
+    "ffffffff81251260": {
+      "symbol": "__vmap_pages_range_noflush",
+      "symbol_address": "ffffffff81251260",
+      "offset": 0,
+      "next_symbol": "__pfx_vm_map_ram",
+      "next_address": "ffffffff81251800"
+    },
+    "ffffffff812568de": {
+      "symbol": "__pageblock_pfn_to_page",
+      "symbol_address": "ffffffff81256780",
+      "offset": 350,
+      "next_symbol": "__pfx_post_alloc_hook",
+      "next_address": "ffffffff812569b0"
+    },
+    "ffffffff81258bc7": {
+      "symbol": "get_page_from_freelist",
+      "symbol_address": "ffffffff81258960",
+      "offset": 615,
+      "next_symbol": "__pfx___alloc_pages_direct_compact",
+      "next_address": "ffffffff81259a50"
+    },
+    "ffffffff8127cb00": {
+      "symbol": "allocate_slab",
+      "symbol_address": "ffffffff8127c990",
+      "offset": 368,
+      "next_symbol": "__pfx_fixup_red_left",
+      "next_address": "ffffffff8127cd70"
+    },
+    "ffffffff8127cb19": {
+      "symbol": "allocate_slab",
+      "symbol_address": "ffffffff8127c990",
+      "offset": 393,
+      "next_symbol": "__pfx_fixup_red_left",
+      "next_address": "ffffffff8127cd70"
+    },
+    "ffffffff812b0826": {
+      "symbol": "__d_alloc",
+      "symbol_address": "ffffffff812b07c0",
+      "offset": 102,
+      "next_symbol": "__pfx_d_alloc",
+      "next_address": "ffffffff812b0990"
+    },
+    "ffffffff812b4ebe": {
+      "symbol": "inode_init_once",
+      "symbol_address": "ffffffff812b4eb0",
+      "offset": 14,
+      "next_symbol": "__pfx_unlock_new_inode",
+      "next_address": "ffffffff812b4fb0"
+    },
+    "ffffffff812b4ed7": {
+      "symbol": "inode_init_once",
+      "symbol_address": "ffffffff812b4eb0",
+      "offset": 39,
+      "next_symbol": "__pfx_unlock_new_inode",
+      "next_address": "ffffffff812b4fb0"
+    },
+    "ffffffff812b5ede": {
+      "symbol": "init_once",
+      "symbol_address": "ffffffff812b5ed0",
+      "offset": 14,
+      "next_symbol": "__pfx_inode_needs_update_time",
+      "next_address": "ffffffff812b5fd0"
+    },
+    "ffffffff8132f01e": {
+      "symbol": "insert_header",
+      "symbol_address": "ffffffff8132f010",
+      "offset": 14,
+      "next_symbol": "__pfx_proc_sys_call_handler",
+      "next_address": "ffffffff8132f630"
+    },
+    "ffffffff8133a46e": {
+      "symbol": "sysfs_do_create_link_sd",
+      "symbol_address": "ffffffff8133a410",
+      "offset": 94,
+      "next_symbol": "__pfx_sysfs_create_link_nowarn",
+      "next_address": "ffffffff8133a4e0"
+    },
+    "ffffffff81648115": {
+      "symbol": "io_serial_out",
+      "symbol_address": "ffffffff81648100",
+      "offset": 21,
+      "next_symbol": "__pfx_set_io_from_upio",
+      "next_address": "ffffffff81648120"
+    },
+    "ffffffff81eacdcd": {
+      "symbol": "kobject_get",
+      "symbol_address": "ffffffff81eacdc0",
+      "offset": 13,
+      "next_symbol": "__pfx_kobject_get_unless_zero",
+      "next_address": "ffffffff81eace30"
+    },
+    "ffffffff81ec12d4": {
+      "symbol": "radix_tree_node_ctor",
+      "symbol_address": "ffffffff81ec12c0",
+      "offset": 20,
+      "next_symbol": "__pfx_radix_tree_node_rcu_free",
+      "next_address": "ffffffff81ec1310"
+    },
+    "ffffffff81ec5fd4": {
+      "symbol": "strchr",
+      "symbol_address": "ffffffff81ec5fd0",
+      "offset": 4,
+      "next_symbol": "__pfx_strchrnul",
+      "next_address": "ffffffff81ec6000"
+    },
+    "ffffffff81ec6310": {
+      "symbol": "memcmp",
+      "symbol_address": "ffffffff81ec6310",
+      "offset": 0,
+      "next_symbol": "__pfx_bcmp",
+      "next_address": "ffffffff81ec6390"
+    },
+    "ffffffff81ed150b": {
+      "symbol": "clear_page_erms",
+      "symbol_address": "ffffffff81ed1500",
+      "offset": 11,
+      "next_symbol": "__pfx_rep_stos_alternative",
+      "next_address": "ffffffff81ed1520"
+    },
+    "ffffffff81ed3f7f": {
+      "symbol": "insn_get_prefixes",
+      "symbol_address": "ffffffff81ed3f40",
+      "offset": 63,
+      "next_symbol": "__pfx_insn_get_opcode",
+      "next_address": "ffffffff81ed4250"
+    },
+    "ffffffff81ed40a4": {
+      "symbol": "insn_get_prefixes",
+      "symbol_address": "ffffffff81ed3f40",
+      "offset": 356,
+      "next_symbol": "__pfx_insn_get_opcode",
+      "next_address": "ffffffff81ed4250"
+    },
+    "ffffffff81ed9354": {
+      "symbol": "kvm_sched_clock_read",
+      "symbol_address": "ffffffff81ed9350",
+      "offset": 4,
+      "next_symbol": "__pfx_paravirt_BUG",
+      "next_address": "ffffffff81ed9370"
+    },
+    "ffffffff81ed93a4": {
+      "symbol": "pvclock_clocksource_read_nowd",
+      "symbol_address": "ffffffff81ed93a0",
+      "offset": 4,
+      "next_symbol": "__pfx_exc_control_protection",
+      "next_address": "ffffffff81ed9430"
+    },
+    "ffffffff81ed93f7": {
+      "symbol": "pvclock_clocksource_read_nowd",
+      "symbol_address": "ffffffff81ed93a0",
+      "offset": 87,
+      "next_symbol": "__pfx_exc_control_protection",
+      "next_address": "ffffffff81ed9430"
+    },
+    "ffffffff81eda520": {
+      "symbol": "__memcpy",
+      "symbol_address": "ffffffff81eda520",
+      "offset": 0,
+      "next_symbol": "__pfx_memcpy_orig",
+      "next_address": "ffffffff81eda540"
+    },
+    "ffffffff81eda52c": {
+      "symbol": "__memcpy",
+      "symbol_address": "ffffffff81eda520",
+      "offset": 12,
+      "next_symbol": "__pfx_memcpy_orig",
+      "next_address": "ffffffff81eda540"
+    },
+    "ffffffff81eda86f": {
+      "symbol": "__memset",
+      "symbol_address": "ffffffff81eda860",
+      "offset": 15,
+      "next_symbol": "__pfx_memset_orig",
+      "next_address": "ffffffff81eda880"
+    },
+    "ffffffff81eda95f": {
+      "symbol": "default_idle",
+      "symbol_address": "ffffffff81eda950",
+      "offset": 15,
+      "next_symbol": "__pfx_mwait_idle",
+      "next_address": "ffffffff81eda970"
+    },
+    "ffffffff81edfad6": {
+      "symbol": "mutex_unlock",
+      "symbol_address": "ffffffff81edfac0",
+      "offset": 22,
+      "next_symbol": "__pfx_ww_mutex_unlock",
+      "next_address": "ffffffff81edfae0"
+    },
+    "ffffffff81ee57e4": {
+      "symbol": "_raw_spin_lock",
+      "symbol_address": "ffffffff81ee57e0",
+      "offset": 4,
+      "next_symbol": "__pfx__raw_spin_lock_bh",
+      "next_address": "ffffffff81ee5810"
+    },
+    "ffffffff81ee57f2": {
+      "symbol": "_raw_spin_lock",
+      "symbol_address": "ffffffff81ee57e0",
+      "offset": 18,
+      "next_symbol": "__pfx__raw_spin_lock_bh",
+      "next_address": "ffffffff81ee5810"
+    },
+    "ffffffff81ee5ea0": {
+      "symbol": "__x86_indirect_thunk_rax",
+      "symbol_address": "ffffffff81ee5ea0",
+      "offset": 0,
+      "next_symbol": "__x86_indirect_thunk_rcx",
+      "next_address": "ffffffff81ee5ec0"
+    },
+    "ffffffff820014f0": {
+      "symbol": "asm_sysvec_apic_timer_interrupt",
+      "symbol_address": "ffffffff820014f0",
+      "offset": 0,
+      "next_symbol": "asm_sysvec_x86_platform_ipi",
+      "next_address": "ffffffff82001510"
+    },
+    "ffffffff82001774": {
+      "symbol": "native_irq_return_iret",
+      "symbol_address": "ffffffff82001774",
+      "offset": 0,
+      "next_symbol": "native_irq_return_ldt",
+      "next_address": "ffffffff82001776"
+    },
+    "ffffffff8325812a": {
+      "symbol": "init_pod_type",
+      "symbol_address": "ffffffff83258100",
+      "offset": 42,
+      "next_symbol": "__pfx_workqueue_init",
+      "next_address": "ffffffff83258330"
+    },
+    "ffffffff83296b51": {
+      "symbol": "tcp_init",
+      "symbol_address": "ffffffff83296a10",
+      "offset": 321,
+      "next_symbol": "__pfx_tcp_tasklet_init",
+      "next_address": "ffffffff83296d60"
+    },
+    "ffffffff832aaab5": {
+      "symbol": "_einittext",
+      "symbol_address": "ffffffff832aa4f1",
+      "offset": 1476,
+      "next_symbol": "initcall_level_names",
+      "next_address": "ffffffff832ae000"
+    }
+  },
+  "state_counts": [
+    {
+      "symbol": "__d_alloc",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "__get_locked_pte",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "__memcpy",
+      "state": "Runnable",
+      "count": 2
+    },
+    {
+      "symbol": "__memset",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "__mutex_init",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "__pageblock_pfn_to_page",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "__pte_offset_map_lock",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "__rcu_read_lock",
+      "state": "Runnable",
+      "count": 2
+    },
+    {
+      "symbol": "__sysvec_apic_timer_interrupt",
+      "state": "Runnable",
+      "count": 2
+    },
+    {
+      "symbol": "__text_poke",
+      "state": "Runnable",
+      "count": 6
+    },
+    {
+      "symbol": "__vmap_pages_range_noflush",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "__x86_indirect_thunk_rax",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "_einittext",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "_raw_spin_lock",
+      "state": "Runnable",
+      "count": 2
+    },
+    {
+      "symbol": "account_process_tick",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "account_system_time",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "allocate_slab",
+      "state": "Runnable",
+      "count": 8
+    },
+    {
+      "symbol": "alternatives_smp_module_add",
+      "state": "Runnable",
+      "count": 2
+    },
+    {
+      "symbol": "apply_seal_endbr",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "asm_sysvec_apic_timer_interrupt",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "clear_page_erms",
+      "state": "Runnable",
+      "count": 10
+    },
+    {
+      "symbol": "copy_from_kernel_nofault",
+      "state": "Runnable",
+      "count": 3
+    },
+    {
+      "symbol": "cpuacct_account_field",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "default_idle",
+      "state": "Halted",
+      "count": 27
+    },
+    {
+      "symbol": "do_one_initcall",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "finish_rcuwait",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "get_page_from_freelist",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "init_once",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "init_pod_type",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "inode_init_once",
+      "state": "Runnable",
+      "count": 2
+    },
+    {
+      "symbol": "insert_header",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "insn_get_prefixes",
+      "state": "Runnable",
+      "count": 3
+    },
+    {
+      "symbol": "io_serial_out",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "irq_work_tick",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "is_module_text_address",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "kmalloc_trace",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "kobject_get",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "ktime_get",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "kvm_sched_clock_read",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "memcmp",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "mutex_unlock",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "native_irq_return_iret",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "optimize_nops",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "pcpu_alloc",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "profile_tick",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "pvclock_clocksource_read_nowd",
+      "state": "Runnable",
+      "count": 2
+    },
+    {
+      "symbol": "radix_tree_node_ctor",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "sched_clock_tick",
+      "state": "Runnable",
+      "count": 2
+    },
+    {
+      "symbol": "scheduler_tick",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "sighand_ctor",
+      "state": "Runnable",
+      "count": 2
+    },
+    {
+      "symbol": "strchr",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "switch_ldt",
+      "state": "Runnable",
+      "count": 2
+    },
+    {
+      "symbol": "switch_mm_irqs_off",
+      "state": "Runnable",
+      "count": 3
+    },
+    {
+      "symbol": "sysfs_do_create_link_sd",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "task_tick_fair",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "tcp_init",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "text_poke_early",
+      "state": "Runnable",
+      "count": 6
+    },
+    {
+      "symbol": "timekeeping_advance",
+      "state": "Runnable",
+      "count": 1
+    },
+    {
+      "symbol": "update_curr",
+      "state": "Runnable",
+      "count": 2
+    },
+    {
+      "symbol": "update_vsyscall",
+      "state": "Runnable",
+      "count": 1
+    }
+  ],
+  "artifacts_unchanged": true
+}

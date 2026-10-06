@@ -1,0 +1,137 @@
+   Compiling either v1.17.0
+   Compiling once_cell v1.21.4
+   Compiling anyhow v1.0.104
+   Compiling bitflags v2.13.2
+   Compiling bytes v1.12.1
+   Compiling pulldown-cmark v0.13.4
+   Compiling prettyplease v0.2.37
+   Compiling getrandom v0.4.3
+   Compiling rustix v1.1.4
+   Compiling regex-syntax v0.8.11
+   Compiling linux-raw-sys v0.12.1
+   Compiling equivalent v1.0.2
+   Compiling unicase v2.9.0
+   Compiling memchr v2.8.3
+   Compiling foldhash v0.1.5
+   Compiling hashbrown v0.17.1
+    Checking digest v0.11.3
+   Compiling fixedbitset v0.5.7
+   Compiling fastrand v2.5.0
+    Checking hyper-util v0.1.21
+   Compiling rustls v0.23.45
+   Compiling log v0.4.34
+   Compiling multimap v0.10.1
+    Checking tower v0.5.3
+    Checking hv2-sandbox v1.1.0 (/var/tmp/hm-sparse-named-snapshots/source/crates/hv2-sandbox)
+   Compiling hashbrown v0.15.5
+   Compiling pin-project-internal v1.1.13
+    Checking hmac v0.13.0
+    Checking sha3 v0.11.0
+    Checking sha2 v0.11.0
+   Compiling rustversion v1.0.23
+   Compiling const-random-macro v0.1.16
+   Compiling itertools v0.14.0
+    Checking parking v2.2.1
+   Compiling crc32fast v1.5.0
+    Checking tokio-stream v0.1.19
+    Checking hv2-guest-agent v1.1.0 (/var/tmp/hm-sparse-named-snapshots/source/crates/hv2-guest-agent)
+    Checking event-listener v5.4.2
+    Checking powerfmt v0.2.0
+   Compiling heapless v0.9.3
+    Checking byteorder v1.5.0
+    Checking simd-adler32 v0.3.10
+    Checking hv2-context v1.1.0 (/var/tmp/hm-sparse-named-snapshots/source/crates/hv2-context)
+    Checking deranged v0.5.8
+    Checking adler2 v2.0.1
+    Checking time-core v0.1.9
+   Compiling indexmap v2.14.0
+    Checking num-conv v0.2.2
+    Checking miniz_oxide v0.9.1
+    Checking hash32 v0.3.1
+    Checking event-listener-strategy v0.5.4
+    Checking pbjson v0.9.0
+    Checking openssl-probe v0.2.1
+   Compiling smoltcp v0.14.0
+    Checking async-lock v3.4.2
+    Checking rustls-native-certs v0.8.4
+    Checking backon v1.6.0
+    Checking combine v4.6.8
+    Checking slh-dsa v0.2.0-rc.5
+    Checking pem v4.0.0
+    Checking managed v0.8.0
+    Checking arcstr v1.2.0
+    Checking xxhash-rust v0.8.18
+    Checking tower-http v0.6.11
+    Checking bitflags v1.3.2
+    Checking flate2 v1.1.10
+    Checking filetime v0.2.29
+    Checking twox-hash v2.1.4
+    Checking const-random v0.1.18
+    Checking tar v0.4.46
+    Checking ahash v0.8.12
+    Checking ruzstd v0.8.3
+   Compiling regex-automata v0.4.18
+   Compiling petgraph v0.8.3
+   Compiling tonic-build v0.14.6
+    Checking hv2-core v1.1.0 (/var/tmp/hm-sparse-named-snapshots/source/crates/hv2-core)
+    Checking rhai v1.26.1
+    Checking axum v0.8.9
+    Checking hyper-timeout v0.5.2
+   Compiling pulldown-cmark-to-cmark v22.0.1
+    Checking time v0.3.55
+   Compiling prost-derive v0.14.4
+    Checking pin-project v1.1.13
+    Checking arc-swap v1.9.2
+   Compiling tempfile v3.27.0
+    Checking yasna v0.6.0
+    Checking rcgen v0.14.10
+   Compiling regex v1.13.1
+    Checking tokio-rustls v0.26.5
+    Checking hyper-rustls v0.27.9
+   Compiling prost v0.14.4
+    Checking reqwest v0.12.28
+    Checking prost-types v0.14.4
+    Checking redis v1.7.1
+   Compiling prost-build v0.14.4
+   Compiling pbjson-build v0.9.0
+    Checking tonic v0.14.6
+   Compiling tonic-prost-build v0.14.6
+   Compiling pbjson-types v0.9.0
+   Compiling hv2-api v1.1.0 (/var/tmp/hm-sparse-named-snapshots/source/crates/hv2-api)
+    Checking tonic-prost v0.14.6
+    Checking hv2-agent v1.1.0 (/var/tmp/hm-sparse-named-snapshots/source/crates/hv2-agent)
+    Checking hv2-net v1.1.0 (/var/tmp/hm-sparse-named-snapshots/source/crates/hv2-net)
+    Checking hv2-runtime v1.1.0 (/var/tmp/hm-sparse-named-snapshots/source/crates/hv2-runtime)
+    Checking hv2-cluster v1.1.0 (/var/tmp/hm-sparse-named-snapshots/source/crates/hv2-cluster)
+    Checking hv2-sandboxd v1.1.0 (/var/tmp/hm-sparse-named-snapshots/source/crates/hv2-sandboxd)
+error: this function has too many arguments (8/7)
+    --> crates/hv2-sandboxd/src/main.rs:1298:1
+     |
+1298 | / async fn bring_up(
+1299 | |     state: &AppState,
+1300 | |     sandbox_id: &str,
+1301 | |     template_id: &str,
+...    |
+1306 | |     access_token: &str,
+1307 | | ) -> Result<Running, (StatusCode, String)> {
+     | |__________________________________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#too_many_arguments
+     = note: `-D clippy::too-many-arguments` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::too_many_arguments)]`
+
+error: this function has too many arguments (8/7)
+    --> crates/hv2-sandboxd/src/main.rs:1541:1
+     |
+1541 | / async fn register(
+1542 | |     state: &AppState,
+1543 | |     slot: Slot,
+1544 | |     running: Running,
+...    |
+1549 | |     context: RegistrationContext<'_>,
+1550 | | ) -> Result<(), (StatusCode, String)> {
+     | |_____________________________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#too_many_arguments
+
+error: could not compile `hv2-sandboxd` (bin "hv2-sandboxd") due to 2 previous errors

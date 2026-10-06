@@ -1,0 +1,123 @@
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-core)
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/hello.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:34:17
+   |
+34 |     let hello = include_bytes!("../../../examples/guest_code/hello.bin");
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/timer_test.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:37:17
+   |
+37 |     let timer = include_bytes!("../../../examples/guest_code/timer_test.bin");
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/keyboard_test.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:40:20
+   |
+40 |     let keyboard = include_bytes!("../../../examples/guest_code/keyboard_test.bin");
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/rtc_test.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:43:15
+   |
+43 |     let rtc = include_bytes!("../../../examples/guest_code/rtc_test.bin");
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/boot_sequence.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:46:16
+   |
+46 |     let boot = include_bytes!("../../../examples/guest_code/boot_sequence.bin");
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/vga_demo.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:49:15
+   |
+49 |     let vga = include_bytes!("../../../examples/guest_code/vga_demo.bin");
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/device_combo.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:52:17
+   |
+52 |     let combo = include_bytes!("../../../examples/guest_code/device_combo.bin");
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/hello.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:62:13
+   |
+62 |             include_bytes!("../../../examples/guest_code/hello.bin"),
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/timer_test.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:66:13
+   |
+66 |             include_bytes!("../../../examples/guest_code/timer_test.bin"),
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/keyboard_test.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:70:13
+   |
+70 |             include_bytes!("../../../examples/guest_code/keyboard_test.bin"),
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/rtc_test.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:74:13
+   |
+74 |             include_bytes!("../../../examples/guest_code/rtc_test.bin"),
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/boot_sequence.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:78:13
+   |
+78 |             include_bytes!("../../../examples/guest_code/boot_sequence.bin"),
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/vga_demo.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:82:13
+   |
+82 |             include_bytes!("../../../examples/guest_code/vga_demo.bin"),
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/device_combo.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:86:13
+   |
+86 |             include_bytes!("../../../examples/guest_code/device_combo.bin"),
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/stage1.bin`: No such file or directory (os error 2)
+   --> crates/hv2-core/tests/guest_code_integration.rs:137:18
+    |
+137 |     let stage1 = include_bytes!("../../../examples/guest_code/stage1.bin");
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/stage2.bin`: No such file or directory (os error 2)
+   --> crates/hv2-core/tests/guest_code_integration.rs:153:18
+    |
+153 |     let stage2 = include_bytes!("../../../examples/guest_code/stage2.bin");
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/stage2_pmode.bin`: No such file or directory (os error 2)
+   --> crates/hv2-core/tests/guest_code_integration.rs:202:24
+    |
+202 |     let stage2_pmode = include_bytes!("../../../examples/guest_code/stage2_pmode.bin");
+    |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/stage2_pmode.bin`: No such file or directory (os error 2)
+   --> crates/hv2-core/tests/guest_code_integration.rs:227:24
+    |
+227 |     let stage2_pmode = include_bytes!("../../../examples/guest_code/stage2_pmode.bin");
+    |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/interrupt_demo_extended.bin`: No such file or directory (os error 2)
+   --> crates/hv2-core/tests/guest_code_integration.rs:282:18
+    |
+282 |     let stage2 = include_bytes!("../../../examples/guest_code/interrupt_demo_extended.bin");
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/mmio_test_extended.bin`: No such file or directory (os error 2)
+   --> crates/hv2-core/tests/guest_code_integration.rs:332:18
+    |
+332 |     let stage2 = include_bytes!("../../../examples/guest_code/mmio_test_extended.bin");
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: could not compile `hv2-core` (test "guest_code_integration") due to 20 previous errors
+warning: build failed, waiting for other jobs to finish...

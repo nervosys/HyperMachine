@@ -4,6 +4,7 @@ import argparse
 import collections
 import hashlib
 import json
+import math
 from pathlib import Path
 import re
 import statistics
@@ -14,14 +15,40 @@ def stats(values):
         "median": statistics.median(values), "mean": statistics.mean(values), "max": max(values)}
 
 
+def require(condition, message):
+    if not condition:
+        raise ValueError(message)
+
+
 def analyze(baseline_path, diagnostic_path):
-    baseline = json.loads(baseline_path.read_text())
-    diagnostic = json.loads(diagnostic_path.read_text())
-    assert diagnostic["diagnostic_only"] and diagnostic["artifacts_unchanged"]
-    assert diagnostic["cold_ids_match_passed_requests"] and diagnostic["stage_ids_match_passed_requests"]
-    assert baseline["concurrency"] == diagnostic["concurrency"] == 100
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    diagnostic = json.loads(diagnostic_path.read_text(encoding="utf-8"))
+    for field in ("diagnostic_only", "artifacts_unchanged", "cold_ids_match_passed_requests", "stage_ids_match_passed_requests"):
+        require(diagnostic[field] is True, "unverified diagnostic contract: " + field)
+    require(type(baseline["concurrency"]) is int and type(diagnostic["concurrency"]) is int
+            and baseline["concurrency"] == diagnostic["concurrency"] == 100, "readiness concurrency differs")
     for name in ("hypermachine", "firecracker", "kernel", "initrd"):
-        assert baseline["artifact_sha256"][name] == diagnostic["artifact_sha256"][name]
+        digest = baseline["artifact_sha256"][name]
+        require(isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest)
+                and digest == diagnostic["artifact_sha256"][name], "readiness artifact identity differs: " + name)
+    successful_ids = [row["sandbox_id"] for batch in diagnostic["batches"]
+                      if batch["engine"] == "hypermachine" for row in batch["samples"]
+                      if row["success"] is True and row["cleanup_success"] is True]
+    require(successful_ids and all(isinstance(identity, str) and identity for identity in successful_ids)
+            and len(successful_ids) == len(set(successful_ids)), "duplicate or invalid diagnostic guest identity")
+    for field, durations in (("cold_readiness_stages_ms", ("blocking_queue_ms", "connect_ms", "ping_ms")),
+                             ("startup_stages_ms", ("total_ms", "build_ms", "launch_ms", "agent_ms", "network_envd_ms"))):
+        stages = diagnostic[field]
+        require(isinstance(stages, dict) and set(stages) == set(successful_ids),
+                "raw diagnostic guest identities differ: " + field)
+        for stage in stages.values():
+            require(isinstance(stage, dict), "invalid diagnostic stage")
+            if field == "cold_readiness_stages_ms":
+                require(stage.get("succeeded") is True, "successful request lacks successful agent stage")
+            for duration in durations:
+                value = stage.get(duration)
+                require(type(value) in (int, float) and math.isfinite(value) and value >= 0,
+                        "invalid diagnostic stage duration: " + duration)
     failed = [row for batch in baseline["batches"] for row in batch["samples"] if not row["success"]]
     states, addresses = collections.Counter(), collections.Counter()
     for row in failed:

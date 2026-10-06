@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "audit_only": true,
+  "files": {
+    "README.md": "dcd6aa2cad7b911da1997c735c587bdc7d515b52b151dea47b55547b90d14809",
+    "accepted-source/crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "accepted-source/crates/hv2-core/src/devices/serial.rs": "0e3475490ae566ec727fd27928044227abdb0fc3f176fc478447549b82badb85",
+    "accepted-source/crates/hv2-core/src/vm.rs": "9e6bb11843f5640ca775c5306b09bf335828de260228a7e00e8df89cabcad6d5",
+    "accepted-source/crates/hv2-sandboxd/src/main.rs": "5b8d92902845f748bcfd497cdaa349a7509b4ed27fd6dd867935c8f27e59fb52",
+    "source-context.json": "8df758eecf8a7d1a672181799153e12f2f4194bdb5e25da16670e7a1febedc92"
+  }
+}

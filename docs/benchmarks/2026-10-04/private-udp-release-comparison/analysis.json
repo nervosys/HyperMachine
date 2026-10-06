@@ -1,0 +1,39 @@
+{
+  "cohorts": 2,
+  "scored_operations": 256,
+  "all_scored_success": true,
+  "paired_differences": [
+    [
+      {
+        "payload_bytes": 64,
+        "complete_pairs": 32,
+        "setup_ms_private_minus_standard_p50": 0.3112254999999998,
+        "echo_ms_private_minus_standard_p50": 0.00548499999999999,
+        "total_ms_private_minus_standard_p50": 0.27349100000000015
+      },
+      {
+        "payload_bytes": 65507,
+        "complete_pairs": 32,
+        "setup_ms_private_minus_standard_p50": 0.294289,
+        "echo_ms_private_minus_standard_p50": 0.02530549999999998,
+        "total_ms_private_minus_standard_p50": 0.34575900000000015
+      }
+    ],
+    [
+      {
+        "payload_bytes": 64,
+        "complete_pairs": 32,
+        "setup_ms_private_minus_standard_p50": 0.3287165000000002,
+        "echo_ms_private_minus_standard_p50": 0.026749999999999996,
+        "total_ms_private_minus_standard_p50": 0.32665849999999996
+      },
+      {
+        "payload_bytes": 65507,
+        "complete_pairs": 32,
+        "setup_ms_private_minus_standard_p50": 0.33681649999999996,
+        "echo_ms_private_minus_standard_p50": 0.00706699999999999,
+        "total_ms_private_minus_standard_p50": 0.3846315
+      }
+    ]
+  ]
+}

@@ -1,0 +1,68 @@
+--- baseline/control.rs
++++ candidate/control.rs
+@@ -1438,6 +1438,27 @@
+ 
+ // ── Operations ──────────────────────────────────────────────────────────────
+ 
++fn valid_pending_page(value: &Value, after: Option<&str>) -> bool {
++    let Some(object)=value.as_object() else { return false; };
++    if object.len()!=2 || !object.contains_key("nextCursor") { return false; }
++    let Some(rows)=object.get("registrations").and_then(Value::as_array) else { return false; };
++    if rows.len()>32 { return false; }
++    let mut previous=after;
++    for row in rows {
++        let Some(object)=row.as_object() else { return false; };
++        if object.len()!=2 { return false; }
++        let Some(id)=object.get("sandboxID").and_then(Value::as_str) else { return false; };
++        if crate::ports::validate_request(id,1,"discovery").is_err() || previous.is_some_and(|previous|id<=previous) { return false; }
++        if !matches!(object.get("kind").and_then(Value::as_str),Some("named"|"unnamed")) { return false; }
++        previous=Some(id);
++    }
++    match &value["nextCursor"] {
++        Value::Null=>true,
++        Value::String(cursor)=>rows.len()==32 && previous==Some(cursor.as_str()),
++        _=>false,
++    }
++}
++
+ async fn pending_on_node(State(control): State<Arc<ControlPlane>>, Extension(admin): Extension<AdministratorContext>,
+     Path(node_id): Path<String>, Query(query): Query<BTreeMap<String,String>>) -> Response {
+     if !admin.0 { return api_error(StatusCode::FORBIDDEN,"administrator credential required"); }
+@@ -1462,7 +1483,8 @@
+         Ok(Some(_))|Err(_)=>return api_error(StatusCode::BAD_GATEWAY,"invalid discovery response"),Ok(None)=>break,
+     }}
+     match serde_json::from_slice::<Value>(&bytes) {
+-        Ok(value)=>Json(value).into_response(),Err(_)=>api_error(StatusCode::BAD_GATEWAY,"invalid discovery response"),
++        Ok(value) if valid_pending_page(&value,query.get("after").map(String::as_str))=>Json(value).into_response(),
++        _=>api_error(StatusCode::BAD_GATEWAY,"invalid discovery response"),
+     }
+ }
+ 
+@@ -2240,6 +2262,27 @@
+ #[cfg(test)]
+ mod access_audit_tests {
+     use super::*;
++    #[test]
++    fn pending_page_refuses_capabilities_and_malformed_pagination() {
++        let page=json!({"registrations":[{"sandboxID":"sbx-001","kind":"unnamed"}],"nextCursor":null});
++        assert!(valid_pending_page(&page,None));
++        assert!(valid_pending_page(&json!({"registrations":[],"nextCursor":null}),None));
++        let mut cases=Vec::new();
++        let mut value=page.clone();value["envdAccessToken"]=json!("secret");cases.push(value);
++        let mut value=page.clone();value["registrations"][0]["envdAccessToken"]=json!("secret");cases.push(value);
++        let mut value=page.clone();value["registrations"][0]["kind"]=json!("other");cases.push(value);
++        let mut value=page.clone();value["registrations"][0]["sandboxID"]=json!("bad/id");cases.push(value);
++        let mut value=page.clone();value["nextCursor"]=json!("sbx-001");cases.push(value);
++        cases.push(json!({"registrations":[]}));
++        cases.push(json!({"registrations":[{"sandboxID":"sbx-001","kind":"unnamed"},{"sandboxID":"sbx-001","kind":"named"}],"nextCursor":null}));
++        cases.push(json!({"registrations":(0..33).map(|i|json!({"sandboxID":format!("sbx-{i:03}"),"kind":"unnamed"})).collect::<Vec<_>>(),"nextCursor":null}));
++        for value in cases { assert!(!valid_pending_page(&value,None)); }
++        assert!(!valid_pending_page(&page,Some("sbx-001")));
++        let full=json!({"registrations":(0..32).map(|i|json!({"sandboxID":format!("sbx-{i:03}"),"kind":"unnamed"})).collect::<Vec<_>>(),"nextCursor":"sbx-031"});
++        assert!(valid_pending_page(&full,None));
++        let mut wrong=full;wrong["nextCursor"]=json!("sbx-030");assert!(!valid_pending_page(&wrong,None));
++    }
++
+     #[tokio::test]
+     async fn reconciliation_requires_administrator_cluster_auth_and_registered_node() {
+         for (admin, token, expected) in [(false,Some("cluster"),StatusCode::FORBIDDEN),(true,None,StatusCode::SERVICE_UNAVAILABLE),(true,Some("cluster"),StatusCode::NOT_FOUND)] {

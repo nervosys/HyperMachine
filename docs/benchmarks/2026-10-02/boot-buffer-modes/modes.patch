@@ -1,0 +1,101 @@
+--- borrowed/crates/hv2-core/src/boot/linux.rs
++++ mode/crates/hv2-core/src/boot/linux.rs
+@@ -401,6 +401,10 @@
+ 
+     /// Prepare the same validated layout without duplicating kernel/initrd bytes.
+     pub(crate) fn borrowed_guest_memory(params: &LinuxBootParams) -> Result<Vec<(u64, std::borrow::Cow<'_, [u8]>)>> {
++        Self::borrowed_guest_memory_with_mode(params, crate::boot::source::borrowed_images_enabled())
++    }
++
++    pub(crate) fn borrowed_guest_memory_with_mode(params: &LinuxBootParams, borrow_images: bool) -> Result<Vec<(u64, std::borrow::Cow<'_, [u8]>)>> {
+         use std::borrow::Cow;
+         // 1. Validate everything first
+         Self::validate_params(params)?;
+@@ -425,7 +429,7 @@
+         // 3. Initrd (optional) — place at 32 MB (above kernel)
+         let (initrd_addr, initrd_size) = if let Some(ref initrd) = params.initrd {
+             let addr = Self::initrd_address(params, initrd.len() as u64)?;
+-            regions.push((addr, Cow::Borrowed(initrd.as_slice())));
++            regions.push((addr, if borrow_images { Cow::Borrowed(initrd.as_slice()) } else { Cow::Owned(initrd.clone()) }));
+             (Some(addr), Some(initrd.len()))
+         } else {
+             (None, None)
+@@ -444,7 +448,8 @@
+         // 6. Protected-mode kernel at kernel_addr (skip setup sectors)
+         let kernel_offset = header.setup_size;
+         if kernel_offset < params.kernel_image.len() {
+-            let kernel_data = Cow::Borrowed(&params.kernel_image[kernel_offset..]);
++            let kernel_data = if borrow_images { Cow::Borrowed(&params.kernel_image[kernel_offset..]) }
++                else { Cow::Owned(params.kernel_image[kernel_offset..].to_vec()) };
+             regions.push((params.kernel_addr, kernel_data));
+         }
+ 
+@@ -521,6 +526,35 @@
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++
++
++    #[test]
++    fn explicit_buffer_modes_preserve_linux_wire_bytes_and_validation() {
++        let params = LinuxBootParams {
++            kernel_image: create_minimal_bzimage(), initrd: Some(vec![0x51; 8192]),
++            cmdline: "console=ttyS0 quiet".into(), memory_size: 64 * 1024 * 1024,
++            ..Default::default()
++        };
++        let borrowed = LinuxBootProtocol::borrowed_guest_memory_with_mode(&params, true).unwrap();
++        let owned = LinuxBootProtocol::borrowed_guest_memory_with_mode(&params, false).unwrap();
++        assert_eq!(borrowed, owned);
++        assert_eq!(borrowed.iter().filter(|(_, bytes)| matches!(bytes, std::borrow::Cow::Borrowed(_))).count(), 2);
++        assert!(owned.iter().all(|(_, bytes)| matches!(bytes, std::borrow::Cow::Owned(_))));
++        assert_eq!(borrowed[0].1.as_ptr(), params.initrd.as_ref().unwrap().as_ptr());
++        assert_ne!(owned[0].1.as_ptr(), params.initrd.as_ref().unwrap().as_ptr());
++        for case in 0..4 {
++            let mut invalid = params.clone();
++            match case {
++                0 => invalid.memory_size = 0,
++                1 => invalid.kernel_image[0x202] = 0,
++                2 => invalid.cmdline = "x".repeat(4097),
++                _ => invalid.initrd = Some(vec![0; 65 * 1024 * 1024]),
++            }
++            let a = LinuxBootProtocol::borrowed_guest_memory_with_mode(&invalid, true).unwrap_err();
++            let b = LinuxBootProtocol::borrowed_guest_memory_with_mode(&invalid, false).unwrap_err();
++            assert_eq!(a.to_string(), b.to_string());
++        }
++    }
+ 
+     fn create_minimal_bzimage() -> Vec<u8> {
+         // Create image large enough for setup sectors + some kernel data
+--- borrowed/crates/hv2-core/src/boot/source.rs
++++ mode/crates/hv2-core/src/boot/source.rs
+@@ -29,6 +29,19 @@
+ 
+ use std::path::{Path, PathBuf};
+ 
++// Isolated counterfactual: one executable, explicit host-only buffer mode.
++pub(crate) fn borrowed_images_enabled() -> bool {
++    static MODE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
++    *MODE.get_or_init(|| {
++        let borrowed = std::env::var_os("HM_BOOT_IMAGE_MODE").as_deref()
++            != Some(std::ffi::OsStr::new("owned"));
++        eprintln!("HM_BOOT_IMAGE_MODE={}", if borrowed { "borrowed" } else { "owned" });
++        borrowed
++    })
++}
++
++
++
+ use serde::{Deserialize, Serialize};
+ 
+ use crate::boot::linux::{LinuxBootParams, LinuxBootProtocol};
+@@ -506,7 +519,9 @@
+         use std::borrow::Cow;
+         match self {
+             Self::Linux(params) => LinuxBootProtocol::borrowed_guest_memory(params),
+-            Self::Raw { data, load_addr, .. } => Ok(vec![(*load_addr, Cow::Borrowed(data))]),
++            Self::Raw { data, load_addr, .. } => Ok(vec![(*load_addr,
++                if borrowed_images_enabled() { Cow::Borrowed(data) } else { Cow::Owned(data.clone()) }
++            )]),
+             Self::Multiboot(_) => Ok(self.memory_regions()?.into_iter()
+                 .map(|(addr, data)| (addr, Cow::Owned(data))).collect()),
+         }

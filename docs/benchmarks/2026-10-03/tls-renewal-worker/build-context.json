@@ -1,0 +1,29 @@
+{
+  "control_plane_context": "../tls-bundle/build-context.json",
+  "accepted_core_context": "../../2026-10-02/borrowed-boot/accepted-source-context.json",
+  "input_sha256": {
+    "pebble": "4e35cad137f20f62a8e71fd104b98417daa592e901bb01ab4227074ee1990e3c",
+    "challenge_server": "00ec0f9680d5eecb23cb4073868a547db635775a52ba14e0392ed15c8004f1ed",
+    "certbot": "47a7758f3418a83e97f533fbeddcd40e0746ded2a628ca3965905cdfe8914561",
+    "control_plane": "958d30f3ab8dc3e83c0455179b8868ceb5fb3a57a5a2d6f472c4b846155fbe1e",
+    "deploy_hook": "6dab5a718080f7591acb84b46fd318305dc7e381ba0338fcd49304d3e993f3f7",
+    "renewal_worker": "c493c4e5347ec2f4ad4aec453cb5502797794429d80ffa1434a1bb51f7140688",
+    "kvm_verifier": "350c48463a151c8d749038d29dd7774a0bfd20e42da0a07758d5a0fb5425aa16",
+    "daemon": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "driver_sha256": "c240497e09735b26a382c79333f7745674d799a5756bceb8d7e465988e2c6cf7",
+  "unit_driver_sha256": "cc44971315c9e8d6beb9e98ecf7145ff983c6aa42c22731e5340f7fe48031175",
+  "environment": {
+    "python": "3.13.5",
+    "openssl": "3.5.7",
+    "kernel": "6.18.33.2-microsoft-standard-WSL2"
+  },
+  "pebble_release": "https://github.com/letsencrypt/pebble/releases/tag/v2.10.1",
+  "certbot_version": "certbot 5.8.0",
+  "functional_only": true,
+  "scope": "owned continuous renewal scheduling, publication/activation crash recovery and real worker-driven ACME-to-KVM traffic",
+  "rust_source_changed": false,
+  "public_ca_contacted": false
+}

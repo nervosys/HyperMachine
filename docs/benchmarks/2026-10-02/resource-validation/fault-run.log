@@ -1,0 +1,3 @@
+{"pair": 0, "engine": "hypermachine", "success": false}
+{"pair": 0, "engine": "firecracker", "success": false}
+{"fault_injection_only": true, "resource_gets_falsified": {"hypermachine": 2, "firecracker": 2}, "benchmark_failure_required": true, "performance_win_established": false}

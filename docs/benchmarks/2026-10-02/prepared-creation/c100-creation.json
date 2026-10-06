@@ -1,0 +1,303 @@
+{
+  "diagnostic_only": true,
+  "runtime_change_adopted": false,
+  "performance_win_established": false,
+  "cohort_success": true,
+  "cleanup_verified": true,
+  "matched_successful_hypermachine_attempts": 400,
+  "unmatched_failed_attempts": [],
+  "uncorrelated_creation_trace_ids": [
+    "sbx-e972afd59c874cc29645"
+  ],
+  "slow_threshold_ms": 1000,
+  "slow_attempts": 347,
+  "all_stages": {
+    "build": {
+      "mean_ms": 59.06155428,
+      "p50_ms": 14.352059,
+      "p95_ms": 281.002787,
+      "p99_ms": 528.871703,
+      "fraction_of_total_time": 0.013115911634638341
+    },
+    "launch": {
+      "mean_ms": 93.8119186475,
+      "p50_ms": 46.447007,
+      "p95_ms": 308.719742,
+      "p99_ms": 483.646299,
+      "fraction_of_total_time": 0.020832991109974067
+    },
+    "agent_answering": {
+      "mean_ms": 1835.3056473675,
+      "p50_ms": 1185.118822,
+      "p95_ms": 5586.989226,
+      "p99_ms": 6761.407889,
+      "fraction_of_total_time": 0.40756981401649706
+    },
+    "network_envd": {
+      "mean_ms": 4.5730895325,
+      "p50_ms": 0.05072,
+      "p95_ms": 3.51715,
+      "p99_ms": 80.813893,
+      "fraction_of_total_time": 0.0010155546858994643
+    },
+    "outside_creation": {
+      "mean_ms": 1043.5822515600507,
+      "p50_ms": 776.895574997261,
+      "p95_ms": 3613.845195000632,
+      "p99_ms": 5077.669034002216,
+      "fraction_of_total_time": 0.2317502944478647
+    },
+    "exec": {
+      "mean_ms": 1466.711603974918,
+      "p50_ms": 1195.5860029993346,
+      "p95_ms": 2947.0782060016063,
+      "p99_ms": 6813.771391000046,
+      "fraction_of_total_time": 0.32571543410512643
+    }
+  },
+  "slow_stages": {
+    "build": {
+      "mean_ms": 67.47988044092219,
+      "p50_ms": 18.846052,
+      "p95_ms": 288.926902,
+      "p99_ms": 548.538754,
+      "fraction_of_total_time": 0.013348955648246062
+    },
+    "launch": {
+      "mean_ms": 105.74590274063401,
+      "p50_ms": 61.583258,
+      "p95_ms": 324.112439,
+      "p99_ms": 563.084434,
+      "fraction_of_total_time": 0.020918788777409013
+    },
+    "agent_answering": {
+      "mean_ms": 2066.5198776368875,
+      "p50_ms": 1548.026087,
+      "p95_ms": 5795.6649210000005,
+      "p99_ms": 6811.96984,
+      "fraction_of_total_time": 0.40880158667359817
+    },
+    "network_envd": {
+      "mean_ms": 5.058865337175793,
+      "p50_ms": 0.055813,
+      "p95_ms": 2.330949,
+      "p99_ms": 251.978422,
+      "fraction_of_total_time": 0.0010007511657571949
+    },
+    "outside_creation": {
+      "mean_ms": 1172.4858250230916,
+      "p50_ms": 886.0570500010383,
+      "p95_ms": 3777.0639009994975,
+      "p99_ms": 5105.899935000296,
+      "fraction_of_total_time": 0.2319426349626257
+    },
+    "exec": {
+      "mean_ms": 1637.777791907708,
+      "p50_ms": 1369.1458479988796,
+      "p95_ms": 2979.5289950016013,
+      "p99_ms": 7213.809773998946,
+      "fraction_of_total_time": 0.3239872827723639
+    }
+  },
+  "ten_slowest": [
+    {
+      "pair": 0,
+      "index": 8,
+      "sandbox_id": "sbx-24c89ec7316f4431a980",
+      "ready_ms": 9815.289588001178,
+      "create_ms": 7797.949470001186,
+      "exec_ms": 2017.3401179999928,
+      "creation_stages_ms": {
+        "logged_up": 5297.7853159999995,
+        "build": 528.871703,
+        "launch": 343.395366,
+        "agent_answering": 4425.428847,
+        "network_envd": 0.09009099999999999
+      },
+      "component_sum_ms": 5297.786007000001,
+      "outside_creation_ms": 2500.163463001185,
+      "readiness_ms": 3876.059718,
+      "agent_other_ms": 549.3691290000002
+    },
+    {
+      "pair": 0,
+      "index": 80,
+      "sandbox_id": "sbx-0ab6a3ac1dc844af8060",
+      "ready_ms": 9806.736727001407,
+      "create_ms": 7760.433818002639,
+      "exec_ms": 2046.3029089987685,
+      "creation_stages_ms": {
+        "logged_up": 5218.975227999999,
+        "build": 1.375239,
+        "launch": 334.803371,
+        "agent_answering": 4882.673971,
+        "network_envd": 0.123809
+      },
+      "component_sum_ms": 5218.97639,
+      "outside_creation_ms": 2541.457428002639,
+      "readiness_ms": 4853.812526,
+      "agent_other_ms": 28.861445000000458
+    },
+    {
+      "pair": 0,
+      "index": 77,
+      "sandbox_id": "sbx-9bdfa4448ca34c3798a4",
+      "ready_ms": 9802.126704002148,
+      "create_ms": 8128.80875799965,
+      "exec_ms": 1673.3179460024985,
+      "creation_stages_ms": {
+        "logged_up": 4511.901234,
+        "build": 283.081587,
+        "launch": 59.164881,
+        "agent_answering": 4169.531187,
+        "network_envd": 0.12395
+      },
+      "component_sum_ms": 4511.901605,
+      "outside_creation_ms": 3616.90715299965,
+      "readiness_ms": 3632.523205,
+      "agent_other_ms": 537.0079819999996
+    },
+    {
+      "pair": 0,
+      "index": 89,
+      "sandbox_id": "sbx-8a66080fea9a4834a64b",
+      "ready_ms": 9785.035537999647,
+      "create_ms": 7767.618860998482,
+      "exec_ms": 2017.4166770011652,
+      "creation_stages_ms": {
+        "logged_up": 4786.6084200000005,
+        "build": 182.823309,
+        "launch": 231.152703,
+        "agent_answering": 4372.557447,
+        "network_envd": 0.075082
+      },
+      "component_sum_ms": 4786.6085410000005,
+      "outside_creation_ms": 2981.0103199984815,
+      "readiness_ms": 3749.341877,
+      "agent_other_ms": 623.2155700000003
+    },
+    {
+      "pair": 0,
+      "index": 6,
+      "sandbox_id": "sbx-a13f5034352f439d99ef",
+      "ready_ms": 9743.606299998646,
+      "create_ms": 7799.20627699903,
+      "exec_ms": 1944.4000229996163,
+      "creation_stages_ms": {
+        "logged_up": 5990.993855,
+        "build": 281.002787,
+        "launch": 313.831009,
+        "agent_answering": 5395.957221,
+        "network_envd": 0.20291900000000002
+      },
+      "component_sum_ms": 5990.993936,
+      "outside_creation_ms": 1808.21234099903,
+      "readiness_ms": 5237.915053,
+      "agent_other_ms": 158.04216799999995
+    },
+    {
+      "pair": 0,
+      "index": 64,
+      "sandbox_id": "sbx-fb41db1feaea4db6b9c2",
+      "ready_ms": 9731.593735999923,
+      "create_ms": 7658.049564997782,
+      "exec_ms": 2073.5441710021405,
+      "creation_stages_ms": {
+        "logged_up": 4391.641156000001,
+        "build": 198.747999,
+        "launch": 337.982775,
+        "agent_answering": 3854.831193,
+        "network_envd": 0.07944
+      },
+      "component_sum_ms": 4391.641407,
+      "outside_creation_ms": 3266.408157997782,
+      "readiness_ms": 3643.249335,
+      "agent_other_ms": 211.581858
+    },
+    {
+      "pair": 0,
+      "index": 86,
+      "sandbox_id": "sbx-25c8bb2fb52d4978bfd5",
+      "ready_ms": 9729.865323999547,
+      "create_ms": 7695.263789999444,
+      "exec_ms": 2034.6015340001031,
+      "creation_stages_ms": {
+        "logged_up": 2544.293347,
+        "build": 72.015054,
+        "launch": 133.619472,
+        "agent_answering": 2338.621646,
+        "network_envd": 0.037295
+      },
+      "component_sum_ms": 2544.293467,
+      "outside_creation_ms": 5150.970322999445,
+      "readiness_ms": 2265.9651,
+      "agent_other_ms": 72.65654600000016
+    },
+    {
+      "pair": 0,
+      "index": 71,
+      "sandbox_id": "sbx-4a2ba7eebeac44f29337",
+      "ready_ms": 9728.169597001397,
+      "create_ms": 8052.044721000129,
+      "exec_ms": 1676.1248760012677,
+      "creation_stages_ms": {
+        "logged_up": 2488.2367740000004,
+        "build": 247.720382,
+        "launch": 579.85901,
+        "agent_answering": 1660.5047550000002,
+        "network_envd": 0.15417
+      },
+      "component_sum_ms": 2488.2383170000003,
+      "outside_creation_ms": 5563.806404000129,
+      "readiness_ms": 1645.604542,
+      "agent_other_ms": 14.900213000000122
+    },
+    {
+      "pair": 0,
+      "index": 45,
+      "sandbox_id": "sbx-f9e2f7d7ec99482c90e6",
+      "ready_ms": 9718.681747999653,
+      "create_ms": 8033.779593999498,
+      "exec_ms": 1684.9021540001559,
+      "creation_stages_ms": {
+        "logged_up": 4256.71428,
+        "build": 482.752043,
+        "launch": 301.263722,
+        "agent_answering": 3472.586229,
+        "network_envd": 0.113699
+      },
+      "component_sum_ms": 4256.715693,
+      "outside_creation_ms": 3777.0639009994975,
+      "readiness_ms": 2777.324995,
+      "agent_other_ms": 695.2612340000001
+    },
+    {
+      "pair": 0,
+      "index": 73,
+      "sandbox_id": "sbx-0769f830fec44851b1f7",
+      "ready_ms": 9709.92631899935,
+      "create_ms": 7977.695113000664,
+      "exec_ms": 1732.231205998687,
+      "creation_stages_ms": {
+        "logged_up": 4392.120202,
+        "build": 288.492977,
+        "launch": 214.200925,
+        "agent_answering": 3889.313332,
+        "network_envd": 0.11453100000000001
+      },
+      "component_sum_ms": 4392.121765,
+      "outside_creation_ms": 3585.573348000664,
+      "readiness_ms": 3863.50101,
+      "agent_other_ms": 25.812322000000222
+    }
+  ],
+  "limitations": [
+    "Existing selective logging can perturb timing; this is not a ranking cohort",
+    "Build includes preparation before new_vm returns; launch covers accepted launch_from_snapshot_prefaulted",
+    "Agent answering encloses existing queue/connection/Restored observations plus other scheduling time",
+    "Network/envd is the existing elapsed phase name; this fixture has no network or volume mounts",
+    "Outside creation includes HTTP/handler and registration/response work, not a measured internal cause",
+    "Logged up total and final phase use separate elapsed readings; component sum is retained independently",
+    "Stage percentiles are not additive; all slow observations remain in overall summaries"
+  ]
+}

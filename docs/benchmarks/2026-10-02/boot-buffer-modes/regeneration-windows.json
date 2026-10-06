@@ -1,0 +1,18 @@
+{
+  "experiment_only": true,
+  "production_runtime_changed": false,
+  "intervention": "same_binary_boot_buffer_modes",
+  "source_files_verified": 550,
+  "mode_source_sha256": {
+    "crates/hv2-core/src/boot/linux.rs": "9e30eb3febc5cb36ada880e25af6b762683ba9d0dc8a0daea336a8ed42284877",
+    "crates/hv2-core/src/boot/source.rs": "4958c3445a57d20a88b3d8190a9c91f224dc563604badd1ae4af2b18fb1ddff4",
+    "crates/hv2-core/src/backends/kvm.rs": "b3a41c9404a634f37a92c23e2a799bea77bd2f184842186184f6463f38a1bcfc"
+  },
+  "mode_environment": "HM_BOOT_IMAGE_MODE",
+  "modes": [
+    "owned",
+    "borrowed"
+  ],
+  "default_mode": "borrowed",
+  "startup_mode_logged_before_scoring": true
+}

@@ -1,0 +1,15 @@
+diagnostic promoted to ranked input: rejected
+missing-agent: rejected
+missing-handler: rejected
+duplicate-agent: rejected
+negative-queue: rejected
+nonfinite-command: rejected
+over-budget-command: rejected
+failed-command: rejected
+wrong-phase: rejected
+scored-top-level: rejected
+wrong-binary: rejected
+activation-after-scoring: rejected
+bad-guest-cleanup: rejected
+unmatched-clock-rng: rejected
+actual execution diagnostic accepted; fourteen invalid promotions/contracts rejected

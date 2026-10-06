@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-acme-issuance.py", line 716, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-acme-issuance.py", line 663, in main
+    run(guest_command, timeout=180)
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-acme-issuance.py", line 110, in run
+    raise RuntimeError("Command failed: " + str(argv[0]) + "\n" +
+                       result.stderr.decode(errors="replace")[-3000:])
+RuntimeError: Command failed: /usr/bin/python3
+

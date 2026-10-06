@@ -1,0 +1,151 @@
+{
+  "diagnostic_only": true,
+  "runtime_change_adopted": false,
+  "performance_win_established": false,
+  "cohort_success": true,
+  "cleanup_verified": true,
+  "matched_successful_hypermachine_attempts": 2,
+  "unmatched_failed_attempts": [],
+  "uncorrelated_creation_trace_ids": [
+    "sbx-39a0384e3fb7458cbdc1"
+  ],
+  "slow_threshold_ms": 1000,
+  "slow_attempts": 0,
+  "all_stages": {
+    "build": {
+      "mean_ms": 0.9660724999999999,
+      "p50_ms": 0.778107,
+      "p95_ms": 1.154038,
+      "p99_ms": 1.154038,
+      "fraction_of_total_time": 0.0032865679939613084
+    },
+    "launch": {
+      "mean_ms": 59.6759755,
+      "p50_ms": 56.046515,
+      "p95_ms": 63.305436,
+      "p99_ms": 63.305436,
+      "fraction_of_total_time": 0.20301701071784906
+    },
+    "agent_answering": {
+      "mean_ms": 15.0060975,
+      "p50_ms": 10.569465,
+      "p95_ms": 19.44273,
+      "p99_ms": 19.44273,
+      "fraction_of_total_time": 0.05105057825138674
+    },
+    "network_envd": {
+      "mean_ms": 0.175579,
+      "p50_ms": 0.121685,
+      "p95_ms": 0.229473,
+      "p99_ms": 0.229473,
+      "fraction_of_total_time": 0.0005973178222252809
+    },
+    "outside_creation": {
+      "mean_ms": 176.72135949848416,
+      "p50_ms": 9.174828999574771,
+      "p95_ms": 344.2678899973936,
+      "p99_ms": 344.2678899973936,
+      "fraction_of_total_time": 0.6012041166445049
+    },
+    "exec": {
+      "mean_ms": 41.40060700046888,
+      "p50_ms": 37.26554899913026,
+      "p95_ms": 45.5356650018075,
+      "p99_ms": 45.5356650018075,
+      "fraction_of_total_time": 0.1408444085700727
+    }
+  },
+  "slow_stages": {
+    "build": {
+      "mean_ms": null,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null,
+      "fraction_of_total_time": null
+    },
+    "launch": {
+      "mean_ms": null,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null,
+      "fraction_of_total_time": null
+    },
+    "agent_answering": {
+      "mean_ms": null,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null,
+      "fraction_of_total_time": null
+    },
+    "network_envd": {
+      "mean_ms": null,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null,
+      "fraction_of_total_time": null
+    },
+    "outside_creation": {
+      "mean_ms": null,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null,
+      "fraction_of_total_time": null
+    },
+    "exec": {
+      "mean_ms": null,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null,
+      "fraction_of_total_time": null
+    }
+  },
+  "ten_slowest": [
+    {
+      "pair": 1,
+      "index": 0,
+      "sandbox_id": "sbx-f9d7c11619034f7bb821",
+      "ready_ms": 465.0619669992011,
+      "create_ms": 419.5263019973936,
+      "exec_ms": 45.5356650018075,
+      "creation_stages_ms": {
+        "logged_up": 75.256428,
+        "build": 1.154038,
+        "launch": 63.305436,
+        "agent_answering": 10.569465,
+        "network_envd": 0.229473
+      },
+      "component_sum_ms": 75.25841199999999,
+      "outside_creation_ms": 344.2678899973936,
+      "readiness_ms": 10.286363,
+      "agent_other_ms": 0.2831019999999995
+    },
+    {
+      "pair": 0,
+      "index": 0,
+      "sandbox_id": "sbx-f4ac5ea07e1e4412bf10",
+      "ready_ms": 122.82941499870503,
+      "create_ms": 85.56386599957477,
+      "exec_ms": 37.26554899913026,
+      "creation_stages_ms": {
+        "logged_up": 76.388365,
+        "build": 0.778107,
+        "launch": 56.046515,
+        "agent_answering": 19.44273,
+        "network_envd": 0.121685
+      },
+      "component_sum_ms": 76.389037,
+      "outside_creation_ms": 9.174828999574771,
+      "readiness_ms": 19.226564,
+      "agent_other_ms": 0.2161660000000012
+    }
+  ],
+  "limitations": [
+    "Existing selective logging can perturb timing; this is not a ranking cohort",
+    "Build includes preparation before new_vm returns; launch covers accepted launch_from_snapshot_prefaulted",
+    "Agent answering encloses existing queue/connection/Restored observations plus other scheduling time",
+    "Network/envd is the existing elapsed phase name; this fixture has no network or volume mounts",
+    "Outside creation includes HTTP/handler and registration/response work, not a measured internal cause",
+    "Logged up total and final phase use separate elapsed readings; component sum is retained independently",
+    "Stage percentiles are not additive; all slow observations remain in overall summaries"
+  ]
+}

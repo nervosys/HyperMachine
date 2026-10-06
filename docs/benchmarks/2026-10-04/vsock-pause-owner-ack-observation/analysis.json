@@ -1,0 +1,29 @@
+{
+  "total_main_target_resumes": 20,
+  "resume_api_elapsed_ms": [
+    18.176105,
+    15.630921999999998,
+    17.029738,
+    18.274713000000002,
+    15.920912999999999,
+    17.029645,
+    17.067510000000002,
+    17.845968,
+    16.752422,
+    16.636602,
+    16.444076,
+    19.174021,
+    16.622163999999998,
+    16.906475,
+    16.225,
+    16.513368,
+    16.789533,
+    16.454546,
+    16.643265,
+    19.652059
+  ],
+  "original_gate_proven": false,
+  "earlier_unchanged_gate_failure_preserved": true,
+  "observation_api_timeout_seconds": 90,
+  "daemon_ready_timeout_seconds": 15
+}

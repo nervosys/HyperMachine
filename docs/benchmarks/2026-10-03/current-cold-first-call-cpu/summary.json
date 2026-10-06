@@ -1,0 +1,30 @@
+[
+  {
+    "concurrency": 8,
+    "guests": 8,
+    "median_thread_cpu_ms": 206.306621,
+    "median_wall_ms": 213.01313499999998,
+    "median_per_guest_cpu_wall_fraction": 0.9851289002289296,
+    "return_kinds": [
+      {
+        "kind": "io_out",
+        "io_port": 3320,
+        "count": 8
+      }
+    ]
+  },
+  {
+    "concurrency": 100,
+    "guests": 100,
+    "median_thread_cpu_ms": 375.25356750000003,
+    "median_wall_ms": 5006.5814835,
+    "median_per_guest_cpu_wall_fraction": 0.07460020889900902,
+    "return_kinds": [
+      {
+        "kind": "io_out",
+        "io_port": 3320,
+        "count": 100
+      }
+    ]
+  }
+]

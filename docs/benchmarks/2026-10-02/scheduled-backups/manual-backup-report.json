@@ -1,0 +1,100 @@
+{
+  "success": true,
+  "performance_comparison": false,
+  "storage": "owned Moto S3 HTTP emulator; no managed-store durability claim",
+  "artifact_sha256": {
+    "tool": "ded00f18a08abd2d46b001afd54b5f97c2c0e3cbd082bd91802eba7b3f12877a",
+    "coordinator": "ece179a42c4025e1f3c2cafaf717dcdb67fbd08fd54a8d58e0cbce7362203f32"
+  },
+  "versions": {
+    "boto3": "1.43.107",
+    "botocore": "1.43.107",
+    "cryptography": "50.0.0",
+    "moto": "5.2.3"
+  },
+  "checks": [
+    {
+      "name": "active-store-refused",
+      "refused": true
+    },
+    {
+      "name": "encrypted-conditional-upload",
+      "sha256": "b82e94aae9e74f3b6fa5619b5d636508aee1bd78fced635343c59abab8262051",
+      "bytes": 931
+    },
+    {
+      "name": "relocated-roundtrip-with-empty-directory-and-permissions",
+      "files": 4
+    },
+    {
+      "name": "wrong-key-tampered-truncated-refused",
+      "refused": true
+    },
+    {
+      "name": "expanded-byte-limit-refused",
+      "refused": true
+    },
+    {
+      "name": "unsafe-path",
+      "refused": true,
+      "error": "unsafe relative file name"
+    },
+    {
+      "name": "symlink",
+      "refused": true,
+      "error": "unsupported archive entry"
+    },
+    {
+      "name": "missing-file",
+      "refused": true,
+      "error": "archive file missing"
+    },
+    {
+      "name": "wrong-digest",
+      "refused": true,
+      "error": "archive file digest mismatch"
+    },
+    {
+      "name": "extra-file",
+      "refused": true,
+      "error": "extra or duplicate archive file"
+    },
+    {
+      "name": "duplicate-file",
+      "refused": true,
+      "error": "extra or duplicate archive file"
+    },
+    {
+      "name": "source-symlink-and-unfinished-claim-refused",
+      "refused": true
+    },
+    {
+      "name": "independent-receipt-mismatch-refused",
+      "refused": true
+    },
+    {
+      "name": "lost-upload-response-retains-verifiable-receipt",
+      "passed": true,
+      "injection": "client acknowledgement loss after real emulator commit",
+      "receipt": {
+        "operation": "backup",
+        "object": "lost-response.hmb",
+        "encrypted_bytes": 931,
+        "sha256": "a684686197ed8bd9d0a342fea2734b515ecb4b3dea8824e3b8cc3175fb2a5c14",
+        "files": 4,
+        "expanded_bytes": 7089,
+        "compression_level": 1,
+        "upload_method": "single",
+        "parts": 0
+      }
+    }
+  ],
+  "cleanup_errors": [],
+  "processes_stopped": [
+    {
+      "name": "s3",
+      "exit_code": 0
+    }
+  ],
+  "artifacts_unchanged": true
+}

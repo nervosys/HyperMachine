@@ -1,0 +1,14 @@
+{
+  "ipv4_old_summary_regenerates": true,
+  "ipv6_old_summary_regenerates": true,
+  "profile_rejected": true,
+  "resources_rejected": true,
+  "cleanup_rejected": true,
+  "raw_samples_rejected": true,
+  "percentile_rejected": true,
+  "rate_rejected": true,
+  "gateway_identity_rejected": true,
+  "warmups_rejected": true,
+  "host_rejected": true,
+  "cli_samples_rejected": true
+}

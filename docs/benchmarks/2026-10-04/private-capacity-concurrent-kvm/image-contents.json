@@ -1,0 +1,74 @@
+{
+  "changed_paths": [
+    "bin/hm-udp-echo"
+  ],
+  "preserved_entries": 7,
+  "base_catalog": {
+    "init": [
+      "file",
+      "25879880540c60aeabff8f2d708b1acfaf8441fe617b228e644953b635ba5098"
+    ],
+    "bin/sh": [
+      "symlink",
+      "busybox"
+    ],
+    "bin/tcp-fixture": [
+      "file",
+      "2fd0eb16d9f6e63bf4cef0238b721b2b6d4d448ef48ae5bdc620a8a63c80793c"
+    ],
+    "bin/hv2-guest-agentd": [
+      "file",
+      "4d1e45affe4e18e29544d88eeed142bfbc718174f12b98cf33a4a24803eb1ce8"
+    ],
+    "bin/hm-udp-echo": [
+      "file",
+      "d03c8ba9e917356f17c948d567f36aa1a02700e8d937624a75a3fed83de71fb5"
+    ],
+    "bin/hm-private-udp-client": [
+      "file",
+      "f3b0702524a57bc28a80987d252c8e2756963d3fce3e419317e1f71d27435d2a"
+    ],
+    "bin/busybox": [
+      "file",
+      "7ae95c260622412ceba6eb9f45d68f616cdc091a1d71d6c0a08b5875bb2c31dd"
+    ],
+    "bin/bash": [
+      "file",
+      "4e11eafa00e8ffce3971a2a815e08dd8543de71f133519592379262bb07c1cf0"
+    ]
+  },
+  "candidate_catalog": {
+    "init": [
+      "file",
+      "25879880540c60aeabff8f2d708b1acfaf8441fe617b228e644953b635ba5098"
+    ],
+    "bin/sh": [
+      "symlink",
+      "busybox"
+    ],
+    "bin/tcp-fixture": [
+      "file",
+      "2fd0eb16d9f6e63bf4cef0238b721b2b6d4d448ef48ae5bdc620a8a63c80793c"
+    ],
+    "bin/hv2-guest-agentd": [
+      "file",
+      "4d1e45affe4e18e29544d88eeed142bfbc718174f12b98cf33a4a24803eb1ce8"
+    ],
+    "bin/hm-udp-echo": [
+      "file",
+      "3a705fd72f2bfbfc81016b2ed1627620285a3982c8a91811c2e00c78a971e5d5"
+    ],
+    "bin/hm-private-udp-client": [
+      "file",
+      "f3b0702524a57bc28a80987d252c8e2756963d3fce3e419317e1f71d27435d2a"
+    ],
+    "bin/busybox": [
+      "file",
+      "7ae95c260622412ceba6eb9f45d68f616cdc091a1d71d6c0a08b5875bb2c31dd"
+    ],
+    "bin/bash": [
+      "file",
+      "4e11eafa00e8ffce3971a2a815e08dd8543de71f133519592379262bb07c1cf0"
+    ]
+  }
+}

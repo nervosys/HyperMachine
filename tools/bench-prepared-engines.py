@@ -51,7 +51,9 @@ def guest_exec(vsock,process,command,restored_notice=None):
         restored_notice.update(entropy_bytes=64,entropy_sha256=hashlib.sha256(entropy).hexdigest(),unix_time_ns=now,attempts=restored_notice.get('attempts',0)+1)
         return ({'kind':'restored','unix_time_ns':now,'entropy':list(entropy)},'acknowledged')
     with fc.guest(vsock,time.perf_counter()+15,process,readiness=readiness if restored_notice is not None else None) as stream:
-        if restored_notice is not None:restored_notice['acknowledged']=True
+        if restored_notice is not None:
+            restored_notice['acknowledged']=True
+            restored_notice['ready_monotonic']=time.perf_counter()
         value=fc.rpc(stream,2,{'kind':'exec','program':'/bin/sh','args':['-c',command],'timeout_ms':10000})
     return value
 
@@ -74,14 +76,15 @@ def batch(args,engine,pair,url,node,seed,snapshot,directory):
         try:
             if engine=='hypermachine':
                 created=engines.request(url,'POST','/v2/sandboxes',{'templateID':'warm-benchmark','timeout':300,'allowInternetAccess':False})
+                created_at=time.perf_counter()
                 sandbox=created.get('sandboxID');require(isinstance(sandbox,str) and sandbox,'create returned no known sandbox ID')
                 with lock:handles[index]=(sandbox,None,None)
+                if args.readiness_diagnostics:row['sandbox_id']=sandbox
                 row['restored_notice']={'acknowledged_via_create':True,'entropy_bytes':64}
                 result=engines.request(url,'POST',f'/sandboxes/{sandbox}/exec',{'cmd':verify_command(seed,marker),'timeout_secs':10})
                 valid_exec(result,marker)
-                row['ready_ms']=(time.perf_counter()-started)*1000
-                config=engines.request(url,'GET',f'/sandboxes/{sandbox}')
-                require(config['cpuCount']==1 and config['memoryMB']==1024,'guest resources differ')
+                finished=time.perf_counter();row['ready_ms']=(finished-started)*1000
+                row['latency_phases_ms']={'create_and_notice':(created_at-started)*1000,'exec':(finished-created_at)*1000}
             else:
                 api=child/'api.sock';vsock=child/'vsock.sock';log=(child/'console.log').open('wb')
                 process=subprocess.Popen([str(args.firecracker),'--api-sock',str(api)],stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT)
@@ -90,15 +93,38 @@ def batch(args,engine,pair,url,node,seed,snapshot,directory):
                     args.owned_firecracker.append(process)
                 fc.wait_api(api,started+30,process)
                 fapi(api,'PUT','/snapshot/load',{'snapshot_path':str(snapshot/'vm.state'),'mem_backend':{'backend_type':'File','backend_path':str(snapshot/'memory.raw')},'resume_vm':True,'vsock_override':{'uds_path':str(vsock)}})
+                loaded_at=time.perf_counter()
                 row['restored_notice']={}
                 result=guest_exec(vsock,process,verify_command(seed,marker),row['restored_notice']);valid_exec(result,marker,True)
-                row['ready_ms']=(time.perf_counter()-started)*1000
-                config=fapi(api,'GET','/machine-config');require(config['vcpu_count']==1 and config['mem_size_mib']==1024,'guest resources differ')
+                finished=time.perf_counter();row['ready_ms']=(finished-started)*1000
+                notice_at=row['restored_notice']['ready_monotonic']
+                row['latency_phases_ms']={'process_and_load':(loaded_at-started)*1000,'connect_and_notice':(notice_at-loaded_at)*1000,'exec':(finished-notice_at)*1000}
             row.update(success=True,prepared_file=True,prepared_process_environment=True,independent_child_write=True,clock_rng_resynchronised=True)
         except Exception as error:row['error']=str(error)
         return row
     with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
         report['samples']=list(pool.map(attempt,range(args.concurrency)))
+        # These independent resource checks must not load the shared API while
+        # peers are still measuring creation and execution. A failed check still
+        # invalidates the sample; it never turns into a conditional timing win.
+        def validate_resources(row):
+            if not row['success']:
+                return row
+            try:
+                sandbox,process,_=handles[row['index']]
+                if engine=='hypermachine':
+                    config=engines.request(url,'GET',f'/sandboxes/{sandbox}')
+                    resources={'cpu_count':config['cpuCount'],'memory_mb':config['memoryMB']}
+                else:
+                    config=fapi(directory/f"child-{pair}-{row['index']}"/'api.sock','GET','/machine-config')
+                    resources={'cpu_count':config['vcpu_count'],'memory_mb':config['mem_size_mib']}
+                require(resources=={'cpu_count':1,'memory_mb':1024},'guest resources differ')
+                row['verified_resources']=resources
+            except Exception as error:
+                row.update(success=False,error=f'after-timing resource validation: {error}')
+            return row
+        report['samples']=list(pool.map(validate_resources,report['samples']))
+    report['resource_validation_phase']='after_all_timed_attempts'
     try:
         time.sleep(5);started=time.perf_counter()
         readings=[engines.memory(node.pid)] if engine=='hypermachine' else [engines.memory(p.pid) for _,p,_ in handles.values() if p.poll() is None]
@@ -138,7 +164,10 @@ def main():
     for name in ['hypermachine','firecracker','kernel','initrd','output']:parser.add_argument('--'+name,type=Path,required=True)
     parser.add_argument('--pairs',type=int,default=10);parser.add_argument('--concurrency',type=int,default=8)
     parser.add_argument('--mapping-diagnostics',action='store_true',help='Read owned-process smaps outside latency timing; diagnostic-only cohort')
+    parser.add_argument('--readiness-diagnostics',action='store_true',help='Retain bounded owned-daemon readiness logs; diagnostic-only cohort')
+    parser.add_argument('--creation-diagnostics',action='store_true',help='Also retain existing daemon build/launch timing logs; diagnostic-only cohort')
     args=parser.parse_args();args.owned_firecracker=[];require(1<=args.pairs<=100 and 1<=args.concurrency<=100,'invalid experiment limits')
+    if args.creation_diagnostics:args.readiness_diagnostics=True
     if args.mapping_diagnostics:
         diagnostic_spec=importlib.util.spec_from_file_location('prepared_mappings',Path(__file__).with_name('prepared-memory-mappings.py'))
         args.mapping_diagnostics=importlib.util.module_from_spec(diagnostic_spec);diagnostic_spec.loader.exec_module(args.mapping_diagnostics)
@@ -152,14 +181,20 @@ def main():
     report={'success':False,'purpose':'prepared snapshot startup, no managed endpoint or universal performance claim','artifact_sha256':hashes,'driver_cpu_affinity':affinity,'cpu_count':1,'memory_mb':1024,'concurrency':args.concurrency,'pairs':args.pairs,'guest_readiness_timeout_s':15,'preparation':{},'runs':[],'cleanup_errors':[],
         'limitations':['Shared WSL nested KVM and uncontrolled host background load','Persistent HyperMachine HTTP daemon versus fresh Firecracker process/Unix API','Prepared resident/cache-warm sources; no dropped-cache or storage durability comparison','PSS excludes kernel memory and unmapped page cache; not fleet density','Failed attempts retained; conditional latency and memory summaries','Engine-generated device kernel arguments differ']}
     args.output.parent.mkdir(parents=True,exist_ok=True)
-    report['diagnostic_only']=bool(args.mapping_diagnostics)
+    report['diagnostic_only']=bool(args.mapping_diagnostics or args.readiness_diagnostics)
+    log_filter='warn,hv2_agent::agent_vm=debug' if args.readiness_diagnostics else 'warn'
+    if args.creation_diagnostics:log_filter+=',hv2_sandboxd=debug'
+    if args.readiness_diagnostics:report['readiness_diagnostics']={'rust_log':log_filter,'max_log_bytes':16*1024*1024,'logging_may_affect_timing':True}
+    if args.creation_diagnostics:report['readiness_diagnostics']['creation_stages']=True
     report['guest_restore_contract']={'clock_rng_resynchronised':True,'entropy_bytes':64,'hypermachine':'acknowledged by successful create, source-bound after_restore','firecracker':'Restored RPC acknowledgement before exec; replaces readiness ping'}
+    report['latency_phase_measurement']='client_monotonic_no_added_rpc'
+    report['resource_validation_phase']='after_all_timed_attempts'
     def save():args.output.write_text(json.dumps(report,indent=2)+'\n')
     with tempfile.TemporaryDirectory(prefix='hm-prepared-',dir='/var/tmp') as scratch:
         scratch=Path(scratch);node=None;parent=None;log=None;seed=uuid.uuid4().hex;url=None
         try:
             hm=scratch/'hm';hm.mkdir();api_port=engines.free_port();proxy=engines.free_port();url=f'http://127.0.0.1:{api_port}'
-            log=(hm/'console.log').open('wb');node=subprocess.Popen([str(args.hypermachine),'--port',str(api_port),'--proxy-port',str(proxy),'--memory-mb','1024','--cpu-cores','1','--capacity','128','--volume-dir',str(hm/'volumes'),'--snapshot-store',str(hm/'snapshots')],env={'PATH':'/usr/local/bin:/usr/bin:/bin','HV2_KERNEL':str(args.kernel),'HV2_INITRD':str(args.initrd),'RUST_LOG':'warn'},stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT)
+            log=(hm/'console.log').open('wb');node=subprocess.Popen([str(args.hypermachine),'--port',str(api_port),'--proxy-port',str(proxy),'--memory-mb','1024','--cpu-cores','1','--capacity','128','--volume-dir',str(hm/'volumes'),'--snapshot-store',str(hm/'snapshots')],env={'PATH':'/usr/local/bin:/usr/bin:/bin','HV2_KERNEL':str(args.kernel),'HV2_INITRD':str(args.initrd),'RUST_LOG':log_filter},stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT)
             deadline=time.perf_counter()+30
             while True:
                 require(node.poll() is None,'node exited during startup')
@@ -173,13 +208,15 @@ def main():
             report['preparation_phase']='hypermachine-populate-parent';save()
             result=engines.request(url,'POST',f'/sandboxes/{id}/exec',{'cmd':prepare_command(seed),'timeout_secs':10});valid_exec(result,'prepared')
             report['preparation_phase']='hypermachine-capture-named-snapshot';save()
+            capture_started=time.perf_counter()
             engines.request(url,'POST',f'/sandboxes/{id}/snapshots',{'name':'warm-benchmark'})
+            named_capture_ms=(time.perf_counter()-capture_started)*1000
             report['preparation_phase']='hypermachine-delete-parent';save()
             engines.request(url,'DELETE',f'/sandboxes/{id}')
             report['preparation_phase']='hypermachine-verify-named-snapshot';save()
             offerings=engines.request(url,'GET','/snapshots?name=warm-benchmark');offering=next((t for t in offerings if t.get('snapshotID')=='warm-benchmark:default'),None)
             require(offering is not None and offering.get('sandboxID')==id,'named snapshot not listed for prepared parent')
-            report['preparation']['hypermachine']={'duration_ms':(time.perf_counter()-started)*1000,'offering':offering,'base_template':base,'source_files':file_catalog(hm/'snapshots')}
+            report['preparation']['hypermachine']={'duration_ms':(time.perf_counter()-started)*1000,'named_capture_ms':named_capture_ms,'offering':offering,'base_template':base,'source_files':file_catalog(hm/'snapshots')}
             report['preparation_phase']='firecracker-prepare-parent';save()
             snapshot=scratch/'fc';snapshot.mkdir();api=snapshot/'api.sock';vsock=snapshot/'vsock.sock';plog=(snapshot/'console.log').open('wb');started=time.perf_counter()
             parent=subprocess.Popen([str(args.firecracker),'--api-sock',str(api)],stdin=subprocess.DEVNULL,stdout=plog,stderr=subprocess.STDOUT)
@@ -212,6 +249,10 @@ def main():
                 except Exception as error:report['cleanup_errors'].append(str(error))
                 report['owned_node_stopped']=engines.stop(node);report['owned_node_exit_code']=node.returncode
             if log:log.close();report['node_log_tail']=(scratch/'hm/console.log').read_bytes()[-8000:].decode(errors='replace')
+            if log and args.readiness_diagnostics:
+                with (scratch/'hm/console.log').open('rb') as captured:raw=captured.read(16*1024*1024+1)
+                report['readiness_diagnostics'].update(log_bytes=len(raw),log_truncated=len(raw)>16*1024*1024,node_log=raw[:16*1024*1024].decode(errors='replace'))
+                if len(raw)>16*1024*1024:report['cleanup_errors'].append('readiness diagnostic log exceeded retention bound')
             report['artifacts_unchanged']=all(engines.digest(path)==hashes[name] for name,path in paths.items())
             report['success']='setup_error' not in report and not report['cleanup_errors'] and report.get('owned_node_stopped') is True and report['artifacts_unchanged'] and all(p.get('source_unchanged') for p in report['preparation'].values()) and len(report['runs'])==args.pairs*2 and all(r['success'] for r in report['runs'])
             save()

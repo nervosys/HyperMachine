@@ -1,9 +1,11 @@
 # HyperMachine against boxd and exe.dev
 
 The goal: every capability [boxd](https://boxd.sh/) and [exe.dev](https://exe.dev/) offer, and more.
-This page tracks it. Their feature lists were reviewed against their public docs on 2026-10-01
+This page tracks it. Their feature lists were reviewed against their public docs on 2026-10-01, with a targeted
+secret, storage and raw-port rechecks on 2026-10-03
 (`docs.boxd.sh/llms-full.txt`, `exe.dev/docs/all`). HyperMachine's statuses come from its code,
-not its docs. **Real** means wired to a shipped binary and checked. **Partial** says what is missing.
+not its docs. **Real** means wired to a checked binary; it does not imply a published
+release or managed production validation. **Partial** says what is missing.
 
 All three products give each user a real Linux VM behind a hardware boundary, rather than a
 container. The comparison is about what surrounds the VM.
@@ -19,26 +21,28 @@ container. The comparison is about what surrounds the VM.
 | Checkpoint and restore in place | yes, 10 per VM | not documented | **Real**: 10 per sandbox; memory and disk; same ID, token and URL; a failed restore changes nothing |
 | Pause and resume | yes | not documented | **Real**: to disk; any node resumes |
 | Suspend when idle, wake on traffic | yes | not documented | **Real**: `idleTimeout` or `--idle-pause-after`, plus `autoResume`. Idle means no traffic *and* a quiet guest CPU, so unwatched work is never frozen |
-| HTTPS URL per VM | yes | yes | **Partial**: `{port}-{id}.{domain}` over TLS; you bring the wildcard certificate (no ACME) |
-| Per-port URLs, raw TCP/UDP | yes | ports 3000-9999 | **Partial**: every port over HTTP(S); authenticated raw TCP through the node/control-plane API and loopback CLI, [verified with KVM/TLS and lifecycle operations](benchmarks/2026-10-01/tcp-tunnel.md); UDP absent |
+| HTTPS URL per VM | yes | yes | **Partial**: `{port}-{id}.{domain}` over TLS; operator-supplied wildcard or [hostname certificate bundles](CUSTOM_DOMAINS.md), with [built-in Certbot renewal scheduling and deployment recovery through real KVM traffic](benchmarks/2026-10-03/tls-renewal-worker/README.md); [automatic custom-domain discovery and initial issuance](benchmarks/2026-10-03/discovery-tls-kvm/README.md) verified with owned ACME/KVM; public CA operation remains unverified |
+| Per-port HTTP(S) URLs | yes | HTTPS proxy; authenticated additional ports 3000–9999, one public target | **Real**: guest HTTP(S) port URLs through authenticated node/control proxies; see [private guest URLs](PRIVATE_GUEST_URLS.md) |
+| Authenticated local TCP/UDP tunnels | raw public forwards documented; local tunnel equivalence not checked | SSH/HTTP access; raw UDP not established | **Real in recorded accepted context**: CLI TCP and framed IPv4/IPv6 loopback UDP through control/node APIs, with TLS/mTLS, peer isolation and lifecycle closure ([UDP evidence](benchmarks/2026-10-03/udp-ipv6-forwarding/README.md), [source alignment](benchmarks/2026-10-03/udp-ipv6-source-alignment/README.md)) |
+| Managed public raw TCP/UDP port allocation | yes; stable allocated port, TCP/UDP/both, max 3 per VM, owner-only; persists across reboots | not established in reviewed docs | **Partial**: owner-only API/CLI, stable Memory/Redis allocations and gateway supervision. [Sixteen both-protocol ports per VM](benchmarks/2026-10-03/native-sixteen-tcp-udp-capacity/README.md) and [32-worker mixed TCP/UDP traffic](benchmarks/2026-10-03/native-mixed-tcp-udp-capacity/README.md) pass real KVM checks with exact payloads and pause/resume/delete cleanup. [Gateway/Redis restart recovery](benchmarks/2026-10-03/native-gateway-redis-outage/README.md), [administrator legacy-owner adoption](benchmarks/2026-10-03/legacy-owner-adoption-workflow/README.md), and [one stable both-protocol port across node migration](benchmarks/2026-10-03/native-public-port-migration/README.md) are verified in owned fixtures. [Automatic local registration recovery](benchmarks/2026-10-03/automatic-registration-kvm/README.md) and [repeated store-timeout recovery](benchmarks/2026-10-03/registration-store-timeout-kvm/README.md) preserve uncertain initial/resumed guests. Guest reboot persistence, daemon-crash claim recovery, managed failover, public Internet operation and competitor performance remain unverified |
 | Custom domains | yes | yes | **Real**: authenticated cluster bindings to guest HTTP ports, Memory/Redis ownership, HTTPS forwarding; [operator DNS and certificates](CUSTOM_DOMAINS.md) |
-| DNS validation and automatic domain TLS | yes | not checked | **Absent**: operators provide DNS and certificates |
-| Private URLs with login, identity headers | public web URL; team shell sharing | yes (`X-ExeDev-Email`) | **Partial**: [dedicated operator-issued browser credentials and trusted subject headers](PRIVATE_GUEST_URLS.md), TLS/mTLS required, expiry and atomic reload; [exact sandbox-ID sharing grants, revocation, fork exclusion and domain rebinding](benchmarks/2026-10-02/private-web-scopes/README.md) pass 25 KVM/TLS checks; SSO, verified email claims and self-service sharing management absent |
-| SSH to a VM by name | yes | yes | **Partial**: [persisted metadata names](benchmarks/2026-10-01/ssh-name.md) and authenticated stdio transport verified with real KVM/TLS, binary transfer and duplicate/key rejection; [reserved aliases for existing VMs](benchmarks/2026-10-02/reserved-alias/README.md) verified with deletion/reuse and fork ownership; [control-plane named creation](benchmarks/2026-10-02/reserved-create/README.md) is KVM/TLS verified, including deletion/reuse; [forked children omit the parent name](benchmarks/2026-10-02/fork-name/README.md), preserving parent lookup; [node-side atomic completion and discarded-descriptor recovery](benchmarks/2026-10-02/node-completion/README.md) are KVM-verified; [committed-name recovery after real node response loss and timeout](benchmarks/2026-10-02/node-response-loss/README.md) passes 24 KVM/TLS checks; [guest preservation after post-commit event failure](benchmarks/2026-10-02/node-publication-fault/README.md) is KVM-verified; [registration ACL partial-write prevention](benchmarks/2026-10-02/registration-acl/README.md) is verified against Redis and [real guest registration-write failure preservation](benchmarks/2026-10-02/node-registration-fault/README.md) passes 26 combined KVM/TLS checks; [authenticated node reconciliation of the same preserved guest](benchmarks/2026-10-02/registration-reconcile/README.md) is KVM-verified; [uncertain-registration lifecycle guards](benchmarks/2026-10-02/registration-lifecycle/README.md) are KVM-verified across the idle deadline, including [connect and checkpoint mutation protection](benchmarks/2026-10-02/registration-mutations/README.md); fleet migration, in-flight recovery and guest SSH provisioning remain incomplete |
+| DNS validation and automatic domain TLS | yes | not checked | **Partial**: [opt-in DNS TXT ownership verification](CUSTOM_DOMAINS.md) gates new domain claims and port updates; [operator-configured certificate worker](TLS_RENEWAL_WORKER.md) verifies scheduling, activation and crash recovery with real ACME-to-KVM traffic, plus [fresh-account initial issuance through KVM](benchmarks/2026-10-03/initial-tls-kvm/README.md); [automatic claim discovery and initial issuance](benchmarks/2026-10-03/discovery-tls-kvm/README.md) verified with owned ACME/KVM; retirement and public DNS/CA operation incomplete |
+| Private URLs with login, identity headers | public web URL; team shell sharing | yes (`X-ExeDev-Email`) | **Partial**: [dedicated operator-issued browser credentials and trusted subject headers](PRIVATE_GUEST_URLS.md), TLS/mTLS required, expiry and atomic reload; [exact sandbox-ID sharing grants, revocation, fork exclusion and domain rebinding](benchmarks/2026-10-02/private-web-scopes/README.md) pass 25 KVM/TLS checks; [owner API/CLI grants and opt-in HTTP/1+HTTP/2 TLS enforcement](benchmarks/2026-10-04/web-sharing-proxy/README.md) verified in local fixtures; [five local Redis AOF-always hard restarts](benchmarks/2026-10-04/web-sharing-aof-restart/README.md) preserve grants/revocations; [ten real KVM owner API/CLI/TLS cases](benchmarks/2026-10-05/owner-sharing-kvm/README.md) verify fork exclusion, paused revocation and shipped-control-plane restart; [thirteen live KVM/Redis outage cases](benchmarks/2026-10-05/owner-sharing-redis-outage/README.md) verify paused no-wake denial and active/revoked AOF recovery; managed durability remains open; SSO and verified email claims absent |
+| SSH to a VM by name | yes | yes | **Partial**: [persisted metadata names](benchmarks/2026-10-01/ssh-name.md) and authenticated stdio transport verified with real KVM/TLS, binary transfer and duplicate/key rejection; [reserved aliases for existing VMs](benchmarks/2026-10-02/reserved-alias/README.md) verified with deletion/reuse and fork ownership; [control-plane named creation](benchmarks/2026-10-02/reserved-create/README.md) is KVM/TLS verified, including deletion/reuse; [forked children omit the parent name](benchmarks/2026-10-02/fork-name/README.md), preserving parent lookup; [node-side atomic completion and discarded-descriptor recovery](benchmarks/2026-10-02/node-completion/README.md) are KVM-verified; [committed-name recovery after real node response loss and timeout](benchmarks/2026-10-02/node-response-loss/README.md) passes 24 KVM/TLS checks; [guest preservation after post-commit event failure](benchmarks/2026-10-02/node-publication-fault/README.md) is KVM-verified; [registration ACL partial-write prevention](benchmarks/2026-10-02/registration-acl/README.md) is verified against Redis and [real guest registration-write failure preservation](benchmarks/2026-10-02/node-registration-fault/README.md) passes 26 combined KVM/TLS checks; [authenticated node reconciliation of the same preserved guest](benchmarks/2026-10-02/registration-reconcile/README.md) is KVM-verified; [uncertain-registration lifecycle guards](benchmarks/2026-10-02/registration-lifecycle/README.md) are KVM-verified across the idle deadline, including [connect and checkpoint mutation protection](benchmarks/2026-10-02/registration-mutations/README.md); [Automatic named registration recovery](benchmarks/2026-10-03/named-automatic-registration-kvm/README.md) now passes two real KVM profiles with duplicate refusal, preserved operation identity, deletion and name reuse; fleet migration, daemon-crash recovery and guest SSH provisioning remain incomplete |
 | exec, and file copy in and out | yes | ssh/scp | **Real**: `/exec`, envd processes with PTY and stdin, files |
 | **Env vars for every command in a VM** | org-wide | creation env supported; command inheritance not checked | **Real**: E2B's `envVars`, kept in the guest so pause, fork and snapshots carry them |
-| Secrets held off the VM, injected at the edge | platform-held integration credentials; header-injection parity not established | yes | **Real**: header injection at the egress gateway, which the guest never sees |
+| Secrets held off the VM, injected at the edge | host-bound placeholder substitution in headers, query, body and Basic auth | yes | **Partial**: exact-ID operator scopes rewrite headers, Basic auth, query, JSON, form and raw bodies over verified HTTPS in real KVM; delimiter escaping, rejected reload retention, rotation, revocation, fork exclusion and pause/resume verified. Binary payloads, upstream hostname refusal and rotation/revocation on an established guest HTTPS connection are verified; managed org scope and exact lifecycle race schedules remain incomplete ([current guide](EGRESS_SECRETS.md), [keepalive evidence](benchmarks/2026-10-03/secret-https-keepalive/README.md)) |
 | Workload identity (AWS/GCP federation) | no | yes | **Real**: JWT-SVIDs minted at the gateway, JWKS and OIDC discovery |
 | Egress policy per VM | egress allowlist documented; enforcement details not checked | no | **Real**: allow/deny lists, live updates, decision log, reserved ranges refused |
-| VM-to-VM networks by tag | yes | via proxy | **Absent** |
-| Teams, roles, sharing | yes | yes, with SSO | **Partial**: one team, with operator/observer key roles and [operator-managed sandbox-ID web sharing](PRIVATE_GUEST_URLS.md); tenant isolation and self-service sharing absent |
+| VM-to-VM networks by tag | yes | via proxy | **Partial**: [same-node guest TCP/DNS](benchmarks/2026-10-04/private-guest-gateway-kvm/README.md) and [two daemon nodes on one owned host](benchmarks/2026-10-04/private-cross-node-kvm/README.md) pass KVM checks with Internet disabled, exact one-MiB payloads, owner/tag DNS isolation, stale-address recovery and source pause/resume and [long-lived guest TCP closure after target membership removal](benchmarks/2026-10-04/private-guest-stream-revocation/README.md), plus [source membership removal and fresh-binding rejoin recovery](benchmarks/2026-10-04/private-source-stream-revocation/README.md). Owner-scoped membership, atomic Memory/Redis address publication and generation-pinned mTLS transport are implemented. [Actual source guest IPv4 UDP through the maximum 65,507-byte payload](benchmarks/2026-10-04/private-udp-max-source-guest-kvm/README.md) preserves empty/binary/fragmented datagrams through the production gateway/router/connector, with owner binding refusal and stale-address recovery, plus [established UDP source/target membership revocation and rejoin](benchmarks/2026-10-04/private-udp-active-membership-kvm/README.md) and [target pause/resume](benchmarks/2026-10-04/private-udp-target-pause-kvm/README.md) and [route-store lookup failure/recovery](benchmarks/2026-10-04/private-udp-store-outage-kvm/README.md) and [target deletion](benchmarks/2026-10-04/private-udp-target-delete-kvm/README.md) and [source pause/resume/deletion](benchmarks/2026-10-04/private-udp-source-lifecycle-kvm/README.md). Independent hosts, complete lifecycle/pending-publication tests, complete guest stream/half-close/saturation gates, private IPv6 and full UDP lifecycle gates, and crash durability remain unfinished or unverified |
+| Teams, roles, sharing | yes | yes, with SSO | **Partial**: one team, with operator/observer key roles and [operator-provisioned browser identities with owner-managed grants](PRIVATE_GUEST_URLS.md), checked through local owner API/CLI, real KVM/TLS and control-plane restart fixtures; creator-bound sandbox API admission and filtered inventory passed a rebuilt-release KVM gate; full tenant isolation, team membership, SSO and managed sharing durability remain incomplete |
 | Scoped, expiring API keys | yes | yes | **Real on the control plane**: hashed operator-provisioned keys, request-time expiry and capability scopes; single team; [atomic policy replacement and Unix signal reload](API_KEY_ROTATION.md) are verified through real HTTP and a running process |
-| Persistent volumes shared between VMs | no | no | **Real**: E2B volumes over 9P, live and shared (Linux hosts) |
+| Persistent volumes shared between VMs | persistent movable disks, one attachment at a time; concurrent sharing not documented | not documented | **Partial**: E2B volumes over 9P, live and shared (Linux hosts), with existing authenticated control-plane management and bearer-token content forwarding; integrated CLI management, streaming upload/download, directory listing/stat and directory creation are verified through owned real routes. Exact 4 GiB client transfers and [path-command HTTPS trust checks](benchmarks/2026-10-03/volume-path-cli-tls/README.md) pass in protocol fixtures; managed-storage guarantees remain incomplete. Exclusive metadata creation and file/directory flushing, with two-daemon binary upload/replacement/restart checks. Opt-in atomic upload preserves previous bytes on ordinary pre-publication failure; default replacement remains in-place. Block-device attach/detach and power-loss equivalence are not established ([current guide](VOLUMES.md)) |
 | Build images from Dockerfiles or OCI | compose | Dockerfile | **Real**: E2B template builds, no Docker |
-| Backups to object storage | yes | no | **Partial**: [encrypted offline S3 snapshot-store backup and recovery](OBJECT_STORAGE_BACKUPS.md), verified with an owned S3 HTTP emulator and real KVM paused guests, mounted volumes and named snapshots; managed-store durability, IAM, scheduling and retention remain unverified or absent |
+| Backups to object storage | yes | no | **Partial**: [encrypted offline S3 snapshot-store backup and recovery](OBJECT_STORAGE_BACKUPS.md), verified with an owned S3 HTTP emulator and real KVM paused guests, mounted volumes and named snapshots; [receipt-driven exact-version retention](benchmarks/2026-10-02/backup-retention/README.md) verifies scoped deletion and failure handling; [durable scheduled offline capture](benchmarks/2026-10-02/scheduled-backups/README.md) verifies restart, uncertainty/reconciliation, pins and catalog repair on owned emulators; [integrated locked retention](benchmarks/2026-10-02/locked-retention/README.md) verifies serialization with capture and pins; [scheduled real KVM recovery](benchmarks/2026-10-02/scheduled-kvm/README.md) verifies paused guest memory, volumes and named snapshots; managed-store durability, IAM and coordinated guest maintenance remain unverified or absent |
 | Scheduled jobs and event triggers | `*.run.ts` | no | **Partial**: lifecycle webhooks, [durable delayed host-process jobs and interval publication](JOBS.md), and [explicit VM dispatch verified with KVM/TLS](benchmarks/2026-10-01/scheduled-dispatch.md); an [automatic VM worker is verified with KVM/TLS](benchmarks/2026-10-01/scheduled-worker.md), with operator-recorded completion recovery; [calendar catch-up execution is KVM/TLS-verified](benchmarks/2026-10-01/scheduled-calendar.md), with [bounded batch publication and restart verified on KVM](benchmarks/2026-10-01/calendar-publication-kvm.md) and [matched local publication timings](benchmarks/2026-10-01/calendar-publication.md); live DST scheduling, guest execution throughput and automatic guest reconciliation remain incomplete |
 | Desktop in a browser, browser for agents | yes | web terminal | **Absent** |
-| MCP for agents | skill + MCP | remote MCP with browser login; Shelley agent | **Partial**: 12 lifecycle/exec/checkpoint tools plus 2 opt-in binary file tools over [MCP stdio](src/ai/mcp-server.md), with cancellable client waits checked on real KVM; accepted remote work can continue, and remote authenticated MCP, streaming plus the wider `hv2-agent` surface remain absent |
+| MCP for agents | skill + MCP | remote MCP with browser login; Shelley agent | **Partial**: 12 lifecycle/exec/checkpoint tools plus 2 opt-in binary file tools over [MCP stdio](src/ai/mcp-server.md), with cancellable client waits checked on real KVM; accepted remote work can continue, and [operator-authenticated MCP JSON HTTP](benchmarks/2026-10-02/mcp-http/README.md) passes local transport/cancellation tests with a loopback listener for an operator TLS proxy; [official-client HTTPS and real KVM lifecycle verification](benchmarks/2026-10-02/mcp-http-kvm/README.md) passes checkpoint restore, pause/resume, fork isolation and cleanup; [opt-in HTTP binary file tools](benchmarks/2026-10-02/mcp-http-files/README.md) pass a 256 KiB roundtrip and size refusal through trusted envd HTTPS; [real-guest HTTP cancellation](benchmarks/2026-10-02/mcp-http-cancellation/README.md) verifies session reuse and continued accepted remote work after correcting an official-client interoperability failure; [observer-role inheritance](benchmarks/2026-10-02/mcp-http-observer/README.md) verifies thirteen refusals under an observer/admin-scope policy; OAuth/browser login, streaming plus the wider `hv2-agent` surface remain incomplete |
 | Email in and out | no | yes | **Absent** |
 | Multi-node, self-hosted | contact sales | enterprise | **Real**: control plane, Redis store, cross-node resume, mTLS, Helm chart |
 | GPU | no | no | **Partial**: VFIO code, not wired to sandboxes |
@@ -51,8 +55,35 @@ proxies, followed a guest-port update, retained its Redis binding across a
 control-plane restart, resumed on alias access with `autoResume` enabled, and
 released its hostname after deletion. HTTP/1.1 and HTTP/2 fixture tests preserve
 the public host, path, query and body. See [setup and evidence](CUSTOM_DOMAINS.md).
-Operators still provide DNS and certificates; ACME and DNS ownership verification
-are not implemented. These functional passes establish no performance win.
+Operators still provide DNS and certificates. Optional sandbox-bound TXT ownership
+verification now gates domain claims and port updates; ten real KVM checks verify
+refusal, successful routing, unchanged routing after failed revalidation, restart
+and replacement isolation through a trusted owned HTTPS resolver. The same binary
+passes the six legacy-mode checks without the policy. Existing bindings are not
+retroactively revalidated and public DNS propagation remains unverified.
+These functional passes establish no performance win.
+
+The [integrated ACME deploy-hook check](benchmarks/2026-10-03/acme-deployment/README.md)
+passes thirteen issuer/deployment checks and fourteen real KVM checks. Certbot
+performs real HTTP-01 renewal against Pebble and its deploy hook activates the
+new leaf while an existing 16 MiB guest download completes. Failed activation
+rolls back the manifest and leaf; expired-certificate recovery, idempotent retries,
+process/manifest identity and concurrent-deployment refusal are verified. The
+earlier [issuer-only check](benchmarks/2026-10-03/acme-issuance/README.md) is preserved.
+Initial certificates were operator-supplied in that fixture. [Later automatic claim discovery and initial issuance](benchmarks/2026-10-03/discovery-tls-kvm/README.md) verifies owned ACME/KVM provisioning; operators still configure the authenticator/webroot. The
+later [renewal worker fixture](benchmarks/2026-10-03/tls-renewal-worker/README.md)
+passes twenty-one scheduling/input/process tests, twenty-one live issuer/worker
+checks and fourteen KVM checks. Continuous due checks, exclusive journal locking,
+new-PID recovery after successful issuance, and hard termination after publication
+or activation are verified without duplicate issuance. Later owned domain-discovery checks verify automatic provisioning; public CA operation and fleet-wide orchestration remain incomplete.
+
+The [certificate bundle fixture](benchmarks/2026-10-03/tls-bundle/README.md) passes
+fourteen combined DNS/TLS/KVM checks plus six legacy checks on the same binary.
+New handshakes see a renewed leaf while an existing 16 MiB guest download completes;
+rejected key mismatch preserves the certificate and guest route. Optional default
+certificates activate and are removed through reload. All 1,067 API library tests
+and strict API/cluster lint pass. The later ACME fixture uses that same compiled
+control plane; its operator hook supplies verified certificate deployment.
 
 The [Boxd documentation](https://docs.boxd.sh/llms-full.txt) distinguishes public
 web access from team shell sharing, describes platform-held integration credentials,
@@ -61,7 +92,305 @@ describes remote MCP and VM copying, but does not establish live-memory copying.
 These are documentation findings, not independent runtime tests. “Not documented”
 and “not checked” do not establish that a competitor lacks a capability.
 
+## Current measured performance scope
+
+| Workload | Verified result | Remaining comparison limit |
+| --- | --- | --- |
+| Prepared VM creation, 100 concurrent | HyperMachine P50 853 ms / P99 1449 ms versus Firecracker P50 1018 ms / P99 1646 ms in the recorded owned fixture | HyperMachine PSS is higher; managed boxd/exe.dev endpoints are unmeasured |
+| [Recorded optimized cold VM creation, 1 concurrent](benchmarks/2026-10-03/current-release-cold-sweep/README.md) | HM/Firecracker P50 402.77/341.64 ms; P99 418.03/358.75 ms; held PSS 150.72/85.92 MiB | 4/4 per engine passed; same eight-CPU affinity and guest; owned WSL, short cohort, managed endpoints unmeasured |
+| [Recorded optimized cold VM creation, 8 concurrent](benchmarks/2026-10-03/current-release-cold-sweep/README.md) | HM/Firecracker P50 504.84/410.66 ms; P99 554.34/520.40 ms; held PSS 897.75/670.91 MiB | 32/32 per engine passed; same eight-CPU affinity and guest; owned WSL, short cohort, managed endpoints unmeasured |
+| [Recorded optimized cold VM creation, 50 concurrent](benchmarks/2026-10-03/current-release-cold-sweep/README.md) | HM/Firecracker P50 3114.63/2743.81 ms; P99 3318.44/4284.52 ms; held PSS 4305.52/4180.28 MiB | 100/100 per engine passed; same eight-CPU affinity and guest; owned WSL, short cohort, managed endpoints unmeasured |
+| [Recorded optimized cold VM creation, 100 concurrent](benchmarks/2026-10-03/current-release-cold-sweep/README.md) | HM/Firecracker P50 6871.04/5673.70 ms; P99 7238.33/5943.06 ms; held PSS 8586.02/8360.31 MiB | 200/200 per engine passed; same eight-CPU affinity and guest; owned WSL, short cohort, managed endpoints unmeasured |
+| Secret HTTPS, one client/one guest vCPU | Original → optimized 17.340 → 14.844 ms | Large synthetic raw body, new TLS connection, local WSL |
+| Secret HTTPS, eight clients/one guest vCPU | 114.349 → 113.806 ms | No consistent concurrent latency gain |
+| Secret HTTPS, eight clients/two guest vCPUs | 48.070 → 48.652 ms; mixed pair directions | No consistent concurrent latency gain at equal resources |
+| Same optimized daemon, one → two guest vCPUs | 115.217 → 45.574 ms | Additional resource allocation, not a code or competitor win |
+| [UDP 64-byte HTTPS/KVM round trips](benchmarks/2026-10-03/udp-latency/README.md), one outstanding | CLI P50 0.956/0.968 ms; P99 1.535/2.442 ms in two runs | Development build, 100 samples per run; no sustained load or competitor endpoint |
+| [Native UDP vs CLI tunnel, matched KVM ABBA](benchmarks/2026-10-03/native-cli-abba/README.md), 4 KiB | Native/CLI completion rate: 1,793/1,429 round trips/s (IPv4, 2 peers); 3,817/3,390 (IPv6, 8 peers). Native mean peer medians 20.5%/11.6% lower | Internal product paths; same guest port, both processes live; unpinned development builds, 1,000 samples/peer/block. Boxd/exe.dev unmeasured |
+| [Release native UDP vs CLI tunnel, KVM ABBA](benchmarks/2026-10-03/native-cli-release-abba/README.md), 4 KiB | Native/CLI completion rate: 2,921/2,359 round trips/s (IPv4, 2 peers); 7,399/6,549 (IPv6, 8 peers). Native mean peer medians 19.3%/12.6% lower | Optimized internal paths; same 1-vCPU/1,024-MiB guest; unpinned short runs, mixed eight-peer P99 block ranking. Boxd/exe.dev unmeasured |
+
+[Current cold-admission repeats](benchmarks/2026-10-03/current-admission-sixteen/README.md) expose a reliability gap beyond the all-passing engine sweep: sixteen admitted starts passed 800/800 versus 571/800 uncapped. Successful P99 was higher with the limit in both cohorts, and paired median improvements were inconsistent. The default remains unchanged; these are same-product configuration measurements, not competitor wins.
+
+The VM measurements and their provenance are recorded below. [HTTPS performance evidence and configuration guidance](EGRESS_SECRETS.md#measured-performance-and-guest-sizing) links exact reports and immutable binary identities. No measured result supports superiority across every workload, feature or resource metric.
+
+## Remaining delivery gaps
+
+| Area | Verified foundation | Work still required |
+| --- | --- | --- |
+| Edge secrets | Exact-ID scopes; full request formats; completed reload on reused guest HTTPS connections | Managed organization scopes, multi-tenant authorization, fleet distribution and controlled lifecycle races |
+| Persistent storage | 9P sharing, exclusive creation, private metadata, sync ordering and two-daemon upload/restart | Maximum-sized real-volume-store transfers and shipped-control-plane TLS verification, automatic health/Redis/network-storage failover, hard-kill staging recovery, power-loss checks, network-storage guarantees and movable block attachment |
+| Networking | Per-VM egress; authenticated IPv4/IPv6 local tunnels; sixteen owner-managed native TCP/UDP ports; mixed-protocol KVM traffic, stable-port node migration and same-node private guest TCP/DNS | Public Internet operation, guest reboot persistence, controlled loss/overload recovery, fleet failover, cross-node private guest networking and complete lifecycle/durability gates |
+| Identity and collaboration | Scoped operator keys, exact-ID browser grants, owner API/CLI, real KVM/TLS admission, shipped-control-plane restart, local AOF-always Redis hard-restart and live outage/no-wake recovery | Tenant isolation, SSO, verified email, team membership, power-loss guarantees and managed/fleet-scale durability |
+| Agent interfaces | Verified MCP transports and VM operations | Browser OAuth, streaming, desktop/browser environments and email |
+| Hosted operations | Owned ACME issuance/renewal and discovery; local backup/recovery and scheduling; opt-in automatic local registration reconciliation under refusal and store timeouts | Public CA/DNS operation, automatic certificate retirement, managed storage/IAM, fleet rollout and durable daemon-crash registration/claim recovery |
+| Performance comparison | Reproducible owned HyperMachine/Firecracker fixtures and matched secret-processing binaries | Equal-host managed-product measurements, fleet throughput/P99 and cold-start/memory improvements |
+
+The absence of competitor endpoints prevents managed-product measurements but does not prevent implementation work. Existing fixtures prove only their stated local scope. Automatic certificate retirement and publication remain separate authorization-dependent steps; their pending state does not establish a feature or performance win.
+
+## Implementation journal
+
+The entries below record successive implementation and verification steps. Statements such as “not yet wired” or “not rebuilt” describe the state at that step and may be superseded by later evidence. Use the matrix and current guides above for the latest status; frozen archives preserve earlier source, reports and limitations.
+
 ## HyperMachine capabilities to compare
+
+An October 3 targeted recheck of the [Boxd primary documentation](https://docs.boxd.sh/llms-full.txt)
+corrects two earlier comparisons. Its egress guide documents host-bound secret
+placeholders substituted in several request locations. HyperMachine's verified
+header injection alone does not establish that broader parity. Its disk guide
+documents persistent storage movable between VMs with a single attachment and
+same-host placement constraints. Concurrent sharing is a separate capability;
+HyperMachine's 9P volumes do not establish matching block-device workflows.
+These are provider documentation claims, not independent service measurements.
+The [exe.dev primary documentation](https://exe.dev/docs/all) was also retrieved;
+absence of a volume entry establishes no runtime absence.
+
+The HTTPS interception relay keeps request bodies streaming and currently
+accepts only header transforms; it has no host-bound placeholder policy or
+query/body/Basic-auth substitution API. Before extending that surface, request
+URI debug logging was removed from the working relay because paths and query
+strings may contain guest credentials. Method and response status remain logged.
+This source change is not yet in the accepted benchmark daemon and establishes
+neither substitution parity nor a performance gain.
+
+[Egress logging regression evidence](benchmarks/2026-10-03/egress-uri-logging/README.md)
+records all 167 passing networking library tests against the exact changed relay
+in an isolated accepted-source checkout. Header injection, interception TLS,
+destination-policy checks and DNS rebinding refusal pass. This is library
+validation; the accepted benchmark daemon was not rebuilt or replaced.
+
+The working networking library now contains a host-bound raw substitution
+component (`secret_substitution`). It validates unique fixed-length opaque
+placeholders, exact hostname scopes and bounded secret material. Replacement
+accepts binary input, runs once without reprocessing inserted values, and bounds
+both input and expanded output to 1 MiB. Debug output reports only binding count.
+All 171 networking library tests pass in the isolated checkout, including four
+new component tests for scope, configuration, expansion and nonrecursive behavior.
+The component grants no egress access and requires its caller to authenticate the
+upstream hostname. Gateway wiring, operator policy/API, query encoding, Basic-auth
+decoding, streaming body framing, rotation and live KVM verification remain
+incomplete; existing header transforms are unchanged. Secret values are held in
+ordinary process memory without explicit zeroization. This is an implementation
+step, not completed secret-substitution parity or a performance improvement.
+
+The component now adds a lock-protected store: validation completes before atomic
+policy replacement, placeholders can remain stable across value rotation, and
+an empty replacement revokes all bindings. Failed validation preserves the active
+policy. Owned binding values are zeroized on drop, and failed expansions use
+[zeroizing temporary storage](https://docs.rs/zeroize/1.9.0/zeroize/struct.Zeroizing.html).
+This supersedes the ordinary-memory limitation above for component-owned storage;
+successful returned request bytes and caller-created copies remain the caller's
+responsibility. All 172 networking tests pass in the isolated checkout, including
+rotation failure preservation, stable-token replacement and revocation. Offline
+lock reconciliation changed only metadata for unrelated accepted-source packages;
+those differences were not copied into the working repository. Gateway/API
+integration and live rotation verification remain incomplete.
+
+Basic-auth substitution is now implemented in the component: it decodes a Basic
+credential, applies the authenticated-host policy and re-encodes changed bytes.
+Unchanged credentials and other authorization schemes retain their original
+bytes. Malformed Base64 or decoded credentials without a colon are refused;
+decoded/replacement temporary buffers are zeroized and encoded expansion remains
+bounded. All 173 networking library tests pass, including scope and malformed
+credential cases. An initial compile error from an unstable slice helper was
+corrected with stable operations before the successful run. Gateway integration,
+query encoding, body framing, operator policy and live verification remain open.
+
+Query substitution now handles ampersand-separated names and values with one
+percent-decoding pass. Unchanged components retain their original bytes;
+substituted components encode delimiters and binary bytes so secrets cannot add
+parameters or alter the request target. Literal plus signs are not interpreted
+as form spaces. Malformed escapes are refused, and percent-encoded expansion is
+bounded to 1 MiB with zeroizing intermediate buffers. All 174 networking library
+tests pass, including query structure, scope, double-encoding preservation and
+encoded expansion refusal. Gateway integration, body framing, operator policy
+and live verification remain incomplete.
+
+The component now rewrites a fully buffered HTTP request under one policy read
+lock. It requires the request hostname to match the authenticated upstream,
+applies raw/header, Basic-auth, query and raw-body substitution, and updates
+Content-Length. Fields commit only after validation; malformed replacement
+headers preserve the original request. Host/routing and named hop-by-hop headers
+are not substituted. Compressed bodies, trailers and undecoded transfer framing
+are refused. All 176 networking library tests pass, including request-field
+rewriting and failure preservation. The caller must bound body collection,
+authenticate upstream TLS and handle HTTP serialization. JSON/form escaping,
+streaming gateway integration, operator configuration and live KVM verification
+remain incomplete. Returned HTTP fields use ordinary HTTP buffers; this is not a
+claim that every temporary or serializer copy of a secret is zeroized.
+
+An opt-in relay entry point now uses the component on actual HTTP requests.
+Substitution mode collects at most 1 MiB under a ten-second body deadline,
+rejects trailers, removes decoded transfer framing and forwards corrected body
+length. The existing entry point retains streaming bodies without substitution.
+All 177 networking tests pass; an owned duplex HTTP fixture verifies the upstream
+header, query, body and Content-Length bytes and downstream response. The caller
+must already have verified upstream TLS for the supplied hostname. Gateway
+selection/configuration, owned TLS substitution verification, KVM operation,
+JSON/form escaping and performance comparison remain incomplete. This opt-in
+library path does not yet make the feature available to sandbox operators.
+
+The opt-in TLS interception entry point now performs the existing verified
+upstream handshake before calling the secret relay. An owned duplex TLS fixture
+verifies substituted query/header bytes at the trusted upstream and handshake
+refusal for an untrusted upstream CA, with no HTTP request delivered in that
+case. The guest trusts a separate interception CA. All 178 networking library
+tests pass in the isolated checkout. This closes the library TLS-substitution
+verification gap; gateway selection, operator policy/API, KVM traffic and
+performance measurements remain incomplete. The accepted daemon is unchanged.
+
+Gateway handles now accept a validated secret store only when interception is
+enabled. Matching TLS SNI hosts select the substitution interceptor after the
+existing destination/egress checks; bindings do not grant access. Plain HTTP
+keeps its existing header-transform path and never substitutes store-held
+secrets. Store rotation applies between requests; replacing/removing the handle
+applies to new intercepted connections, so operators must revoke existing
+connections through the retained store. All 179 networking tests pass, including
+configuration refusal without interception, unchanged policy and store revocation.
+This verifies handle configuration and preserves the prior TLS fixture, but does
+not yet verify secret selection through the full Ethernet gateway or a KVM guest.
+Daemon configuration/API, JSON/form escaping and performance remain incomplete.
+
+The full Ethernet gateway selection path now has a passing owned fixture. A
+second smoltcp guest sends TCP/TLS through the gateway to a mapped local TLS
+upstream, with a host-bound store and no header-transform rule. The upstream
+receives the substituted Authorization value, unrelated guest header bytes
+remain intact, and the gateway records interception. All 180 networking tests
+pass. This supersedes the Ethernet selection gap above; Linux/KVM guest traffic,
+daemon configuration, live rotation/revocation and performance remain unverified.
+
+An owned persistent HTTP relay now verifies rotation and revocation across three
+requests on the same connection. With an unchanged guest placeholder, the
+upstream observes the original secret, the rotated value and finally the raw
+placeholder after revocation. Header, query, raw body and Content-Length agree
+within each request. All 181 networking tests pass. This supersedes the relay
+rotation gap above; it is not TLS/Ethernet/KVM rotation evidence, concurrent
+request stress or a performance measurement. Daemon configuration remains open.
+
+Form-body substitution now selects URL-encoded handling from Content-Type,
+including case-insensitive media types with parameters. It decodes percent
+escapes once and treats plus as space, then percent-encodes changed components
+so secret delimiters cannot introduce fields. Unchanged components preserve
+their original representation. All 182 networking tests pass, including encoded
+placeholders, field preservation, space semantics and updated Content-Length.
+This closes component form escaping; multipart forms, JSON escaping, daemon
+configuration and live guest verification remain incomplete.
+
+JSON-aware substitution now validates the document as a raw JSON value, then
+rewrites string values only. Keys, whitespace, unchanged string representations
+and numeric literals retain their original bytes, including numbers beyond
+machine-integer precision. Changed strings receive JSON escaping; malformed JSON
+or non-UTF8 substituted string values are refused. Request rewriting selects this
+mode for application/json and application/*+json. All 183 networking tests pass,
+including escaped placeholders, quote/backslash/newline secrets, unchanged keys
+and a 30-digit numeric literal. This closes component JSON escaping, not daemon
+configuration, multipart support, guest verification or performance parity.
+
+The store now accepts a strict version-1 operator JSON document with `bindings`
+entries containing `placeholder`, UTF-8 `value` and exact `hosts`. Input is bounded
+to 1 MiB; unknown fields, duplicate struct fields, wrong version/types and
+invalid bindings fail with redacted errors. Reload parses and validates before
+commit; failed reload preserves active bindings and an empty document revokes
+them. All 184 networking tests pass. Private file handling and sandbox ownership
+remain caller responsibilities. Inspection located daemon egress integration in
+`hv2-sandboxd::start_network`; its network request is also stored for pause/resume
+and forks, so lifecycle persistence and isolated per-sandbox rotation must be
+resolved before daemon wiring. No secret file is loaded by the daemon yet.
+
+The component now supplies a strict version-1 `sandboxes` registry keyed by
+exact sandbox IDs (at most 64 scopes, bounded 1-MiB input). All policies validate
+before reload. Existing scopes retain their store handles during rotation;
+removed scopes clear retained stores before removal, revoking open-relay access
+to future substitutions. Unlisted fork IDs receive no policy. Duplicate IDs,
+invalid selectors and unknown schema fields are refused. Commit is atomic per
+sandbox/request, not fleet-wide across concurrent requests. All 185 networking
+tests pass, including retained-handle rotation/revocation, invalid reload and
+explicit fork exclusion. Daemon private-file loading, lifecycle ownership and
+guest verification remain incomplete.
+
+Linux scoped-policy loading now requires an absolute path, owned 0700 immediate
+directory and owned 0600 regular file with one hard link. File opening refuses
+symlinks and uses nonblocking mode before checking file type; input reads remain
+bounded and use zeroizing storage. Reload retains validation-before-commit.
+All 186 networking tests pass, including valid private loading and refusal of
+symlinks, hard links and unsafe permissions. Ancestor-directory policy and daemon
+startup/reload/lifecycle integration remain operator/caller responsibilities.
+
+The working daemon now accepts opt-in `--egress-secrets-file` with `--network`
+on Linux. Startup privately loads the exact-ID registry; new or resumed gateways
+select only their own sandbox scope, so forks do not inherit parent-ID entries.
+SIGHUP validates/reloads the file and updates active gateway handles. Failed
+reload retains active policy; removed scopes revoke retained stores. Policies
+remain operator files rather than guest request fields or snapshot metadata.
+Other nodes require their own configured policy file. The isolated daemon passes
+`cargo check --offline -p hv2-sandboxd` after correcting an initial synchronous
+lock/await mismatch. Binary startup, signal reload, lifecycle behavior and real
+KVM traffic are not yet verified; the accepted benchmark daemon is unchanged.
+
+[Owned daemon startup/reload evidence](benchmarks/2026-10-03/daemon-secret-policy/README.md)
+records seven passing checks against a separate isolated debug executable.
+Unsafe permissions, symlink files and malformed policies refuse startup;
+networking is required. Valid private startup and valid/invalid SIGHUP delivery
+are verified, with an empty guest inventory and complete owned-process cleanup.
+Exact tested sources and the isolated source hash catalog are archived. This
+supersedes the startup/signal gap above; log markers and empty inventory do not
+prove active secret contents. Guest substitution, lifecycle behavior and
+performance comparisons remain outstanding.
+
+### Measured performance comparison
+
+The managed products have no measured entries: no competitor endpoints or matched
+host were available. Firecracker is a local engine control, not a measurement of
+boxd or exe.dev. The rows below use eight pinned CPUs and matched 1-vCPU/1-GiB
+guests on shared WSL KVM; cold timing includes admission queueing. Latencies are
+conditional on successful attempts, and PSS excludes kernel memory and unmapped
+cache. Prepared restore and cold creation measure different operations.
+
+| Product/engine and workload | Passed attempts | P50 ms | P99 ms | Median held PSS MiB | Evidence |
+|---|---:|---:|---:|---:|---|
+| boxd managed service | unmeasured | — | — | — | No endpoint available |
+| exe.dev managed service | unmeasured | — | — | — | No endpoint available |
+| HyperMachine, prepared C100 | 400/400 | 853 | 1449 | 333.95 | [Matched prepared comparison](benchmarks/2026-10-02/resource-c100/README.md) |
+| Firecracker, same prepared comparison | 400/400 | 1018 | 1646 | 272.31 | [Same run](benchmarks/2026-10-02/resource-c100/README.md) |
+| HyperMachine baseline, cold C8 | 32/32 | 500.06 | 600.93 | 879.55 | [Cold allocator comparison](benchmarks/2026-10-03/mmap-threshold-cold/README.md) |
+| Firecracker beside baseline, cold C8 | 32/32 | 425.40 | 472.37 | 670.78 | [Same run](benchmarks/2026-10-03/mmap-threshold-cold/README.md) |
+| HyperMachine baseline, cold C100 | 400/400 | 3752.10 | 8138.99 | 8597.77 | [Cold allocator comparison](benchmarks/2026-10-03/mmap-threshold-cold/README.md) |
+| Firecracker beside baseline, cold C100 | 400/400 | 7951.29 | 10440.96 | 8361.44 | [Same run](benchmarks/2026-10-03/mmap-threshold-cold/README.md) |
+
+HyperMachine's prepared C100 aggregate latency is lower, while held memory is
+higher in every pair. Cold C8 remains slower and uses more held memory than the
+local control. The static allocator candidate reduced memory but increased cold
+C100 mean from 3877.37 to 4253.31 ms and P99 from 8138.99 to 9640.11 ms; it remains
+deferred. Shared-host control shifts and inconsistent paired tails prevent a
+universal performance claim. The original reports retain sample identities,
+counterbalance, executable hashes, failures and cleanup checks.
+
+The working readiness analyzer now enforces diagnostic flags, stage/request
+identity confirmations, C100 concurrency and all four executable/input hashes
+with unconditional checks instead of Python assertions. Replaying the preserved
+current-readiness reports reproduces the original analysis exactly; 13 damaged
+contracts are rejected under `python -O` on both Windows and Linux by
+`tools/test-current-readiness-analysis.py`. Frozen historical analyzers remain
+unchanged. This closes an optimization-mode validation gap and establishes no
+runtime improvement or root cause for the retained readiness failures.
+
+Raw readiness validation now independently matches both stage-map key sets to
+the successful HyperMachine request IDs and refuses duplicate IDs. Successful
+requests require successful agent stages; stage durations must be numeric,
+finite and nonnegative. The same replay still matches the archived analysis
+exactly. Twenty-one damaged contracts are rejected under optimized Python on
+Windows and Linux, including unrelated stage IDs, duplicate request IDs,
+negative/nonfinite/boolean durations and a failed stage concealed behind the
+coordinator's positive confirmation flags.
+
+### Certificate lifecycle status
+
+[Receipt-bound explicit retirement](benchmarks/2026-10-03/tls-retirement-receipt/README.md)
+passes 17 owned ACME/live TLS checks, including rejection of a wrong prior-leaf
+receipt and recovery after a publication crash. Discovery retains completed-job
+identity until retirement is verified. Automatic retirement scheduling remains
+unimplemented and awaits explicit authorization; public CA/DNS operation and
+retirement-specific KVM traffic remain unverified. These functional results
+establish no performance win.
 
 Cold boot now has an [optional per-node admission budget](COLD_START_ADMISSION.md).
 At 100 concurrent requests on the eight-CPU native fixture, the final binary's
@@ -135,6 +464,144 @@ quarters of the observed total PSS gap and directs investigation toward host
 allocation ownership. Raw smaps and parser checks are retained; the diagnostic
 does not prove reclaimability or a runtime optimization benefit.
 
+A [boot-buffer allocation probe](benchmarks/2026-10-02/boot-allocations/README.md)
+reproduces temporary copies in two fresh daemons: calculating the highest guest
+address materializes about 14.1 MiB of boot regions, then frees them without
+shrinking the GNU allocator arena. Four prepared restores pass with clean
+cleanup. This identifies redundant layout copies but does not attribute the
+full retained PSS gap or establish a performance improvement. No runtime
+optimization is adopted from this diagnostic.
+
+The resulting [borrowed boot-region candidate](benchmarks/2026-10-02/borrowed-boot/README.md)
+passes 3,328 scored restores across an eight-guest profile and two 100-guest
+cohorts. Held PSS is lower in all six baseline/candidate outer pairs, but mean
+and P99 latency rankings remain mixed. The 100-guest repeat's candidate mean
+and P99 are worse in aggregate. All 2,304 core library tests have passing evidence,
+including two explicit KVM hardware tests. Default adoption is deferred; the
+archive retains the source patch, reproducible accepted overlays, raw comparisons,
+and a failed broad lint invocation caused by missing generated guest binaries.
+
+The [single-guest and 50-guest extension](benchmarks/2026-10-02/borrowed-boot-profiles/README.md)
+passes 816 more restores with the same binaries. Held PSS is lower in all ten
+outer pairs across both archives. Single-guest means and observed tails are worse
+with the candidate, while 50-guest results improve alongside shifting Firecracker
+controls. The single-guest profile has just four samples per variant/engine;
+no stable tail estimate or universal latency win follows from it.
+
+A [same-binary owned/borrowed counterfactual](benchmarks/2026-10-02/boot-buffer-modes/README.md)
+passes 1,664 additional restores with runtime activation verified before scoring.
+Held PSS is lower in all four mode pairs, but borrowed-mode aggregate means
+and observed P99 are worse in both profiles. A 5.5-second P99 occurs in the
+100-guest borrowed cohort alongside slower Firecracker controls. This removes
+separate executable builds as a confound without proving a latency root cause.
+The experiment is isolated, and default adoption remains deferred.
+
+[Creation-stage diagnostics](benchmarks/2026-10-02/boot-buffer-stages/README.md)
+pass 1,600 additional restores. [Execution-stage diagnostics](benchmarks/2026-10-02/exec-stages/README.md)
+pass 1,604 restores, with cleanup verified and fourteen damaged contracts or
+ranking promotions rejected. Blocking-pool wait accounts for 0.6–2.8% of
+execution time; command RPC and time outside the HTTP handler remain broad
+aggregate costs. Debug logging may perturb timing, so these runs establish no
+performance win. The coordinator now checks guest resources after all timed
+attempts complete, avoiding validation GETs during peer latency measurements.
+
+The [corrected C100 prepared comparison](benchmarks/2026-10-02/resource-c100/README.md)
+passes 400/400 restores per engine. HyperMachine has lower aggregate P50/P99
+(853/1449 ms versus 1018/1646 ms), but higher median held PSS
+(333.95 versus 272.31 MiB). Paired means favor HyperMachine in three of four
+pairs and paired P99 in two of four; held memory is higher in every pair.
+This establishes a local memory gap, not a managed competitor win or a causal
+performance improvement from the coordinator correction.
+
+A [same-binary C100 repeat with corrected resource timing](benchmarks/2026-10-02/corrected-buffer-modes/README.md)
+passes all 1,600 restores. Borrowed buffers reduce held PSS by 14.60/26.41 MiB
+in the two fresh-daemon pairs, but worsen means by 100.31/77.54 ms and P99 by
+358.51/113.83 ms. Aggregate held PSS falls from 340.81 to 321.00 MiB while
+P99 rises from 1081 to 1437 ms. Firecracker controls shift in opposite directions
+between pairs, so no causal latency claim follows. The repeat does not support
+default adoption; the isolated buffer candidate remains deferred.
+
+A [C100 raw mapping diagnosis](benchmarks/2026-10-02/prepared-memory-c100/README.md)
+passes all 400 diagnostic restores with verified cleanup. Paired mapping PSS
+is 56.34/58.56 MiB higher for HyperMachine. Guest-sized file mappings contribute
+23.30/22.84 MiB; heap and anonymous categories contribute further differences,
+partly offset by Firecracker process stacks. About 13 MiB of the aggregate
+guest-sized difference is private dirty, whose host/guest write cause is not
+isolated. This supports investigating both retained host allocation and restore
+write ownership; mapping sizes alone do not prove subsystem ownership.
+
+The [accepted-source restore audit](benchmarks/2026-10-02/restore-memory-audit/README.md)
+confirms image restore already uses KVM copy-on-write mapping, skips cold boot
+loading, and grows console output buffers on demand. Those paths do not support
+an unconditional-image-copy or eager-console-cap optimization. Private-dirty
+ownership still needs observations before the first vCPU run and after guest
+maintenance; no restore write is removed without that evidence.
+
+[Address-bound single-guest probes](benchmarks/2026-10-02/restore-memory-boundaries/README.md)
+pass eight activated restores and fifteen evidence-rejection checks. All four
+measured HyperMachine children show 1,528 KiB private dirty before first vCPU
+execution. Later private-dirty classification varies markedly. Private dirty
+also includes uniquely mapped dirty file-cache pages, so the earlier C100
+private-dirty difference must not be interpreted as anonymous COW allocation
+or attributed solely to host/guest writes. Anonymous and private-clean counters
+are needed next; no runtime change is adopted.
+
+[Reanalysis of the original C100 raw smaps](benchmarks/2026-10-02/prepared-memory-c100-anonymous/README.md)
+finds median guest-sized anonymous residency of 216.170 MiB for HyperMachine
+and 203.510 MiB for Firecracker, a 12.660 MiB gap. In that C100 cohort the
+private-dirty gap is mostly consistent with anonymous residency, rather than
+solely dirty file-cache classification. This still does not identify the writing
+subsystem or account for the entire PSS gap. The single-guest before-run
+observations require their own extended counters and remain unclassified.
+
+The [extended single-guest boundary study](benchmarks/2026-10-02/restore-memory-anonymous/README.md)
+passes eight restores and eighteen evidence-rejection checks. Median anonymous
+residency is 1,408 KiB before first vCPU execution, 1,436 KiB after restore
+acknowledgment and 1,912 KiB after the verification command. The much larger
+private-dirty rise includes dirty file-page residency. Anonymous pages are
+already present before guest execution in this fixture, but their responsible
+restore step and the cause of the C100 difference remain unisolated. No runtime
+optimization is adopted from these diagnostic readings.
+
+[Host-stage probes](benchmarks/2026-10-02/restore-memory-host-stages/README.md)
+pass eight restores and twenty-two rejection checks. Anonymous residency rises
+from zero after image mapping to 1,412 KiB by the post-machine-state boundary,
+then remains unchanged through vCPU/device restore before guest execution.
+The interval includes layered snapshot-page application, not only machine-state
+ioctls. Named snapshot capture currently stores a layer over its base; a full
+sparse prepared-source image is the next candidate for avoiding repeated
+overlay writes, pending lifecycle and matched performance verification.
+
+The [full sparse named-image candidate](benchmarks/2026-10-02/sparse-named-lifecycle/README.md)
+builds but fails a real KVM lifecycle comparison: after deleting the source,
+its child still executes and pauses, then fails resume because the paused layer
+references the deleted image. The accepted child preserves state through the
+same sequence. Both nodes clean up completely. The candidate is rejected for
+adoption, and its timing driver refuses cohorts until a matching lifecycle check
+passes. Image ownership must include live children and persisted dependencies
+before any performance improvement is evaluated.
+
+The [retained-image revision](benchmarks/2026-10-03/sparse-retained-images/README.md)
+passes that real KVM deletion/pause/resume comparison for both binaries, preserving
+files, child writes and a live process with complete cleanup. Its offline image
+collector passes 15 dependency and lock tests. The revision remains isolated:
+restart, replacement, collection with real persisted guests, shared-store races,
+and capture/physical-storage tradeoffs still require verification before adoption.
+Its concurrency-one smoke restores all pass, but candidate mean readiness is
+49.90 ms versus 35.46 ms and median capture time is 744.29 ms versus 13.68 ms;
+held PSS is also higher. The optimization remains deferred. This small local
+sample, with varying Firecracker controls, establishes no general performance win.
+
+The [layered compare-before-write candidate](benchmarks/2026-10-03/layer-compare/README.md)
+preserves the existing snapshot capture and format while skipping writes whose
+bytes already match the mapped base. Strict core Clippy, 2,298 core tests and
+the real guest lifecycle fixture pass. A scored concurrency-eight repeat passes
+all 128 restores, but candidate mean readiness is 76.16 ms versus 65.39 ms and
+held daemon PSS is 92.62 MiB versus 90.97 MiB. Both outer pairs have higher
+candidate mean latency and held PSS; tails and Firecracker controls vary. This
+candidate is also deferred. An earlier cohort overlapping test compilation is
+preserved separately and excluded from performance conclusions.
+
 A subsequent [prepared-source sham/trim probe](benchmarks/2026-10-02/prepared-reclaim/README.md)
 passes all 128 diagnostic restores. A one-time trim after named-source
 preparation reduces empty-daemon PSS by a sham-adjusted 28.70/28.75 MiB
@@ -176,6 +643,46 @@ The maintenance contract is now matched, while HTTP-daemon/fresh-VMM paths,
 kernel arguments and hypervisor implementations still differ. Earlier direct
 controls and raw evidence remain preserved; no managed-platform or universal
 performance claim follows.
+
+[Client phase accounting at C100](benchmarks/2026-10-02/prepared-phases/README.md)
+adds monotonic response-boundary timestamps without extra guest RPCs. Two
+cohorts pass all 1600 restores but do not reproduce the earlier multi-second
+tail. Among HyperMachine attempts of at least one second, creation/readiness
+accounts for 60.25%/64.12% of summed time and execution for 39.75%/35.88%.
+Both phases are material; client timestamps do not identify server CPU,
+queueing or guest-scheduling causes, or establish an optimization benefit.
+
+[Owned server readiness traces](benchmarks/2026-10-02/prepared-stages/README.md)
+correlate all 800 successful HyperMachine children across two logging-enabled
+C100 cohorts; all 1600 C100 restores and four smoke restores pass with cleanup.
+Multi-second tails are observed again (HyperMachine P99 5764.574/5811.669 ms).
+Blocking queue wait contributes 1.63%/1.10% of total time, connection
+21.59%/20.84%, clock/RNG acknowledgement 11.87%/10.80%, other creation
+38.75%/35.68%, and execution 26.15%/31.58%. Existing stage logs narrow the
+diagnostic search, but logging can perturb timing and these are not ranking
+cohorts. Neither internal root cause nor an optimization benefit is proved;
+the accepted runtime remains unchanged.
+
+[Creation-stage diagnostics](benchmarks/2026-10-02/prepared-creation/README.md)
+use existing accepted-daemon build/launch/agent/setup logs. All 1604 restores
+pass with cleanup, and 802 successful HyperMachine attempts correlate to
+creation and readiness records. Build plus launch accounts for 3.39%/3.41%
+of summed readiness time across two C100 cohorts; agent answering accounts
+for 40.76%/38.98%, outside logged creation for 23.18%/32.17%, and execution
+for 32.57%/25.41%. This narrows the next experiment toward simultaneous
+guest readiness rather than launch offloading. Logging can affect timing;
+internal root cause and optimization benefits remain unproved.
+
+An isolated [sixteen-slot prepared admission candidate](benchmarks/2026-10-02/restore-admission/README.md)
+passes all 3200 matched paired C100 restores. Paired means improve four of four
+times, while tails improve only two of four and held PSS only two of four.
+First-cohort P99 regresses from 1040.757 to 1278.194 ms; the repeat reverses
+that ranking, with a materially faster Firecracker control in one pair.
+Default adoption is rejected because tail benefits are inconsistent and the
+shared-host comparison cannot isolate all effects. A separate diagnostic
+verifies 64 injected launch failures followed by 128 passing restores and
+cleanup; queued-request cancellation remains untested. Accepted runtime is
+unchanged.
 
 A subsequent [owned heap-reclamation diagnostic](benchmarks/2026-10-02/heap-reclaim/README.md)
 passed all 432 guest attempts and all post-probe guest checks. At C100, two pairs
@@ -243,7 +750,7 @@ pass the acceptance criteria below.
 | Throughput and tails | Sustained arrivals on identical host resources; include failures, queueing, and recovery rather than counting accepted requests | Matched short fixed-rate schedules at 5/25 arrivals per second passed 560/560, including client queue delay and full cleanup/drain. HyperMachine trails Firecracker in both profiles. Longer arrivals, overload failures, load-change recovery and equivalent fleet scale remain unverified |
 | CLI and SDK usability | Shipped client for lifecycle, execution, files and checkpoints, tested against a real node and control plane | VM CLI verified on a real KVM node and authenticated control plane, including binary files through the control-plane proxy |
 | Isolation and governance | Enforced tenant boundaries, scoped expiring keys, roles, auditable access, and escape tests | Scoped expiring keys, [single-team observer/operator roles](API_KEY_ROTATION.md#single-team-observer-and-operator-roles), and [durable protected-API admission/completion records](ACCESS_AUDIT.md) are verified, including restart, storage failure and KVM/TLS lifecycle requests. Tenant boundaries, team membership/sharing, retention automation and guest/proxy activity auditing remain incomplete; [opt-in keyed sandbox target references](ACCESS_AUDIT.md) are verified on protected control-plane routes, while creation-result, template/volume and proxy attribution remain incomplete |
-| Networking and access | Custom domains, certificate automation, authenticated private URLs, SSH, raw TCP/UDP and isolated VM groups | Custom-domain HTTP/HTTPS routing, authenticated raw TCP and egress are implemented. [The API socket fix](benchmarks/2026-10-01/tcp-api-buffering.md) reduced observed 1 MiB native TCP median latency from 48.5–50.8 ms to 7.0–7.9 ms in bracketed runs (1600/1600 transfers verified). That sequential comparison did not establish a median win over Firecracker; large tails and TLS performance remain unresolved. [Eight-stream controls](benchmarks/2026-10-01/tcp-concurrent.md) corrected the shared guest-agent backlog and verified 1920/1920 transfers on both native paths; observed median/tail rankings vary by profile. A [Unix relay prototype](benchmarks/2026-10-01/tcp-unix-relay.md) passed 5440 transfers but did not establish a repeatable gain and was reverted. [Private browser URLs and exact sandbox-ID sharing](benchmarks/2026-10-02/private-web-scopes/README.md) pass 25 KVM/TLS checks; SSO, self-service sharing, certificate automation, UDP and isolated groups remain absent; [control-plane named creation](benchmarks/2026-10-02/reserved-create/README.md) is KVM/TLS verified, [fork name inheritance is fixed and KVM-verified](benchmarks/2026-10-02/fork-name/README.md), [node-side atomic completion](benchmarks/2026-10-02/node-completion/README.md) is verified, as is [committed-name recovery after response loss and timeout](benchmarks/2026-10-02/node-response-loss/README.md), while fleet name migration and in-flight recovery remain incomplete; [reserved aliases for existing VMs](benchmarks/2026-10-02/reserved-alias/README.md) pass real KVM/TLS verification |
+| Networking and access | Custom domains, certificate automation, authenticated private URLs, SSH, raw TCP/UDP and isolated VM groups | Custom-domain HTTP/HTTPS routing, authenticated raw TCP and egress are implemented. [The API socket fix](benchmarks/2026-10-01/tcp-api-buffering.md) reduced observed 1 MiB native TCP median latency from 48.5–50.8 ms to 7.0–7.9 ms in bracketed runs (1600/1600 transfers verified). That sequential comparison did not establish a median win over Firecracker; large tails and TLS performance remain unresolved. [Eight-stream controls](benchmarks/2026-10-01/tcp-concurrent.md) corrected the shared guest-agent backlog and verified 1920/1920 transfers on both native paths; observed median/tail rankings vary by profile. A [Unix relay prototype](benchmarks/2026-10-01/tcp-unix-relay.md) passed 5440 transfers but did not establish a repeatable gain and was reverted. [Private browser URLs and exact sandbox-ID sharing](benchmarks/2026-10-02/private-web-scopes/README.md) pass 25 KVM/TLS checks; SSO, self-service sharing and isolated groups remain absent. [Owned certificate discovery/issuance](benchmarks/2026-10-03/discovery-tls-kvm/README.md), [scheduled renewal](benchmarks/2026-10-03/tls-renewal-worker/README.md), and [sixteen native TCP/UDP ports](benchmarks/2026-10-03/native-sixteen-tcp-udp-capacity/README.md) are now verified; public CA/Internet operation remains unverified; [control-plane named creation](benchmarks/2026-10-02/reserved-create/README.md) is KVM/TLS verified, [fork name inheritance is fixed and KVM-verified](benchmarks/2026-10-02/fork-name/README.md), [node-side atomic completion](benchmarks/2026-10-02/node-completion/README.md) is verified, as is [committed-name recovery after response loss and timeout](benchmarks/2026-10-02/node-response-loss/README.md), while fleet name migration and in-flight recovery remain incomplete; [reserved aliases for existing VMs](benchmarks/2026-10-02/reserved-alias/README.md) pass real KVM/TLS verification |
 | Platforms and workloads | Verified ARM64 execution, GPU sandboxes, browser/desktop workloads, and persistent storage limits | ARM64 execution and GPU sandbox wiring remain unverified or absent |
 | Operations | Object-storage backups and recovery, quota enforcement, scheduling/event triggers, load-tested multi-node failover | [Encrypted offline snapshot-store S3 recovery](OBJECT_STORAGE_BACKUPS.md) is verified against an owned S3 emulator with real KVM state, named snapshots and mounted volumes. Managed-store durability/IAM, backup automation, external cluster metadata recovery and load-tested failover remain incomplete; shared-directory snapshots and host job queues do not cover all these capabilities |
 
@@ -1929,3 +2436,619 @@ The [durable audit writer comparison](benchmarks/2026-10-02/audit-batching/READM
 The [16-versus-32 cold-slot comparison](benchmarks/2026-10-02/cold-budget-32/README.md) retained all 800 C100 attempts. Sixteen slots passed 400/400; 32 passed 381/400 with 19 guest-readiness timeouts. Conditional successful P50/P99 were lower with 32, but held PSS was higher in every complete pair and mean latency improved in only two of three complete pairs. Cleanup and artifact identity passed. No default changed; these results establish neither a generally preferred setting nor a competitor win.
 
 The [retained readiness snapshot diagnostic](benchmarks/2026-10-02/readiness-snapshots/README.md) maps all 10 RIPs from the 19 cold-slot failures using the exact kernel/initrd. Ten snapshots are halted at default_idle; nine are runnable in several kernel functions. Sequential clock samples do not establish a missed timer or listener backlog. The refusal message now preserves that uncertainty; retry logic and deadlines are unchanged. No reliability fix or performance improvement is claimed.
+
+The [same-binary GNU allocator threshold comparison](benchmarks/2026-10-03/mmap-threshold/README.md)
+passes all 128 C8 and 1,600 C100 matched restores, plus source-deletion and
+pause/resume checks. Setting only `MALLOC_MMAP_THRESHOLD_=131072` reduced C100
+held PSS from 330.10 to 314.91 MiB and empty-daemon PSS from 59.24 to 31.17 MiB.
+Mean and P99 improved in both C100 pairs; aggregate P50 barely changed and a
+C8 pair's P99 regressed. Firecracker control shifts expose shared-host noise.
+The setting remains experimental, with no default adoption or managed-product
+win claimed. Failed setup collections are retained and excluded in full.
+
+The [cold-creation follow-up](benchmarks/2026-10-03/mmap-threshold-cold/README.md)
+passes all 128 C8 and 1,600 C100 cold attempts under the same allocator policies,
+16-slot cold admission limit, deadlines and guest resources. At C100 the fixed
+threshold saves 233.41 MiB held PSS but worsens mean readiness by 375.94 ms
+and P99 by 1501.11 ms. Both outer-pair means regress; Firecracker controls show
+large host shifts. The setting is deferred as a general-purpose default, despite
+prepared-restore memory gains. Neither a causal allocator slowdown nor a managed
+competitor win is established. All failures remain accounted for, and nineteen
+negative evidence contracts pass on Linux and Windows with assertions disabled.
+
+The [explicit first-group deployment check](benchmarks/2026-10-03/tls-group-provisioning/README.md)
+passes thirteen owned ACME/live TLS checks, eight provisioning tests and
+21 existing renewal tests. The deploy hook can now add a non-overlapping named
+certificate group with `--provision-new-group`, preserving and pinning the
+existing default for rollback. This removes the pre-existing-group requirement
+for initial certificate activation. Automatic issuance after a domain claim,
+public CA behavior and additional new-group crash boundaries remain incomplete.
+
+The [first-group publication crash check](benchmarks/2026-10-03/tls-first-group-crash/README.md)
+passes fourteen owned ACME/live TLS checks. A hard exit after first-group manifest
+publication leaves the live fallback and a durable journal; a retry verifies
+recovery without CA reissuance. This covers one new-group crash boundary.
+Automatic issuance after a domain claim remains open.
+
+[Configured initial issuance](benchmarks/2026-10-03/initial-tls-worker/README.md)
+now passes fifteen owned ACME/live TLS checks. Explicit worker jobs can issue
+a missing lineage through HTTP-01 and provision its named TLS group, preserving
+the default; non-due retries skip issuance. Eight policy and 21 renewal tests
+pass. Automatic job discovery after a domain claim, public DNS/CA behavior
+remain incomplete.
+
+The [fresh-account worker check](benchmarks/2026-10-03/fresh-account-tls-worker/README.md)
+passes sixteen owned ACME/live TLS checks. A separate, initially absent Certbot
+account directory gains exactly one registration before initial issuance and
+verified named-group activation; a non-due retry skips issuance. Fresh account
+registration is now verified against the owned CA. Public DNS/CA operation,
+domain-claim job discovery remain incomplete.
+
+[Initial issuance through KVM guest traffic](benchmarks/2026-10-03/initial-tls-kvm/README.md)
+now passes seventeen outer ACME and fifteen real KVM checks. A fresh account
+and lineage issue a certificate and provision its named group while an existing
+16 MiB guest download completes. Routing, reload refusal, restart and guest
+lifecycle checks pass with clean teardown. Configured initial issuance is KVM
+verified; automatic domain-claim job discovery and public DNS/CA operation remain
+incomplete. Failed fixture runs are retained and excluded.
+
+[Automatic claim discovery through ACME and KVM](benchmarks/2026-10-03/discovery-tls-kvm/README.md)
+now passes seventeen outer ACME and fifteen real KVM checks. An empty job list
+is populated from authenticated, certificate-verified API inventory under operator
+suffix policy; guarded initial issuance provisions the named TLS group while an
+existing 16 MiB guest download completes. This supersedes earlier statements
+that domain-claim job discovery was unverified. Certificate retirement, real
+ownership-change interruption, public DNS/CA operation and fleet scale remain
+incomplete. No managed-product performance win is established.
+
+[Real pending-job unbind verification](benchmarks/2026-10-03/discovery-unbind-kvm/README.md)
+passes seventeen outer ACME and sixteen KVM checks. An actual issued-but-not-yet
+activated job survives a real unbind: discovery refuses without changing its
+journal, manifest or certificate. Restoring the proof-authorized binding activates
+the retained certificate. Live owner replacement and port-change interruptions,
+certificate retirement and public DNS/CA operation remain incomplete.
+
+[Live pending-job ownership and port changes](benchmarks/2026-10-03/discovery-ownership-kvm/README.md)
+pass seventeen outer ACME and seventeen KVM checks. Real unbind, replacement
+owner and guest-port changes refuse a pending job without altering its journal,
+manifest or issued certificate; restoring the original binding recovers deployment.
+Replacement guests are cleaned up. This supersedes earlier statements that live
+owner/port interruption checks were unverified. Certificate retirement, public
+DNS/CA behavior and fleet operation remain incomplete.
+
+[Explicit named TLS group retirement](benchmarks/2026-10-03/tls-retirement/README.md)
+now passes fifteen owned ACME/live TLS checks plus eight provisioning and
+21 renewal tests. `deploy-tls-certificate.py --retire-group` removes an exact
+entry, preserves the existing default and immutable files, verifies its pinned
+fallback leaf, retries idempotently and permits reprovisioning. The existing
+manifest/lineage/generation/process arguments remain required; lineage contents
+are unused in retirement mode. Provision and retirement flags are exclusive.
+Automatic completed-job retirement, no-default bundles and retirement-specific
+crash/KVM verification remain incomplete. This operation sends no application
+data during fallback pin checks and does not revoke CA certificates or remove
+bindings, old files or established connections.
+
+[Retirement publication crash recovery](benchmarks/2026-10-03/tls-retirement-crash/README.md)
+passes sixteen owned ACME/live TLS checks. A hard exit after retirement manifest
+publication leaves the previous live leaf and a durable journal; retry reconciles
+the manifest, verifies fallback activation and clears the journal without changing
+immutable-file inventory. Automatic retirement, additional crash boundaries,
+no-default bundles and retirement-specific KVM traffic remain incomplete.
+
+[Connection header and revoked-scope verification](benchmarks/2026-10-03/secret-connection-scope/README.md)
+passes all 187 networking tests in the isolated accepted-source checkout.
+Secret rewriting excludes Connection-nominated headers and refuses malformed
+lists transactionally. Removing and re-adding a sandbox ID creates a new store;
+old retained connections stay revoked. Real guest HTTPS lifecycle coverage still
+requires a separate client fixture image and an explicitly configured owned
+upstream trust root. These results add no performance or managed-competitor claim.
+
+[Explicit daemon upstream roots](benchmarks/2026-10-03/daemon-upstream-root/README.md)
+now support an owned HTTPS endpoint without trusting the guest interception CA
+upstream. The Linux-only `--egress-upstream-ca` accepts a bounded private operator
+PEM bundle with `--network`, adds roots to the public Web PKI for intercepted TLS,
+and requires restart for changes. It is node-wide and does not grant egress
+access. All 188 network tests and twelve owned daemon startup/reload checks pass.
+The accepted guest image still lacks an HTTPS client; guest-level lifecycle
+substitution and managed competitor parity remain unverified. No performance
+binary changed and no new performance claim is made.
+
+[Owned HTTPS client fixture](benchmarks/2026-10-03/secret-https-client-image/README.md)
+now adds installed curl and its hashed shared libraries to a separate accepted
+initramfs copy. Two builds produce identical 11,017,803-byte images and curl
+starts with HTTPS support under chroot. The accepted benchmark image remains
+unchanged. Guest HTTPS traffic, secret scope lifecycle behavior and competitor
+feature parity remain unverified; this is fixture readiness evidence only.
+
+[Real KVM secret lifecycle verification](benchmarks/2026-10-03/secret-substitution-kvm/README.md)
+now observes seven owned HTTPS requests: placeholder pass-through, header/Basic
+/query/JSON substitution, hostname exclusion, SIGHUP rotation, fork scope
+exclusion, pause/resume reattachment and revocation. The test exposed and fixed
+TLS sniffing for address-based egress with a configured secret store. All 188
+network tests pass. Concurrent lifecycle/reload races, managed organization
+scope and additional KVM body-format coverage remain incomplete. Separate
+verification inputs leave accepted performance binaries and image unchanged;
+no competitor parity or new performance win is claimed.
+
+[Real KVM raw/form and rejected reload verification](benchmarks/2026-10-03/secret-body-kvm/README.md)
+passes eleven owned checks across thirteen HTTPS requests using unchanged
+verification inputs. Form and raw bodies, delimiter-bearing secret escaping and
+malformed-policy retention are now observed upstream through a real guest, in
+addition to the earlier lifecycle checks. Binary KVM payloads, concurrent
+lifecycle/reload races and managed organization scopes remain incomplete. No
+runtime changes, managed competitor measurements or performance claims result
+from this coverage extension.
+
+[Registration scope refresh and overlapping resume/reload](benchmarks/2026-10-03/secret-registration-kvm/README.md)
+passes all 41 daemon tests and twelve real KVM checks across seventeen owned
+HTTPS requests. The daemon refreshes the scope under its registry lock after
+asynchronous bring-up and failed-pause reinsertion. Four pending resume calls
+overlap revoke/re-add reloads and converge to the current secret observed
+upstream. Exact registration schedules and failed-pause recovery are not forced;
+this does not prove every lifecycle race. Accepted performance inputs remain
+unchanged, and no managed competitor or performance claim is added.
+
+[Real KVM binary and upstream hostname verification](benchmarks/2026-10-03/secret-binary-kvm/README.md)
+passes fourteen owned checks with nineteen successful HTTPS requests and one
+wrong-hostname request rejected before HTTP delivery. Binary payloads preserve
+NUL/non-UTF8 bytes around replacements with correct framing. The rejected name
+is explicitly scoped and enters interception, while the certificate lacks that
+name. Verification input hashes remain unchanged. Exact lifecycle schedules,
+failed-pause recovery and managed organization scope remain incomplete; no
+managed competitor or performance win is claimed.
+
+[Operator egress Secret chart wiring](benchmarks/2026-10-03/egress-secret-chart/README.md)
+passes eight chart tests and Helm lint. Existing policy/root Secret keys are copied
+at startup into private regular files; the daemon mounts only the output volume
+read-only. Schema/template checks refuse missing networking and invalid keys.
+The copy script's ownership, permissions and single-link contract are verified
+locally against symlinked inputs. [Operator instructions](EGRESS_SECRETS.md)
+explain node-local scopes and required pod restarts after Secret updates. Actual
+Kubernetes rollout, updated container image and managed organization service
+remain incomplete. No competitor or performance win is claimed.
+
+[Exclusive volume creation](benchmarks/2026-10-03/volume-exclusive-create/README.md)
+fixes concurrent duplicate creation overwriting access tokens. A directory is
+reserved exclusively before metadata publication; duplicates preserve token/data
+and incomplete reservations. All 43 daemon tests and four owned API checks pass;
+sixteen concurrent HTTP creates yield one 201 and fifteen 409 responses. Shared
+multi-node filesystem behavior, crash repair, power-loss durability and
+block-device attach equivalence remain incomplete. Accepted performance inputs
+are unchanged and no competitor or performance win is claimed.
+
+[Cross-process shared-directory volume creation](benchmarks/2026-10-03/volume-shared-create/README.md)
+passes six owned API checks with two independent daemons and with the retained
+single-daemon mode. Sixteen creates across two processes yield one 201 and fifteen
+409 responses; both observe the same token, and winner restart preserves token
+and data. These standalone APIs share one local filesystem, not a Redis cluster
+or network filesystem. Guest mounts, coordinated delete/create and power-loss
+storage behavior remain untested by this fixture. Verification input hashes
+match the earlier volume fix; no new runtime or performance claim is made.
+
+[Independent volume-store chart wiring](benchmarks/2026-10-03/volume-store-chart/README.md)
+passes ten chart tests and Helm lint. An existing node.volumeStore claim mounts
+separately and configures --volume-dir, independently of the snapshot-store
+claim; defaults retain the existing fallback. [Volume guidance](VOLUMES.md)
+distinguishes shared directory data from guest memory snapshots and documents
+migration and backup scope. Actual Kubernetes/PVC/network-filesystem operation
+remains unverified. No runtime or performance input changed.
+
+[Raw secret rewriting baseline](benchmarks/2026-10-03/secret-rewrite-baseline/README.md)
+records eight release-mode synthetic cases. A plain 1 MiB body takes 634.10 us
+median batch-average per replacement; dense last-of-128 and unmatched tokens take
+3865.96 and 4507.04 us. This identifies prefix scanning and token lookup as
+optimization targets. It is one unpinned process, not HTTP/TLS/KVM or competitor
+performance, and establishes no improvement or service P99 claim.
+
+[Bulk-copy raw secret rewriting](benchmarks/2026-10-03/secret-bulk-copy/README.md)
+reduces the plain 1 MiB synthetic component median from 647.03 to 19.78 us and
+sparse input from 637.36 to 25.04 us over four alternating release binary pairs.
+Dense matching across 128 bindings is essentially unchanged. All 189 networking
+tests and fourteen owned KVM checks pass on the changed implementation. These
+are raw replacement timings, not full HTTP/TLS/KVM latency or competitor results;
+no service P99 or across-the-board performance win is claimed. Accepted VM
+benchmark inputs remain unchanged.
+
+[Ordered raw placeholder lookup](benchmarks/2026-10-03/secret-ordered-lookup/README.md)
+reduces the dense last-of-128 component median from 3842.64 to 649.18 us and dense
+unmatched input from 3861.55 to 743.87 us versus the verified bulk-copy binary,
+over four alternating release pairs. Other cases are broadly unchanged with
+small shifts in both directions. All 190 networking tests and fourteen real KVM
+checks with 128-binding policies pass. One-time policy sorting, full HTTP/TLS
+latency, fleet performance and competitors remain unmeasured; no across-the-board
+win is claimed. Accepted VM benchmark inputs remain unchanged.
+
+[Large-body owned HTTPS timing fixture](benchmarks/2026-10-03/secret-large-http/README.md)
+passes fifteen KVM checks and validates every byte of twelve timed 1,035,000-byte
+raw requests, plus three warm-ups. Each substitutes 15,000 tokens under a
+128-binding policy into 180,000 bytes with correct framing. Guest curl time_total
+is recorded on the debug verification binary; this is measurement preparation,
+not a matched release result or proof that component gains improve service
+latency. Runtime and accepted benchmark inputs remain unchanged.
+
+[Matched release KVM HTTPS rewriting](benchmarks/2026-10-03/secret-https-release/README.md)
+observes median-of-run-medians 17.340 -> 14.844 ms (-14.4%) over two alternating
+pairs for a verified 1,035,000-byte raw request with 128 bindings and 15,000
+replacements. All fifteen correctness checks pass in every cohort. The server
+uses TCP_NODELAY in both variants, and source catalogs differ only in the
+replacement module. An initial identical-artifact comparison is excluded; the
+runner now rejects identical binaries before execution. This is one synthetic
+local workload, not service P99, fleet throughput or a competitor result.
+Accepted VM benchmark inputs remain unchanged; across-the-board wins are unproven.
+
+[Eight-client release KVM HTTPS comparison](benchmarks/2026-10-03/secret-https-concurrent/README.md)
+uses the same release inputs and observes median-of-run-medians 114.349 ->
+113.806 ms (-0.5%), with mixed pair results: essentially unchanged. All fifteen
+checks pass in each cohort; 96 timed requests per cohort and HTTP overlap peaks
+5–7 verify concurrent execution. The sequential 14.4% improvement does not carry
+over to this workload. Bottleneck profiling remains required. This is one guest
+with eight clients, not eight VMs, service P99, throughput or competitor evidence.
+
+### Concurrent secret HTTPS CPU accounting (2026-10-03)
+
+Four additional eight-client cohorts passed all correctness and cleanup checks. Median request latency was 113.961 to 112.242 ms (-1.5%); this small difference does not establish a concurrent gain. The measured 12-batch windows used 0.112–0.130 CPU seconds in the Python driver and owned HTTPS server, compared with 2.85–3.11 daemon user-plus-system CPU seconds (user already includes guest). Batch wall was 1.745–1.775 seconds. These counters favor investigating daemon/guest work next but do not identify a bottleneck. [Frozen CPU accounting evidence](benchmarks/2026-10-03/secret-https-cpu/README.md) records scope, tick quantization, input identity, all reports, and limitations. Managed competitors remain unmeasured.
+
+### Concurrent secret HTTPS thread accounting (2026-10-03)
+
+Four matched eight-client cohorts passed all checks and cleanup. Median request latency was 112.948 to 112.980 ms, effectively unchanged. The vCPU thread used 1.70–1.74 user-plus-system CPU seconds per measured cohort, more than half of daemon CPU. This includes guest execution and vCPU host work and supports investigating guest execution/VM exits next; it does not identify a causal bottleneck. [Frozen thread accounting table](benchmarks/2026-10-03/secret-https-threads/README.md) records group totals, per-thread reports, identity checks, quantization, and limitations. Managed competitors remain unmeasured.
+
+### Guest CPU scaling for concurrent secret HTTPS (2026-10-03)
+
+An unchanged optimized release daemon was tested with one/two/two/one guest vCPUs and eight concurrent curl processes. All four cohorts passed all 15 correctness/lifecycle checks and cleanup, including verified guest CPU counts. Median of request run medians fell from 115.217 to 45.574 ms (60.4%); measured batch wall fell from 1.800 to 0.973 seconds. This is an extra-resource configuration result, not a code speedup or equal-resource competitor win. Prepared template sizes may override node defaults. [Frozen CPU scaling table](benchmarks/2026-10-03/secret-https-cpu-scaling/README.md) includes reports, binary identities, runner, and limits. Evaluate two vCPUs for similar parallel workloads; no default change or general performance claim follows.
+
+### Equal-resource two-vCPU secret HTTPS comparison (2026-10-03)
+
+Original versus optimized release daemons at equal two-vCPU allocation passed four complete eight-client KVM cohorts. Median latency was 48.070 to 48.652 ms (+1.2%) with opposing pair directions, so no concurrent latency gain is established. Daemon user-plus-system CPU fell in both measured windows (2.65 to 2.49 and 2.63 to 2.45 seconds); this remains a short local accounting observation. [Frozen equal-resource table](benchmarks/2026-10-03/secret-https-two-cpu/README.md) separates these results from the verified extra-vCPU scaling gain and single-client code latency improvement.
+
+### Deployment guest sizing validation (2026-10-03)
+
+The chart already exposes node CPU/memory defaults. Schema now refuses zero, negative, fractional, mistyped, and representationally overflowing values; rendered argument checks cover one/two/four vCPUs. All 12 chart tests and lint passed. [Frozen sizing checks](benchmarks/2026-10-03/guest-sizing-chart/README.md) record exact coverage and limits. Operator guidance includes the measured two-vCPU configuration without changing defaults or claiming capacity/rollout verification.
+
+### Direct daemon guest sizing validation (2026-10-03)
+
+The standalone CLI now rejects zero guest CPU/memory and checked GiB conversion refuses overflow before startup. All 44 daemon unit tests and 17 direct invalid-argument invocations passed in the isolated accepted-core checkout. [Frozen CLI sizing evidence](benchmarks/2026-10-03/daemon-guest-sizing/README.md) includes source, build/test logs, binary identity, and exact errors. This closes the direct-launch validation gap alongside Helm validation without changing valid resource defaults or claiming backend capacity.
+
+### Secret policy updates on established HTTPS connections (2026-10-03)
+
+Owned KVM checks now prove next-request rotation and revocation on one established guest HTTPS connection. Three transfers asserted curl connection counts 1/0/0 and upstream original/updated/placeholder payloads with matching framing. Current debug (128 bindings, one vCPU) and immutable release (one binding, two vCPUs) cohorts each passed all 15 checks and cleanup. [Frozen keepalive evidence](benchmarks/2026-10-03/secret-https-keepalive/README.md) states the completed-reload boundary and separates guest connection reuse from upstream connection behavior. In-flight and fleet-wide atomicity remain unproven.
+
+### Volume metadata persistence (2026-10-03)
+
+Volume creation now flushes metadata/data and publication directories before success, with private 0600 metadata. Failure handling preserves published volumes rather than removing their data directory after rename. All 45 daemon tests plus the two-daemon 16-request/restart fixture passed. [Frozen flush evidence](benchmarks/2026-10-03/volume-metadata-sync/README.md) includes four injected sync-stage failures and explicit filesystem/power-loss limits. This improves local persistence handling; it does not establish managed block-volume or network-storage parity.
+
+### Volume content upload persistence (2026-10-03)
+
+Content uploads now sync the completed file and every containing directory to the data root before success. All 45 daemon tests and the expanded two-daemon binary-upload/replacement/token-refusal/restart fixture passed. [Frozen upload evidence](benchmarks/2026-10-03/volume-content-sync/README.md) records safe descriptor opening and boundaries. Interrupted replacements remain in-place and can be partial; power-loss, network storage, guest-write guarantees and flush performance remain unverified.
+
+### Opt-in atomic volume content uploads (2026-10-03)
+
+`atomic=true` stages and syncs the replacement before pinned-parent rename publication. All 46 daemon tests and both two-daemon atomic/default API cohorts passed. The atomic cohort verifies an incomplete HTTP request returns 400, preserves previous bytes, and removes its staging file. [Frozen atomic-upload evidence](benchmarks/2026-10-03/volume-atomic-upload/README.md) includes exact source, input hashes, compatibility checks and inode/error semantics. Hard-kill staging recovery, power-loss and network-filesystem guarantees remain incomplete.
+
+### Verified volume upload timing (2026-10-03)
+
+The same dev-profile daemon completed four alternating in-place/atomic upload cohorts, each with three warm-ups and twelve timed 1,048,586-byte PUTs followed by exact readback on both nodes. All correctness/restart/cleanup checks passed. Atomic mode was slower in both pairs (19.660 to 22.905 ms and 9.975 to 15.083 ms); large time drift prevents a stable overhead estimate. [Frozen timing evidence](benchmarks/2026-10-03/volume-upload-timing/README.md) includes sample arrays and scope. No release, fleet, network storage or competitor performance claim follows.
+
+### Atomic upload redundant-flush removal (2026-10-03)
+
+Atomic uploads now flush their pinned immediate parent once and continue with ancestors; the default path still flushes its whole chain. All 46 daemon tests and four two-daemon upload cohorts passed, including new root-level atomic publication coverage and incomplete-request preservation. [Frozen single-parent-sync evidence](benchmarks/2026-10-03/volume-single-parent-sync/README.md) records current timings without claiming a before/after gain.
+
+### Volume client and endpoint boundary (2026-10-03)
+
+A streamed Python operator upload helper now defaults to atomic replacement and passes exact binary readback on two owned nodes. Source inspection confirms volume routes are node-only; control-plane volume management/content routing remains absent. The current matrix and storage guide now state this limitation rather than implying full control-plane volume compatibility. [Frozen client evidence](benchmarks/2026-10-03/volume-upload-client/README.md) records the local check and unverified TLS/size/fault limits.
+
+### Volume upload client TLS validation (2026-10-03)
+
+All seven owned upload-client tests pass, including custom-CA HTTPS, untrusted/wrong-hostname refusal before HTTP arrival, no platform API-key forwarding, redirects, invalid/oversized input, empty uploads and timeout/response errors. [Frozen TLS client evidence](benchmarks/2026-10-03/volume-client-tls/README.md) records scope and cleanup. This verifies the direct-node helper's transport behavior; control-plane routing, public CA/proxy operation and maximum-size success remain incomplete.
+
+### Connected volume upload timeout (2026-10-03)
+
+The upload helper now enforces the remaining connected-transfer deadline with socket shutdown, refusing slowly arriving responses rather than extending each read indefinitely. All eight owned client tests and the real two-daemon upload workflow pass. [Frozen deadline evidence](benchmarks/2026-10-03/volume-client-deadline/README.md) states DNS/local-I/O and post-publication uncertainty limits.
+
+### Correction: sandbox control-plane volume routes
+
+The earlier node-only conclusion inspected the general `hv2-api` server rather than the sandbox control plane in `hv2-cluster/src/control.rs`. The sandbox control plane already routes `/volumes`, `/volumes/{id}` and `/volumecontent/{id}/{file,dir,path}`. Management is API-key protected; content uses the volume bearer token checked by the selected node. Rendezvous placement is over volume ID, and list merges duplicate IDs from live nodes. The current matrix and volume guide are corrected. Older journal entries and frozen client archives preserve the mistaken conclusion as historical evidence and must not be used for current routing status.
+
+The [focused control-plane volume test](benchmarks/2026-10-03/control-volume-routing/README.md) passes actual HTTP management/content routing to two protocol nodes, stable placement, binary/query preservation, key/bearer/cluster credential boundaries and duplicate-list merging. This is routing evidence; actual shared-storage failover and control-plane-to-daemon filesystem verification remain incomplete.
+
+### Real control-plane volume forwarding (2026-10-03)
+
+The opt-in integration test now passes against two real daemons sharing a local volume root. It verifies authenticated create, 1 MiB atomic binary upload and on-disk bytes, routing eligibility changes to each peer with unchanged token/content, both daemon restarts, bearer refusal, deduplicated listing and deletion cleanup. [Frozen real-daemon evidence](benchmarks/2026-10-03/control-real-volumes/README.md) records before/after input hashes, source and test logs. This uses the actual control router with MemoryStore in the test process; Redis, shipped control-plane process, network storage, TLS/mTLS and abrupt in-flight failures remain unverified.
+
+### Selected-node kill during atomic volume upload (2026-10-03)
+
+The real-daemon control-plane test now waits for partial private staging, kills the selected node, verifies a 502 response and exact old destination bytes on the eligible peer, then verifies both daemon restarts and cleanup. An orphan staging file remains mode 0600 as expected after hard termination. [Frozen crash evidence](benchmarks/2026-10-03/control-volume-crash/README.md) records the controlled pre-publication boundary. Automatic orphan repair, post-rename crash, power loss, Redis health failover and network storage remain incomplete.
+
+### Create-only volume uploads (2026-10-03)
+
+`overwrite=false` and client `--no-clobber` now provide exclusive creation. Atomic publication uses RENAME_NOREPLACE, while in-place creation uses O_EXCL. All 46 daemon/eight client tests pass; two-node 16-upload cohorts have one winner and fifteen conflicts in each mode, with exact bytes and client refusal verified. [Frozen create-only evidence](benchmarks/2026-10-03/volume-create-only-upload/README.md) records filesystem and interrupted-write limits. No compare-and-swap, network-storage or competitor win is claimed.
+
+### Integrated volume management CLI (2026-10-03)
+
+`hm sandbox vm volume create/list/inspect/delete` now uses authenticated bounded API requests and validates volume names/IDs. The shipped-binary volume test, all 12 existing VM CLI protocol tests, and real control-router/two-daemon management operations pass. [Frozen CLI evidence](benchmarks/2026-10-03/volume-management-cli/README.md) records exact inputs/source and compatibility. Streaming volume content remains in the separate helper; Redis/new-command TLS and fleet storage guarantees remain incomplete.
+
+### Integrated streamed volume upload (2026-10-03)
+
+`hm sandbox vm volume upload` now streams regular files with atomic default, create-only and force options using the volume bearer token and no platform API key. Both shipped volume tests, 12 existing CLI regressions and actual control-router/real-storage uploads pass, including a repeated no-clobber refusal with unchanged bytes. [Frozen streamed upload evidence](benchmarks/2026-10-03/volume-cli-stream-upload/README.md) records source/input identity and scope. Integrated download, new-command TLS, full-size transfer and fleet storage guarantees remain incomplete.
+
+### Integrated streamed volume download (2026-10-03)
+
+`hm sandbox vm volume download` now stages, syncs and publishes a streamed local file without replacing an existing destination. Four volume CLI tests and 12 existing VM CLI tests pass; actual control-router/real-storage roundtrips verify exact bytes and repeated download refusal. [Frozen download evidence](benchmarks/2026-10-03/volume-cli-stream-download/README.md) includes truncated-response cleanup and input/source identity. New-command TLS, full-size/race injection and power-loss/fleet storage guarantees remain incomplete.
+
+### Integrated volume CLI TLS (2026-10-03)
+
+Five owned shipped-CLI transport tests pass for upload/download: custom-CA HTTPS with a proper leaf, exact bytes, bearer-only authorization, trust/hostname and redirect refusal, slow-response deadline, truncated/advertised-oversized download cleanup. [Frozen CLI TLS evidence](benchmarks/2026-10-03/volume-cli-tls/README.md) records the checked binary and scope. Public CA, shipped control-plane HTTPS/mTLS, full-size transfer and managed storage guarantees remain incomplete.
+
+## Broader CLI and cluster regression verification
+
+The accepted isolated checkout passes the full CLI and cluster suites: 286 tests, zero failures and one ignored real-daemon test. [Frozen regression evidence](benchmarks/2026-10-03/cli-cluster-regressions/README.md) records exact scope and isolated source context. The ignored test passed separately with owned daemon inputs in the directory-sync fixture. These checks support the current CLI/routing changes; they do not prove competitor parity or validate protected root core modifications.
+
+## UDP implementation and node-level KVM evidence
+
+Framed UDP now has guest/host methods, authenticated node/control routes and a bounded per-peer loopback CLI. Separate protocol fixtures verify routing and CLI peers. [Real node-level KVM verification](benchmarks/2026-10-03/udp-kvm/README.md) passes empty/binary/maximum IPv4-size payloads, credential refusal and pause/resume/delete session handling. Combined real control-plane/CLI/TLS integration remains outstanding, so this is partial UDP implementation rather than completed networking parity.
+
+## Current API source verification correction
+
+A full comparison verifies that current root API/cluster Rust sources and manifests match the accepted isolated checkout. [Full API regression and matching-source catalog](benchmarks/2026-10-03/current-api-regressions/README.md) supersedes earlier UDP archive statements about mismatched API TLS sources. Isolated core/lock provenance still limits this to the stated test context rather than whole-root workspace validation.
+
+### Local UDP write optimization follow-up (2026-10-03)
+
+| Workload | Baseline average round trips/sec | Combined-write average | Change | Evidence |
+|---|---:|---:|---:|---|
+| Two concurrent peers, 64-byte datagrams | 1,515.4 | 1,825.3 | +20.4% | [Matched ABBA](benchmarks/2026-10-03/udp-combined-write/README.md) |
+| Two concurrent peers, 4 KiB datagrams | 1,427.9 | 1,647.3 | +15.4% | [Matched ABBA](benchmarks/2026-10-03/udp-combined-write-4k/README.md) |
+| Eight concurrent peers, 4 KiB datagrams | 3,763.5 | 4,159.5 | +10.5% | [Matched ABBA, median tradeoff](benchmarks/2026-10-03/udp-eight-peer-4k/README.md) |
+
+These compare preserved HyperMachine CLI binaries through fresh HTTPS/mTLS/Redis/KVM stacks, with 1,000 exact replies per peer per cohort and passing correctness/lifecycle checks. Two-peer median latency is mixed; with eight peers the mean of per-peer sample medians rises 5.1% (slower), and P99 is mixed. These short local development-build measurements establish an internal completion-rate improvement; Boxd and exe.dev endpoints were unavailable, so their UDP performance remains unmeasured. Sustained capacity, resource tradeoffs and an across-the-board competitor win remain unproven.
+
+The subsequent [UDP peer-capacity cleanup](benchmarks/2026-10-03/udp-peer-recovery/README.md) fixes panic/cancellation slot leaks and verifies EOF reconnection. Its [matched development-build comparison](benchmarks/2026-10-03/udp-peer-recovery-performance/README.md) shows a 5.6% completion-rate regression and 6.5% higher mean per-peer sample medians versus the preceding combined-write binary. Earlier optimization numbers concern preserved binaries; they do not demonstrate that the latest binary improves every metric. Release-build evaluation remains pending.
+
+A [matched release-CLI follow-up](benchmarks/2026-10-03/udp-peer-recovery-release/README.md) reduces the measured cleanup rate regression to 1.3%, with 0.7% higher mean per-peer sample medians and generally higher P99. The fixed daemon/control remain development builds. Release EOF recovery passes; release panic=abort terminates the process, so prior panic-cleanup injection evidence applies to unwinding profiles. Production overhead and an across-the-board performance win remain unproven.
+
+[IPv6 source alignment](benchmarks/2026-10-03/udp-ipv6-source-alignment/README.md) resolves the initial nineteen unrelated byte differences as line endings/formatting. All six IPv6 crates now match current root Rust source/tests/manifests exactly in the accepted checkout; rebuilt regressions and fresh IPv4/IPv6 TLS/mTLS/KVM runs pass. Accepted core and lockfile limitations still prevent a whole-root-workspace claim.
+
+[Root lockfile alignment](benchmarks/2026-10-03/udp-root-lock-alignment/README.md) establishes that the previous root/isolated lockfile difference was CRLF/LF only, with identical parsed dependencies. Exact root lockfile/workspace manifest bytes now match the accepted checkout, and offline locked compilation passes. The protected accepted-core boundary and uncataloged workspace scope still limit whole-root verification.
+
+### Matched guest IPv4/IPv6 configuration (2026-10-03)
+
+| Guest destination | Average round trips/sec | Mean per-peer sample medians (ms) | Evidence |
+|---|---:|---:|---|
+| IPv4 loopback | 3,916.1 | 1.9881 | [Same-binary ABBA](benchmarks/2026-10-03/udp-ipv6-family-performance/README.md) |
+| IPv6 loopback | 3,912.3 | 1.9897 | [Same-binary ABBA](benchmarks/2026-10-03/udp-ipv6-family-performance/README.md) |
+
+Eight peers, 4 KiB payloads, identical development binaries, IPv4 local peers, one guest vCPU/1 GiB and fresh HTTPS/mTLS/Redis/KVM stacks. IPv6's sampled rate is 0.10% lower; cohort latency directions are mixed. This compares guest-family configurations and establishes no statistical equivalence, production overhead or competitor superiority.
+
+### Raw-port contract recheck (2026-10-03)
+
+Boxd documents managed public raw ports with stable allocation, optional TCP/UDP on one port, owner-controlled management and reboot persistence ([official documentation](https://docs.boxd.sh/llms-full.txt), Port forwarding). exe.dev documents authenticated additional HTTP proxy ports 3000–9999; only one selected target can be public ([official documentation](https://exe.dev/docs/all), HTTPS proxy / Additional Ports). The reviewed exe.dev page does not establish a native UDP service. These documented capabilities are distinct from HyperMachine's verified local framed tunnels.
+
+A durable allocation and ownership model is required before native listener wiring can establish parity. Verification must include allocation concurrency, stable restart/reboot identity, protocol updates without port changes, scope/owner refusals, exact datagrams, bounded peer resources, removal and guest-deletion cleanup. An ephemeral loopback listener alone would leave the documented managed-port contract incomplete.
+
+A [deferred native UDP reply-buffer candidate](benchmarks/2026-10-03/native-udp-buffer-reuse/README.md) passes eight counterbalanced KVM profiles and five targeted tests. Development-profile mean native rates rose 1.77% with two IPv4 peers and 0.38% with eight IPv6 peers; mean peer median/P99 values fell slightly. These small differences lack release-profile and retained-memory evidence. The candidate retains up to 65,507 bytes per peer and was not promoted; production source is unchanged. No competitor win follows.
+
+The [release reply-buffer experiment](benchmarks/2026-10-03/native-udp-buffer-reuse-release/README.md) fills the earlier release/memory evidence gap but remains deferred. Native rates changed +12.89% with two IPv4 peers and −12.44% with eight IPv6 peers; eight-peer mean P99 rose 84.10% and gateway PSS after traffic rose 6.85%. The unchanged CLI reference rates also shifted +14.43%/−6.09%, leaving causal attribution unresolved. All eight profiles passed 23 checks and cleanup. Production source is unchanged; no across-metric or competitor win is established.
+
+The subsequent [bounded reply-buffer release experiment](benchmarks/2026-10-03/native-udp-bounded-reuse-release/README.md) passed eight profiles but did not justify promotion: native rates fell 16.96%/0.78% for two IPv4/eight IPv6 peers, while sampled gateway PSS rose 5.36%/2.33%. The two-peer unchanged CLI reference fell 34%, leaving strong confounding. Production remains unchanged; dropping large Vec capacity does not guarantee lower process memory.
+
+A fresh [CPU-affinity-matched bounded reuse comparison](benchmarks/2026-10-03/native-udp-bounded-reuse-affinity/README.md) also leaves the candidate deferred: native rate −15.45%/−2.35%, mean peer P99 +85.20%/+14.00%, gateway PSS +2.68%/+1.26% for two IPv4/eight IPv6 peers. The unchanged CLI reference slowed too. All eight 23-check profiles passed; production remains unchanged. CPU placement control does not eliminate host contention.
+
+[Resume ownership lookup cancellation](benchmarks/2026-10-03/resume-ownership-lookup-cancellation/README.md) now restores shared paused metadata when the ownership lookup is cancelled. All 49 daemon tests pass, including synchronized cancellation and completed-error cleanup checks. This covers the pre-startup store wait, not VM startup/registration cancellation, in-memory-only pauses or machine-crash recovery; updated KVM verification remains pending.
+
+The [updated ownership-lookup guard daemon](benchmarks/2026-10-03/resume-ownership-lookup-kvm/README.md) now passes both real KVM migration profiles, 27 checks each, preserving owner, execution, fork and the same both-protocol public port across nodes. Cleanup leaves zero guests and reaps all owned processes. These verify normal lifecycle regression; deterministic lookup cancellation remains separately proven by the daemon test, not by an HTTP disconnect.
+
+[In-memory resume lookup rollback](benchmarks/2026-10-03/resume-local-lookup-cancellation/README.md) retains local paused state during authoritative ownership lookup and restores it on cancellation when no shared store exists. All 51 daemon tests pass, including synchronized rollback and completion checks. Updated KVM verification, startup/registration cancellation and machine-crash recovery remain pending or incomplete.
+
+The [current paused-state rollback daemon](benchmarks/2026-10-03/resume-local-lookup-kvm/README.md) passes four KVM profiles: two shared-store migration profiles with 27 checks each and two in-memory paused-state profiles with 22 checks each. All verify exact traffic, lifecycle and complete cleanup. Cancellation remains separately proven by deterministic tests; startup/crash recovery remains incomplete.
+
+[Pre-startup network decision rollback](benchmarks/2026-10-03/resume-network-decision-cancellation/README.md) now protects paused state while resume resolves an egress proxy. All 51 daemon tests pass with the existing cancellation/completion helper checks. Real networked resume verification remains pending; VM startup/registration cancellation and machine-crash recovery remain incomplete.
+
+[Direct proxy-resolution guard tests](benchmarks/2026-10-03/resume-proxy-resolution/README.md) bring the daemon suite to 53 passing tests: actual localhost resolution verifies default private-address refusal and explicit operator allowance while preserving the paused value. Networked KVM/cancellation injection and startup/crash recovery remain unverified or incomplete.
+
+[Fresh-daemon network reconstruction](benchmarks/2026-10-03/network-fresh-daemon-resume/README.md) passes 16 real KVM/owned HTTPS checks: a paused guest resumes from shared metadata in a replacement daemon without cached network state, preserving exact scoped substitution and final revocation/deletion cleanup. This request has no egress proxy; DNS cancellation and crash/startup recovery remain unverified or incomplete.
+
+[Unnamed registration uncertainty](benchmarks/2026-10-03/unnamed-registration-uncertainty/README.md) now retains a pending marker for clustered unnamed creation/resume until shared publication succeeds, returns 503 on uncertainty and supports authenticated reconciliation of the preserved guest. All 53 existing daemon tests pass; targeted Redis failure/cancellation and updated KVM verification remain pending.
+
+[Unnamed resume publication-fault recovery](benchmarks/2026-10-03/unnamed-resume-publication-fault/README.md) passes both 23-check KVM profiles. Owned Redis SET refusal yields 503 and preserves the paused record and live guest; pause mutation/unauthorized reconciliation refuse, then authenticated recovery publishes the same running owner record and exact forwarding succeeds. Cancellation, event-only faults, initial-creation failure and machine-crash recovery remain unverified or incomplete.
+
+[Committed-record/event-only resume failure](benchmarks/2026-10-03/unnamed-resume-event-fault/README.md) passes two 23-check KVM profiles: owned Redis XADD refusal retains the committed running owner record while returning 503, blocks pause, then authenticated reconciliation and forwarding recover the same guest. Exactly-once events, cancellation, initial creation faults and crash recovery remain unverified or incomplete.
+
+[Administrator explicit-node registration recovery](benchmarks/2026-10-03/registration-recovery-cli/README.md) is now available through the control plane and shipped CLI, including when a failed initial write leaves no sandbox record. 88 cluster tests and 38 filtered CLI tests pass; end-to-end forwarding/scoped authorization and runtime response-bound verification remain pending.
+
+[Shipped administrator recovery CLI](benchmarks/2026-10-03/registration-recovery-cli-kvm/README.md) passes four 24-check KVM profiles covering SET/XADD failures across both ingress families. Legacy/scoped administrators recover the same guest; observer, inventory and sandbox scopes, unknown nodes and replay refuse. Descriptor identity/token and exact forwarding persist. Initial creation faults, response-bound runtime refusal, cancellation and crash recovery remain unverified or incomplete.
+
+[Initial unnamed creation recovery](benchmarks/2026-10-03/initial-registration-cli-recovery/README.md) passes four 25-check KVM profiles. SET failure leaves no shared record and XADD failure leaves a committed record; node-local inventory identifies the preserved guest, then explicit-node administrator CLI recovery restores the same owner and exact execution before deletion. Initial creation uses trusted node API; automatic missing-registration discovery, cancellation and crash recovery remain incomplete.
+
+[Administrator pending-registration discovery](benchmarks/2026-10-03/pending-registration-discovery/README.md) now exposes bounded paginated node-local IDs through API/CLI without guest access tokens, including when shared records are missing. 54 daemon, 88 cluster and 39 focused CLI tests pass; real KVM discovery/scoped authorization and crash recovery remain pending or incomplete.
+
+[Administrator CLI discovery-to-recovery](benchmarks/2026-10-03/pending-discovery-kvm/README.md) passes four 27-check KVM profiles for initial/resumed SET and XADD failures. Missing-record guests are discoverable by ID without capability fields; unauthorized scopes/unknown nodes/cursor exclusions refuse, and recovery clears entries while preserving execution and forwarding. Multi-page behavior remains unit-tested; automatic reconciliation and crash/startup recovery remain incomplete.
+
+[Discovery schema enforcement](benchmarks/2026-10-03/pending-discovery-schema/README.md) now validates node pages before public forwarding: only ID/kind fields, bounded ordered rows and consistent cursors are accepted; capability fields and malformed pages refuse. All 89 cluster tests pass. Updated KVM and malformed remote-response fixtures remain pending.
+
+[Strict discovery runtime verification](benchmarks/2026-10-03/pending-discovery-schema-runtime/README.md) passes 13 owned HTTP boundary checks plus four 27-check KVM discovery/recovery profiles. Capability fields, malformed/oversized pages and invalid cursors refuse; client API keys are stripped, and valid KVM recovery remains functional. Automatic reconciliation, cancellation and crash recovery remain incomplete.
+
+[Discovery transport verification](benchmarks/2026-10-03/pending-discovery-http-transport/README.md) passes 17 owned HTTP checks, including valid/oversized chunked pages, truncated bodies and invalid chunk framing. The [operator guide](NATIVE_PORT_GATEWAY.md#recovering-uncertain-guest-registration) now documents discovery, cursor pagination and same-guest reconciliation after uncertain registration. Production code is unchanged; automatic and crash recovery remain incomplete.
+
+The [additional publisher-ownership guard](benchmarks/2026-10-03/registration-publisher-ownership/README.md) is withdrawn: source inspection shows initial creation already holds the same transition lock as reconciliation. The redundant atomic guard and its two tests were removed. Current serialization is verified below.
+
+[Initial publication/reconciliation serialization](benchmarks/2026-10-03/registration-publication-serialization/README.md) passes four 28-check KVM profiles. A held Redis write exposes the live guest while both requests remain pending; after release, original creation succeeds and serialized reconciliation refuses the cleared marker. This supersedes the earlier incorrect race diagnosis. Automatic recovery, startup cancellation and machine-crash recovery remain incomplete.
+
+Opt-in automatic local registration reconciliation is implemented with bounded rotating batches and per-attempt deadlines. [Worker source and 56 passing isolated daemon tests](benchmarks/2026-10-03/automatic-registration-worker/README.md) cover interval bounds and selection fairness. Runtime automatic recovery under publication faults remains unverified; this adds no competitor performance claim.
+
+[Automatic registration recovery in real KVM guests](benchmarks/2026-10-03/automatic-registration-kvm/README.md) passed four profiles with 30 checks each: initial creation and resume recover automatically after Redis SET/XADD refusal, with IPv4 two peers and IPv6 eight peers. Failed retries preserve pending guests; restoration clears pending state without manual reconciliation, retains resumed access tokens, and restores exact native TCP/UDP traffic on stable ports. All fixture processes and guests are cleaned up. This supersedes the runtime-unverified worker note above; daemon-crash durability and competitor performance remain unproven.
+
+[Repeated cluster-store timeout recovery](benchmarks/2026-10-03/registration-store-timeout-kvm/README.md) passed two owned KVM profiles with 32 checks each. Initial and resumed guests remain pending through multiple store timeouts during an owned Redis write stall, then recover automatically with exact execution/native traffic and complete cleanup. The store deadline preempts the worker’s outer five-second deadline; the outer timeout branch and daemon-crash recovery remain unverified.
+
+[Current same-binary cold-start stage diagnostics](benchmarks/2026-10-03/current-cold-start-stages/README.md) pass 116/116 guests per engine with complete cleanup. Guest-agent connection wait dominates both profiles; VM build and blocking-worker queue intervals are smaller. At C100, a large first-backend-call wall interval directs further investigation toward guest execution and vCPU scheduling. Tracing changes timing, the interval is not CPU time, and no causal fix or performance gain is established. The scored current-release comparison above remains authoritative for rankings.
+
+[Current first-KVM-call CPU/wall diagnostics](benchmarks/2026-10-03/current-cold-first-call-cpu/README.md) pass 108/108 guests per engine. At C8 the median per-guest thread-CPU/wall ratio is 98.5%; at C100 it is 7.46%. This is consistent with substantial scheduling/waiting effects under oversubscription and directs the next scored experiment toward existing cold-start admission limits. It does not establish a cause or justify a default change; tracing and one-pair cohorts remain excluded from rankings.
+
+[Retained current cold-failure symbol mapping](benchmarks/2026-10-03/current-cold-failure-symbols/README.md) verifies all 229 timeout snapshots against an independently booted identical kernel: 202 runnable at varied kernel locations and 27 halted in default_idle. The halted samples have nonzero deadlines later than their sampled TSC, so these records do not prove expired deadlines or missed timer delivery. This separates failure groups without establishing a causal fix; the cold-start reliability gap remains.
+
+[Unregistered startup cancellation cleanup](benchmarks/2026-10-03/unregistered-startup-cancellation/README.md) now carries VM/network ownership through bring_up and the registration-lock wait, disarming only after local registry insertion. Cancellation stops the unregistered VM and aborts its network bridge; uncertain shared publication still preserves the registered guest. The final daemon passes 58 ordinary tests, two explicit KVM guard tests, two 32-check publication profiles and 16 real-network checks. Runtime shutdown, complete HTTP-disconnect cancellation and atomic shared-claim crash fencing remain unverified. Earlier optimized performance cohorts use their archived source/binary and do not measure this guard change.
+
+[Pending-registration idle-eviction starvation is fixed](benchmarks/2026-10-03/pending-registration-idle-eviction/README.md): the selector now skips uncertain guests and can pause an eligible idle guest to admit a replacement. A controlled baseline fails while the fixed daemon passes two 34-check KVM profiles and 58 ordinary tests, preserving pending guests and subsequent recovery. The final fixed profiles verify full cleanup and unchanged input hashes; this is functional availability evidence, not a competitor timing result.
+
+[Matched private/standard receiving TCP costs](benchmarks/2026-10-04/private-transport-comparison/README.md) pass 30 functional checks and 128/128 scored operations on the same KVM target. Private median setup costs an additional 1.54 ms at 64 B and 1.82 ms at one MiB; one-MiB payload echo throughput is approximately equal at 10.35 MiB/s. This measures two HyperMachine receiving paths at concurrency one, excluding the source guest gateway. It adds no competitor ranking or across-the-board performance claim.
+
+The [unchanged-input transport repeat](benchmarks/2026-10-04/private-transport-repeat/README.md) independently passes another 30 checks and 128/128 scored operations. Private setup P50 remains higher by 1.14 ms at 64 B and 1.61 ms at one MiB; echo throughput remains close. Both cohorts support investigating setup overhead without attributing it to a component or claiming a competitor win.
+
+[Concurrent receiving authorization lookups](benchmarks/2026-10-04/private-transport-parallel/README.md) retain both fresh setup checks while overlapping independent membership/node reads. All 64 ordinary daemon tests and two 30-check KVM candidate cohorts pass, including 256/256 scored operations and full cleanup. In matched dev-profile cohorts the private-minus-standard setup P50 gap decreases from 1.14–1.54 to 0.93–1.04 ms at 64 B, and from 1.61–1.82 to 1.16–1.28 ms at one MiB. Separate shared-host cohorts limit attribution; private setup remains slower. An initial release candidate cohort is retained but excluded from before/after timing comparisons. The archived baseline was a dev build, correcting earlier release wording. No competitor win is established.
+
+[Benchmark failure evidence preservation](benchmarks/2026-10-04/private-transport-journal/README.md) now journals completed operations and saves the summary before scored-failure assertions. A 30-check normal KVM run passes 128/128 scored operations; an isolated injected failure retains all 136 rows, reports 127/128 scored success, emits no success report and reaps all 23 tracked children. This strengthens reproducibility without adding a performance claim.
+
+[Actual source guest membership stream revocation](benchmarks/2026-10-04/private-source-stream-revocation/README.md) passes 31 owned two-daemon KVM checks. A distinct-marker established source guest TCP stream closes after source membership removal; numeric reconnect refuses while removed, and source rejoin preserves old-address refusal while fresh DNS restores exact binary traffic. All guests/processes are cleaned up. This is one functional observation on a shared host, without an SLA or competitor timing claim; active local VM/pending/owner changes, half-close, saturation, UDP and crash recovery remain unfinished or unverified.
+
+[Interleaved dev-profile baseline/candidate comparison](benchmarks/2026-10-04/private-transport-abba/README.md) verifies 512/512 scored operations across ABBA cohorts, with 32 functional checks and complete cleanup each. Median paired private-minus-standard setup overhead is 1.26–1.29 versus 0.91–0.93 ms at 64 B, and 1.51–1.53 versus 1.18–1.28 ms at one MiB. Both candidate cohorts improve this local metric; private setup remains slower, and release, high-concurrency, guest-origin and competitor comparisons remain unmeasured.
+
+[Matching release-mode ABBA transport comparison](benchmarks/2026-10-04/private-transport-release-abba/README.md) also passes 512/512 scored operations and 32 KVM checks per cohort, with complete cleanup. Median paired setup overhead falls from baseline 0.44–0.64 to candidate 0.29–0.34 ms at 64 B, and from 0.64–0.66 to 0.38–0.44 ms at one MiB. Source catalogs differ only in lookup ordering, and both builds use release mode. This verifies a local setup improvement; private remains slower than standard, and high-concurrency, guest-origin and competitor results remain unmeasured.
+
+[Private receiving UDP](benchmarks/2026-10-04/private-udp-receiving-kvm/README.md) passes 64 ordinary daemon tests and 34 owned KVM checks, including empty/binary/65,507-byte exact datagrams, framing/context refusal and source-generation stream closure. All guests/processes are cleaned up. Source guest UDP interception, connector/router integration and full lifecycle parity remain unfinished; this adds no competitor win.
+
+[Private UDP source connector](benchmarks/2026-10-04/private-udp-source-connector/README.md) adds generation-bound mTLS transport with shared TCP lifecycle checks. The full owned Redis cluster suite passes 119 tests, including framed UDP bytes, protocol/authentication/setup race refusal and no-contact stale bindings. Source guest UDP gateway/router integration and real connector-to-KVM delivery remain pending; this does not complete private UDP parity.
+
+[Committed-binding private UDP source router](benchmarks/2026-10-04/private-udp-source-router/README.md) now dispatches UDP through the generation-bound connector with the same committed address, source lease and authorization gates as TCP. The full owned Redis suite passes 120 tests, including DNS-to-UDP mTLS framed transport and Memory/Redis stale UDP binding refusal. Source guest Ethernet/session integration and actual router-to-KVM UDP delivery remain unfinished or unverified.
+
+[Private UDP gateway session foundation](benchmarks/2026-10-04/private-udp-gateway-session/README.md) adds bounded framing/idle/lifetime/cancellation handling and a daemon UDP hook to the fixed-source router. All 197 network and 64 daemon tests pass. Non-DNS UDP packets are still dropped until Ethernet socket/session admission and reply emission are integrated; guest-origin KVM UDP remains unverified.
+
+[Private IPv4 UDP Ethernet gateway](benchmarks/2026-10-04/private-udp-ethernet-gateway/README.md) now routes claimed private destinations through bounded per-peer sessions and returns datagrams with the original private endpoint. All 200 network and 64 daemon tests pass, including real smoltcp guest empty/binary/1,280-byte packets, no fallback, shared TCP/UDP admission and gateway teardown. Actual cluster/KVM guest UDP delivery and lifecycle revocation remain unverified; IPv4 fragmentation and private IPv6 remain unfinished.
+
+[Actual source guest UDP](benchmarks/2026-10-04/private-udp-source-guest-kvm/README.md) passes 37 KVM checks through production routing on two owned daemon nodes with complete cleanup and an identical fixture image rebuild. This supersedes the earlier guest-UDP integration-unverified notes for within-MTU IPv4 datagrams. Full UDP lifecycle, fragmentation, IPv6, independent hosts and competitor performance remain unverified or incomplete.
+
+[Private IPv4 fragmentation/reassembly](benchmarks/2026-10-04/private-udp-ipv4-fragmentation/README.md) is implemented with bounded buffer counts/size and expiry. All 201 network/64 daemon tests pass; maximum UDP payloads preserve bytes across multiple valid-size Ethernet fragments in both directions, including delayed first-fragment delivery. Maximum-size KVM and reassembly exhaustion/expiry schedules remain unverified, and this adds no performance or competitor win.
+
+[Maximum-size actual source guest UDP](benchmarks/2026-10-04/private-udp-max-source-guest-kvm/README.md) passes 37 KVM checks on two owned daemon nodes sharing one host, including exact 65,507-byte guest UDP, owner/stale-binding refusal and DNS recovery, complete cleanup and a byte-identical image rebuild. This supersedes prior maximum-size KVM-unverified notes. IPv6, full UDP lifecycle, reassembly pressure/reorder/expiry, independent hosts and competitor performance remain incomplete or unverified.
+
+[Active guest UDP membership coverage](benchmarks/2026-10-04/private-udp-active-membership-kvm/README.md) passes 41 two-daemon KVM checks on one owned host, including established same-socket refusal after source/target membership removal, stale-address refusal and fresh-DNS maximum-payload recovery. A negative control rejects replies continuing beyond the grace window; all guests/processes are cleaned up and the image rebuilds identically. Full UDP lifecycle, IPv6, independent-host and competitor performance evidence remains incomplete.
+
+[Active guest UDP target pause/resume](benchmarks/2026-10-04/private-udp-target-pause-kvm/README.md) passes 43 two-daemon KVM checks on one owned host: established same-socket target-pause refusal, paused numeric/DNS refusal and exact maximum-size resume recovery with preserved binding. Updated negative control, byte-identical image rebuild and complete cleanup pass. Other full UDP lifecycle, IPv6, independent-host and competitor performance evidence remains incomplete.
+
+[Active guest UDP lookup-outage coverage](benchmarks/2026-10-04/private-udp-store-outage-kvm/README.md) passes 45 two-daemon KVM checks on one owned host: established UDP, new numeric access and DNS fail closed during verified Redis GET refusal; restored lookups recover maximum-size delivery. Independent owned mTLS node exec provides observation and full cleanup passes. Other outage/lifecycle modes, IPv6, independent hosts and competitor performance remain incomplete or unverified.
+
+[Active guest UDP target deletion](benchmarks/2026-10-04/private-udp-target-delete-kvm/README.md) passes 47 two-daemon KVM checks on one owned host: dedicated target deletion stops established UDP, refuses numeric/DNS access, removes the record and preserves exact maximum-size delivery to another target. Earlier lifecycle gates repeat and complete cleanup passes. Active source UDP pause/delete, other lifecycle cases, IPv6, independent hosts and competitor performance remain incomplete or unverified.
+
+[Active guest UDP source lifecycle](benchmarks/2026-10-04/private-udp-source-lifecycle-kvm/README.md) passes 50 two-daemon KVM checks on one owned host: source pause/delete removes exact identified target relay sockets before natural timeout, records reflect lifecycle state, and source resume restores exact maximum-size delivery. Before/after identities and complete cleanup are verified. This supersedes earlier source UDP pause/delete-unverified notes; other lifecycle races, IPv6, independent hosts and competitor performance remain incomplete or unverified.
+
+[Private UDP reassembly bounds](benchmarks/2026-10-04/private-udp-reassembly-bounds/README.md) pass 204 networking tests: maximum-size reverse-order exact echo, configured two-buffer exhaustion without incomplete private admission, and expiry/refusal/recovery. Only test code changes. These are owned Ethernet/duplex-hook gates; actual KVM reassembly stress, adversarial overlap/corruption, IPv6, independent hosts and competitor performance remain unverified or incomplete.
+
+[Release private versus standard UDP transport](benchmarks/2026-10-04/private-udp-release-comparison/README.md) now has two matched 51-check owned KVM cohorts with 256/256 scored operations. Fresh-TLS private setup has paired median overhead of about 0.29–0.34 ms; echo differences are smaller and vary.
+
+| Payload | Private setup P50 (ms) | Standard setup P50 (ms) | Paired setup overhead P50 (ms) | Paired echo difference P50 (ms) |
+|---|---:|---:|---:|---:|
+| 64 B | 2.278–2.309 | 1.957–1.992 | 0.311–0.329 | 0.005–0.027 |
+| 65,507 B | 2.192–2.193 | 1.830–1.886 | 0.294–0.337 | 0.007–0.025 |
+
+These are separate shared-host cohort medians for internal HyperMachine transports. Source guest latency, sustained throughput, resources, independent hosts and competitor UDP performance remain unmeasured; private setup remains slower.
+
+[Combined receiving private authorization snapshot](benchmarks/2026-10-04/private-route-live-snapshot/README.md) passes 120 cluster tests with owned Redis and 64 ordinary daemon tests. Redis now uses one atomic route/live-node read per fresh barrier, retaining both setup barriers and all authorization gates. This reduces command count; candidate release KVM and latency evidence remains outstanding, so no measured improvement or competitor win is claimed.
+
+[Combined private authorization ABBA comparison](benchmarks/2026-10-04/private-route-live-snapshot-release-abba/README.md) passes four 51-check release KVM cohorts and 512/512 scored operations. Exact source snapshots, raw rows, independently recomputed statistics and cleanup are verified.
+
+| Payload | Baseline paired setup overhead P50 (ms) | Candidate paired setup overhead P50 (ms) |
+|---|---:|---:|
+| 64 B | 0.267–0.286 | 0.282–0.323 |
+| 65,507 B | 0.296–0.358 | 0.250–0.370 |
+
+No consistent latency improvement is established; fewer commands do not prove a speedup. Candidate KVM lifecycle coverage is now verified, while private setup remains slower and broader performance/feature parity remains incomplete.
+
+[Private/standard setup stage diagnostics](benchmarks/2026-10-04/private-setup-stage-profile/README.md) retain exact tagged per-request timings from a separate instrumented release daemon: 51 KVM checks, 128 scored operations and full cleanup pass.
+
+| Payload / path | Fresh authorization total P50 (ms) | Guest-port open P50 (ms) | Loopback pair P50 (ms) | Server setup P50 (ms) |
+|---|---:|---:|---:|---:|
+| 64 B / private | 0.287 | 0.876 | 0.092 | 1.260 |
+| 64 B / standard | 0.000 | 0.861 | 0.091 | 0.961 |
+| 65,507 B / private | 0.280 | 0.760 | 0.091 | 1.123 |
+| 65,507 B / standard | 0.000 | 0.743 | 0.092 | 0.839 |
+
+Instrumentation is excluded from production benchmark claims. Guest-port opening and loopback-pair creation are sequential independent stages; overlap is a proposed next experiment with both fresh authorization barriers and cleanup preserved. No measured optimization or competitor win follows yet.
+
+[Concurrent tunnel setup release ABBA](benchmarks/2026-10-04/private-setup-overlap-release-abba/README.md) passes 204 KVM checks and 512/512 scored operations with full cleanup. Both candidate setup medians are lower than both baseline medians in all four tested payload/path groups: private 64 B 2.273–2.290 vs 2.344–2.364 ms; private 65,507 B 2.121–2.151 vs 2.250–2.271 ms. The receiver overlaps guest-port opening with socket-pair creation while retaining both fresh authorization barriers and stream cleanup ownership. Tail/echo/total metrics and the private-standard gap do not improve uniformly. This supports local setup latency only; no competitor or throughput/resource win is claimed.
+
+[Real private receiving capacity](benchmarks/2026-10-04/private-receiving-capacity-kvm/README.md) passes 53 KVM checks and 128 scored operations with full cleanup. The configured shared 128-slot budget refuses excess requests with 503 while 125 additional private UDP tunnels remain held alongside fixture routes; exact traffic survives on all held tunnels, an existing private route and a fresh standard route. One closed slot recovers on the first attempt and refilling restores 503. This proves bounded serialized admission and recovery in the owned fixture, not concurrent setup/worker throughput, mixed TCP capacity, resource or competitor superiority.
+
+[Concurrent private receiving traffic](benchmarks/2026-10-04/private-capacity-concurrent-kvm/README.md) passes 54 KVM checks, 128 regression benchmark operations and 3,200/3,200 exact datagrams from 32 workers at receiving saturation. The same workload initially dropped at the owned echo fixture: 14 kernel receive-buffer errors match 14 echo-socket drops. An explicit requested 8 MiB fixture buffer (Linux actual 16 MiB) yields zero error/drop deltas and 21.98 MiB/s aggregate echoed payload throughput in one local cohort. The derived image changes only the echo binary; guest agent/client and production daemon are unchanged. This is fixture-corrected host-to-target transport evidence, not source-guest throughput, a production performance improvement, resource efficiency or competitor superiority.
+
+[Matched concurrent private/standard UDP](benchmarks/2026-10-04/private-capacity-comparison-kvm/README.md) runs 32 workers in private-standard-standard-private order with both tunnel sets live throughout: 12,800/12,800 exact scored datagrams, zero guest UDP error/echo-socket drop deltas, 55 KVM checks and full cleanup pass. Private payload throughput is 21.771–21.790 MiB/s; standard is 22.069–22.209 MiB/s. This retains a small local steady-traffic gap, not throughput parity or a competitor win. Identical buffered guest fixture and workload are used; CPU/PSS attribution and source-guest/independent-host/managed comparisons remain unmeasured.
+
+[Concurrent UDP resource repeat](benchmarks/2026-10-04/private-capacity-resource-kvm/README.md) independently verifies stable-process CPU/PSS snapshots for four matched 32-worker blocks, 12,800 exact scored datagrams, zero UDP drop/error deltas, 55 KVM checks and full cleanup. Throughput now overlaps: private 21.728–22.051 and standard 21.723–22.472 MiB/s; target CPU cost also overlaps (private 320.53–321.72 vs standard 319.34–331.82 ms/payload MiB). The earlier small throughput gap is not consistent across repeats. Whole target CPU dominates observed process costs and warrants thread profiling; whole-process PSS with both route sets held does not establish per-route memory efficiency or competitor superiority.
+
+[Target thread diagnostics](benchmarks/2026-10-04/private-capacity-thread-kvm/README.md) verify 351 stable target threads in every matched concurrent block: Tokio-named workers use 19.48–20.60 CPU-seconds, vCPU threads 1.16–1.24. All 12,800 matched datagrams and 55 KVM checks pass with zero UDP drop/error deltas and full cleanup. Device-wide vsock progress wakes all stream waiters and is a concrete candidate for targeted wakeups; thread names do not prove causality. No production optimization or performance saving is claimed.
+
+[Focused repeat-resume audit](benchmarks/2026-10-04/vsock-resume-cycles/README.md) reproduces a final resume timeout on the unchanged baseline after five added successful cycles; the targeted-wake candidate completes eight total resumes with exact UDP/full cleanup. The seven-vCPU-exit stall can occur without the wake change. Permitted VM code marks pause before any owner acknowledgement; that quiescence gap requires correction/testing, while timeout causality remains unproven. The targeted-wake CPU gain remains provisional because the original full ABBA lifecycle gates did not all pass.
+
+Acknowledged-pause follow-up: the isolated candidate passed 47 selected core, 531 agent and 64 daemon tests, but the unchanged-deadline KVM audit timed out on the original main-target resume before additional cycles. Pause acknowledgement completed; the restored vCPU logged 6 exits before teardown. This does not validate a lifecycle fix or the provisional vsock CPU reduction. [Raw failure archive](benchmarks/2026-10-04/vsock-pause-owner-ack/README.md).
+
+A separate readiness diagnostic reproduced the acknowledged-pause failure: vsock connection accepted in 9.69 ms, restore request unanswered for 15 seconds, clock fallback timed out, then HTTP 503. Owner sample showed a halted vCPU; interrupt/timer cause remains unproven. [Diagnostic evidence](benchmarks/2026-10-04/vsock-pause-owner-ack-readiness-failure/README.md).
+
+Serialized MMIO IRQ follow-up: deterministic tests expose both status/line races under the old ordering and pass after serialization. The isolated release passes one original-deadline 20-resume cohort (21 KVM checks, exact UDP, prior closure and full cleanup). This does not establish elimination of the intermittent stall or accept the provisional CPU gain; independent repeats remain required. [Verified evidence](benchmarks/2026-10-04/mmio-irq-order/README.md).
+
+Two additional independent original-deadline serialized-IRQ cohorts also pass: three cohorts total cover 60 main-target resumes, each with exact UDP/prior closure, 21 KVM checks and full cleanup. The transport change has red/green concurrent regression proof. Intermittent-stall elimination and CPU superiority remain unproven; earlier failures remain preserved. [Repeated-run evidence](benchmarks/2026-10-04/mmio-irq-order-resume-repeats/README.md).
+
+Full combined-candidate release ABBA now passes 220 KVM checks, 512 scored setup/echo operations and 51,200 exact concurrent datagrams with zero UDP drops/errors and complete cleanup. Independently recomputed target CPU falls from 316.70 to 35.11 ms/MiB (88.91% lower); aggregate throughput rises 3.62%. Candidate measured P50/P95 setup/echo metrics are lower in these cohorts. This accepts a scoped improvement against the owned HyperMachine baseline, not a competitor win or permanent elimination of the lifecycle stall. [Raw comparison and limitations](benchmarks/2026-10-04/mmio-irq-order-release-abba/README.md).
+
+PCI transport follow-up: three deterministic IRQ/ISR-read/reset tests fail under old ordering and pass with serialization, alongside 16 PCI, 47 selected core, 531 agent and 64 daemon regressions. Real Linux PCI-vsock remains unverified: the guest reaches userspace and starts its agent, but Linux reports no PCI configuration-space access function and the first ping times out. Configuration discovery is the next gap; no PCI runtime win is claimed. [Failure evidence](benchmarks/2026-10-04/pci-guest-discovery/README.md).
+
+PCI configuration discovery follow-up: a minimal root host bridge allows Linux to select native type-1 access and enumerate virtio-vsock without a PCI kernel override. 84 PCI and 47 selected core regressions pass. Actual operation still fails because the guest cannot find the PCI INT A route and its vsock probe fails; source changes remain unstaged. [Verified discovery and routing evidence](benchmarks/2026-10-04/pci-host-bridge/README.md).
+
+
+PCI guest functional acceptance (2026-10-04): the combined host bridge, bus-zero INTx routing, IRQ ordering, and initial queue-capacity corrections pass three fresh owned KVM guests: 192 pings and 192 exact commands, all followed by clean shutdown. The new queue-discovery regression fails against the prior implementation; 106 PCI-filtered library tests, 47 VM tests (2 ignored), and 531 agent tests pass. This supersedes the earlier PCI discovery/routing failures for this fixture only. Broad kernel compatibility, MSI-X, hotplug, migration and competitor performance remain unverified. [Raw evidence and candidate sources](benchmarks/2026-10-04/pci-queue-discovery/README.md).
+
+Host MMIO reset correctness: reset now releases outstanding level interrupts under the status lock. A regression fails against the prior implementation; 17 MMIO and 47 VM tests pass (2 ignored), plus a real KVM/MMIO guest command smoke check. The smoke does not directly test host reset. This establishes no new performance win. [Evidence](benchmarks/2026-10-04/mmio-host-reset/README.md).
+
+PCI checkpoint/restore gap (2026-10-04): cold PCI guest acceptance does not extend to snapshots. A working template captures a checkpoint, but a fresh restored PCI guest times out on its first 15-second ping; VM code explicitly omits PCI transport state. Both guests and snapshot outputs are cleaned up. Default MMIO lifecycle evidence remains separately scoped; PCI lifecycle parity is incomplete. [Reproducible gate and raw failure](benchmarks/2026-10-04/pci-snapshot-failure/README.md).
+
+PCI checkpoint acceptance (2026-10-04) supersedes the preceding fixture failure: three fresh owned checkpoint restores pass 48 restored pings and 96 exact commands, including saved guest data, with full cleanup. PCI registers, queues/cursors/counters, bus-zero standard-function configuration and CONFIG_ADDRESS are captured and validated; PCI snapshots use version 3, MMIO-only snapshots retain version 2. Five existing MMIO restores also pass timer/clock/arithmetic/RNG health checks after correcting their proven IRQ-0-only timer parser. 110 PCI, 14 snapshot-file, 47 VM (2 ignored), 531 agent and 64 daemon (2 ignored) regressions pass. This is functional parity for the owned fixture; other kernels/backends, arbitrary PCI topologies and managed migration remain unverified, with no performance claim. [Raw evidence and verification](benchmarks/2026-10-04/pci-snapshot-state/README.md).
+
+PCI sibling/descendant lifecycle verification: three fresh direct AgentVM/VM runs restore nine guests, pass 174 pings and 378 exact commands, and preserve distinct sibling markers across 30 explicit pause/resume pairs and a second-generation checkpoint. All guests and snapshot outputs are cleaned up; the unchanged default restore profile passes on the same frozen executable. Production sources match the preceding accepted PCI snapshot candidate. This tests direct checkpoint clones, not the sandbox API fork route, managed migration or competitor performance. [Gate and raw evidence](benchmarks/2026-10-04/pci-sibling-descendant/README.md).
+
+PCI sandbox API integration: `hv2-sandboxd --guest-transport pci` selects PCI vsock consistently in the shared template/create/restore builder, with distinct template cache identities. Selected PCI and unchanged default MMIO each pass 27 authenticated owned API checks, including actual two-child/descendant fork, exact write isolation, three disk pause/resume cycles, four deletions and empty inventory. 66 daemon tests pass (2 ignored). Earlier harness failures and recovery/deletion of their paused children are retained. Network-enabled PCI nodes, mixed-transport migration/scheduling and managed competitor performance remain unverified. [Operator guide](GUEST_TRANSPORT.md) and [API evidence](benchmarks/2026-10-04/pci-daemon-api/README.md).
+
+Network-enabled PCI sandbox acceptance: two fresh authenticated API profiles pass 56 checks each with PCI vsock plus the MMIO NIC. Fourteen total NIC HTTP requests reach an owned exact-/32 host fixture with unique exact responses and matching receipt, while 28 separate guest-proxy HTTP requests preserve markers across forks and disk resumes. Each profile deletes four sandboxes to an empty inventory. Proxy forwarding uses vsock and is not counted as NIC delivery. No production change or performance win is claimed; mixed-transport migration, other kernels and broader network/policy gates remain unverified. [NIC and proxy evidence](benchmarks/2026-10-04/pci-network-api/README.md).
+
+Matched release transport performance (prepared create, C1): one frozen daemon passes MMIO–PCI–PCI–MMIO with 72 exact/create/delete gates and 64 scored operations. Pooled API-create P50/P95 is 22.50/31.40 ms for MMIO versus 19.87/24.31 ms for PCI; mean sampled process CPU is 36.88 versus 31.56 ms per create+command, while held daemon PSS P50 is 75,337 versus 76,685 KiB. PCI is faster in pooled observations but uses more held PSS; cohort tails overlap. Same owned WSL/KVM host, guest, fixed eight-CPU affinity; configured boot arguments differ. This is an internal mode comparison, not cold boot, throughput, high concurrency or a managed competitor win. [Raw ABBA samples and independent verification](benchmarks/2026-10-04/pci-mmio-release-abba/README.md).
+
+Matched cold release transport comparison: --no-template MMIO–PCI–PCI–MMIO passes 72 exact/create/delete gates and 64 scored samples, with 18 Linux loads and zero restores per cohort. MMIO/PCI API-create P50 is 425.68/753.93 ms and P95 2114.16/1346.20 ms; sampled CPU 978.75/570.63 ms and immediately held PSS P50 193.63/163.72 MiB. PCI has slower median cold creation despite faster prepared creation in the separate gate. Host caches are warm, boot arguments differ and these short same-host samples establish no overall or competitor win. [Raw cold samples and verification](benchmarks/2026-10-04/pci-mmio-cold-release-abba/README.md).
+
+Current frozen release versus Firecracker C1 refresh: both engines pass 8/8 matched cold-create-to-exact-command attempts with the same immutable output-drain guest, kernel and eight-CPU affinity. HM/FC readiness P50 is 477.35/445.64 ms; P95/P99 1315.94/1495.04 ms; five-second held PSS medians 151.98/85.88 MiB and incremental PSS 84.92/85.88 MiB. HM retains more process memory and has higher median latency; its lower observed maximum does not establish tail superiority with eight samples. Higher-concurrency October 3 results remain scoped to their older binary. [Fresh matched-engine evidence](benchmarks/2026-10-04/current-release-firecracker-c1/README.md).
+
+Allocator exploration, current release C1: with MALLOC_ARENA_MAX=2 for the owned HM daemon only, both engines pass 8/8 attempts and clean up. HM/FC five-second held PSS medians are 123.81/85.85 MiB; readiness P50 441.27/470.32 ms and P95/P99 3346.86/1740.96 ms. HM holds less PSS than the separate default-allocator run (151.98 MiB), but a sequential run with observed unrelated host compilation does not isolate causality; maximum latency worsens. No allocator default change or overall win is accepted. Interleaved allocator trials, concurrency and throughput gates remain necessary. [Raw exploratory evidence and verification](benchmarks/2026-10-04/current-release-arena2-c1/README.md).
+
+Allocator C1 ABBA follow-up: four fresh equal-length cohorts (default/2/2/default, four pairs each) pass all 32 exact engine attempts and cleanup. Default/limited HM held PSS is 114.42/121.47 MiB, readiness P50 423.26/461.67 ms and P95/P99 574.70/1395.42 ms. The earlier sequential apparent memory benefit does not repeat; no allocator default change is accepted. Per-pair empty/held/post-cleanup measurements expose variable retained memory, but do not establish its cause or longer-run density. [Interleaved evidence and independent verification](benchmarks/2026-10-04/allocator-c1-abba/README.md).
+
+Fixed mmap-threshold C1 ABBA candidate: default/1MiB/1MiB/default fresh cohorts pass all 32 exact engine attempts. Default/fixed HM held PSS medians are 130.06/93.88 MiB, repeated in both candidate cohorts; empty baseline medians 31.84/10.35 MiB. Readiness P50 is 400.98/396.24 ms and P95/P99 489.57/778.21 ms. Lower memory repeats for this fixture but the maximum worsens; product defaults remain unchanged pending longer lifecycle, concurrency, prepared restore and network CPU/throughput gates. FC still has lower memory and median readiness. [Raw evidence, glibc rationale and independent verification](benchmarks/2026-10-04/mmap-threshold-c1-abba/README.md).
+
+Current-release C8 mmap-threshold ABBA: default/fixed/fixed/default fresh cohorts pass all 256 exact engine attempts (64 per engine per setting) and cleanup. Default/fixed HM held PSS medians are 888.01/680.16 MiB for eight guests; empty baseline medians 200.74/14.80 MiB. Lower memory repeats in both fixed cohorts, but readiness P50 worsens 487.07 to 547.33 ms and P95 529.44 to 892.35 ms. FC held PSS remains about 671 MiB and median readiness about 428-437 ms; its tails vary. This proves a fixture-specific memory/latency tradeoff, not an overall optimization; defaults remain unchanged. [Current C8 raw evidence and independent verification](benchmarks/2026-10-04/mmap-threshold-c8-abba/README.md).
+
+PCI cold-start improvement: the one-UART/headless keyboard boot bundle reduces matched PCI create P50/P95 from 654.58/765.21 to 378.10/428.37 ms in baseline/candidate/candidate/baseline, with all 72 exact lifecycle gates passing. Sampled CPU is 417.50/390.31 ms per operation; held PSS slightly increases. An explicit PCI template discriminator prevents identical boot arguments from sharing MMIO cache identity; MMIO identity bytes remain stable. Full daemon tests pass 67 (2 ignored); prepared PCI/MMIO APIs pass 28 checks each and network-enabled PCI passes 56. Default remains MMIO; broader kernel, concurrency and managed competitor performance are unverified. [Sources, raw evidence and independent verification](benchmarks/2026-10-04/pci-fastboot/README.md).
+
+PCI boot-change store adoption: old-release-to-candidate PCI and default-MMIO profiles pass 21 checks each on the same owned host/store path. Saved guest memory marker, sandbox ID/access token, fork isolation and two further disk resume cycles per profile survive. PCI keeps its old base alongside the new key; MMIO actually reuses its existing template (zero candidate Linux loads). Both profiles delete two guests, empty inventory, stop both daemon phases normally and remove their owned stores. This closes this exact old-store adoption gate only; general version/host/path migration, network/volume stores and crash recovery remain unverified. [Raw upgrade evidence and verification](benchmarks/2026-10-04/pci-fastboot-store-upgrade/README.md).
+
+Current PCI release versus Firecracker: all 144 matched C1/C8 cold attempts pass. HM/FC readiness P50 is 413.50/381.93 ms at C1 and 520.63/448.77 ms at C8; C8 P95 is 620.84/521.00 ms. Five-second held PSS medians are 145.35/85.87 MiB at C1 and 860.56/670.87 MiB at C8. Actual accepted PCI boot-argument tokens match the FC configuration; both use the same immutable kernel/output-drain guest and eight-CPU affinity, with no allocator experiment or admission budget. Improved PCI still has higher median readiness and held memory; no competitive superiority is established. [Current raw C1/C8 comparison and verification](benchmarks/2026-10-04/current-pci-firecracker/README.md).
+
+PCI C8 allocator investigation: glibc/jemalloc/jemalloc/glibc passes all 256 exact engine attempts with a frozen local jemalloc 5.3.0 library and child-only background-purge/one-second-decay settings. HM held PSS is 813.29/688.80 MiB pooled, and both candidate cohorts hold less than either glibc cohort. Latency varies substantially by time window; candidate pooled P50 is worse (1233.41 vs 721.82 ms), while FC reference timings also shift. Defaults remain unchanged; no speed, throughput or overall win is accepted. [Raw combined-allocator memory candidate and independent verification](benchmarks/2026-10-04/jemalloc-pci-c8-abba/README.md).
+
+Durable sharing prerequisite: proxy requests now await an admission hook before backend open/guest wakeup, with default delegation preserving synchronous policies. A delayed-denial HTTP/gRPC regression proves pending and denied admission resolve no backend; all 1070 API library and 31 control-plane integration tests pass, including legacy private web policy checks. No KVM/performance or self-service sharing completion is claimed. Owner-bound Memory/Redis grants, management API/CLI, fail-closed store-backed admission and persistence/real-guest gates remain open. [Compatible source extension and test evidence](benchmarks/2026-10-04/async-proxy-admission/README.md).
+
+Browser sharing model prerequisite: five isolated tests pass for strict owner-bound grants, exclusive expiry, canonical revisions, duplicate rejection, revocation records and exact sandbox-incarnation checks. Node movement is identity-neutral in the model only. Storage CAS, owner management, proxy enforcement and restart/real-guest gates remain unimplemented; no self-service feature or performance win is claimed. [Model and test evidence](benchmarks/2026-10-04/web-sharing-model/README.md).
+
+Browser sharing storage prerequisite: owner-checked Memory/Redis reads, atomic record/grant snapshots and byte-fenced revision CAS pass seven sharing tests against a fresh owned Redis, followed by 127 cluster library tests (one ignored; ACL fixture test skipped). Exact replay succeeds; stale requests cannot revive revoked grants, and deleted/recreated records deny admission. Sharing rows deliberately retain revisions after deletion. Active grants are visible across connections; disk persistence was disabled, so restart/crash durability is unverified. Owner management and proxy enforcement remain open, with no feature-completion or performance claim. [Store sources and raw tests](benchmarks/2026-10-04/web-sharing-store/README.md).
+
+Owner sharing API prerequisite: owner-only GET/PUT grant replacement supports exact revision retries and empty-list revocation with strict 64 KiB JSON and five-second store-call bounds. Memory and owned Redis HTTP contracts verify key permissions, rotated credentials, single-winner concurrency, stale replay refusal and deletion. The full cluster library passes 129 tests (one ignored; ACL fixture skipped), followed by ten final sharing tests including eight fault modes, four cancelled calls and two exact retry recoveries after committed errors/timeouts. Browser enforcement, CLI and restart/real-guest gates remain open; no self-service completion or performance claim is made. [API sources and fault evidence](benchmarks/2026-10-04/web-sharing-api/README.md).
+
+Owner sharing proxy and CLI: explicitly delegable browser credentials use atomic store-backed grants after existing operator scopes, with five-second fail-closed reads and post-await credential rotation/expiry/delegation revalidation. The cluster library passes 132 tests (one ignored; ACL fixture skipped), all 31 control-plane integrations pass including HTTP/1+HTTP/2 TLS grant admission, expiry/revocation, credential stripping and no-open denials, and two CLI tests verify bounded payloads, exact file retries and credential-safe errors. The CLI binary also compiles; its initial targeted run selected zero tests and is not counted as test evidence. Owner grant management and proxy enforcement are verified in local fixtures; Redis restart/crash, real KVM owner sharing, SSO and verified identities remain open. No performance win is claimed. [Sources and scoped verification](benchmarks/2026-10-04/web-sharing-proxy/README.md).
+
+Owner sharing AOF restart gate: one explicitly invoked owned Redis 8.0.2 test passes five hard process restarts with appendonly=yes/appendfsync=always. Six distinct processes and five AOF reloads preserve active grants, exact u64 incarnation, revocation, deletion, replacement and owner-change semantics through async admission. Corrupt JSON and wrong key types deny without mutation. The first run’s old-connection broken pipe is retained; corrected bounded read-only reconnection passes, with no production change. Independent verification confirms test-only source scope, raw hashes and process/directory cleanup. Hardware power loss, managed failover, shipped control-plane restart and real KVM owner sharing remain open; no performance or overall superiority claim is made. [Sources, initial failure and final verification](benchmarks/2026-10-04/web-sharing-aof-restart/README.md).
+
+Real KVM owner sharing (2026-10-05): ten cases pass through owner API/CLI, verified API/proxy TLS, node mTLS and a real local guest plus fork. Exact CLI retries, guest identity/credential stripping, custom domains, fork exclusion, revoked paused-guest no-wake, current regrant auto-resume, delegation reload and expiry are verified. Two shipped control-plane restarts preserve active and revoked state while Redis stays available. Both guests are deleted to empty inventory, all five registered processes stop, private fixture files are removed and input hashes remain unchanged. The initial CA key-usage verification failure and corrected strict-TLS driver are retained. Current isolated control/CLI release builds have accepted protected hash guards and eleven matching selected source/dependency hashes, not a full source closure. Live Redis outage, power loss, managed failover, SSO and tenant/team isolation remain open; no performance or overall competitive win is claimed. [Release context, initial failure and final evidence](benchmarks/2026-10-05/owner-sharing-kvm/README.md).
+
+Live Redis outage owner-sharing gate (2026-10-05): thirteen real KVM cases pass with unchanged frozen binaries, repeating ten owner API/CLI/TLS cases plus three outage/recovery cases. During an owned Redis hard outage, two browser requests deny and independent node mTLS state remains paused; closed-connection and five-second-timeout paths meet the functional deadline. Two AOF-always reloads preserve active and revoked revisions, stale replay returns 409, and current regrant permits real auto-resume. Both guests are deleted to empty inventory, seven processes stop and private fixture files are removed. Redis 8.0.2 logs show three processes and two AOF reloads; hashes and cleanup are independently verified. Fleet-scale outages, managed failover, power loss, SSO and tenant/team isolation remain open. Failure-path timings are not performance scores or competitor wins. [Driver and raw outage evidence](benchmarks/2026-10-05/owner-sharing-redis-outage/README.md).
+
+
+### 2026-10-05: creator-bound sandbox API release gate
+
+Non-administrator scoped keys with a configured principal now receive owner-filtered inventories and cannot dispatch sandbox-ID operations against another owner or ownerless records. Administrator and unassigned-key compatibility is preserved; operator policies with admin scope remain administrators. Global resources and already admitted operations remain outside this boundary.
+
+The isolated locked release build passed protected-source hash guards. The [owned KVM report](benchmarks/2026-10-05/creator-bound-api-kvm/report.json) passed all 14 functional cases, repeating grant/revocation, TLS guest identity, control-plane restart, and live Redis outage gates alongside creator API admission. The archive retains the initial execute-permission failure, raw logs, source and release hashes, independent cleanup checks, and a manifest verifier. All seven processes stopped; administrator inventory was empty; private fixture files were removed. The HTTP integration suite passed 32 tests. No new performance measurement or hosted competitor result is claimed.
+
+
+### 2026-10-05: current creator policy and filtered pagination
+
+The [expanded HTTP integration evidence](benchmarks/2026-10-05/creator-policy-pagination/integration.txt) passes all 32 tests. The ownership fixture now verifies old-key revocation, replacement-key access, denial after a stored owner changes, and updated principal assignment on the same key. Interleaved records from two owners paginate without duplicates or foreign records in ascending and descending order; a foreign cursor restarts within the filtered inventory. These checks use an owned MemoryStore fixture, not a managed multi-tenant deployment. No production behavior changed in this follow-up.

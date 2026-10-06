@@ -1,0 +1,12 @@
+{
+  "crates/hv2-agent/examples/pci_snapshot_probe.rs": "7f0950b0eda3c7c4ea30bc1760794486a3f4fc21599506ee8ee63e1db949dce4",
+  "crates/hv2-core/src/vm.rs": "e03a7f82ee85c17b92956095d46a72d5bd8ad4e52233f01253b0292f48ab4b84",
+  "crates/hv2-core/src/devices/virtio_pci.rs": "a2494223b1f88c5d43afc48e9c04588e9d3660ed105ef7a9742acca0d495c344",
+  "crates/hv2-core/src/snapshot/file.rs": "832ecbb8ec4000215859de29a7dc783b534c788206c886647b2c3af44555283f",
+  "crates/hv2-core/src/snapshot/device.rs": "0ad4dcb62a7cf58dffacaf99a41f6d0516176177ae5264be052ffecb6b7e3bbf",
+  "runtime_inputs": {
+    "/var/tmp/hm-pci-snapshot-probe-v1": "61057f316f51abdf6d26699505f8beb26af252afaea948f52cd49f2d30dd8dd8",
+    "/var/tmp/hm-competitive/bzImage-known-uart-irq": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "/var/tmp/hm-private-capacity-buffered-guest-v1.cpio.gz": "28c839a0969728c2c579fa9fdc7274714266ce4308f48a2ee1090d6c34537294"
+  }
+}

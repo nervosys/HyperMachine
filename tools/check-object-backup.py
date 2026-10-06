@@ -43,7 +43,10 @@ def main():
     parser.add_argument("--multipart", action="store_true", help="exercise multipart upload for the KVM backup")
     parser.add_argument("--compression-level", type=int, choices=range(1, 10), default=1)
     parser.add_argument("--versioned", action="store_true", help="recover KVM store by version ID while its current key is deleted")
+    parser.add_argument("--scheduled", action="store_true", help="capture the paused KVM store through the durable scheduler")
     args = parser.parse_args()
+    require(not args.scheduled or args.daemon is not None, "scheduled KVM mode requires guest paths")
+    if args.scheduled: args.versioned = True
     require(all([args.daemon, args.kernel, args.initrd]) or not any([args.daemon, args.kernel, args.initrd]), "KVM paths must be supplied together")
     os.umask(0o077)
     args.output = args.output.resolve()
@@ -52,6 +55,9 @@ def main():
     spec = importlib.util.spec_from_file_location("backup", tool)
     backup = importlib.util.module_from_spec(spec); spec.loader.exec_module(backup)
     paths = {"tool": tool, "coordinator": Path(__file__)}
+    if args.scheduled:
+        paths["scheduler"] = tool.with_name("schedule-object-backups.py")
+        paths["retention"] = tool.with_name("retain-object-backups.py")
     for name in ["daemon", "kernel", "initrd"]:
         if getattr(args, name): paths[name] = getattr(args, name).resolve(strict=True)
     import boto3, botocore, cryptography, moto
@@ -266,7 +272,34 @@ def main():
                 (args.output / "locked-startup.log").write_bytes(rejected.stdout + rejected.stderr)
             require((store / "volumes" / volume["volumeID"] / "data/marker").read_text() == marker, "guest volume write not persisted")
             if args.versioned: client.put_bucket_versioning(Bucket=bucket, VersioningConfiguration={"Status": "Enabled"})
-            receipt = invoke("backup", store=store, object="kvm.hmb", extra=["--multipart-threshold-mib", "8", "--multipart-part-mib", "8"] if args.multipart else [])
+            backup_object = "kvm.hmb"
+            if args.scheduled:
+                from datetime import datetime, timezone
+                configuration = args.output / "schedule-config.json"
+                schedule_state = args.output / "schedule-state"
+                configuration.write_text(json.dumps({"start_at": datetime.now(timezone.utc).isoformat(), "interval_seconds": 86400,
+                    "store": str(store), "key_file": str(key), "bucket": bucket, "prefix": "scheduled-kvm/", "endpoint": endpoint,
+                    "compression_level": args.compression_level, "multipart_threshold_mib": 8 if args.multipart else 64, "multipart_part_mib": 8 if args.multipart else 64}))
+                def scheduled(command, extra=()):
+                    result = subprocess.run([sys.executable, str(paths["scheduler"]), command, "--config", str(configuration),
+                        "--state", str(schedule_state), *extra], env=env, capture_output=True, timeout=180)
+                    for secret in [credential, aws_id, aws_secret, key.read_text()]:
+                        require(secret.encode() not in result.stdout + result.stderr, "secret leaked into scheduler output")
+                    require(result.returncode == 0, "scheduler command failed: " + (result.stdout + result.stderr).decode(errors="replace"))
+                    return json.loads(result.stdout)
+                captured = scheduled("run");require(captured["status"] == "confirmed", "scheduled KVM capture not confirmed")
+                receipt = captured["receipt"];backup_object = receipt["object"]
+                require(scheduled("run")["status"] == "not_due", "scheduled restart duplicated KVM backup")
+                scheduled("pin", ["--object", backup_object, "--version-id", receipt["version_id"]])
+                planned = scheduled("retain", ["--keep-newest", "1", "--older-than-days", "1"])
+                require(len(planned["retained"]) == 1 and planned["retained"][0]["pinned"] and not planned["expired"], "KVM pin/retention registration differs")
+                catalog = json.loads((schedule_state / "catalog.json").read_text())
+                require(catalog["receipts"][0]["receipt"]["sha256"] == receipt["sha256"], "scheduled KVM catalog receipt differs")
+                report["scheduled"] = {"capture_confirmed": True, "restart_no_duplicate": True, "durable_pin_registered": True,
+                    "locked_retention_plan_verified": True, "periodic_timer_deployed": False}
+                report["checks"].append({"name": "scheduled-kvm-capture-restart-pin-retention", "passed": True})
+            else:
+                receipt = invoke("backup", store=store, object=backup_object, extra=["--multipart-threshold-mib", "8", "--multipart-part-mib", "8"] if args.multipart else [])
             if args.multipart: require(receipt["upload_method"] == "multipart" and receipt["parts"] >= 2, "KVM multipart path not exercised")
             # Make original files unavailable; recovery must use the S3 object.
             original = args.output / "kvm-source-unavailable"
@@ -274,9 +307,9 @@ def main():
             restore_args = ["--sha256", receipt["sha256"]]
             if args.versioned:
                 require(receipt["version_id"] != "null", "KVM version ID missing")
-                require(client.delete_object(Bucket=bucket, Key="kvm.hmb")["DeleteMarker"], "KVM object delete marker missing")
+                require(client.delete_object(Bucket=bucket, Key=backup_object)["DeleteMarker"], "KVM object delete marker missing")
                 restore_args += ["--version-id", receipt["version_id"]]
-            recovery_receipt = invoke("restore", destination=recovered, object="kvm.hmb", extra=restore_args)
+            recovery_receipt = invoke("restore", destination=recovered, object=backup_object, extra=restore_args)
             if args.versioned: require(recovery_receipt["version_pinned"] and recovery_receipt["version_id"] == receipt["version_id"], "KVM version not pinned")
             require(recovery_receipt["receipt_checksum_verified"], "KVM backup receipt not verified")
             recovered_header, _ = backup.snapshot_header(recovered / "paused" / (sandbox + ".snap"))

@@ -1,0 +1,58 @@
+[
+  {
+    "concurrency": 1,
+    "argv": [
+      "python3",
+      "/var/tmp/hm-pci-current-firecracker-v1-0lo9yz3e/bench-local-engines-concurrent.py",
+      "--environment",
+      "owned WSL KVM current PCI release; matched kernel/output-drain guest, eight CPU affinity, no templates or admission budget",
+      "--daemon-guest-transport",
+      "pci",
+      "--concurrency",
+      "1",
+      "--pairs",
+      "8",
+      "--memory-idle-seconds",
+      "5",
+      "--hypermachine",
+      "/var/tmp/hm-pci-fastboot-release-node-v1",
+      "--firecracker",
+      "/var/tmp/hm-competitive/firecracker/firecracker-v1.17.0-x86_64",
+      "--kernel",
+      "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+      "--initrd",
+      "/var/tmp/hm-competitive/guest-output-drain.cpio.gz"
+    ],
+    "exit_code": 0,
+    "started_unix": 1791135725.6034582,
+    "ended_unix": 1791135893.5221484
+  },
+  {
+    "concurrency": 8,
+    "argv": [
+      "python3",
+      "/var/tmp/hm-pci-current-firecracker-v1-0lo9yz3e/bench-local-engines-concurrent.py",
+      "--environment",
+      "owned WSL KVM current PCI release; matched kernel/output-drain guest, eight CPU affinity, no templates or admission budget",
+      "--daemon-guest-transport",
+      "pci",
+      "--concurrency",
+      "8",
+      "--pairs",
+      "8",
+      "--memory-idle-seconds",
+      "5",
+      "--hypermachine",
+      "/var/tmp/hm-pci-fastboot-release-node-v1",
+      "--firecracker",
+      "/var/tmp/hm-competitive/firecracker/firecracker-v1.17.0-x86_64",
+      "--kernel",
+      "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+      "--initrd",
+      "/var/tmp/hm-competitive/guest-output-drain.cpio.gz"
+    ],
+    "exit_code": 0,
+    "started_unix": 1791135893.5230124,
+    "ended_unix": 1791136064.613759
+  }
+]

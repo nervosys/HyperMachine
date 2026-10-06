@@ -1,0 +1,414 @@
+   Compiling hv2-cluster v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-cluster)
+error[E0201]: duplicate definitions with name `private_membership`:
+    --> crates/hv2-cluster/src/control.rs:2671:9
+     |
+2597 | /     async fn private_membership(&self, _sandbox: &str, _owner: &crate::ownership::OwnerId)
+2598 | |         -> StoreResult<MembershipAccess<Option<NetworkMembershipState>>> {
+2599 | |         Err(StoreError("private membership unsupported by this store".into()))
+2600 | |     }
+     | |_____- previous definition here
+...
+2671 | /         async fn private_membership(&self, sandbox: &str, owner: &crate::ownership::OwnerId)
+2672 | |             -> StoreResult<MembershipAccess<Option<NetworkMembershipState>>> {
+2673 | |             match self.mode.load(Ordering::SeqCst) {
+2674 | |                 1 => Self::error(), 2 => self.hang().await,
+...    |
+2677 | |         }
+     | |_________^ duplicate definition
+     |
+    ::: crates/hv2-cluster/src/store.rs:56:5
+     |
+  56 | /     async fn private_membership(&self, _sandbox: &str, _owner: &crate::ownership::OwnerId)
+  57 | |         -> Result<MembershipAccess<Option<NetworkMembershipState>>> {
+  58 | |         Err(StoreError("private membership unsupported by this store".into()))
+  59 | |     }
+     | |_____- item in trait
+
+error[E0201]: duplicate definitions with name `compare_private_membership`:
+    --> crates/hv2-cluster/src/control.rs:2678:9
+     |
+2604 | /     async fn compare_private_membership(&self, _expected: Option<&str>, _next: &NetworkMembershipState)
+2605 | |         -> StoreResult<MembershipChange> {
+2606 | |         Err(StoreError("private membership unsupported by this store".into()))
+2607 | |     }
+     | |_____- previous definition here
+...
+2678 | /         async fn compare_private_membership(&self, expected: Option<&str>, next: &NetworkMembershipState)
+2679 | |             -> StoreResult<MembershipChange> {
+2680 | |             let mode=self.mode.load(Ordering::SeqCst);
+2681 | |             match mode { 5 => return Self::error(), 6 => return self.hang().await, _=>{} }
+...    |
+2686 | |             Ok(result)
+2687 | |         }
+     | |_________^ duplicate definition
+     |
+    ::: crates/hv2-cluster/src/store.rs:63:5
+     |
+  63 | /     async fn compare_private_membership(&self, _expected: Option<&str>, _next: &NetworkMembershipState)
+  64 | |         -> Result<MembershipChange> {
+  65 | |         Err(StoreError("private membership unsupported by this store".into()))
+  66 | |     }
+     | |_____- item in trait
+
+error[E0425]: cannot find value `_sandbox` in this scope
+    --> crates/hv2-cluster/src/control.rs:2609:108
+     |
+2609 | ...<()> { self.inner.private_membership(_sandbox, _owner, _expected, _next, record).await }
+     |                                         ^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_owner` in this scope
+    --> crates/hv2-cluster/src/control.rs:2609:118
+     |
+2609 | ...lf.inner.private_membership(_sandbox, _owner, _expected, _next, record).await }
+     |                                          ^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_expected` in this scope
+    --> crates/hv2-cluster/src/control.rs:2609:126
+     |
+2609 | ...private_membership(_sandbox, _owner, _expected, _next, record).await }
+     |                                         ^^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_next` in this scope
+    --> crates/hv2-cluster/src/control.rs:2609:137
+     |
+2609 | ...embership(_sandbox, _owner, _expected, _next, record).await }
+     |                                           ^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_sandbox` in this scope
+    --> crates/hv2-cluster/src/control.rs:2622:61
+     |
+2622 |     ) -> StoreResult<bool> { self.inner.adopt_sandbox_owner(_sandbox, _owner, record, reservation).await }
+     |                                                             ^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_owner` in this scope
+    --> crates/hv2-cluster/src/control.rs:2622:71
+     |
+2622 |     ) -> StoreResult<bool> { self.inner.adopt_sandbox_owner(_sandbox, _owner, record, reservation).await }
+     |                                                                       ^^^^^^ not found in this scope
+
+error[E0425]: cannot find type `PortProtocol` in this scope
+    --> crates/hv2-cluster/src/control.rs:2634:20
+     |
+2634 |         _protocol: PortProtocol, _range: PublicPortRange) -> StoreResult<PortClaim> {
+     |                    ^^^^^^^^^^^^ not found in this scope
+     |
+help: consider importing this enum
+     |
+2570 +     use crate::ports::PortProtocol;
+     |
+
+error[E0425]: cannot find type `PublicPortRange` in this scope
+    --> crates/hv2-cluster/src/control.rs:2634:42
+     |
+ 397 | struct PublicPortRequest {
+     | ------------------------ similarly named struct `PublicPortRequest` defined here
+...
+2634 |         _protocol: PortProtocol, _range: PublicPortRange) -> StoreResult<PortClaim> {
+     |                                          ^^^^^^^^^^^^^^^
+     |
+help: a struct with a similar name exists
+     |
+2634 -         _protocol: PortProtocol, _range: PublicPortRange) -> StoreResult<PortClaim> {
+2634 +         _protocol: PortProtocol, _range: PublicPortRequest) -> StoreResult<PortClaim> {
+     |
+help: consider importing this struct
+     |
+2570 +     use crate::ports::PublicPortRange;
+     |
+
+error[E0425]: cannot find type `PortClaim` in this scope
+    --> crates/hv2-cluster/src/control.rs:2634:74
+     |
+2634 |         _protocol: PortProtocol, _range: PublicPortRange) -> StoreResult<PortClaim> {
+     |                                                                          ^^^^^^^^^ not found in this scope
+     |
+help: consider importing this enum
+     |
+2570 +     use crate::ports::PortClaim;
+     |
+
+error[E0425]: cannot find type `PortAllocation` in this scope
+    --> crates/hv2-cluster/src/control.rs:2637:81
+     |
+2637 |     async fn port_allocations(&self, _sandbox: Option<&str>) -> StoreResult<Vec<PortAllocation>> {
+     |                                                                                 ^^^^^^^^^^^^^^ not found in this scope
+     |
+help: consider importing this struct
+     |
+2570 +     use crate::ports::PortAllocation;
+     |
+
+error[E0425]: cannot find type `PortProtocol` in this scope
+    --> crates/hv2-cluster/src/control.rs:2647:20
+     |
+2647 |         _protocol: PortProtocol, _range: PublicPortRange) -> StoreResult<PortClaim> {
+     |                    ^^^^^^^^^^^^ not found in this scope
+     |
+help: consider importing this enum
+     |
+2570 +     use crate::ports::PortProtocol;
+     |
+
+error[E0425]: cannot find type `PublicPortRange` in this scope
+    --> crates/hv2-cluster/src/control.rs:2647:42
+     |
+ 397 | struct PublicPortRequest {
+     | ------------------------ similarly named struct `PublicPortRequest` defined here
+...
+2647 |         _protocol: PortProtocol, _range: PublicPortRange) -> StoreResult<PortClaim> {
+     |                                          ^^^^^^^^^^^^^^^
+     |
+help: a struct with a similar name exists
+     |
+2647 -         _protocol: PortProtocol, _range: PublicPortRange) -> StoreResult<PortClaim> {
+2647 +         _protocol: PortProtocol, _range: PublicPortRequest) -> StoreResult<PortClaim> {
+     |
+help: consider importing this struct
+     |
+2570 +     use crate::ports::PublicPortRange;
+     |
+
+error[E0425]: cannot find type `PortClaim` in this scope
+    --> crates/hv2-cluster/src/control.rs:2647:74
+     |
+2647 |         _protocol: PortProtocol, _range: PublicPortRange) -> StoreResult<PortClaim> {
+     |                                                                          ^^^^^^^^^ not found in this scope
+     |
+help: consider importing this enum
+     |
+2570 +     use crate::ports::PortClaim;
+     |
+
+error[E0425]: cannot find type `OwnedPortAccess` in this scope
+    --> crates/hv2-cluster/src/control.rs:2650:78
+     |
+2650 | ...str, _owner: &str) -> StoreResult<OwnedPortAccess<Vec<PortAllocation>>> {
+     |                                      ^^^^^^^^^^^^^^^ not found in this scope
+     |
+help: consider importing this enum
+     |
+2570 +     use crate::ports::OwnedPortAccess;
+     |
+
+error[E0425]: cannot find type `PortAllocation` in this scope
+    --> crates/hv2-cluster/src/control.rs:2650:98
+     |
+2650 | ...> StoreResult<OwnedPortAccess<Vec<PortAllocation>>> {
+     |                                      ^^^^^^^^^^^^^^ not found in this scope
+     |
+help: consider importing this struct
+     |
+2570 +     use crate::ports::PortAllocation;
+     |
+
+error[E0425]: cannot find type `OwnedPortAccess` in this scope
+    --> crates/hv2-cluster/src/control.rs:2653:104
+     |
+2653 | ...u16, _owner: &str) -> StoreResult<OwnedPortAccess<bool>> {
+     |                                      ^^^^^^^^^^^^^^^ not found in this scope
+     |
+help: consider importing this enum
+     |
+2570 +     use crate::ports::OwnedPortAccess;
+     |
+
+error[E0425]: cannot find value `_sandbox` in this scope
+    --> crates/hv2-cluster/src/control.rs:2658:94
+     |
+2658 | ...reResult<()> { self.inner.claim_port(_sandbox, _machine_port, _owner, _protocol, _range, _sandbox, _sandbox...
+     |                                         ^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_machine_port` in this scope
+    --> crates/hv2-cluster/src/control.rs:2658:104
+     |
+2658 | ... { self.inner.claim_port(_sandbox, _machine_port, _owner, _protocol, _range, _sandbox, _sandbox, _machine_p...
+     |                                       ^^^^^^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_owner` in this scope
+    --> crates/hv2-cluster/src/control.rs:2658:119
+     |
+2658 | ...r.claim_port(_sandbox, _machine_port, _owner, _protocol, _range, _sandbox, _sandbox, _machine_port, _owner,...
+     |                                          ^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_protocol` in this scope
+    --> crates/hv2-cluster/src/control.rs:2658:127
+     |
+2658 | ...ort(_sandbox, _machine_port, _owner, _protocol, _range, _sandbox, _sandbox, _machine_port, _owner, _sandbox...
+     |                                         ^^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_range` in this scope
+    --> crates/hv2-cluster/src/control.rs:2658:138
+     |
+2658 | ...ox, _machine_port, _owner, _protocol, _range, _sandbox, _sandbox, _machine_port, _owner, _sandbox, _machine...
+     |                                          ^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_sandbox` in this scope
+    --> crates/hv2-cluster/src/control.rs:2658:146
+     |
+2658 | ...ine_port, _owner, _protocol, _range, _sandbox, _sandbox, _machine_port, _owner, _sandbox, _machine_port, _o...
+     |                                         ^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_sandbox` in this scope
+    --> crates/hv2-cluster/src/control.rs:2658:156
+     |
+2658 | ..._owner, _protocol, _range, _sandbox, _sandbox, _machine_port, _owner, _sandbox, _machine_port, _owner, _pro...
+     |                                         ^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_machine_port` in this scope
+    --> crates/hv2-cluster/src/control.rs:2658:166
+     |
+2658 | ...tocol, _range, _sandbox, _sandbox, _machine_port, _owner, _sandbox, _machine_port, _owner, _protocol, _rang...
+     |                                       ^^^^^^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_owner` in this scope
+    --> crates/hv2-cluster/src/control.rs:2658:181
+     |
+2658 | ...e, _sandbox, _sandbox, _machine_port, _owner, _sandbox, _machine_port, _owner, _protocol, _range, _sandbox,...
+     |                                          ^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_sandbox` in this scope
+    --> crates/hv2-cluster/src/control.rs:2658:189
+     |
+2658 | ...ox, _sandbox, _machine_port, _owner, _sandbox, _machine_port, _owner, _protocol, _range, _sandbox, _owner, ...
+     |                                         ^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_machine_port` in this scope
+    --> crates/hv2-cluster/src/control.rs:2658:199
+     |
+2658 | ..., _machine_port, _owner, _sandbox, _machine_port, _owner, _protocol, _range, _sandbox, _owner, _sandbox, _m...
+     |                                       ^^^^^^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_owner` in this scope
+    --> crates/hv2-cluster/src/control.rs:2658:214
+     |
+2658 | ...ort, _owner, _sandbox, _machine_port, _owner, _protocol, _range, _sandbox, _owner, _sandbox, _machine_port,...
+     |                                          ^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_protocol` in this scope
+    --> crates/hv2-cluster/src/control.rs:2658:222
+     |
+2658 | ...er, _sandbox, _machine_port, _owner, _protocol, _range, _sandbox, _owner, _sandbox, _machine_port, _owner, ...
+     |                                         ^^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_range` in this scope
+    --> crates/hv2-cluster/src/control.rs:2658:233
+     |
+2658 | ...ox, _machine_port, _owner, _protocol, _range, _sandbox, _owner, _sandbox, _machine_port, _owner, event).awa...
+     |                                          ^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_sandbox` in this scope
+    --> crates/hv2-cluster/src/control.rs:2658:241
+     |
+2658 | ...ine_port, _owner, _protocol, _range, _sandbox, _owner, _sandbox, _machine_port, _owner, event).await }
+     |                                         ^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_owner` in this scope
+    --> crates/hv2-cluster/src/control.rs:2658:251
+     |
+2658 | ... _owner, _protocol, _range, _sandbox, _owner, _sandbox, _machine_port, _owner, event).await }
+     |                                          ^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_sandbox` in this scope
+    --> crates/hv2-cluster/src/control.rs:2658:259
+     |
+2658 | ..._protocol, _range, _sandbox, _owner, _sandbox, _machine_port, _owner, event).await }
+     |                                         ^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_machine_port` in this scope
+    --> crates/hv2-cluster/src/control.rs:2658:269
+     |
+2658 | ...range, _sandbox, _owner, _sandbox, _machine_port, _owner, event).await }
+     |                                       ^^^^^^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `_owner` in this scope
+    --> crates/hv2-cluster/src/control.rs:2658:284
+     |
+2658 | ...box, _owner, _sandbox, _machine_port, _owner, event).await }
+     |                                          ^^^^^^ not found in this scope
+
+error[E0061]: this method takes 2 arguments but 5 arguments were supplied
+    --> crates/hv2-cluster/src/control.rs:2609:89
+     |
+2609 | ...t<()> { self.inner.private_membership(_sandbox, _owner, _expected, _next, record).await }
+     |                       ^^^^^^^^^^^^^^^^^^                   ---------  -----  ------ unexpected argument #5 of type `&'life1 model::SandboxRecord`
+     |                                                            |          |
+     |                                                            |          unexpected argument #4
+     |                                                            unexpected argument #3
+     |
+note: method defined here
+    --> crates/hv2-cluster/src/store.rs:56:14
+     |
+  56 |     async fn private_membership(&self, _sandbox: &str, _owner: &crate::ownership::OwnerId)
+     |              ^^^^^^^^^^^^^^^^^^
+help: remove the extra arguments
+     |
+2609 -     async fn put_sandbox(&self, record: &SandboxRecord) -> StoreResult<()> { self.inner.private_membership(_sandbox, _owner, _expected, _next, record).await }
+2609 +     async fn put_sandbox(&self, record: &SandboxRecord) -> StoreResult<()> { self.inner.private_membership(_sandbox, _owner).await }
+     |
+
+error[E0308]: mismatched types
+    --> crates/hv2-cluster/src/control.rs:2609:78
+     |
+2609 | ...sult<()> { self.inner.private_membership(_sandbox, _owner, _expected, _next, record).await }
+     |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Result<(), StoreError>`, found `Result<MembershipAccess<...>, ...>`
+     |
+     = note: expected enum `std::result::Result<(), _>`
+                found enum `std::result::Result<private_networks::MembershipAccess<std::option::Option<private_networks::NetworkMembershipState>>, _>`
+
+error[E0061]: this method takes 2 arguments but 4 arguments were supplied
+    --> crates/hv2-cluster/src/control.rs:2622:41
+     |
+2622 |     ) -> StoreResult<bool> { self.inner.adopt_sandbox_owner(_sandbox, _owner, record, reservation).await }
+     |                                         ^^^^^^^^^^^^^^^^^^^                   ------  ----------- unexpected argument #4 of type `&'life2 names::NameReservation`
+     |                                                                               |
+     |                                                                               unexpected argument #3 of type `&'life1 model::SandboxRecord`
+     |
+note: method defined here
+    --> crates/hv2-cluster/src/store.rs:71:14
+     |
+  71 |     async fn adopt_sandbox_owner(&self, _sandbox: &str, _owner: &crate::ownership::OwnerId)
+     |              ^^^^^^^^^^^^^^^^^^^
+help: remove the extra arguments
+     |
+2622 -     ) -> StoreResult<bool> { self.inner.adopt_sandbox_owner(_sandbox, _owner, record, reservation).await }
+2622 +     ) -> StoreResult<bool> { self.inner.adopt_sandbox_owner(_sandbox, _owner).await }
+     |
+
+error[E0308]: mismatched types
+    --> crates/hv2-cluster/src/control.rs:2622:30
+     |
+2622 |     ) -> StoreResult<bool> { self.inner.adopt_sandbox_owner(_sandbox, _owner, record, reservation).await }
+     |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Result<bool, StoreError>`, found `Result<OwnerAdoption, StoreError>`
+     |
+     = note: expected enum `std::result::Result<bool, _>`
+                found enum `std::result::Result<OwnerAdoption, _>`
+
+error[E0061]: this method takes 5 arguments but 20 arguments were supplied
+    --> crates/hv2-cluster/src/control.rs:2658:83
+     |
+2658 |     async fn publish(&self, event: &ClusterEvent) -> StoreResult<()> { self.inner.claim_port(_sandbox, _machin...
+     |                                                                                   ^^^^^^^^^^
+     |
+note: method defined here
+    --> crates/hv2-cluster/src/store.rs:109:14
+     |
+ 109 |     async fn claim_port(&self, _sandbox: &str, _machine_port: u16, _owner: &str,
+     |              ^^^^^^^^^^
+help: remove the extra arguments
+     |
+2658 -     async fn publish(&self, event: &ClusterEvent) -> StoreResult<()> { self.inner.claim_port(_sandbox, _machine_port, _owner, _protocol, _range, _sandbox, _sandbox, _machine_port, _owner, _sandbox, _machine_port, _owner, _protocol, _range, _sandbox, _owner, _sandbox, _machine_port, _owner, event).await }
+2658 +     async fn publish(&self, event: &ClusterEvent) -> StoreResult<()> { self.inner.claim_port(_sandbox, _machine_port, _owner, _protocol, _range).await }
+     |
+
+error[E0308]: mismatched types
+    --> crates/hv2-cluster/src/control.rs:2658:72
+     |
+2658 | ... { self.inner.claim_port(_sandbox, _machine_port, _owner, _protocol, _range, _sandbox, _sandbox, _machine_port, _owner, _sandbox, _machine_port, _owner, _protocol, _range, _sandbox, _owner, _sandbox, _machine_port, _owner, event).await }
+     |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^... StoreError>`, found `Result<PortClaim, StoreError>`
+     |
+     = note: expected enum `std::result::Result<(), _>`
+                found enum `std::result::Result<ports::PortClaim, _>`
+
+Some errors have detailed explanations: E0061, E0201, E0308, E0425.
+For more information about an error, try `rustc --explain E0061`.
+error: could not compile `hv2-cluster` (lib test) due to 43 previous errors

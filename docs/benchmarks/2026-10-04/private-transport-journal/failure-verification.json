@@ -1,0 +1,11 @@
+{
+  "expected_failure_observed": true,
+  "journal_rows": 136,
+  "failed_scored_operations": 1,
+  "successful_scored_operations": 127,
+  "false_success_report_absent": true,
+  "all_tracked_child_processes_reaped": true,
+  "tracked_process_count": 23,
+  "production_checker_sha256": "6e5a10728708016874299e9741d187517016a55140508a7d1721b59baf7be545",
+  "injected_checker_sha256": "bfc022160c24395e012d32ed0b8b322d66f5604281fbecafe6f9efad8e14fb7e"
+}

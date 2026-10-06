@@ -1,0 +1,13 @@
+   Compiling zerocopy v0.8.56
+   Compiling num-traits v0.2.19
+    Checking tracing-core v0.1.36
+    Checking bitflags v2.13.2
+    Checking serde v1.0.229
+    Checking tokio v1.53.1
+    Checking tracing v0.1.44
+    Checking bincode v1.3.3
+    Checking hv2-sandbox v1.1.0 (/var/tmp/hm-borrowed-boot/source/crates/hv2-sandbox)
+    Checking chrono v0.4.45
+    Checking slh-dsa v0.2.0-rc.5
+    Checking hv2-core v1.1.0 (/var/tmp/hm-borrowed-boot/source/crates/hv2-core)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 27.35s

@@ -1,0 +1,28 @@
+   Compiling hv2-cluster v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-cluster)
+    Finished `test` profile [optimized + debuginfo] target(s) in 31.96s
+     Running unittests src/lib.rs (/var/tmp/hm-object-backup/target/debug/deps/hv2_cluster-39b572a236a06967)
+
+running 10 tests
+test control::web_sharing_failure_tests::http_store_failures_preserve_uncertainty_and_exact_replay_after_commit ... fault mode=1 status=503 elapsed_ms=0
+fault mode=2 status=503 elapsed_ms=5001
+fault mode=3 status=503 elapsed_ms=0
+fault mode=4 status=503 elapsed_ms=5002
+fault mode=5 status=503 elapsed_ms=0
+fault mode=6 status=503 elapsed_ms=5001
+fault mode=8 status=503 elapsed_ms=0 committed=true
+fault mode=7 status=503 elapsed_ms=5001 committed=true
+fault recovery exact_replays=2 changed_payload_refusals=2 changed_revision_refusals=2 cancelled_store_futures=4
+ok
+test control::web_sharing_http_tests::memory_sharing_api_enforces_owners_revisions_and_request_bounds ... ok
+test control::web_sharing_http_tests::redis_sharing_api_enforces_owners_revisions_and_request_bounds ... ok
+test store::tests::memory_web_sharing_contract ... ok
+test store::tests::redis_web_sharing_contract ... owned Redis sharing contract completed; active grants visible across connections; deletion denies admission
+ok
+test web_sharing::tests::authorization_binds_owner_incarnation_subject_and_expiry ... ok
+test web_sharing::tests::duplicate_oversized_and_malformed_states_are_rejected ... ok
+test web_sharing::tests::grant_order_is_canonical ... ok
+test web_sharing::tests::grant_validation_and_unknown_fields_fail_closed ... ok
+test web_sharing::tests::tombstone_roundtrip_preserves_exact_incarnation_and_revision ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 121 filtered out; finished in 20.03s
+

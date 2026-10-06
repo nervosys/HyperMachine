@@ -1,0 +1,16 @@
+{
+  "success": true,
+  "checks": [
+    "missing, absent and expired DNS proofs are refused without binding a real guest",
+    "trusted owned HTTPS resolver proves sandbox-bound TXT before routing",
+    "certificate-verified HTTPS alias reaches guest web server through both proxies",
+    "owner port update reaches a distinct guest web server without proxy restart",
+    "failed TXT revalidation preserves existing guest port and HTTPS response",
+    "Redis binding survives control-plane restart",
+    "alias request resumes paused guest with retained web-server state",
+    "unbind and sandbox deletion stop alias routing",
+    "prior sandbox TXT cannot bind a replacement sandbox",
+    "deleted sandbox releases hostname ownership for a new sandbox"
+  ],
+  "cleanup_errors": []
+}

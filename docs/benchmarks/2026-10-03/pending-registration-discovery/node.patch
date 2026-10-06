@@ -1,0 +1,70 @@
+--- baseline/crates/hv2-sandboxd/src/main.rs
++++ candidate/crates/hv2-sandboxd/src/main.rs
+@@ -1772,6 +1772,34 @@
+     Ok(())
+ }
+ 
++#[derive(Deserialize)]
++#[serde(deny_unknown_fields)]
++struct PendingQuery { after: Option<String> }
++
++async fn pending_registrations(State(state): State<Arc<AppState>>, headers: HeaderMap, Query(query): Query<PendingQuery>) -> Response {
++    if let Err((status,message)) = authorize_registration_reconciliation(&headers,state.node.is_some(),state.opts.cluster_token.as_deref()) {
++        return api_error(status,message);
++    }
++    if query.after.as_ref().is_some_and(|id| !valid_sandbox_id(id)) {
++        return api_error(StatusCode::BAD_REQUEST,"invalid registration cursor");
++    }
++    let rows:Vec<_>=state.sandboxes.lock().iter().filter_map(|(id,live)| {
++        live.pending_registration.as_ref().map(|pending| (id.clone(),match pending {
++            PendingRegistration::Named(_)=>"named",PendingRegistration::Unnamed { .. }=>"unnamed",
++        }))
++    }).collect();
++    Json(pending_registration_page(rows,query.after.as_deref())).into_response()
++}
++
++fn pending_registration_page(mut rows: Vec<(String, &'static str)>, after: Option<&str>) -> serde_json::Value {
++    rows.retain(|(id,_)|after.is_none_or(|after|id.as_str()>after));
++    rows.sort_by(|a,b|a.0.cmp(&b.0));
++    let more=rows.len()>32;rows.truncate(32);
++    let next=if more { rows.last().map(|row|row.0.clone()) } else { None };
++    let rows:Vec<_>=rows.into_iter().map(|(id,kind)|json!({"sandboxID":id,"kind":kind})).collect();
++    json!({"registrations":rows,"nextCursor":next})
++}
++
+ /// Recover the same preserved guest with locally retained trusted ownership.
+ /// Per-request authorization is checked here and by the node route middleware.
+ async fn reconcile_registration(
+@@ -4940,6 +4968,7 @@
+ 
+     let app = Router::new()
+         .route("/sandboxes", post(create_v1).get(list_sandboxes))
++        .route("/registrations/pending", get(pending_registrations))
+         // What current SDKs (2.51+) call: `NewSandboxV2`, the same fields
+         // used here, secure-only -- which every sandbox here already is.
+         .route("/v2/sandboxes", post(create_v2).get(list_sandboxes))
+@@ -5363,6 +5392,24 @@
+ #[cfg(test)]
+ mod adoption_claim_tests {
+     use super::*;
++    #[test]
++    fn pending_pages_preserve_all_ids_and_exclude_capability_fields() {
++        let rows:Vec<_>=(0..65).rev().map(|i|(format!("sbx-{i:03}"),"unnamed")).collect();
++        let mut cursor=None;let mut ids=Vec::new();let mut lengths=Vec::new();
++        loop {
++            let page=pending_registration_page(rows.clone(),cursor.as_deref());
++            let values=page["registrations"].as_array().unwrap();lengths.push(values.len());
++            for row in values {
++                assert_eq!(row.as_object().unwrap().len(),2);
++                ids.push(row["sandboxID"].as_str().unwrap().to_owned());
++            }
++            cursor=page["nextCursor"].as_str().map(str::to_owned);
++            if cursor.is_none() { break; }
++        }
++        assert_eq!(lengths,vec![32,32,1]);
++        assert_eq!(ids,(0..65).map(|i|format!("sbx-{i:03}")).collect::<Vec<_>>());
++    }
++
+     #[tokio::test]
+     async fn real_proxy_resolution_refusal_preserves_paused_value() {
+         let network=SandboxNetworkConfig {

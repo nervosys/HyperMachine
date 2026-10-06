@@ -1,0 +1,809 @@
+//! The protocol between the host and an agent running inside a guest.
+//!
+//! # Why this crate exists separately
+//!
+//! Both ends of this conversation have to agree on the bytes, and the two ends
+//! are built for different machines: the host half is linked into
+//! [`hv2-agent`](../hv2_agent/index.html) on whatever the host is, and the
+//! guest half is a Linux binary that ships inside the VM image. Defining the
+//! frames in one crate that both depend on is what keeps a change to the
+//! request type from silently meaning two different things.
+//!
+//! The library half builds anywhere. Only the binary needs `AF_VSOCK`, and it
+//! is Linux-only.
+//!
+//! # Framing
+//!
+//! A four-byte little-endian length followed by that many bytes of JSON. A
+//! stream socket gives no message boundaries, so the length has to be on the
+//! wire; JSON because a request is small, rare, and worth being able to read
+//! in a packet dump.
+//!
+//! ```text
+//! len u32 | { "id": 1, "op": {...} }
+//! ```
+//!
+//! # What this protocol deliberately does not do
+//!
+//! There is no streaming: a command runs to completion and its output comes
+//! back in one response. That is the right shape for "run this and tell me
+//! what happened" and the wrong one for an interactive shell, and pretending
+//! otherwise is how `execute_script` came to be described as something it was
+//! not. A follow-on protocol version can add streaming; this one says plainly
+//! that it has none.
+
+pub mod datagram;
+
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+/// Port the guest agent listens on.
+///
+/// Above 1023, so the agent does not need to be root to bind it.
+pub const GUEST_AGENT_PORT: u32 = 1024;
+
+/// Largest frame either side will send or accept, in bytes.
+///
+/// Output from a command is guest-controlled, so the ceiling exists on both
+/// ends: the agent truncates what it sends, and the host refuses what it did
+/// not expect. A guest that says "my reply is 4 GiB long" must not be able to
+/// make the host allocate it.
+pub const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
+
+/// Bytes of captured output the agent returns per stream before truncating.
+pub const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
+
+/// Protocol version, sent in every request and checked by the agent.
+///
+/// A guest image outlives the host that built it. Without this, an old agent
+/// meeting a new host fails by misreading a field rather than by saying so.
+pub const PROTOCOL_VERSION: u32 = 3;
+
+/// A request from the host to the guest agent.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Request {
+    /// Correlates a response with its request.
+    pub id: u64,
+    /// Protocol version the host is speaking.
+    pub version: u32,
+    /// What to do.
+    pub op: Operation,
+}
+
+/// What the host is asking for.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Operation {
+    /// Confirm the agent is alive and report what it is.
+    Ping,
+    /// Run a program and return what it printed.
+    ///
+    /// `program` is executed directly, not through a shell: there is no shell
+    /// parsing here, so `ls > out` redirects nothing. A caller that wants a
+    /// shell asks for one by name, and does so knowingly.
+    Exec {
+        program: String,
+        #[serde(default)]
+        args: Vec<String>,
+        /// Working directory, or the agent's own if absent.
+        #[serde(default)]
+        cwd: Option<String>,
+        /// Bytes to write to the program's standard input.
+        #[serde(default)]
+        stdin: Option<String>,
+        /// How long the agent will wait before killing the program.
+        timeout_ms: u64,
+    },
+
+    /// Start a program and leave it running.
+    ///
+    /// The difference from [`Operation::Exec`] is the whole reason this exists:
+    /// `Exec` runs a program to completion and answers with everything it
+    /// printed, so there is no moment at which the host holds a *running*
+    /// process. Anything that needs one -- sending it input, signalling it,
+    /// watching its output arrive -- cannot be built on that shape.
+    ///
+    /// Answers [`OpResult::Started`] with the guest pid, which every operation
+    /// below takes.
+    Start {
+        program: String,
+        #[serde(default)]
+        args: Vec<String>,
+        #[serde(default)]
+        cwd: Option<String>,
+        /// Added to the environment the agent itself has, not replacing it.
+        ///
+        /// A program inherits `PATH` and the rest either way, because a
+        /// program started with an empty environment cannot find `sh`; these
+        /// are the variables the caller wants on top. Sorted, so two identical
+        /// requests encode identically.
+        #[serde(default)]
+        envs: BTreeMap<String, String>,
+        /// Give the program a pseudo-terminal of this size instead of pipes.
+        ///
+        /// Which changes what the program *is*, not just how it is watched: it
+        /// gets a controlling terminal, so it line-buffers rather than
+        /// block-buffers, draws prompts, honours Ctrl-C as a signal, and
+        /// answers `isatty`. A shell handed pipes behaves like a script
+        /// interpreter; handed a pty it behaves like a shell.
+        ///
+        /// Its stdout and stderr are the same stream afterwards, because a
+        /// terminal has one. [`OpResult::Output`] says `pty` so a caller knows
+        /// that empty `stderr` means merged, not silent.
+        #[serde(default)]
+        pty: Option<PtySize>,
+        /// Who runs it: a user in the guest's `/etc/passwd`, by name or
+        /// number. `None` is the template's user ([`TemplateDefaults::user`]),
+        /// or root for a template that names none -- as envd runs a command
+        /// that names no user as the template's.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        user: Option<String>,
+    },
+
+    /// Collect whatever a started program has printed since the last poll, and
+    /// say whether it is still running.
+    ///
+    /// Draining rather than accumulating: each poll returns only what is new,
+    /// so a caller streaming output does not re-send what it already has, and
+    /// the agent's buffer does not grow without bound for a chatty process.
+    Poll { pid: u32 },
+
+    /// Write to a started program's standard input.
+    ///
+    /// `close` sends EOF afterwards, which is the only way a program waiting on
+    /// end-of-input ever finishes.
+    WriteStdin {
+        pid: u32,
+        data: String,
+        #[serde(default)]
+        close: bool,
+    },
+
+    /// Send a signal to a started program.
+    Signal { pid: u32, signal: i32 },
+
+    /// Tell a program's terminal it is a different size.
+    ///
+    /// Only meaningful for one started with a `pty`. A full-screen program
+    /// redraws when it hears this, and never learns otherwise -- there is
+    /// nothing else in the protocol that would tell it.
+    ResizePty { pid: u32, size: PtySize },
+
+    /// Bring a guest restored from a snapshot back in step with the world:
+    /// set its wall clock, and reseed its random number generator.
+    ///
+    /// The reseed is the one that matters. Every guest restored from one
+    /// snapshot resumes with the same kernel RNG state, and Linux only
+    /// reseeds on its own every minute or so -- until then, two sandboxes
+    /// from one template draw the same "random" TLS keys, UUIDs and ASLR
+    /// offsets. Writing to `/dev/urandom` mixes bytes in without forcing a
+    /// reseed; this credits them (`RNDADDENTROPY`) and forces one
+    /// (`RNDRESEEDCRNG`), so the next read is already distinct.
+    ///
+    /// Answered with [`OpResult::Acknowledged`].
+    Restored {
+        /// The host's time, in nanoseconds since the Unix epoch.
+        unix_time_ns: u64,
+        /// Fresh randomness from the host, unique to this guest.
+        entropy: Vec<u8>,
+    },
+
+    /// Write bytes to a file, creating it and its parent directories.
+    ///
+    /// A large file goes as several of these, the first truncating and the
+    /// rest appending: one frame holds [`FILE_CHUNK`] bytes of it.
+    ///
+    /// Answered with [`OpResult::Acknowledged`].
+    WriteFile {
+        path: String,
+        /// The bytes, base64 (standard alphabet, padded).
+        data: String,
+        /// Append rather than replace.
+        #[serde(default)]
+        append: bool,
+        /// Who owns the file, and the directories made for it: a user by
+        /// name or number, or [`TEMPLATE_USER`] for the template's user. `None`
+        /// leaves them root's, as the host's own writes are.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        owner: Option<String>,
+    },
+
+    /// Read up to `length` bytes of a file from `offset`.
+    ///
+    /// Answered with [`OpResult::FileData`].
+    ReadFile {
+        path: String,
+        offset: u64,
+        length: u64,
+    },
+
+    /// Mount a volume at `path`, served by the host over *this connection*.
+    ///
+    /// Answered with [`OpResult::Acknowledged`] once `path` is ready -- a
+    /// directory, anything mounted there before detached -- and then the
+    /// connection stops being this protocol's: the agent hands its socket
+    /// to the kernel as a 9P2000.L mount (`trans=fd`), and every byte after
+    /// the answer is 9P, served by the host. The host learns whether the
+    /// mount took from that: a mount that failed closes the connection
+    /// without a `Tattach`.
+    MountVolume { path: String },
+
+    /// Carry *this connection* to a TCP port inside the guest: the agent
+    /// connects to `127.0.0.1:port` (or `[::1]:port`), answers
+    /// [`OpResult::Acknowledged`], and from then on copies bytes both ways
+    /// between the two until either closes -- a sandbox's web server,
+    /// reached from the host with no network interface involved. Answered
+    /// with [`OpResult::Failed`] if nothing listens there.
+    Forward { port: u16 },
+
+    /// Carry length-prefixed datagrams to IPv4 loopback UDP `port`.
+    /// Acknowledgement confirms socket setup, not a listening peer.
+    /// Framing is defined by [`datagram`]; host inactivity ends the session.
+    ForwardUdp { port: u16 },
+
+    /// What the guest is using, as it sees it: CPU time, memory, and its
+    /// root filesystem. Answered with [`OpResult::Stats`] -- one round trip,
+    /// for a host sampling every sandbox every few seconds.
+    Stats,
+}
+
+/// The most file data one [`Operation::WriteFile`] or
+/// [`OpResult::FileData`] carries: base64 makes it a third larger, and the
+/// frame must stay under [`MAX_FRAME_BYTES`].
+pub const FILE_CHUNK: usize = 4 * 1024 * 1024;
+
+/// Where a template built by steps keeps [`TemplateDefaults`], in the guest.
+pub const TEMPLATE_DEFAULTS_PATH: &str = "/etc/hv2/defaults.json";
+
+/// What a template built by steps -- a Dockerfile's `ENV` and `WORKDIR` --
+/// gives every program started in its sandboxes. Read by the agent at each
+/// start, so it holds in every sandbox restored from the template's
+/// snapshot, whose agent was running long before the file was written.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TemplateDefaults {
+    /// Under what a request sets: a request's own variable wins.
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
+    /// The working directory, when a request names none.
+    #[serde(default)]
+    pub cwd: Option<String>,
+    /// Who runs a program started without a user, and owns what is written
+    /// for [`TEMPLATE_USER`]: a Dockerfile's last `USER`. Root if `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+}
+
+/// A guest's use of its resources, from `/proc/stat`, `/proc/meminfo` and
+/// `statvfs("/")`. CPU time is cumulative, in clock ticks: a rate needs two.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GuestStats {
+    pub cpus: u32,
+    pub cpu_busy_ticks: u64,
+    pub cpu_total_ticks: u64,
+    pub mem_total: u64,
+    pub mem_available: u64,
+    pub mem_cached: u64,
+    pub disk_total: u64,
+    pub disk_used: u64,
+}
+
+/// An [`Operation::WriteFile`] owner meaning the template's user, whoever
+/// that is: the host does not know, and envd writes a file for a caller
+/// who names no user as that user's.
+pub const TEMPLATE_USER: &str = "@template";
+
+/// A terminal's size, in character cells.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PtySize {
+    pub cols: u16,
+    pub rows: u16,
+}
+
+impl Default for PtySize {
+    /// 80x24, the size a terminal is assumed to be when nobody says.
+    ///
+    /// Not 0x0, which is what zeroed memory would give and what a program
+    /// reads as "no terminal size known" -- some then refuse to draw at all.
+    fn default() -> Self {
+        Self { cols: 80, rows: 24 }
+    }
+}
+
+/// The guest agent's answer.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Response {
+    /// The `id` of the request this answers.
+    pub id: u64,
+    /// Protocol version the agent is speaking.
+    pub version: u32,
+    /// The outcome.
+    pub result: OpResult,
+}
+
+/// What happened.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum OpResult {
+    /// Answer to [`Operation::Ping`].
+    Pong {
+        /// Agent build identifier, for telling one guest image from another.
+        agent_version: String,
+    },
+    /// A program ran. Note that this is success at the protocol level: the
+    /// program itself may have failed, which `exit_code` reports.
+    Exited {
+        /// Exit status, or `None` when a signal ended the program — which is
+        /// distinct from exiting 0 and must not be flattened into one.
+        exit_code: Option<i32>,
+        /// Signal that killed the program, if one did.
+        signal: Option<i32>,
+        stdout: String,
+        stderr: String,
+        /// Whether either stream hit [`MAX_OUTPUT_BYTES`] and was cut short.
+        truncated: bool,
+        /// Whether the agent killed the program for exceeding its timeout.
+        timed_out: bool,
+    },
+    /// Answer to [`Operation::Start`]: the program is running.
+    Started {
+        /// The guest's own pid, which [`Operation::Signal`] and the rest take.
+        pid: u32,
+    },
+    /// Answer to [`Operation::Poll`].
+    Output {
+        /// Printed since the previous poll, not since the program began.
+        ///
+        /// For a program with a pty this is everything it wrote, stderr
+        /// included, because a terminal has one stream.
+        stdout: String,
+        stderr: String,
+        /// Whether this program has a pty, so a caller can tell an empty
+        /// `stderr` that means "merged into stdout" from one that means
+        /// "wrote nothing".
+        #[serde(default)]
+        pty: bool,
+        /// Set once the program has finished. `exit_code` and `signal` are
+        /// meaningless while it is `true`.
+        running: bool,
+        /// As [`OpResult::Exited`]: `None` when a signal ended the program,
+        /// which is not the same as exiting 0.
+        exit_code: Option<i32>,
+        signal: Option<i32>,
+    },
+    /// Answer to [`Operation::WriteStdin`] and [`Operation::Signal`]: the agent
+    /// did it. Nothing is reported back because neither produces anything.
+    Acknowledged,
+    /// Answer to [`Operation::ReadFile`].
+    FileData {
+        /// The bytes read, base64 (standard alphabet, padded).
+        data: String,
+        /// The file's size, so a reader knows when it has everything.
+        size: u64,
+    },
+    /// Answer to [`Operation::Stats`].
+    Stats(GuestStats),
+    /// The request could not be carried out at all.
+    Failed { message: String },
+}
+
+/// Errors from encoding or decoding a frame.
+#[derive(Debug)]
+pub enum FrameError {
+    /// The frame is longer than [`MAX_FRAME_BYTES`].
+    TooLarge(usize),
+    /// Fewer bytes are present than the length prefix promises.
+    Incomplete,
+    /// The body is not the JSON this protocol expects.
+    Malformed(String),
+}
+
+impl std::fmt::Display for FrameError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TooLarge(len) => {
+                write!(
+                    f,
+                    "frame of {len} bytes exceeds the {MAX_FRAME_BYTES}-byte limit"
+                )
+            }
+            Self::Incomplete => write!(f, "frame is incomplete"),
+            Self::Malformed(e) => write!(f, "frame is not valid protocol JSON: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for FrameError {}
+
+/// Encode a value as a length-prefixed frame.
+/// Base64, standard alphabet with padding, for file data in a JSON frame --
+/// a third larger than the bytes, where a JSON array of numbers is three
+/// to four times larger.
+pub mod b64 {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    /// Encode `bytes`.
+    #[must_use]
+    pub fn encode(bytes: &[u8]) -> String {
+        let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+        for chunk in bytes.chunks(3) {
+            let n = chunk
+                .iter()
+                .enumerate()
+                .fold(0u32, |n, (i, b)| n | u32::from(*b) << (16 - 8 * i));
+            for i in 0..4 {
+                if i <= chunk.len() {
+                    out.push(char::from(ALPHABET[(n >> (18 - 6 * i) & 0x3f) as usize]));
+                } else {
+                    out.push('=');
+                }
+            }
+        }
+        out
+    }
+
+    /// Decode `text`, or `None` if it is not base64.
+    #[must_use]
+    pub fn decode(text: &str) -> Option<Vec<u8>> {
+        let text = text.as_bytes();
+        if !text.len().is_multiple_of(4) {
+            return None;
+        }
+        let value = |c: u8| -> Option<u32> {
+            Some(match c {
+                b'A'..=b'Z' => c - b'A',
+                b'a'..=b'z' => c - b'a' + 26,
+                b'0'..=b'9' => c - b'0' + 52,
+                b'+' => 62,
+                b'/' => 63,
+                _ => return None,
+            } as u32)
+        };
+        let mut out = Vec::with_capacity(text.len() / 4 * 3);
+        for (index, quad) in text.chunks(4).enumerate() {
+            let last = index == text.len() / 4 - 1;
+            let pad = quad.iter().rev().take_while(|c| **c == b'=').count();
+            if pad > 2 || (pad > 0 && !last) {
+                return None;
+            }
+            let mut n = 0u32;
+            for (i, c) in quad[..4 - pad].iter().enumerate() {
+                n |= value(*c)? << (18 - 6 * i);
+            }
+            let bytes = [(n >> 16) as u8, (n >> 8) as u8, n as u8];
+            out.extend_from_slice(&bytes[..3 - pad]);
+        }
+        Some(out)
+    }
+}
+
+pub fn encode<T: Serialize>(value: &T) -> Result<Vec<u8>, FrameError> {
+    let body = serde_json::to_vec(value).map_err(|e| FrameError::Malformed(e.to_string()))?;
+    if body.len() > MAX_FRAME_BYTES {
+        return Err(FrameError::TooLarge(body.len()));
+    }
+    let mut out = Vec::with_capacity(4 + body.len());
+    out.extend_from_slice(&(body.len() as u32).to_le_bytes());
+    out.extend_from_slice(&body);
+    Ok(out)
+}
+
+/// Try to decode one frame from the front of `buf`.
+///
+/// Returns the value and how many bytes it consumed, or `Ok(None)` when the
+/// frame has not fully arrived — the normal case on a stream socket, and the
+/// reason this takes a buffer rather than a reader.
+pub fn decode<T: for<'de> Deserialize<'de>>(buf: &[u8]) -> Result<Option<(T, usize)>, FrameError> {
+    if buf.len() < 4 {
+        return Ok(None);
+    }
+    let len = u32::from_le_bytes(buf[0..4].try_into().expect("4 bytes")) as usize;
+    if len > MAX_FRAME_BYTES {
+        // Refuse before allocating: the length is written by the other end.
+        return Err(FrameError::TooLarge(len));
+    }
+    if buf.len() < 4 + len {
+        return Ok(None);
+    }
+    let value = serde_json::from_slice(&buf[4..4 + len])
+        .map_err(|e| FrameError::Malformed(e.to_string()))?;
+    Ok(Some((value, 4 + len)))
+}
+
+/// Cut `s` to at most `limit` bytes, on a character boundary.
+///
+/// Returns the text and whether anything was removed. Truncating a `String` by
+/// byte index panics mid-character, and command output is arbitrary bytes.
+pub fn truncate_utf8(s: &str, limit: usize) -> (String, bool) {
+    if s.len() <= limit {
+        return (s.to_string(), false);
+    }
+    let mut end = limit;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    (s[..end].to_string(), true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn exec_request() -> Request {
+        Request {
+            id: 7,
+            version: PROTOCOL_VERSION,
+            op: Operation::Exec {
+                program: "uname".to_string(),
+                args: vec!["-r".to_string()],
+                cwd: None,
+                stdin: None,
+                timeout_ms: 5_000,
+            },
+        }
+    }
+
+    #[test]
+    fn a_frame_survives_a_round_trip() {
+        let request = exec_request();
+        let bytes = encode(&request).expect("encode");
+        let (decoded, used) = decode::<Request>(&bytes).expect("decode").expect("a frame");
+        assert_eq!(decoded, request);
+        assert_eq!(used, bytes.len());
+    }
+
+    #[test]
+    fn a_partial_frame_is_not_an_error() {
+        let bytes = encode(&exec_request()).expect("encode");
+
+        // A stream socket hands over whatever has arrived. Treating a short
+        // read as a failure would drop every request split across two packets.
+        for cut in [0, 1, 3, 4, bytes.len() - 1] {
+            assert!(
+                decode::<Request>(&bytes[..cut]).expect("decode").is_none(),
+                "{cut} bytes should read as incomplete, not as an error"
+            );
+        }
+    }
+
+    #[test]
+    fn two_frames_in_one_buffer_are_read_one_at_a_time() {
+        let mut buf = encode(&exec_request()).expect("encode");
+        let first_len = buf.len();
+        buf.extend_from_slice(&encode(&exec_request()).expect("encode"));
+
+        let (_, used) = decode::<Request>(&buf).expect("decode").expect("a frame");
+        assert_eq!(used, first_len);
+        assert!(decode::<Request>(&buf[used..]).expect("decode").is_some());
+    }
+
+    #[test]
+    fn a_length_beyond_the_limit_is_refused_before_anything_is_allocated() {
+        // The length prefix is written by the other end. Believing it is how a
+        // peer gets to choose how much memory this process uses.
+        let mut buf = (u32::MAX).to_le_bytes().to_vec();
+        buf.extend_from_slice(b"{}");
+        assert!(matches!(
+            decode::<Request>(&buf),
+            Err(FrameError::TooLarge(_))
+        ));
+    }
+
+    #[test]
+    fn a_body_that_is_not_this_protocol_is_reported_as_such() {
+        let body = b"{\"nope\":true}";
+        let mut buf = (body.len() as u32).to_le_bytes().to_vec();
+        buf.extend_from_slice(body);
+        assert!(matches!(
+            decode::<Request>(&buf),
+            Err(FrameError::Malformed(_))
+        ));
+    }
+
+    #[test]
+    fn an_exit_code_and_a_signal_stay_distinguishable() {
+        // A program killed by SIGKILL did not exit 0, and a response that
+        // flattened the two would report a crash as a success.
+        let killed = OpResult::Exited {
+            exit_code: None,
+            signal: Some(9),
+            stdout: String::new(),
+            stderr: String::new(),
+            truncated: false,
+            timed_out: true,
+        };
+        let json = serde_json::to_string(&killed).expect("encode");
+        let back: OpResult = serde_json::from_str(&json).expect("decode");
+        assert_eq!(back, killed);
+    }
+
+    #[test]
+    fn every_live_process_operation_survives_a_round_trip() {
+        // The host encodes these and the guest decodes them across a vsock,
+        // so a field either side spells differently is a runtime failure with
+        // no compiler to catch it.
+        let ops = [
+            Operation::Start {
+                program: "/bin/sh".to_string(),
+                args: vec!["-c".to_string(), "read x".to_string()],
+                cwd: Some("/tmp".to_string()),
+                envs: BTreeMap::new(),
+                pty: None,
+                user: None,
+            },
+            Operation::Poll { pid: 42 },
+            Operation::WriteStdin {
+                pid: 42,
+                data: "hello
+"
+                .to_string(),
+                close: true,
+            },
+            Operation::Signal { pid: 42, signal: 9 },
+        ];
+        for op in ops {
+            let request = Request {
+                id: 1,
+                version: PROTOCOL_VERSION,
+                op: op.clone(),
+            };
+            let bytes = encode(&request).expect("encode");
+            let (back, _) = decode::<Request>(&bytes).expect("decode").expect("a frame");
+            assert_eq!(back.op, op);
+        }
+    }
+
+    #[test]
+    fn the_optional_start_fields_may_simply_be_absent() {
+        // `args` and `cwd` are `#[serde(default)]`, which is only worth having
+        // if a sender that omits them actually decodes.
+        let body = br#"{"id":1,"version":2,"op":{"kind":"start","program":"/bin/true"}}"#;
+        let mut buf = (body.len() as u32).to_le_bytes().to_vec();
+        buf.extend_from_slice(body);
+        let (request, _) = decode::<Request>(&buf).expect("decode").expect("a frame");
+        assert_eq!(
+            request.op,
+            Operation::Start {
+                program: "/bin/true".to_string(),
+                args: Vec::new(),
+                cwd: None,
+                envs: BTreeMap::new(),
+                pty: None,
+                user: None,
+            }
+        );
+    }
+
+    #[test]
+    fn a_poll_says_running_and_finished_apart() {
+        // `running` is what tells a caller whether `exit_code` means anything.
+        // If it round-tripped wrong, a still-running process would report as
+        // having exited with whatever zero value came out of the decode.
+        let running = OpResult::Output {
+            stdout: "partial".to_string(),
+            stderr: String::new(),
+            pty: false,
+            running: true,
+            exit_code: None,
+            signal: None,
+        };
+        let killed = OpResult::Output {
+            stdout: String::new(),
+            stderr: String::new(),
+            // A terminal merges the two streams, so this is also the case
+            // where an empty stderr means "merged" rather than "silent".
+            pty: true,
+            running: false,
+            exit_code: None,
+            signal: Some(9),
+        };
+        for result in [running, killed] {
+            let json = serde_json::to_string(&result).expect("encode");
+            assert_eq!(
+                serde_json::from_str::<OpResult>(&json).expect("decode"),
+                result
+            );
+        }
+    }
+
+    #[test]
+    fn a_terminal_is_asked_for_and_resized_across_the_wire() {
+        for op in [
+            Operation::Start {
+                program: "/bin/sh".to_string(),
+                args: Vec::new(),
+                cwd: None,
+                envs: BTreeMap::new(),
+                pty: Some(PtySize {
+                    cols: 120,
+                    rows: 40,
+                }),
+                user: None,
+            },
+            Operation::ResizePty {
+                pid: 7,
+                size: PtySize {
+                    cols: 200,
+                    rows: 50,
+                },
+            },
+        ] {
+            let request = Request {
+                id: 1,
+                version: PROTOCOL_VERSION,
+                op: op.clone(),
+            };
+            let bytes = encode(&request).expect("encode");
+            let (back, _) = decode::<Request>(&bytes).expect("decode").expect("a frame");
+            assert_eq!(back.op, op);
+        }
+    }
+
+    #[test]
+    fn a_start_without_a_terminal_still_decodes() {
+        // `pty` is `#[serde(default)]`, so a caller that predates terminals --
+        // or simply does not want one -- keeps working.
+        let body = br#"{"id":1,"version":3,"op":{"kind":"start","program":"/bin/true"}}"#;
+        let mut buf = (body.len() as u32).to_le_bytes().to_vec();
+        buf.extend_from_slice(body);
+        let (request, _) = decode::<Request>(&buf).expect("decode").expect("a frame");
+        let Operation::Start { pty, .. } = request.op else {
+            panic!("expected a start");
+        };
+        assert_eq!(pty, None, "no terminal unless one is asked for");
+    }
+
+    #[test]
+    fn an_unspecified_terminal_is_80x24_not_nothing() {
+        // 0x0 is what zeroed memory gives, and some full-screen programs
+        // refuse to draw at that size. The conventional default is a size a
+        // program can actually work with.
+        assert_eq!(PtySize::default(), PtySize { cols: 80, rows: 24 });
+    }
+
+    #[test]
+    fn the_protocol_version_moved_with_the_new_operations() {
+        // A v1 agent cannot serve Start or Poll, and a host that spoke v1 at
+        // it would get a confusing decode failure rather than a version
+        // refusal. Bumping this is what makes the mismatch legible.
+        assert_eq!(PROTOCOL_VERSION, 3);
+    }
+
+    #[test]
+    fn truncation_cuts_on_a_character_boundary() {
+        // Command output is arbitrary bytes; slicing a String by byte index
+        // panics in the middle of a multi-byte character.
+        let s = "aé😀";
+        for limit in 0..s.len() + 2 {
+            let (cut, truncated) = truncate_utf8(s, limit);
+            assert!(cut.len() <= limit.min(s.len()));
+            assert_eq!(truncated, limit < s.len());
+            assert!(s.starts_with(&cut));
+        }
+    }
+}
+
+#[cfg(test)]
+mod b64_tests {
+    use super::b64;
+
+    #[test]
+    fn base64_round_trips_and_matches_the_rfc() {
+        for (plain, encoded) in [
+            ("", ""),
+            ("f", "Zg=="),
+            ("fo", "Zm8="),
+            ("foo", "Zm9v"),
+            ("foob", "Zm9vYg=="),
+            ("fooba", "Zm9vYmE="),
+            ("foobar", "Zm9vYmFy"),
+        ] {
+            assert_eq!(b64::encode(plain.as_bytes()), encoded);
+            assert_eq!(b64::decode(encoded).as_deref(), Some(plain.as_bytes()));
+        }
+        let all: Vec<u8> = (0..=255).collect();
+        assert_eq!(b64::decode(&b64::encode(&all)), Some(all));
+        for bad in ["Zg=", "Z===", "Zg==Zg==", "Zm9v!", "Zg=a"] {
+            assert_eq!(b64::decode(bad), None, "{bad}");
+        }
+    }
+}

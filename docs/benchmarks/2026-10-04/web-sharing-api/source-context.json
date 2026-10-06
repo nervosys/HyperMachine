@@ -1,0 +1,13 @@
+{
+  "candidate_sha256": {
+    "crates/hv2-cluster/src/control.rs": "2182241577dc7152ae327ac99c417861b1d35652341df8cce6773952f8bdff41",
+    "crates/hv2-cluster/src/web_sharing.rs": "ec95f7d2845a8f8030e116a1f335cf4ffcb05066789bf6beeecd0d1a01bed4f3"
+  },
+  "isolated_tree": "/var/tmp/hm-egress-log-mA2CCL",
+  "commands": [
+    "cargo test --locked -p hv2-cluster --lib -- --nocapture --test-threads=1",
+    "cargo test --locked -p hv2-cluster --lib web_sharing -- --nocapture --test-threads=1"
+  ],
+  "source_sequence": "Full suite before adding sharing fault-test module; targeted final suite includes that test-only addition. Production implementation unchanged between runs.",
+  "protected_guards": "Accepted isolated protected hashes verified before and after each run; root protected implementations not read or built."
+}

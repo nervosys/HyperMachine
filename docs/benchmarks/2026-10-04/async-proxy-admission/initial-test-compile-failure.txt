@@ -1,0 +1,30 @@
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-core)
+   Compiling hv2-api v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-api)
+   Compiling hv2-agent v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-agent)
+   Compiling hv2-runtime v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-runtime)
+error[E0433]: cannot find type `Duration` in this scope
+   --> crates/hv2-api/src/sandbox_proxy.rs:916:34
+    |
+916 |             tokio::time::timeout(Duration::from_secs(2), entered.notified()).await.unwrap();
+    |                                  ^^^^^^^^ use of undeclared type `Duration`
+    |
+    = note: struct `crate::middleware::tests::Duration` exists but is inaccessible
+help: consider importing this struct
+    |
+872 +     use std::time::Duration;
+    |
+
+error[E0433]: cannot find type `Duration` in this scope
+   --> crates/hv2-api/src/sandbox_proxy.rs:920:49
+    |
+920 |             let response = tokio::time::timeout(Duration::from_secs(2), request).await.unwrap().unwrap();
+    |                                                 ^^^^^^^^ use of undeclared type `Duration`
+    |
+    = note: struct `crate::middleware::tests::Duration` exists but is inaccessible
+help: consider importing this struct
+    |
+872 +     use std::time::Duration;
+    |
+
+For more information about this error, try `rustc --explain E0433`.
+error: could not compile `hv2-api` (lib test) due to 2 previous errors

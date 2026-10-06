@@ -1,0 +1,18 @@
+{
+  "rejected": [
+    "not_diagnostic",
+    "truncated_log",
+    "wrong_filter",
+    "byte_count",
+    "missing_sample_identity",
+    "unmatched_sample_identity",
+    "missing_traces",
+    "duplicate_trace",
+    "nan_duration",
+    "negative_duration",
+    "stage_exceeds_create",
+    "failed_server_trace",
+    "missing_stage"
+  ],
+  "count": 13
+}

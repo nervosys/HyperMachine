@@ -1,0 +1,14 @@
+{
+  "sha256": {
+    "0-baseline.json": "306d71a62b766caf9a41e90f0f951a54dcda36d5ada806e544c4b6e67d52a2ac",
+    "1-candidate.json": "16c1fabbb6f39d225e0f3ddf20402dfd43b274bb68ffcc4f72aa3f593bfaddff",
+    "2-candidate.json": "bc075f9360e7267d89befecb8c1760caca766cf651678e6bd3f60ed92304bd48",
+    "3-baseline.json": "38a17e5568b6549e2be8f9cc0a69f728bf65cc67c5f913f40003c87ada6c2f52",
+    "README.md": "377e7d62baec0278480ebfbd9abf39dba35b93fd13bc3b99193c370918e05805",
+    "check-udp-cluster-kvm.py": "fee1275c7e65eed493870938f664546240c01b407b9e87972d271708f6e19e30",
+    "compare-udp-cli.py": "d2ccd58393707aaff2e5c6c5d4edb2243dfa986f1c53929043168a8fb89724af",
+    "refusal-gates.json": "66dbedc5d07f9cd284646c045ea3b883c5bf79ee8ab4f9b0c580eca6a030510c",
+    "source-context.json": "2daa270c94b74b645d500a74545fadd5517342c6e808cc19484a3f72af899caa",
+    "summary.json": "3fc4c334a31393b1b7252f1de8e07918cc6a09c2983b387e4bbfe59bfc80d8cf"
+  }
+}

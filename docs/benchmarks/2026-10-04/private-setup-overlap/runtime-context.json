@@ -1,0 +1,5 @@
+{
+  "candidate_daemon_sha256": "aef812594544d708d6c0101c27b3cdc0c93f6c3ded3e408f1eff9e253be955ef",
+  "baseline_daemon_sha256": "8afb215a2ff476147b8ebf9ce96f25d161ae361876d16b32f9f72b97808c9fa3",
+  "status": "release built; ABBA complete and independently verified in ../private-setup-overlap-release-abba"
+}

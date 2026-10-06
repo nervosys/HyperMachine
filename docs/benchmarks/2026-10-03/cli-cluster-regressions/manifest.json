@@ -1,0 +1,9 @@
+{
+  "sha256": {
+    "README.md": "cc6382549d538e7a6c880da0d1bbccb16326dbe3f90058f169639b98a1ef7c4b",
+    "isolated-Cargo.lock": "72b971c6f6a1d27ccd6adb47852d02687381923da99f7f5487767637ab407a70",
+    "source-context.json": "194fac67301e195ff38063e23eec2a84e93f19e3ca83fbe4043f6a912cee00ae",
+    "summary.json": "7874c2cad2626ec2cd3f22c78cbe21ce5affa03d12d5deb07a12c89abe191d87",
+    "tests.log": "666a825ae4822faef2733871cbc166e3b299aa566917c88cc691735912eb911d"
+  }
+}

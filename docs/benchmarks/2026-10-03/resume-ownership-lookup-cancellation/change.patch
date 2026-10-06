@@ -1,0 +1,92 @@
+--- baseline/main.rs
++++ candidate/main.rs
+@@ -2571,7 +2571,13 @@
+         }
+     };
+     if let Some(node)=&state.node {
+-        match node.store().sandbox(sandbox_id).await {
++        let lookup_claim = match (&state.store, &claim) {
++            (Some(store), Some(path)) => Some(SnapshotClaim {
++                store, id: sandbox_id, path: path.clone(), released: false,
++            }),
++            _ => None,
++        };
++        match protected_snapshot_lookup(lookup_claim, node.store().sandbox(sandbox_id)).await {
+             Ok(Some(record))=>paused.record.owner_id=record.owner_id,
+             Ok(None)=>{give_back(paused);return Err((StatusCode::NOT_FOUND,"resume ownership record missing".into()));},
+             Err(_)=>{give_back(paused);return Err((StatusCode::SERVICE_UNAVAILABLE,"resume ownership unavailable".into()));},
+@@ -2659,16 +2665,24 @@
+ }
+ 
+ /// `POST /sandboxes/{id}/pause`.
+-/// Return paused metadata if an adoption request is cancelled during store I/O.
+-struct AdoptionClaim<'a> { store: &'a SnapshotStore, id: &'a str, path: std::path::PathBuf, released: bool }
+-impl AdoptionClaim<'_> {
++/// Return shared paused metadata when a protected store operation is cancelled.
++struct SnapshotClaim<'a> { store: &'a SnapshotStore, id: &'a str, path: std::path::PathBuf, released: bool }
++impl SnapshotClaim<'_> {
+     fn release(&mut self) -> std::io::Result<()> {
+         std::fs::rename(&self.path,self.store.meta(self.id))?;
+         self.released=true;Ok(())
+     }
+ }
+-impl Drop for AdoptionClaim<'_> {
++impl Drop for SnapshotClaim<'_> {
+     fn drop(&mut self) { if !self.released { self.store.release(self.id,&self.path); } }
++}
++
++// Only protect the ownership lookup, before VM startup can have side effects.
++// Completed lookups leave the claim with the caller's existing success/error path.
++async fn protected_snapshot_lookup<T>(mut claim: Option<SnapshotClaim<'_>>, lookup: impl std::future::Future<Output = T>) -> T {
++    let result = lookup.await;
++    if let Some(claim) = claim.as_mut() { claim.released = true; }
++    result
+ }
+ 
+ #[derive(Deserialize)]
+@@ -2693,7 +2707,7 @@
+     let mut claim=if !running {
+         match &state.store {
+             Some(store)=>match store.claim(&id,&state.node_id) {
+-                Some((path,meta))=>Some((AdoptionClaim{store,id:&id,path,released:false},meta)),
++                Some((path,meta))=>Some((SnapshotClaim{store,id:&id,path,released:false},meta)),
+                 None=>return api_error(StatusCode::CONFLICT,"paused sandbox must be available for adoption"),
+             },
+             None=>{
+@@ -5274,7 +5288,22 @@
+ mod adoption_claim_tests {
+     use super::*;
+     #[tokio::test]
+-    async fn cancelled_adoption_returns_paused_description() {
++    async fn completed_lookup_keeps_claim_for_caller_cleanup() {
++        let directory=tempfile::tempdir().unwrap();
++        let store=SnapshotStore::open(directory.path()).unwrap();
++        let path=store.paused_dir().join("sbx-lookup.json.claimed-node");
++        std::fs::write(&path,b"preserved-description").unwrap();
++        let claim=SnapshotClaim{store:&store,id:"sbx-lookup",path:path.clone(),released:false};
++        let result=protected_snapshot_lookup(Some(claim),async { Err::<(),_>("lookup failed") }).await;
++        assert_eq!(result,Err("lookup failed"));
++        assert!(!store.meta("sbx-lookup").exists());
++        assert_eq!(std::fs::read(&path).unwrap(),b"preserved-description");
++        store.release("sbx-lookup",&path);
++        assert_eq!(std::fs::read(store.meta("sbx-lookup")).unwrap(),b"preserved-description");
++    }
++
++    #[tokio::test]
++    async fn cancelled_protected_lookup_returns_paused_description() {
+         let directory=tempfile::tempdir().unwrap();
+         let store=Arc::new(SnapshotStore::open(directory.path()).unwrap());
+         let path=store.paused_dir().join("sbx-adoption.json.claimed-node");
+@@ -5282,8 +5311,10 @@
+         let ready=Arc::new(tokio::sync::Notify::new());
+         let task_store=store.clone();let task_ready=ready.clone();
+         let task=tokio::spawn(async move {
+-            let _claim=AdoptionClaim{store:&task_store,id:"sbx-adoption",path,released:false};
+-            task_ready.notify_one();std::future::pending::<()>().await;
++            let claim=SnapshotClaim{store:&task_store,id:"sbx-adoption",path,released:false};
++            protected_snapshot_lookup(Some(claim), async {
++                task_ready.notify_one();std::future::pending::<()>().await;
++            }).await;
+         });
+         ready.notified().await;task.abort();assert!(task.await.unwrap_err().is_cancelled());
+         assert_eq!(std::fs::read(store.meta("sbx-adoption")).unwrap(),b"preserved-description");

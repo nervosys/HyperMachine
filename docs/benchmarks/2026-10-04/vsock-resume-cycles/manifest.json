@@ -1,0 +1,17 @@
+{
+  "README.md": "6337a0631eaebf21a645a254b1c07f3cc7e6e8c34897b3699e5a5a0c0300742b",
+  "agent-vm.rs": "51b3f5de37a0d0d069c16fdd6f30b65df60778553de9896436e0305eb9505bce",
+  "baseline/daemon.txt": "657df96f7883696f0ef9874174a66552b8a04de034539df26e938adbf82476dd",
+  "baseline/resume-cycles.json": "a3e0a9dd7c003c21b799b446b7426968e86e715e71603c2ce4b65c338df4c91e",
+  "baseline/stdout.txt": "c9cdc0206df534d66a6fccbb86cea7c8e8b77529d0b8d23a1e6c55b4bb1a65e6",
+  "candidate/daemon.txt": "70521d56363407002d059cd62c282465976a240551c5c39c1ee3f7110f541bf9",
+  "candidate/report.json": "4216d0dfdf4d175ea28a7c11eec35473c2b72c75a14a4afbc6259d0fea183ccf",
+  "candidate/resume-cycles.json": "f300bffbc5ae68fb55da114f6787989ee82a0d2c72d13fbccf0f4a7d5dda6c60",
+  "candidate/stdout.txt": "4216d0dfdf4d175ea28a7c11eec35473c2b72c75a14a4afbc6259d0fea183ccf",
+  "checker.py": "e651123dec9da73f3ddeccdc96382b035228d970cca56e1c1404f885d23aea34",
+  "cleanup.json": "3656c8f3302a3294fd8bd6424945828624776ca1ba47e1296997bfc81204a0f4",
+  "driver.py": "761e3e372bcbc1ee5f7f75e70614b02e7040aeee5965db2b8a68ab3f6669a351",
+  "source-context.json": "13b706735dcc3bfc165854d7f3b5f69152f0eb698cf15a768bfc9bc1e7a36c5c",
+  "verify-results.py": "bb1dbafe32efc8f0bd066ec2fe9a0445db893d36b42c07af3f7924383dd8c1eb",
+  "vm.rs": "9e6bb11843f5640ca775c5306b09bf335828de260228a7e00e8df89cabcad6d5"
+}

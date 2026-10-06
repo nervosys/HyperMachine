@@ -1,0 +1,5 @@
+# Daemon guest sizing validation
+
+The CLI now rejects zero CPU cores and memory, and uses checked GiB-to-MiB conversion. Invalid values produce fixed configuration errors rather than debug overflow panics or release-mode wrapping. All 44 daemon unit tests passed in the isolated accepted-core checkout; the new test covers invalid memory inputs, conversion overflow, the representational boundary and normal MiB/GiB sizes. Seventeen direct daemon invocations reject zero, negative, boolean, fractional, and overflowing CPU/MiB/GiB inputs before guest startup and without panic. Nonexistent owned fixture paths ensure these are parsing checks, not boot checks. Each invocation is bounded by five seconds.
+
+The dev binary hash is in cli.json. Build and test logs and exact daemon source are frozen here. The isolated checkout retains accepted protected core sources, not root worktree variants. The immutable release benchmark binaries were not overwritten. This verifies invalid-input handling; no maximum-size allocation or backend capacity is claimed. The earlier KVM comparisons cover valid one/two-vCPU guest configurations before this parsing-only change.

@@ -1,0 +1,5 @@
+error: the argument '--lib' cannot be used multiple times
+
+Usage: cargo check [OPTIONS]
+
+For more information, try '--help'.

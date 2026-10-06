@@ -1,0 +1,14 @@
+{
+  "set-ipv4": [
+    "2026-10-04T04:47:59.710762Z  WARN hv2_sandboxd: registration reconciliation remains uncertain sandbox_id=sbx-e41bcfcd629a46719218 error=cluster store: timed out",
+    "2026-10-04T04:48:00.710981Z  WARN hv2_sandboxd: registration reconciliation remains uncertain sandbox_id=sbx-e41bcfcd629a46719218 error=cluster store: timed out",
+    "2026-10-04T04:48:06.711523Z  WARN hv2_sandboxd: registration reconciliation remains uncertain sandbox_id=sbx-b36b3ff609c041448842 error=cluster store: timed out",
+    "2026-10-04T04:48:07.712090Z  WARN hv2_sandboxd: registration reconciliation remains uncertain sandbox_id=sbx-b36b3ff609c041448842 error=cluster store: timed out"
+  ],
+  "xadd-ipv6": [
+    "2026-10-04T04:48:16.761543Z  WARN hv2_sandboxd: registration reconciliation remains uncertain sandbox_id=sbx-129eb6f7c9a84502af8d error=cluster store: timed out",
+    "2026-10-04T04:48:17.762150Z  WARN hv2_sandboxd: registration reconciliation remains uncertain sandbox_id=sbx-129eb6f7c9a84502af8d error=cluster store: timed out",
+    "2026-10-04T04:48:24.762449Z  WARN hv2_sandboxd: registration reconciliation remains uncertain sandbox_id=sbx-48362c18711e49f9bcce error=cluster store: timed out",
+    "2026-10-04T04:48:25.762099Z  WARN hv2_sandboxd: registration reconciliation remains uncertain sandbox_id=sbx-48362c18711e49f9bcce error=cluster store: timed out"
+  ]
+}

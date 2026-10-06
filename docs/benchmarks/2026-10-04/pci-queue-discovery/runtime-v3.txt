@@ -1,0 +1,13 @@
+[2m2026-10-04T15:21:21.430731Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T15:21:21.432513Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-guest-probe': vsock device attached over PCI at slot 3, BAR 0xd0010000 (guest CID 3, IRQ 11) -- no kernel argument needed
+[2m2026-10-04T15:21:21.447499Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'pci-guest-probe' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T15:21:21.462654Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T15:21:21.462751Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-guest-probe': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T15:21:21.463591Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'pci-guest-probe' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T15:21:21.463880Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'pci-guest-probe' with 1 vCPUs
+[2m2026-10-04T15:21:21.463902Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T15:21:21.464169Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T15:21:22.191175Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=2956)
+[2m2026-10-04T15:21:22.191450Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'pci-guest-probe'
+[2m2026-10-04T15:21:22.191517Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-guest-probe' stopped
+{"pci_guest_probe":true,"pings":64,"exact_commands":64,"vm_stopped":true}

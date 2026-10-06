@@ -1,0 +1,16 @@
+{
+  "diagnostic_only": true,
+  "performance_win_established": false,
+  "production_runtime_changed": false,
+  "source_files_verified": 550,
+  "mode_source_sha256": {
+    "crates/hv2-core/src/boot/linux.rs": "9e30eb3febc5cb36ada880e25af6b762683ba9d0dc8a0daea336a8ed42284877",
+    "crates/hv2-core/src/boot/source.rs": "4958c3445a57d20a88b3d8190a9c91f224dc563604badd1ae4af2b18fb1ddff4",
+    "crates/hv2-core/src/backends/kvm.rs": "b3a41c9404a634f37a92c23e2a799bea77bd2f184842186184f6463f38a1bcfc"
+  },
+  "exec_source_sha256": {
+    "crates/hv2-agent/src/agent_vm.rs": "cfbbe1c6763007b084987f566a835d4286e7e84c70c8879c1e1dd8445fa4745b",
+    "crates/hv2-sandboxd/src/main.rs": "4134938885282ff07a1740acd88421a8fafa7c06ce1c1c14dd2ea232b23e9bb7"
+  },
+  "trace_payload": "VM identity, durations, success and phase only; no command, args, output, entropy or credentials"
+}

@@ -1,0 +1,22 @@
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-core)
+    Finished `test` profile [optimized + debuginfo] target(s) in 20.41s
+     Running unittests src/lib.rs (/var/tmp/hm-object-backup/target/debug/deps/hv2_core-e659a1d473ebec97)
+
+running 1 test
+test devices::virtio_mmio::tests::register_and_host_reset_release_outstanding_interrupts ... FAILED
+
+failures:
+
+---- devices::virtio_mmio::tests::register_and_host_reset_release_outstanding_interrupts stdout ----
+
+thread 'devices::virtio_mmio::tests::register_and_host_reset_release_outstanding_interrupts' (571) panicked at crates/hv2-core/src/devices/virtio_mmio.rs:997:13:
+reset left IRQ asserted
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    devices::virtio_mmio::tests::register_and_host_reset_release_outstanding_interrupts
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2317 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p hv2-core --lib`

@@ -1,0 +1,12 @@
+{
+  "sha256": {
+    "README.md": "8487c6279a70ac2e2387f6db0bfbda9e7a6e8f1158a153cd14c748017cdac3ac",
+    "agentd.rs": "48d0cec503077bc49b08b4bab7dd99da266db697c54b412db66819adc8187f38",
+    "build-udp-guest-image.py": "4234ad780756f8b97c4a97fe8f88711de5d5d8cf0cc9c23d6208b1198ab835d9",
+    "build.log": "dd74adf10388121c4477cfe301021cf7abe33fe99e02f07d4cc27730b46d35c2",
+    "datagram.rs": "b16c4c8027cca79e67dbf43af3abb993d6312fe4e3214007929b5c454f3c2219",
+    "image.json": "245e58a6e7b2837e3f7372d5d411f06d0f6b07837d7e7652e7f7f32a23697c18",
+    "protocol.rs": "022853ad55bc9d9be0c64c7ed1a28cab97edc5ba5404528db011d1d09a8c8d1e",
+    "repeat-image.json": "245e58a6e7b2837e3f7372d5d411f06d0f6b07837d7e7652e7f7f32a23697c18"
+  }
+}

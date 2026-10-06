@@ -1,0 +1,15 @@
+{
+  "sha256": {
+    "README.md": "95a62a4418cf229ffbcf765b95eec98065a132af7463dc4949286a3f9823844f",
+    "cli-build.log": "e8b1b2d2e13462a44d0046cda6b530b2aa7e6cbfa85daaae15ed7f69d5c8cac2",
+    "cli-input.json": "ea6082814279def2daeaf92a26aedf9ba0e5c197918cba367708cb4dbf86fdb2",
+    "cli-tests.log": "df7d13815fd2704aab5ae5b9b97c15a88436c3001fc48f53c0b84247851a71f7",
+    "ipv4-two/daemon.log": "dd496a5ac2d6171048fb0c5d13dd3324888297a993486a428123e3649201837d",
+    "ipv4-two/report.json": "a104f49916e1891b93b831a55541e8c8d197b93731a9a948d937b36c38579273",
+    "ipv6-eight/daemon.log": "7c4855d6ac51ccb64074f39a7ee8607dab6b2f3a2d7ce739c5da8fca0a1c9905",
+    "ipv6-eight/report.json": "47947d3d37fc6ec54ab91e6be854a12867a54131aeb23cc3dabfe66b462aba12",
+    "source/crates/hm-cli/src/sandbox_vm.rs": "e7f82fb668ccfd82f8b1816602c3da7a3cef187c3420e71241d00597f45cc28e",
+    "source/tools/check-udp-cluster-kvm.py": "6a15678c28a7c87d7f80f8d5fbef5ab3c0bc9fe2022ccb5eb6209dac1bd9092f",
+    "source-context.json": "3c110fc9f30266fc49a0b5499b41f4e22fa680a257db5519d6de1af8b6e7ebec"
+  }
+}

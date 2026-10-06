@@ -1,0 +1,24 @@
+{
+  "functional_only": true,
+  "public_ca_contacted": false,
+  "hypermachine_deployment_verified": false,
+  "checks": [
+    "HTTP-01 issuance and issuer/hostname verification",
+    "Forced renewal produces a different valid certificate",
+    "Unavailable HTTP-01 server refuses renewal and retains certificate"
+  ],
+  "initial_certificate_sha256": "225e84b6dcf89067453a350af5256e2232ec677f4ffab7189d6d0ba78f04afa8",
+  "renewed_certificate_sha256": "b9f90806e7604a1c01bf31933915f6abbad2311d172f2f5a3b1227fb503eb0e9",
+  "issuance_http01_successful_requests": 3,
+  "renewal_http01_successful_requests": 3,
+  "certbot_version": "certbot 5.8.0",
+  "pebble_version": "Pebble version: v2.10.1 (b1e1ca4f3c30abb64111adaca4544bc5374cc306)",
+  "processes_reaped": true,
+  "http_thread_stopped": true,
+  "input_sha256": {
+    "pebble": "4e35cad137f20f62a8e71fd104b98417daa592e901bb01ab4227074ee1990e3c",
+    "challenge_server": "00ec0f9680d5eecb23cb4073868a547db635775a52ba14e0392ed15c8004f1ed",
+    "certbot": "47a7758f3418a83e97f533fbeddcd40e0746ded2a628ca3965905cdfe8914561"
+  },
+  "driver_sha256": "27393276d58c7c85845420851dd3a05744cbc35a94f636b6ea67d065d58dcc9c"
+}

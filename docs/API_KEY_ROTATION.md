@@ -17,7 +17,7 @@ A real HTTP integration test checks old-key revocation, replacement-key access, 
 Policies accept an optional `role`: `operator` (the default for existing policies)
 or `observer`. Unknown values and explicit null are rejected by startup and
 atomic replacement. Roles apply to the configured single team, without tenant
-isolation or per-resource ownership.
+isolation. Public-port management separately requires matching creator ownership.
 
 An observer can only GET/HEAD `/sandboxes`, `/v2/sandboxes`, `/templates`,
 `/sandboxes/metrics` and `/cluster/nodes`, and only where its scopes also allow
@@ -48,3 +48,15 @@ sequence kept the process running and stopped it afterward.
 
 Protected control-plane requests can also write synced, tamper-evident admission
 and completion records. See [configuration, verification and failure semantics](ACCESS_AUDIT.md).
+
+Policies also accept an optional `principal_id`, an operator-assigned stable identity label such as `team-user-17`. It must contain 1–128 ASCII letters, digits, dots, hyphens or underscores. Use the same label when replacing a person's credential digest; multiple credentials may identify that same principal. The label must identify the person or service, rather than contain a credential, and must not be reassigned to a different principal. Policies without it retain the existing team scope behavior.
+
+Authenticated V1/V2 sandbox creation records this principal in the internal sandbox record through an authenticated control-to-node request. Client owner headers and body/metadata labels cannot assign it. Creation with a configured principal requires a nonempty cluster token and a compatible clustered node; otherwise it fails closed. Legacy admin, anonymous and unlabelled policies create ownerless records. Existing VM ownership is not rewritten when policies reload. Forks inherit the source owner, while pause/resume preserve it; native allocations are not inherited by forks. This creator attribution leaves existing team-wide sandbox routes in place. [Owner-only public-port APIs](NATIVE_PORT_GATEWAY.md) now require matching stored creator identity for reservation, listing and removal.
+
+[Trusted creator verification](benchmarks/2026-10-03/sandbox-owner-context/README.md) passes stable identity across key rotation, forged client context refusal, legacy compatibility and authenticated-node requirements. Actual Redis/mTLS/KVM checks verify initial owner persistence, two forks with no inherited source allocation, pause/resume preservation and ownerless legacy creation. Organization identity provisioning, explicit legacy adoption and ownership transfer remain incomplete.
+
+[Owner API rotation verification](benchmarks/2026-10-03/owner-public-port-api/README.md) uses actual policy-file SIGHUP replacement through Redis/mTLS/KVM. The old key is refused, the replacement key retains the same owner and public allocation, and removal/reexposure work with the replacement. No credential change implicitly adopts an ownerless VM or transfers an existing VM to another principal.
+
+[Shipped CLI verification](benchmarks/2026-10-03/owner-public-port-cli/README.md) creates an owned VM through the V2 CLI command before native expose/list/remove. After actual SIGHUP rotation, the old CLI key is refused and the replacement retains the same creator/allocation. Commands take credentials from `HV2_API_KEY` and accept no owner override.
+
+Administrator legacy adoption uses POST `/sandboxes/{id}/owner` or `hm sandbox vm adopt-owner ID --principal-id LABEL`. It requires a configured legacy administrator or an operator-role key with admin scope; sandbox scope and observer role are insufficient. It assigns only an unowned VM without legacy public-port reservations, never transfers an existing owner, and accepts same-principal retries. [Verified running/paused adoption and key rotation](benchmarks/2026-10-03/legacy-owner-adoption-workflow/README.md) retain the stable principal through fork and pause/resume.

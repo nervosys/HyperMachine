@@ -1,0 +1,25 @@
+{
+  "sha256": {
+    "README.md": "832b545ef13c9ce4194ad22720abcdc365b08f8d69e556cfea4d3070e4399e28",
+    "cli-build.log": "b2d744c56d1212eac5eecd94f1ad579792d96f9f1d286b6d6eaa57d1cbb165f1",
+    "cli-tests.log": "20f20ede986b3e975d1e0dc6426c5cd21ffe5a5cddc1799b4f058b86d81cdf7d",
+    "cluster-tests.log": "b2e65e5794d57d260c070330128514835ccc96283e67a1dbf14275b229e83f44",
+    "host-build.log": "5b099a554a8371056df733353c07e4a64028018263c985cf51d67ab9e3136235",
+    "image-report.json": "83ec6ede85a2eb6fcc151d821646a4989022f62aec6030344156bb7101d4b356",
+    "ipv4/daemon.log": "1075aec9b6c17b333f68e7f30f3eff3826382cac824a3cd9a180ff354a2c82da",
+    "ipv4/report.json": "bc1b4c1bd51690eac671857241df7d705f6a63bb2af737158148e8d92df665b7",
+    "ipv6/daemon.log": "2f2b0e5857f2c6e3a814a6d6891df480d0a314ead32cecf99cf99f577d6882ec",
+    "ipv6/report.json": "c62fc9aa739fda36d18a2ae1fcc200711d80ec417f87bd03bc53863892930fda",
+    "node-tests.log": "667311f3aea385b8b8ef61fdada3db7c1cf387911fe1adfaa65092dece5a0535",
+    "redis-tests.log": "d4827b9cae357d0c7e4dc73a45ad2e786bbf3bd84cb8f68d848341d9ebc3a60b",
+    "source-context.json": "a66c3bcedb49f3453fd60c258c29acf1ca941acdccaf096cf08cb0000bb9ea2b",
+    "sources/crates/hm-cli/src/sandbox_vm.rs": "040e7b967e8e4dde1b1da445524a9982bc3db296f6a46db3b6dcb6d53b98fd2c",
+    "sources/crates/hv2-cluster/src/control.rs": "4016fcbe7257403e110246740fe51baf2a7c103ade7ea0b0a98bb404bc5e2e26",
+    "sources/crates/hv2-cluster/src/keys.rs": "9f9bc5052cc8389ae7f8c7a8697402af45931f54591f9b6c38741dc51408e63c",
+    "sources/crates/hv2-cluster/src/ownership.rs": "1da35c56b7b0e49c1934fdd2a5fd37d0b147bec8cb9e907889e3b77da7a7b0bf",
+    "sources/crates/hv2-cluster/src/store.rs": "74ff5b4fac508b879d9a178d3608df090e53a0e3eaa5ec4cb3f83addf5b2227a",
+    "sources/crates/hv2-cluster/tests/control_plane.rs": "9dc392dee900edf1101be3a75b2ef34f18e8af305c4385bfceeec2816ef947cc",
+    "sources/crates/hv2-sandboxd/src/main.rs": "a257f48fb1f02f28568f5f4e544579dd2936c49ed0829c4a28e251285701608c",
+    "sources/tools/check-udp-cluster-kvm.py": "6346ce3cb52aa7be787f007fef9afcd241a228d2cd3d0e566ac5c56ba9a1d9dc"
+  }
+}

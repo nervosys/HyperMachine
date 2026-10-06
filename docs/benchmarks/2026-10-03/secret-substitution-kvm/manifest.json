@@ -1,0 +1,15 @@
+{
+  "sha256": {
+    "README.md": "aa35c96623fe3c670a11caf6aea6f91e7ec12f48c0e94d23b243ce24f8baf0d0",
+    "build-context.json": "92c348c06f2c17d6283b89ee1be52bb936c1f78ea31d06fb7dbd2a7d90ebdf5e",
+    "checker.py": "689335579d1fd75778d44f381a88bd4de2acd9500bbaed0742305241dfb244ec",
+    "client-image.json": "f6da0437e3d2c1dedcf9778030beae8d5e964916e4c36623b3f6d129be434489",
+    "daemon-build.txt": "6f100eaff8a81b3d4d1dc3c2e06d5f20d2d3fda1be818c9dc5bf1f3ae64cad8e",
+    "gateway-mod.rs": "edc8dfa34a76cc61ede939dbb8d86fb5312d24817f5c4b13867ad2b8ca535efc",
+    "main.rs": "7a1037a2862e87befdcc111d91dec056ed1f35a13430ecedbaecbfd8e1021d25",
+    "mitm.rs": "9a9b2ef2ba0a5dc27e2e0763eb354d05cd43da63178fbd195d1bc5e15a04faf9",
+    "network-tests.txt": "60da37e0569e2e89793bbc0f89068b53a4259ef256b8bc3eec9a54f84d3ad647",
+    "result.json": "d0946f25f536a13e7a49c44d9b5c4759bce25ff36b8a0cb112c60fe6a6045148",
+    "secret_substitution.rs": "9a8bed5b115379c8cb7bb7b5aface6f33ef2ce098af1b55a45203f357ad9fd0a"
+  }
+}

@@ -1,0 +1,5 @@
+# Diagnostic execution stages
+
+The C1 smoke run passed all four restores; the C100 run passed all 1,600 restores (800 per engine), with cleanup verified. Blocking-pool wait accounts for 0.6–2.8% of execution time, connection setup 4.4–6.6%, command RPC 31–58%, and time outside the measured HTTP handler 33–58%. RPC includes transport and guest work; outside-handler time does not identify a causal bottleneck. Debug logging may perturb timing. These runs are excluded from performance rankings; no runtime change was adopted. The frozen coordinator performs resource GETs while peer guests may still be timed; the separate resource-validation study corrects that measurement overlap.
+
+The isolated diagnostic build passed 529 agent tests and strict agent-library Clippy. Replay with `tools/check-exec-stages.py c100/report.json` rejects fourteen damaged contracts or attempts to promote diagnostics into ranked results. Source generation validates the accepted 550-file catalog plus explicit mode and execution overlays. The original provisional core source files were not modified.

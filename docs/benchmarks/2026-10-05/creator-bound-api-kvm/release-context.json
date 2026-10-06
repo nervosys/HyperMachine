@@ -1,0 +1,22 @@
+{
+  "selected_source_sha256": {
+    "crates/hv2-cluster/src/control.rs": "bbb3fae891e7a5eb781d492ff3295e843503debacab024b6ea68b801cb851b1f",
+    "crates/hv2-cluster/src/store.rs": "6f0341fe2c82423dfea133d862d2b5e28650fcc070f23d576a871cfe896c5f55",
+    "crates/hv2-cluster/src/web_sharing.rs": "ec95f7d2845a8f8030e116a1f335cf4ffcb05066789bf6beeecd0d1a01bed4f3",
+    "crates/hv2-cluster/src/web_access.rs": "65a7752cb433ef552912830135b94d5f23ddef16c1ddfd38c1daa7182793c7e9",
+    "crates/hv2-cluster/src/lib.rs": "313fdcb985d6517acc3c0497e30a7abff68286e64f9a5f85cc25ab59ab109313",
+    "crates/hv2-api/src/sandbox_proxy.rs": "363fb17758d9fc984af4724984fca31765ab34d7cadcd472f081f2b347d9bf78",
+    "crates/hv2-cluster/Cargo.toml": "a1707a45bf879e0468b975b456a93ccebdcbc3e8f05dfccc3f85750717152e8c",
+    "crates/hm-cli/Cargo.toml": "7fe7a3fe30c4c0ebe771c947f29369e2ec24ef9ba7213b74646103c1aa2ba9d8",
+    "Cargo.lock": "81f02cd2ce8b7117f0c8279a03ad0c6d0758d20f5d8138048692ff20298e24da"
+  },
+  "protected_isolate_sha256": {
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+    "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+  },
+  "binary_sha256": {
+    "control": "6acf1bc012a1944b1afc949b1f8d740bbc9e8e2293f9c94c8f508ff1cd7a6fb6",
+    "cli": "c4b82db62ec7bc4e717ddff54d6edb1ed697d9738807bd2f3b29660d0d3d3c2f"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "functional_only": true,
+  "public_ca_contacted": false,
+  "hypermachine_deployment_verified": true,
+  "checks": [
+    "HTTP-01 issuance and issuer/hostname verification",
+    "First-group publication hard-exit recovers journal and TLS without CA reissuance",
+    "Explicit new hostname group publishes even with the same initial leaf; default preserved",
+    "Actual control plane serves the issued ACME certificate",
+    "Forced renewal produces a different valid certificate",
+    "Certbot deploy hook activates the renewed leaf on actual control-plane TLS",
+    "Retrying an active immutable generation verifies TLS without rewriting or duplicating it",
+    "Untrusted certificate activation rolls back manifest and verified TLS leaf",
+    "Mismatched private key is refused before manifest publication",
+    "Wrong process executable is refused without signal or mutation",
+    "Wrong manifest is refused by checking the live process arguments",
+    "Concurrent deployment lock refuses overlapping publication",
+    "Already-expired active certificate recovers through verified ACME deployment",
+    "Unavailable HTTP-01 server refuses renewal and retains certificate"
+  ],
+  "first_group_crash_recovery": {
+    "exit_code": 86,
+    "wrapper_sha256": "d1eb90bfe64bd88cca270ac41dfb43f896821c88084cb4c584e324471b10e6c3",
+    "fault_wrapper_source": "import importlib.util,os\nspec=importlib.util.spec_from_file_location('owned_hook','/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/deploy-tls-certificate.py')\nmodule=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)\noriginal=module.atomic_write\ndef interrupted(path,data,mode):\n original(path,data,mode)\n if str(path)=='/tmp/hm-acme-9kntk5_k/bundle.json': os._exit(86)\nmodule.atomic_write=interrupted\nmodule.main()\n",
+    "recovered_without_reissuance": true
+  },
+  "new_hostname_group_verified": true,
+  "expired_active_leaf_sha256": "ec966f2ef72a92108729158a840775d999732160e40f212e4684bf34b64646d6",
+  "initial_proxy_leaf_sha256": "7b21a890fb56fd6fa808cf86304378ea200d27bf7734764cd7b6566fa6dfa644",
+  "renewed_proxy_leaf_sha256": "fc118a1aeb1b0c07e74e8acd81b39f003714a7394751f96886f2cc04106f9ba7",
+  "control_plane_alive_after_deployment": true,
+  "guest_kvm_traffic_verified": false,
+  "initial_certificate_sha256": "ad3bdeffde24a11d72f62680cd1a936e4bcfc62890d75adff30e276f13bd8090",
+  "renewed_certificate_sha256": "632a353748b56f37d6dcb82c4bd620f8c574b06b9c0f6754bf6f446f01718380",
+  "issuance_http01_successful_requests": 3,
+  "renewal_http01_successful_requests": 3,
+  "certbot_version": "certbot 5.8.0",
+  "pebble_version": "Pebble version: v2.10.1 (b1e1ca4f3c30abb64111adaca4544bc5374cc306)",
+  "processes_reaped": true,
+  "http_thread_stopped": true,
+  "input_sha256": {
+    "pebble": "4e35cad137f20f62a8e71fd104b98417daa592e901bb01ab4227074ee1990e3c",
+    "challenge_server": "00ec0f9680d5eecb23cb4073868a547db635775a52ba14e0392ed15c8004f1ed",
+    "certbot": "47a7758f3418a83e97f533fbeddcd40e0746ded2a628ca3965905cdfe8914561",
+    "control_plane": "958d30f3ab8dc3e83c0455179b8868ceb5fb3a57a5a2d6f472c4b846155fbe1e",
+    "deploy_hook": "09e9f6b7543cbe810b18c5db26306f2dee72cb733efd2d9bc3fd5f64bfe2189d"
+  },
+  "driver_sha256": "95d9de697809bbddf8460d9bd9c3be965a895a9597fb12eab4d18a5da0e33c48"
+}

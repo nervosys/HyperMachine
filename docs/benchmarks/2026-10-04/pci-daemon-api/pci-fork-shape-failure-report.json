@@ -1,0 +1,13 @@
+{
+  "passed": false,
+  "checks": [
+    "authenticated node startup with required PCI template",
+    "API create",
+    "exact command sbx-ff3cc4c257d14fa78939",
+    "API deletion sbx-ff3cc4c257d14fa78939"
+  ],
+  "failure": "'sandboxID' inventory: ",
+  "binary_sha256": "d69de5c7f1f1806a86145779f288e1c01addddae0c86c906d60bffbcadcbb4f7",
+  "output": "/var/tmp/hm-pci-daemon-api-v2-98cdhg46",
+  "daemon_exit": 0
+}

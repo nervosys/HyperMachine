@@ -1,0 +1,6 @@
+{
+  "sha256": {
+    "/var/tmp/hm-object-backup/target/debug/hm": "7ce4d77f51e26f07419e63bb122f99ab779a409ff21c1f5bfa8cc5bce7a1e473",
+    "/var/tmp/hm-object-backup/target/debug/hv2-sandboxd": "12e585d9a72e3540eac862fc0dcdade92d90aa650527180509806e78551218a7"
+  }
+}

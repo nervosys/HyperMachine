@@ -1,0 +1,13 @@
+{
+  "sha256": {
+    "cli-tests.log": "f2af785b13c54f3d9040be5d1d588d967b784178f5eba2ca0729cc8667aade94",
+    "hm-cli-Cargo.toml": "9e0e9fe5b5e2764081151bf3fd6137890a18ec87095423de4bd979ecd33947fd",
+    "inputs.json": "f22189b2b47d666fdd52eee428fa8fe80e029b77f01e7df174f4786868b0aec6",
+    "README.md": "5cc4b6d17e837a371be0eab79b785a6ddf8ea66a58581f2aaad25aa5231dceff",
+    "real-tests.log": "ee3bcb4c8a8d8ac92e4d48edb6ce923772b45b54685bfac456bf770d28868724",
+    "regression-tests.log": "6e7ad38319a0807c3ee0d9b5813afe75dd567852541ab4b492a4ddc0421f681d",
+    "sandbox_vm.rs": "287859b12e4067c6a3a9a3aa38c8be9ba4dabe2e1574bf97e94f7bdd50d56f9f",
+    "volume_client.rs": "75243ef17e517a93858b2f077b03ee38874d64275911d1f8143fb39326ce77e9",
+    "volume_routing.rs": "1da9d17b9bd4bb95764c335a85be4f35ffe22cd12f3e1ff1601154afd46b6868"
+  }
+}

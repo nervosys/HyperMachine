@@ -1,0 +1,117 @@
+{
+  "runs": [
+    {
+      "variant": "baseline",
+      "report": "ipv6-0-baseline-report.json",
+      "report_sha256": "48f7a9011fb35dc9a27f98eecec84ca27302b80c2788253e4ae335652915ddf2",
+      "native_mean_block_rps": 5186.4445936139655,
+      "mean_peer_p50_ms": 1.4212983125,
+      "mean_peer_p99_ms": 3.52334425
+    },
+    {
+      "variant": "baseline",
+      "report": "ipv6-3-baseline-report.json",
+      "report_sha256": "1e6bc755020f3e2aeb8f4c502bd3b11393c09feafdef5c41c232bcf4f20fa350",
+      "native_mean_block_rps": 5549.387845826861,
+      "mean_peer_p50_ms": 1.329389625,
+      "mean_peer_p99_ms": 3.182494375
+    },
+    {
+      "variant": "candidate",
+      "report": "ipv6-1-candidate-report.json",
+      "report_sha256": "2eb40465ca19f2ffca6e2f065eea8d004030ad48b45e52d8152ac7c3b8b2eec1",
+      "native_mean_block_rps": 4588.681483511684,
+      "mean_peer_p50_ms": 1.5432651874999999,
+      "mean_peer_p99_ms": 5.48652925
+    },
+    {
+      "variant": "candidate",
+      "report": "ipv6-2-candidate-report.json",
+      "report_sha256": "edc3257475a957662f2f23db9014b5bca93a8a6eafb0d7d49b71ddca0e55a182",
+      "native_mean_block_rps": 4811.377501540666,
+      "mean_peer_p50_ms": 1.449155625,
+      "mean_peer_p99_ms": 6.85875125
+    }
+  ],
+  "summary": {
+    "native_mean_block_rps": {
+      "baseline": 5367.916219720413,
+      "candidate": 4700.029492526175,
+      "candidate_change_percent": -12.442197304432312
+    },
+    "mean_peer_p50_ms": {
+      "baseline": 1.37534396875,
+      "candidate": 1.49621040625,
+      "candidate_change_percent": 8.788087943545575
+    },
+    "mean_peer_p99_ms": {
+      "baseline": 3.3529193125,
+      "candidate": 6.172640250000001,
+      "candidate_change_percent": 84.09748862693517
+    }
+  },
+  "memory_summary": {
+    "after_maximum_udp": {
+      "rss_kib": {
+        "baseline": 7620,
+        "candidate": 7976,
+        "candidate_change_percent": 4.671916010498678
+      },
+      "pss_kib": {
+        "baseline": 5474.5,
+        "candidate": 5803,
+        "candidate_change_percent": 6.000547995250716
+      },
+      "private_kib": {
+        "baseline": 5352,
+        "candidate": 5706,
+        "candidate_change_percent": 6.614349775784745
+      },
+      "anonymous_kib": {
+        "baseline": 1574,
+        "candidate": 1910,
+        "candidate_change_percent": 21.346886912325292
+      }
+    },
+    "after_abba": {
+      "rss_kib": {
+        "baseline": 7740,
+        "candidate": 8126,
+        "candidate_change_percent": 4.987080103359176
+      },
+      "pss_kib": {
+        "baseline": 5593,
+        "candidate": 5976,
+        "candidate_change_percent": 6.847845521187201
+      },
+      "private_kib": {
+        "baseline": 5472,
+        "candidate": 5856,
+        "candidate_change_percent": 7.017543859649122
+      },
+      "anonymous_kib": {
+        "baseline": 1694,
+        "candidate": 2060,
+        "candidate_change_percent": 21.605667060212518
+      }
+    }
+  },
+  "cli_reference_summary": {
+    "cli_mean_block_rps": {
+      "baseline": 4543.00040755329,
+      "candidate": 4266.123142961735,
+      "candidate_change_percent": -6.094590353353546
+    },
+    "mean_peer_p50_ms": {
+      "baseline": 1.55975809375,
+      "candidate": 1.68274046875,
+      "candidate_change_percent": 7.884708243720251
+    },
+    "mean_peer_p99_ms": {
+      "baseline": 6.6655525625,
+      "candidate": 5.68981625,
+      "candidate_change_percent": -14.638491008073872
+    }
+  },
+  "scope": "Release-profile, unpinned owned KVM; means of block rates and per-peer percentiles, not pooled percentiles or statistical confidence; memory is gateway-only snapshot KiB, not peak or whole-stack memory; not competitor evidence."
+}

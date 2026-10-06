@@ -1,0 +1,26 @@
+{
+  "exit_code": 0,
+  "argv": [
+    "python3",
+    "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/diagnose-concurrent-startup.py",
+    "--hypermachine",
+    "/var/tmp/hm-current-cold-cpu-v1/hv2-sandboxd",
+    "--firecracker",
+    "/var/tmp/hm-competitive/firecracker/firecracker-v1.17.0-x86_64",
+    "--kernel",
+    "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+    "--initrd",
+    "/var/tmp/hm-competitive/guest-output-drain.cpio.gz",
+    "--environment",
+    "unscored owned WSL startup-stage diagnostic; same optimized executable and eight allowed CPUs",
+    "--pairs",
+    "1",
+    "--concurrency",
+    "8",
+    "--memory-idle-seconds",
+    "5",
+    "--collect-cold-readiness",
+    "--collect-dispatch",
+    "--collect-first-cpu"
+  ]
+}

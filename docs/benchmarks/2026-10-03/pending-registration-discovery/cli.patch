@@ -1,0 +1,59 @@
+--- baseline/crates/hm-cli/src/sandbox_vm.rs
++++ candidate/crates/hm-cli/src/sandbox_vm.rs
+@@ -40,6 +40,12 @@
+ /// VM sandbox lifecycle commands. Responses are JSON for shell automation.
+ #[derive(Debug, Subcommand)]
+ pub enum VmCommand {
++    /// Administrator discovery of uncertain registrations on a node
++    PendingRegistrations {
++        #[arg(long)] node_id: String,
++        /// Cursor from the preceding page
++        #[arg(long)] after: Option<String>,
++    },
+     /// Administrator recovery of a preserved guest with uncertain registration
+     ReconcileRegistration {
+         id: String,
+@@ -657,10 +663,11 @@
+         body: Option<Value>,
+         limit: usize,
+     ) -> Result<Value> {
+-        let mut request = self.client.request(method, self.url(path)?);
+-        if let Some(body) = body {
+-            request = request.json(&body);
+-        }
++        self.request_bounded_query(method,path,body,limit,&[]).await
++    }
++    async fn request_bounded_query(&self,method:Method,path:&[&str],body:Option<Value>,limit:usize,query:&[(&str,&str)]) -> Result<Value> {
++        let mut request = self.client.request(method, self.url(path)?).query(query);
++        if let Some(body) = body { request = request.json(&body); }
+         let mut response = request.send().await.context("sandbox API request failed")?;
+         if !response.status().is_success() {
+             bail!("sandbox API returned {}", response.status());
+@@ -723,6 +730,10 @@
+         args.api_ca_cert.as_deref(),
+     )?;
+     let value = match args.command {
++        VmCommand::PendingRegistrations { node_id, after } => {
++            let query=after.as_deref().map(|after|vec![("after",after)]).unwrap_or_default();
++            api.request_bounded_query(Method::GET,&["cluster","nodes",&node_id,"registrations","pending"],None,16384,&query).await?
++        },
+         VmCommand::ReconcileRegistration { id, node_id } => api.request_bounded(Method::POST,
+             &["cluster","nodes",&node_id,"sandboxes",&id,"registration","reconcile"],Some(json!({})),16384).await?,
+         VmCommand::AdoptOwner { id, principal_id } => api.request_bounded(Method::POST,&["sandboxes",&id,"owner"],Some(json!({"principalId":principal_id})),16384).await?,
+@@ -1464,6 +1475,16 @@
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    #[test]
++    fn pending_discovery_cli_requires_node_and_accepts_cursor() {
++        use clap::Parser;
++        #[derive(Parser)]
++        struct Command { #[command(flatten)] vm: VmArgs }
++        assert!(Command::try_parse_from(["hm","pending-registrations"]).is_err());
++        let parsed=Command::try_parse_from(["hm","pending-registrations","--node-id","node-a","--after","sbx-001"]).unwrap();
++        assert!(matches!(parsed.vm.command,VmCommand::PendingRegistrations { node_id,after } if node_id=="node-a" && after.as_deref()==Some("sbx-001")));
++    }
++
+     #[test]
+     fn reconciliation_cli_requires_explicit_node() {
+         use clap::Parser;

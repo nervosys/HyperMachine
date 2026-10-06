@@ -1,0 +1,13 @@
+{
+  "sha256": {
+    "README.md": "84294969f7d2756762aac79877e4d15aea9bc0bc7314c20ade3d72405be82f0a",
+    "VOLUMES.md": "d5d12508b698d2407022dfb2607d853136666e55f6636bdddb12d27fa93d37b5",
+    "lint.txt": "2606542625120ff212d5fbcf9878047162830cfcfa0647e41edaf6f9bf85e74b",
+    "node.yaml": "c91016ce4838a62e5d1bf23124378bf660682d50b86cec596f5e9bb627c90cbc",
+    "test-sandbox-chart.py": "746da1f2e8aff1bc75f4b7116b8a24091bcaabd65a1ea8ccd0071e94efef89a1",
+    "tests.txt": "de5e41dbc2bdcac32210263479c82f63bc6d9bb9e886bfcc0290f3fdd4f1204e",
+    "tool.json": "301a6fb7a20c2240605dd6c1fd6de858fd20b4f989ca68231b905bff668f6bab",
+    "values.schema.json": "6ff6eef4f39f9fd028ddbd8ea7a2601fc2d961842f84dc1c20012fd759273b44",
+    "values.yaml": "7e5d1383118f5753e2ee5e8098c2232a2178171526e90d239a98379bd377fa94"
+  }
+}

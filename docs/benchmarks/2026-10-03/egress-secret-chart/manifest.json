@@ -1,0 +1,13 @@
+{
+  "sha256": {
+    "EGRESS_SECRETS.md": "c431b4f1e209e47f720108858589aed11a6f89b3c1cdff5c770e348eb3cddd2f",
+    "README.md": "dd39c3c2efe821187a6cafdc62442d633d0d9a429f84d0d07005fc23e8473057",
+    "lint.txt": "2606542625120ff212d5fbcf9878047162830cfcfa0647e41edaf6f9bf85e74b",
+    "node.yaml": "15563cfba12ad5faed396c5870c95bf8fa1277945b8d39ad6b868eb1fed2d0be",
+    "test-sandbox-chart.py": "312369ad804f26fe7175dd201e4c456b1ae17682f7744d2cbad5370f073f5b5c",
+    "tests.txt": "d117aadc353c2b2db0ae70ed4cb8637498712a65906bd8d08f7a06a67835e07f",
+    "tool.json": "301a6fb7a20c2240605dd6c1fd6de858fd20b4f989ca68231b905bff668f6bab",
+    "values.schema.json": "da1680c21dc92621ef1a18c7ea574e70f8738bd8f0f75eb99335300dd4856baa",
+    "values.yaml": "89f4f0db9c21f1cb204218ab4b67bfc58e7b15320a8ae78620e5d4bda0feaff4"
+  }
+}

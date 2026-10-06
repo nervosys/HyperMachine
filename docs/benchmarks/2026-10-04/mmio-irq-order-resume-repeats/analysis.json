@@ -1,0 +1,9 @@
+{
+  "cohorts": 3,
+  "main_target_resumes": 60,
+  "kvm_checks_per_cohort": 21,
+  "api_timeout_seconds": 30,
+  "timed_retries": 0,
+  "same_runtime_inputs": true,
+  "scope": "First cohort archived in ../mmio-irq-order; two additional cohorts here. All pass exact UDP/prior closure and cleanup. Does not establish permanent elimination or CPU improvement. Earlier failed gates retained."
+}

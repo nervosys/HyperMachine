@@ -1,0 +1,46 @@
+{
+  "functional_only": true,
+  "success": false,
+  "checks": [],
+  "dns_ownership_enabled": true,
+  "artifact_sha256": {
+    "control_plane": "de2a920bfd0bd114b6e1f71f3f1c27b7316f10a52f50c3fbe46a552796f579d4",
+    "daemon": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "verifier": "734923cfdb8d8af9655bd7d50c8f73505df5394cf59defe110abcd4bdae49329"
+  },
+  "cleanup_errors": [],
+  "template": {
+    "aliases": [
+      "base"
+    ],
+    "buildID": "base",
+    "buildStatus": "ready",
+    "cpuCount": 1,
+    "memoryMB": 1024,
+    "nodeIDs": [
+      "domain-node"
+    ],
+    "nodes": [
+      {
+        "cpuCount": 1,
+        "memoryMB": 1024,
+        "nodeID": "domain-node",
+        "snapshot": true
+      }
+    ],
+    "public": false,
+    "snapshot": true,
+    "templateID": "base"
+  },
+  "error": "absent TXT proof was accepted",
+  "owned_processes_reaped": true,
+  "owned_dns_server_stopped": true,
+  "log_tails": {
+    "node-1.log": "hv2-sandboxd: listening on 0.0.0.0:46129, capacity 4, cluster node domain-node\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes are restored from template snapshots: base\n\nsandbox proxy on 0.0.0.0:54483 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:54483 process.Process/Start\n",
+    "redis-0.log": "464:C 03 Oct 2026 01:06:16.478 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.\n464:C 03 Oct 2026 01:06:16.479 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo\n464:C 03 Oct 2026 01:06:16.479 * Redis version=8.0.2, bits=64, commit=00000000, modified=0, pid=464, just started\n464:C 03 Oct 2026 01:06:16.479 * Configuration loaded\n464:M 03 Oct 2026 01:06:16.479 * monotonic clock: POSIX clock_gettime\n464:M 03 Oct 2026 01:06:16.480 * Running mode=standalone, port=39281.\n464:M 03 Oct 2026 01:06:16.480 * Server initialized\n464:M 03 Oct 2026 01:06:16.480 * Ready to accept connections tcp\n464:signal-handler (1791014777) Received SIGTERM scheduling shutdown...\n464:M 03 Oct 2026 01:06:17.787 * User requested shutdown...\n464:M 03 Oct 2026 01:06:17.787 # Redis is now ready to exit, bye bye...\n",
+    "control-2.log": "\u001b[2m2026-10-03T08:06:17.600786Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_control_plane\u001b[0m\u001b[2m:\u001b[0m no --mtls-*: nodes are reached in plaintext, the cluster token and envd traffic with them\nhv2-control-plane: E2B API on 0.0.0.0:55061, envd proxy on 0.0.0.0:56751, store redis://127.0.0.1:39281\n"
+  },
+  "artifacts_unchanged": true
+}

@@ -1,0 +1,31 @@
+[2m2026-10-04T15:57:08.012017Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T15:57:08.014508Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-template': vsock device attached over PCI at slot 3, BAR 0xd0010000 (guest CID 3, IRQ 11) -- no kernel argument needed
+[2m2026-10-04T15:57:08.032091Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'pci-checkpoint-template' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T15:57:08.046125Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T15:57:08.046295Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-template': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T15:57:08.047539Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'pci-checkpoint-template' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T15:57:08.047919Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'pci-checkpoint-template' with 1 vCPUs
+[2m2026-10-04T15:57:08.047936Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T15:57:08.048399Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+PCI_TEMPLATE_EXACT_COMMAND_PASS
+[2m2026-10-04T15:57:08.752059Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-template' paused
+[2m2026-10-04T15:57:10.956274Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-template' snapshotted to /tmp/hm-pci-checkpoint-354.snap
+[2m2026-10-04T15:57:10.956412Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-template' resumed
+PCI_SNAPSHOT_CAPTURE_PASS
+[2m2026-10-04T15:57:10.956501Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=2089)
+[2m2026-10-04T15:57:10.957138Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'pci-checkpoint-template'
+[2m2026-10-04T15:57:10.957338Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-template' stopped
+[2m2026-10-04T15:57:10.957444Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T15:57:10.959031Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-restored': vsock device attached over PCI at slot 3, BAR 0xd0010000 (guest CID 3, IRQ 11) -- no kernel argument needed
+[2m2026-10-04T15:57:10.960278Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'pci-checkpoint-restored' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T15:57:10.964116Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-restored' restored from /tmp/hm-pci-checkpoint-354.snap
+[2m2026-10-04T15:57:10.964151Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'pci-checkpoint-restored' with 1 vCPUs and 1 GB memory (parallel=true)
+PCI_SNAPSHOT_LAUNCH_PASS
+[2m2026-10-04T15:57:10.964405Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'pci-checkpoint-restored' with 1 vCPUs
+[2m2026-10-04T15:57:10.964434Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T15:57:10.964765Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T15:57:11.111799Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=390)
+[2m2026-10-04T15:57:11.112199Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'pci-checkpoint-restored'
+[2m2026-10-04T15:57:11.112362Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-restored' stopped
+PCI_SNAPSHOT_OUTPUT_CLEANUP_PASS
+{"pci_snapshot_probe":true,"restore_pings":16,"exact_restore_commands":32,"cleanup":true}

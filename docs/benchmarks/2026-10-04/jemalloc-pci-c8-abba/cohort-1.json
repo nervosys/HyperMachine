@@ -1,0 +1,1360 @@
+{
+  "schema_version": 1,
+  "lifecycle": "native-cold-create-to-command-bursts",
+  "concurrency": 8,
+  "pairs": 4,
+  "order": "alternating engine-batch AB/BA",
+  "environment": "owned WSL KVM PCI C8 glibc/jemalloc/jemalloc/glibc; background purge and one-second decay candidate; matched fixed inputs",
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "artifact_sha256": {
+    "hypermachine": "5d136c14b7ac36bd23af194ea82e844573a3ca18bfa7640e8e3d5e669db80f23",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "harness": "2adf3b1d7a0a57641e9744d443a5fed71a591e96429c7f199aeef992ce4ad8c3",
+    "shared_harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "firecracker_harness": "0bcdc13351d54d4c9658bf034aa97f7d86d96d99375a2df04e4c94eaf8d3b610"
+  },
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "daemon_jemalloc_library": null,
+  "daemon_jemalloc_conf": null,
+  "daemon_guest_transport": "pci",
+  "daemon_allocator_arena_max": null,
+  "daemon_allocator_mmap_threshold": null,
+  "daemon_log_filter": "warn",
+  "cold_start_concurrency": null,
+  "queue_included_in_ready_ms": true,
+  "driver_cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "guest_readiness_timeout_s": {
+    "hypermachine": 15,
+    "firecracker": 15
+  },
+  "firecracker_total_startup_timeout_s": 30,
+  "common_boot_args": "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd",
+  "batches": [
+    {
+      "engine": "hypermachine",
+      "pair": 0,
+      "concurrency": 8,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.19608899998502238,
+          "create_ms": 643.5012060000247,
+          "ready_ms": 652.4877600000139,
+          "exec_ms": 8.986553999989155,
+          "validated_offset_ms": 662.6155710000035
+        },
+        {
+          "index": 1,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.24425099999803024,
+          "create_ms": 705.7480530000078,
+          "ready_ms": 718.5764379999853,
+          "exec_ms": 12.828384999977516,
+          "validated_offset_ms": 726.5843920000066
+        },
+        {
+          "index": 2,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.2884029999847826,
+          "create_ms": 666.2659560000179,
+          "ready_ms": 676.6516180000224,
+          "exec_ms": 10.385662000004459,
+          "validated_offset_ms": 685.6549130000076
+        },
+        {
+          "index": 3,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.743137999994815,
+          "create_ms": 710.299096,
+          "ready_ms": 721.817638999994,
+          "exec_ms": 11.518542999993997,
+          "validated_offset_ms": 732.9447719999962
+        },
+        {
+          "index": 4,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.5823529999986476,
+          "create_ms": 637.5200559999996,
+          "ready_ms": 645.7046520000063,
+          "exec_ms": 8.18459600000665,
+          "validated_offset_ms": 653.661948000007
+        },
+        {
+          "index": 5,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.3465049999865641,
+          "create_ms": 694.4480860000226,
+          "ready_ms": 706.6004750000161,
+          "exec_ms": 12.15238899999349,
+          "validated_offset_ms": 720.4693939999913
+        },
+        {
+          "index": 6,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.790053999992324,
+          "create_ms": 647.0464779999929,
+          "ready_ms": 663.0803060000119,
+          "exec_ms": 16.033828000018957,
+          "validated_offset_ms": 674.9639539999919
+        },
+        {
+          "index": 7,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.1539409999841155,
+          "create_ms": 775.918933000014,
+          "ready_ms": 784.4964280000113,
+          "exec_ms": 8.57749499999727,
+          "validated_offset_ms": 795.0255399999833
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 795.0255399999833,
+      "launch_spread_ms": 1.5470490000097925,
+      "passing_attempts": 8,
+      "passing_attempts_per_second": 10.062569813795125,
+      "held_process_count": 1,
+      "held_process_memory_kib": {
+        "Rss_kib": 841896,
+        "Pss_kib": 839795,
+        "Private_Clean_kib": 8080,
+        "Private_Dirty_kib": 831568,
+        "Anonymous_kib": 831504
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 841916,
+        "Pss_kib": 839818,
+        "Private_Clean_kib": 8080,
+        "Private_Dirty_kib": 831588,
+        "Anonymous_kib": 831524
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 9668,
+        "Pss_kib": 7570,
+        "Private_Clean_kib": 6384,
+        "Private_Dirty_kib": 1036,
+        "Anonymous_kib": 1036
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 832248,
+        "Pss_kib": 832248,
+        "Private_Clean_kib": 1696,
+        "Private_Dirty_kib": 830552,
+        "Anonymous_kib": 830488
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.000154855999995,
+      "idle_memory_read_duration_ms": 8.820763000016996,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5013.234116000007,
+        "max": 5154.597707999983
+      },
+      "total_wall_ms_including_cleanup": 5930.606449999999,
+      "success": true,
+      "empty_node_memory_after_cleanup_kib": {
+        "Rss_kib": 161536,
+        "Pss_kib": 159349,
+        "Private_Clean_kib": 8144,
+        "Private_Dirty_kib": 151016,
+        "Anonymous_kib": 151016
+      }
+    },
+    {
+      "engine": "firecracker",
+      "pair": 0,
+      "concurrency": 8,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 14.765498999992133,
+          "api_setup_ms": 288.0007619999958,
+          "agent_connect_ms": 1227.9719299999954,
+          "ready_ms": 1533.196963999984,
+          "exec_ms": 17.22427199999288,
+          "validated_offset_ms": 1548.6675469999795
+        },
+        {
+          "index": 1,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 8.179326999993464,
+          "api_setup_ms": 321.759491999984,
+          "agent_connect_ms": 984.5057740000129,
+          "ready_ms": 1325.1710739999965,
+          "exec_ms": 18.905807999999524,
+          "validated_offset_ms": 1334.5833959999993
+        },
+        {
+          "index": 2,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 8.520154999985152,
+          "api_setup_ms": 259.1679200000101,
+          "agent_connect_ms": 1162.962551999982,
+          "ready_ms": 1453.19598399999,
+          "exec_ms": 31.065511999997852,
+          "validated_offset_ms": 1462.6047539999831
+        },
+        {
+          "index": 3,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 21.08746299998643,
+          "api_setup_ms": 329.10164399999076,
+          "agent_connect_ms": 958.9994020000177,
+          "ready_ms": 1307.169977000001,
+          "exec_ms": 19.068930999992517,
+          "validated_offset_ms": 1331.2692659999925
+        },
+        {
+          "index": 4,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 12.987498999990521,
+          "api_setup_ms": 270.5994639999858,
+          "agent_connect_ms": 1059.8182900000097,
+          "ready_ms": 1348.6370990000012,
+          "exec_ms": 18.21934500000566,
+          "validated_offset_ms": 1362.8002549999962
+        },
+        {
+          "index": 5,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.054934999999205,
+          "api_setup_ms": 306.43563999998946,
+          "agent_connect_ms": 1194.7768189999977,
+          "ready_ms": 1511.8163549999792,
+          "exec_ms": 10.603895999992119,
+          "validated_offset_ms": 1516.5558309999767
+        },
+        {
+          "index": 6,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 28.667323999997052,
+          "api_setup_ms": 262.0313819999751,
+          "agent_connect_ms": 1210.447165000005,
+          "ready_ms": 1486.8224759999862,
+          "exec_ms": 14.343929000006028,
+          "validated_offset_ms": 1516.4809649999995
+        },
+        {
+          "index": 7,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 25.045895999994627,
+          "api_setup_ms": 258.7474860000043,
+          "agent_connect_ms": 976.8968159999929,
+          "ready_ms": 1246.932921999985,
+          "exec_ms": 11.288619999987759,
+          "validated_offset_ms": 1272.7829149999934
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 1548.6675469999795,
+      "launch_spread_ms": 24.612388999997847,
+      "passing_attempts": 8,
+      "passing_attempts_per_second": 5.165731028261875,
+      "held_process_count": 8,
+      "held_process_memory_kib": {
+        "Rss_kib": 703112,
+        "Pss_kib": 686507,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 684108,
+        "Anonymous_kib": 684044
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 703112,
+        "Pss_kib": 686507,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 684108,
+        "Anonymous_kib": 684044
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 0,
+        "Pss_kib": 0,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 0,
+        "Anonymous_kib": 0
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 703112,
+        "Pss_kib": 686507,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 684108,
+        "Anonymous_kib": 684044
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.000142997000012,
+      "idle_memory_read_duration_ms": 9.598784999980126,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5009.516581000014,
+        "max": 5285.401213
+      },
+      "total_wall_ms_including_cleanup": 6695.885220999998,
+      "success": true
+    },
+    {
+      "engine": "firecracker",
+      "pair": 1,
+      "concurrency": 8,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.291466000002629,
+          "api_setup_ms": 72.98538599999915,
+          "agent_connect_ms": 1044.0412499999923,
+          "ready_ms": 1118.868961000004,
+          "exec_ms": 1.842325000012579,
+          "validated_offset_ms": 1122.1798889999945
+        },
+        {
+          "index": 1,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 9.99273100001119,
+          "api_setup_ms": 61.72709300000179,
+          "agent_connect_ms": 971.0251839999842,
+          "ready_ms": 1038.131462999985,
+          "exec_ms": 5.379185999998981,
+          "validated_offset_ms": 1049.7758690000012
+        },
+        {
+          "index": 2,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 16.673086999986708,
+          "api_setup_ms": 62.61313800001744,
+          "agent_connect_ms": 895.5008469999939,
+          "ready_ms": 962.0655190000207,
+          "exec_ms": 3.95153400000936,
+          "validated_offset_ms": 981.6590080000083
+        },
+        {
+          "index": 3,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 7.128829999999198,
+          "api_setup_ms": 62.256401000013284,
+          "agent_connect_ms": 889.3200359999867,
+          "ready_ms": 954.2121570000006,
+          "exec_ms": 2.635720000000674,
+          "validated_offset_ms": 962.3694160000014
+        },
+        {
+          "index": 4,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 11.698607999989008,
+          "api_setup_ms": 69.52484500001788,
+          "agent_connect_ms": 967.2482469999863,
+          "ready_ms": 1051.034990000005,
+          "exec_ms": 14.261898000000883,
+          "validated_offset_ms": 1064.033118999987
+        },
+        {
+          "index": 5,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 11.651169000003847,
+          "api_setup_ms": 72.12645699999598,
+          "agent_connect_ms": 993.2501520000017,
+          "ready_ms": 1068.3308520000026,
+          "exec_ms": 2.954243000004908,
+          "validated_offset_ms": 1081.2134130000004
+        },
+        {
+          "index": 6,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 9.793083999994678,
+          "api_setup_ms": 68.22351499999968,
+          "agent_connect_ms": 904.0668160000109,
+          "ready_ms": 977.3035160000063,
+          "exec_ms": 5.013184999995701,
+          "validated_offset_ms": 989.4278769999971
+        },
+        {
+          "index": 7,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 12.160329000010961,
+          "api_setup_ms": 76.48348899999746,
+          "agent_connect_ms": 1001.543780999981,
+          "ready_ms": 1099.1676069999983,
+          "exec_ms": 21.140337000019827,
+          "validated_offset_ms": 1113.3033280000006
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 1122.1798889999945,
+      "launch_spread_ms": 14.38162099998408,
+      "passing_attempts": 8,
+      "passing_attempts_per_second": 7.128981795538166,
+      "held_process_count": 8,
+      "held_process_memory_kib": {
+        "Rss_kib": 702976,
+        "Pss_kib": 686397,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 683996,
+        "Anonymous_kib": 683932
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 702976,
+        "Pss_kib": 686397,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 683996,
+        "Anonymous_kib": 683932
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 0,
+        "Pss_kib": 0,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 0,
+        "Anonymous_kib": 0
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 702976,
+        "Pss_kib": 686397,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 683996,
+        "Anonymous_kib": 683932
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.000206904999999,
+      "idle_memory_read_duration_ms": 14.54300899999339,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5024.411825000016,
+        "max": 5184.222298000009
+      },
+      "total_wall_ms_including_cleanup": 6281.290831999996,
+      "success": true
+    },
+    {
+      "engine": "hypermachine",
+      "pair": 1,
+      "concurrency": 8,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.3108469999801855,
+          "create_ms": 1654.399402000024,
+          "ready_ms": 1671.009018999996,
+          "exec_ms": 16.609616999971877,
+          "validated_offset_ms": 1701.5635289999977
+        },
+        {
+          "index": 1,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.428370999979279,
+          "create_ms": 1771.1838790000058,
+          "ready_ms": 1796.1641240000006,
+          "exec_ms": 24.98024499999474,
+          "validated_offset_ms": 1808.9749179999899
+        },
+        {
+          "index": 2,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.6557859999816174,
+          "create_ms": 1733.4181250000142,
+          "ready_ms": 1773.8272360000167,
+          "exec_ms": 40.40911100000244,
+          "validated_offset_ms": 1789.1333849999853
+        },
+        {
+          "index": 3,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.917044999999007,
+          "create_ms": 1631.4516019999985,
+          "ready_ms": 1670.3676909999956,
+          "exec_ms": 38.9160889999971,
+          "validated_offset_ms": 1693.8320669999882
+        },
+        {
+          "index": 4,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.8530540000037945,
+          "create_ms": 1658.843318999999,
+          "ready_ms": 1696.615090999984,
+          "exec_ms": 37.77177199998505,
+          "validated_offset_ms": 1716.9432959999824
+        },
+        {
+          "index": 5,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.546161999987362,
+          "create_ms": 1819.2719090000082,
+          "ready_ms": 1846.2426990000154,
+          "exec_ms": 26.970790000007128,
+          "validated_offset_ms": 1866.056149000002
+        },
+        {
+          "index": 6,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.1853749999772845,
+          "create_ms": 1702.9441380000208,
+          "ready_ms": 1720.2158200000213,
+          "exec_ms": 17.27168200000051,
+          "validated_offset_ms": 1733.7667580000016
+        },
+        {
+          "index": 7,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.2612689999969007,
+          "create_ms": 1875.8647679999854,
+          "ready_ms": 1899.5022499999834,
+          "exec_ms": 23.637481999998045,
+          "validated_offset_ms": 1908.037749999977
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 1908.037749999977,
+      "launch_spread_ms": 2.2353150000071764,
+      "passing_attempts": 8,
+      "passing_attempts_per_second": 4.192789162583443,
+      "held_process_count": 1,
+      "held_process_memory_kib": {
+        "Rss_kib": 846260,
+        "Pss_kib": 844031,
+        "Private_Clean_kib": 8144,
+        "Private_Dirty_kib": 835740,
+        "Anonymous_kib": 835676
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 846268,
+        "Pss_kib": 844016,
+        "Private_Clean_kib": 8144,
+        "Private_Dirty_kib": 835748,
+        "Anonymous_kib": 835684
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 161456,
+        "Pss_kib": 159228,
+        "Private_Clean_kib": 8144,
+        "Private_Dirty_kib": 150936,
+        "Anonymous_kib": 150936
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 684812,
+        "Pss_kib": 684788,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 684812,
+        "Anonymous_kib": 684748
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.000245046999993,
+      "idle_memory_read_duration_ms": 18.01595099999531,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5012.417426000014,
+        "max": 5226.623109000002
+      },
+      "total_wall_ms_including_cleanup": 7151.113828999996,
+      "success": true,
+      "empty_node_memory_after_cleanup_kib": {
+        "Rss_kib": 166244,
+        "Pss_kib": 163985,
+        "Private_Clean_kib": 8144,
+        "Private_Dirty_kib": 155724,
+        "Anonymous_kib": 155724
+      }
+    },
+    {
+      "engine": "hypermachine",
+      "pair": 2,
+      "concurrency": 8,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 2,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.6173450000233061,
+          "create_ms": 2103.1751349999868,
+          "ready_ms": 2123.4798409999767,
+          "exec_ms": 20.304705999989892,
+          "validated_offset_ms": 2131.2144570000273
+        },
+        {
+          "index": 1,
+          "pair": 2,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.37753700001985635,
+          "create_ms": 1847.8301950000002,
+          "ready_ms": 1888.8443600000073,
+          "exec_ms": 41.0141650000071,
+          "validated_offset_ms": 1908.98226500002
+        },
+        {
+          "index": 2,
+          "pair": 2,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.33252800000127536,
+          "create_ms": 2288.1182590000153,
+          "ready_ms": 2310.5796450000184,
+          "exec_ms": 22.46138600000313,
+          "validated_offset_ms": 2319.422783000022
+        },
+        {
+          "index": 3,
+          "pair": 2,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.4274270000053093,
+          "create_ms": 1809.7763389999955,
+          "ready_ms": 1845.9407029999966,
+          "exec_ms": 36.164364000001115,
+          "validated_offset_ms": 1862.1937780000053
+        },
+        {
+          "index": 4,
+          "pair": 2,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.4804510000155915,
+          "create_ms": 1809.236281000011,
+          "ready_ms": 1829.1019780000113,
+          "exec_ms": 19.865697000000182,
+          "validated_offset_ms": 1843.2178200000067
+        },
+        {
+          "index": 5,
+          "pair": 2,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.5364620000136711,
+          "create_ms": 2212.7523119999923,
+          "ready_ms": 2245.43743000001,
+          "exec_ms": 32.68511800001761,
+          "validated_offset_ms": 2256.343550000025
+        },
+        {
+          "index": 6,
+          "pair": 2,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.5761680000091474,
+          "create_ms": 1756.4774809999903,
+          "ready_ms": 1797.213362000008,
+          "exec_ms": 40.73588100001757,
+          "validated_offset_ms": 1819.4337640000242
+        },
+        {
+          "index": 7,
+          "pair": 2,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.2744880000022931,
+          "create_ms": 2023.3408650000229,
+          "ready_ms": 2045.6260079999993,
+          "exec_ms": 22.285142999976415,
+          "validated_offset_ms": 2063.872730000014
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 2319.422783000022,
+      "launch_spread_ms": 0.34285700002101294,
+      "passing_attempts": 8,
+      "passing_attempts_per_second": 3.449134008096843,
+      "held_process_count": 1,
+      "held_process_memory_kib": {
+        "Rss_kib": 851824,
+        "Pss_kib": 849556,
+        "Private_Clean_kib": 8144,
+        "Private_Dirty_kib": 841304,
+        "Anonymous_kib": 841240
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 851828,
+        "Pss_kib": 849571,
+        "Private_Clean_kib": 8144,
+        "Private_Dirty_kib": 841308,
+        "Anonymous_kib": 841244
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 166144,
+        "Pss_kib": 163875,
+        "Private_Clean_kib": 8144,
+        "Private_Dirty_kib": 155624,
+        "Anonymous_kib": 155624
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 685684,
+        "Pss_kib": 685696,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 685684,
+        "Anonymous_kib": 685620
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.000551322000007,
+      "idle_memory_read_duration_ms": 20.46211999999059,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5018.098584,
+        "max": 5518.087602999998
+      },
+      "total_wall_ms_including_cleanup": 7520.172721000023,
+      "success": true,
+      "empty_node_memory_after_cleanup_kib": {
+        "Rss_kib": 171804,
+        "Pss_kib": 169539,
+        "Private_Clean_kib": 8144,
+        "Private_Dirty_kib": 161284,
+        "Anonymous_kib": 161284
+      }
+    },
+    {
+      "engine": "firecracker",
+      "pair": 2,
+      "concurrency": 8,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 2,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.311423000004197,
+          "api_setup_ms": 87.27281700001299,
+          "agent_connect_ms": 1323.5311889999934,
+          "ready_ms": 1412.9522690000158,
+          "exec_ms": 2.148263000009365,
+          "validated_offset_ms": 1414.9386160000006
+        },
+        {
+          "index": 1,
+          "pair": 2,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 10.872859000016888,
+          "api_setup_ms": 108.48088399998801,
+          "agent_connect_ms": 1569.8028209999961,
+          "ready_ms": 1680.298492999981,
+          "exec_ms": 2.01478799999677,
+          "validated_offset_ms": 1691.8221029999927
+        },
+        {
+          "index": 2,
+          "pair": 2,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 24.543703999995614,
+          "api_setup_ms": 118.90779099999804,
+          "agent_connect_ms": 1256.1309190000145,
+          "ready_ms": 1378.390674000002,
+          "exec_ms": 3.3519639999894935,
+          "validated_offset_ms": 1407.3110049999968
+        },
+        {
+          "index": 3,
+          "pair": 2,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 22.696053000004213,
+          "api_setup_ms": 96.42384800000059,
+          "agent_connect_ms": 1243.7873430000081,
+          "ready_ms": 1344.5720089999895,
+          "exec_ms": 4.360817999980782,
+          "validated_offset_ms": 1368.2622430000038
+        },
+        {
+          "index": 4,
+          "pair": 2,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.223550000001296,
+          "api_setup_ms": 66.13870000001043,
+          "agent_connect_ms": 1315.25135199999,
+          "ready_ms": 1395.6993099999977,
+          "exec_ms": 14.309257999997271,
+          "validated_offset_ms": 1406.731801999996
+        },
+        {
+          "index": 5,
+          "pair": 2,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 19.084136000003582,
+          "api_setup_ms": 131.2629500000071,
+          "agent_connect_ms": 1522.2956869999962,
+          "ready_ms": 1658.2126590000144,
+          "exec_ms": 4.654022000011082,
+          "validated_offset_ms": 1678.5491980000131
+        },
+        {
+          "index": 6,
+          "pair": 2,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 30.61221000001524,
+          "api_setup_ms": 91.46433799998022,
+          "agent_connect_ms": 1564.5532550000212,
+          "ready_ms": 1658.9030459999776,
+          "exec_ms": 2.8854529999762235,
+          "validated_offset_ms": 1691.0390520000078
+        },
+        {
+          "index": 7,
+          "pair": 2,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 28.290451999993138,
+          "api_setup_ms": 75.6034900000202,
+          "agent_connect_ms": 1654.2060109999852,
+          "ready_ms": 1739.5601569999997,
+          "exec_ms": 9.750655999994251,
+          "validated_offset_ms": 1768.8514980000036
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 1768.8514980000036,
+      "launch_spread_ms": 29.30078700001104,
+      "passing_attempts": 8,
+      "passing_attempts_per_second": 4.522708666637873,
+      "held_process_count": 8,
+      "held_process_memory_kib": {
+        "Rss_kib": 703100,
+        "Pss_kib": 686460,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 684056,
+        "Anonymous_kib": 683992
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 703100,
+        "Pss_kib": 686460,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 684056,
+        "Anonymous_kib": 683992
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 0,
+        "Pss_kib": 0,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 0,
+        "Anonymous_kib": 0
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 703100,
+        "Pss_kib": 686460,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 684056,
+        "Anonymous_kib": 683992
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.000178260000013,
+      "idle_memory_read_duration_ms": 17.73770599999125,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5025.85508300001,
+        "max": 5426.44433800001
+      },
+      "total_wall_ms_including_cleanup": 7013.586142000008,
+      "success": true
+    },
+    {
+      "engine": "firecracker",
+      "pair": 3,
+      "concurrency": 8,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 3,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.7457030000116447,
+          "api_setup_ms": 57.12158800000111,
+          "agent_connect_ms": 890.3644299999769,
+          "ready_ms": 950.069472999985,
+          "exec_ms": 2.5834550000070067,
+          "validated_offset_ms": 953.0785489999971
+        },
+        {
+          "index": 1,
+          "pair": 3,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 13.555383000010579,
+          "api_setup_ms": 59.46952899998337,
+          "agent_connect_ms": 758.7699169999951,
+          "ready_ms": 820.807230999975,
+          "exec_ms": 2.5677849999965474,
+          "validated_offset_ms": 835.2550779999888
+        },
+        {
+          "index": 2,
+          "pair": 3,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 20.684203000001844,
+          "api_setup_ms": 117.80481700000678,
+          "agent_connect_ms": 821.2987969999972,
+          "ready_ms": 941.2796189999995,
+          "exec_ms": 2.1760049999954845,
+          "validated_offset_ms": 962.9670349999913
+        },
+        {
+          "index": 3,
+          "pair": 3,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 14.72640299999739,
+          "api_setup_ms": 60.588760000001685,
+          "agent_connect_ms": 840.1589300000012,
+          "ready_ms": 904.1779709999958,
+          "exec_ms": 3.430280999992874,
+          "validated_offset_ms": 919.8136800000043
+        },
+        {
+          "index": 4,
+          "pair": 3,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 15.752929000001359,
+          "api_setup_ms": 64.45653800000173,
+          "agent_connect_ms": 847.3306100000002,
+          "ready_ms": 915.7563159999995,
+          "exec_ms": 3.9691679999975804,
+          "validated_offset_ms": 932.6296190000107
+        },
+        {
+          "index": 5,
+          "pair": 3,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 19.113148999991836,
+          "api_setup_ms": 68.58530100001303,
+          "agent_connect_ms": 826.9073349999871,
+          "ready_ms": 899.2878859999962,
+          "exec_ms": 3.795249999996031,
+          "validated_offset_ms": 919.6333699999855
+        },
+        {
+          "index": 6,
+          "pair": 3,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 16.24093099999868,
+          "api_setup_ms": 71.9058050000001,
+          "agent_connect_ms": 846.7572540000106,
+          "ready_ms": 922.2668779999879,
+          "exec_ms": 3.603818999977193,
+          "validated_offset_ms": 939.3110549999903
+        },
+        {
+          "index": 7,
+          "pair": 3,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 19.32486800001243,
+          "api_setup_ms": 63.168116999975155,
+          "agent_connect_ms": 882.8558440000052,
+          "ready_ms": 948.1884039999784,
+          "exec_ms": 2.164442999998073,
+          "validated_offset_ms": 968.561655000002
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 968.561655000002,
+      "launch_spread_ms": 18.9384999999902,
+      "passing_attempts": 8,
+      "passing_attempts_per_second": 8.259670366570504,
+      "held_process_count": 8,
+      "held_process_memory_kib": {
+        "Rss_kib": 703132,
+        "Pss_kib": 686471,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 684072,
+        "Anonymous_kib": 684008
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 703132,
+        "Pss_kib": 686471,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 684072,
+        "Anonymous_kib": 684008
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 0,
+        "Pss_kib": 0,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 0,
+        "Anonymous_kib": 0
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 703132,
+        "Pss_kib": 686471,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 684072,
+        "Anonymous_kib": 684008
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.000144272,
+      "idle_memory_read_duration_ms": 21.100049000011722,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5020.460456999984,
+        "max": 5153.767033999997
+      },
+      "total_wall_ms_including_cleanup": 6181.1802690000095,
+      "success": true
+    },
+    {
+      "engine": "hypermachine",
+      "pair": 3,
+      "concurrency": 8,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 3,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.2085799999917981,
+          "create_ms": 1429.0633820000096,
+          "ready_ms": 1477.8642120000143,
+          "exec_ms": 48.80083000000468,
+          "validated_offset_ms": 1488.9435579999883
+        },
+        {
+          "index": 1,
+          "pair": 3,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.4503209999929823,
+          "create_ms": 1433.5649399999966,
+          "ready_ms": 1467.390445999996,
+          "exec_ms": 33.82550599999945,
+          "validated_offset_ms": 1488.825534
+        },
+        {
+          "index": 2,
+          "pair": 3,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.6994190000000344,
+          "create_ms": 1437.802409999989,
+          "ready_ms": 1470.1400479999904,
+          "exec_ms": 32.337638000001334,
+          "validated_offset_ms": 1482.0677879999948
+        },
+        {
+          "index": 3,
+          "pair": 3,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.5872059999869634,
+          "create_ms": 1426.19646,
+          "ready_ms": 1468.4257380000076,
+          "exec_ms": 42.22927800000775,
+          "validated_offset_ms": 1486.904681999988
+        },
+        {
+          "index": 4,
+          "pair": 3,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.9781210000028295,
+          "create_ms": 1466.4410949999933,
+          "ready_ms": 1485.286857999995,
+          "exec_ms": 18.845763000001625,
+          "validated_offset_ms": 1500.9077659999832
+        },
+        {
+          "index": 5,
+          "pair": 3,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.3257019999789463,
+          "create_ms": 1436.417041000027,
+          "ready_ms": 1488.275262000002,
+          "exec_ms": 51.85822099997495,
+          "validated_offset_ms": 1504.153137000003
+        },
+        {
+          "index": 6,
+          "pair": 3,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.205037999994829,
+          "create_ms": 1415.0737500000048,
+          "ready_ms": 1468.4088180000003,
+          "exec_ms": 53.335067999995545,
+          "validated_offset_ms": 1481.8345479999948
+        },
+        {
+          "index": 7,
+          "pair": 3,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.7484439999861934,
+          "create_ms": 1468.5519170000134,
+          "ready_ms": 1489.2059459999984,
+          "exec_ms": 20.65402899998503,
+          "validated_offset_ms": 1502.6824329999897
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 1504.153137000003,
+      "launch_spread_ms": 2.3786259999951653,
+      "passing_attempts": 8,
+      "passing_attempts_per_second": 5.318607396555251,
+      "held_process_count": 1,
+      "held_process_memory_kib": {
+        "Rss_kib": 852032,
+        "Pss_kib": 849769,
+        "Private_Clean_kib": 8144,
+        "Private_Dirty_kib": 841512,
+        "Anonymous_kib": 841448
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 852040,
+        "Pss_kib": 849778,
+        "Private_Clean_kib": 8144,
+        "Private_Dirty_kib": 841520,
+        "Anonymous_kib": 841456
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 171704,
+        "Pss_kib": 169442,
+        "Private_Clean_kib": 8144,
+        "Private_Dirty_kib": 161184,
+        "Anonymous_kib": 161184
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 680336,
+        "Pss_kib": 680336,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 680336,
+        "Anonymous_kib": 680272
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.000393704000004,
+      "idle_memory_read_duration_ms": 37.28199199997562,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5030.620481999989,
+        "max": 5052.939070999997
+      },
+      "total_wall_ms_including_cleanup": 6776.9834020000135,
+      "success": true,
+      "empty_node_memory_after_cleanup_kib": {
+        "Rss_kib": 171892,
+        "Pss_kib": 169630,
+        "Private_Clean_kib": 8144,
+        "Private_Dirty_kib": 161372,
+        "Anonymous_kib": 161372
+      }
+    }
+  ],
+  "setup_error": null,
+  "cleanup_errors": [],
+  "success": true,
+  "limitations": [
+    "Shared nested-KVM host; no dedicated hardware",
+    "Persistent HyperMachine HTTP daemon versus fresh Firecracker processes and Unix APIs",
+    "Barrier-released arrivals have measured scheduling spread; not sustained arrivals",
+    "All guests held until last validation; earlier guests have longer idle time",
+    "Aggregate process PSS includes guest/VMM memory but excludes kernel allocations; no long idle/density test",
+    "Cold native engines only; no managed SDK, snapshot or fleet comparison",
+    "Fixed idle hold starts after all readiness checks; individual guest idle ages and sequential read duration are recorded; PSS excludes kernel memory and does not prove density"
+  ],
+  "memory_idle_seconds": 5.0,
+  "memory_method": "HM held daemon minus same-batch empty daemon PSS; FC summed fresh VMM PSS minus zero-process baseline",
+  "daemon_argv": [
+    "/var/tmp/hm-pci-fastboot-release-node-v1",
+    "--port",
+    "35517",
+    "--proxy-port",
+    "57221",
+    "--memory-mb",
+    "1024",
+    "--cpu-cores",
+    "1",
+    "--capacity",
+    "128",
+    "--no-template",
+    "--volume-dir",
+    "/var/tmp/hm-concurrent-i5n6cpon/volumes",
+    "--snapshot-store",
+    "/var/tmp/hm-concurrent-i5n6cpon/snapshots",
+    "--guest-transport",
+    "pci"
+  ],
+  "hypermachine_template_preflight": {
+    "aliases": [
+      "base"
+    ],
+    "buildID": "base",
+    "buildStatus": "ready",
+    "cpuCount": 1,
+    "envdVersion": "0.6.3",
+    "memoryMB": 1024,
+    "public": false,
+    "snapshot": false,
+    "templateID": "base"
+  },
+  "node_memory_baseline_kib": {
+    "Rss_kib": 9540,
+    "Pss_kib": 7453,
+    "Private_Clean_kib": 6256,
+    "Private_Dirty_kib": 1036,
+    "Anonymous_kib": 1036
+  },
+  "remaining_sandbox_count": 0,
+  "daemon_exit_code": 0,
+  "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:35517, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:57221 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:57221 process.Process/Start\n",
+  "artifacts_unchanged": true,
+  "ready_ms": {
+    "hypermachine": {
+      "n": 32,
+      "min": 645.7046520000063,
+      "max": 2310.5796450000184,
+      "mean": 1485.7681219062533,
+      "p50": 1489.2059459999984,
+      "p95": 2245.43743000001,
+      "p99": 2310.5796450000184
+    },
+    "firecracker": {
+      "n": 32,
+      "min": 820.807230999975,
+      "max": 1739.5601569999997,
+      "mean": 1220.390009718745,
+      "p50": 1118.868961000004,
+      "p95": 1680.298492999981,
+      "p99": 1739.5601569999997
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "acme_issuance_implemented": false,
+  "files": {
+    "README.md": "ca53917854c096dfeb6eda54725caaaaf333aa17a9b9c74d0d3a3f77178dc24d",
+    "binary-before-alias-budget.sha256": "fe0ef6acc556ba646fd7c3b3a1455510289f516cd1cbef541ce4de70904e8212",
+    "binary.sha256": "69b8a050081eef53ecaea08e9f292209811fdfb1cb53ec20ec033c3b4f13e4e0",
+    "build-before-alias-budget.log": "3de05079475adfa416a0f573962d5de5756dc68bf27395a6125d1fbe9b7ad237",
+    "build-context.json": "ceb56f3c405d21bdcfc2451a73c03ae4008165d395a2b1237493b86668c5bbe9",
+    "build-linux.log": "bf5dbe9f70c60b259db52e63a7d778d633b05e0b73cc459168d843465a07aabe",
+    "clippy-before-alias-budget.log": "f924a0881bd4af3226c68d332bc79e2be0116f5db18be643317cede9ef6336a3",
+    "clippy-initial-failure.log": "bcc28bb15eb78a8f1cb1edb648f453abfa0759c7dbd94c12abf2b10cdf01c5f5",
+    "clippy-linux.log": "3f8715c20dc716c25e8cc772fefba6a1ba2bbf6ca5f2dc4d4ef8b3ba8d348e4d",
+    "kvm-first-success-report.json": "dd0194c5ef03e4b8fd02a4fca4119c7e0834fc026db871d237b545df6398e835",
+    "kvm-first-success-run.log": "dd31f67a6c0dab82b5b034d1ffa222d33b25a2c974c988f8ca46d209449eda85",
+    "kvm-report.json": "53d67504c57db8e691897e377a5271ba37844b240d072e84a4d5dd95b3cb9e65",
+    "kvm-run.log": "dd31f67a6c0dab82b5b034d1ffa222d33b25a2c974c988f8ca46d209449eda85",
+    "legacy-kvm-report.json": "1ef6daf07e240ffb710dffe673e96bee9d8da08fba1b49aab7963fb706951fa5",
+    "legacy-kvm-run.log": "58c325d4ca6f20b5f72b5f3791b42cded607fb781130082b73a336a2bdab1dc0",
+    "source-overlays/Cargo.lock": "b81a30720e5c52100dd6454db34d4e160bdca3bed6f42859fb685cb515c911b7",
+    "source-overlays/crates/hv2-api/Cargo.toml": "a42d959079e80c9fe7aa3561502d28ae213d463f369b906a8902bb63d1ce8938",
+    "source-overlays/crates/hv2-api/src/lib.rs": "5bc46df5419be17a1d72962cbdbbf3139c7012adbea537d4ee9bc0e97f9185f7",
+    "source-overlays/crates/hv2-api/src/tls_bundle.rs": "762c6a1dbb9fffc1fb7618d4d1d12e958eabab12a283a51814a370530ed4e65c",
+    "source-overlays/crates/hv2-cluster/src/bin/hv2-control-plane.rs": "10d30c3bb970efc6a485fc9c5e5c9121afe0eb8515533372c28f3510170dc23f",
+    "tests-api-before-alias-budget.log": "a7a02711149811a423579fd5b14bb8e040e4eecc53eb09ba28376380f7c70d32",
+    "tests-api-before-lifetime-check.log": "98438dda8e73c5f3845fcb7dca8c119e5b7525df8a0651b814d73725d4140819",
+    "tests-api-linux.log": "0609da38c984d5fd423756d7a70c49e8a44dddf87549477a6e3e3117ea4e05b7",
+    "tests-tls-linux.log": "2db63c526678ee2af524b1701e71d308845944f08d87b69cfb9967b9e5370dd0",
+    "tls-bundle-before-alias-budget.rs": "f540e220fdd05f6f0888671415e8aee81acf99bd9d8e14df475fc5a3eba5a8de",
+    "tools/verify-custom-domains.py": "5e41ee5ca1710d400d8521c8d4d971ddc74683041e2f3396454fcc67484bdc44",
+    "verify-custom-domains-first-success.py": "0734e23dc2eb7808396a5d5e17bcec8f57ae796a67244a3aabb495edb4249180"
+  }
+}

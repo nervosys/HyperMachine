@@ -1,0 +1,12 @@
+{
+  "sha256": {
+    "README.md": "70a7a4a08c72bf08063a51d7261c74107eb3c430e4ac6203745f58c2b1aee432",
+    "build-udp-guest-image.py": "0327dbd69e779fbf9dd69789652aea27500029849f4ebee4e4c8ba8fb3ce6cb2",
+    "check-udp-kvm.py": "cbb597f5a721cb47dca3d9241c366b54dc8772edb28377e7c60d59484e2c9fb8",
+    "daemon-build.log": "726c34d07643031e5bd2dcadb8a65af973c333fa4b6201dc698c67c1efb6a115",
+    "daemon.log": "9cb8e1d3278105349cb9a1ed165d26a3d6465c871e217f226bc5a663c6bffb27",
+    "image.json": "e2733c2aedf45e44224b446b953d6b87e24e070eb9c874f5400a6ac226176cce",
+    "report.json": "c606ca3c24f9ba9e9118c3f41d1f751df9bf3f5fb2d31b12f54b6b5f9a6da133",
+    "udp-guest-echo.c": "457b20bf54e49c829333f8c956240abe5cfa0e6c0caace56389e355c8206618f"
+  }
+}

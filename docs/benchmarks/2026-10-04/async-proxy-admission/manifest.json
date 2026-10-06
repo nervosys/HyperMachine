@@ -1,0 +1,10 @@
+{
+  "README.md": "b8434a9198a8644f3a95211a38ea5ea25e25dad3e358d07527490eb3ddc37ee7",
+  "api-tests.txt": "64da634ed9cccd1536dc8c027af7594789b6c513d78a0a1895ceced3fa1798e6",
+  "control-tests.txt": "b512fe1cddb2fa66a9f274f05d8f833b0ff845193281493d4f7e4a8a657157bc",
+  "initial-test-compile-failure.txt": "443d502a18d62d209736b135a5cec82b4a2b3c288f375219e74f9fc286f1f32d",
+  "proxy-before.rs": "996fde17115bb40b215721a7c942efc496b8823275ced79246336b0e1c2ae1c1",
+  "proxy-candidate.rs": "363fb17758d9fc984af4724984fca31765ab34d7cadcd472f081f2b347d9bf78",
+  "source-context.json": "e36f42ace12f851774ad9e645f0f16a1fe02f15e3d3fe37daa628448356b7447",
+  "verify.py": "8df390be80a365cfb819714244ae75b225ab1cbe1481c8b8c80e3611f81da15a"
+}

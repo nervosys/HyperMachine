@@ -1,0 +1,18 @@
+[2m2026-10-04T15:28:10.050096Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+build         : ok
+[2m2026-10-04T15:28:10.052107Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'guest-exec-probe': vsock device attached at 0xd0000000 (guest CID 3, IRQ 5)
+channel       : attached, guest CID 3
+kernel args   : virtio_mmio.device=4K@0xd0000000:5
+[2m2026-10-04T15:28:10.069979Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'guest-exec-probe' on the Kvm backend (1 vCPUs, 2048 MiB)
+[2m2026-10-04T15:28:10.079339Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T15:28:10.079402Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'guest-exec-probe': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T15:28:10.080281Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'guest-exec-probe' with 1 vCPUs and 2 GB memory (parallel=true)
+launch        : ok, waiting 1s for the guest to come up
+[2m2026-10-04T15:28:10.080628Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'guest-exec-probe' with 1 vCPUs
+[2m2026-10-04T15:28:10.080660Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T15:28:10.081023Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+ping          : agent 1.1.0
+exec status   : exit=Some(0) signal=None timed_out=false
+exec stdout   : Linux (none) 6.6.52 #1 SMP PREEMPT_DYNAMIC 1970-01-01 x86_64 GNU/Linux
+result        : a command ran in the guest through the published API
+[2m2026-10-04T15:28:11.085896Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3534)

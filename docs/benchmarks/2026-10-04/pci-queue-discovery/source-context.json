@@ -1,0 +1,8 @@
+{
+  "crates/hv2-core/src/devices/virtio_pci.rs": "a2494223b1f88c5d43afc48e9c04588e9d3660ed105ef7a9742acca0d495c344",
+  "crates/hv2-core/src/pci/bus.rs": "507baa6644dd8cb7ee057a15b350a5860b5b43e580d78f585a17a86589551f03",
+  "crates/hv2-core/src/pci/mod.rs": "b681630813315e875ec7b8988b5407c2be6094608a1d1d90c2720ec782dfc5ec",
+  "crates/hv2-core/src/pci/firmware.rs": "9e05abe2f0cd1cf8e4cbb62c15ca564a42a830be401dc8e5ba03daec2868df2e",
+  "crates/hv2-core/src/vm.rs": "e03a7f82ee85c17b92956095d46a72d5bd8ad4e52233f01253b0292f48ab4b84",
+  "crates/hv2-agent/examples/pci_guest_probe.rs": "9f392e480f4649c848f0b0b74308ba43b4c32f9415d7c12351cce8c0ea80fba6"
+}

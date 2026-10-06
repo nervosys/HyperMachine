@@ -1,0 +1,33 @@
+{
+  "sha256": {
+    "README.md": "4efe4ecfd1b0de65b92151935680e8c8594494c879db6d2d017292d6b756b092",
+    "analysis-ipv4.json": "e615d632d66a9762949342ecbfa92f1d91990a755742daa02ec3f59b54253cc1",
+    "analysis-ipv6.json": "b44caafb0e7742cdefcebbd4755fc12b133830bc3ee6d1ca9add92fc9a5fc0d0",
+    "analyze-native-gateway-candidate.py": "ce19b2423eb8c78ae6a7d8d18bcb1d2e1066c1e6f99fec932fd5369eadb315be",
+    "baseline-build.log": "4af6d9ca37d0625af451146fb140b93be92bc28887031e475e11532669bbb9cf",
+    "baseline-native_udp.rs": "9e50ddb8546cc304d1b00e9db170ad828117348f378c0e7f22f15cf1a982ae35",
+    "candidate-build.log": "bc24cd97e393009705d19b4e8904da81b4404a6e12d855b0162711aba16ff3a7",
+    "candidate-matched-build.log": "d7906e7caf9eb0c8371c3f6b171022a4fae36b15afa890d8b652af5a164c301e",
+    "candidate-native_udp.rs": "90576eb1372b7c072d49b0b99e1691081acf9bb354b23edd1e92e0c7c60dddf2",
+    "candidate-tests.log": "358267146b652836cb34974faeb1c5e87a2e2abec42abc81d5db5ee4d48e53ae",
+    "candidate.patch": "335b72e3ba8304217654edbf07bc492b9261a7a5af67932772325f1e36e8b234",
+    "check-udp-cluster-kvm.py": "1b54f7536dccec53188ad8d13c152c2a93079b5276abe84516aacaf799f62abe",
+    "ipv4/0-baseline/daemon.log": "c3a4db3d760d43e428e5657433fd9989b94ee1df614cfea2775c5e8aa0c2fb0a",
+    "ipv4/0-baseline/report.json": "0d8338f5fdb9cc112ef08e07372f671a6ea333276824aed02e8db3264ec4d034",
+    "ipv4/1-candidate/daemon.log": "009f18611c692934a597d09069d9254c6fef903f56c7587d32c7dc889e415064",
+    "ipv4/1-candidate/report.json": "22c9c32af3a18eb668746786e0684260f07301be5458aa4b9fd2ede87769190f",
+    "ipv4/2-candidate/daemon.log": "df9fe819d4a8e2ded8747d5031890e5096d370215947c8dfb8d8109c9884cb6e",
+    "ipv4/2-candidate/report.json": "d2880989a87b84b77d542c9734f4028e4aa00359b4d55250dbae24ded425c7c6",
+    "ipv4/3-baseline/daemon.log": "6f562cc6090540eed23e2a0d047b0545eb520af917d01db94d8ec241da8a9f10",
+    "ipv4/3-baseline/report.json": "f0fdb2ca2ff44e48229af5752fe507ae4fb150b37b78de3e9a17f12f545b3229",
+    "ipv6/0-baseline/daemon.log": "adf8334c8bba4b5331beff96e3d5e8e2a118b6ff3303656c62d090eca5462b36",
+    "ipv6/0-baseline/report.json": "6c50487913c9451417d8bede5e52d6e0e2142594046ed2ed34e179704c8fd6bf",
+    "ipv6/1-candidate/daemon.log": "5e7702ee4bb49c2772b5f296f434f4016f036dfdc5fd809f2581834826249efd",
+    "ipv6/1-candidate/report.json": "07cd3251ae4bfe7c51312a9f6ca1d2531e9d85982c113b9bdc6151c84e8b6378",
+    "ipv6/2-candidate/daemon.log": "e552fadc802641dd35415fd039ed8c81a1b1a15d89f0a31060388ce6f287e342",
+    "ipv6/2-candidate/report.json": "08fef0ba8d8a26e62213da816c211ac76f0879c45c6bb92ee40cc0c637221b82",
+    "ipv6/3-baseline/daemon.log": "7ec2cf06a30d55698ce32e6433d73f52105a785ca952d08af562c52dff571e46",
+    "ipv6/3-baseline/report.json": "ab846c411a47a9ea0b6250728049fa39728ccfae85ca18c9b5380687097b29db",
+    "source-context.json": "54a37be08eb4147b52c5880b947471437526c02f23ab5ebed4e17837dddcf434"
+  }
+}

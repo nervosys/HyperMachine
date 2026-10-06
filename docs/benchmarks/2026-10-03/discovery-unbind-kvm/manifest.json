@@ -1,0 +1,17 @@
+{
+  "sha256": {
+    "README.md": "515c4dcd1a62f1365eb009822404767311b0508b0563b8245c2a9394f6a10fb0",
+    "check-acme-issuance.py": "062f469e653bbd4fea895c0d4223041e21e756245dda78b17d5ee2439285e76e",
+    "control-build-context.json": "ceb56f3c405d21bdcfc2451a73c03ae4008165d395a2b1237493b86668c5bbe9",
+    "daemon-build-context.json": "b1048f146b326d48662c45e8851cf15da12f3a77f5d0fefdfb6f75f3731b5a55",
+    "deploy-tls-certificate.py": "09e9f6b7543cbe810b18c5db26306f2dee72cb733efd2d9bc3fd5f64bfe2189d",
+    "domain-certificate-jobs.py": "3b8c3b5db70434c2ae4100632353d850adbb63d2afe607f3ccb5c1341bcee45d",
+    "renew-tls-certificates.py": "b6dd26bc78de6495c355698356cb033f4990b5c5364b949727cb2ed5562698bd",
+    "report.json": "3f2cdee979fae78f21675f9929e9e6f8c49e7045b5f86d6dabacf4b84379dcc1",
+    "run.log": "3f2cdee979fae78f21675f9929e9e6f8c49e7045b5f86d6dabacf4b84379dcc1",
+    "verify-custom-domains.py": "675cabe8121db9c1a52e8095baa13d96adff93de5a2336b4dc419575ce643da8"
+  },
+  "public_ca_contacted": false,
+  "automatic_claim_job_discovery_verified": true,
+  "performance_win_established": false
+}

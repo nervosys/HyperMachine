@@ -1,0 +1,18 @@
+{
+  "README.md": "7d4131b54ba39017eaac689c91b1fed535145877986ca78c2da74a9f9f90b134",
+  "before-driver.py": "3d7f965157a38fc022746da5de83f2cb8373d4401766d7809fa0910ecf44847b",
+  "candidate-driver.py": "9a48fb3056074a054735287332bf11fb2a6f3ad1679c16f755d46e797849929e",
+  "independent-check.json": "86fb969fe31062148e1c6621d9b5b07f329d82140f8fc51062bf4d4aff989b72",
+  "raw/control-restarted.log.txt": "631964894ddf122ecb1ea4c55b2303602f7e13978eb32f92e2e842d8aae27bba",
+  "raw/control-revoked-restarted.log.txt": "d1bba7dac9fc58964cf11a48af2e94aac914943f6dbe1b4b66ce497267bbb612",
+  "raw/control.log.txt": "631964894ddf122ecb1ea4c55b2303602f7e13978eb32f92e2e842d8aae27bba",
+  "raw/node.log.txt": "1cc85a11f738a167bacb3c7e0629c7e9d4c6eb43393a9c8117940bca55924904",
+  "raw/redis-active-recovered.log.txt": "d022f49962a73362d7b6e003f6c6e93fcd907c24767a0a2b6f72f46e21624048",
+  "raw/redis-revoked-recovered.log.txt": "189710ad4758db9b984db88d062f31276b900c0c112c775e6e33c0300acb44cf",
+  "raw/redis.log.txt": "980f51389277eb9e750c986ca14306ee3880135b7aa875710bf82deefdfee0d7",
+  "release-context.json": "e446f8c898221095649ead44bec8a34971b5deab0d31c063cd5133f55bd492cb",
+  "report.json": "05f296003ff5fed338a0ee19ae821515b32dbd2e1f4b4f3663e180cb05cacefa",
+  "runner.txt": "2c2f6294b8e09c4d6cd81dafd75da86abc8f5354f303341e75c6471c77dbcd9b",
+  "source-context.json": "ba647d317348c6146901cf515f40f86c808c6b0c89a4235b8bdf15b3acd8acd2",
+  "verify.py": "13d092fab1301f5b3a223228e2cc396176ce9568e9fc4ffebf2284b4eb1d8de8"
+}

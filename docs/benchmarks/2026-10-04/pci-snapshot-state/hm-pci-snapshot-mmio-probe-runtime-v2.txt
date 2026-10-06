@@ -1,0 +1,80 @@
+[2m2026-10-04T15:50:32.415561Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T15:50:32.417499Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-10-04T15:50:32.436166Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'template' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T15:50:32.446162Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T15:50:32.446236Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T15:50:32.447107Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'template' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T15:50:32.447449Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'template' with 1 vCPUs
+[2m2026-10-04T15:50:32.447472Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T15:50:32.447788Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+boot          :   402.2 ms to a guest agent that answers
+template      : warm 6.6.52
+[2m2026-10-04T15:50:32.822713Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' paused
+[2m2026-10-04T15:50:34.764280Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' snapshotted to /tmp/hv2-linux-875.snap
+[2m2026-10-04T15:50:34.764427Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' resumed
+snapshot      :  1941.9 ms; memory image 81.1 MiB allocated of 1024 MiB
+[2m2026-10-04T15:50:34.764537Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=2966)
+[2m2026-10-04T15:50:34.764981Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'template'
+[2m2026-10-04T15:50:34.765069Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' stopped
+[2m2026-10-04T15:50:34.765145Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T15:50:34.766734Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'restored-0': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-10-04T15:50:34.767986Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'restored-0' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T15:50:34.769440Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'restored-0' restored from /tmp/hv2-linux-875.snap
+[2m2026-10-04T15:50:34.769466Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'restored-0' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T15:50:34.769662Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'restored-0' with 1 vCPUs
+[2m2026-10-04T15:50:34.769677Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T15:50:34.769938Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+restore 0     :    2.9 ms to running,   19.3 ms to an answering agent (next ping 2.4 ms); timer 157->169, clock skew 0s, 6*7=42
+[2m2026-10-04T15:50:35.120351Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=211)
+[2m2026-10-04T15:50:35.120692Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'restored-0'
+[2m2026-10-04T15:50:35.120763Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'restored-0' stopped
+[2m2026-10-04T15:50:35.140382Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T15:50:35.141970Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'restored-1': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-10-04T15:50:35.142913Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'restored-1' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T15:50:35.144419Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'restored-1' restored from /tmp/hv2-linux-875.snap
+[2m2026-10-04T15:50:35.144510Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'restored-1' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T15:50:35.144745Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'restored-1' with 1 vCPUs
+[2m2026-10-04T15:50:35.144761Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T15:50:35.144987Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+restore 1     :    2.7 ms to running,   19.5 ms to an answering agent (next ping 2.0 ms); timer 161->173, clock skew 0s, 6*7=42
+[2m2026-10-04T15:50:35.495074Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=216)
+[2m2026-10-04T15:50:35.495383Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'restored-1'
+[2m2026-10-04T15:50:35.495460Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'restored-1' stopped
+[2m2026-10-04T15:50:35.540599Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T15:50:35.542089Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'restored-2': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-10-04T15:50:35.542835Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'restored-2' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T15:50:35.544258Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'restored-2' restored from /tmp/hv2-linux-875.snap
+[2m2026-10-04T15:50:35.544295Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'restored-2' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T15:50:35.544526Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'restored-2' with 1 vCPUs
+[2m2026-10-04T15:50:35.544543Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T15:50:35.544773Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+restore 2     :    2.3 ms to running,   16.7 ms to an answering agent (next ping 2.2 ms); timer 159->171, clock skew 0s, 6*7=42
+[2m2026-10-04T15:50:35.893331Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=226)
+[2m2026-10-04T15:50:35.893649Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'restored-2'
+[2m2026-10-04T15:50:35.893727Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'restored-2' stopped
+[2m2026-10-04T15:50:35.932472Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T15:50:35.933988Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'restored-3': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-10-04T15:50:35.935119Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'restored-3' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T15:50:35.936564Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'restored-3' restored from /tmp/hv2-linux-875.snap
+[2m2026-10-04T15:50:35.936597Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'restored-3' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T15:50:35.936793Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'restored-3' with 1 vCPUs
+[2m2026-10-04T15:50:35.936809Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T15:50:35.937022Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+restore 3     :    2.7 ms to running,   17.2 ms to an answering agent (next ping 2.1 ms); timer 159->172, clock skew 0s, 6*7=42
+[2m2026-10-04T15:50:36.286377Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=232)
+[2m2026-10-04T15:50:36.286669Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'restored-3'
+[2m2026-10-04T15:50:36.286732Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'restored-3' stopped
+[2m2026-10-04T15:50:36.336615Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T15:50:36.338264Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'restored-4': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-10-04T15:50:36.339069Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'restored-4' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T15:50:36.340492Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'restored-4' restored from /tmp/hv2-linux-875.snap
+[2m2026-10-04T15:50:36.340530Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'restored-4' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T15:50:36.340733Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'restored-4' with 1 vCPUs
+[2m2026-10-04T15:50:36.340750Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T15:50:36.340975Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+restore 4     :    2.4 ms to running,   17.3 ms to an answering agent (next ping 2.2 ms); timer 158->171, clock skew 0s, 6*7=42
+[2m2026-10-04T15:50:36.690783Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=227)
+[2m2026-10-04T15:50:36.691095Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'restored-4'
+[2m2026-10-04T15:50:36.691169Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'restored-4' stopped
+randomness    : 1 distinct of 5 before the reseed, 5 distinct after
+result        : restore-to-agent median 17.3 ms vs boot 402.2 ms (23.2x)

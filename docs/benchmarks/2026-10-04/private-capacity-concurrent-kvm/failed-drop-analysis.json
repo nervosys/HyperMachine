@@ -1,0 +1,170 @@
+{
+  "before": {
+    "counters": {
+      "InDatagrams": 644,
+      "NoPorts": 0,
+      "InErrors": 0,
+      "OutDatagrams": 644,
+      "RcvbufErrors": 0,
+      "SndbufErrors": 0,
+      "InCsumErrors": 0,
+      "IgnoredMulti": 0,
+      "MemErrors": 0
+    },
+    "target_echo_sockets": [
+      {
+        "local": "0100007F:46A2",
+        "remote": "00000000:0000",
+        "inode": "409",
+        "drops": 0
+      }
+    ]
+  },
+  "after": {
+    "counters": {
+      "InDatagrams": 4336,
+      "NoPorts": 0,
+      "InErrors": 14,
+      "OutDatagrams": 4350,
+      "RcvbufErrors": 14,
+      "SndbufErrors": 0,
+      "InCsumErrors": 0,
+      "IgnoredMulti": 0,
+      "MemErrors": 0
+    },
+    "target_echo_sockets": [
+      {
+        "local": "0100007F:46A2",
+        "remote": "00000000:0000",
+        "inode": "409",
+        "drops": 14
+      }
+    ]
+  },
+  "udp_counter_delta": {
+    "InDatagrams": 3692,
+    "NoPorts": 0,
+    "InErrors": 14,
+    "OutDatagrams": 3706,
+    "RcvbufErrors": 14,
+    "SndbufErrors": 0,
+    "InCsumErrors": 0,
+    "IgnoredMulti": 0,
+    "MemErrors": 0
+  },
+  "completed_workers": 18,
+  "failures": [
+    {
+      "worker": 0,
+      "planned": 100,
+      "completed": 2,
+      "echoed_payload_bytes": 1344,
+      "success": false,
+      "failure_type": "TimeoutError"
+    },
+    {
+      "worker": 1,
+      "planned": 100,
+      "completed": 2,
+      "echoed_payload_bytes": 1344,
+      "success": false,
+      "failure_type": "TimeoutError"
+    },
+    {
+      "worker": 2,
+      "planned": 100,
+      "completed": 2,
+      "echoed_payload_bytes": 1344,
+      "success": false,
+      "failure_type": "TimeoutError"
+    },
+    {
+      "worker": 4,
+      "planned": 100,
+      "completed": 8,
+      "echoed_payload_bytes": 135046,
+      "success": false,
+      "failure_type": "TimeoutError"
+    },
+    {
+      "worker": 7,
+      "planned": 100,
+      "completed": 2,
+      "echoed_payload_bytes": 1344,
+      "success": false,
+      "failure_type": "TimeoutError"
+    },
+    {
+      "worker": 8,
+      "planned": 100,
+      "completed": 8,
+      "echoed_payload_bytes": 135046,
+      "success": false,
+      "failure_type": "TimeoutError"
+    },
+    {
+      "worker": 11,
+      "planned": 100,
+      "completed": 2,
+      "echoed_payload_bytes": 1344,
+      "success": false,
+      "failure_type": "TimeoutError"
+    },
+    {
+      "worker": 17,
+      "planned": 100,
+      "completed": 2,
+      "echoed_payload_bytes": 1344,
+      "success": false,
+      "failure_type": "TimeoutError"
+    },
+    {
+      "worker": 18,
+      "planned": 100,
+      "completed": 2,
+      "echoed_payload_bytes": 1344,
+      "success": false,
+      "failure_type": "TimeoutError"
+    },
+    {
+      "worker": 24,
+      "planned": 100,
+      "completed": 2,
+      "echoed_payload_bytes": 1344,
+      "success": false,
+      "failure_type": "TimeoutError"
+    },
+    {
+      "worker": 25,
+      "planned": 100,
+      "completed": 8,
+      "echoed_payload_bytes": 135046,
+      "success": false,
+      "failure_type": "TimeoutError"
+    },
+    {
+      "worker": 28,
+      "planned": 100,
+      "completed": 2,
+      "echoed_payload_bytes": 1344,
+      "success": false,
+      "failure_type": "TimeoutError"
+    },
+    {
+      "worker": 29,
+      "planned": 100,
+      "completed": 2,
+      "echoed_payload_bytes": 1344,
+      "success": false,
+      "failure_type": "TimeoutError"
+    },
+    {
+      "worker": 30,
+      "planned": 100,
+      "completed": 2,
+      "echoed_payload_bytes": 1344,
+      "success": false,
+      "failure_type": "TimeoutError"
+    }
+  ]
+}

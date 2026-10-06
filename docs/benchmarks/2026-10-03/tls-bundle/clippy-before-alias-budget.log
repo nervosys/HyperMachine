@@ -1,0 +1,33 @@
+   Compiling num-traits v0.2.19
+    Checking zerotrie v0.2.5
+    Checking minimal-lexical v0.2.1
+    Checking tinystr v0.8.4
+    Checking icu_collections v2.3.0
+    Checking time v0.3.55
+   Compiling oid-registry v0.8.1
+   Compiling hv2-api v1.1.0 (/var/tmp/hm-tls-bundle/source/crates/hv2-api)
+    Checking icu_locale_core v2.3.0
+    Checking nom v7.1.3
+    Checking chrono v0.4.45
+    Checking num-integer v0.1.47
+    Checking rhai v1.26.1
+    Checking num-bigint v0.4.8
+    Checking icu_provider v2.3.0
+    Checking icu_normalizer v2.3.0
+    Checking icu_properties v2.3.0
+    Checking rusticata-macros v4.1.0
+    Checking hv2-core v1.1.0 (/var/tmp/hm-tls-bundle/source/crates/hv2-core)
+    Checking pbjson-types v0.9.0
+    Checking asn1-rs v0.7.2
+    Checking idna_adapter v1.2.2
+    Checking idna v1.1.0
+    Checking url v2.5.8
+    Checking tower-http v0.6.11
+    Checking redis v1.7.1
+    Checking der-parser v10.0.0
+    Checking reqwest v0.12.28
+    Checking x509-parser v0.18.1
+    Checking hv2-agent v1.1.0 (/var/tmp/hm-tls-bundle/source/crates/hv2-agent)
+    Checking hv2-runtime v1.1.0 (/var/tmp/hm-tls-bundle/source/crates/hv2-runtime)
+    Checking hv2-cluster v1.1.0 (/var/tmp/hm-tls-bundle/source/crates/hv2-cluster)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 02s

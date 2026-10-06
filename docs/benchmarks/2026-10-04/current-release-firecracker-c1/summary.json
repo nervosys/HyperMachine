@@ -1,0 +1,33 @@
+{
+  "concurrency": 1,
+  "pairs": 8,
+  "profile_success": true,
+  "engines": {
+    "hypermachine": {
+      "passed": 8,
+      "attempted": 8,
+      "ready_ms": {
+        "p50": 477.349935999996,
+        "p95": 1315.9354949999624,
+        "p99": 1315.9354949999624
+      },
+      "median_held_pss_mib": 151.9755859375,
+      "median_incremental_pss_mib": 84.923828125,
+      "memory_batches": 8,
+      "failures": []
+    },
+    "firecracker": {
+      "passed": 8,
+      "attempted": 8,
+      "ready_ms": {
+        "p50": 445.6358879999698,
+        "p95": 1495.0434920000362,
+        "p99": 1495.0434920000362
+      },
+      "median_held_pss_mib": 85.8828125,
+      "median_incremental_pss_mib": 85.8828125,
+      "memory_batches": 8,
+      "failures": []
+    }
+  }
+}

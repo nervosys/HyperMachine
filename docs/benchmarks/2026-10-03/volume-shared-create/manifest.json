@@ -1,0 +1,8 @@
+{
+  "sha256": {
+    "README.md": "b6f41c1fd1ce1f1aff9f08b19b8f3cc7dd38e81c352f4956d9f20bf916ec36aa",
+    "checker.py": "33f72140f59d7d88196c2446bb216b88ea686bd7da49ebc67d3279dea53646e5",
+    "one-daemon.json": "53620cc259e411732061b3fa786d8ae713c56beb66b7d354e0ae29a5033315bd",
+    "two-daemon.json": "0698cbadc399b0ee7524f82ea558309ea2666d21e17cc0956060625a15429658"
+  }
+}

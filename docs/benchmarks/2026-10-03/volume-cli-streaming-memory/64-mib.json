@@ -1,0 +1,27 @@
+{
+  "cli_sha256": "268916e844221c8a2cdc8933ba8984fa1afdf0b473995bf667d751e04265517f",
+  "payload_sha256": "281e519df3077b557c6b03f5da83c4e8d397219259615dd7c3308f89cae8f2a6",
+  "transfers": [
+    {
+      "direction": "upload",
+      "bytes": 67108864,
+      "elapsed_seconds": 0.8711794770000054,
+      "mib_per_second": 73.46362223819881,
+      "rss_samples": 396,
+      "sampled_peak_rss_kib": 14152,
+      "observed_peak_hwm_kib": 14152
+    },
+    {
+      "direction": "download",
+      "bytes": 67108864,
+      "elapsed_seconds": 0.052861755000009225,
+      "mib_per_second": 1210.7051686041984,
+      "rss_samples": 24,
+      "sampled_peak_rss_kib": 15672,
+      "observed_peak_hwm_kib": 15672
+    }
+  ],
+  "server_reaped": true,
+  "source_and_destination_removed": true,
+  "scope": "Owned loopback HTTP protocol fixture, development binary, no sandbox/control plane/TLS/competitor."
+}

@@ -1,0 +1,13 @@
+{
+  "diagnostic_only": true,
+  "production_runtime_changed": false,
+  "source_files_verified": 550,
+  "source_sha256": {
+    "crates/hv2-core/src/vm.rs": "6c0e0495f1a8e55f144657f6c1e667e94b029a7fb1afeb11ce103dd48d01c2de",
+    "crates/hv2-agent/src/agent_vm.rs": "46b7fbe8040adde2d8015a22354b7038ecd9b4ce1d11bb1b0bc2d4d49b93776b"
+  },
+  "activation_environment": "HM_RESTORE_MEMORY_DIAGNOSTICS=1",
+  "counter_profile": "anonymous_private_clean",
+  "restore_stage_profile": "host_restore",
+  "logged_payload": "VM identity, phase, residency counters and read duration only"
+}

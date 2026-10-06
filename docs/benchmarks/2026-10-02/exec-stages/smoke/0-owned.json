@@ -1,0 +1,241 @@
+{
+  "success": true,
+  "purpose": "prepared snapshot startup, no managed endpoint or universal performance claim",
+  "artifact_sha256": {
+    "hypermachine": "7353fedfb7d3db01c9d1e3f5286b6dbfb2e427204e49d9a25fc8de4d562c1af3",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "coordinator": "c41c5e00184193a74a7da771e5e45289ce5fecd513bfa719bc40ca4541cb834a",
+    "engines": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "firecracker_harness": "0bcdc13351d54d4c9658bf034aa97f7d86d96d99375a2df04e4c94eaf8d3b610"
+  },
+  "driver_cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "concurrency": 1,
+  "pairs": 1,
+  "guest_readiness_timeout_s": 15,
+  "preparation": {
+    "hypermachine": {
+      "duration_ms": 160.4786909999998,
+      "offering": {
+        "createdAt": 1791004874022,
+        "names": [
+          "warm-benchmark:default"
+        ],
+        "sandboxID": "sbx-2bf55ba45da84223ab52",
+        "snapshotID": "warm-benchmark:default",
+        "templateID": "base"
+      },
+      "base_template": {
+        "aliases": [
+          "base"
+        ],
+        "buildID": "base",
+        "buildStatus": "ready",
+        "cpuCount": 1,
+        "envdVersion": "0.6.3",
+        "memoryMB": 1024,
+        "public": false,
+        "snapshot": true,
+        "templateID": "base"
+      },
+      "source_files": {
+        ".backup.lock": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "snapshots/warm-benchmark-c45f51cbc68d4d1eadce68e42606d98b.snap": {
+          "bytes": 1451804,
+          "sha256": "b8d7fe4549ecb6a5e4ac7a4cde7ac146d1418657baf93f1c9a6296d8f7725be8"
+        },
+        "snapshots/warm-benchmark.json": {
+          "bytes": 142,
+          "sha256": "8b1e4dae21d0dae1d4000f5f9023ec0aa571f569bb8b373673ca123104d1848e"
+        },
+        "templates/94cbb63bd81baf1783adfe6c07e8d944/template.snap": {
+          "bytes": 50873,
+          "sha256": "4e6705818780682a7becfae6345ffe278c98b4cf988f379a89d7362cf7ac86e1"
+        },
+        "templates/94cbb63bd81baf1783adfe6c07e8d944/template.snap.mem": {
+          "bytes": 1073741824,
+          "sha256": "78169df926e34f3e1cb261a89f5a367e68ac32f06db13eb256aed77c335fb3b9"
+        }
+      },
+      "source_unchanged": true
+    },
+    "firecracker": {
+      "duration_ms": 4242.550362999999,
+      "state_sha256": "9d949d95f2a9363c9d4826406d0841b07aefc527fa627975e9fb80eca5d90d66",
+      "memory_sha256": "5d85fbdea90aa2be9a0ef1caa2ba96ce4661a66217f762a48706c4ac6c05ece6",
+      "memory_bytes": 1073741824,
+      "snapshot_type": "Full",
+      "source_parent_stopped": true,
+      "source_unchanged": true
+    }
+  },
+  "runs": [
+    {
+      "engine": "hypermachine",
+      "pair": 0,
+      "samples": [
+        {
+          "index": 0,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 16.578458453,
+          "sandbox_id": "sbx-78a7a6d7ac1a45e5b6c7",
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 125.38479599999874,
+          "latency_phases_ms": {
+            "create_and_notice": 39.15735100000006,
+            "exec": 86.22744499999868
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true
+        }
+      ],
+      "success": true,
+      "cleanup_errors": [],
+      "held_process_memory_kib": {
+        "Rss_kib": 74740,
+        "Pss_kib": 72594,
+        "Private_Clean_kib": 36980,
+        "Private_Dirty_kib": 35432,
+        "Anonymous_kib": 35428
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 44216,
+        "Pss_kib": 42029,
+        "Private_Clean_kib": 9096,
+        "Private_Dirty_kib": 32792,
+        "Anonymous_kib": 32792
+      },
+      "incremental_process_memory_kib": {
+        "Rss_kib": 30524,
+        "Pss_kib": 30565,
+        "Private_Clean_kib": 27884,
+        "Private_Dirty_kib": 2640,
+        "Anonymous_kib": 2636
+      },
+      "memory_hold_seconds": 5,
+      "memory_read_ms": 1.248130000000458,
+      "remaining_sandboxes": 0,
+      "start_spread_ms": 0.0
+    },
+    {
+      "engine": "firecracker",
+      "pair": 0,
+      "samples": [
+        {
+          "index": 0,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 21.771945869,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "a5ef7f5330d319e638ac86261a7d3d791c2beeade3b42c7ac38353eeb37cf876",
+            "unix_time_ns": 1791004889505142242,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 21.84824945
+          },
+          "ready_ms": 98.69234900000023,
+          "latency_phases_ms": {
+            "process_and_load": 17.138936000002047,
+            "connect_and_notice": 59.16464499999918,
+            "exec": 22.388767999999004
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true
+        }
+      ],
+      "success": true,
+      "cleanup_errors": [],
+      "held_process_memory_kib": {
+        "Rss_kib": 23708,
+        "Pss_kib": 23700,
+        "Private_Clean_kib": 21056,
+        "Private_Dirty_kib": 2640,
+        "Anonymous_kib": 2636
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 0,
+        "Pss_kib": 0,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 0,
+        "Anonymous_kib": 0
+      },
+      "incremental_process_memory_kib": {
+        "Rss_kib": 23708,
+        "Pss_kib": 23700,
+        "Private_Clean_kib": 21056,
+        "Private_Dirty_kib": 2640,
+        "Anonymous_kib": 2636
+      },
+      "memory_hold_seconds": 5,
+      "memory_read_ms": 2.1857470000021806,
+      "start_spread_ms": 0.0
+    }
+  ],
+  "cleanup_errors": [],
+  "limitations": [
+    "Shared WSL nested KVM and uncontrolled host background load",
+    "Persistent HyperMachine HTTP daemon versus fresh Firecracker process/Unix API",
+    "Prepared resident/cache-warm sources; no dropped-cache or storage durability comparison",
+    "PSS excludes kernel memory and unmapped page cache; not fleet density",
+    "Failed attempts retained; conditional latency and memory summaries",
+    "Engine-generated device kernel arguments differ"
+  ],
+  "diagnostic_only": true,
+  "readiness_diagnostics": {
+    "rust_log": "warn,hv2_agent::agent_vm=debug,hv2_sandboxd=debug",
+    "max_log_bytes": 16777216,
+    "logging_may_affect_timing": true,
+    "creation_stages": true,
+    "log_bytes": 4927,
+    "log_truncated": false,
+    "node_log": "HM_BOOT_IMAGE_MODE=owned\n\u001b[2m2026-10-03T05:21:13.432253Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m guest command execution stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0mtemplate \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.037011 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m0.168249 \u001b[3mcommand_ms\u001b[0m\u001b[2m=\u001b[0m1.716239 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"command\"\n\u001b[2m2026-10-03T05:21:13.868056Z\u001b[0m \u001b[32m INFO\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m template ready in 957.537908ms at /var/tmp/hm-prepared-t1scn67h/hm/snapshots/templates/.94cbb63bd81baf1783adfe6c07e8d944.aa1ef7153bed478bb07403dd4863708d/template.snap; working set 0 pages in 0 ranges\n\u001b[2m2026-10-03T05:21:13.933768Z\u001b[0m \u001b[32m INFO\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m published the shared template 94cbb63bd81baf1783adfe6c07e8d944\nhv2-sandboxd: listening on 0.0.0.0:60735, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes are restored from template snapshots: base\n\nsandbox proxy on 0.0.0.0:60827 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:60827 process.Process/Start\n\u001b[2m2026-10-03T05:21:13.950020Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 3.987\u00b5s\n\u001b[2m2026-10-03T05:21:13.977954Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-2bf55ba45da84223ab52 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.035257 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m16.626162 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m8.487858 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T05:21:13.978198Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-2bf55ba45da84223ab52 up in 28.134602ms: build 731.338\u00b5s, launch 2.001012ms, agent answering 25.315617ms,          network and envd 87.406\u00b5s\n\u001b[2m2026-10-03T05:21:14.005048Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m guest command execution stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-2bf55ba45da84223ab52 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.050447 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m0.7626179999999999 \u001b[3mcommand_ms\u001b[0m\u001b[2m=\u001b[0m18.867938000000002 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"command\"\n\u001b[2m2026-10-03T05:21:14.005244Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sandbox command handler stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-2bf55ba45da84223ab52 \u001b[3mhandler_ms\u001b[0m\u001b[2m=\u001b[0m19.884453 \u001b[3mguest_exec_ms\u001b[0m\u001b[2m=\u001b[0m19.879043999999997 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue\n\u001b[2m2026-10-03T05:21:14.022303Z\u001b[0m \u001b[32m INFO\u001b[0m \u001b[2mhv2_sandboxd::snapshots\u001b[0m\u001b[2m:\u001b[0m snapshot warm-benchmark taken\n\u001b[2m2026-10-03T05:21:24.254407Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 6.081\u00b5s\n\u001b[2m2026-10-03T05:21:24.283220Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-78a7a6d7ac1a45e5b6c7 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.150962 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m12.119504 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m10.310233 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T05:21:24.283785Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-78a7a6d7ac1a45e5b6c7 up in 29.240535ms: build 699.558\u00b5s, launch 5.361275ms, agent answering 22.999189ms,          network and envd 181.545\u00b5s\n\u001b[2m2026-10-03T05:21:24.369484Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m guest command execution stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-78a7a6d7ac1a45e5b6c7 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.046488 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m1.0401049999999998 \u001b[3mcommand_ms\u001b[0m\u001b[2m=\u001b[0m73.02651 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"command\"\n\u001b[2m2026-10-03T05:21:24.370395Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sandbox command handler stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-78a7a6d7ac1a45e5b6c7 \u001b[3mhandler_ms\u001b[0m\u001b[2m=\u001b[0m75.041444 \u001b[3mguest_exec_ms\u001b[0m\u001b[2m=\u001b[0m75.03891899999999 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue\n"
+  },
+  "guest_restore_contract": {
+    "clock_rng_resynchronised": true,
+    "entropy_bytes": 64,
+    "hypermachine": "acknowledged by successful create, source-bound after_restore",
+    "firecracker": "Restored RPC acknowledgement before exec; replaces readiness ping"
+  },
+  "latency_phase_measurement": "client_monotonic_no_added_rpc",
+  "preparation_phase": "complete",
+  "owned_firecracker_processes": [
+    {
+      "pid": 810,
+      "exit_code": -15
+    },
+    {
+      "pid": 1100,
+      "exit_code": -15
+    }
+  ],
+  "remaining_sandboxes_before_cleanup": 0,
+  "remaining_sandboxes": 0,
+  "owned_node_stopped": true,
+  "owned_node_exit_code": 0,
+  "node_log_tail": "HM_BOOT_IMAGE_MODE=owned\n\u001b[2m2026-10-03T05:21:13.432253Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m guest command execution stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0mtemplate \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.037011 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m0.168249 \u001b[3mcommand_ms\u001b[0m\u001b[2m=\u001b[0m1.716239 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"command\"\n\u001b[2m2026-10-03T05:21:13.868056Z\u001b[0m \u001b[32m INFO\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m template ready in 957.537908ms at /var/tmp/hm-prepared-t1scn67h/hm/snapshots/templates/.94cbb63bd81baf1783adfe6c07e8d944.aa1ef7153bed478bb07403dd4863708d/template.snap; working set 0 pages in 0 ranges\n\u001b[2m2026-10-03T05:21:13.933768Z\u001b[0m \u001b[32m INFO\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m published the shared template 94cbb63bd81baf1783adfe6c07e8d944\nhv2-sandboxd: listening on 0.0.0.0:60735, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes are restored from template snapshots: base\n\nsandbox proxy on 0.0.0.0:60827 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:60827 process.Process/Start\n\u001b[2m2026-10-03T05:21:13.950020Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 3.987\u00b5s\n\u001b[2m2026-10-03T05:21:13.977954Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-2bf55ba45da84223ab52 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.035257 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m16.626162 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m8.487858 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T05:21:13.978198Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-2bf55ba45da84223ab52 up in 28.134602ms: build 731.338\u00b5s, launch 2.001012ms, agent answering 25.315617ms,          network and envd 87.406\u00b5s\n\u001b[2m2026-10-03T05:21:14.005048Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m guest command execution stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-2bf55ba45da84223ab52 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.050447 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m0.7626179999999999 \u001b[3mcommand_ms\u001b[0m\u001b[2m=\u001b[0m18.867938000000002 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"command\"\n\u001b[2m2026-10-03T05:21:14.005244Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sandbox command handler stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-2bf55ba45da84223ab52 \u001b[3mhandler_ms\u001b[0m\u001b[2m=\u001b[0m19.884453 \u001b[3mguest_exec_ms\u001b[0m\u001b[2m=\u001b[0m19.879043999999997 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue\n\u001b[2m2026-10-03T05:21:14.022303Z\u001b[0m \u001b[32m INFO\u001b[0m \u001b[2mhv2_sandboxd::snapshots\u001b[0m\u001b[2m:\u001b[0m snapshot warm-benchmark taken\n\u001b[2m2026-10-03T05:21:24.254407Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 6.081\u00b5s\n\u001b[2m2026-10-03T05:21:24.283220Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-78a7a6d7ac1a45e5b6c7 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.150962 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m12.119504 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m10.310233 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T05:21:24.283785Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-78a7a6d7ac1a45e5b6c7 up in 29.240535ms: build 699.558\u00b5s, launch 5.361275ms, agent answering 22.999189ms,          network and envd 181.545\u00b5s\n\u001b[2m2026-10-03T05:21:24.369484Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m guest command execution stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-78a7a6d7ac1a45e5b6c7 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.046488 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m1.0401049999999998 \u001b[3mcommand_ms\u001b[0m\u001b[2m=\u001b[0m73.02651 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"command\"\n\u001b[2m2026-10-03T05:21:24.370395Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sandbox command handler stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-78a7a6d7ac1a45e5b6c7 \u001b[3mhandler_ms\u001b[0m\u001b[2m=\u001b[0m75.041444 \u001b[3mguest_exec_ms\u001b[0m\u001b[2m=\u001b[0m75.03891899999999 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue\n",
+  "artifacts_unchanged": true
+}

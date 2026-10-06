@@ -1,0 +1,15 @@
+   Compiling hv2-cluster v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-cluster)
+    Finished `test` profile [optimized + debuginfo] target(s) in 34.09s
+     Running unittests src/lib.rs (/var/tmp/hm-object-backup/target/debug/deps/hv2_cluster-39b572a236a06967)
+
+running 7 tests
+test web_sharing::tests::authorization_binds_owner_incarnation_subject_and_expiry ... ok
+test store::tests::memory_web_sharing_contract ... ok
+test web_sharing::tests::grant_order_is_canonical ... ok
+test web_sharing::tests::grant_validation_and_unknown_fields_fail_closed ... ok
+test web_sharing::tests::tombstone_roundtrip_preserves_exact_incarnation_and_revision ... ok
+test web_sharing::tests::duplicate_oversized_and_malformed_states_are_rejected ... ok
+test store::tests::redis_web_sharing_contract ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 121 filtered out; finished in 0.01s
+

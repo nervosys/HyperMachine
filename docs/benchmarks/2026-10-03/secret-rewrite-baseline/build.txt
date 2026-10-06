@@ -1,0 +1,42 @@
+   Compiling serde_core v1.0.229
+   Compiling smallvec v1.15.2
+   Compiling once_cell v1.21.4
+   Compiling num-traits v0.2.19
+   Compiling zerocopy v0.8.56
+   Compiling syn v3.0.3
+   Compiling syn v2.0.119
+   Compiling memchr v2.8.3
+   Compiling log v0.4.34
+   Compiling base64 v0.23.1
+   Compiling tracing-core v0.1.36
+   Compiling rustls v0.23.45
+   Compiling parking_lot_core v0.9.12
+   Compiling pem v4.0.0
+   Compiling parking_lot v0.12.5
+   Compiling rcgen v0.14.10
+   Compiling chrono v0.4.45
+   Compiling tokio-macros v2.7.2
+   Compiling serde_derive v1.0.229
+   Compiling thiserror-impl v2.0.21
+   Compiling async-trait v0.1.92
+   Compiling serde_spanned v1.1.1
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling serde_json v1.0.151
+   Compiling toml v1.1.6+spec-1.1.0
+   Compiling tracing-attributes v0.1.31
+   Compiling zerocopy-derive v0.8.56
+   Compiling tokio v1.53.1
+   Compiling thiserror v2.0.21
+   Compiling tracing v0.1.44
+   Compiling serde v1.0.229
+   Compiling bincode v1.3.3
+   Compiling hv2-sandbox v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-sandbox)
+   Compiling tokio-util v0.7.19
+   Compiling tokio-rustls v0.26.5
+   Compiling slh-dsa v0.2.0-rc.5
+   Compiling h2 v0.4.16
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-core)
+   Compiling hyper v1.11.1
+   Compiling hyper-util v0.1.21
+   Compiling hv2-net v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-net)
+    Finished `release` profile [optimized] target(s) in 42.11s

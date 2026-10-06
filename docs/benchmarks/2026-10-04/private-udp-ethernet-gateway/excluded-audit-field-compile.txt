@@ -1,0 +1,19 @@
+   Compiling hv2-net v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-net)
+error[E0609]: no field `protocol` on type `&Decision`
+    --> crates/hv2-net/src/gateway/tests.rs:1135:53
+     |
+1135 |     assert!(gw.handle().decisions().iter().any(|d|d.protocol=="udp" && d.reason=="private network"));
+     |                                                     ^^^^^^^^ unknown field
+     |
+     = note: available fields are: `at`, `kind`, `destination`, `name`, `verdict`, `reason`
+
+error[E0609]: no field `protocol` on type `&Decision`
+    --> crates/hv2-net/src/gateway/tests.rs:1143:53
+     |
+1143 |     assert!(gw.handle().decisions().iter().any(|d|d.protocol=="udp" && d.verdict==Verdict::Deny));
+     |                                                     ^^^^^^^^ unknown field
+     |
+     = note: available fields are: `at`, `kind`, `destination`, `name`, `verdict`, `reason`
+
+For more information about this error, try `rustc --explain E0609`.
+error: could not compile `hv2-net` (lib test) due to 2 previous errors

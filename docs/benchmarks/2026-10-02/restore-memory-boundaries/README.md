@@ -1,0 +1,7 @@
+# Restore memory boundaries
+
+The activated single-guest cohort passes eight restores, including four HyperMachine guests with exactly ordered address-bound before-run, after-notice and after-exec observations. Cleanup is verified. Fifteen damaged contracts are rejected with assertions disabled. The diagnostic build passed strict core/agent-library Clippy; Windows and Linux source regeneration produced identical hashes and patches. No ranked performance result or runtime adoption is established.
+
+All four measured guests show 1,528 KiB private dirty before the first vCPU run. Later private-dirty readings vary sharply, including a fall in file-page dirty classification in the fourth guest. Private dirty can include uniquely mapped dirty file-cache pages; it is not proof of anonymous COW allocation or host restore writes. The next probe must include Anonymous and Private_Clean before attributing this footprint. Guest/device activity continues during later procfs observations. No equivalent Firecracker boundary probes were collected.
+
+The original report.json is an inactive control: the coordinator stripped the outer activation environment. Its eight restores passed, but the boundary analyzer correctly rejected missing traces. activated-report.json uses the wrapper to inject activation directly into the owned daemon environment and records that injection. This failure and correction are preserved. The source context and diagnostic-source files bind the activated measurements to the compiled probes.

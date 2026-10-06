@@ -1,0 +1,18 @@
+{
+  "sha256": {
+    "Cargo.lock": "a87b0f9773fbd985c616be48810caa5c36b7119f10cbf7d4afe9d0d917b44903",
+    "Cargo.toml": "2259621537c18cbc143e7d649313d8cd0b6792996d167512235d77eac001600e",
+    "README.md": "7189427adc8312419743cf61f903c79e9dbf50167109e77ef5af28d80a8dd75d",
+    "bench-secret-rewriting.py": "b75194a0f5725c45c4884d5a9994b43cb808a67a031741473f80e96db0e64387",
+    "benchmark-build.txt": "7970d723249b78f09a30265760f71e0f6a129b57d005e6ee9e08d1d5a3cbb492",
+    "benchmark.rs": "5f407bd6dc2c85fb14793cc59903fadf89c2e9a6eb6dc4327d9c49db7be8c246",
+    "build-context.json": "13fceb5b2275c5d24c41f070681978374f0c7cbdba7e077b72dd6ec5045e241e",
+    "daemon-build.txt": "3c3f5a29ab951d9ed80ca7374f860b65669c0d66a945f60c8bdada833a4128eb",
+    "excluded-build-contended.json": "d94cbf1f45cd8c184fe40c49b3f301c49b06849ff4dc883924d8ff742485a4e2",
+    "kvm-checker.py": "c2639427adadd2415c951706d930eee76d4c3083468ba45e0a5f380afaa3dacd",
+    "kvm-result.json": "dc15af5867f945df940f31996a8105cb81739610781aff63a7b08112608d2c48",
+    "network-tests.txt": "30b40ff14735d82ed008e5be3aceaeb6c8e3eb94e0547feba199d3d4a84f39c9",
+    "paired.json": "80b7a3477ea5265cdbb6e31023e61972c6b06407665aa67229c6650eca83df14",
+    "secret_substitution.rs": "c6f2526446c5cce4fac1d09e7603771f9a0cac5aef1479e81106f0f939bcf09d"
+  }
+}

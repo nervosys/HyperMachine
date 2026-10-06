@@ -9,6 +9,7 @@
 
 pub mod audit;
 pub mod control;
+pub mod domain_verification;
 pub mod domains;
 pub mod events;
 pub mod keys;
@@ -16,7 +17,21 @@ pub mod metrics;
 pub mod model;
 pub mod mtls;
 pub mod names;
+pub mod native_budget;
+pub mod native_gateway;
+pub mod native_node;
+pub mod native_ports;
+pub mod native_tcp;
+pub mod native_udp;
 pub mod node;
+pub mod ports;
+pub mod private_addresses;
+pub mod private_networks;
+pub mod private_node;
+pub mod private_router;
 pub mod scheduler;
 pub mod store;
 pub mod web_access;
+pub mod web_sharing;
+
+pub mod ownership;

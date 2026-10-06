@@ -1,0 +1,23 @@
+missing: rejected
+duplicate: rejected
+wrong-phase: rejected
+wrong-size: rejected
+pss-over-rss: rejected
+dirty-over-rss: rejected
+negative: rejected
+unknown-field: rejected
+wrong-target: rejected
+scored-claim: rejected
+wrong-binary: rejected
+concurrent-guests: rejected
+truncated-log: rejected
+failed-cleanup: rejected
+missing-activation: rejected
+anonymous-over-rss: rejected
+clean-dirty-sum: rejected
+wrong-boundary-driver: rejected
+missing-map-stage: rejected
+wrong-machine-stage: rejected
+duplicate-vcpu-stage: rejected
+missing-device-stage: rejected
+actual single-guest boundaries accepted; 22 damaged contracts rejected

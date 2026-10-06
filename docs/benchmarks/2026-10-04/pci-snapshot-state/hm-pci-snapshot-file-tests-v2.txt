@@ -1,0 +1,21 @@
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.12s
+     Running unittests src/lib.rs (/var/tmp/hm-object-backup/target/debug/deps/hv2_core-e659a1d473ebec97)
+
+running 14 tests
+test snapshot::file::tests::a_corrupt_header_length_does_not_become_an_allocation ... ok
+test snapshot::file::tests::a_complete_snapshot_passes_the_length_check ... ok
+test snapshot::file::tests::a_file_that_is_not_a_snapshot_is_refused ... ok
+test snapshot::file::tests::a_newer_version_is_refused_rather_than_guessed_at ... ok
+test snapshot::file::tests::a_header_survives_the_round_trip ... ok
+test snapshot::file::tests::a_page_beyond_the_map_is_not_recorded_and_does_not_panic ... ok
+test snapshot::file::tests::a_page_map_covers_a_count_that_is_not_a_multiple_of_eight ... ok
+test snapshot::file::tests::a_page_map_remembers_exactly_which_pages ... ok
+test snapshot::file::tests::a_page_map_survives_the_round_trip ... ok
+test snapshot::file::tests::a_snapshot_says_it_has_no_device_state ... ok
+test snapshot::file::tests::a_sparse_snapshot_is_shorter_than_a_full_one ... ok
+test snapshot::file::tests::a_truncated_snapshot_is_caught_before_it_is_restored ... ok
+test snapshot::file::tests::the_reader_stops_where_the_regions_begin ... ok
+test snapshot::file::tests::pci_snapshots_use_version_three_and_mmio_stays_version_two ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 2308 filtered out; finished in 0.00s
+

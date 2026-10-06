@@ -20,12 +20,17 @@ def percentile(values,q):
 
 
 def analyze(report):
+    resource_phase=report.get('resource_validation_phase')
+    if resource_phase is not None:
+        require(resource_phase=='after_all_timed_attempts','resource validation phase differs')
     require(report['cpu_count']==1 and report['memory_mb']==1024 and report['guest_readiness_timeout_s']==15,'guest resources/deadline differ')
     require(len(report['runs'])==report['pairs']*2,'incomplete planned runs')
     require(report['artifacts_unchanged'] is True,'inputs changed during cohort')
     contract=report.get('guest_restore_contract');entropy_hashes=[]
     if contract is not None:require(contract['clock_rng_resynchronised'] is True and contract['entropy_bytes']==64,'guest restore contract differs')
     prep=report['preparation'];base=prep['hypermachine']['base_template']
+    if 'named_capture_ms' in prep['hypermachine']:
+        require(number(prep['hypermachine']['named_capture_ms']) and prep['hypermachine']['named_capture_ms']>=0,'invalid named capture time')
     require(base['snapshot'] is True and base['cpuCount']==1 and base['memoryMB']==1024,'HM base not prepared at matching resources')
     require(prep['hypermachine']['offering']['snapshotID']=='warm-benchmark:default','named snapshot differs')
     require(prep['firecracker']['snapshot_type']=='Full' and prep['firecracker']['memory_bytes']==1024*1024*1024 and prep['firecracker']['source_parent_stopped'] is True,'FC source not a stopped full snapshot')
@@ -33,14 +38,24 @@ def analyze(report):
     valid_runs=all(row['success'] for row in report['runs'])
     require(report['success']==('setup_error' not in report and not report['cleanup_errors'] and report.get('owned_node_stopped') is True and valid_runs),'cohort success inconsistent')
     for i,row in enumerate(report['runs']):
+        if resource_phase is not None:
+            require(row.get('resource_validation_phase')==resource_phase,'batch resource validation phase missing/differs')
         order=('hypermachine','firecracker') if (i//2)%2==0 else ('firecracker','hypermachine')
         require(row['pair']==i//2 and row['engine']==order[i%2],'counterbalance differs')
         samples=row['samples'];require(len(samples)==report['concurrency'] and {s['index'] for s in samples}==set(range(report['concurrency'])),'planned attempts missing/duplicated')
         require(number(row['start_spread_ms']) and row['start_spread_ms']>=0,'arrival spread missing')
         for sample in samples:
             if sample['success']:
+                if resource_phase is not None:
+                    resources=sample.get('verified_resources')
+                    require(isinstance(resources,dict) and set(resources)=={'cpu_count','memory_mb'} and all(isinstance(v,int) and not isinstance(v,bool) for v in resources.values()) and resources=={'cpu_count':1,'memory_mb':1024},'verified guest resources missing/differ')
                 require(number(sample['ready_ms']) and sample['ready_ms']>=0,'invalid readiness time')
                 require(all(sample.get(k) is True for k in ['prepared_file','prepared_process_environment','independent_child_write']),'prepared state validation missing')
+                if 'latency_phase_measurement' in report:
+                    require(report['latency_phase_measurement']=='client_monotonic_no_added_rpc','phase measurement differs')
+                    phases=sample['latency_phases_ms'];expected={'create_and_notice','exec'} if row['engine']=='hypermachine' else {'process_and_load','connect_and_notice','exec'}
+                    require(set(phases)==expected and all(number(v) and v>=0 for v in phases.values()),'invalid latency phases')
+                    require(math.isclose(sum(phases.values()),sample['ready_ms'],rel_tol=1e-9,abs_tol=1e-6),'latency phases do not sum to readiness')
                 if contract is not None:
                     require(sample.get('clock_rng_resynchronised') is True,'guest clock/RNG maintenance missing')
                     notice=sample['restored_notice'];require(notice['entropy_bytes']==64,'restore entropy size differs')

@@ -1,0 +1,99 @@
+{
+  "variants": {
+    "baseline": {
+      "planned": 400,
+      "attempted": 400,
+      "passed": 271,
+      "failed": 129,
+      "successful_p50_ms": 10883.981000000062,
+      "successful_p99_ms": 16053.418846,
+      "failed_runs": 2,
+      "median_held_pss_mib": 8577.8369140625,
+      "median_incremental_pss_mib": 8570.712890625
+    },
+    "candidate": {
+      "planned": 400,
+      "attempted": 400,
+      "passed": 400,
+      "failed": 0,
+      "successful_p50_ms": 5131.461447999982,
+      "successful_p99_ms": 19190.01830299999,
+      "failed_runs": 0,
+      "median_held_pss_mib": 8574.4921875,
+      "median_incremental_pss_mib": 8567.21533203125
+    }
+  },
+  "pairs": [
+    {
+      "pair": 0,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": 5897.178161860002,
+      "candidate_p50_reduction_ms": 5601.047636999965,
+      "candidate_p99_reduction_ms": 2680.044670999905
+    },
+    {
+      "pair": 1,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": -3321.209125500003,
+      "candidate_p50_reduction_ms": -8167.569085999959,
+      "candidate_p99_reduction_ms": -10433.686556999986
+    },
+    {
+      "pair": 2,
+      "complete_successful_pair": false,
+      "candidate_mean_reduction_ms": null,
+      "candidate_p50_reduction_ms": null,
+      "candidate_p99_reduction_ms": null
+    },
+    {
+      "pair": 3,
+      "complete_successful_pair": false,
+      "candidate_mean_reduction_ms": null,
+      "candidate_p50_reduction_ms": null,
+      "candidate_p99_reduction_ms": null
+    }
+  ],
+  "complete_successful_pairs": 2,
+  "candidate_faster_pairs": 1,
+  "median_paired_mean_reduction_ms": 1287.9845181799992,
+  "cleanup_verified": true,
+  "artifacts_unchanged": true,
+  "cohort_success": false,
+  "latencies_conditional_on_success": true,
+  "runtime_change_adopted": false,
+  "competitor_win_established": false,
+  "candidate_limit": 16,
+  "same_binary": true,
+  "queue_included_in_ready_ms": true,
+  "experimental_candidate": true,
+  "note": "Incomplete pairs remain in failure totals; their mean latency difference is unavailable",
+  "baseline_limit": null,
+  "memory_idle_seconds": 5.0,
+  "memory_pairs": [
+    {
+      "pair": 0,
+      "complete_successful_pair": true,
+      "candidate_held_pss_reduction_mib": -66.1875,
+      "candidate_incremental_pss_reduction_mib": -66.0029296875
+    },
+    {
+      "pair": 1,
+      "complete_successful_pair": true,
+      "candidate_held_pss_reduction_mib": 169.9755859375,
+      "candidate_incremental_pss_reduction_mib": 170.08984375
+    },
+    {
+      "pair": 2,
+      "complete_successful_pair": false,
+      "candidate_held_pss_reduction_mib": null,
+      "candidate_incremental_pss_reduction_mib": null
+    },
+    {
+      "pair": 3,
+      "complete_successful_pair": false,
+      "candidate_held_pss_reduction_mib": null,
+      "candidate_incremental_pss_reduction_mib": null
+    }
+  ],
+  "memory_conditional_on_complete_successful_runs": true
+}

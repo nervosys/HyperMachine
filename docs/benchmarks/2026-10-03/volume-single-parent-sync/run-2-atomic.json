@@ -1,0 +1,50 @@
+{
+  "input_sha256": {
+    "daemon": "540ccada1f7ccc6534fed475b3b2bb89f17b137b9413df3a3af10008f3c8f28e",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "nodes": 2,
+  "concurrent_requests": 16,
+  "created": 1,
+  "conflicts": 15,
+  "checks": [
+    "One concurrent creator wins",
+    "Winner token matches published metadata",
+    "Duplicate preserves metadata and data",
+    "All nodes observe the same winning token",
+    "Winning daemon restart preserves token and data",
+    "One volume listed and cleaned up on all nodes",
+    "Nested binary upload and replacement visible on all nodes after restart",
+    "Wrong volume bearer token refuses overwrite",
+    "Root-level atomic upload succeeds with the pinned data-root flush",
+    "Incomplete atomic upload preserves prior file and removes staging file"
+  ],
+  "processes_reaped": true,
+  "guests_created": 0,
+  "atomic_uploads": true,
+  "upload_timings": {
+    "samples_seconds": [
+      0.008462313999984872,
+      0.008027673000015056,
+      0.007421291000014207,
+      0.00889804999997068,
+      0.00897314799999549,
+      0.015215599000043767,
+      0.014626678000013271,
+      0.01424786799998401,
+      0.011818118000007871,
+      0.013006934000031833,
+      0.015702038000029006,
+      0.009439145999976972
+    ],
+    "warmup_uploads": 3,
+    "input_bytes": 1048586,
+    "atomic": true,
+    "metric": "host HTTP PUT through response including flush; readback excluded"
+  },
+  "limits": [
+    "Independent daemons share one local filesystem; network filesystem not exercised",
+    "No power-loss durability, performance or competitor comparison"
+  ]
+}

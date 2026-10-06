@@ -1,0 +1,20 @@
+{
+  "sha256": {
+    "README.md": "79ae31a55df05330c772f54692bbc6d031a2a3002bee1ca260fc953c3868fa7a",
+    "build-context.json": "ceb56f3c405d21bdcfc2451a73c03ae4008165d395a2b1237493b86668c5bbe9",
+    "check-acme-issuance.py": "bbd5c5f826aec733dcfb353d3c967f4629c8f6407ed7ff511f8fd6e2c2d4be9d",
+    "deploy-tls-certificate.py": "09e9f6b7543cbe810b18c5db26306f2dee72cb733efd2d9bc3fd5f64bfe2189d",
+    "excluded-fixture-variable-error.log": "bb55155f756710aecc04cd1de821da3eb8d062c4fb142a16dc9e650ee9dd77c8",
+    "excluded-invocation-error.log": "f553d9d1ee45e05b6599bf5812a7ec297ab3ccee7e83e38d52ec672ec0aae86e",
+    "renew-tls-certificates.py": "c493c4e5347ec2f4ad4aec453cb5502797794429d80ffa1434a1bb51f7140688",
+    "renewal-tests.log": "ac8de56ec316c95b9a07842bd6dfcc2e601b5067fc9c188f7ce923ceb37f6f86",
+    "report.json": "985670954df06dc9a4d1e1d3c212b9f02afbb5bc583622fed9b45ea973fa8cc6",
+    "run.log": "985670954df06dc9a4d1e1d3c212b9f02afbb5bc583622fed9b45ea973fa8cc6",
+    "test-renew-tls-certificates.py": "cc44971315c9e8d6beb9e98ecf7145ff983c6aa42c22731e5340f7fe48031175",
+    "test-tls-group-provisioning.py": "70b98e41d576f39cba1b7bbf0d7a4888c098c6dadbe2a7144f0c923984159e9a",
+    "tests.log": "637ad693971420b70a01476cd5d51065ecc3c7af270c41cfe91899ec8c2db4bd"
+  },
+  "public_ca_contacted": false,
+  "automatic_claim_issuance_verified": false,
+  "performance_win_established": false
+}

@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-acme-issuance.py", line 644, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-acme-issuance.py", line 233, in main
+    refused = run(hook[:-1], check=False)
+TypeError: main.<locals>.run() got an unexpected keyword argument 'check'

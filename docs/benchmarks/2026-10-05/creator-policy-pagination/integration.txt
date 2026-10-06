@@ -1,0 +1,40 @@
+   Compiling hv2-cluster v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-cluster)
+    Finished `test` profile [optimized + debuginfo] target(s) in 19.52s
+     Running tests/control_plane.rs (/var/tmp/hm-object-backup/target/debug/deps/control_plane-611cf81edaa82d46)
+
+running 32 tests
+test named_creation_never_forwards_client_operation_context ... ok
+test embedded_admin_collision_never_bypasses_scope_or_expiry ... ok
+test envd_routes_go_to_the_owning_nodes_proxy ... ok
+test checkpoints_forward_collection_and_named_operations_to_the_owner ... ok
+test observer_admin_scope_cannot_obtain_capabilities_or_dispatch_mutations ... ok
+test per_sandbox_calls_reach_the_owning_node ... ok
+test reserved_name_lookup_authenticates_and_never_returns_operation_tokens ... ok
+test a_full_node_refuses_and_the_next_one_takes_it ... ok
+test creator_context_comes_from_current_policy_not_client_headers_or_metadata ... ok
+test named_creation_reserves_before_forwarding_across_control_planes ... ok
+test listing_detail_and_pagination_come_from_the_store ... ok
+test scoped_keys_expire_and_inventory_cannot_leak_guest_credentials ... ok
+test legacy_owner_adoption_requires_administrator_before_node_dispatch ... ok
+test the_jwks_lists_each_nodes_key_once_and_discovery_points_at_it ... ok
+test custom_domains_are_authenticated_owned_and_follow_port_updates ... ok
+test template_metadata_distinguishes_snapshot_cold_legacy_and_heterogeneous_nodes ... ok
+test creates_go_to_a_node_with_the_template ... ok
+test policy_replacement_revokes_old_keys_and_rejects_invalid_updates ... ok
+test the_api_key_is_required_when_set ... ok
+test udp_tunnels_route_authenticated_binary_streams_and_framed_payloads ... ok
+test udp_ipv6_tunnels_require_scoped_keys_and_preserve_framed_bytes ... ok
+test durable_access_records_survive_restart_without_credentials_or_request_values ... ok
+test tcp_tunnels_route_authenticated_binary_streams_and_both_half_closes ... ok
+test name_assignment_is_authenticated_exclusive_and_reusable_after_deletion ... ok
+test creator_bound_keys_filter_inventory_and_deny_cross_owner_routes ... ok
+test resource_audit_correlates_decoded_targets_without_recording_path_values ... ok
+test public_port_api_requires_stored_creator_and_preserves_stable_reservations ... ok
+test creations_spread_across_nodes_and_answer_with_this_proxy ... ok
+test custom_domain_https_reaches_the_node_with_guest_routing_and_host_intact ... ok
+test private_guest_urls_authenticate_before_open_and_strip_credentials_over_http1_and_http2 ... ok
+test uncertain_named_creation_keeps_ownership_and_never_tries_another_node ... ok
+test a_dead_nodes_sandboxes_are_reaped ... ok
+
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.58s
+

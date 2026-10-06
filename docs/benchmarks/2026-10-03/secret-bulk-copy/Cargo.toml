@@ -1,0 +1,71 @@
+[package]
+name = "hv2-net"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "HyperMachine networking with TCP/IP stack and virtio-net"
+
+[dependencies]
+hv2-core = { path = "../hv2-core", version = "1.1.0" }
+
+# The device the bridge joins to a host link is behind one of these, because
+# that is how `VM::attach_net` hands it out.
+parking_lot = { workspace = true }
+zeroize = "1.9"
+base64 = "0.22"
+bytes = "1"
+memchr = "2.8"
+http-body-util = "0.1"
+serde_json = { workspace = true, features = ["raw_value"] }
+serde = { workspace = true, features = ["derive"] }
+
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# The userspace gateway (src/gateway): a TCP/IP stack to be the guest's router,
+# and TLS for the one case that must read inside a connection -- injecting
+# headers a sandbox's policy names. rustls on `ring`, as everywhere in the
+# workspace, and rcgen on the same backend, so there is one crypto provider.
+smoltcp = { version = "0.14", default-features = false, features = [
+    "std",
+    "medium-ethernet",
+    "proto-ipv4",
+    "socket-tcp",
+    "socket-tcp-pause-synack",
+    "socket-udp",
+] }
+rustls = { workspace = true }
+tokio-rustls = { workspace = true }
+rcgen = { version = "0.14", default-features = false, features = ["ring", "pem"] }
+webpki-roots = "1"
+hyper = { workspace = true, features = ["http1", "server", "client"] }
+hyper-util = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+# Linux TAP device uses raw ioctl/open syscalls.
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+
+# macOS utun opens a PF_SYSTEM socket, so it needs libc too (tap.rs:585).
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Storage_FileSystem",
+    "Win32_Foundation",
+    "Win32_System_IO",
+    "Win32_System_Registry",
+    "Win32_Security",
+] }
+
+[lints]
+workspace = true
