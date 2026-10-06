@@ -565,6 +565,15 @@ mod guest_transport_tests {
         assert!(guest_cmdline(true, GuestTransport::Pci)
             .contains(&super::GatewayConfig::default().kernel_ip_arg()));
     }
+    #[test]
+    fn mmio_guests_skip_pci_enumeration_and_pci_guests_keep_it() {
+        let has = |line: String, arg: &str| line.split_whitespace().any(|a| a == arg);
+        assert!(has(guest_cmdline(false, GuestTransport::Mmio), "pci=off"));
+        assert!(has(guest_cmdline(true, GuestTransport::Mmio), "pci=off"));
+        assert!(!has(guest_cmdline(false, GuestTransport::Pci), "pci=off"));
+        // The rest of the fast set is unchanged.
+        assert!(super::MMIO_BOOT_ARGS.starts_with(hv2_core::BootSource::MICROVM_FAST_BOOT_ARGS));
+    }
 }
 
 #[cfg(test)]
@@ -4409,11 +4418,22 @@ fn shared_authority(store: &SnapshotStore) -> Result<Authority, String> {
 /// kernel's errors and panics reach the console, which a guest that never
 /// answers is reported with; nothing below that, which a booting guest
 /// would write a character at a time, an exit each.
+/// An MMIO guest's probe arguments: the fast microVM set, and no PCI.
+const MMIO_BOOT_ARGS: &str = concat!(
+    "8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd",
+    " pci=off"
+);
+
 fn guest_cmdline(network: bool, transport: GuestTransport) -> String {
     format!(
         "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 {}{}",
         match transport {
-            GuestTransport::Mmio => hv2_core::BootSource::MICROVM_FAST_BOOT_ARGS,
+            // No PCI device exists on an MMIO guest, so the kernel is told not
+            // to look: probing bus 0 (and 254, 255) costs about 1,800
+            // config-space port exits per boot, each a round trip to this
+            // process, where Firecracker's guests make none (it boots its
+            // PCI-less guests with pci=off too).
+            GuestTransport::Mmio => MMIO_BOOT_ARGS,
             // Keep PCI and APIC available for enumeration and level INTx.
             // This headless machine has one UART and no auxiliary input device.
             GuestTransport::Pci =>

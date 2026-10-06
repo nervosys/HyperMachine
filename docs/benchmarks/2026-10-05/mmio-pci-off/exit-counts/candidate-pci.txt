@@ -1,0 +1,6 @@
+guests 3 config accesses per guest by bus: {0: 1}
+bus/dev/fn with more than 2 data accesses per guest: {}
+distinct bus/dev/fn probed per guest: 1
+guest 13031: PCI config window 0.1 ms (2 events)
+guest 13051: PCI config window 0.1 ms (2 events)
+guest 13066: PCI config window 0.1 ms (2 events)
