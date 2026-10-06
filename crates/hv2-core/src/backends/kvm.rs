@@ -1030,7 +1030,7 @@ impl HypervisorBackend for KvmBackend {
         // here is a fresh anonymous mapping made in `create_vm` and nothing has
         // touched it since, so it already reads as zero and writing zeros over
         // it would achieve nothing except making every page of it resident.
-        for (addr, data) in boot.data_regions()? {
+        for (addr, data) in boot.data_regions_borrowed()? {
             kvm_vm.write_guest_memory(addr, &data)?;
         }
         if !self.guest_memory_starts_zeroed() {

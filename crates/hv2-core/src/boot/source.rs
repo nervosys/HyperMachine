@@ -27,11 +27,12 @@
 //! # }
 //! ```
 
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::boot::linux::{LinuxBootParams, LinuxBootProtocol};
+use crate::boot::linux::{BorrowedBootRegion, LinuxBootParams, LinuxBootProtocol};
 use crate::boot::multiboot::{MultibootInfo, MultibootLayout, MultibootModule, MultibootProtocol};
 use crate::{Error, Result};
 
@@ -500,6 +501,35 @@ impl LoadedBoot {
         }
     }
 
+    /// As [`Self::memory_regions`], borrowing Linux and raw image payloads.
+    /// Multiboot retains its existing owned preparation and zero-fill semantics.
+    pub fn memory_regions_borrowed(&self) -> Result<Vec<BorrowedBootRegion<'_>>> {
+        match self {
+            Self::Linux(params) => LinuxBootProtocol::prepare_guest_memory_borrowed(params),
+            Self::Raw {
+                data, load_addr, ..
+            } => Ok(vec![(*load_addr, Cow::Borrowed(data.as_slice()))]),
+            Self::Multiboot(_) => Ok(self
+                .memory_regions()?
+                .into_iter()
+                .map(|(address, bytes)| (address, Cow::Owned(bytes)))
+                .collect()),
+        }
+    }
+
+    /// As [`Self::data_regions`], borrowing Linux and raw image payloads.
+    pub fn data_regions_borrowed(&self) -> Result<Vec<BorrowedBootRegion<'_>>> {
+        if matches!(self, Self::Multiboot(_)) {
+            Ok(self
+                .data_regions()?
+                .into_iter()
+                .map(|(address, bytes)| (address, Cow::Owned(bytes)))
+                .collect())
+        } else {
+            self.memory_regions_borrowed()
+        }
+    }
+
     /// The ranges that must read as zero, without materialising the zeros.
     ///
     /// A `.bss`. Separate from [`Self::memory_regions`] because the two cost
@@ -561,7 +591,7 @@ impl LoadedBoot {
     /// A VM whose memory is smaller than this cannot hold the boot images.
     pub fn highest_address(&self) -> Result<u64> {
         Ok(self
-            .memory_regions()?
+            .memory_regions_borrowed()?
             .iter()
             .map(|(addr, data)| addr + data.len() as u64)
             .max()
