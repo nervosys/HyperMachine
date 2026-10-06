@@ -1304,6 +1304,62 @@ pub struct KvmVm {
     irqchip_in_kernel: bool,
 }
 
+/// Transparent huge page size on x86-64.
+const THP_SIZE: usize = 2 * 1024 * 1024;
+
+/// Map `size` bytes of zero-filled guest RAM, aligned to 2 MiB and advised for
+/// transparent huge pages.
+///
+/// Nearly every exit during a cold boot is a nested page fault: the guest
+/// touching a 4 KiB page for the first time, which the host then has to fault
+/// in. With huge pages one fault maps 2 MiB, so a boot takes a few hundred of
+/// them instead of ~22,000. KVM can only use a 2 MiB EPT entry where the host
+/// address and the guest physical address agree modulo 2 MiB, and the slots
+/// start at 2 MiB-aligned guest addresses, so the host base must be aligned
+/// too. Newer kernels align large anonymous mappings by themselves; this does
+/// not rely on it.
+///
+/// The advice is best-effort. Hosts with THP set to `never` keep 4 KiB pages,
+/// and the mapping is still lazy either way: nothing is resident until the
+/// guest touches it.
+///
+/// # Safety
+///
+/// Returns a fresh mapping that the caller owns and must `munmap` with `size`.
+unsafe fn map_guest_ram(size: usize) -> std::io::Result<*mut u8> {
+    let span = size + THP_SIZE;
+    let raw = libc::mmap(
+        std::ptr::null_mut(),
+        span,
+        libc::PROT_READ | libc::PROT_WRITE,
+        libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_NORESERVE,
+        -1,
+        0,
+    );
+    if raw == libc::MAP_FAILED {
+        return Err(std::io::Error::last_os_error());
+    }
+    // Trim the over-allocation so exactly `size` bytes remain, starting at
+    // the first 2 MiB boundary.
+    let raw = raw as usize;
+    let base = (raw + THP_SIZE - 1) & !(THP_SIZE - 1);
+    let head = base - raw;
+    let tail = span - head - size;
+    if head > 0 {
+        libc::munmap(raw as *mut libc::c_void, head);
+    }
+    if tail > 0 {
+        libc::munmap((base + size) as *mut libc::c_void, tail);
+    }
+    if libc::madvise(base as *mut libc::c_void, size, libc::MADV_HUGEPAGE) != 0 {
+        tracing::debug!(
+            "guest RAM stays on 4 KiB pages: MADV_HUGEPAGE: {}",
+            std::io::Error::last_os_error()
+        );
+    }
+    Ok(base as *mut u8)
+}
+
 impl KvmVm {
     /// Create a new KVM VM
     fn new(kvm_fd: RawFd, vcpu_count: u32, memory_size: u64, run_mmap_size: usize) -> Result<Self> {
@@ -1338,22 +1394,15 @@ impl KvmVm {
             // instruction. Mapped lazily, a VM costs what its guest has
             // actually touched.
             let guest_memory = if memory_size > 0 {
-                let ptr = libc::mmap(
-                    std::ptr::null_mut(),
-                    memory_size as usize,
-                    libc::PROT_READ | libc::PROT_WRITE,
-                    libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_NORESERVE,
-                    -1,
-                    0,
-                );
-                if ptr == libc::MAP_FAILED {
-                    libc::close(vm_fd);
-                    return Err(Error::Memory(format!(
-                        "Failed to map {memory_size} bytes of guest memory: {}",
-                        std::io::Error::last_os_error()
-                    )));
-                }
-                let ptr = ptr as *mut u8;
+                let ptr = match map_guest_ram(memory_size as usize) {
+                    Ok(ptr) => ptr,
+                    Err(e) => {
+                        libc::close(vm_fd);
+                        return Err(Error::Memory(format!(
+                            "Failed to map {memory_size} bytes of guest memory: {e}"
+                        )));
+                    }
+                };
 
                 // Map guest memory into KVM: one slot per RAM range, either side
                 // of the hole below 4 GiB, both from this one buffer (see
@@ -3141,6 +3190,24 @@ fn fpu_into(state: &FpuState) -> Result<kvm_fpu> {
 
 #[cfg(test)]
 mod tests {
+    /// Guest RAM must start on a 2 MiB boundary, or KVM cannot back the
+    /// guest with 2 MiB EPT entries however the host pages are sized.
+    #[test]
+    fn guest_ram_is_huge_page_aligned_zeroed_and_writable() {
+        for size in [THP_SIZE, 3 * THP_SIZE, 64 * 1024 * 1024 + 4096] {
+            // SAFETY: the mapping is owned here and unmapped with `size`.
+            unsafe {
+                let ptr = map_guest_ram(size).unwrap();
+                assert_eq!(ptr as usize % THP_SIZE, 0, "size {size}");
+                assert_eq!((*ptr, *ptr.add(size - 1)), (0, 0));
+                *ptr = 0xa5;
+                *ptr.add(size - 1) = 0x5a;
+                assert_eq!((*ptr, *ptr.add(size - 1)), (0xa5, 0x5a));
+                assert_eq!(libc::munmap(ptr as *mut libc::c_void, size), 0);
+            }
+        }
+    }
+
     /// Isolate deadline-timer wakeup from Linux, vsock and daemon retries.
     #[tokio::test]
     #[ignore = "requires /dev/kvm; run explicitly with --ignored --nocapture"]
