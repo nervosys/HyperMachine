@@ -48,13 +48,16 @@ impl SnapshotId {
 
         // CAS loop: whoever wins publishes `max(now, last + 1)`, so concurrent
         // callers cannot collide either.
-        let previous = LAST
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |last| {
-                Some(now.max(last.saturating_add(1)))
-            })
-            .unwrap_or(0);
-
-        Self(now.max(previous.saturating_add(1)))
+        // Use the underlying CAS primitive: `try_update` is newer than our
+        // minimum Rust version, while its former name is now deprecated.
+        let mut previous = LAST.load(Ordering::SeqCst);
+        loop {
+            let next = now.max(previous.saturating_add(1));
+            match LAST.compare_exchange_weak(previous, next, Ordering::SeqCst, Ordering::SeqCst) {
+                Ok(_) => return Self(next),
+                Err(observed) => previous = observed,
+            }
+        }
     }
 }
 
@@ -651,6 +654,27 @@ fn crc32_checksum(data: &[u8]) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn snapshot_ids_are_unique_under_concurrent_generation() {
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
+        let threads: Vec<_> = (0..8)
+            .map(|_| {
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    let ids: Vec<_> = (0..1000).map(|_| SnapshotId::generate().value()).collect();
+                    assert!(ids.windows(2).all(|pair| pair[0] < pair[1]));
+                    ids
+                })
+            })
+            .collect();
+        let ids: std::collections::HashSet<_> = threads
+            .into_iter()
+            .flat_map(|thread| thread.join().unwrap())
+            .collect();
+        assert_eq!(ids.len(), 8000);
+    }
 
     #[test]
     fn test_snapshot_id_creation() {
