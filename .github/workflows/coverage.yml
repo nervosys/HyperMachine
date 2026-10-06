@@ -62,7 +62,12 @@ jobs:
         # and --html to a single invocation is rejected ("--html may not be
         # used together with --codecov"), which failed this job on every
         # push since June while uploading nothing.
+        #
+        # The cache restores target/, including .profraw files from earlier
+        # runs. Once the toolchain moves, llvm-profdata rejects them ("raw
+        # profile version mismatch") and the merge fails, so clear them first.
         run: |
+          cargo llvm-cov clean --workspace
           cargo llvm-cov --workspace \
             --no-report
           cargo llvm-cov report --codecov --output-path codecov.json
