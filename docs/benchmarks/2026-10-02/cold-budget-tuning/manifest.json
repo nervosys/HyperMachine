@@ -1,0 +1,33 @@
+{
+  "inputs": {
+    "hypermachine": "b7d2aba8a9a21845e187a10dbeda10c0c10f43d6794160739888435723a77d95",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "sha256": {
+    "README.md": "8143fc8eb9ef72d2e881e9e566a9e6cbe6252f1eb08d66529f58fdd8369b9c59",
+    "analysis-checks-linux.log": "20ef056a725e33f44ef3465eaed2dd3526293efe7984f6cf432d50416faafc22",
+    "analysis-checks-windows.log": "e343576ff3ac977c2f87b0a94518d707f39f757cfac3e341a49471ee13c89d37",
+    "analysis-checks.log": "e343576ff3ac977c2f87b0a94518d707f39f757cfac3e341a49471ee13c89d37",
+    "analyze-budget-engines.py": "6a2b7303428a7aeb01b4123e2af19059b0cbdc0f40effbaee83564479689a7d8",
+    "build-context.json": "27adb622da2937181cac88052e24f54d4e9edcb02439f0801ba4b98e05ccc4f0",
+    "check-budget-engine-analysis.py": "4e44bb084d39f0db893f7a726ea9dd062e365847e4a17bd5b0b3f9e483c33a3f",
+    "compiled-main.rs": "e1b85b8a455a9afad0452113739a089f202b67787f419fc0d76a60a172334d5c",
+    "engines/bench-firecracker-local.py": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6",
+    "engines/bench-local-engines-concurrent.py": "b4d6e2426360e13d02bf4f812b8b2bfaf7b69be7ddbcd0ae7986dab6c2ff1acf",
+    "engines/bench-local-engines.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "engines/c100-analysis.json": "d7de85b3d922d7af0c8cc8d76198611277e76e95fd21047ec159133df4dc324c",
+    "engines/c100.json": "27dc83f6c643121fea1812d8429871b58c910b226d7af626e95b2ad4fddbb14a",
+    "off-on/analyze-cold-start-limit.py": "91c0314d2d8cf6cfe7a42e12994eae6ab01e55e622516eb29d2cef501f6145e1",
+    "off-on/analyze-connection-wait.py": "6c919d1d109490cba2e889648825fed8f4977a09bc9a78390d9801ace031dd14",
+    "off-on/bench-cold-start-limit.py": "086b5209d77f3b5c909f67ae13535dfccae0a8b867b824f4550af1ebdca2d8b1",
+    "off-on/bench-connection-wait.py": "c82f36426a434c22d514e517effe5300bac482e4da1dd414b2d4c8e269dd3b50",
+    "off-on/bench-firecracker-local.py": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6",
+    "off-on/bench-local-engines-concurrent.py": "59fae86ff5a8a8de390e15359e7da3e470edbab1c701e04de5efa788ae5fa459",
+    "off-on/bench-local-engines.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "off-on/limit4-c100-analysis.json": "bf65a58321198323d38e91257e7f55fb4af57f2a1f93242e23329c41efdecb3c",
+    "off-on/limit4-c100.json": "d8fe41de016cd2f3fbb1dc47f40fd8e473b6dd45011aa6b0f2820186df071a10",
+    "verify-cold-budget-tuning.py": "304ca661df36a4231f13043c14567959b7ee8b21bfe741d3189f230fdbf99c61"
+  }
+}

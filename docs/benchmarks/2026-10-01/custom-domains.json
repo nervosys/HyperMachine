@@ -1,0 +1,51 @@
+{
+  "functional_only": true,
+  "success": true,
+  "checks": [
+    "certificate-verified HTTPS alias reaches guest web server through both proxies",
+    "owner port update reaches a distinct guest web server without proxy restart",
+    "Redis binding survives control-plane restart",
+    "alias request resumes paused guest with retained web-server state",
+    "unbind and sandbox deletion stop alias routing",
+    "deleted sandbox releases hostname ownership for a new sandbox"
+  ],
+  "artifact_sha256": {
+    "control_plane": "8b1f79fa025a4676cec0b570a214b5a81670117348fce83ac616bde8b8a3ed81",
+    "daemon": "c3a39cb29fe7c4c1e5d427fc214c3da5a6fcd721f9bc77929cdf791a9785d309",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "verifier": "f5f1693139bcc27e63b5eb6c9ad969348cafaa04f6635a91b1cb83da36baafb4"
+  },
+  "cleanup_errors": [],
+  "template": {
+    "aliases": [
+      "base"
+    ],
+    "buildID": "base",
+    "buildStatus": "ready",
+    "cpuCount": 1,
+    "memoryMB": 1024,
+    "nodeIDs": [
+      "domain-node"
+    ],
+    "nodes": [
+      {
+        "cpuCount": 1,
+        "memoryMB": 1024,
+        "nodeID": "domain-node",
+        "snapshot": true
+      }
+    ],
+    "public": false,
+    "snapshot": true,
+    "templateID": "base"
+  },
+  "owned_processes_reaped": true,
+  "log_tails": {
+    "control-restarted-3.log": "\u001b[2m2026-10-01T09:39:20.093318Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_control_plane\u001b[0m\u001b[2m:\u001b[0m no --mtls-*: nodes are reached in plaintext, the cluster token and envd traffic with them\nhv2-control-plane: E2B API on 0.0.0.0:49491, envd proxy on 0.0.0.0:60167, store redis://127.0.0.1:40753\n",
+    "node-1.log": "hv2-sandboxd: listening on 0.0.0.0:44575, capacity 4, cluster node domain-node\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes are restored from template snapshots: base\n\nsandbox proxy on 0.0.0.0:48609 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:48609 process.Process/Start\n",
+    "redis-0.log": "299:C 01 Oct 2026 02:39:19.119 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo\n299:C 01 Oct 2026 02:39:19.119 * Redis version=8.0.2, bits=64, commit=00000000, modified=0, pid=299, just started\n299:C 01 Oct 2026 02:39:19.119 * Configuration loaded\n299:M 01 Oct 2026 02:39:19.119 * monotonic clock: POSIX clock_gettime\n299:M 01 Oct 2026 02:39:19.120 * Running mode=standalone, port=40753.\n299:M 01 Oct 2026 02:39:19.120 * Server initialized\n299:M 01 Oct 2026 02:39:19.120 * Ready to accept connections tcp\n299:signal-handler (1790847560) Received SIGTERM scheduling shutdown...\n299:M 01 Oct 2026 02:39:20.427 * User requested shutdown...\n299:M 01 Oct 2026 02:39:20.427 # Redis is now ready to exit, bye bye...\n",
+    "control-2.log": "\u001b[2m2026-10-01T09:39:19.981343Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_control_plane\u001b[0m\u001b[2m:\u001b[0m no --mtls-*: nodes are reached in plaintext, the cluster token and envd traffic with them\nhv2-control-plane: E2B API on 0.0.0.0:49491, envd proxy on 0.0.0.0:60167, store redis://127.0.0.1:40753\n"
+  },
+  "artifacts_unchanged": true
+}

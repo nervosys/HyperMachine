@@ -7,7 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Benchmark evidence
+- Sample failed-boot architectural state on the vCPU execution owner after a
+  kick, with a bounded response wait. Add a real-KVM halted/spinning regression
+  and a smaller cold-boot diagnostic probe; this does not fix startup stalls.
+- Add a checksum-pinned Firecracker installer and alternating same-host cold
+  sandbox comparison with exact guest workload verification, failure retention,
+  cleanup checks and source provenance. Record two cohorts exposing HyperMachine
+  startup failures and slower median readiness; no performance win is claimed.
+- Gate local engine benchmark failure accounting in CI.
+- Add opt-in KVM boot exit tracing on the vCPU owner thread and retain node
+  log tails at each failed benchmark sample. Mark tracing reports as diagnostics
+  because register sampling and log output perturb performance.
+
 ### Security
+- Reject control-plane credentials configured as both a legacy admin key and
+  a scoped key. Embedded instances enforce the scoped key's permissions and
+  expiry, preventing legacy admin access from overriding those restrictions.
+- Restored guests receive host time sampled after their agent connection is
+  established, avoiding stale timestamps captured before worker scheduling
+  and connection waits. Host clock conversion failures are reported rather
+  than sending zero or truncating the timestamp; RNG reseeding still must
+  succeed.
 - **The API's `/agentic` auth exemption no longer covers writes**
   (`hv2-api`). With API keys on, the default exempted every path under
   `/agentic`, and `POST /agentic/plans/execute` starts and stops the
@@ -31,6 +52,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `store-password` key. `tools/e2e-egress.sh` checks all of it on real guests.
 
 ### Added
+- `hm sandbox vm mcp` serves 12 real remote sandbox lifecycle, execution and
+  checkpoint tools over MCP 2025-11-25 stdio. It validates arguments before
+  HTTP requests, bounds input frames, omits structured sandbox access tokens,
+  reports guest and partial-fork failures, and keeps tracing on stderr.
+- Protected control-plane API access tracing with request correlation,
+  credential categories, configured-key fingerprints, route templates and
+  response status/timing. Logs omit raw credentials and request contents;
+  durable audit storage and bearer/proxy-route coverage are not provided.
+- Sandbox Helm chart policy-Secret mounting and optional policy-only API
+  authentication, with configuration validation and rotation instructions.
+  Disabling legacy admin authentication requires a scoped-key policy Secret.
+- Control-plane `--api-keys-file` provisions hashed, expiring credentials with
+  admin, inventory, sandbox, template, volume and event capability scopes.
+  Inventory access excludes credential-bearing detail responses. Expiration
+  is enforced per API request; policies load at startup and apply to the single
+  configured team. Existing admin and independently issued bearer credentials
+  keep their existing lifetimes.
+- Cluster template listings report node-advertised snapshot availability and
+  guest resources, with unknown metadata for legacy nodes and per-node details
+  for heterogeneous fleets. Checkpoint operations now forward through the
+  authenticated control plane. VM CLI files can route through shared proxies
+  with `--envd-host`.
+- `hm sandbox vm files` uploads and downloads binary files through authenticated
+  envd, with a separate sandbox access token, a 512 MiB limit, atomic downloads
+  and no overwrite of existing local files. Requires a reachable envd endpoint.
+- `hv2-sandboxd --require-template` refuses startup when any configured snapshot
+  template cannot be prepared, before listening or joining the cluster. It
+  conflicts with `--no-template`; the default cold-boot fallback is unchanged.
+- **`hm sandbox vm`** (`hm-cli`): a client for sandboxd lifecycle, guest
+  commands and checkpoints. `benchmark` measures creation through checked
+  guest output, with concurrency, raw samples, tail latencies, failure
+  accounting and an optional P99 gate. Commands retain guest exit codes;
+  benchmark failures and cleanup errors fail the run.
 - **`hm jobs`, a durable job queue** (`hv2-jobs`, `hm-cli`): programs
   queued in a shared directory and run by workers under the process sandbox,
   with labels (e.g. `gpu`), leases that requeue a lost worker's job,
@@ -426,6 +480,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disagree about a VM.
 
 ### Changed
+- CI crypto/API measurements use a fresh Criterion directory outside the Cargo
+  cache. Benchmark execution failures and missing, incomplete or invalid
+  measurement data fail the workflow; raw artifacts are retained on failure.
+- Successful SDK stdin, EOF and signal requests wake the affected process's
+  output poller rather than waiting for its next 50 ms tick. Unsolicited output
+  retains periodic polling. The guest agent publishes process exit only after
+  its stdout/stderr readers finish, and polls observe completion before draining
+  final bytes, preventing a faster poll from losing final command output.
 - **ML-KEM and ML-DSA come from IronCrypto** (`hv2-core`). All six
   parameter sets now use `ic-mlkem` and `ic-mldsa` 0.2.3, checked against
   NIST's ACVP vectors and self-tested by `ic-fips`, so `FipsMode::Strict`

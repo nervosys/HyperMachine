@@ -1,0 +1,38 @@
+{
+  "success": true,
+  "storage": "owned in-process Moto S3 emulator",
+  "managed_storage_verified": false,
+  "artifact_sha256": {
+    "tool": "5dc3efa5ddfd9914ef5bb7b6cbe930a89bd39e13bf3d210339fb1af1028b9be2",
+    "coordinator": "f833da5e12a08853f804fca420e22c5625aebd18bf87c122aacb15cf02e8c1a0"
+  },
+  "versions": {
+    "boto3": "1.43.107",
+    "moto": "5.2.3"
+  },
+  "checks": [
+    "newest_and_pin_retained",
+    "expired_versions_deleted",
+    "unregistered_version_and_marker_preserved",
+    "retained_ciphertext_checksums_verified",
+    "adjacent_prefix_preserved",
+    "repeat_application_idempotent"
+  ],
+  "result": {
+    "success": true,
+    "operation": "retention",
+    "plan_sha256": "c0e8ed2c72d58caa401fd21ca96d6adf209b57652580fd312ee74f6644e349cc",
+    "deleted": [
+      {
+        "object": "cluster-a/reused.hmb",
+        "version_id": "ee5ccc06-cd93-485e-8a58-945428f723d6"
+      },
+      {
+        "object": "cluster-a/reused.hmb",
+        "version_id": "80f03aea-83ea-4138-b525-679271c55534"
+      }
+    ],
+    "already_absent": [],
+    "delete_unconfirmed": null
+  }
+}

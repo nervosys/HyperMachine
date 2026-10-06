@@ -1,0 +1,200 @@
+[workspace]
+members = [
+    "crates/hv1-core",
+    "crates/hv1-arm",
+    "crates/hv2-core",
+    "crates/hv2-cpu",
+    "crates/hv2-gpu",
+    "crates/hv2-net",
+    "crates/hv2-agent",
+    "crates/hv2-guest-agent",
+    "crates/hv2-sandbox",
+    "crates/hv2-jobs",
+    "crates/hv2-swarm",
+    "crates/hv2-agent-proto",
+    "crates/hv2-infer",
+    "crates/hv2-context",
+    "crates/hv2-runtime",
+    "crates/hv2-api",
+    "crates/hv2-cluster",
+    "crates/hv2-sandboxd",
+    "crates/hv2-cli",
+    "crates/hm-cli",
+    "crates/hm-gui",
+    "crates/hypermachine",
+]
+# hv1-boot is not a member, and that is deliberate.
+#
+# It builds a bootable image, and the `bootloader` build script it needs
+# invokes cargo with `-Z` flags that only nightly accepts. While it was a
+# member, `cargo check --workspace` failed on a clean clone against the
+# toolchain this repo itself pins -- reported as issue #57. CI never saw it,
+# because every stable lane passed `--exclude hv1-boot`; only contributors did.
+#
+# A member cannot be skipped by `--workspace`, so excluding it is what makes
+# the obvious command work. It is still built and checked on nightly, by name,
+# in the HV1 jobs in ci.yml.
+#
+# hv2-unikernel is excluded for the same reason with a different cause: it is a
+# bare-metal guest, so it has no host build at all. `hv2-core`'s
+# `rust_unikernel` example builds it by name and boots it.
+exclude = ["crates/hv1-boot", "crates/hv2-unikernel", "crates/hv1-multiboot"]
+
+resolver = "2"
+
+[workspace.package]
+version = "1.1.0"
+edition = "2021"
+authors = ["HyperMachine Contributors"]
+license = "AGPL-3.0-only OR LicenseRef-Commercial"
+repository = "https://github.com/nervosys/HyperMachine"
+homepage = "https://github.com/nervosys/HyperMachine"
+documentation = "https://github.com/nervosys/HyperMachine/tree/master/docs"
+rust-version = "1.95"
+description = "High-performance hypervisor framework with first-class AI agent support"
+keywords = ["hypervisor", "virtualization", "kvm", "ai-agent", "vm"]
+categories = ["virtualization", "os", "hardware-support"]
+
+[workspace.dependencies]
+# Core async runtime
+tokio = { version = "1.42", features = ["full"] }
+async-trait = "0.1"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+bincode = "1.3"
+
+# Networking
+tonic = "0.14"
+tonic-build = "0.14"
+tonic-prost = "0.14"
+tonic-prost-build = "0.14"
+prost = "0.14"
+hyper = "1.4"
+hyper-util = { version = "0.1", features = [
+    "tokio",
+    "server-auto",
+    "http1",
+    "http2",
+] }
+axum = { version = "0.8", features = ["ws"] }
+tower = "0.5"
+
+# TLS
+rustls = { version = "0.23", default-features = false, features = [
+    "ring",
+    "logging",
+    "std",
+    "tls12",
+] }
+# `default-features = false` for the same reason as rustls above, and it has
+# to be said twice: tokio-rustls' default features include `aws_lc_rs`, which
+# turns on rustls' `aws-lc-rs` feature through cargo's feature unification. The
+# careful backend pin on rustls is undone from here otherwise, and the build
+# picks up aws-lc-sys -- a second, C-based crypto backend nobody asked for.
+tokio-rustls = { version = "0.26", default-features = false, features = [
+    "logging",
+    "ring",
+    "tls12",
+] }
+rustls-pemfile = "2"
+
+# GPU acceleration
+wgpu = "30.0"
+ash = "0.38"
+
+# Memory management
+memmap2 = "0.9"
+parking_lot = "0.12"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "2"
+
+# HTTP client. rustls on `ring`, not the default native-tls: the default
+# brought OpenSSL in as a second TLS stack beside the one the workspace pins,
+# and made every crate using this unbuildable for another architecture
+# without that architecture's OpenSSL -- which is how it was found, checking
+# an aarch64 build. The rest of the defaults are kept as they were.
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+    "charset",
+    "http2",
+    "system-proxy",
+] }
+
+# Logging and tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Configuration
+toml = "1.1"
+
+# Time and date
+chrono = "0.4"
+
+# CLI
+clap = { version = "4.5", features = ["derive", "cargo"] }
+colored = "2.1"
+
+# Testing
+proptest = "1.5"
+criterion = "0.5"
+
+# Security (Linux only - commented out for Windows compatibility)
+# seccompiler = "0.4"
+# caps = "0.5"
+
+# Scripting for AI agents
+rhai = { version = "1.19", features = ["sync"] }
+
+# Compression
+flate2 = "1.0"
+
+# Utilities
+uuid = { version = "1.10", features = ["v4", "serde"] }
+bitflags = "2.4"
+rand = "0.10"
+
+[workspace.lints.rust]
+# Note: unsafe_code intentionally not warned — unsafe is inherent to hypervisor code.
+# unreachable_pub and unused_qualifications omitted — too noisy for internal crate items.
+unused_import_braces = "warn"
+
+[workspace.lints.clippy]
+# Correctness
+manual_clamp = "warn"
+manual_range_contains = "warn"
+needless_range_loop = "warn"
+useless_format = "warn"
+# Style
+single_match = "warn"
+let_and_return = "warn"
+map_entry = "warn"
+collapsible_if = "warn"
+doc_markdown = "allow"
+semicolon_if_nothing_returned = "warn"
+inefficient_to_string = "warn"
+# Complexity thresholds (allow via #[allow] where justified)
+type_complexity = "warn"
+too_many_arguments = "warn"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+overflow-checks = true
+panic = "abort"
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.bench]
+inherits = "release"
+
+[profile.test]
+opt-level = 1

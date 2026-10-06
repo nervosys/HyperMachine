@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py", line 1381, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py", line 426, in main
+    if eligible in after_eviction or uncertain not in after_eviction or filler not in after_eviction or len(replacement)!=1:raise ValueError('pending oldest guest prevented eviction of eligible idle guest')
+                                                                                                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: pending oldest guest prevented eviction of eligible idle guest

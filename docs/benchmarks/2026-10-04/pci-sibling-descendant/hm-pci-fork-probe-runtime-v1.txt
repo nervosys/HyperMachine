@@ -1,0 +1,86 @@
+[2m2026-10-04T15:55:59.664838Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T15:55:59.667545Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-template': vsock device attached over PCI at slot 3, BAR 0xd0010000 (guest CID 3, IRQ 11) -- no kernel argument needed
+[2m2026-10-04T15:55:59.699508Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'pci-checkpoint-template' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T15:55:59.719610Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T15:55:59.719842Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-template': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T15:55:59.721813Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'pci-checkpoint-template' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T15:55:59.722600Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'pci-checkpoint-template' with 1 vCPUs
+[2m2026-10-04T15:55:59.722647Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T15:55:59.723208Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+PCI_TEMPLATE_EXACT_COMMAND_PASS
+[2m2026-10-04T15:56:00.483970Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-template' paused
+[2m2026-10-04T15:56:02.980510Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-template' snapshotted to /tmp/hm-pci-checkpoint-1100.snap
+[2m2026-10-04T15:56:02.980712Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-template' resumed
+PCI_SNAPSHOT_CAPTURE_PASS
+[2m2026-10-04T15:56:02.981043Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=2078)
+[2m2026-10-04T15:56:02.981661Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'pci-checkpoint-template'
+[2m2026-10-04T15:56:02.981841Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-template' stopped
+[2m2026-10-04T15:56:02.982055Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T15:56:02.984501Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-first': vsock device attached over PCI at slot 3, BAR 0xd0010000 (guest CID 3, IRQ 11) -- no kernel argument needed
+[2m2026-10-04T15:56:02.987063Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'pci-fork-first' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T15:56:02.994232Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-first' restored from /tmp/hm-pci-checkpoint-1100.snap
+[2m2026-10-04T15:56:02.994406Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'pci-fork-first' with 1 vCPUs and 1 GB memory (parallel=true)
+PCI_SNAPSHOT_LAUNCH_PASS
+[2m2026-10-04T15:56:02.995084Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'pci-fork-first' with 1 vCPUs
+[2m2026-10-04T15:56:02.995130Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T15:56:02.995648Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T15:56:03.142796Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T15:56:03.145515Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-second': vsock device attached over PCI at slot 3, BAR 0xd0010000 (guest CID 3, IRQ 11) -- no kernel argument needed
+[2m2026-10-04T15:56:03.147165Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'pci-fork-second' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T15:56:03.151881Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-second' restored from /tmp/hm-pci-checkpoint-1100.snap
+[2m2026-10-04T15:56:03.151976Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'pci-fork-second' with 1 vCPUs and 1 GB memory (parallel=true)
+PCI_SNAPSHOT_LAUNCH_PASS
+[2m2026-10-04T15:56:03.152397Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'pci-fork-second' with 1 vCPUs
+[2m2026-10-04T15:56:03.152445Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T15:56:03.153115Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+PCI_FORK_INITIAL_ISOLATION_PASS
+[2m2026-10-04T15:56:03.318654Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-first' paused
+[2m2026-10-04T15:56:03.321335Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-first' resumed
+[2m2026-10-04T15:56:03.325466Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-second' paused
+[2m2026-10-04T15:56:03.327942Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-second' resumed
+PCI_FORK_PAUSE_CYCLE_PASS 0
+[2m2026-10-04T15:56:03.332146Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-first' paused
+[2m2026-10-04T15:56:03.335007Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-first' resumed
+[2m2026-10-04T15:56:03.339593Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-second' paused
+[2m2026-10-04T15:56:03.342103Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-second' resumed
+PCI_FORK_PAUSE_CYCLE_PASS 1
+[2m2026-10-04T15:56:03.347381Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-first' paused
+[2m2026-10-04T15:56:03.350662Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-first' resumed
+[2m2026-10-04T15:56:03.358425Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-second' paused
+[2m2026-10-04T15:56:03.363163Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-second' resumed
+PCI_FORK_PAUSE_CYCLE_PASS 2
+[2m2026-10-04T15:56:03.369669Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-first' paused
+[2m2026-10-04T15:56:03.372985Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-first' resumed
+[2m2026-10-04T15:56:03.377136Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-second' paused
+[2m2026-10-04T15:56:03.379619Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-second' resumed
+PCI_FORK_PAUSE_CYCLE_PASS 3
+[2m2026-10-04T15:56:03.384647Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-first' paused
+[2m2026-10-04T15:56:03.387130Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-first' resumed
+[2m2026-10-04T15:56:03.390702Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-second' paused
+[2m2026-10-04T15:56:03.392919Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-second' resumed
+PCI_FORK_PAUSE_CYCLE_PASS 4
+[2m2026-10-04T15:56:03.396753Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-first' paused
+[2m2026-10-04T15:56:07.257323Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-first' snapshotted to /tmp/hm-pci-descendant-1100.snap
+[2m2026-10-04T15:56:07.257612Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-first' resumed
+[2m2026-10-04T15:56:07.271655Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T15:56:07.274631Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-grandchild': vsock device attached over PCI at slot 3, BAR 0xd0010000 (guest CID 3, IRQ 11) -- no kernel argument needed
+[2m2026-10-04T15:56:07.277304Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'pci-fork-grandchild' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T15:56:07.289282Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-grandchild' restored from /tmp/hm-pci-descendant-1100.snap
+[2m2026-10-04T15:56:07.289477Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'pci-fork-grandchild' with 1 vCPUs and 1 GB memory (parallel=true)
+PCI_SNAPSHOT_LAUNCH_PASS
+[2m2026-10-04T15:56:07.290186Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'pci-fork-grandchild' with 1 vCPUs
+[2m2026-10-04T15:56:07.290285Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T15:56:07.290965Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+PCI_FORK_SECOND_GENERATION_ISOLATION_PASS
+PCI_FORK_OPERATIONS pings=58 exact_commands=126
+[2m2026-10-04T15:56:07.690697Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=608)
+[2m2026-10-04T15:56:07.691469Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'pci-fork-first'
+[2m2026-10-04T15:56:07.691648Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-first' stopped
+[2m2026-10-04T15:56:07.691844Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=618)
+[2m2026-10-04T15:56:07.692351Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'pci-fork-second'
+[2m2026-10-04T15:56:07.692451Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-second' stopped
+[2m2026-10-04T15:56:07.692640Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=427)
+[2m2026-10-04T15:56:07.693058Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'pci-fork-grandchild'
+[2m2026-10-04T15:56:07.693214Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-fork-grandchild' stopped
+{"pci_fork_probe":true,"restored_guests":3,"explicit_pause_resume_pairs":10,"cleanup":true}
+PCI_SNAPSHOT_OUTPUT_CLEANUP_PASS

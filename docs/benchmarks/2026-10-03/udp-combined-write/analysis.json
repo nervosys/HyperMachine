@@ -1,0 +1,13 @@
+{
+  "mean_cohort_measured_rates": {
+    "baseline": 1515.4228753743641,
+    "candidate": 1825.2536861139265
+  },
+  "candidate_rate_change_percent": 20.445171824598663,
+  "pair_order": [
+    "baseline",
+    "candidate",
+    "candidate",
+    "baseline"
+  ]
+}

@@ -1,0 +1,176 @@
+{
+  "diagnostic_only": true,
+  "runtime_change_adopted": false,
+  "performance_win_established": false,
+  "cohort_success": true,
+  "cohort_artifact_sha256": {
+    "hypermachine": "ea7d3196890254dc5f94fc621040c3f5d3dfdebba31ef401d0235bafd621fd76",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "coordinator": "c41c5e00184193a74a7da771e5e45289ce5fecd513bfa719bc40ca4541cb834a",
+    "engines": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "firecracker_harness": "0bcdc13351d54d4c9658bf034aa97f7d86d96d99375a2df04e4c94eaf8d3b610",
+    "mapping_diagnostics": "7470c429a974f6f876349dc1a473b654f7a002ceae99d49efc12a4aad3f95ab3"
+  },
+  "driver_sha256": "0cdfb6c3b91c291837ca2db082070ba5ea065c6d16dbe3cde5e8b7a778a4a23e",
+  "events": [
+    {
+      "seq": 0,
+      "stage": "image-read-before",
+      "bytes": 0,
+      "arena": 3190784,
+      "mapped": 0,
+      "used": 483264,
+      "free": 2707520,
+      "top": 1652992
+    },
+    {
+      "seq": 1,
+      "stage": "image-read-live",
+      "bytes": 12952576,
+      "arena": 14757888,
+      "mapped": 0,
+      "used": 13439200,
+      "free": 1318688,
+      "top": 132336
+    },
+    {
+      "seq": 2,
+      "stage": "image-read-before",
+      "bytes": 0,
+      "arena": 14757888,
+      "mapped": 0,
+      "used": 13439200,
+      "free": 1318688,
+      "top": 132336
+    },
+    {
+      "seq": 3,
+      "stage": "image-read-live",
+      "bytes": 1858675,
+      "arena": 16617472,
+      "mapped": 0,
+      "used": 15297888,
+      "free": 1319584,
+      "top": 133232
+    },
+    {
+      "seq": 4,
+      "stage": "highest-before",
+      "bytes": 0,
+      "arena": 16617472,
+      "mapped": 0,
+      "used": 15298400,
+      "free": 1319072,
+      "top": 132720
+    },
+    {
+      "seq": 5,
+      "stage": "initrd-copy-before",
+      "bytes": 1858675,
+      "arena": 16617472,
+      "mapped": 0,
+      "used": 15298400,
+      "free": 1319072,
+      "top": 132720
+    },
+    {
+      "seq": 6,
+      "stage": "initrd-copy-live",
+      "bytes": 1858675,
+      "arena": 18477056,
+      "mapped": 0,
+      "used": 17157088,
+      "free": 1319968,
+      "top": 133616
+    },
+    {
+      "seq": 7,
+      "stage": "kernel-copy-before",
+      "bytes": 12932096,
+      "arena": 18477056,
+      "mapped": 0,
+      "used": 17161680,
+      "free": 1315376,
+      "top": 129024
+    },
+    {
+      "seq": 8,
+      "stage": "kernel-copy-live",
+      "bytes": 12932096,
+      "arena": 31412224,
+      "mapped": 0,
+      "used": 30093792,
+      "free": 1318432,
+      "top": 132080
+    },
+    {
+      "seq": 9,
+      "stage": "highest-live",
+      "bytes": 14795027,
+      "arena": 31412224,
+      "mapped": 0,
+      "used": 30093792,
+      "free": 1318432,
+      "top": 132080
+    },
+    {
+      "seq": 10,
+      "stage": "highest-dropped",
+      "bytes": 14795027,
+      "arena": 31412224,
+      "mapped": 0,
+      "used": 15298880,
+      "free": 16113344,
+      "top": 13064192
+    },
+    {
+      "seq": 11,
+      "stage": "initrd-copy-before",
+      "bytes": 1858675,
+      "arena": 31412224,
+      "mapped": 0,
+      "used": 15300416,
+      "free": 16111808,
+      "top": 13064192
+    },
+    {
+      "seq": 12,
+      "stage": "initrd-copy-live",
+      "bytes": 1858675,
+      "arena": 31412224,
+      "mapped": 0,
+      "used": 17159104,
+      "free": 14253120,
+      "top": 13064192
+    },
+    {
+      "seq": 13,
+      "stage": "kernel-copy-before",
+      "bytes": 12932096,
+      "arena": 31412224,
+      "mapped": 0,
+      "used": 17163664,
+      "free": 14248560,
+      "top": 13060080
+    },
+    {
+      "seq": 14,
+      "stage": "kernel-copy-live",
+      "bytes": 12932096,
+      "arena": 31412224,
+      "mapped": 0,
+      "used": 30095776,
+      "free": 1316448,
+      "top": 127968
+    }
+  ],
+  "owned_node_exit_code": 0,
+  "limitations": [
+    "normal-thread process-wide GNU allocator snapshots",
+    "logging and concurrent work confound deltas",
+    "no performance ranking or allocation-to-PSS attribution"
+  ],
+  "success": true
+}

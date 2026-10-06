@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "diagnostic_only": true,
+  "files": {
+    "README.md": "38fbe98dcc5e80bc03ef23bf269165933be1a4bd64eaf6c087baa8b324056a16",
+    "analysis.json": "a06a87706f60d2ab528990ac3fc4afca18d1ca4b7f084bbabdc9b46c21ec7ced",
+    "binary.sha256": "8a9366c1ced9af2898bd1fe7dc405740af060c732281d2add66b0ca070474370",
+    "boundaries.patch": "826ab5ba5c442ccfea3bf81d2e4f5f0a86dd2e65f15c6222df30fdb77d86e5e2",
+    "build-context.json": "629e7ad2c309206b859df61ecd800f72ac1ace0960a5a1846897232ac6962822",
+    "build.log": "48e5a3a7aca50b8efd7451362af84696a9ba1e853020338a8892a7e8357f0d51",
+    "check-linux.log": "8e293793dc57d7f02acea354e7a4180a47cba8fcf53e68d9658687bef20f99f0",
+    "clippy-linux.log": "a468885379757afc8ff21a511d35d0aecfa7e429376b470ba7f7fa0895364faf",
+    "diagnostic-source/crates/hv2-agent/src/agent_vm.rs": "46b7fbe8040adde2d8015a22354b7038ecd9b4ce1d11bb1b0bc2d4d49b93776b",
+    "diagnostic-source/crates/hv2-core/src/vm.rs": "c8e07b5744c0b314e285e2d9ddfdfe058b0b562e3d5ce490357c549dfc79aa94",
+    "report.json": "49582825a2de61427a02bfdd89274cd4bc5fb1b252665638602c1c422772c84c",
+    "run.log": "056ec0345ff3d8d042d20fd6ff5b7429b3adda3a22f9964327bca0bdc2d58ff2",
+    "source-context.json": "7805dc4aa1aebcc9a32f6d16644b8906fa723e02de259bbb63b76e5c8f91198c",
+    "tools/analyze-prepared-engines.py": "b2a9934f2a22aa250aa5340c83cc800753d56354de6784e64b545ed3e8a2116b",
+    "tools/analyze-restore-memory-boundaries.py": "b2477086dbf91bb24535e647ab1fecddb3c6973fc79040d5369d4e4df16f112a",
+    "tools/bench-firecracker-local.py": "0bcdc13351d54d4c9658bf034aa97f7d86d96d99375a2df04e4c94eaf8d3b610",
+    "tools/bench-local-engines.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "tools/bench-prepared-engines.py": "b4259781bd3b448a5eb28a54a2a3686c06f677c4b2581331e611f5a486700935",
+    "tools/bench-restore-memory-boundaries.py": "4b080fc8f24224d055901e2e4e7aae5aa956fcf0bc1f5f8f9217f4f65e6b5a23",
+    "tools/check-restore-memory-boundaries.py": "14a7a06106765eba76aad1a3033bfc2fb49414b97cf04fe806f366635cf8e17b",
+    "tools/experiment-restore-memory-boundaries.py": "50ea14bf085cbef22ada6cda1aef7c5b4914aab69b8e73d832e569aedcb8e26f"
+  }
+}

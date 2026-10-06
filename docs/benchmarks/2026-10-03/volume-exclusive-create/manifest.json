@@ -1,0 +1,11 @@
+{
+  "sha256": {
+    "README.md": "447fbcdb94cedcf2f379edec1c0bc5d8004c8a54ab90a2c915857150f41b7ae3",
+    "build-context.json": "cb7bb8777f57e781a990049ec81d0f52dff6950c6049fb45404c9dd5f2fee38d",
+    "checker.py": "a861b0dcb6122e2bd85fd1caea13499ab14825411e8199d90e101ea4a58ee722",
+    "daemon-build.txt": "45554052a67ad32bf3dfe75f8a36fb6533655e7b5bd482ba3c88e96c67dcad19",
+    "daemon-tests.txt": "0428146be60bb0658cc7d308df6eba4927db12c9fff773f0a8c93052a107527b",
+    "result.json": "0ba84f01301f4e6c9a2bbb68452a5a548f601e15104eeb4371f4bd53cc040b0a",
+    "volumes.rs": "746bbef56d61fe4da027b88ac7314f78d297e634c46bbea1f7be88865a917336"
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "inputs": {
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "accepted_source_bindings": {
+    "accepted-main.rs": "crates/hv2-sandboxd/src/main.rs",
+    "accepted-agent-vm.rs": "crates/hv2-agent/src/agent_vm.rs",
+    "accepted-guest-agent.rs": "crates/hv2-agent/src/guest_agent.rs"
+  },
+  "adoption_rejected": true,
+  "cohorts": [
+    {
+      "report": "c100-report.json",
+      "analysis": "c100-analysis.json",
+      "pairs": 2,
+      "concurrency": 100
+    },
+    {
+      "report": "c100-repeat-report.json",
+      "analysis": "c100-repeat-analysis.json",
+      "pairs": 2,
+      "concurrency": 100
+    }
+  ],
+  "sha256": {
+    "accepted-agent-vm.rs": "8fa6d7427c7c5c5cbc32ca0440c28ffb26a041efd84a9faa865cb8ec64f25baf",
+    "accepted-build-context.json": "1f58ce32de276164c11736c6b2c661b590795766d2a525bcb51d72406b1f6e9d",
+    "accepted-guest-agent.rs": "ff88341827b762759fe4c71cd06fb41e77bf7e3aae2862ad14991997eb0392b8",
+    "accepted-main.rs": "5b8d92902845f748bcfd497cdaa349a7509b4ed27fd6dd867935c8f27e59fb52",
+    "analyze-prepared-engines.py": "778431260971f03be051ccb5a1e5aaa2e63aca5fbd3adb81231b51cc47234223",
+    "analyze-restore-admission.py": "ac137192e70e715c5c941b5fde863258fb97716dda8e51bc7948d34f8a82796a",
+    "bench-firecracker-local.py": "0bcdc13351d54d4c9658bf034aa97f7d86d96d99375a2df04e4c94eaf8d3b610",
+    "bench-local-engines.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "bench-prepared-engines.py": "c41c5e00184193a74a7da771e5e45289ce5fecd513bfa719bc40ca4541cb834a",
+    "bench-restore-admission.py": "1b20b62129241a3ed5fd26587735e4dd7b787a40ff3a0b192e0d6bb1d6cc4b41",
+    "build-context.json": "2692ce3419af2e1bb45b637b0063d96e7fca43c6960c36df8dfdca6b2e31f16c",
+    "c100-analysis.json": "aa27ad444510e33c7f355df1815118d82db6823d6d63c0278021c533da0fe35a",
+    "c100-repeat-analysis.json": "3d84171a76d7c094431e52ff3dc335e4684b787a92df4cb038f04b8ee85e1678",
+    "c100-repeat-report.json": "d735217152ad2f0af3dcf65edac6c9e9b7a5213c0fb2be15238be0c459248f1e",
+    "c100-report.json": "729111dd598d00dac8b2008dcc45ace0590c7b5af70be03466d4bd60cbecd42f",
+    "candidate-main.rs": "a353a2a96dd9b99ca764b17d3c839429fd40b0ffed7f2ef6652b84dbd583c411",
+    "candidate.patch": "be4d9a5130cc3aa12ea210381ce7c8c50a5e1dcd39e20ecb46df5ad04fcb0287",
+    "check-restore-admission.py": "58ce9142322c2aaf1da3343a2aba02d5a6779a6739622b6802bdb0ad641238be",
+    "compiler-comments.json": "15d980e93615a64a7fa16d3f7c097eb9516ab32050461908f3056d419c09ab61",
+    "diagnose-restore-admission.py": "147d8ab48953cb3c99cf61944fa430349147a0b7601a2f1b914749294383f843",
+    "experiment-restore-admission.py": "d300755b0cc011ab34dfd1d9eac5305ae7ba88e8fe7caa60515a476b559a4e14",
+    "negative-paired-linux.log": "011211100e2a88a11c2fb9b71a97038f31cd6fba5a993ac2ac42679059699eb3",
+    "negative-paired-windows.log": "93283f7e687d36ca82a07cb389d199c6c87f9af941521f4de438eb1d55d0fcc8",
+    "negative-recovery-linux.log": "cf484e23710e73873a675844c40609003bc7f64f1f438d0c483b91d81338d081",
+    "negative-recovery-windows.log": "bf229ad62a29e0a5ad4b3de5d1c8acb6d9267e5bbebf1678bcb18e6cb24413fc",
+    "README.md": "87c2ea29e28f71e8be15982c33d927be46dd49447f809cb7d803da886ef5fffa",
+    "recovery-analysis.json": "a235f3b372b2c25cf12d980cbafb223004e51852e706a527f7df8d75c6f9a14c",
+    "recovery-report.json": "2ba04c1687935077c0a99852a6700f4e198e0c935c298da21fc1fb37b39d4527",
+    "source-context.json": "47c75bbd4c4ebbb97efa150275bcfa418919f3231bde43721844aa72d537c943",
+    "verify-restore-admission.py": "4c8de12de99d964dc737c8573785f55339fffc89b3316fe0e5eebc5ac44dd349"
+  }
+}

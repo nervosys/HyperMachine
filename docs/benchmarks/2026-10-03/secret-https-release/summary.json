@@ -1,0 +1,110 @@
+{
+  "input_sha256": {
+    "baseline": "eb91da10a1c32ea4e61c4e668ad2a9c4c95edb8142cc9ca713b3f4beada0f80d",
+    "candidate": "dfef62b16cb2b80eca0860f70e5ddd90d09f3b95bc9a8fe047d9cdd7070c6706",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "f4b9228e965d5c03a5747348693e81c9f52a0793a7b6f957f4a81301e0a9d2fa"
+  },
+  "checker_sha256": "981d4675442a1f090158929c53d1b4b5ba66cf1f184ed2983aea612cc4c0c0e0",
+  "pairs": 2,
+  "runs": [
+    {
+      "pair": 0,
+      "engine": "baseline",
+      "report": "pair-0-baseline.json",
+      "median_ms": 17.3735,
+      "samples_seconds": [
+        0.017628,
+        0.018253,
+        0.018391,
+        0.01769,
+        0.017351,
+        0.017098,
+        0.017342,
+        0.017396,
+        0.017299,
+        0.017282,
+        0.017557,
+        0.017104
+      ]
+    },
+    {
+      "pair": 0,
+      "engine": "candidate",
+      "report": "pair-0-candidate.json",
+      "median_ms": 14.6895,
+      "samples_seconds": [
+        0.017119,
+        0.014936,
+        0.014808,
+        0.016288,
+        0.014536,
+        0.014659,
+        0.014715,
+        0.014487,
+        0.014664,
+        0.014625,
+        0.01492,
+        0.014582
+      ]
+    },
+    {
+      "pair": 1,
+      "engine": "candidate",
+      "report": "pair-1-candidate.json",
+      "median_ms": 14.999,
+      "samples_seconds": [
+        0.015057,
+        0.015907,
+        0.014906,
+        0.014716,
+        0.014976,
+        0.01438,
+        0.014617,
+        0.014708,
+        0.015022,
+        0.015513,
+        0.016691,
+        0.015749
+      ]
+    },
+    {
+      "pair": 1,
+      "engine": "baseline",
+      "report": "pair-1-baseline.json",
+      "median_ms": 17.305500000000002,
+      "samples_seconds": [
+        0.017877,
+        0.016933,
+        0.017351,
+        0.017322,
+        0.017961,
+        0.017256,
+        0.017033,
+        0.017181,
+        0.017097,
+        0.017289,
+        0.017591,
+        0.017512
+      ]
+    }
+  ],
+  "baseline_run_medians_ms": [
+    17.3735,
+    17.305500000000002
+  ],
+  "candidate_run_medians_ms": [
+    14.6895,
+    14.999
+  ],
+  "baseline_ms": 17.3395,
+  "candidate_ms": 14.84425,
+  "change_percent": -14.390553360823555,
+  "limits": [
+    "Two alternating local WSL pairs; unpinned processes",
+    "Synthetic large raw body, 128 bindings and new TLS connection per request",
+    "Includes owned server and guest networking; no service P99 or fleet throughput",
+    "Release build identities require external source/build evidence",
+    "No managed competitor measurement"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "candidate_rejected": true,
+  "files": {
+    "README.md": "a18c4174b842e2190273b25a96425883389c01b009a1a6c000dc1d623dba34a1",
+    "baseline-clippy-linux.log": "3dd75b273339b8730d34862094e32cfa95022e2ff0d57062dc0ecbbaeca6feb5",
+    "baseline-clippy.exit": "39b8dc3fc8b44765c8e6f1adee04c5b465e555ab791cc42d0d9e810d5b64297c",
+    "binary.sha256": "040c915c25c9c989b3b3516d1849948b0bffbc8595eee2667189d3b6ecb38bef",
+    "build-context.json": "f269688216d084bfeaf5303d987d040e618c92aece01550578d799750b77718c",
+    "build.log": "ae3915848473118de46dbdea5b5896c4c0c36360a2969fbef8d60f40f018c7fe",
+    "candidate-source/crates/hv2-sandboxd/src/snapshots.rs": "7d5a748a3d7f97c98444b12eb8ba3a75732543fbb4cd5f5754e3f6a87808b14f",
+    "candidate.patch": "2bb0dbbdd5140e38ae5dd32f9d58d4346390c23f4ad62ca89af0c10eae2a3bc4",
+    "clippy-existing-lint-waiver-linux.log": "c4df1d5b2d37c97ee416db9bd774d60934170744b90bf20bed3e9670026d1771",
+    "clippy-linux.log": "4612a5f739681cccb4544c27e371c1470df204a8b57516e4c5b5f9f4ee2ef20e",
+    "lifecycle-report.json": "21028470673b95d322f17c25cf8e8d0181d12bc58cc989d7b2bcbec5667e213e",
+    "lifecycle-run.log": "bba2c3ce037a62b154ebfc1c8cc1c6d5a3236ce8f7c550049b3bf63a84eb339c",
+    "source-context.json": "99c28b6c902a668c61a17903b7d7d1fb611941c6497ad554fdc5fc99bd5298ac",
+    "tools/analyze-prepared-engines.py": "57ab37c11fabbe144280f819b136c8cc359028b85beb928986f4ca8a2d8054f3",
+    "tools/analyze-sparse-named-snapshots.py": "ac868067d3ef631b2946fc3745782fb286ff0ee8a99f2eeb72c5c3b267ceee18",
+    "tools/bench-firecracker-local.py": "0bcdc13351d54d4c9658bf034aa97f7d86d96d99375a2df04e4c94eaf8d3b610",
+    "tools/bench-local-engines.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "tools/bench-prepared-engines.py": "b076ca1aefd11fec49b23575deb0b23b55b2c784238f86766c43897383a4bfc0",
+    "tools/bench-sparse-named-snapshots.py": "5cea4c214815475d56e46fae894b52b1ac876f2ef9698f4e13803f337bd4a0fc",
+    "tools/check-sparse-named-lifecycle.py": "f214103dc2583716f62a0f059fe6810dbfec2494bdbff507ce5ba6f97ea37c07",
+    "tools/check-sparse-named-snapshots.py": "1e2010db9b7274c5fed0f63993a0a06b846ed12522833e4cf91c5470ebcc7bda",
+    "tools/experiment-sparse-named-snapshots.py": "2539e197f56a2a202ac7011605f9994e9ccb45d6a125c87db2ac4e49f8f79e32",
+    "gate-rejection.log": "0474cc474de26f471f88cf56455897f13bdde391a58a79e7f747066e6981c72f"
+  }
+}

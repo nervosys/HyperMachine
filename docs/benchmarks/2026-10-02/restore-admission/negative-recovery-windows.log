@@ -1,0 +1,17 @@
+{
+  "rejected": [
+    "missing_fault_cycle",
+    "missing_fault_attempt",
+    "wrong_fault_status",
+    "wrong_failure_stage",
+    "unexpected_created_guest",
+    "source_not_restored",
+    "source_fingerprint_changed",
+    "guest_retained",
+    "recovery_failed",
+    "ranking_claim",
+    "runtime_adoption",
+    "invalid_failure_time"
+  ],
+  "count": 12
+}

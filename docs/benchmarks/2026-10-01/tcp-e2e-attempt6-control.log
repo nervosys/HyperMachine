@@ -1,0 +1,1 @@
+hv2-control-plane: E2B API on 0.0.0.0:42171, envd proxy on 0.0.0.0:56309, store redis://127.0.0.1:33123

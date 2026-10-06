@@ -1,0 +1,109 @@
+--- accepted/crates/hv2-core/src/vm.rs
++++ diagnostic/crates/hv2-core/src/vm.rs
+@@ -1803,6 +1803,7 @@
+             }
+         }
+         let restored = t0.elapsed();
++        self.diagnose_restore_memory("before_run")?;
+         self.start_in_background().await?;
+         tracing::debug!(
+             "VM '{}' from snapshot: provision {:?}, restore {:?}, start {:?}",
+@@ -2201,6 +2202,66 @@
+     /// Get all vCPUs
+     pub fn vcpus(&self) -> &[Arc<VCpu>] {
+         &self.vcpus
++    }
++
++    /// Isolated diagnostic only: no contents or host addresses are logged.
++    pub fn diagnose_restore_memory(&self, phase: &str) -> Result<()> {
++        if std::env::var("HM_RESTORE_MEMORY_DIAGNOSTICS").as_deref() != Ok("1") {
++            return Ok(());
++        }
++        #[cfg(target_os = "linux")]
++        {
++            use std::io::Read;
++            let started = std::time::Instant::now();
++            let regions = self.memory.regions();
++            if regions.len() != 1 {
++                return Err(Error::Memory("memory diagnostic requires one guest RAM region".into()));
++            }
++            let region = &regions[0];
++            let end = region.host_addr.checked_add(region.size)
++                .ok_or_else(|| Error::Memory("diagnostic address overflow".into()))?;
++            let mut text = String::new();
++            std::fs::File::open("/proc/self/smaps")
++                .and_then(|file| file.take(16 * 1024 * 1024 + 1).read_to_string(&mut text))
++                .map_err(|e| Error::Memory(format!("diagnostic smaps read: {e}")))?;
++            if text.len() > 16 * 1024 * 1024 {
++                return Err(Error::Memory("diagnostic smaps exceeds bound".into()));
++            }
++            let mut selected = false;
++            let mut matches = 0;
++            let mut fields = std::collections::BTreeMap::new();
++            for line in text.lines() {
++                let first = line.split_whitespace().next().unwrap_or("");
++                if let Some((lo, hi)) = first.split_once('-') {
++                    if let (Ok(lo), Ok(hi)) = (u64::from_str_radix(lo, 16), u64::from_str_radix(hi, 16)) {
++                        selected = lo == region.host_addr && hi == end;
++                        if selected { matches += 1; }
++                        continue;
++                    }
++                }
++                if selected {
++                    if let Some((key, value)) = line.split_once(':') {
++                        if ["Size", "Rss", "Pss", "Private_Dirty", "Shared_Clean", "Shared_Dirty"].contains(&key) {
++                            let mut words = value.split_whitespace();
++                            let amount = words.next().and_then(|v| v.parse::<u64>().ok());
++                            if words.next() != Some("kB") || words.next().is_some() || amount.is_none()
++                                || fields.insert(key, amount.unwrap_or(0)).is_some() {
++                                return Err(Error::Memory("malformed diagnostic smaps field".into()));
++                            }
++                        }
++                    }
++                }
++            }
++            if matches != 1 || fields.len() != 6 || fields.get("Size") != Some(&(region.size / 1024)) {
++                return Err(Error::Memory("diagnostic guest mapping not found exactly once".into()));
++            }
++            tracing::warn!(vm = %self.config.name, phase,
++                size_kib = fields["Size"], rss_kib = fields["Rss"], pss_kib = fields["Pss"],
++                private_dirty_kib = fields["Private_Dirty"], shared_clean_kib = fields["Shared_Clean"],
++                shared_dirty_kib = fields["Shared_Dirty"], read_us = started.elapsed().as_micros() as u64,
++                "restore memory boundary diagnostic");
++        }
++        Ok(())
+     }
+ 
+     /// Get guest memory
+--- accepted/crates/hv2-agent/src/agent_vm.rs
++++ diagnostic/crates/hv2-agent/src/agent_vm.rs
+@@ -468,9 +468,12 @@
+         // stops one slow guest from stalling every other task.
+         let program = program.to_string();
+         let args = args.to_vec();
++        let diagnostic_vm = Arc::clone(&self.vm);
+         tokio::task::spawn_blocking(move || {
+             let mut agent = GuestAgent::over_vsock(device, timeout)?;
+-            agent.exec(&program, &args, timeout)
++            let result = agent.exec(&program, &args, timeout);
++            if result.is_ok() { diagnostic_vm.diagnose_restore_memory("after_exec")?; }
++            result
+         })
+         .await
+         .map_err(|e| AgentError::Script(format!("guest exec task failed: {e}")))?
+@@ -750,6 +753,7 @@
+         entropy.extend_from_slice(&rand::random::<[u8; 32]>());
+         let vm_name = self.vm.config().name.clone();
+         let queued_at = std::time::Instant::now();
++        let diagnostic_vm = Arc::clone(&self.vm);
+         let reseeded = tokio::task::spawn_blocking(move || {
+             let started_at = std::time::Instant::now();
+             let mut agent = match GuestAgent::over_vsock(device, timeout) {
+@@ -765,6 +769,7 @@
+             };
+             let connected_at = std::time::Instant::now();
+             let result = agent.restored_now(entropy, timeout);
++            if result.is_ok() { diagnostic_vm.diagnose_restore_memory("after_notice")?; }
+             tracing::debug!(vm = %vm_name,
+                 blocking_queue_ms = (started_at - queued_at).as_secs_f64() * 1000.0,
+                 connect_ms = (connected_at - started_at).as_secs_f64() * 1000.0,

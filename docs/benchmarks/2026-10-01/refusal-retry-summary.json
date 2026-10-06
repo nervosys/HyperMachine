@@ -1,0 +1,155 @@
+{
+  "attempts": 15600,
+  "passed": 15600,
+  "preparations": 636,
+  "setup_failure_cohorts": 16,
+  "rows": [
+    {
+      "concurrency": 1,
+      "block": 0,
+      "attempts_per_profile": 100,
+      "mean_ms": {
+        "baseline": 5.791240309845307,
+        "candidate": 6.2569014894688735
+      },
+      "p99_ms": {
+        "baseline": 39.18290000001434,
+        "candidate": 41.64982999645872
+      },
+      "candidate_minus_baseline_mean_ms": 0.46566117962356657
+    },
+    {
+      "concurrency": 1,
+      "block": 1,
+      "attempts_per_profile": 100,
+      "mean_ms": {
+        "baseline": 5.732519600060186,
+        "candidate": 5.846359760398627
+      },
+      "p99_ms": {
+        "baseline": 38.79290300392313,
+        "candidate": 42.42515200166963
+      },
+      "candidate_minus_baseline_mean_ms": 0.11384016033844091
+    },
+    {
+      "concurrency": 8,
+      "block": 0,
+      "attempts_per_profile": 800,
+      "mean_ms": {
+        "baseline": 13.453523038688218,
+        "candidate": 13.52438166376487
+      },
+      "p99_ms": {
+        "baseline": 46.946804999606684,
+        "candidate": 43.88982000091346
+      },
+      "candidate_minus_baseline_mean_ms": 0.07085862507665297
+    },
+    {
+      "concurrency": 8,
+      "block": 1,
+      "attempts_per_profile": 800,
+      "mean_ms": {
+        "baseline": 13.722361780100982,
+        "candidate": 13.277270753733319
+      },
+      "p99_ms": {
+        "baseline": 42.734143004054204,
+        "candidate": 43.082379997940734
+      },
+      "candidate_minus_baseline_mean_ms": -0.4450910263676633
+    },
+    {
+      "concurrency": 50,
+      "block": 0,
+      "attempts_per_profile": 1000,
+      "mean_ms": {
+        "baseline": 53.1615337121184,
+        "candidate": 57.094833196162654
+      },
+      "p99_ms": {
+        "baseline": 365.56490599468816,
+        "candidate": 382.5605540041579
+      },
+      "candidate_minus_baseline_mean_ms": 3.9332994840442552
+    },
+    {
+      "concurrency": 50,
+      "block": 1,
+      "attempts_per_profile": 1000,
+      "mean_ms": {
+        "baseline": 53.78384173101949,
+        "candidate": 56.18220294791536
+      },
+      "p99_ms": {
+        "baseline": 374.3909379991237,
+        "candidate": 395.35766399785643
+      },
+      "candidate_minus_baseline_mean_ms": 2.3983612168958643
+    },
+    {
+      "concurrency": 100,
+      "block": 0,
+      "attempts_per_profile": 2000,
+      "mean_ms": {
+        "baseline": 119.9459976514263,
+        "candidate": 121.30467810799382
+      },
+      "p99_ms": {
+        "baseline": 449.583306995919,
+        "candidate": 459.0686529991217
+      },
+      "candidate_minus_baseline_mean_ms": 1.3586804565675266
+    },
+    {
+      "concurrency": 100,
+      "block": 1,
+      "attempts_per_profile": 2000,
+      "mean_ms": {
+        "baseline": 111.02700679460395,
+        "candidate": 116.13259225906222
+      },
+      "p99_ms": {
+        "baseline": 466.43843300262233,
+        "candidate": 463.0026730010286
+      },
+      "candidate_minus_baseline_mean_ms": 5.105585464458272
+    }
+  ],
+  "raw_sha256": {
+    "refusal-commands-executable-baseline-c1-block0.json": "688903a45112a395a4e4d9ab80a9c093638f775c70b86be0799a979de0c18aab",
+    "refusal-commands-executable-candidate-c1-block0.json": "7f37a73419691e57ac6d3ceb9e4f17b65f2a6e034daa4abc449cd3dae61f9087",
+    "refusal-commands-executable-candidate-c1-block1.json": "29f76ca060702071616b04efb86207862528c7551cb902a722b3e62aa63816c5",
+    "refusal-commands-executable-baseline-c1-block1.json": "2af16d3e2cd8c527f65136f8411f8542d2ba6df213d043aad96c81c83efa48b1",
+    "refusal-commands-executable-baseline-c8-block0.json": "d0b07afc3b686db69d7d70e7bb418efa27ce59406b5171839b3f0e60a521df81",
+    "refusal-commands-executable-candidate-c8-block0.json": "40c34c4223196e4df119edec1685e40c56b2e9d9b972ba8b36a0ebc5c6729af9",
+    "refusal-commands-executable-candidate-c8-block1.json": "4a0e32520cc92e71f2767670b8d5b214c75a0aab6be59ce847f2f31a688bc91e",
+    "refusal-commands-executable-baseline-c8-block1.json": "de712d9140083bde8b76108e8ca4743d72136f3f0cfbd64e22f2401d0349832e",
+    "refusal-commands-executable-baseline-c50-block0.json": "f51e163ab1e00822e9467d3e17702c1b761b9fa55d7530bf01df818945d5ad92",
+    "refusal-commands-executable-candidate-c50-block0.json": "295343ddef1f10ae82d3fdd957fc62543646c8ebc3fa80fb76ee678b263f7e95",
+    "refusal-commands-executable-candidate-c50-block1.json": "7e21a344ad06db43deeeff237a225271cfe69912082ddc9cd1cc568962a686d6",
+    "refusal-commands-executable-baseline-c50-block1.json": "7c2f18e07887aeb17532c14faf95c470b1d99a997b5a67dc7447f0ac0d30d08d",
+    "refusal-commands-executable-baseline-c100-block0.json": "d8ba8aca64e0a37201ac17ac5957845aba501bbfe4c7cc02c7585db78db7c299",
+    "refusal-commands-executable-candidate-c100-block0.json": "858a69b1ed5fa5a36be951aee5259bc38b8bda90db4ba1cc9aef53923abddaab",
+    "refusal-commands-executable-candidate-c100-block1.json": "31b46454f5215f49d12ec70987dfe69f512e05c1ad89726ee107f09e00daf374",
+    "refusal-commands-executable-baseline-c100-block1.json": "4c3c0bd02b067a3d2abcec863bd796d8119b0c5748763dad683c0ebebd8c2702",
+    "refusal-commands-baseline-c1-block0.json": "201f981f607a41abefe0877dcd69799d702486c8f2983c34f5a403264411dda9",
+    "refusal-commands-candidate-c1-block0.json": "2a7efea1604c6f239a2985f3864f90e67cbc4d4c5855b57bc02e18907bb75b64",
+    "refusal-commands-candidate-c1-block1.json": "2a7efea1604c6f239a2985f3864f90e67cbc4d4c5855b57bc02e18907bb75b64",
+    "refusal-commands-baseline-c1-block1.json": "201f981f607a41abefe0877dcd69799d702486c8f2983c34f5a403264411dda9",
+    "refusal-commands-baseline-c8-block0.json": "0648377ed37d037fe0b3216a7300c7f44390f37983eff2b0a83c28e4474ff1ec",
+    "refusal-commands-candidate-c8-block0.json": "4fae5885a49fc4d1a557bb41d1ea861f216d56065da5e1ca76c17abee68c39f7",
+    "refusal-commands-candidate-c8-block1.json": "4fae5885a49fc4d1a557bb41d1ea861f216d56065da5e1ca76c17abee68c39f7",
+    "refusal-commands-baseline-c8-block1.json": "0648377ed37d037fe0b3216a7300c7f44390f37983eff2b0a83c28e4474ff1ec",
+    "refusal-commands-baseline-c50-block0.json": "89de6ac6f0f4294ce37e751650fc8caeb9cb03e8ee85ed00653fb5cd049d05c0",
+    "refusal-commands-candidate-c50-block0.json": "e9f6fe5024b7aa59c336941990770a0add80d9687f2955805d402f011ea41391",
+    "refusal-commands-candidate-c50-block1.json": "e9f6fe5024b7aa59c336941990770a0add80d9687f2955805d402f011ea41391",
+    "refusal-commands-baseline-c50-block1.json": "89de6ac6f0f4294ce37e751650fc8caeb9cb03e8ee85ed00653fb5cd049d05c0",
+    "refusal-commands-baseline-c100-block0.json": "742558dc20b5483da8d452212f31c1ae1afbe6fb87e13ede1228c32b653f73bb",
+    "refusal-commands-candidate-c100-block0.json": "60ee613635042c882786a4c59920e8e13d6b1384a637f8bcebd8bbb51c21683d",
+    "refusal-commands-candidate-c100-block1.json": "60ee613635042c882786a4c59920e8e13d6b1384a637f8bcebd8bbb51c21683d",
+    "refusal-commands-baseline-c100-block1.json": "742558dc20b5483da8d452212f31c1ae1afbe6fb87e13ede1228c32b653f73bb"
+  },
+  "adopted": false
+}

@@ -1,0 +1,169 @@
+{
+  "functional_only": true,
+  "public_ca_contacted": false,
+  "hypermachine_deployment_verified": true,
+  "checks": [
+    "HTTP-01 issuance and issuer/hostname verification",
+    "First-group publication hard-exit recovers journal and TLS without CA reissuance",
+    "Explicit new hostname group publishes even with the same initial leaf; default preserved",
+    "Configured missing-lineage worker issues via HTTP-01, adds verified TLS group and skips non-due retry",
+    "Initial worker registers a fresh owned ACME account using configured email and terms",
+    "Actual control plane serves the issued ACME certificate",
+    "Forced renewal produces a different valid certificate",
+    "Certbot deploy hook activates the renewed leaf on actual control-plane TLS",
+    "Retrying an active immutable generation verifies TLS without rewriting or duplicating it",
+    "Untrusted certificate activation rolls back manifest and verified TLS leaf",
+    "Mismatched private key is refused before manifest publication",
+    "Wrong process executable is refused without signal or mutation",
+    "Wrong manifest is refused by checking the live process arguments",
+    "Concurrent deployment lock refuses overlapping publication",
+    "Already-expired active certificate recovers through verified ACME deployment",
+    "Real HTTP-01 renewal activates through KVM guest traffic while an old 16 MiB TLS download completes",
+    "Unavailable HTTP-01 server refuses renewal and retains certificate"
+  ],
+  "first_group_crash_recovery": {
+    "exit_code": 86,
+    "wrapper_sha256": "00d102cdb8a14c8543c938c7ca1490ae18a229a5a41fe1958c6f284a87b2a877",
+    "fault_wrapper_source": "import importlib.util,os\nspec=importlib.util.spec_from_file_location('owned_hook','/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/deploy-tls-certificate.py')\nmodule=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)\noriginal=module.atomic_write\ndef interrupted(path,data,mode):\n original(path,data,mode)\n if str(path)=='/tmp/hm-acme-ca_bimzi/bundle.json': os._exit(86)\nmodule.atomic_write=interrupted\nmodule.main()\n",
+    "recovered_without_reissuance": true
+  },
+  "new_hostname_group_verified": true,
+  "initial_issuance_worker_verified": true,
+  "fresh_acme_account_registration_verified": true,
+  "fresh_account_registration_count": 1,
+  "initial_issuance_worker_sha256": "b6dd26bc78de6495c355698356cb033f4990b5c5364b949727cb2ed5562698bd",
+  "expired_active_leaf_sha256": "57bf62f34ea3c1ba196baf776b53eb6e446c216800c405c959effd998a6c0178",
+  "initial_proxy_leaf_sha256": "8b8a2ed43d2ebb54f3b4a46c4e1ad0fc9bcd51a4a27dd86c5e4c7643f844ba14",
+  "renewed_proxy_leaf_sha256": "201b78b349c3238837f60d36db8704e59fb7500bf14fbbc434f3653c91227017",
+  "control_plane_alive_after_deployment": true,
+  "guest_kvm_traffic_verified": true,
+  "kvm_report": {
+    "functional_only": true,
+    "success": true,
+    "checks": [
+      "missing, absent and expired DNS proofs are refused without binding a real guest",
+      "trusted owned HTTPS resolver proves sandbox-bound TXT before routing",
+      "certificate-verified HTTPS alias reaches guest web server through both proxies",
+      "fresh-account initial issuance provisions a named TLS group during real guest traffic",
+      "real unbind preserves and refuses a pending discovered job; restored claim activates retained certificate",
+      "new TLS handshakes use the renewed certificate while the old guest stream completes",
+      "mismatched certificate/key reload preserves the active TLS identity and guest route",
+      "unconfigured SNI handshake is refused without a default certificate",
+      "optional default certificate activates and is removed through validated TLS reload",
+      "owner port update reaches a distinct guest web server without proxy restart",
+      "failed TXT revalidation preserves existing guest port and HTTPS response",
+      "Redis binding survives control-plane restart",
+      "alias request resumes paused guest with retained web-server state",
+      "unbind and sandbox deletion stop alias routing",
+      "prior sandbox TXT cannot bind a replacement sandbox",
+      "deleted sandbox releases hostname ownership for a new sandbox"
+    ],
+    "dns_ownership_enabled": true,
+    "tls_bundle_enabled": true,
+    "acme_renewal_enabled": true,
+    "renewal_worker_enabled": true,
+    "artifact_sha256": {
+      "control_plane": "958d30f3ab8dc3e83c0455179b8868ceb5fb3a57a5a2d6f472c4b846155fbe1e",
+      "daemon": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+      "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+      "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+      "verifier": "675cabe8121db9c1a52e8095baa13d96adff93de5a2336b4dc419575ce643da8",
+      "deploy_hook": "09e9f6b7543cbe810b18c5db26306f2dee72cb733efd2d9bc3fd5f64bfe2189d",
+      "certificate_ca": "214fedb87f226993fcdd4db50c83a1b04ea67a5eb7e699a5d906dec48841aa6b",
+      "renew_command_file": "029247cf09a4dfce32309dafba2634784867a2054abb329a0feab811dcbdc091",
+      "renewal_worker": "b6dd26bc78de6495c355698356cb033f4990b5c5364b949727cb2ed5562698bd",
+      "discovery_planner": "3b8c3b5db70434c2ae4100632353d850adbb63d2afe607f3ccb5c1341bcee45d",
+      "acme_ca": "eca6211cca8ef7f0b33a3f37fec978cad788f163a9447bf523dd8a997d2b2b56"
+    },
+    "cleanup_errors": [],
+    "template": {
+      "aliases": [
+        "base"
+      ],
+      "buildID": "base",
+      "buildStatus": "ready",
+      "cpuCount": 1,
+      "memoryMB": 1024,
+      "nodeIDs": [
+        "domain-node"
+      ],
+      "nodes": [
+        {
+          "cpuCount": 1,
+          "memoryMB": 1024,
+          "nodeID": "domain-node",
+          "snapshot": true
+        }
+      ],
+      "public": false,
+      "snapshot": true,
+      "templateID": "base"
+    },
+    "renewal_worker": {
+      "id": "domain-7feabecfba444cb380f19575efb5523ea313760affa8e66afe050b901b557809",
+      "status": "verified",
+      "success": true,
+      "renewal_exit": 0,
+      "active_leaf_sha256": "c36c52a75667a00d5cefae6775d6e9c1541ef6460db68094eae148e3bcae72c6",
+      "activation_verified": true,
+      "unchanged": false,
+      "recovered_pending_deployment": false
+    },
+    "initial_issuance_kvm_verified": true,
+    "automatic_discovery_kvm_verified": true,
+    "pending_claim_interruption": {
+      "unbind_refused_without_mutation": true,
+      "retained_certificate_activated": true,
+      "fault_wrapper_sha256": "4ff72ff8e470e770cbc60a3aa20152e75630240a2ff531158cfda5e8c03b063d",
+      "fault_wrapper_source": "import importlib.util\nspec=importlib.util.spec_from_file_location('owned_worker','/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/renew-tls-certificates.py')\nmodule=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)\noriginal=module.run_cycle\ndef unavailable(*args): raise OSError('owned activation fault')\ndef cycle(*args,**kwargs):\n kwargs['activate_fn']=unavailable\n return original(*args,**kwargs)\nmodule.run_cycle=cycle\nraise SystemExit(module.main())\n"
+    },
+    "certificate_deployment": {
+      "certbot_deploy_hook": false,
+      "renewal_worker": true,
+      "activation_verified": true,
+      "previous_leaf_sha256": "201b78b349c3238837f60d36db8704e59fb7500bf14fbbc434f3653c91227017",
+      "active_leaf_sha256": "d6e7f9deceb73a43d3a9b0c60cf91d42eeae1389d924fea0be544ab26125e404"
+    },
+    "tls_reload": {
+      "initial_leaf_sha256": "201b78b349c3238837f60d36db8704e59fb7500bf14fbbc434f3653c91227017",
+      "renewed_leaf_sha256": "d6e7f9deceb73a43d3a9b0c60cf91d42eeae1389d924fea0be544ab26125e404",
+      "rejected_reload_retained_leaf_sha256": "d6e7f9deceb73a43d3a9b0c60cf91d42eeae1389d924fea0be544ab26125e404",
+      "default_leaf_sha256": "201b78b349c3238837f60d36db8704e59fb7500bf14fbbc434f3653c91227017",
+      "old_connection_guest_bytes_verified": 16777216,
+      "control_plane_pid": 493,
+      "control_plane_alive_after_reload": true,
+      "rejected_reload_observed_in_log": true
+    },
+    "owned_processes_reaped": true,
+    "owned_dns_server_stopped": true,
+    "log_tails": {
+      "control-restarted-3.log": "\u001b[2m2026-10-03T12:13:23.814223Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_control_plane\u001b[0m\u001b[2m:\u001b[0m no --mtls-*: nodes are reached in plaintext, the cluster token and envd traffic with them\nhv2-control-plane: E2B API on 0.0.0.0:50117, envd proxy on 0.0.0.0:50223, store redis://127.0.0.1:32961\n",
+      "node-1.log": "hv2-sandboxd: listening on 0.0.0.0:47439, capacity 4, cluster node domain-node\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes are restored from template snapshots: base\n\nsandbox proxy on 0.0.0.0:49677 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:49677 process.Process/Start\n",
+      "redis-0.log": "456:C 03 Oct 2026 05:13:17.076 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.\n456:C 03 Oct 2026 05:13:17.076 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo\n456:C 03 Oct 2026 05:13:17.076 * Redis version=8.0.2, bits=64, commit=00000000, modified=0, pid=456, just started\n456:C 03 Oct 2026 05:13:17.076 * Configuration loaded\n456:M 03 Oct 2026 05:13:17.077 * monotonic clock: POSIX clock_gettime\n456:M 03 Oct 2026 05:13:17.077 * Running mode=standalone, port=32961.\n456:M 03 Oct 2026 05:13:17.077 * Server initialized\n456:M 03 Oct 2026 05:13:17.077 * Ready to accept connections tcp\n456:signal-handler (1791029604) Received SIGTERM scheduling shutdown...\n456:M 03 Oct 2026 05:13:24.316 * User requested shutdown...\n456:M 03 Oct 2026 05:13:24.316 # Redis is now ready to exit, bye bye...\n",
+      "control-2.log": "\u001b[2m2026-10-03T12:13:17.986969Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_control_plane\u001b[0m\u001b[2m:\u001b[0m no --mtls-*: nodes are reached in plaintext, the cluster token and envd traffic with them\nhv2-control-plane: E2B API on 0.0.0.0:50117, envd proxy on 0.0.0.0:50223, store redis://127.0.0.1:32961\n\u001b[2m2026-10-03T12:13:23.632770Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_control_plane\u001b[0m\u001b[2m:\u001b[0m TLS certificate bundle reload rejected; active certificates retained \u001b[3merror\u001b[0m\u001b[2m=\u001b[0minvalid TLS certificate/key pair\n"
+    },
+    "artifacts_unchanged": true
+  },
+  "kvm_renewal_http01_successful_requests": 6,
+  "kvm_renewed_certificate_sha256": "a028a1021548d59c520e6514b62319cf8109d4ecb7e6b913df4c01d50f5c9bb4",
+  "initial_certificate_sha256": "55a22062d7e44d34cc655a5d37f48a21c0a0d6e34ebdc0e39d835c26c14a4d59",
+  "renewed_certificate_sha256": "a028a1021548d59c520e6514b62319cf8109d4ecb7e6b913df4c01d50f5c9bb4",
+  "issuance_http01_successful_requests": 6,
+  "renewal_http01_successful_requests": 9,
+  "certbot_version": "certbot 5.8.0",
+  "pebble_version": "Pebble version: v2.10.1 (b1e1ca4f3c30abb64111adaca4544bc5374cc306)",
+  "processes_reaped": true,
+  "http_thread_stopped": true,
+  "input_sha256": {
+    "pebble": "4e35cad137f20f62a8e71fd104b98417daa592e901bb01ab4227074ee1990e3c",
+    "challenge_server": "00ec0f9680d5eecb23cb4073868a547db635775a52ba14e0392ed15c8004f1ed",
+    "certbot": "47a7758f3418a83e97f533fbeddcd40e0746ded2a628ca3965905cdfe8914561",
+    "control_plane": "958d30f3ab8dc3e83c0455179b8868ceb5fb3a57a5a2d6f472c4b846155fbe1e",
+    "deploy_hook": "09e9f6b7543cbe810b18c5db26306f2dee72cb733efd2d9bc3fd5f64bfe2189d",
+    "kvm_verifier": "675cabe8121db9c1a52e8095baa13d96adff93de5a2336b4dc419575ce643da8",
+    "daemon": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "driver_sha256": "062f469e653bbd4fea895c0d4223041e21e756245dda78b17d5ee2439285e76e"
+}

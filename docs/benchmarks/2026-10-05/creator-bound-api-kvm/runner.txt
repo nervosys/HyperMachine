@@ -1,0 +1,6 @@
+{
+  "success": true,
+  "cases": 14,
+  "output": "/var/tmp/hm-creator-bound-kvm-v2-ba7b39a4",
+  "error": null
+}

@@ -1,0 +1,23 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py", line 1491, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py", line 882, in main
+    api('POST',f'/sandboxes/{private_source}/pause')
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py", line 171, in api
+    with opener.open(request, timeout=30) as response:
+         ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/urllib/request.py", line 495, in open
+    response = meth(req, response)
+  File "/usr/lib/python3.13/urllib/request.py", line 604, in http_response
+    response = self.parent.error(
+        'http', request, response, code, msg, hdrs)
+  File "/usr/lib/python3.13/urllib/request.py", line 533, in error
+    return self._call_chain(*args)
+           ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/usr/lib/python3.13/urllib/request.py", line 466, in _call_chain
+    result = func(*args)
+  File "/usr/lib/python3.13/urllib/request.py", line 613, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 400: Bad Request

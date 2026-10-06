@@ -1,0 +1,57 @@
+{
+  "baseline_binary_sha256": "dc315d313fe2f156ab7aaa593e02c4e0d04ffa024cfb5c69c85d2780a270676e",
+  "candidate_binary_sha256": "5d136c14b7ac36bd23af194ea82e844573a3ca18bfa7640e8e3d5e669db80f23",
+  "main_before_sha256": "7b8704b91b64edd8c75ed074fdba6b3626fa1dd8c005692fd8a4a00499f4592e",
+  "main_candidate_sha256": "6f3f5c405cbd568c5a9dfb4dd2d5277eea16da88259d380005932a80f97a4c81",
+  "prior_release_source_context": {
+    "permitted_sources_sha256": {
+      "crates/hv2-sandboxd/src/main.rs": "7b8704b91b64edd8c75ed074fdba6b3626fa1dd8c005692fd8a4a00499f4592e",
+      "crates/hv2-core/src/devices/virtio_pci.rs": "e3d464a51bafa7ca72155cee32010eba6de5019bb8afc0b96c431a1f94dc846e",
+      "crates/hv2-core/src/snapshot/device.rs": "9fb38f31e477739bdaadc77324b5881bdd9e9b533757329d05958138f5e986a6",
+      "crates/hv2-core/src/snapshot/file.rs": "9f939af5a3cf09a803a22af331683f7b3cae695f12973cecca6ee27202a8566b",
+      "crates/hv2-core/src/pci/config.rs": "cc17b1fe02c980d5557449e82af3252573b841582926565207d6fa16d51bd04e",
+      "crates/hv2-core/src/pci/mod.rs": "e618c69c388c4f2cf9f00124ef486488f3f0a147660076594938ca95a0e84412",
+      "crates/hv2-core/src/vm.rs": "bdf72ebc509a40a1cb128dc8804973853cc5df8e113fbfd4891f1fddbe5ee935",
+      "crates/hv2-agent/examples/pci_snapshot_probe.rs": "3b87fd59ad4c7681a54f564e343bb193ddbbf464b6751a79c93e7fb1a3225bcb",
+      "crates/hv2-agent/examples/linux_snapshot_restore.rs": "5931a0aa2e8495abbf2c02683c4e5f79d4c85040c3eec17ff23e011e7c0e9c97"
+    },
+    "runtime_inputs_sha256": {
+      "/var/tmp/hm-pci-daemon-api-node-v1": "d69de5c7f1f1806a86145779f288e1c01addddae0c86c906d60bffbcadcbb4f7",
+      "/var/tmp/hm-competitive/bzImage-known-uart-irq": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+      "/var/tmp/hm-private-capacity-buffered-guest-v1.cpio.gz": "28c839a0969728c2c579fa9fdc7274714266ce4308f48a2ee1090d6c34537294"
+    },
+    "isolated_protected_sha256": {
+      "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+      "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+      "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+    },
+    "affinity_available": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23
+    ],
+    "release_binary_sha256": "dc315d313fe2f156ab7aaa593e02c4e0d04ffa024cfb5c69c85d2780a270676e"
+  },
+  "scope": "isolated daemon-only change; permitted prior catalog is not full build closure"
+}

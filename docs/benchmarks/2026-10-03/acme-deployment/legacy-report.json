@@ -1,0 +1,54 @@
+{
+  "functional_only": true,
+  "success": true,
+  "checks": [
+    "certificate-verified HTTPS alias reaches guest web server through both proxies",
+    "owner port update reaches a distinct guest web server without proxy restart",
+    "Redis binding survives control-plane restart",
+    "alias request resumes paused guest with retained web-server state",
+    "unbind and sandbox deletion stop alias routing",
+    "deleted sandbox releases hostname ownership for a new sandbox"
+  ],
+  "dns_ownership_enabled": false,
+  "tls_bundle_enabled": false,
+  "acme_renewal_enabled": false,
+  "artifact_sha256": {
+    "control_plane": "958d30f3ab8dc3e83c0455179b8868ceb5fb3a57a5a2d6f472c4b846155fbe1e",
+    "daemon": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "verifier": "476dfb6a4c93f2faea326a1b0d0aea5d5b377f6ce111abd399b834fb0a23d157"
+  },
+  "cleanup_errors": [],
+  "template": {
+    "aliases": [
+      "base"
+    ],
+    "buildID": "base",
+    "buildStatus": "ready",
+    "cpuCount": 1,
+    "memoryMB": 1024,
+    "nodeIDs": [
+      "domain-node"
+    ],
+    "nodes": [
+      {
+        "cpuCount": 1,
+        "memoryMB": 1024,
+        "nodeID": "domain-node",
+        "snapshot": true
+      }
+    ],
+    "public": false,
+    "snapshot": true,
+    "templateID": "base"
+  },
+  "owned_processes_reaped": true,
+  "log_tails": {
+    "control-restarted-3.log": "\u001b[2m2026-10-03T09:34:27.106327Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_control_plane\u001b[0m\u001b[2m:\u001b[0m no --mtls-*: nodes are reached in plaintext, the cluster token and envd traffic with them\nhv2-control-plane: E2B API on 0.0.0.0:44927, envd proxy on 0.0.0.0:52701, store redis://127.0.0.1:34555\n",
+    "node-1.log": "hv2-sandboxd: listening on 0.0.0.0:43861, capacity 4, cluster node domain-node\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes are restored from template snapshots: base\n\nsandbox proxy on 0.0.0.0:44563 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:44563 process.Process/Start\n",
+    "redis-0.log": "270:C 03 Oct 2026 02:34:26.080 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.\n270:C 03 Oct 2026 02:34:26.080 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo\n270:C 03 Oct 2026 02:34:26.080 * Redis version=8.0.2, bits=64, commit=00000000, modified=0, pid=270, just started\n270:C 03 Oct 2026 02:34:26.080 * Configuration loaded\n270:M 03 Oct 2026 02:34:26.080 * monotonic clock: POSIX clock_gettime\n270:M 03 Oct 2026 02:34:26.081 * Running mode=standalone, port=34555.\n270:M 03 Oct 2026 02:34:26.081 * Server initialized\n270:M 03 Oct 2026 02:34:26.081 * Ready to accept connections tcp\n270:signal-handler (1791020067) Received SIGTERM scheduling shutdown...\n270:M 03 Oct 2026 02:34:27.387 * User requested shutdown...\n270:M 03 Oct 2026 02:34:27.387 # Redis is now ready to exit, bye bye...\n",
+    "control-2.log": "\u001b[2m2026-10-03T09:34:26.992284Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_control_plane\u001b[0m\u001b[2m:\u001b[0m no --mtls-*: nodes are reached in plaintext, the cluster token and envd traffic with them\nhv2-control-plane: E2B API on 0.0.0.0:44927, envd proxy on 0.0.0.0:52701, store redis://127.0.0.1:34555\n"
+  },
+  "artifacts_unchanged": true
+}

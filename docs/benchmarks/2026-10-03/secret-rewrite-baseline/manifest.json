@@ -1,0 +1,12 @@
+{
+  "sha256": {
+    "Cargo.lock": "caf9022c47528949ab1d16667a1a42d35e63fd78602e19de9f91a1bf26147e3f",
+    "Cargo.toml": "941d6653e492be7f00a79d2a0d5d2669bec5c454e92c97610b378ad11dab521b",
+    "README.md": "2c133c88f4c4ad15bfddf2d923ead2a750c165909035e50b22b2188aff8cb680",
+    "benchmark.rs": "5f407bd6dc2c85fb14793cc59903fadf89c2e9a6eb6dc4327d9c49db7be8c246",
+    "build-context.json": "5939c73f80bc3c9a88feac6f8a184340ef67bb87c2b834e4de74564e55424d0f",
+    "build.txt": "7584635fcc4710a6aa98366c0c8f55d4a8fe867399939d744ac800354fc7f7a8",
+    "result.json": "a142b81947b9cb7580b33d2afd8cecb9d9a12ad73d4ef6c668b4436265d7da86",
+    "secret_substitution.rs": "9a8bed5b115379c8cb7bb7b5aface6f33ef2ce098af1b55a45203f357ad9fd0a"
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "profiles": [
+    {
+      "concurrency": 1,
+      "variants": {
+        "previous": {
+          "planned_total": 660,
+          "attempted_total": 660,
+          "passed_total": 660,
+          "failed_total": 0,
+          "measured_attempted": 600,
+          "measured_passed": 600,
+          "successful_p50_ms": 0.14180199650581926,
+          "successful_p95_ms": 0.19325599714647979,
+          "successful_p99_ms": 0.2748539991443977,
+          "successful_batch_median_requests_per_second": 6531.762373473091,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-off": {
+          "planned_total": 660,
+          "attempted_total": 660,
+          "passed_total": 660,
+          "failed_total": 0,
+          "measured_attempted": 600,
+          "measured_passed": 600,
+          "successful_p50_ms": 0.1419829932274297,
+          "successful_p95_ms": 0.1924250100273639,
+          "successful_p99_ms": 0.2718709874898195,
+          "successful_batch_median_requests_per_second": 6613.718453528671,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-on": {
+          "planned_total": 660,
+          "attempted_total": 660,
+          "passed_total": 660,
+          "failed_total": 0,
+          "measured_attempted": 600,
+          "measured_passed": 600,
+          "successful_p50_ms": 8.694284013472497,
+          "successful_p95_ms": 9.384103992488235,
+          "successful_p99_ms": 10.89770600083284,
+          "successful_batch_median_requests_per_second": 113.56098017152654,
+          "successful_batches": 6,
+          "failed_runs": 0
+        }
+      },
+      "comparisons": {
+        "audit-off_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 4,
+          "median_paired_mean_reduction_ms": 0.0004752798849949613,
+          "median_paired_throughput_ratio": 1.0025514155829758
+        },
+        "audit-on_versus_audit-off": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 0,
+          "median_paired_mean_reduction_ms": -8.649212764867116,
+          "median_paired_throughput_ratio": 0.01761084119731092
+        },
+        "audit-on_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 0,
+          "median_paired_mean_reduction_ms": -8.650606344963307,
+          "median_paired_throughput_ratio": 0.017446218107782494
+        }
+      }
+    }
+  ],
+  "total_attempted": 1980,
+  "total_passed": 1980,
+  "audit_records_verified": 1320,
+  "cleanup_verified": true,
+  "cohort_success": true,
+  "artifacts_unchanged": true,
+  "previous_audited": false,
+  "competitor_win_established": false
+}

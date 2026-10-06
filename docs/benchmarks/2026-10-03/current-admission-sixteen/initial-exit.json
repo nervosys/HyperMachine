@@ -1,0 +1,27 @@
+{
+  "exit_code": 1,
+  "argv": [
+    "python3",
+    "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/bench-cold-start-limit.py",
+    "--baseline",
+    "/var/tmp/hm-current-competitive-release-node-v1",
+    "--candidate",
+    "/var/tmp/hm-current-competitive-release-node-v1",
+    "--kernel",
+    "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+    "--initrd",
+    "/var/tmp/hm-competitive/guest-output-drain.cpio.gz",
+    "--output",
+    "/var/tmp/hm-current-admission16-v1/initial.json",
+    "--pairs",
+    "4",
+    "--concurrency",
+    "100",
+    "--baseline-limit",
+    "0",
+    "--candidate-limit",
+    "16",
+    "--memory-idle-seconds",
+    "5"
+  ]
+}

@@ -1,0 +1,672 @@
+{
+  "purpose": "cold-boot admission experiment; no competitor win claim",
+  "artifact_sha256": {
+    "baseline": "8a41a012b9eaac150dce7832dfb7fdc01d12ba3c28796cf98ca76f7070eb206c",
+    "candidate": "b7d2aba8a9a21845e187a10dbeda10c0c10f43d6794160739888435723a77d95",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "harness": "086b5209d77f3b5c909f67ae13535dfccae0a8b867b824f4550af1ebdca2d8b1",
+    "comparison": "c82f36426a434c22d514e517effe5300bac482e4da1dd414b2d4c8e269dd3b50",
+    "burst": "59fae86ff5a8a8de390e15359e7da3e470edbab1c701e04de5efa788ae5fa459",
+    "shared": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "firecracker": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6"
+  },
+  "driver_cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "added_CPU_load": false,
+  "concurrency": 1,
+  "pairs": 4,
+  "candidate_limit": 0,
+  "order": "fresh-daemon AB/BA",
+  "guest_readiness_timeout_s": 15,
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "queue_included_in_ready_ms": true,
+  "same_binary": false,
+  "limitations": [
+    "Shared nested-KVM host",
+    "Cold native startup only",
+    "Conditional latency summaries exclude failed attempts; all failures retained",
+    "No managed competitor endpoint or optimal admission-limit claim"
+  ],
+  "runs": [
+    {
+      "variant": "baseline",
+      "pair": 0,
+      "cleanup_errors": [],
+      "success": true,
+      "template": {
+        "aliases": [
+          "base"
+        ],
+        "buildID": "base",
+        "buildStatus": "ready",
+        "cpuCount": 1,
+        "envdVersion": "0.6.3",
+        "memoryMB": 1024,
+        "public": false,
+        "snapshot": false,
+        "templateID": "base"
+      },
+      "batch": {
+        "engine": "hypermachine",
+        "pair": 0,
+        "concurrency": 1,
+        "samples": [
+          {
+            "index": 0,
+            "pair": 0,
+            "engine": "hypermachine",
+            "success": true,
+            "cleanup_success": true,
+            "start_offset_ms": 0.03654099418781698,
+            "create_ms": 371.68896599905565,
+            "ready_ms": 377.82485599745996,
+            "exec_ms": 6.135889998404309,
+            "validated_offset_ms": 383.0070639960468
+          }
+        ],
+        "error": null,
+        "readiness_wall_ms": 383.0070639960468,
+        "launch_spread_ms": 0.0,
+        "passing_attempts": 1,
+        "passing_attempts_per_second": 2.610917902052902,
+        "held_process_count": 1,
+        "held_process_memory_kib": {
+          "Rss_kib": 111068,
+          "Pss_kib": 109027,
+          "Private_Clean_kib": 7768,
+          "Private_Dirty_kib": 101060,
+          "Anonymous_kib": 101052
+        },
+        "all_guests_validated_while_held": true,
+        "total_wall_ms_including_cleanup": 428.6031079973327,
+        "success": true
+      },
+      "remaining_sandbox_count": 0,
+      "daemon_exit_code": 0,
+      "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:52547, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:36603 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:36603 process.Process/Start\n",
+      "cold_start_limit": null,
+      "daemon_argv": [
+        "/var/tmp/hm-registration-mutations/daemon",
+        "--port",
+        "52547",
+        "--proxy-port",
+        "36603",
+        "--memory-mb",
+        "1024",
+        "--cpu-cores",
+        "1",
+        "--capacity",
+        "128",
+        "--no-template",
+        "--volume-dir",
+        "/var/tmp/hm-connect-wait-rkqn940i/volumes",
+        "--snapshot-store",
+        "/var/tmp/hm-connect-wait-rkqn940i/snapshots"
+      ]
+    },
+    {
+      "variant": "candidate",
+      "pair": 0,
+      "cleanup_errors": [],
+      "success": true,
+      "template": {
+        "aliases": [
+          "base"
+        ],
+        "buildID": "base",
+        "buildStatus": "ready",
+        "cpuCount": 1,
+        "envdVersion": "0.6.3",
+        "memoryMB": 1024,
+        "public": false,
+        "snapshot": false,
+        "templateID": "base"
+      },
+      "batch": {
+        "engine": "hypermachine",
+        "pair": 0,
+        "concurrency": 1,
+        "samples": [
+          {
+            "index": 0,
+            "pair": 0,
+            "engine": "hypermachine",
+            "success": true,
+            "cleanup_success": true,
+            "start_offset_ms": 0.0826359901111573,
+            "create_ms": 388.2365099998424,
+            "ready_ms": 395.0229270121781,
+            "exec_ms": 6.786417012335733,
+            "validated_offset_ms": 399.1438749944791
+          }
+        ],
+        "error": null,
+        "readiness_wall_ms": 399.1438749944791,
+        "launch_spread_ms": 0.0,
+        "passing_attempts": 1,
+        "passing_attempts_per_second": 2.5053622581928177,
+        "held_process_count": 1,
+        "held_process_memory_kib": {
+          "Rss_kib": 111388,
+          "Pss_kib": 109385,
+          "Private_Clean_kib": 8064,
+          "Private_Dirty_kib": 101112,
+          "Anonymous_kib": 101104
+        },
+        "all_guests_validated_while_held": true,
+        "total_wall_ms_including_cleanup": 458.4821960015688,
+        "success": true
+      },
+      "remaining_sandbox_count": 0,
+      "daemon_exit_code": 0,
+      "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:41669, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:45849 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:45849 process.Process/Start\n",
+      "cold_start_limit": null,
+      "daemon_argv": [
+        "/var/tmp/hm-cold-start-adoption/hv2-sandboxd",
+        "--port",
+        "41669",
+        "--proxy-port",
+        "45849",
+        "--memory-mb",
+        "1024",
+        "--cpu-cores",
+        "1",
+        "--capacity",
+        "128",
+        "--no-template",
+        "--volume-dir",
+        "/var/tmp/hm-connect-wait-w85b0sa1/volumes",
+        "--snapshot-store",
+        "/var/tmp/hm-connect-wait-w85b0sa1/snapshots"
+      ]
+    },
+    {
+      "variant": "candidate",
+      "pair": 1,
+      "cleanup_errors": [],
+      "success": true,
+      "template": {
+        "aliases": [
+          "base"
+        ],
+        "buildID": "base",
+        "buildStatus": "ready",
+        "cpuCount": 1,
+        "envdVersion": "0.6.3",
+        "memoryMB": 1024,
+        "public": false,
+        "snapshot": false,
+        "templateID": "base"
+      },
+      "batch": {
+        "engine": "hypermachine",
+        "pair": 1,
+        "concurrency": 1,
+        "samples": [
+          {
+            "index": 0,
+            "pair": 1,
+            "engine": "hypermachine",
+            "success": true,
+            "cleanup_success": true,
+            "start_offset_ms": 0.032729003578424454,
+            "create_ms": 370.9198479918996,
+            "ready_ms": 376.8337910005357,
+            "exec_ms": 5.913943008636124,
+            "validated_offset_ms": 381.1231529980432
+          }
+        ],
+        "error": null,
+        "readiness_wall_ms": 381.1231529980432,
+        "launch_spread_ms": 0.0,
+        "passing_attempts": 1,
+        "passing_attempts_per_second": 2.62382380113531,
+        "held_process_count": 1,
+        "held_process_memory_kib": {
+          "Rss_kib": 111032,
+          "Pss_kib": 108946,
+          "Private_Clean_kib": 7628,
+          "Private_Dirty_kib": 101124,
+          "Anonymous_kib": 101116
+        },
+        "all_guests_validated_while_held": true,
+        "total_wall_ms_including_cleanup": 432.28628899669275,
+        "success": true
+      },
+      "remaining_sandbox_count": 0,
+      "daemon_exit_code": 0,
+      "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:35223, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:43117 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:43117 process.Process/Start\n",
+      "cold_start_limit": null,
+      "daemon_argv": [
+        "/var/tmp/hm-cold-start-adoption/hv2-sandboxd",
+        "--port",
+        "35223",
+        "--proxy-port",
+        "43117",
+        "--memory-mb",
+        "1024",
+        "--cpu-cores",
+        "1",
+        "--capacity",
+        "128",
+        "--no-template",
+        "--volume-dir",
+        "/var/tmp/hm-connect-wait-ga2d52xu/volumes",
+        "--snapshot-store",
+        "/var/tmp/hm-connect-wait-ga2d52xu/snapshots"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "pair": 1,
+      "cleanup_errors": [],
+      "success": true,
+      "template": {
+        "aliases": [
+          "base"
+        ],
+        "buildID": "base",
+        "buildStatus": "ready",
+        "cpuCount": 1,
+        "envdVersion": "0.6.3",
+        "memoryMB": 1024,
+        "public": false,
+        "snapshot": false,
+        "templateID": "base"
+      },
+      "batch": {
+        "engine": "hypermachine",
+        "pair": 1,
+        "concurrency": 1,
+        "samples": [
+          {
+            "index": 0,
+            "pair": 1,
+            "engine": "hypermachine",
+            "success": true,
+            "cleanup_success": true,
+            "start_offset_ms": 0.03804999869316816,
+            "create_ms": 372.9403769975761,
+            "ready_ms": 378.9576080016559,
+            "exec_ms": 6.017231004079804,
+            "validated_offset_ms": 383.80112299637403
+          }
+        ],
+        "error": null,
+        "readiness_wall_ms": 383.80112299637403,
+        "launch_spread_ms": 0.0,
+        "passing_attempts": 1,
+        "passing_attempts_per_second": 2.6055160865421634,
+        "held_process_count": 1,
+        "held_process_memory_kib": {
+          "Rss_kib": 111068,
+          "Pss_kib": 108948,
+          "Private_Clean_kib": 7712,
+          "Private_Dirty_kib": 101028,
+          "Anonymous_kib": 101020
+        },
+        "all_guests_validated_while_held": true,
+        "total_wall_ms_including_cleanup": 427.31827800162137,
+        "success": true
+      },
+      "remaining_sandbox_count": 0,
+      "daemon_exit_code": 0,
+      "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:46027, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:59037 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:59037 process.Process/Start\n",
+      "cold_start_limit": null,
+      "daemon_argv": [
+        "/var/tmp/hm-registration-mutations/daemon",
+        "--port",
+        "46027",
+        "--proxy-port",
+        "59037",
+        "--memory-mb",
+        "1024",
+        "--cpu-cores",
+        "1",
+        "--capacity",
+        "128",
+        "--no-template",
+        "--volume-dir",
+        "/var/tmp/hm-connect-wait-6a7fxwhm/volumes",
+        "--snapshot-store",
+        "/var/tmp/hm-connect-wait-6a7fxwhm/snapshots"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "pair": 2,
+      "cleanup_errors": [],
+      "success": true,
+      "template": {
+        "aliases": [
+          "base"
+        ],
+        "buildID": "base",
+        "buildStatus": "ready",
+        "cpuCount": 1,
+        "envdVersion": "0.6.3",
+        "memoryMB": 1024,
+        "public": false,
+        "snapshot": false,
+        "templateID": "base"
+      },
+      "batch": {
+        "engine": "hypermachine",
+        "pair": 2,
+        "concurrency": 1,
+        "samples": [
+          {
+            "index": 0,
+            "pair": 2,
+            "engine": "hypermachine",
+            "success": true,
+            "cleanup_success": true,
+            "start_offset_ms": 0.03702098911162466,
+            "create_ms": 376.86209101229906,
+            "ready_ms": 383.593506005127,
+            "exec_ms": 6.731414992827922,
+            "validated_offset_ms": 388.04646299104206
+          }
+        ],
+        "error": null,
+        "readiness_wall_ms": 388.04646299104206,
+        "launch_spread_ms": 0.0,
+        "passing_attempts": 1,
+        "passing_attempts_per_second": 2.577010990622236,
+        "held_process_count": 1,
+        "held_process_memory_kib": {
+          "Rss_kib": 110944,
+          "Pss_kib": 108824,
+          "Private_Clean_kib": 7612,
+          "Private_Dirty_kib": 101004,
+          "Anonymous_kib": 100996
+        },
+        "all_guests_validated_while_held": true,
+        "total_wall_ms_including_cleanup": 427.89995500061195,
+        "success": true
+      },
+      "remaining_sandbox_count": 0,
+      "daemon_exit_code": 0,
+      "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:45989, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:48645 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:48645 process.Process/Start\n",
+      "cold_start_limit": null,
+      "daemon_argv": [
+        "/var/tmp/hm-registration-mutations/daemon",
+        "--port",
+        "45989",
+        "--proxy-port",
+        "48645",
+        "--memory-mb",
+        "1024",
+        "--cpu-cores",
+        "1",
+        "--capacity",
+        "128",
+        "--no-template",
+        "--volume-dir",
+        "/var/tmp/hm-connect-wait-q2wg5sxx/volumes",
+        "--snapshot-store",
+        "/var/tmp/hm-connect-wait-q2wg5sxx/snapshots"
+      ]
+    },
+    {
+      "variant": "candidate",
+      "pair": 2,
+      "cleanup_errors": [],
+      "success": true,
+      "template": {
+        "aliases": [
+          "base"
+        ],
+        "buildID": "base",
+        "buildStatus": "ready",
+        "cpuCount": 1,
+        "envdVersion": "0.6.3",
+        "memoryMB": 1024,
+        "public": false,
+        "snapshot": false,
+        "templateID": "base"
+      },
+      "batch": {
+        "engine": "hypermachine",
+        "pair": 2,
+        "concurrency": 1,
+        "samples": [
+          {
+            "index": 0,
+            "pair": 2,
+            "engine": "hypermachine",
+            "success": true,
+            "cleanup_success": true,
+            "start_offset_ms": 0.032302006729878485,
+            "create_ms": 376.6317279951181,
+            "ready_ms": 382.84359499812126,
+            "exec_ms": 6.211867003003135,
+            "validated_offset_ms": 387.2176120057702
+          }
+        ],
+        "error": null,
+        "readiness_wall_ms": 387.2176120057702,
+        "launch_spread_ms": 0.0,
+        "passing_attempts": 1,
+        "passing_attempts_per_second": 2.582527160425488,
+        "held_process_count": 1,
+        "held_process_memory_kib": {
+          "Rss_kib": 111068,
+          "Pss_kib": 108954,
+          "Private_Clean_kib": 7756,
+          "Private_Dirty_kib": 100992,
+          "Anonymous_kib": 100984
+        },
+        "all_guests_validated_while_held": true,
+        "total_wall_ms_including_cleanup": 428.2316060125595,
+        "success": true
+      },
+      "remaining_sandbox_count": 0,
+      "daemon_exit_code": 0,
+      "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:52745, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:51069 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:51069 process.Process/Start\n",
+      "cold_start_limit": null,
+      "daemon_argv": [
+        "/var/tmp/hm-cold-start-adoption/hv2-sandboxd",
+        "--port",
+        "52745",
+        "--proxy-port",
+        "51069",
+        "--memory-mb",
+        "1024",
+        "--cpu-cores",
+        "1",
+        "--capacity",
+        "128",
+        "--no-template",
+        "--volume-dir",
+        "/var/tmp/hm-connect-wait-p5_ntla6/volumes",
+        "--snapshot-store",
+        "/var/tmp/hm-connect-wait-p5_ntla6/snapshots"
+      ]
+    },
+    {
+      "variant": "candidate",
+      "pair": 3,
+      "cleanup_errors": [],
+      "success": true,
+      "template": {
+        "aliases": [
+          "base"
+        ],
+        "buildID": "base",
+        "buildStatus": "ready",
+        "cpuCount": 1,
+        "envdVersion": "0.6.3",
+        "memoryMB": 1024,
+        "public": false,
+        "snapshot": false,
+        "templateID": "base"
+      },
+      "batch": {
+        "engine": "hypermachine",
+        "pair": 3,
+        "concurrency": 1,
+        "samples": [
+          {
+            "index": 0,
+            "pair": 3,
+            "engine": "hypermachine",
+            "success": true,
+            "cleanup_success": true,
+            "start_offset_ms": 0.03539299359545112,
+            "create_ms": 372.72662900795694,
+            "ready_ms": 378.7301539996406,
+            "exec_ms": 6.003524991683662,
+            "validated_offset_ms": 383.23923699499574
+          }
+        ],
+        "error": null,
+        "readiness_wall_ms": 383.23923699499574,
+        "launch_spread_ms": 0.0,
+        "passing_attempts": 1,
+        "passing_attempts_per_second": 2.609336162552317,
+        "held_process_count": 1,
+        "held_process_memory_kib": {
+          "Rss_kib": 111152,
+          "Pss_kib": 109225,
+          "Private_Clean_kib": 7920,
+          "Private_Dirty_kib": 101104,
+          "Anonymous_kib": 101096
+        },
+        "all_guests_validated_while_held": true,
+        "total_wall_ms_including_cleanup": 428.71800299326424,
+        "success": true
+      },
+      "remaining_sandbox_count": 0,
+      "daemon_exit_code": 0,
+      "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:44067, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:43171 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:43171 process.Process/Start\n",
+      "cold_start_limit": null,
+      "daemon_argv": [
+        "/var/tmp/hm-cold-start-adoption/hv2-sandboxd",
+        "--port",
+        "44067",
+        "--proxy-port",
+        "43171",
+        "--memory-mb",
+        "1024",
+        "--cpu-cores",
+        "1",
+        "--capacity",
+        "128",
+        "--no-template",
+        "--volume-dir",
+        "/var/tmp/hm-connect-wait-5lncwj43/volumes",
+        "--snapshot-store",
+        "/var/tmp/hm-connect-wait-5lncwj43/snapshots"
+      ]
+    },
+    {
+      "variant": "baseline",
+      "pair": 3,
+      "cleanup_errors": [],
+      "success": true,
+      "template": {
+        "aliases": [
+          "base"
+        ],
+        "buildID": "base",
+        "buildStatus": "ready",
+        "cpuCount": 1,
+        "envdVersion": "0.6.3",
+        "memoryMB": 1024,
+        "public": false,
+        "snapshot": false,
+        "templateID": "base"
+      },
+      "batch": {
+        "engine": "hypermachine",
+        "pair": 3,
+        "concurrency": 1,
+        "samples": [
+          {
+            "index": 0,
+            "pair": 3,
+            "engine": "hypermachine",
+            "success": true,
+            "cleanup_success": true,
+            "start_offset_ms": 0.033495001844130456,
+            "create_ms": 380.35747199319303,
+            "ready_ms": 386.43735999357887,
+            "exec_ms": 6.079888000385836,
+            "validated_offset_ms": 390.8950639888644
+          }
+        ],
+        "error": null,
+        "readiness_wall_ms": 390.8950639888644,
+        "launch_spread_ms": 0.0,
+        "passing_attempts": 1,
+        "passing_attempts_per_second": 2.558231331436018,
+        "held_process_count": 1,
+        "held_process_memory_kib": {
+          "Rss_kib": 110900,
+          "Pss_kib": 108786,
+          "Private_Clean_kib": 7492,
+          "Private_Dirty_kib": 101088,
+          "Anonymous_kib": 101080
+        },
+        "all_guests_validated_while_held": true,
+        "total_wall_ms_including_cleanup": 438.08255999465473,
+        "success": true
+      },
+      "remaining_sandbox_count": 0,
+      "daemon_exit_code": 0,
+      "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:49305, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:51183 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:51183 process.Process/Start\n",
+      "cold_start_limit": null,
+      "daemon_argv": [
+        "/var/tmp/hm-registration-mutations/daemon",
+        "--port",
+        "49305",
+        "--proxy-port",
+        "51183",
+        "--memory-mb",
+        "1024",
+        "--cpu-cores",
+        "1",
+        "--capacity",
+        "128",
+        "--no-template",
+        "--volume-dir",
+        "/var/tmp/hm-connect-wait-rtmxfux0/volumes",
+        "--snapshot-store",
+        "/var/tmp/hm-connect-wait-rtmxfux0/snapshots"
+      ]
+    }
+  ],
+  "success": true,
+  "artifacts_unchanged": true,
+  "ready_ms": {
+    "baseline": {
+      "n": 4,
+      "min": 377.82485599745996,
+      "max": 386.43735999357887,
+      "mean": 381.7033324994554,
+      "p50": 378.9576080016559,
+      "p95": 386.43735999357887,
+      "p99": 386.43735999357887
+    },
+    "candidate": {
+      "n": 4,
+      "min": 376.8337910005357,
+      "max": 395.0229270121781,
+      "mean": 383.3576167526189,
+      "p50": 378.7301539996406,
+      "p95": 395.0229270121781,
+      "p99": 395.0229270121781
+    }
+  }
+}

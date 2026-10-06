@@ -1,0 +1,154 @@
+[
+  {
+    "concurrency": 8,
+    "hypermachine_guests": 16,
+    "diagnostic_only": true,
+    "startup_stages_ms": {
+      "total_ms": {
+        "median": 483.3011715,
+        "max": 543.531056,
+        "n": 16
+      },
+      "build_ms": {
+        "median": 0.715673,
+        "max": 3.397742,
+        "n": 16
+      },
+      "launch_ms": {
+        "median": 61.902818999999994,
+        "max": 88.911706,
+        "n": 16
+      },
+      "agent_ms": {
+        "median": 420.81659,
+        "max": 456.899108,
+        "n": 16
+      },
+      "network_envd_ms": {
+        "median": 0.028164,
+        "max": 0.057318,
+        "n": 16
+      }
+    },
+    "cold_readiness_stages_ms": {
+      "blocking_queue_ms": {
+        "median": 2.751761,
+        "max": 5.160665,
+        "n": 16
+      },
+      "connect_ms": {
+        "median": 416.81034750000003,
+        "max": 453.66852,
+        "n": 16
+      },
+      "ping_ms": {
+        "median": 0.32354,
+        "max": 3.9371529999999995,
+        "n": 16
+      }
+    },
+    "dispatch_stages_ms": {
+      "dispatch_queue_ms": {
+        "median": 0.43105649999999995,
+        "max": 3.393183,
+        "n": 16
+      },
+      "wrapper_queue_ms": {
+        "median": 0.0027700000000000003,
+        "max": 0.007883999999999999,
+        "n": 16
+      },
+      "thread_start_ms": {
+        "median": 0.7807545,
+        "max": 6.326955000000001,
+        "n": 16
+      },
+      "owner_setup_ms": {
+        "median": 0.0830575,
+        "max": 39.171758000000004,
+        "n": 16
+      },
+      "first_backend_ms": {
+        "median": 198.1807155,
+        "max": 210.73427,
+        "n": 16
+      }
+    }
+  },
+  {
+    "concurrency": 100,
+    "hypermachine_guests": 100,
+    "diagnostic_only": true,
+    "startup_stages_ms": {
+      "total_ms": {
+        "median": 11558.764274500001,
+        "max": 12376.266835999999,
+        "n": 100
+      },
+      "build_ms": {
+        "median": 5.0377705,
+        "max": 43.57733,
+        "n": 100
+      },
+      "launch_ms": {
+        "median": 75.867423,
+        "max": 1130.794267,
+        "n": 100
+      },
+      "agent_ms": {
+        "median": 11403.601182,
+        "max": 12242.683794999999,
+        "n": 100
+      },
+      "network_envd_ms": {
+        "median": 0.024892,
+        "max": 4.865596,
+        "n": 100
+      }
+    },
+    "cold_readiness_stages_ms": {
+      "blocking_queue_ms": {
+        "median": 6.533386999999999,
+        "max": 111.719538,
+        "n": 100
+      },
+      "connect_ms": {
+        "median": 11363.424889000002,
+        "max": 12239.026033,
+        "n": 100
+      },
+      "ping_ms": {
+        "median": 6.211878499999999,
+        "max": 65.86622200000001,
+        "n": 100
+      }
+    },
+    "dispatch_stages_ms": {
+      "dispatch_queue_ms": {
+        "median": 2.4449235,
+        "max": 59.877274,
+        "n": 100
+      },
+      "wrapper_queue_ms": {
+        "median": 0.0042025,
+        "max": 0.01575,
+        "n": 100
+      },
+      "thread_start_ms": {
+        "median": 6.186083999999999,
+        "max": 287.81131799999997,
+        "n": 100
+      },
+      "owner_setup_ms": {
+        "median": 0.11760699999999999,
+        "max": 52.325453,
+        "n": 100
+      },
+      "first_backend_ms": {
+        "median": 6066.0214240000005,
+        "max": 7496.571287,
+        "n": 100
+      }
+    }
+  }
+]

@@ -1,0 +1,15 @@
+{
+  "README.md": "1d74b93fd6e75ee6dab0bd3aade8dc4512c0afc718fb5a17d929f7d8b57f05fb",
+  "diagnostic-runtime.txt": "992c7226005408a18999a3bba2c2472899033fb6237a5ba638e6b7cf5b20f67b",
+  "discovery-extract.txt": "1c7222f15b67f537e8eea5ef011e5483df52741e6ce6105e4e703f75367f4782",
+  "pci-bus.rs": "507baa6644dd8cb7ee057a15b350a5860b5b43e580d78f585a17a86589551f03",
+  "pci-guest-probe.rs": "9f392e480f4649c848f0b0b74308ba43b4c32f9415d7c12351cce8c0ea80fba6",
+  "pci-tests.txt": "6f74022c85232e7be7fdc055e120f5655af9b6771373b958bec386754a3064d7",
+  "probe-build.txt": "44d83579fe3628c8c1576d1725883bc0888fd00af04fbd45efdd8af9c5b4fca9",
+  "quiet-runtime.txt": "6f65c69c47758fdef0862eeb5a26d88944328e59ce169dc86879af898bf37f7a",
+  "source-context.json": "68fb8c97127d78022fe7e045e5250a9744d8bcc3db0b49230e34294d98e02f8a",
+  "verify.py": "12f030d48c65043eb077cf537add43aa02523e257fdf683f5ed1f4e6e5820a76",
+  "virtio-pci.rs": "8fcd07fa92f17a6785afb4d46387479deba22f5e405cb9c728bb277a3c2554af",
+  "vm-tests.txt": "fbc190d03d5983fb1da280a7912ef1adc0f78ed53b6bc4a00d486af56df6dc26",
+  "vm.rs": "21165c9923b4ced53d014ed3ce36a8b2ebf49ef2145ebee464333e6facddfef3"
+}

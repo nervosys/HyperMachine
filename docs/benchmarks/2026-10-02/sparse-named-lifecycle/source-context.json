@@ -1,0 +1,14 @@
+{
+  "intervention": "sparse_named_snapshot_images",
+  "production_runtime_changed": false,
+  "source_files_verified": 550,
+  "candidate_source_sha256": {
+    "crates/hv2-sandboxd/src/snapshots.rs": "7d5a748a3d7f97c98444b12eb8ba3a75732543fbb4cd5f5754e3f6a87808b14f"
+  },
+  "adoption_requirements": [
+    "Matched restored state and latency/memory",
+    "Capture time and physical storage cost",
+    "Delete/replacement/failure sidecar cleanup",
+    "Shared-store create/delete races"
+  ]
+}

@@ -1,0 +1,42 @@
+[2m2026-10-04T16:10:32.320171Z[0m [32m INFO[0m [2mhv2_sandboxd[0m[2m:[0m using the shared template a5737004198300cb01004b736bc1f769
+[2m2026-10-04T16:10:32.321153Z[0m [32m INFO[0m [2mhv2_api::sandbox_proxy[0m[2m:[0m sandbox proxy listening on 0.0.0.0:60165
+hv2-sandboxd: listening on 0.0.0.0:45459, capacity 8
+  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)
+  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)
+  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls
+  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener
+  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules
+  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy
+  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies
+  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log
+sandboxes get no network interface (--network to change that)
+sandboxes are restored from template snapshots: base
+
+sandbox proxy on 0.0.0.0:60165 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>
+  grpcurl -plaintext -authority 49983-$SBX.local -H "X-Access-Token: $TOKEN" -import-path crates/hv2-api/proto -proto process.proto \
+      -d '{"process":{"cmd":"/bin/sh","args":["-c","echo hi"]}}' \
+      localhost:60165 process.Process/Start
+[2m2026-10-04T16:10:32.475961Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:10:32.477995Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-7bd99a132efc4f5aac08': vsock device attached over PCI at slot 3, BAR 0xd0010000 (guest CID 100, IRQ 11) -- no kernel argument needed
+[2m2026-10-04T16:10:32.478045Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:10:32.479674Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-7bd99a132efc4f5aac08' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:10:32.527925Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-7bd99a132efc4f5aac08' restored from /var/tmp/hm-pci-daemon-api-v2-98cdhg46/store/paused/sbx-7bd99a132efc4f5aac08.snap
+[2m2026-10-04T16:10:32.528022Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-7bd99a132efc4f5aac08' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:10:32.528521Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-7bd99a132efc4f5aac08' with 1 vCPUs
+[2m2026-10-04T16:10:32.528554Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:10:32.528879Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:10:32.556196Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=12)
+[2m2026-10-04T16:10:32.556408Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-7bd99a132efc4f5aac08'
+[2m2026-10-04T16:10:32.556444Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-7bd99a132efc4f5aac08' stopped
+[2m2026-10-04T16:10:32.605022Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:10:32.607015Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-803dffb7719249aeb610': vsock device attached over PCI at slot 3, BAR 0xd0010000 (guest CID 100, IRQ 11) -- no kernel argument needed
+[2m2026-10-04T16:10:32.607083Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:10:32.608375Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-803dffb7719249aeb610' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:10:32.615603Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-803dffb7719249aeb610' restored from /var/tmp/hm-pci-daemon-api-v2-98cdhg46/store/paused/sbx-803dffb7719249aeb610.snap
+[2m2026-10-04T16:10:32.615683Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-803dffb7719249aeb610' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:10:32.616013Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-803dffb7719249aeb610' with 1 vCPUs
+[2m2026-10-04T16:10:32.616037Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:10:32.616302Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:10:32.624416Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=14)
+[2m2026-10-04T16:10:32.624608Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-803dffb7719249aeb610'
+[2m2026-10-04T16:10:32.624638Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-803dffb7719249aeb610' stopped

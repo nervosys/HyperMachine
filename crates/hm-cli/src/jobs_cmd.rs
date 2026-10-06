@@ -34,6 +34,11 @@ impl StoreArgs {
 /// `hm jobs` commands.
 #[derive(Debug, Subcommand)]
 pub enum JobsCommand {
+    /// Persist interval schedules and occurrences; does not execute jobs
+    Schedule {
+        #[command(subcommand)]
+        command: ScheduleCommand,
+    },
     /// Queue a job from a spec file (JSON); prints its ID
     Submit {
         /// The spec, or `-` for standard input
@@ -90,10 +95,240 @@ pub enum JobsCommand {
     },
 }
 
+#[derive(Debug, Subcommand)]
+pub enum ScheduleCommand {
+    /// Record an independently verified guest completion; does not execute or retry
+    RecordResult {
+        id: String,
+        scheduled_ms: u64,
+        result: PathBuf,
+    },
+    /// Publish and execute VM occurrences in order; unresolved work stops the worker
+    Worker {
+        id: String,
+        #[arg(long)]
+        profiles: PathBuf,
+        #[arg(long, default_value = "cli")]
+        worker: String,
+        #[arg(long, default_value = "100")]
+        limit: usize,
+        #[arg(long, default_value = "1000")]
+        poll_ms: u64,
+        #[arg(long)]
+        ticks: Option<u64>,
+    },
+    /// Read durable dispatch ownership and completion output
+    Receipt { id: String, scheduled_ms: u64 },
+    /// Dispatch one committed VM occurrence; uncertain outcomes are not retried
+    Dispatch {
+        id: String,
+        scheduled_ms: u64,
+        #[arg(long)]
+        profiles: PathBuf,
+        #[arg(long, default_value = "cli")]
+        worker: String,
+    },
+    /// Validate an operator connection profile; makes no network request
+    ProfileCheck { file: PathBuf, name: String },
+    /// List schedule names in lexical order as a JSON page
+    List {
+        #[arg(long)]
+        after: Option<String>,
+        #[arg(long, default_value = "100")]
+        limit: usize,
+    },
+    /// Stop future occurrence publication; preserves committed history
+    Cancel { id: String },
+    /// Publish due occurrences repeatedly; does not execute jobs
+    Watch {
+        id: String,
+        #[arg(long, default_value = "100")]
+        limit: usize,
+        #[arg(long, default_value = "1000")]
+        poll_ms: u64,
+        /// Stop after this many polling ticks (otherwise until Ctrl+C)
+        #[arg(long)]
+        ticks: Option<u64>,
+    },
+    /// Create an immutable interval or calendar schedule from JSON (use - for stdin)
+    Create { id: String, spec: PathBuf },
+    /// Print the schedule and occurrence-publication progress as JSON
+    Status { id: String },
+    /// Publish one bounded due batch; does not enqueue or execute jobs
+    Publish {
+        id: String,
+        /// Unix milliseconds to plan through [default: current wall clock]
+        #[arg(long)]
+        now_ms: Option<u64>,
+        #[arg(long, default_value = "100")]
+        limit: usize,
+    },
+    /// Read a JSON page of committed occurrences; does not claim jobs
+    Occurrences {
+        id: String,
+        /// Exclusive scheduled-time cursor in Unix milliseconds
+        #[arg(long)]
+        after_ms: Option<u64>,
+        #[arg(long, default_value = "100")]
+        limit: usize,
+    },
+}
+
 /// Run a `hm jobs` command.
 pub async fn run(store: &StoreArgs, command: JobsCommand) -> Result<i32> {
     let s = store.open()?;
     match command {
+        JobsCommand::Schedule { command } => {
+            let value = match command {
+                ScheduleCommand::Worker {
+                    id,
+                    profiles,
+                    worker,
+                    limit,
+                    poll_ms,
+                    ticks,
+                } => {
+                    return crate::jobs_vm_dispatch::run_worker(
+                        &s,
+                        crate::jobs_vm_dispatch::VmWorkerOptions {
+                            schedule_id: id,
+                            profiles,
+                            worker,
+                            limit,
+                            poll_ms,
+                            ticks,
+                        },
+                    )
+                    .await;
+                }
+                ScheduleCommand::RecordResult {
+                    id,
+                    scheduled_ms,
+                    result,
+                } => {
+                    let text = std::fs::read_to_string(&result)
+                        .with_context(|| format!("reading {}", result.display()))?;
+                    let mut completion: hv2_jobs::dispatch::DispatchCompletion =
+                        serde_json::from_str(&text).context("the verified dispatch completion")?;
+                    completion.origin = hv2_jobs::dispatch::CompletionOrigin::OperatorRecorded;
+                    s.complete_vm_occurrence(&id, scheduled_ms, &completion)?;
+                    serde_json::json!({"schedule_id":id,"scheduled_ms":scheduled_ms,"completion_recorded":true})
+                }
+                ScheduleCommand::Receipt { id, scheduled_ms } => {
+                    serde_json::to_value(s.vm_dispatch_state(&id, scheduled_ms)?)?
+                }
+                ScheduleCommand::Dispatch {
+                    id,
+                    scheduled_ms,
+                    profiles,
+                    worker,
+                } => {
+                    crate::jobs_vm_dispatch::dispatch_once(
+                        &s,
+                        &id,
+                        scheduled_ms,
+                        &worker,
+                        &profiles,
+                    )
+                    .await?
+                }
+                ScheduleCommand::ProfileCheck { file, name } => {
+                    crate::jobs_profile::validate_connection_profile(&file, &name)?;
+                    serde_json::json!({"profile": name, "configuration_valid": true})
+                }
+                ScheduleCommand::List { after, limit } => {
+                    serde_json::to_value(s.interval_schedule_ids(after.as_deref(), limit)?)?
+                }
+                ScheduleCommand::Cancel { id } => {
+                    s.cancel_interval_schedule(&id)?;
+                    serde_json::json!({"id": id, "cancelled": true})
+                }
+                ScheduleCommand::Watch {
+                    id,
+                    limit,
+                    poll_ms,
+                    ticks,
+                } => {
+                    if !(1..=1024).contains(&limit)
+                        || !(1..=60_000).contains(&poll_ms)
+                        || ticks == Some(0)
+                    {
+                        bail!("watch requires limit 1-1024, poll-ms 1-60000 and positive ticks");
+                    }
+                    s.interval_schedule(&id)?;
+                    let shutdown = tokio::signal::ctrl_c();
+                    tokio::pin!(shutdown);
+                    let mut count = 0_u64;
+                    loop {
+                        if s.interval_schedule_cancelled(&id)? {
+                            return Ok(0);
+                        }
+                        let (store, name) = (s.clone(), id.clone());
+                        let mut task = tokio::task::spawn_blocking(move || {
+                            store.materialize_interval(&name, hv2_jobs::now_ms(), limit)
+                        });
+                        let result = tokio::select! {
+                            result = &mut task => result?,
+                            signal = &mut shutdown => {
+                                signal?;
+                                // Finish an accepted filesystem operation before exit.
+                                // Its records remain recoverable even without stdout.
+                                task.await??;
+                                return Ok(0);
+                            }
+                        };
+                        match result {
+                            Ok(records) => {
+                                println!("{}", serde_json::to_string(&records)?);
+                                std::io::stdout().flush()?;
+                            }
+                            Err(hv2_jobs::JobError::Conflict(_)) => {
+                                eprintln!("schedule progress changed; retrying on next tick");
+                            }
+                            Err(error) => return Err(error.into()),
+                        }
+                        count = count
+                            .checked_add(1)
+                            .context("schedule tick count overflow")?;
+                        if ticks.is_some_and(|ticks| count >= ticks) {
+                            return Ok(0);
+                        }
+                        tokio::select! {
+                            () = tokio::time::sleep(Duration::from_millis(poll_ms)) => {},
+                            signal = &mut shutdown => { signal?; return Ok(0); }
+                        }
+                    }
+                }
+                ScheduleCommand::Create { id, spec } => {
+                    let text = if spec.as_os_str() == "-" {
+                        let mut text = String::new();
+                        std::io::stdin().read_to_string(&mut text)?;
+                        text
+                    } else {
+                        std::fs::read_to_string(&spec)
+                            .with_context(|| format!("reading {}", spec.display()))?
+                    };
+                    let schedule = serde_json::from_str(&text).context("the schedule spec")?;
+                    s.create_interval_schedule(&id, &schedule)?;
+                    serde_json::json!({"id": id})
+                }
+                ScheduleCommand::Status { id } => serde_json::json!({
+                    "id": id, "schedule": s.interval_schedule(&id)?,
+                    "cancelled": s.interval_schedule_cancelled(&id)?,
+                    "publication_through_ms": s.interval_progress(&id)?
+                }),
+                ScheduleCommand::Publish { id, now_ms, limit } => serde_json::to_value(
+                    s.materialize_interval(&id, now_ms.unwrap_or_else(hv2_jobs::now_ms), limit)?,
+                )?,
+                ScheduleCommand::Occurrences {
+                    id,
+                    after_ms,
+                    limit,
+                } => serde_json::to_value(s.committed_interval_occurrences(&id, after_ms, limit)?)?,
+            };
+            println!("{}", serde_json::to_string_pretty(&value)?);
+            Ok(0)
+        }
         JobsCommand::Submit { spec } => {
             let text = if spec.as_os_str() == "-" {
                 let mut t = String::new();

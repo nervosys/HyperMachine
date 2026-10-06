@@ -20,10 +20,17 @@ struct Options {
     port: u16,
     proxy_port: u16,
     api_key: Option<String>,
+    api_keys_file: Option<String>,
+    native_port_range: Option<hv2_cluster::ports::PublicPortRange>,
+    web_access_file: Option<String>,
+    domain_verification_file: Option<String>,
     cluster_token: Option<String>,
     reap_interval: Duration,
     tls_cert: Option<String>,
     tls_key: Option<String>,
+    tls_bundle_file: Option<String>,
+    api_tls_cert: Option<String>,
+    api_tls_key: Option<String>,
     /// Mutual TLS to nodes: the CA, this instance's client certificate and
     /// key, and the name nodes' certificates carry.
     mtls_ca: Option<String>,
@@ -41,12 +48,19 @@ fn parse() -> Result<Options, String> {
         proxy_port: 5981,
         // From the environment by default, so a key need not sit in `ps`.
         api_key: std::env::var("HV2_API_KEY").ok().filter(|k| !k.is_empty()),
+        api_keys_file: None,
+        native_port_range: None,
+        web_access_file: None,
+        domain_verification_file: None,
         cluster_token: std::env::var("HV2_CLUSTER_TOKEN")
             .ok()
             .filter(|k| !k.is_empty()),
         reap_interval: Duration::from_secs(5),
         tls_cert: None,
         tls_key: None,
+        tls_bundle_file: None,
+        api_tls_cert: None,
+        api_tls_key: None,
         mtls_ca: None,
         mtls_cert: None,
         mtls_key: None,
@@ -71,6 +85,25 @@ fn parse() -> Result<Options, String> {
                 opts.proxy_port = value()?.parse().map_err(|e| format!("--proxy-port: {e}"))?;
             }
             "--api-key" => opts.api_key = Some(value()?),
+            "--api-keys-file" => opts.api_keys_file = Some(value()?),
+            "--native-port-range" => {
+                let raw = value()?;
+                let (first, last) = raw
+                    .split_once('-')
+                    .ok_or("--native-port-range requires FIRST-LAST")?;
+                let first = first
+                    .parse::<u16>()
+                    .map_err(|_| "invalid native port range")?;
+                let last = last
+                    .parse::<u16>()
+                    .map_err(|_| "invalid native port range")?;
+                opts.native_port_range = Some(
+                    hv2_cluster::ports::PublicPortRange::new(first, last)
+                        .map_err(|_| "invalid native port range")?,
+                );
+            }
+            "--web-access-file" => opts.web_access_file = Some(value()?),
+            "--domain-verification-file" => opts.domain_verification_file = Some(value()?),
             "--cluster-token" => opts.cluster_token = Some(value()?),
             "--reap-interval" => {
                 opts.reap_interval = Duration::from_secs(
@@ -81,6 +114,9 @@ fn parse() -> Result<Options, String> {
             }
             "--tls-cert" => opts.tls_cert = Some(value()?),
             "--tls-key" => opts.tls_key = Some(value()?),
+            "--tls-bundle-file" => opts.tls_bundle_file = Some(value()?),
+            "--api-tls-cert" => opts.api_tls_cert = Some(value()?),
+            "--api-tls-key" => opts.api_tls_key = Some(value()?),
             "--mtls-ca" => opts.mtls_ca = Some(value()?),
             "--mtls-cert" => opts.mtls_cert = Some(value()?),
             "--mtls-key" => opts.mtls_key = Some(value()?),
@@ -90,9 +126,10 @@ fn parse() -> Result<Options, String> {
                 println!(
                     "usage: hv2-control-plane [--store memory:|redis://host:port] [--namespace N] \
                      [--port N] [--proxy-port N] [--api-key K] [--cluster-token T] \
-                     [--reap-interval SECS] [--tls-cert F --tls-key F] \
+                     [--api-keys-file F] [--native-port-range FIRST-LAST] [--reap-interval SECS] [--tls-cert F --tls-key F] \
+                     [--tls-bundle-file F] [--api-tls-cert F --api-tls-key F] \
                      [--mtls-ca F --mtls-cert F --mtls-key F [--mtls-node-name N]] \
-                     [--identity-issuer URL]\n\
+                     [--identity-issuer URL] [--web-access-file F] [--domain-verification-file F]\n\
                      HV2_API_KEY and HV2_CLUSTER_TOKEN are read from the environment too."
                 );
                 std::process::exit(0);
@@ -100,6 +137,9 @@ fn parse() -> Result<Options, String> {
             other => return Err(format!("unrecognised argument {other}")),
         }
         i += 1;
+    }
+    if opts.tls_bundle_file.is_some() && (opts.tls_cert.is_some() || opts.tls_key.is_some()) {
+        return Err("--tls-bundle-file cannot be combined with --tls-cert or --tls-key".into());
     }
     Ok(opts)
 }
@@ -120,6 +160,34 @@ async fn main() -> std::process::ExitCode {
             return std::process::ExitCode::FAILURE;
         }
     };
+    let api_keys = match opts
+        .api_keys_file
+        .as_ref()
+        .map(|path| {
+            hv2_cluster::keys::read_policy_file(path)
+                .and_then(|json| hv2_cluster::keys::ApiKeyPolicy::from_json(&json))
+        })
+        .transpose()
+    {
+        Ok(keys) => keys.unwrap_or_default(),
+        Err(error) => {
+            eprintln!("hv2-control-plane: {error}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    if let Err(error) =
+        hv2_cluster::keys::ApiKeyPolicy::validate_legacy_admin(&api_keys, opts.api_key.as_deref())
+    {
+        eprintln!("hv2-control-plane: {error}");
+        return std::process::ExitCode::FAILURE;
+    }
+    let access_audit = match hv2_cluster::audit::AccessAudit::from_env() {
+        Ok(audit) => audit,
+        Err(error) => {
+            eprintln!("hv2-control-plane: {error}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
     let store = match store::open(&opts.store, &opts.namespace).await {
         Ok(store) => store,
         Err(e) => {
@@ -127,9 +195,26 @@ async fn main() -> std::process::ExitCode {
             return std::process::ExitCode::FAILURE;
         }
     };
-    if opts.api_key.is_none() {
+    if opts.api_key.is_none() && api_keys.is_empty() {
         tracing::warn!("no --api-key: anyone who can reach this port can create sandboxes");
     }
+
+    let domain_verification = match opts.domain_verification_file.as_deref() {
+        None => None,
+        Some(path) => match hv2_cluster::domain_verification::DomainVerification::load(
+            std::path::Path::new(path),
+        ) {
+            Ok(policy) if policy.namespace() == opts.namespace => Some(policy),
+            Ok(_) => {
+                eprintln!("hv2-control-plane: DNS verification namespace must match --namespace");
+                return std::process::ExitCode::FAILURE;
+            }
+            Err(e) => {
+                eprintln!("hv2-control-plane: DNS verification: {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+        },
+    };
 
     // Mutual TLS to nodes, all three files or none: half a configuration
     // is a mistake, and falling back to plaintext is the wrong way to say so.
@@ -160,7 +245,29 @@ async fn main() -> std::process::ExitCode {
     }
 
     // Envd traffic, routed to whichever node holds the sandbox.
+    let web_access = match &opts.web_access_file {
+        None => None,
+        Some(path) => {
+            if opts.tls_cert.is_none() || opts.tls_key.is_none() || mtls.is_none() {
+                eprintln!("hv2-control-plane: --web-access-file requires proxy TLS and node mTLS");
+                return std::process::ExitCode::FAILURE;
+            }
+            let policy = hv2_cluster::keys::read_policy_file(path)
+                .and_then(|json| hv2_cluster::web_access::WebAccessPolicy::from_json(&json));
+            match policy {
+                Ok(policy) => Some(Arc::new(policy)),
+                Err(error) => {
+                    eprintln!("hv2-control-plane: web access policy: {error}");
+                    return std::process::ExitCode::FAILURE;
+                }
+            }
+        }
+    };
     let routes = ClusterRoutes::new(Arc::clone(&store), Duration::from_secs(2));
+    let routes = match &web_access {
+        Some(policy) => routes.with_web_access(Arc::clone(policy)),
+        None => routes,
+    };
     let routes = match &mtls {
         None => Arc::new(routes),
         Some(mtls) => match routes.with_mtls(mtls) {
@@ -172,23 +279,66 @@ async fn main() -> std::process::ExitCode {
         },
     };
     let proxy_addr = std::net::SocketAddr::from(([0, 0, 0, 0], opts.proxy_port));
-    let tls = match (&opts.tls_cert, &opts.tls_key) {
-        (Some(cert), Some(key)) => match hv2_api::sandbox_proxy::tls_config(
-            std::path::Path::new(cert),
-            std::path::Path::new(key),
-        ) {
-            Ok(config) => Some(config),
+    let tls_bundle = match opts.tls_bundle_file.as_deref() {
+        None => None,
+        Some(path) => match hv2_api::tls_bundle::TlsBundle::load(std::path::Path::new(path)) {
+            Ok(bundle) => Some(bundle),
             Err(e) => {
-                eprintln!("hv2-control-plane: TLS: {e}");
+                eprintln!("hv2-control-plane: TLS bundle: {e}");
                 return std::process::ExitCode::FAILURE;
             }
         },
-        (None, None) => None,
-        _ => {
-            eprintln!("hv2-control-plane: --tls-cert and --tls-key go together");
-            return std::process::ExitCode::FAILURE;
+    };
+    let tls = if let Some(bundle) = &tls_bundle {
+        Some(bundle.server_config())
+    } else {
+        match (&opts.tls_cert, &opts.tls_key) {
+            (Some(cert), Some(key)) => match hv2_api::sandbox_proxy::tls_config(
+                std::path::Path::new(cert),
+                std::path::Path::new(key),
+            ) {
+                Ok(config) => Some(config),
+                Err(e) => {
+                    eprintln!("hv2-control-plane: TLS: {e}");
+                    return std::process::ExitCode::FAILURE;
+                }
+            },
+            (None, None) => None,
+            _ => {
+                eprintln!("hv2-control-plane: --tls-cert and --tls-key go together");
+                return std::process::ExitCode::FAILURE;
+            }
         }
     };
+    #[cfg(unix)]
+    if let (Some(bundle), Some(path)) = (tls_bundle, opts.tls_bundle_file.clone()) {
+        let mut reload = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())
+        {
+            Ok(signal) => signal,
+            Err(_) => {
+                eprintln!("hv2-control-plane: TLS bundle reload signal unavailable");
+                return std::process::ExitCode::FAILURE;
+            }
+        };
+        tokio::spawn(async move {
+            while reload.recv().await.is_some() {
+                let (bundle, path) = (bundle.clone(), path.clone());
+                match tokio::task::spawn_blocking(move || {
+                    bundle.replace_from_file(std::path::Path::new(&path))
+                })
+                .await
+                {
+                    Ok(Ok(())) => tracing::info!("TLS certificate bundle reloaded"),
+                    Ok(Err(error)) => {
+                        tracing::warn!(%error,"TLS certificate bundle reload rejected; active certificates retained");
+                    }
+                    Err(_) => tracing::error!(
+                        "TLS certificate bundle reload task failed; active certificates retained"
+                    ),
+                }
+            }
+        });
+    }
     let (_proxy_shutdown, proxy_rx) = tokio::sync::oneshot::channel();
     tokio::spawn(async move {
         let result = match tls {
@@ -204,6 +354,8 @@ async fn main() -> std::process::ExitCode {
 
     let config = ControlConfig {
         api_key: opts.api_key,
+        api_keys,
+        access_audit,
         cluster_token: opts.cluster_token,
         proxy_port: opts.proxy_port,
         create_timeout: Duration::from_secs(60),
@@ -211,14 +363,88 @@ async fn main() -> std::process::ExitCode {
     };
     let control = match &mtls {
         None => ControlPlane::new(store, config),
-        Some(mtls) => match mtls.http_client() {
-            Ok(http) => ControlPlane::with_client(store, config, http),
+        Some(mtls) => match mtls
+            .http_client()
+            .and_then(|http| Ok((http, mtls.tcp_http_client()?)))
+        {
+            Ok((http, tcp_http)) => ControlPlane::with_clients(store, config, http, tcp_http),
             Err(e) => {
                 eprintln!("hv2-control-plane: mTLS: {e}");
                 return std::process::ExitCode::FAILURE;
             }
         },
     };
+    if let Some(range) = opts.native_port_range {
+        if let Err(error) = control.configure_public_ports(range) {
+            eprintln!("hv2-control-plane: {error}");
+            return std::process::ExitCode::FAILURE;
+        }
+    }
+    if let Some(policy) = domain_verification {
+        if let Err(e) = control.require_domain_verification(policy) {
+            eprintln!("hv2-control-plane: DNS verification: {e}");
+            return std::process::ExitCode::FAILURE;
+        }
+    }
+    #[cfg(unix)]
+    if let (Some(path), Some(policy)) = (opts.web_access_file.clone(), web_access) {
+        let mut reload = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())
+        {
+            Ok(signal) => signal,
+            Err(_) => {
+                eprintln!("hv2-control-plane: web access reload signal unavailable");
+                return std::process::ExitCode::FAILURE;
+            }
+        };
+        tokio::spawn(async move {
+            while reload.recv().await.is_some() {
+                let path = path.clone();
+                let policy = Arc::clone(&policy);
+                let result = tokio::task::spawn_blocking(move || {
+                    let json = hv2_cluster::keys::read_policy_file(path)?;
+                    policy.replace(&json)
+                })
+                .await;
+                match result {
+                    Ok(Ok(())) => eprintln!("hv2-control-plane: web access policies reloaded"),
+                    Ok(Err(error)) => {
+                        eprintln!("hv2-control-plane: web access reload rejected: {error}");
+                    }
+                    Err(_) => eprintln!("hv2-control-plane: web access reload task failed"),
+                }
+            }
+        });
+    }
+    #[cfg(unix)]
+    if let Some(path) = opts.api_keys_file.clone() {
+        let mut reload = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())
+        {
+            Ok(signal) => signal,
+            Err(error) => {
+                eprintln!("hv2-control-plane: policy reload signal: {error}");
+                return std::process::ExitCode::FAILURE;
+            }
+        };
+        let policy_control = Arc::clone(&control);
+        tokio::spawn(async move {
+            while reload.recv().await.is_some() {
+                let path = path.clone();
+                let control = Arc::clone(&policy_control);
+                let result = tokio::task::spawn_blocking(move || {
+                    let json = hv2_cluster::keys::read_policy_file(path)?;
+                    control.replace_api_key_policies(&json)
+                })
+                .await;
+                match result {
+                    Ok(Ok(())) => eprintln!("hv2-control-plane: API key policies reloaded"),
+                    Ok(Err(error)) => {
+                        eprintln!("hv2-control-plane: API key reload rejected: {error}");
+                    }
+                    Err(_) => eprintln!("hv2-control-plane: API key reload task failed"),
+                }
+            }
+        });
+    }
     tokio::spawn(control::reaper(Arc::clone(&control), opts.reap_interval));
     let addr = format!("0.0.0.0:{}", opts.port);
     let listener = match tokio::net::TcpListener::bind(&addr).await {
@@ -232,7 +458,44 @@ async fn main() -> std::process::ExitCode {
         "hv2-control-plane: E2B API on {addr}, envd proxy on {proxy_addr}, store {}",
         store::redacted(&opts.store)
     );
-    if let Err(e) = axum::serve(listener, control::router(control)).await {
+    let api_tls = match (&opts.api_tls_cert, &opts.api_tls_key) {
+        (None, None) => None,
+        (Some(cert), Some(key)) => {
+            match hv2_api::tls::build_rustls_config(&hv2_api::tls::TlsConfig {
+                cert_path: cert.clone(),
+                key_path: key.clone(),
+            }) {
+                Ok(config) => Some(config),
+                Err(error) => {
+                    eprintln!("hv2-control-plane: API TLS: {error}");
+                    return std::process::ExitCode::FAILURE;
+                }
+            }
+        }
+        _ => {
+            eprintln!("hv2-control-plane: --api-tls-cert and --api-tls-key go together");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    let result = match api_tls {
+        None => axum::serve(
+            axum::serve::ListenerExt::tap_io(listener, hv2_api::tls::configure_api_socket),
+            control::router(control),
+        )
+        .await
+        .map_err(|e| e.to_string()),
+        Some(config) => hv2_api::tls::serve_tls(
+            listener,
+            control::router(control),
+            tokio_rustls::TlsAcceptor::from(config),
+            async {
+                let _ = tokio::signal::ctrl_c().await;
+            },
+        )
+        .await
+        .map_err(|e| e.to_string()),
+    };
+    if let Err(e) = result {
         eprintln!("hv2-control-plane: {e}");
         return std::process::ExitCode::FAILURE;
     }

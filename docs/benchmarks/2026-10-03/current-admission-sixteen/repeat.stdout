@@ -1,0 +1,8 @@
+{"pair": 0, "variant": "baseline", "success": true}
+{"pair": 0, "variant": "candidate", "success": true}
+{"pair": 1, "variant": "candidate", "success": true}
+{"pair": 1, "variant": "baseline", "success": true}
+{"pair": 2, "variant": "baseline", "success": false}
+{"pair": 2, "variant": "candidate", "success": true}
+{"pair": 3, "variant": "candidate", "success": true}
+{"pair": 3, "variant": "baseline", "success": false}

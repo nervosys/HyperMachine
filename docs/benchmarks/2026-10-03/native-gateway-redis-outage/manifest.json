@@ -1,0 +1,11 @@
+{
+  "sha256": {
+    "README.md": "feee51633f345f97ccbab241278e3101593cdc15080b4686e6730106bff06b4c",
+    "check-native-gateway.py": "75c40956a6181985a6ffeceb7e8ffbd22ed9049d4c1011e912d74fdcf1bfbdcb",
+    "gateway-1.log": "988d43ab217014588e324aece8ac2921772df568a4bdda68a6433f978474f8d7",
+    "gateway-2.log": "a5a9cfce322a348bd3efffff19773f1512ddd2170be1176ce3ab388fd31e726b",
+    "redis-restarted.log": "ffe69ca184fe86eb7f86cafda169593fa1fcf41e3609467f522a04ae85de4c8f",
+    "redis.log": "7d67b7a292c74da560311b60f22e72c1d55bbc1455cf8be002e87ee9858c7477",
+    "report.json": "4620636fc36b6c86f76d2c76a8eaa354a159399f7f9f4d06953aeb7d2ac6bd9c"
+  }
+}

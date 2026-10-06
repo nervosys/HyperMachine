@@ -1,0 +1,41 @@
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:60553
+[33mPress CTRL+C to quit[0m
+127.0.0.1 - - [02/Oct/2026 10:48:37] "PUT /hm-owned-backup-fixture HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:38] "PUT /hm-owned-backup-fixture/synthetic.hmb HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:38] "GET /hm-owned-backup-fixture/synthetic.hmb HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:39] "[31m[1mPUT /hm-owned-backup-fixture/synthetic.hmb HTTP/1.1[0m" 412 -
+127.0.0.1 - - [02/Oct/2026 10:48:39] "GET /hm-owned-backup-fixture/synthetic.hmb HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:40] "GET /hm-owned-backup-fixture/synthetic.hmb HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:41] "GET /hm-owned-backup-fixture/synthetic.hmb HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:41] "PUT /hm-owned-backup-fixture/tampered HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:41] "GET /hm-owned-backup-fixture/tampered HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:42] "PUT /hm-owned-backup-fixture/truncated HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:42] "GET /hm-owned-backup-fixture/truncated HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:43] "GET /hm-owned-backup-fixture/synthetic.hmb HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:43] "PUT /hm-owned-backup-fixture/unsafe-path HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:44] "GET /hm-owned-backup-fixture/unsafe-path HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:44] "PUT /hm-owned-backup-fixture/symlink HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:44] "GET /hm-owned-backup-fixture/symlink HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:44] "PUT /hm-owned-backup-fixture/missing-file HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:45] "GET /hm-owned-backup-fixture/missing-file HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:45] "PUT /hm-owned-backup-fixture/wrong-digest HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:45] "GET /hm-owned-backup-fixture/wrong-digest HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:46] "PUT /hm-owned-backup-fixture/extra-file HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:46] "GET /hm-owned-backup-fixture/extra-file HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:46] "PUT /hm-owned-backup-fixture/duplicate-file HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:47] "GET /hm-owned-backup-fixture/duplicate-file HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:49] "GET /hm-owned-backup-fixture/synthetic.hmb HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:49] "PUT /hm-owned-backup-fixture/lost-response.hmb HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:49] "GET /hm-owned-backup-fixture/lost-response.hmb HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:49] "GET /hm-owned-backup-fixture/lost-response.hmb HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:52] "PUT /hm-owned-backup-fixture?versioning HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:57] "POST /hm-owned-backup-fixture/kvm.hmb?uploads HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:57] "PUT /hm-owned-backup-fixture/kvm.hmb?uploadId=QMXZN5LMWHb0zyr5gUSvY0PkI8rMUbrKpzcwMTcHqswnN9wbSAb1ytsA&partNumber=1 HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:57] "PUT /hm-owned-backup-fixture/kvm.hmb?uploadId=QMXZN5LMWHb0zyr5gUSvY0PkI8rMUbrKpzcwMTcHqswnN9wbSAb1ytsA&partNumber=2 HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:57] "PUT /hm-owned-backup-fixture/kvm.hmb?uploadId=QMXZN5LMWHb0zyr5gUSvY0PkI8rMUbrKpzcwMTcHqswnN9wbSAb1ytsA&partNumber=3 HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:57] "PUT /hm-owned-backup-fixture/kvm.hmb?uploadId=QMXZN5LMWHb0zyr5gUSvY0PkI8rMUbrKpzcwMTcHqswnN9wbSAb1ytsA&partNumber=4 HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:57] "PUT /hm-owned-backup-fixture/kvm.hmb?uploadId=QMXZN5LMWHb0zyr5gUSvY0PkI8rMUbrKpzcwMTcHqswnN9wbSAb1ytsA&partNumber=5 HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:57] "POST /hm-owned-backup-fixture/kvm.hmb?uploadId=QMXZN5LMWHb0zyr5gUSvY0PkI8rMUbrKpzcwMTcHqswnN9wbSAb1ytsA HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:48:57] "[35m[1mDELETE /hm-owned-backup-fixture/kvm.hmb HTTP/1.1[0m" 204 -
+127.0.0.1 - - [02/Oct/2026 10:48:58] "GET /hm-owned-backup-fixture/kvm.hmb?versionId=f73f4b57-077d-4418-af64-2c3e681fd18d HTTP/1.1" 200 -

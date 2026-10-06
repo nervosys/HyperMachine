@@ -1,0 +1,146 @@
+{
+  "profiles": [
+    {
+      "concurrency": 8,
+      "variants": {
+        "previous": {
+          "planned_total": 288,
+          "attempted_total": 288,
+          "passed_total": 288,
+          "failed_total": 0,
+          "measured_attempted": 240,
+          "measured_passed": 240,
+          "successful_p50_ms": 71.67656799720135,
+          "successful_p95_ms": 75.10617400112096,
+          "successful_p99_ms": 86.19668000028469,
+          "successful_batch_median_requests_per_second": 110.15175300591133,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-off": {
+          "planned_total": 288,
+          "attempted_total": 288,
+          "passed_total": 288,
+          "failed_total": 0,
+          "measured_attempted": 240,
+          "measured_passed": 240,
+          "successful_p50_ms": 1.1696079891407862,
+          "successful_p95_ms": 2.570179000031203,
+          "successful_p99_ms": 3.9063069998519495,
+          "successful_batch_median_requests_per_second": 4451.577109745975,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-on": {
+          "planned_total": 288,
+          "attempted_total": 288,
+          "passed_total": 288,
+          "failed_total": 0,
+          "measured_attempted": 240,
+          "measured_passed": 240,
+          "successful_p50_ms": 18.17337199463509,
+          "successful_p95_ms": 19.641242004581727,
+          "successful_p99_ms": 20.038105009007268,
+          "successful_batch_median_requests_per_second": 430.3724914162845,
+          "successful_batches": 6,
+          "failed_runs": 0
+        }
+      },
+      "comparisons": {
+        "audit-off_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 6,
+          "median_paired_mean_reduction_ms": 67.71940245143924,
+          "median_paired_throughput_ratio": 40.36599492208132
+        },
+        "audit-on_versus_audit-off": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 0,
+          "median_paired_mean_reduction_ms": -16.7732882880955,
+          "median_paired_throughput_ratio": 0.09553797985760284
+        },
+        "audit-on_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 6,
+          "median_paired_mean_reduction_ms": 50.77422353806469,
+          "median_paired_throughput_ratio": 3.8906546212344724
+        }
+      }
+    },
+    {
+      "concurrency": 100,
+      "variants": {
+        "previous": {
+          "planned_total": 3600,
+          "attempted_total": 3600,
+          "passed_total": 3600,
+          "failed_total": 0,
+          "measured_attempted": 3000,
+          "measured_passed": 3000,
+          "successful_p50_ms": 911.0230660007801,
+          "successful_p95_ms": 943.1039140035864,
+          "successful_p99_ms": 965.3216540027643,
+          "successful_batch_median_requests_per_second": 108.71986426782078,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-off": {
+          "planned_total": 3600,
+          "attempted_total": 3600,
+          "passed_total": 3600,
+          "failed_total": 0,
+          "measured_attempted": 3000,
+          "measured_passed": 3000,
+          "successful_p50_ms": 14.054676998057403,
+          "successful_p95_ms": 32.756902000983246,
+          "successful_p99_ms": 43.9229119947413,
+          "successful_batch_median_requests_per_second": 4474.592845620458,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-on": {
+          "planned_total": 3600,
+          "attempted_total": 3600,
+          "passed_total": 3600,
+          "failed_total": 0,
+          "measured_attempted": 3000,
+          "measured_passed": 3000,
+          "successful_p50_ms": 20.41773901146371,
+          "successful_p95_ms": 31.19092099950649,
+          "successful_p99_ms": 36.51054299552925,
+          "successful_batch_median_requests_per_second": 3823.4388883797396,
+          "successful_batches": 6,
+          "failed_runs": 0
+        }
+      },
+      "comparisons": {
+        "audit-off_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 6,
+          "median_paired_mean_reduction_ms": 855.1003958801593,
+          "median_paired_throughput_ratio": 41.38166719248111
+        },
+        "audit-on_versus_audit-off": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 0,
+          "median_paired_mean_reduction_ms": -5.073934084139182,
+          "median_paired_throughput_ratio": 0.8534573658264112
+        },
+        "audit-on_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 6,
+          "median_paired_mean_reduction_ms": 850.2998693481204,
+          "median_paired_throughput_ratio": 35.28780160256739
+        }
+      }
+    }
+  ],
+  "total_attempted": 11664,
+  "total_passed": 11664,
+  "audit_records_verified": 15552,
+  "cleanup_verified": true,
+  "cohort_success": true,
+  "artifacts_unchanged": true,
+  "previous_audited": true,
+  "competitor_win_established": false
+}

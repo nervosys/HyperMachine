@@ -1,0 +1,25 @@
+{
+  "source_sha256": {
+    "crates/hv2-agent/src/guest_agent.rs": "15811098a1a28c541566f479c86b184ee3af174a70b97253ee8a3c7a596e219f",
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/snapshot/types.rs": "bcc7ac3084f97e447fda271dbaa94cf3e3a9ad8a6ec20971a4731ba494f5db37",
+    "crates/hv2-sandboxd/src/main.rs": "ac04693e1e8bbc6f046332f2c7e73f7148cdb51315ab41dfcbe825142d63abdf",
+    "Cargo.lock": "483b5c6c12d6964be69035547b60bc2ea773fb1daaa735db2d09526852516211"
+  },
+  "source_commit": "5dd8c92805639768c3effc197c8d460cd0826d48",
+  "rustc": "rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)",
+  "original_binary_sha256": "8ea52a369067d99f281b96bc513c59216304ac8e7eea0462d746f854e9d7aa5d",
+  "command": [
+    "cargo",
+    "build",
+    "--locked",
+    "--release",
+    "-p",
+    "hv2-sandboxd"
+  ],
+  "build_exit_code": 0,
+  "candidate_binary_sha256": "fd8cb6c412192a9aa3b948d4348fa210dc6dc7a835a7fe0d0eb99a57eda504b7",
+  "canonical_scored_binary_restored": true,
+  "build_output": "   Compiling hv2-agent v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-agent)\n   Compiling hv2-runtime v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-runtime)\n   Compiling hv2-api v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-api)\n   Compiling hv2-cluster v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-cluster)\n   Compiling hv2-sandboxd v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-sandboxd)\n    Finished `release` profile [optimized] target(s) in 3m 24s\n",
+  "build_output_sha256": "539f9ca74ac7da6ae1c0af91be651d014037e89193fd1d248650fd89ad6cd84d"
+}

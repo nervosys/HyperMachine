@@ -1,0 +1,34 @@
+{
+  "success": true,
+  "source_sha256": {
+    "Cargo.lock": "4c9d2ed68cf63118d05119ed1f237d34124a24f94af32bc120cfd50bec1a78e4",
+    "crates/hv2-guest-agent/Cargo.toml": "c5c0e5b3118f8f14dc6e69ba26abf3e68124d8de528f00056f02e803035ac170",
+    "crates/hv2-guest-agent/src/bin/agentd.rs": "3eb0fb815f3616501a353d944a31486f4b7f10764763d5e37f54459088f0913d",
+    "crates/hv2-guest-agent/src/lib.rs": "22dc1c124145e5c03e3ce6ccce2e935753451147ddbbd97988625acc33e114ad"
+  },
+  "source_initrd_sha256": "f226c599d385609fc03af2223b6829a5249b28193c96179daeb7d47383005d1b",
+  "rustc": "rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)",
+  "coordinator_sha256": "c8e753885fe024cee363af8b0e9f1516a5f7c01b9df9e9d34522412321936466",
+  "command": [
+    "cargo",
+    "build",
+    "--locked",
+    "--release",
+    "-p",
+    "hv2-guest-agent",
+    "--target",
+    "x86_64-unknown-linux-gnu"
+  ],
+  "exit_code": 0,
+  "output_utf8": "   Compiling hv2-guest-agent v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-guest-agent)\n    Finished `release` profile [optimized] target(s) in 25.61s\n",
+  "output_sha256": "df39c26e942a5055ab803b541d36bd5e50729b235b4b555909e067149d34fd4d",
+  "agent_sha256": "5a684465b96c3ede662317cb99b0badff1b9d591017fe08bae12ae648d98f3c7",
+  "unchanged_files_sha256": {
+    "bin/bash": "4e11eafa00e8ffce3971a2a815e08dd8543de71f133519592379262bb07c1cf0",
+    "bin/busybox": "7ae95c260622412ceba6eb9f45d68f616cdc091a1d71d6c0a08b5875bb2c31dd",
+    "bin/tcp-fixture": "1bf4ec31df0b218db72080990ffbfe9aff5fd31fcf7b03b3568afae3d96c6421",
+    "init": "25879880540c60aeabff8f2d708b1acfaf8441fe617b228e644953b635ba5098"
+  },
+  "output_sha256_initrd": "7d36dd6384504ec60abf2e69f9d78941cfae8d96110d9e05f5d45ce87fdd1224",
+  "source_initrd_unchanged": true
+}

@@ -19,7 +19,7 @@
 # Shell scripts
 *.sh text eol=lf
 
-# Windows scripts — keep CRLF
+# Windows scripts â€” keep CRLF
 *.bat text eol=crlf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
@@ -29,3 +29,633 @@
 *.jpg binary
 *.ico binary
 *.wasm binary
+
+# Preserve exact recorded diagnostic coordinator bytes for its SHA256.
+docs/benchmarks/2026-09-30/owner-load-coordinator.py -text whitespace=cr-at-eol
+
+docs/benchmarks/2026-09-30/owner-pinned-load-coordinator.py -text whitespace=cr-at-eol
+
+# Preserve exact startup diagnostic evidence and source hashes.
+docs/benchmarks/2026-10-01/* -text whitespace=cr-at-eol
+# Raw Cargo transcripts intentionally end with a blank line.
+docs/benchmarks/2026-10-01/kvm-events-abi-test.txt -text whitespace=cr-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-01/kvm-events-direct-test.txt -text whitespace=cr-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-01/tcp-build*-output.txt -text whitespace=cr-at-eol,-blank-at-eof
+# Exact compiled source contains pre-existing Markdown line-break spaces.
+docs/benchmarks/2026-10-01/ssh-cli-source-crates--hm-cli--src--agentic--adapters.rs.txt -text whitespace=cr-at-eol,-blank-at-eol
+docs/benchmarks/2026-10-01/scheduled-dispatch-source.patch -text whitespace=cr-at-eol,-blank-at-eol
+
+docs/benchmarks/2026-10-01/scheduled-worker-core-source.patch -text whitespace=cr-at-eol,-blank-at-eol
+docs/benchmarks/2026-10-01/scheduled-worker-coordinator.py -text
+
+docs/benchmarks/2026-10-01/dispatch-history-selection.patch -text whitespace=cr-at-eol,-blank-at-eol
+
+docs/benchmarks/2026-10-01/dispatch-backlog-*.patch -text whitespace=cr-at-eol,-blank-at-eol
+
+docs/benchmarks/2026-10-01/scheduled-worker-cancel-coordinator.py -text
+
+docs/benchmarks/2026-10-01/scheduled-calendar-coordinator.py -text
+
+docs/benchmarks/2026-10-01/calendar-planning-source.rs -text
+docs/benchmarks/2026-10-01/calendar-planning-utc.patch -text whitespace=cr-at-eol,-blank-at-eol
+
+docs/benchmarks/2026-10-01/calendar-batch-source.rs -text
+docs/benchmarks/2026-10-01/calendar-batch.patch -text whitespace=cr-at-eol,-blank-at-eol
+
+docs/benchmarks/2026-10-01/calendar-batch-kvm-coordinator.py -text
+
+docs/benchmarks/2026-10-01/calendar-publication-source.rs -text
+docs/benchmarks/2026-10-01/calendar-publication.patch -text whitespace=cr-at-eol,-blank-at-eol
+
+docs/benchmarks/2026-10-01/calendar-publication-kvm-coordinator.py -text
+
+docs/benchmarks/2026-10-01/calendar-sync-source.rs -text
+docs/benchmarks/2026-10-01/calendar-sync.patch -text whitespace=cr-at-eol,-blank-at-eol
+
+docs/benchmarks/2026-10-01/api-key-reload-coordinator.py -text
+
+docs/benchmarks/2026-10-01/api-key-bounds-coordinator.py -text
+
+docs/benchmarks/2026-10-02/reserved-alias/** -text whitespace=cr-at-eol,-blank-at-eol
+
+docs/benchmarks/2026-10-02/reserved-create/** -text whitespace=cr-at-eol,-blank-at-eol
+
+docs/benchmarks/2026-10-02/fork-name/** -text whitespace=cr-at-eol,-blank-at-eol
+
+docs/benchmarks/2026-10-02/atomic-registration/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+
+docs/benchmarks/2026-10-02/node-completion/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+
+docs/benchmarks/2026-10-02/node-response-loss/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/node-publication-fault/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/registration-acl/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/node-registration-fault/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/registration-reconcile/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/registration-lifecycle/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/registration-mutations/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/current-native-engines/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/current-readiness/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/connection-wait/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/access-audit/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/audit-batching/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/observer-role/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/role-reload/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/first-exit/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/first-cpu/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/cold-start-admission/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/cold-budget-tuning/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/cold-budget-comparison/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/heap-reclaim/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/periodic-heap/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/guarded-heap/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/resource-audit/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/object-backup/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/multipart-backup/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/backup-compression/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/version-backup/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/allocator-comparison/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/private-web/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/private-web-scopes/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/cold-budget-32/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/readiness-snapshots/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/prepared-engines/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/prepared-memory/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/prepared-reclaim/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/startup-reclaim/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/startup-reclaim-scale/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/prepared-contract/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/prepared-phases/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/prepared-stages/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/prepared-creation/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/restore-admission/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/backup-retention/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/scheduled-backups/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+
+docs/benchmarks/2026-10-02/scheduled-retention-lifecycle/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+
+docs/benchmarks/2026-10-02/locked-retention/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+
+docs/benchmarks/2026-10-02/scheduled-kvm/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+
+docs/benchmarks/2026-10-02/mcp-http/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+
+docs/benchmarks/2026-10-02/mcp-http-kvm/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+
+docs/benchmarks/2026-10-02/mcp-http-admission/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+
+docs/benchmarks/2026-10-02/mcp-http-files/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+
+docs/benchmarks/2026-10-02/mcp-http-cancellation/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+
+docs/benchmarks/2026-10-02/mcp-http-observer/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+
+docs/benchmarks/2026-10-02/boot-allocations/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+
+docs/benchmarks/2026-10-02/borrowed-boot/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+
+docs/benchmarks/2026-10-02/borrowed-boot-profiles/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+
+docs/benchmarks/2026-10-02/boot-buffer-modes/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+
+docs/benchmarks/2026-10-02/boot-buffer-stages/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/exec-stages/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/resource-validation/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/resource-c100/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/corrected-buffer-modes/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/prepared-memory-c100/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/restore-memory-audit/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/restore-memory-boundaries/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/prepared-memory-c100-anonymous/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/restore-memory-anonymous/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/restore-memory-host-stages/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/sparse-named-lifecycle/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-03/sparse-retained-images/** -text whitespace=-blank-at-eof,-trailing-space
+docs/benchmarks/2026-10-03/layer-compare/** -text whitespace=-blank-at-eof,-trailing-space
+docs/benchmarks/2026-10-03/domain-verification/** -text whitespace=-blank-at-eof,-trailing-space
+docs/benchmarks/2026-10-03/tls-bundle/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/acme-issuance/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/acme-deployment/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/tls-renewal-worker/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/mmap-threshold/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/mmap-threshold-cold/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/tls-group-provisioning/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/tls-first-group-crash/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/initial-tls-worker/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/fresh-account-tls-worker/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/initial-tls-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/discovery-tls-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/discovery-unbind-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/discovery-ownership-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/tls-retirement/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/tls-retirement-crash/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/tls-retirement-receipt/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/tls-retirement-recovery-pin/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/egress-uri-logging/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/daemon-secret-policy/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/secret-connection-scope/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/daemon-upstream-root/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/secret-https-client-image/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/secret-substitution-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/secret-body-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/secret-registration-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/secret-binary-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/egress-secret-chart/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-exclusive-create/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-shared-create/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-store-chart/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/secret-rewrite-baseline/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/secret-bulk-copy/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/secret-ordered-lookup/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/secret-large-http/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/secret-https-release/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/secret-https-concurrent/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/secret-https-cpu/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/secret-https-threads/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/secret-https-cpu-scaling/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/secret-https-two-cpu/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/guest-sizing-chart/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/daemon-guest-sizing/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/secret-https-keepalive/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-metadata-sync/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-content-sync/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-atomic-upload/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-upload-timing/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-single-parent-sync/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-upload-client/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-client-tls/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-client-deadline/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/control-volume-routing/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/control-real-volumes/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/control-volume-crash/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-create-only-upload/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-management-cli/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-cli-stream-upload/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-cli-stream-download/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-cli-tls/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-source-type/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-cli-streaming-memory/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-cli-size-boundary/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-cli-browse/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-cli-browse-real/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-cli-mkdir/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-mkdir-file-refusal/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-path-cli-tls/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/volume-directory-sync/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/cli-cluster-regressions/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-datagram-codec/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-guest-relay/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-host-forward/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-upgrade-negotiation/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-node-route/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-control-route/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-cli-peers/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-kvm-image/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-cluster-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-cluster-api-tls/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-frame-refusal/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-latency/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-idle-recovery/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-node-mtls/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-concurrent-latency/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/current-api-regressions/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-combined-write/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-combined-write-4k/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-eight-peer-4k/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-peer-recovery/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-peer-recovery-performance/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-peer-recovery-release/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-single-map-deferred/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-ipv6-feasibility/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-ipv6-forwarding/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-ipv6-source-alignment/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-root-lock-alignment/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/udp-ipv6-family-performance/** -text whitespace=-blank-at-eof,-trailing-space
+
+docs/benchmarks/2026-10-03/raw-port-contract/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/managed-port-allocation/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-port-binding/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-port-reconciliation/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-tcp-relay/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-node-tcp/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-udp-relay/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-node-udp/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-session-budget/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-gateway-supervisor/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-gateway-operator/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-gateway-redis-outage/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-gateway-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-cli-abba/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-cli-release-abba/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/sandbox-owner-context/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/owner-public-port-api/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/owner-public-port-cli/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-sixteen-port-capacity/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-port-row-preflight/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-port-preflight-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-sixteen-tcp-udp-capacity/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-mixed-tcp-udp-capacity/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-udp-buffer-reuse/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/legacy-owner-adoption-store/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/legacy-owner-adoption-workflow/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/legacy-owner-adoption-cross-node/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-public-port-migration/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-udp-buffer-reuse-release/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-udp-bounded-reuse-candidate/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-udp-bounded-reuse-release/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-udp-affinity-harness/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/native-udp-bounded-reuse-affinity/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/resume-ownership-lookup-cancellation/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/resume-ownership-lookup-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/resume-local-lookup-cancellation/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/resume-local-lookup-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/resume-network-decision-cancellation/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/resume-proxy-resolution/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/network-fresh-daemon-resume/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/unnamed-registration-uncertainty/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/unnamed-resume-publication-fault/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/unnamed-resume-event-fault/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/registration-recovery-cli/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/registration-recovery-cli-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/initial-registration-cli-recovery/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/pending-registration-discovery/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/pending-discovery-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/pending-discovery-schema/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/pending-discovery-schema-runtime/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/pending-discovery-http-transport/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/registration-publisher-ownership/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/registration-publication-serialization/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/automatic-registration-worker/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/automatic-registration-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/registration-store-timeout-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/current-release-cold-sweep/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/current-cold-start-stages/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/current-cold-first-call-cpu/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/current-admission-sixteen/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/current-cold-failure-symbols/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/named-automatic-registration-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/unregistered-startup-cancellation/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-03/pending-registration-idle-eviction/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-03/private-network-membership/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-03/private-network-membership-store/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-03/private-network-membership-http/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-03/private-network-membership-failures/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-03/private-route-atomic-snapshot/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-03/private-receiving-node/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/private-receiving-tcp-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/private-source-connector/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-source-mtls/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-source-timeout/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-local-source-lease/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-gateway-hook/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-address-ledger/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-bound-connector/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-address-store/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-source-router/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-guest-gateway-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-cross-node-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-guest-stream-revocation/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/private-transport-comparison/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/private-transport-repeat/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/private-transport-parallel/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/private-transport-journal/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/private-source-stream-revocation/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/private-transport-abba/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/private-transport-release-abba/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/private-udp-receiving-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/private-udp-source-connector/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/private-udp-source-router/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/private-udp-gateway-session/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/private-udp-ethernet-gateway/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/private-udp-source-guest-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/private-udp-ipv4-fragmentation/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-udp-max-source-guest-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-udp-active-membership-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-udp-target-pause-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-udp-store-outage-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-udp-target-delete-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-udp-source-lifecycle-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-udp-reassembly-bounds/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-udp-release-comparison/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-route-live-snapshot/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-route-live-snapshot-release-abba/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-setup-stage-profile/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-setup-overlap/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/private-setup-overlap-release-abba/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-receiving-capacity-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-capacity-concurrent-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/private-capacity-concurrent-failure/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-capacity-comparison-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-capacity-resource-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/private-capacity-thread-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/vsock-resume-cycles/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/vsock-connection-progress-resume-failure/** -text whitespace=-blank-at-eof,-trailing-space
+/docs/benchmarks/2026-10-04/vsock-connection-progress-baseline-audit/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/vsock-pause-owner-ack/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/vsock-pause-owner-ack-observation/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/vsock-pause-owner-ack-repeat-failure/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/vsock-pause-owner-ack-readiness-failure/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/mmio-irq-order/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/mmio-irq-order-resume-repeats/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/mmio-irq-order-release-abba/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/pci-irq-order/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/pci-guest-discovery/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/pci-host-bridge/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/pci-intx-route/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/pci-queue-discovery/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/mmio-host-reset/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/pci-snapshot-failure/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/pci-snapshot-state/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/pci-sibling-descendant/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/pci-daemon-api/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/pci-network-api/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/pci-mmio-release-abba/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/pci-mmio-cold-release-abba/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/current-release-firecracker-c1/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/current-release-arena2-c1/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/allocator-c1-abba/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/mmap-threshold-c1-abba/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/mmap-threshold-c8-abba/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/pci-fastboot/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/pci-fastboot-store-upgrade/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/current-pci-firecracker/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/jemalloc-pci-c8-abba/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/async-proxy-admission/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/web-sharing-model/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/web-sharing-store/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/web-sharing-api/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/web-sharing-proxy/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-04/web-sharing-aof-restart/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-05/owner-sharing-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-05/owner-sharing-redis-outage/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-05/creator-bound-api-kvm/** -text whitespace=-blank-at-eof,-trailing-space
+
+/docs/benchmarks/2026-10-05/creator-policy-pagination/** -text whitespace=-blank-at-eof,-trailing-space

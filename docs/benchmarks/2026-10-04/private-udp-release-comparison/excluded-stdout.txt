@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py", line 2025, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py", line 1392, in main
+    if resumed['exit_code']!=0 or resumed.get('stdout','').strip()!=base64.b64encode(payload).decode():raise ValueError('source guest private TCP did not recover after resume')
+                                                                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: source guest private TCP did not recover after resume

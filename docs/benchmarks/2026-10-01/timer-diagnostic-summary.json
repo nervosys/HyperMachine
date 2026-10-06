@@ -1,0 +1,18 @@
+{
+  "diagnostic_only": true,
+  "counts": {
+    "hypermachine": {
+      "attempts": 1000,
+      "passed": 1000
+    },
+    "firecracker": {
+      "attempts": 1000,
+      "passed": 1000
+    }
+  },
+  "failures": [],
+  "failures_with_timer_fields": 0,
+  "raw_sha256": "3021cea4955caf9a60c3d8b680f2c92fcdceb689d3233cdff0f7b64a6821c9ff",
+  "analysis_sha256": "f4c191c852a92cc939be7bdd98efd479f6d141b8c2750932e996ad7378a2590f",
+  "limitation": "Failure-only formatter change; no runtime timer fix. MSRs are sequential owner-safe reads, not atomic. A cohort without failures yields no failed-boot timer state and cannot establish reliability resolution. Shared nested host; diagnostic evidence excluded from scored comparisons."
+}

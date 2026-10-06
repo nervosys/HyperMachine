@@ -1,0 +1,271 @@
+{
+  "workers": 32,
+  "roundtrips_per_worker": 100,
+  "payload_bytes": [
+    64,
+    1280,
+    65507
+  ],
+  "rows": [
+    {
+      "worker": 0,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2653.066833
+    },
+    {
+      "worker": 1,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2720.247918
+    },
+    {
+      "worker": 2,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2840.891916
+    },
+    {
+      "worker": 3,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2813.843971
+    },
+    {
+      "worker": 4,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2788.71855
+    },
+    {
+      "worker": 5,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2637.3947
+    },
+    {
+      "worker": 6,
+      "planned": 100,
+      "completed": 2,
+      "echoed_payload_bytes": 1344,
+      "success": false,
+      "failure_type": "TimeoutError"
+    },
+    {
+      "worker": 7,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2912.325985
+    },
+    {
+      "worker": 8,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2825.505857
+    },
+    {
+      "worker": 9,
+      "planned": 100,
+      "completed": 3,
+      "echoed_payload_bytes": 66851,
+      "success": false,
+      "failure_type": "TimeoutError"
+    },
+    {
+      "worker": 10,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2680.109899
+    },
+    {
+      "worker": 11,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2825.199516
+    },
+    {
+      "worker": 12,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2619.184828
+    },
+    {
+      "worker": 13,
+      "planned": 100,
+      "completed": 3,
+      "echoed_payload_bytes": 66851,
+      "success": false,
+      "failure_type": "TimeoutError"
+    },
+    {
+      "worker": 14,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2733.369432
+    },
+    {
+      "worker": 15,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2843.80521
+    },
+    {
+      "worker": 16,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2827.788898
+    },
+    {
+      "worker": 17,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2825.049445
+    },
+    {
+      "worker": 18,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2586.941698
+    },
+    {
+      "worker": 19,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2872.644802
+    },
+    {
+      "worker": 20,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2779.866891
+    },
+    {
+      "worker": 21,
+      "planned": 100,
+      "completed": 2,
+      "echoed_payload_bytes": 1344,
+      "success": false,
+      "failure_type": "TimeoutError"
+    },
+    {
+      "worker": 22,
+      "planned": 100,
+      "completed": 2,
+      "echoed_payload_bytes": 1344,
+      "success": false,
+      "failure_type": "TimeoutError"
+    },
+    {
+      "worker": 23,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2812.587554
+    },
+    {
+      "worker": 24,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2751.979577
+    },
+    {
+      "worker": 25,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2922.766707
+    },
+    {
+      "worker": 26,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2627.685396
+    },
+    {
+      "worker": 27,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2598.996237
+    },
+    {
+      "worker": 28,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2627.964766
+    },
+    {
+      "worker": 29,
+      "planned": 100,
+      "completed": 3,
+      "echoed_payload_bytes": 66851,
+      "success": false,
+      "failure_type": "TimeoutError"
+    },
+    {
+      "worker": 30,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2699.768713
+    },
+    {
+      "worker": 31,
+      "planned": 100,
+      "completed": 100,
+      "echoed_payload_bytes": 2206147,
+      "success": true,
+      "elapsed_ms": 2596.915944
+    }
+  ],
+  "elapsed_seconds_including_worker_start": 8.081055859,
+  "echoed_payload_bytes": 57564407,
+  "payload_mib_per_second": 6.793381638850537,
+  "all_success": false
+}

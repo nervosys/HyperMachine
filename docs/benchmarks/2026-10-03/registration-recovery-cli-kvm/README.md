@@ -1,0 +1,11 @@
+# Shipped administrator recovery CLI: real KVM
+
+Four fresh owned KVM profiles pass 24 checks each: SET refusal and XADD refusal, each with IPv4/two peers and IPv6/eight peers. All leave zero guests and reap daemon/control/Redis/CLI/gateway. The shipped command `hm sandbox vm reconcile-registration ID --node-id owned-udp-node` uses verified control-plane HTTPS and node mTLS to recover the same preserved resumed guest after Redis permissions are restored.
+
+SET cohorts use the legacy administrator credential; XADD cohorts use the scoped operator/admin credential. Observer/admin, inventory-only and sandbox-only keys refuse recovery. A registered-node lookup refuses an unknown node; replay after successful recovery refuses because the pending marker is cleared. Returned sandbox identity and guest envd token match the original paused descriptor. Exact UDP and native TCP/UDP forwarding then succeeds, followed by allocation/guest deletion cleanup.
+
+The first attempt stopped on a fixture assertion that incorrectly grouped the intentional descriptor envdAccessToken with API/cluster credentials. The corrected assertion checks all API and cluster secrets separately, and verifies guest-token identity. Four fresh v2 profiles are the accepted evidence; failed v1 is excluded. No production implementation change was needed for that assertion correction. Guest descriptor access tokens are intended capability output, unlike operator API/cluster secrets. Private keys, credentials, policies and descriptor bodies are not archived.
+
+The explicit-node recovery route no longer depends on the sandbox record for routing. These cohorts recover resume failures, not a missing initial creation record. Runtime oversized/mismatched node response refusal, anonymous control mode, initial creation uncertainty, request cancellation and machine-crash recovery remain unverified or incomplete. Exactly-once event delivery and performance superiority are not claimed.
+
+The node is the frozen current uncertainty-handling daemon; current CLI/control binaries are freshly built in the isolated checkout. Gateway/kernel/image are unchanged immutable inputs. Raw reports/logs, checker/production snapshots, driver, build log, permitted source catalog and SHA256 manifest preserve provenance. Builds and fixture verification exclude protected root core files.

@@ -1,0 +1,87 @@
+{
+  "platform": "Windows-10-10.0.26200-SP0",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "results": [
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "hv2-api",
+        "tcp_tunnel",
+        "--lib"
+      ],
+      "exit_code": 0,
+      "output_utf8": "    Finished `test` profile [optimized + debuginfo] target(s) in 8.32s\n     Running unittests src\\lib.rs (target\\debug\\deps\\hv2_api-8ea941ed57d41051.exe)\n\nrunning 2 tests\ntest tcp_tunnel::tests::malformed_negotiation_is_rejected_before_connecting ... ok\ntest tcp_tunnel::tests::binary_stream_and_client_eof_cross_the_http_upgrade ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1062 filtered out; finished in 0.01s\n\n",
+      "output_sha256": "e6d7290e077d50e6dee5b47664f7be0bb6a154de22b464bab2322e5ed066ebba"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "hv2-cluster",
+        "--lib",
+        "--test",
+        "control_plane"
+      ],
+      "exit_code": 0,
+      "output_utf8": "    Finished `test` profile [optimized + debuginfo] target(s) in 2.77s\n     Running unittests src\\lib.rs (target\\debug\\deps\\hv2_cluster-c5c82fc61aae15d7.exe)\n\nrunning 31 tests\ntest domains::tests::canonical_names_and_binding_fields_survive_round_trip ... ok\ntest events::tests::events_map_to_e2b_types ... ok\ntest domains::tests::stored_json_cannot_bypass_binding_validation ... ok\ntest keys::tests::capability_scopes_do_not_cross_resource_families ... ok\ntest events::tests::only_public_addresses_are_global ... ok\ntest domains::tests::rejects_authorities_ips_bad_labels_and_reserved_routes ... ok\ntest events::tests::signatures_are_e2bs ... ok\ntest events::tests::the_signature_is_what_e2bs_documented_verifier_expects ... ok\ntest metrics::tests::counters_render_one_line_per_label_value ... ok\ntest keys::tests::expiry_is_enforced_at_the_exact_boundary ... ok\ntest keys::tests::legacy_admin_collision_is_rejected_even_for_expired_policies ... ok\ntest model::tests::metadata_filters_need_every_pair ... ok\ntest metrics::tests::a_histogram_is_cumulative_and_carries_sum_and_count ... ok\ntest keys::tests::inventory_cannot_obtain_access_tokens_or_modify_resources ... ok\ntest model::tests::detail_adds_the_token_and_where_it_runs ... ok\ntest model::tests::template_names_as_e2b_spells_them ... ok\ntest model::tests::a_paused_record_lists_as_paused ... ok\ntest events::tests::a_webhook_payload_has_e2bs_documented_shape ... ok\ntest model::tests::listed_carries_every_required_field ... ok\ntest scheduler::tests::a_full_node_is_not_a_candidate ... ok\ntest scheduler::tests::a_zero_capacity_node_takes_nothing_and_breaks_nothing ... ok\ntest keys::tests::malformed_policy_never_silently_disables_authentication ... ok\ntest node::tests::an_end_is_reported_once ... ok\ntest node::tests::joining_forgets_what_a_previous_run_left_behind ... ok\ntest node::tests::template_metadata_is_published_with_names_and_legacy_updates_clear_it ... ok\ntest scheduler::tests::the_least_loaded_fraction_goes_first ... ok\ntest store::tests::a_logged_store_url_carries_no_password ... ok\ntest store::tests::redis_store_keeps_the_contract ... ok\ntest mtls::tests::tcp_client_uses_http1_alpn_and_retains_mutual_tls ... ok\ntest mtls::tests::a_node_serves_only_peers_its_ca_signed ... ok\ntest store::tests::memory_store_keeps_the_contract ... ok\n\ntest result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.11s\n\n     Running tests\\control_plane.rs (target\\debug\\deps\\control_plane-274c5e9e5351d901.exe)\n\nrunning 16 tests\ntest the_jwks_lists_each_nodes_key_once_and_discovery_points_at_it ... ok\ntest envd_routes_go_to_the_owning_nodes_proxy ... ok\ntest scoped_keys_expire_and_inventory_cannot_leak_guest_credentials ... ok\ntest per_sandbox_calls_reach_the_owning_node ... ok\ntest template_metadata_distinguishes_snapshot_cold_legacy_and_heterogeneous_nodes ... ok\ntest embedded_admin_collision_never_bypasses_scope_or_expiry ... ok\ntest the_api_key_is_required_when_set ... ok\ntest a_full_node_refuses_and_the_next_one_takes_it ... ok\ntest creates_go_to_a_node_with_the_template ... ok\ntest listing_detail_and_pagination_come_from_the_store ... ok\ntest checkpoints_forward_collection_and_named_operations_to_the_owner ... ok\ntest tcp_tunnels_route_authenticated_binary_streams_and_both_half_closes ... ok\ntest custom_domains_are_authenticated_owned_and_follow_port_updates ... ok\ntest creations_spread_across_nodes_and_answer_with_this_proxy ... ok\ntest custom_domain_https_reaches_the_node_with_guest_routing_and_host_intact ... ok\ntest a_dead_nodes_sandboxes_are_reaped ... ok\n\ntest result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.53s\n\n",
+      "output_sha256": "15ba823eac925f814d8387be069c4fb0afdb990dae94f26cf3d9579137415906"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "hm-cli",
+        "--test",
+        "sandbox_vm_client"
+      ],
+      "exit_code": 0,
+      "output_utf8": "    Finished `test` profile [optimized + debuginfo] target(s) in 2.07s\n     Running tests\\sandbox_vm_client.rs (target\\debug\\deps\\sandbox_vm_client-7c93bd211d413ab3.exe)\n\nrunning 8 tests\ntest binary_preserves_guest_arguments_streams_and_failure ... ok\ntest benchmark_snapshot_gate_rejects_cold_boot_before_creating_a_guest ... ok\ntest benchmark_does_not_report_wrong_output_as_a_fast_success ... ok\ntest benchmark_bounds_live_sandboxes_and_fails_a_missed_latency_gate ... ok\ntest failed_downloads_and_destination_races_do_not_publish_or_overwrite_files ... ok\ntest file_transfers_preserve_binary_bytes_and_separate_credentials ... ok\ntest domain_commands_send_authenticated_claim_list_and_release_requests ... ok\ntest tcp_command_authenticates_and_preserves_binary_replies_after_client_eof ... ok\n\ntest result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.48s\n\n",
+      "output_sha256": "d9ff50dc234cc7e91c3142a0531ad93573ffdca3d403fdf46c9d608d4173bc97"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "hv2-sandboxd",
+        "--bin",
+        "hv2-sandboxd"
+      ],
+      "exit_code": 0,
+      "output_utf8": "   Compiling hv2-sandboxd v1.1.0 (C:\\Users\\user\\dev\\nervosys\\os\\HyperMachine\\crates\\hv2-sandboxd)\n    Finished `test` profile [optimized + debuginfo] target(s) in 15.15s\n     Running unittests src\\main.rs (target\\debug\\deps\\hv2_sandboxd-f0976acc1eb71c1e.exe)\n\nrunning 32 tests\ntest boot_diagnostics::tests::machine_sample_refuses_foreign_and_truncated_layouts ... ok\ntest boot_diagnostics::tests::missing_ioapic_does_not_invent_empty_routes ... ok\ntest boot_diagnostics::tests::clock_samples_distinguish_missing_zero_and_large_values ... ok\ntest boot_diagnostics::tests::missing_apic_is_not_reported_as_no_pending_interrupts ... ok\ntest boot_diagnostics::tests::machine_sample_preserves_pic_irq_bits_and_full_pit_count ... ok\ntest boot_diagnostics::tests::ioapic_routes_preserve_full_width_and_ignore_union_padding ... ok\ntest boot_diagnostics::tests::irq_bitmaps_use_register_spacing_and_preserve_all_words ... ok\ntest cloud_login::tests::sigv4_matches_awss_example ... ok\ntest builds::tests::env_values_expand_as_dockers_do ... ok\ntest env_vars::tests::a_template_without_defaults_gets_only_the_sandboxs ... ok\ntest cloud_login::tests::dates_are_amzs ... ok\ntest builds::tests::commands_and_paths_as_a_step_writes_them ... ok\ntest identity::tests::token_names_refuse_braces_and_control_characters ... ok\ntest idle::tests::windows_are_off_or_long_enough_to_mean_something ... ok\ntest env_vars::tests::sandbox_variables_go_over_the_templates_and_keep_the_rest ... ok\ntest boot_diagnostics::tests::unavailable_events_preserve_architecture_without_inventing_zero_state ... ok\ntest identity::tests::base64url_matches_the_rfc_vectors ... ok\ntest idle::tests::a_guest_is_quiet_only_when_every_sample_was ... ok\ntest identity::tests::a_reloaded_key_keeps_its_kid ... ok\ntest env_vars::tests::an_unreadable_defaults_file_is_an_error_not_an_empty_one ... ok\ntest identity::tests::a_minted_token_verifies_against_its_jwk ... ok\ntest oci::tests::paths_that_leave_the_root_are_dropped ... ok\ntest oci::tests::layers_apply_in_order_with_whiteouts ... ok\ntest oci::tests::references_take_dockers_defaults ... ok\ntest tests::a_tenant_rule_opens_reserved_ranges_only_as_the_operator_allows ... ok\ntest initramfs::tests::hard_links_share_one_inode_and_carry_data_once ... ok\ntest env_vars::tests::names_and_sizes_are_checked ... ok\ntest initramfs::tests::records_are_newc_and_aligned ... ok\ntest oci::tests::layers_decompress_by_their_magic ... ok\ntest builds::tests::nothing_matching_is_an_error_not_an_empty_copy ... ok\ntest builds::tests::copies_land_where_docker_puts_them ... ok\ntest cloud_login::tests::gcp_assertions_are_signed_jwts ... ok\n\ntest result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s\n\n",
+      "output_sha256": "abd16f871853708cee99f88c2619d88b7310defcd6bfb2a94be0cf089d8ea5cd"
+    },
+    {
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "-p",
+        "hv2-api",
+        "-p",
+        "hv2-cluster",
+        "-p",
+        "hv2-sandboxd",
+        "-p",
+        "hm-cli",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "output_utf8": "    Checking hv2-sandboxd v1.1.0 (C:\\Users\\user\\dev\\nervosys\\os\\HyperMachine\\crates\\hv2-sandboxd)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.04s\n",
+      "output_sha256": "65ddf0b36b907204404942985af18b7762719062c01232cb63c2972defca369f"
+    }
+  ],
+  "success": true,
+  "coordinator_sha256": "a97ba9b7e28e1d3854b755429578d0ef512debfe4bb71082a3f8a9c69c7095e3"
+}

@@ -686,7 +686,7 @@ mod tests {
     fn test_snapshot_id_generate() {
         let id1 = SnapshotId::generate();
         let id2 = SnapshotId::generate();
-        // Should be different (unless generated in same nanosecond)
+        // The clamp guarantees distinct IDs even in the same clock tick.
         assert!(id1.value() > 0);
         assert!(id2.value() > 0);
     }

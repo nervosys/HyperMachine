@@ -1,0 +1,568 @@
+{
+  "initial": {
+    "failed_guests": 100,
+    "state_counts": {
+      "Runnable": 100
+    },
+    "symbol_state_counts": [
+      {
+        "symbol": "allocate_slab",
+        "state": "Runnable",
+        "count": 14
+      },
+      {
+        "symbol": "insn_get_prefixes",
+        "state": "Runnable",
+        "count": 8
+      },
+      {
+        "symbol": "text_poke_early",
+        "state": "Runnable",
+        "count": 8
+      },
+      {
+        "symbol": "apply_returns",
+        "state": "Runnable",
+        "count": 6
+      },
+      {
+        "symbol": "clear_page_erms",
+        "state": "Runnable",
+        "count": 6
+      },
+      {
+        "symbol": "switch_mm_irqs_off",
+        "state": "Runnable",
+        "count": 4
+      },
+      {
+        "symbol": "__memcpy",
+        "state": "Runnable",
+        "count": 3
+      },
+      {
+        "symbol": "inflate_fast",
+        "state": "Runnable",
+        "count": 3
+      },
+      {
+        "symbol": "insn_decode",
+        "state": "Runnable",
+        "count": 3
+      },
+      {
+        "symbol": "__pte_offset_map_lock",
+        "state": "Runnable",
+        "count": 2
+      },
+      {
+        "symbol": "__text_poke",
+        "state": "Runnable",
+        "count": 2
+      },
+      {
+        "symbol": "_raw_spin_lock",
+        "state": "Runnable",
+        "count": 2
+      },
+      {
+        "symbol": "sighand_ctor",
+        "state": "Runnable",
+        "count": 2
+      },
+      {
+        "symbol": "switch_ldt",
+        "state": "Runnable",
+        "count": 2
+      },
+      {
+        "symbol": "__change_page_attr_set_clr",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "__kernfs_new_node",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "__kmem_cache_alloc_node",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "__kmem_cache_free",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "__x86_return_thunk",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "_einittext",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "_find_next_zero_bit",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "alternatives_smp_module_add",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "apply_retpolines",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "apply_seal_endbr",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "arch_scale_freq_tick",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "asm_sysvec_apic_timer_interrupt",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "copy_from_kernel_nofault",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "debug_css_alloc",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "find_vm_area",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "get_page_from_freelist",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "inat_get_escape_attribute",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "init_once",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "kmem_cache_alloc",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "kprobe_add_ksym_blacklist",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "kvm_sched_clock_read",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "lapic_next_deadline",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "memmap_init_range",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "native_apic_mem_read",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "pcpu_chunk_relocate",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "profile_tick",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "rcu_sched_clock_irq",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "sched_clock_tick",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "timekeeping_advance",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "trace_create_new_event",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "update_curr",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "update_process_times",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "vm_get_status",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "walk_to_pmd",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "xas_create",
+        "state": "Runnable",
+        "count": 1
+      }
+    ],
+    "halted_timer_samples": {}
+  },
+  "repeat": {
+    "failed_guests": 129,
+    "state_counts": {
+      "Runnable": 102,
+      "Halted": 27
+    },
+    "symbol_state_counts": [
+      {
+        "symbol": "default_idle",
+        "state": "Halted",
+        "count": 27
+      },
+      {
+        "symbol": "clear_page_erms",
+        "state": "Runnable",
+        "count": 10
+      },
+      {
+        "symbol": "allocate_slab",
+        "state": "Runnable",
+        "count": 8
+      },
+      {
+        "symbol": "__text_poke",
+        "state": "Runnable",
+        "count": 6
+      },
+      {
+        "symbol": "text_poke_early",
+        "state": "Runnable",
+        "count": 6
+      },
+      {
+        "symbol": "copy_from_kernel_nofault",
+        "state": "Runnable",
+        "count": 3
+      },
+      {
+        "symbol": "insn_get_prefixes",
+        "state": "Runnable",
+        "count": 3
+      },
+      {
+        "symbol": "switch_mm_irqs_off",
+        "state": "Runnable",
+        "count": 3
+      },
+      {
+        "symbol": "__memcpy",
+        "state": "Runnable",
+        "count": 2
+      },
+      {
+        "symbol": "__rcu_read_lock",
+        "state": "Runnable",
+        "count": 2
+      },
+      {
+        "symbol": "__sysvec_apic_timer_interrupt",
+        "state": "Runnable",
+        "count": 2
+      },
+      {
+        "symbol": "_raw_spin_lock",
+        "state": "Runnable",
+        "count": 2
+      },
+      {
+        "symbol": "alternatives_smp_module_add",
+        "state": "Runnable",
+        "count": 2
+      },
+      {
+        "symbol": "inode_init_once",
+        "state": "Runnable",
+        "count": 2
+      },
+      {
+        "symbol": "pvclock_clocksource_read_nowd",
+        "state": "Runnable",
+        "count": 2
+      },
+      {
+        "symbol": "sched_clock_tick",
+        "state": "Runnable",
+        "count": 2
+      },
+      {
+        "symbol": "sighand_ctor",
+        "state": "Runnable",
+        "count": 2
+      },
+      {
+        "symbol": "switch_ldt",
+        "state": "Runnable",
+        "count": 2
+      },
+      {
+        "symbol": "update_curr",
+        "state": "Runnable",
+        "count": 2
+      },
+      {
+        "symbol": "__d_alloc",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "__get_locked_pte",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "__memset",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "__mutex_init",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "__pageblock_pfn_to_page",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "__pte_offset_map_lock",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "__vmap_pages_range_noflush",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "__x86_indirect_thunk_rax",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "_einittext",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "account_process_tick",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "account_system_time",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "apply_seal_endbr",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "asm_sysvec_apic_timer_interrupt",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "cpuacct_account_field",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "do_one_initcall",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "finish_rcuwait",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "get_page_from_freelist",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "init_once",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "init_pod_type",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "insert_header",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "io_serial_out",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "irq_work_tick",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "is_module_text_address",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "kmalloc_trace",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "kobject_get",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "ktime_get",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "kvm_sched_clock_read",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "memcmp",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "mutex_unlock",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "native_irq_return_iret",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "optimize_nops",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "pcpu_alloc",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "profile_tick",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "radix_tree_node_ctor",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "scheduler_tick",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "strchr",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "sysfs_do_create_link_sd",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "task_tick_fair",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "tcp_init",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "timekeeping_advance",
+        "state": "Runnable",
+        "count": 1
+      },
+      {
+        "symbol": "update_vsyscall",
+        "state": "Runnable",
+        "count": 1
+      }
+    ],
+    "halted_timer_samples": {
+      "False": 27
+    }
+  }
+}

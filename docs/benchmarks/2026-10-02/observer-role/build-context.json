@@ -1,0 +1,28 @@
+{
+  "base_source": "/var/tmp/hm-audit-batch/source",
+  "compiled_overlays": {
+    "crates/hv2-cluster/src/keys.rs": "d25e314aa7b1b0a6142f22b3c34e2417f4b99737d174ba1e492d05f87135a3f5",
+    "crates/hv2-cluster/tests/control_plane.rs": "d9b198aed570f91a2123e3903c7527af2f027d0072b8bfb5b6f4339adea2a050"
+  },
+  "control_plane_sha256": "d0757724cfcbacaeb80e64dade681a6299e7443f39bdda16bf458dd251bd00ef",
+  "clean_boot_sha256": {
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+    "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+  },
+  "windows_tests": {
+    "library": 42,
+    "http": 24,
+    "passed": true
+  },
+  "linux_tests": {
+    "library": 42,
+    "http": 24,
+    "passed": true
+  },
+  "strict_clippy": [
+    "Windows",
+    "Linux"
+  ],
+  "performance_comparison": false
+}

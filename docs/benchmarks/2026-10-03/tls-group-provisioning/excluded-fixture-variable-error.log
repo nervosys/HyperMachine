@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-acme-issuance.py", line 644, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-acme-issuance.py", line 633, in main
+    raise RuntimeError("Input executable changed during verification")
+RuntimeError: Input executable changed during verification

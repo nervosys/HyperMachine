@@ -1,0 +1,6 @@
+{
+  "daemon": "12e585d9a72e3540eac862fc0dcdade92d90aa650527180509806e78551218a7",
+  "cli": "43e425075dbdf694bf4b12d9e2cffd53cd8215c584e2bb47cb2efa9631fdfafe",
+  "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+  "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+}

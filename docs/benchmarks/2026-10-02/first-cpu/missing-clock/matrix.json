@@ -1,0 +1,56 @@
+{
+  "purpose": "current native-engine baseline; no causal improvement claim",
+  "driver_cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "added_CPU_load": false,
+  "diagnostic_only": true,
+  "artifact_sha256": {
+    "hypermachine": "3d8e5dbea35c1e30b6be7679b513b4320fd1f8a307f4f81ac6dfd01cd47fed6e",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "harness": "4d6232d5659ef3e38a44a9fd00b71aa1158d1ad2520b4bf899bfaf368df3c2f3"
+  },
+  "coordinator_sha256": "9b5d743afcb99a896363d1f88a608a15647dde85a550d7253aedf78c1e20d20b",
+  "profiles": [
+    {
+      "concurrency": 1,
+      "pairs": 2,
+      "exit_code": 1,
+      "timed_out": false,
+      "report": "c1.json",
+      "sha256": "9d4125801e369121b00221a0731c14ae1f1c8e245bbee95d455ce61a5a5c62c0",
+      "success": false,
+      "ready_ms": {
+        "hypermachine": {
+          "n": 2,
+          "min": 368.42978501226753,
+          "max": 444.2197479947936,
+          "mean": 406.32476650353055,
+          "p50": 368.42978501226753,
+          "p95": 444.2197479947936,
+          "p99": 444.2197479947936
+        },
+        "firecracker": {
+          "n": 2,
+          "min": 338.3493689907482,
+          "max": 381.79790700087324,
+          "mean": 360.0736379958107,
+          "p50": 338.3493689907482,
+          "p95": 381.79790700087324,
+          "p99": 381.79790700087324
+        }
+      }
+    }
+  ],
+  "success": false,
+  "artifacts_unchanged": true
+}

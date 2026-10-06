@@ -1,0 +1,52 @@
+{
+  "mode": "pci",
+  "passed": true,
+  "failure": null,
+  "checks": [
+    "before required-template startup",
+    "exact saved guest command",
+    "old release guest paused into store",
+    "old release clean shutdown preserves paused guest",
+    "after required-template startup",
+    "new PCI template key coexists with old base",
+    "same guest identity and access token after upgrade",
+    "exact saved guest command",
+    "exact saved guest command",
+    "exact saved guest command",
+    "exact saved guest command",
+    "upgraded guest fork isolation",
+    "exact saved guest command",
+    "exact saved guest command",
+    "candidate disk resume cycle 0",
+    "exact saved guest command",
+    "exact saved guest command",
+    "candidate disk resume cycle 1",
+    "guest deleted",
+    "guest deleted",
+    "empty inventory"
+  ],
+  "daemon_exits": [
+    0,
+    0
+  ],
+  "cache_keys": [
+    [
+      "a5737004198300cb01004b736bc1f769"
+    ],
+    [
+      "8c70c557762cfd95da86bc8053d31cee",
+      "a5737004198300cb01004b736bc1f769"
+    ]
+  ],
+  "paused_files_before_upgrade": [
+    {
+      "path": "paused/sbx-d872e605c34b4a52971f.snap",
+      "size": 1428609
+    },
+    {
+      "path": "paused/sbx-d872e605c34b4a52971f.json",
+      "size": 961
+    }
+  ],
+  "owned_store_removed": true
+}

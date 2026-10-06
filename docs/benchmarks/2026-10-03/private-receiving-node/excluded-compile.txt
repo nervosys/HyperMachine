@@ -1,0 +1,28 @@
+   Compiling hv2-cluster v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-cluster)
+   Compiling hv2-sandboxd v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-sandboxd)
+error[E0603]: function `validate_request` is private
+  --> crates/hv2-sandboxd/src/forwards.rs:86:29
+   |
+86 |         hv2_cluster::ports::validate_request(id, 1, "private-route")
+   |                             ^^^^^^^^^^^^^^^^ private function
+   |
+note: the function `validate_request` is defined here
+  --> crates/hv2-cluster/src/ports.rs:60:1
+   |
+60 | pub(crate) fn validate_request(sandbox: &str, machine_port: u16, owner: &str) -> Result<()> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0603]: function `validate_request` is private
+  --> crates/hv2-sandboxd/src/forwards.rs:89:25
+   |
+89 |     hv2_cluster::ports::validate_request(source_node, 1, "private-route")
+   |                         ^^^^^^^^^^^^^^^^ private function
+   |
+note: the function `validate_request` is defined here
+  --> crates/hv2-cluster/src/ports.rs:60:1
+   |
+60 | pub(crate) fn validate_request(sandbox: &str, machine_port: u16, owner: &str) -> Result<()> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For more information about this error, try `rustc --explain E0603`.
+error: could not compile `hv2-sandboxd` (bin "hv2-sandboxd" test) due to 2 previous errors

@@ -1,0 +1,15 @@
+{
+  "base_commit": "01ace7df73b102dbad6b28857eb48abff41f5b98",
+  "source_archive_sha256": "be364e81a7366a09c035eb1b29a5bfb0420d69de5548e647b7378babfd1a00c8",
+  "overlay_main_sha256": "b3e2512548cfbf6cc8d82e388f7e7f60a463f8194de433cb7f8bb07ad3afda18",
+  "committed_core_sha256": {
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+    "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+  },
+  "provisional_boot_changes_excluded": true,
+  "linux_clippy_baseline_exception": "clippy::too_many_arguments: existing bring_up and register signatures",
+  "release_build_exit_code": 0,
+  "linux_daemon_tests_passed": 36,
+  "windows_daemon_tests_passed": 32
+}

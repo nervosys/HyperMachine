@@ -1,0 +1,62 @@
+--- baseline/main.rs
++++ candidate/main.rs
+@@ -2577,7 +2577,13 @@
+             }),
+             _ => None,
+         };
+-        match protected_snapshot_lookup(lookup_claim, node.store().sandbox(sandbox_id)).await {
++        let (returned_paused, ownership) = protected_paused_lookup(paused, |paused| {
++            if state.store.is_none() {
++                state.paused.lock().insert(sandbox_id.to_string(), paused);
++            }
++        }, protected_snapshot_lookup(lookup_claim, node.store().sandbox(sandbox_id))).await;
++        paused = returned_paused;
++        match ownership {
+             Ok(Some(record))=>paused.record.owner_id=record.owner_id,
+             Ok(None)=>{give_back(paused);return Err((StatusCode::NOT_FOUND,"resume ownership record missing".into()));},
+             Err(_)=>{give_back(paused);return Err((StatusCode::SERVICE_UNAVAILABLE,"resume ownership unavailable".into()));},
+@@ -2675,6 +2681,18 @@
+ }
+ impl Drop for SnapshotClaim<'_> {
+     fn drop(&mut self) { if !self.released { self.store.release(self.id,&self.path); } }
++}
++
++struct LookupRollback<P, F: FnMut(P)> { value: Option<P>, restore: F }
++impl<P, F: FnMut(P)> Drop for LookupRollback<P, F> {
++    fn drop(&mut self) {
++        if let Some(value) = self.value.take() { (self.restore)(value); }
++    }
++}
++async fn protected_paused_lookup<P, T>(paused: P, restore: impl FnMut(P), lookup: impl std::future::Future<Output = T>) -> (P, T) {
++    let mut rollback = LookupRollback { value: Some(paused), restore };
++    let result = lookup.await;
++    (rollback.value.take().expect("paused state retained during lookup"), result)
+ }
+ 
+ // Only protect the ownership lookup, before VM startup can have side effects.
+@@ -5288,6 +5306,25 @@
+ mod adoption_claim_tests {
+     use super::*;
+     #[tokio::test]
++    async fn cancelled_lookup_restores_owned_paused_value() {
++        let restored=Arc::new(Mutex::new(None));
++        let output=restored.clone();
++        let ready=Arc::new(tokio::sync::Notify::new());let signal=ready.clone();
++        let task=tokio::spawn(async move {
++            protected_paused_lookup(vec![0,255,42],move |value| { *output.lock()=Some(value); },async {
++                signal.notify_one();std::future::pending::<()>().await;
++            }).await
++        });
++        ready.notified().await;task.abort();assert!(task.await.unwrap_err().is_cancelled());
++        assert_eq!(*restored.lock(),Some(vec![0,255,42]));
++    }
++    #[tokio::test]
++    async fn completed_lookup_returns_paused_value_without_rollback() {
++        let (value,result)=protected_paused_lookup(vec![0,255,42], |_| panic!("completion must not roll back"),async { Err::<(),_>("unavailable") }).await;
++        assert_eq!(value,vec![0,255,42]);assert_eq!(result,Err("unavailable"));
++    }
++
++    #[tokio::test]
+     async fn completed_lookup_keeps_claim_for_caller_cleanup() {
+         let directory=tempfile::tempdir().unwrap();
+         let store=SnapshotStore::open(directory.path()).unwrap();

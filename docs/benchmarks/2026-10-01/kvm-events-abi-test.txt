@@ -1,0 +1,8 @@
+    Finished `test` profile [optimized + debuginfo] target(s) in 1.62s
+     Running unittests src/lib.rs (/var/tmp/hm-competitive-target/debug/deps/hv2_core-daf8c736c2a2c291)
+
+running 1 test
+test backends::kvm::tests::event_payload_matches_the_x86_abi_and_rejects_truncation ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2292 filtered out; finished in 0.00s
+

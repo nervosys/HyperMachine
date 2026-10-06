@@ -1,0 +1,45 @@
+{
+  "success": false,
+  "purpose": "local KVM functional verification; no performance comparison",
+  "input_sha256": {
+    "daemon": "5d136c14b7ac36bd23af194ea82e844573a3ca18bfa7640e8e3d5e669db80f23",
+    "control": "633fff09e0c5f2703e1405d5a95f3764af351d1bbf9cdd784854dfccff59197b",
+    "cli": "c4b82db62ec7bc4e717ddff54d6edb1ed697d9738807bd2f3b29660d0d3d3c2f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "28c839a0969728c2c579fa9fdc7274714266ce4308f48a2ee1090d6c34537294",
+    "driver": "e9523fb67b7f51bca4bcc5d964be45082e96eece5ed733e16b2b0cfadd95594a"
+  },
+  "cases": [],
+  "cleanup_errors": [
+    "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: CA cert does not include key usage extension (_ssl.c:1029)"
+  ],
+  "owned_directory": "/var/tmp/hm-owner-sharing-kvm-1dbxqqtk",
+  "error": "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: CA cert does not include key usage extension (_ssl.c:1029)",
+  "processes": [
+    {
+      "name": "control",
+      "pid": 307,
+      "stopped": true
+    },
+    {
+      "name": "node",
+      "pid": 306,
+      "stopped": true
+    },
+    {
+      "name": "redis",
+      "pid": 300,
+      "stopped": true
+    }
+  ],
+  "input_sha256_after": {
+    "daemon": "5d136c14b7ac36bd23af194ea82e844573a3ca18bfa7640e8e3d5e669db80f23",
+    "control": "633fff09e0c5f2703e1405d5a95f3764af351d1bbf9cdd784854dfccff59197b",
+    "cli": "c4b82db62ec7bc4e717ddff54d6edb1ed697d9738807bd2f3b29660d0d3d3c2f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "28c839a0969728c2c579fa9fdc7274714266ce4308f48a2ee1090d6c34537294",
+    "driver": "e9523fb67b7f51bca4bcc5d964be45082e96eece5ed733e16b2b0cfadd95594a"
+  },
+  "inputs_unchanged": true,
+  "owned_directory_removed": true
+}

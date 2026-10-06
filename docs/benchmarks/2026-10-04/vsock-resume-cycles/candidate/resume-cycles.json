@@ -1,0 +1,51 @@
+[
+  {
+    "cycle": 1,
+    "pause_completed": true,
+    "resume_completed": true,
+    "exact_udp": true,
+    "elapsed_seconds": 0.08808005800000274
+  },
+  {
+    "cycle": 2,
+    "pause_completed": true,
+    "resume_completed": true,
+    "exact_udp": true,
+    "elapsed_seconds": 0.06902175700000157
+  },
+  {
+    "cycle": 3,
+    "pause_completed": true,
+    "resume_completed": true,
+    "exact_udp": true,
+    "elapsed_seconds": 0.06841781999999341
+  },
+  {
+    "cycle": 4,
+    "pause_completed": true,
+    "resume_completed": true,
+    "exact_udp": true,
+    "elapsed_seconds": 0.08129354400000466
+  },
+  {
+    "cycle": 5,
+    "pause_completed": true,
+    "resume_completed": true,
+    "exact_udp": true,
+    "elapsed_seconds": 0.07384690800000016
+  },
+  {
+    "cycle": 6,
+    "pause_completed": true,
+    "resume_completed": true,
+    "exact_udp": true,
+    "elapsed_seconds": 0.07393328400000598
+  },
+  {
+    "cycle": 7,
+    "pause_completed": true,
+    "resume_completed": true,
+    "exact_udp": true,
+    "elapsed_seconds": 0.07527492299999494
+  }
+]

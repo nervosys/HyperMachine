@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/var/tmp/hm-sparse-named-snapshots/tools/bench-sparse-named-snapshots.py", line 86, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/var/tmp/hm-sparse-named-snapshots/tools/bench-sparse-named-snapshots.py", line 34, in main
+    raise ValueError('named-source deletion/pause/resume lifecycle gate failed')
+ValueError: named-source deletion/pause/resume lifecycle gate failed

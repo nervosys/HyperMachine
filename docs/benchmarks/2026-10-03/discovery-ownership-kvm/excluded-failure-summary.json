@@ -1,0 +1,8 @@
+{
+  "excluded": true,
+  "error": "POST /v2/sandboxes: expected 200, got 201",
+  "cleanup_errors": [
+    "isolated node not empty after cleanup"
+  ],
+  "owned_processes_reaped": true
+}

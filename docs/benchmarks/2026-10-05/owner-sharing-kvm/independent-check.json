@@ -1,0 +1,34 @@
+{
+  "cases": 10,
+  "all_pass": true,
+  "inventory_empty": true,
+  "owned_directory_absent": true,
+  "process_checks": [
+    {
+      "name": "control-revoked-restarted",
+      "driver_waited": true,
+      "owned_binary_not_present_at_pid": true
+    },
+    {
+      "name": "control-restarted",
+      "driver_waited": true,
+      "owned_binary_not_present_at_pid": true
+    },
+    {
+      "name": "control",
+      "driver_waited": true,
+      "owned_binary_not_present_at_pid": true
+    },
+    {
+      "name": "node",
+      "driver_waited": true,
+      "owned_binary_not_present_at_pid": true
+    },
+    {
+      "name": "redis",
+      "driver_waited": true,
+      "owned_binary_not_present_at_pid": true
+    }
+  ],
+  "release_context_sha256": "e446f8c898221095649ead44bec8a34971b5deab0d31c063cd5133f55bd492cb"
+}

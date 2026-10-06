@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py", line 1530, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py", line 869, in main
+    if result['exit_code']!=0 or result.get('stdout','').strip()!=base64.b64encode(payload).decode():raise ValueError('source guest private TCP bytes differ: '+repr(result))
+                                                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: source guest private TCP bytes differ: {'exit_code': 0, 'stdout': '', 'stderr': "nc: can't connect to remote host (198.18.0.1): Connection refused\n", 'timed_out': False}

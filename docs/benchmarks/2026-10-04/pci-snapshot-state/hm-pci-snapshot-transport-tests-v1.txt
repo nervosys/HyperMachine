@@ -1,0 +1,40 @@
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-core)
+    Finished `test` profile [optimized + debuginfo] target(s) in 24.34s
+     Running unittests src/lib.rs (/var/tmp/hm-object-backup/target/debug/deps/hv2_core-e659a1d473ebec97)
+
+running 19 tests
+test devices::virtio_pci::tests::a_queue_address_can_be_written_as_two_halves ... ok
+test devices::virtio_pci::tests::a_driver_can_bring_the_device_up_the_way_the_spec_says ... ok
+test devices::virtio_pci::tests::bar0_points_at_the_window_as_a_non_prefetchable_64_bit_memory_bar ... ok
+test devices::virtio_pci::tests::device_specific_config_reaches_the_device ... ok
+test devices::virtio_pci::tests::incompatible_snapshots_are_rejected_without_partial_mutation ... ok
+test devices::virtio_pci::tests::each_queue_notifies_at_its_own_offset ... ok
+test devices::virtio_pci::tests::num_queues_reports_what_the_device_has ... ok
+test devices::virtio_pci::tests::queue_discovery_offers_capacity_and_reset_restores_it ... ok
+test devices::virtio_pci::tests::register_and_device_reset_release_an_outstanding_irq ... ok
+test devices::virtio_pci::tests::acknowledgement_cannot_overtake_an_interrupt_line_assertion ... ok
+test devices::virtio_pci::tests::the_capability_chain_walks_to_all_four_structures ... ok
+test devices::virtio_pci::tests::the_msix_vector_registers_report_no_vector ... ok
+test devices::virtio_pci::tests::the_isr_reports_a_used_queue_and_clears_when_read ... ok
+test devices::virtio_pci::tests::a_new_interrupt_cannot_overtake_acknowledgement_deassertion ... ok
+test devices::virtio_pci::tests::snapshot_restores_negotiation_queue_cursors_and_irq ... FAILED
+test devices::virtio_pci::tests::the_pci_identity_is_the_modern_one_for_the_device_behind_it ... ok
+test devices::virtio_pci::tests::the_notify_capability_gives_each_queue_its_own_address ... ok
+test devices::virtio_pci::tests::writing_zero_to_status_resets_the_device ... ok
+test devices::virtio_pci::tests::the_queue_a_write_notifies_comes_from_its_address ... ok
+
+failures:
+
+---- devices::virtio_pci::tests::snapshot_restores_negotiation_queue_cursors_and_irq stdout ----
+
+thread 'devices::virtio_pci::tests::snapshot_restores_negotiation_queue_cursors_and_irq' (673) panicked at crates/hv2-core/src/devices/virtio_pci.rs:1189:38:
+called `Result::unwrap()` on an `Err` value: InvalidState("PCI snapshot 'virtio-pci-test': ring outside guest memory or misaligned")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    devices::virtio_pci::tests::snapshot_restores_negotiation_queue_cursors_and_irq
+
+test result: FAILED. 18 passed; 1 failed; 0 ignored; 0 measured; 2301 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p hv2-core --lib`

@@ -1,0 +1,33 @@
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.12s
+     Running unittests src/lib.rs (/var/tmp/hm-object-backup/target/debug/deps/hv2_core-e659a1d473ebec97)
+
+running 26 tests
+test devices::virtio_vsock::tests::a_connection_is_not_established_until_the_guest_answers ... ok
+test devices::virtio_vsock::tests::a_guest_request_to_a_port_nothing_listens_on_is_reset ... ok
+test devices::virtio_vsock::tests::a_guest_request_to_a_listening_port_is_accepted ... ok
+test devices::virtio_vsock::tests::a_read_past_config_space_reads_as_zero_rather_than_panicking ... ok
+test devices::virtio_vsock::tests::a_reserved_context_id_is_refused ... ok
+test devices::virtio_vsock::tests::a_reset_clears_connections_but_keeps_host_side_listeners ... ok
+test devices::virtio_vsock::tests::a_guest_shutdown_closes_the_connection_but_keeps_what_it_said ... ok
+test devices::virtio_vsock::tests::a_send_is_bounded_by_the_credit_the_guest_granted ... ok
+test devices::virtio_vsock::tests::a_second_connection_on_the_same_ports_is_refused ... ok
+test devices::virtio_vsock::tests::a_packet_claiming_more_payload_than_it_carries_is_dropped ... ok
+test devices::virtio_vsock::tests::an_rx_buffer_too_small_for_a_packet_is_returned_rather_than_half_filled ... ok
+test devices::virtio_vsock::tests::client_eof_allows_a_reply_and_guest_eof_preserves_host_writes ... ok
+test devices::virtio_vsock::tests::concurrent_ephemeral_connections_each_get_their_own_port ... ok
+test devices::virtio_vsock::tests::config_space_reports_the_guest_context_id ... ok
+test devices::virtio_vsock::tests::connecting_puts_a_request_on_the_rx_queue ... ok
+test devices::virtio_vsock::tests::connection_progress_tracks_payload_credit_and_peer_close_without_waking_others ... ok
+test devices::virtio_vsock::tests::connections_are_listed_in_a_stable_order ... ok
+test devices::virtio_vsock::tests::payload_from_the_guest_reaches_the_host ... ok
+test devices::virtio_vsock::tests::local_close_forget_and_reset_signal_retained_connection_waiters ... ok
+test devices::virtio_vsock::tests::peek_does_not_consume_what_recv_would_return ... ok
+test devices::virtio_vsock::tests::payload_from_the_host_reaches_the_guest ... ok
+test devices::virtio_vsock::tests::queued_packets_for_an_unresponsive_guest_are_bounded ... ok
+test devices::virtio_vsock::tests::reading_from_the_host_tells_the_guest_the_window_moved ... ok
+test devices::virtio_vsock::tests::stream_data_larger_than_a_buffer_is_split_across_buffers ... ok
+test devices::virtio_vsock::tests::successive_ephemeral_connections_do_not_reuse_a_port ... ok
+test devices::virtio_vsock::tests::the_operation_numbers_are_the_ones_on_the_wire ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 2282 filtered out; finished in 0.00s
+

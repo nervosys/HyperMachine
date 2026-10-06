@@ -1,0 +1,7 @@
+cold admission during reclaim: correctly refused
+reclaim during cold admission: correctly refused
+unmatched cold release: correctly refused
+unmatched reclaim release: correctly refused
+duplicate reclaim admission: correctly refused
+missing worker summary: correctly refused
+6 invalid traces refused; real non-overlapping trace accepted

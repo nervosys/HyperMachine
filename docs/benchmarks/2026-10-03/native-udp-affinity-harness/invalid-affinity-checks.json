@@ -1,0 +1,32 @@
+{
+  "": {
+    "exit_code": 2,
+    "no_fixture_directory": true,
+    "error": "check-udp-cluster-kvm.py: error: CPU IDs must be comma-separated nonnegative integers"
+  },
+  "0,0": {
+    "exit_code": 2,
+    "no_fixture_directory": true,
+    "error": "check-udp-cluster-kvm.py: error: duplicate CPU IDs"
+  },
+  "-1": {
+    "exit_code": 2,
+    "no_fixture_directory": true,
+    "error": "check-udp-cluster-kvm.py: error: CPU IDs must be comma-separated nonnegative integers"
+  },
+  "0-3": {
+    "exit_code": 2,
+    "no_fixture_directory": true,
+    "error": "check-udp-cluster-kvm.py: error: CPU IDs must be comma-separated nonnegative integers"
+  },
+  "x": {
+    "exit_code": 2,
+    "no_fixture_directory": true,
+    "error": "check-udp-cluster-kvm.py: error: CPU IDs must be comma-separated nonnegative integers"
+  },
+  "24": {
+    "exit_code": 2,
+    "no_fixture_directory": true,
+    "error": "check-udp-cluster-kvm.py: error: requested CPU is outside the current allowed affinity"
+  }
+}

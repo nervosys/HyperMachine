@@ -1,0 +1,110 @@
+{
+  "diagnostic_only": true,
+  "runtime_change_adopted": false,
+  "baseline_sha256": "9e5afc69842c28635b827228095baa7a94f2c6d67f4441af327719c637699623",
+  "diagnostic_sha256": "e60571bd349d711b0965458c3cfe1fd03ea9ae51803fa71e0d6bb876eb152566",
+  "baseline_failed_attempts": 100,
+  "baseline_failure_elapsed_ms": {
+    "n": 100,
+    "min": 15727.338354001404,
+    "median": 17322.45418349339,
+    "mean": 17157.85835230039,
+    "max": 18066.681326003163
+  },
+  "baseline_failed_batch_submission_offset_ms": {
+    "n": 100,
+    "min": 1.542241996503435,
+    "median": 14.095587503106799,
+    "mean": 18.08362858253531,
+    "max": 59.79862200911157
+  },
+  "baseline_guest_run_states": {
+    "Runnable": 36,
+    "Halted": 64
+  },
+  "baseline_instruction_addresses_unresolved": {
+    "0xffffffff8106f45b": 1,
+    "0xffffffff81060e95": 1,
+    "0xffffffff81eda95f": 64,
+    "0xffffffff8127cb00": 15,
+    "0xffffffff812bd38f": 1,
+    "0xffffffff812b4ebe": 3,
+    "0xffffffff8107f094": 1,
+    "0xffffffff812890a6": 1,
+    "0xffffffff8123394f": 1,
+    "0xffffffff820014f0": 1,
+    "0xffffffff810d0f36": 1,
+    "0xffffffff810613cd": 1,
+    "0xffffffff81ed150b": 4,
+    "0xffffffff81ec6f70": 1,
+    "0xffffffff811235e6": 1,
+    "0xffffffff81133bcf": 1,
+    "0xffffffff812b4ed7": 1,
+    "0xffffffff8107b432": 1
+  },
+  "baseline_zero_recent_vcpu_exits": 38,
+  "diagnostic_attempts": 400,
+  "diagnostic_passed": 400,
+  "diagnostic_agent_stage_rows": 200,
+  "diagnostic_agent_stage_failures": 0,
+  "diagnostic_successful_agent_stages_ms": {
+    "blocking_queue_ms": {
+      "n": 200,
+      "min": 0.09852999999999999,
+      "median": 7.324888,
+      "mean": 10.55573639,
+      "max": 181.88157999999999
+    },
+    "connect_ms": {
+      "n": 200,
+      "min": 2827.7658949999995,
+      "median": 8986.0376355,
+      "mean": 8642.168847375,
+      "max": 10406.842147000001
+    },
+    "ping_ms": {
+      "n": 200,
+      "min": 0.084773,
+      "median": 4.990925,
+      "mean": 11.07187749,
+      "max": 118.77447500000001
+    }
+  },
+  "diagnostic_startup_stages_ms": {
+    "build_ms": {
+      "n": 200,
+      "min": 0.268308,
+      "median": 4.936146,
+      "mean": 6.16719045,
+      "max": 27.757513
+    },
+    "launch_ms": {
+      "n": 200,
+      "min": 30.759878,
+      "median": 70.1825225,
+      "mean": 87.550484235,
+      "max": 1237.782411
+    },
+    "agent_ms": {
+      "n": 200,
+      "min": 2902.519816,
+      "median": 9017.7940295,
+      "mean": 8664.48102917,
+      "max": 10425.757194
+    },
+    "network_envd_ms": {
+      "n": 200,
+      "min": 0.007485,
+      "median": 0.028054500000000003,
+      "mean": 0.09309076499999999,
+      "max": 10.765664
+    }
+  },
+  "cleanup_verified": true,
+  "limits": [
+    "Tracing changes timing and the failure was not reproduced",
+    "Client submission offset does not measure server queueing",
+    "Connection wait includes guest boot, driver and listener readiness",
+    "Timeout guest-state samples are not a root cause or matching symbol proof"
+  ]
+}

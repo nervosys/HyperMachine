@@ -1,0 +1,155 @@
+{
+  "success": true,
+  "performance_comparison": false,
+  "storage": "owned Moto S3 HTTP emulator",
+  "tool_sha256": "8055959543b75b4bef2f4f86df3b7122181f112c682b860aef4d69cff830cea8",
+  "coordinator_sha256": "a6151c5d77bef732504f433141e7782b2788814883cc647d317fa3ebf79507d4",
+  "checks": [
+    {
+      "name": "multipart-roundtrip-composite-and-no-overwrite",
+      "receipt": {
+        "operation": "backup",
+        "object": "success.hmb",
+        "encrypted_bytes": 20978497,
+        "sha256": "dfb9f3d9f0c7f72231c9d43e1b6940660675fe4187e3290168cf7919e1817b76",
+        "files": 1,
+        "expanded_bytes": 20971520,
+        "compression_level": 1,
+        "upload_method": "multipart",
+        "parts": 3,
+        "composite_sha256": "/a6Ut/t6vZZ9Ecp3ZoLYTjbWkV347ARqLDgG4A+qUtU=-3",
+        "version_id": "null",
+        "success": true
+      },
+      "passed": true
+    },
+    {
+      "name": "part-failure-preserves-other-upload",
+      "passed": true
+    },
+    {
+      "name": "part-checksum-mismatch",
+      "passed": true,
+      "cleanup_status": "aborted",
+      "injection": "owned client adapter around real emulator operations"
+    },
+    {
+      "name": "abort-failure",
+      "passed": true,
+      "cleanup_status": "abort_failed",
+      "injection": "owned client adapter around real emulator operations"
+    },
+    {
+      "name": "create-response-loss",
+      "passed": true,
+      "cleanup_status": "upload_id_unavailable",
+      "injection": "owned client adapter around real emulator operations"
+    },
+    {
+      "name": "interrupt",
+      "passed": true,
+      "cleanup_status": "aborted",
+      "injection": "owned client adapter around real emulator operations"
+    },
+    {
+      "name": "complete-response-loss",
+      "passed": true,
+      "cleanup_status": "already_completed_or_absent",
+      "injection": "owned client adapter around real emulator operations"
+    },
+    {
+      "name": "complete-checksum-mismatch",
+      "passed": true,
+      "cleanup_status": "already_completed_or_absent",
+      "injection": "owned client adapter around real emulator operations"
+    },
+    {
+      "name": "configuration-and-format-limits",
+      "passed": true
+    },
+    {
+      "name": "single-version-pinned-recovery",
+      "passed": true,
+      "old_receipt": {
+        "operation": "backup",
+        "object": "single-versions.hmb",
+        "encrypted_bytes": 20978497,
+        "sha256": "9d8d57b0b73dd602abb850d3b992b6072b3d9d34b123f3300ae93d85d115e934",
+        "files": 1,
+        "expanded_bytes": 20971520,
+        "compression_level": 1,
+        "upload_method": "single",
+        "parts": 1,
+        "version_id": "7c5a5b60-7b68-4926-bd74-440bfece733b",
+        "success": true
+      },
+      "new_receipt": {
+        "operation": "backup",
+        "object": "single-versions.hmb",
+        "encrypted_bytes": 20978497,
+        "sha256": "41bc1f4425cc0b808d21aead207e5e680ed6bc6e3776a3b0fa954f9f20e9b033",
+        "files": 1,
+        "expanded_bytes": 20971520,
+        "compression_level": 1,
+        "upload_method": "single",
+        "parts": 1,
+        "version_id": "ff853a50-22b5-47e0-8a8e-556f8f37c5a6",
+        "success": true
+      },
+      "delete_marker_version_id": "c6edaf9d-324c-452d-bc44-5eb30b61b905",
+      "wrong_response_refused": true,
+      "deleted_version_refused": true
+    },
+    {
+      "name": "multipart-version-pinned-recovery",
+      "passed": true,
+      "old_receipt": {
+        "operation": "backup",
+        "object": "multipart-versions.hmb",
+        "encrypted_bytes": 20978497,
+        "sha256": "0ceb896e18bc954ba36731de70cae72e8bf713a738037c478b9c58db4988138f",
+        "files": 1,
+        "expanded_bytes": 20971520,
+        "compression_level": 1,
+        "upload_method": "multipart",
+        "parts": 3,
+        "composite_sha256": "Ips5jitOG+ADx7cj/IGJlIyUWC9Fe56PbXi1U6oBeag=-3",
+        "version_id": "1aac0c4a-6faa-4f22-9456-5d80bd29c635",
+        "success": true
+      },
+      "new_receipt": {
+        "operation": "backup",
+        "object": "multipart-versions.hmb",
+        "encrypted_bytes": 20978508,
+        "sha256": "cf39cf4f717a07d7eadf4ee742979819d0e88a11f704bee3578f7c60e2cfa5aa",
+        "files": 1,
+        "expanded_bytes": 20971520,
+        "compression_level": 1,
+        "upload_method": "multipart",
+        "parts": 3,
+        "composite_sha256": "+QIQ2OOJsnhXPx2aDfchaxOrGyYh5dK7Ksn27KUC9iw=-3",
+        "version_id": "dbb0cc63-2091-4e3a-8f48-0bafbc1c08d0",
+        "success": true
+      },
+      "delete_marker_version_id": "f30593d1-edb8-4b22-9599-0553687b111e",
+      "wrong_response_refused": true,
+      "deleted_version_refused": true
+    }
+  ],
+  "cleanup_errors": [],
+  "versions": {
+    "boto3": "1.43.107",
+    "botocore": "1.43.107",
+    "moto": "5.2.3",
+    "cryptography": "50.0.0"
+  },
+  "checksum_observation": {
+    "head_sha256": "/a6Ut/t6vZZ9Ecp3ZoLYTjbWkV347ARqLDgG4A+qUtU=",
+    "receipt_composite": "/a6Ut/t6vZZ9Ecp3ZoLYTjbWkV347ARqLDgG4A+qUtU=-3"
+  },
+  "emulator_limitations": [
+    "HeadObject composite SHA256 omits AWS part-count suffix; no AWS durability or IAM verification"
+  ],
+  "emulator_exit_code": 0,
+  "artifacts_unchanged": true
+}

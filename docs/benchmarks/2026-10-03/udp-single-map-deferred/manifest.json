@@ -1,0 +1,19 @@
+{
+  "sha256": {
+    "0-baseline.json": "60d47766556481874ea34b5bfa3b79607a988ac52da8012bdbdf24961a683b5d",
+    "1-candidate.json": "44a4eb5b7f93cfeede34a52e5a8760ebff4393c04dc40647523cc164aaad9517",
+    "2-candidate.json": "00171057615905b0d44a72dac91fd88f0ac6c0422dddebeab0f7d9c1bd11c64d",
+    "3-baseline.json": "b186d5b7410e63ebe178fade7fa7c78d3f81a1e1a15f059966fc3b058d0f70e3",
+    "README.md": "493ecdbe21da89019a3506c3a40ea136c2fd10a6f94a351550fdebe68a3f04d1",
+    "baseline-sandbox_vm_udp.rs": "936decd596d2989a60de9be2c8ed6bc4075fa5400987e59bae93c76456d4b1d2",
+    "candidate-sandbox_vm_udp.rs": "0aaf9f318a9404df9db6cb82e311c37bcd67319b83dd037b9cc736f98e73157f",
+    "check-udp-cli-recovery.py": "b9eebefe6e904038990c2b55760e51d87e82aa6bd858cf4b4467a125979e8a04",
+    "check-udp-cluster-kvm.py": "bbb04d665d866bafa54cc498b80d658ea0ddfc274d573e7f764b978eea08e6a0",
+    "compare-udp-cli.py": "6c4a08a3828501f40843c1f551140a6b7c0da73afdfc441cf23abb30dbb15d7c",
+    "library-tests.log": "2d0bb2ee71c7bcc4a5fb08f48f85a70867724ae7607caa92234491ddf75e3bde",
+    "recovery-report.json": "6c378bd4ee5c2d14363e584c7d8aa93dda0b5247c23467102471897bb3386cc9",
+    "release-build.log": "e37b24b16e054cd91bb7d460c66f790e5d4a66ecaa89abb2950177cbc85facfd",
+    "restored-source.json": "269cdf604401d7f5bf4116285fa9aba1a1c051c49a07d54fd062352b87b4cdf0",
+    "summary.json": "025629a7b942160654e5e016d9f393df3ef8b66c77bf1a7eac478d6f403f9303"
+  }
+}

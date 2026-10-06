@@ -1,0 +1,26 @@
+diff --git a/crates/hv2-jobs/src/dispatch.rs b/crates/hv2-jobs/src/dispatch.rs
+index f75bc5e..8d33f89 100644
+--- a/crates/hv2-jobs/src/dispatch.rs
++++ b/crates/hv2-jobs/src/dispatch.rs
+@@ -63,7 +63,7 @@ impl Store {
+                 return Ok(None);
+             }
+             for record in records {
+-                match self.vm_dispatch_state(id, record.scheduled_ms) {
++                match self.read_vm_dispatch_state(id, record.scheduled_ms) {
+                     Ok(state) if state.completion.is_some() => cursor = Some(record.scheduled_ms),
+                     Ok(_) => {
+                         return Err(JobError::Conflict(
+@@ -118,6 +118,12 @@ impl Store {
+     /// Read unresolved or completed ownership after a dispatcher restart.
+     pub fn vm_dispatch_state(&self, id: &str, scheduled_ms: u64) -> Result<DispatchState> {
+         self.interval_schedule(id)?;
++        self.read_vm_dispatch_state(id, scheduled_ms)
++    }
++
++    // Call only after validating the immutable schedule in this operation.
++    // Claim identity and result token checks still apply to every record.
++    fn read_vm_dispatch_state(&self, id: &str, scheduled_ms: u64) -> Result<DispatchState> {
+         let key = format!("{id}--{scheduled_ms}");
+         let claim: DispatchClaim =
+             crate::read_json(&self.root().join("dispatch-claims").join(&key), &key)?;

@@ -1,0 +1,10 @@
+{
+  "README.md": "f5d834584f8553a6fffcf35c761f031fbf73567e75ae83f075b9fb78a024f430",
+  "discovery-extract.txt": "d447efbc808fb62529cf9fc7cb0b5a564324a48b1080007b8344d58f999675be",
+  "pci-guest-probe.rs": "9f392e480f4649c848f0b0b74308ba43b4c32f9415d7c12351cce8c0ea80fba6",
+  "probe-build.txt": "dd5bb3fc26f40c4e401f7d0bff1ae1f0df4873c3d3df81c7314b70fb861f49fb",
+  "probe-runtime.txt": "b48e792626c31f0a40a4ded6120190fdc007d8b8135d85f7c8f0e62641760c35",
+  "source-context.json": "4ad025a6aceb671367f7ada80ed8199d2fbc8e054a3fb12cca9efd2e1d817c25",
+  "verify.py": "adf0220b5b1e70c61047f9d0a38e99d388d30c20d8f12a92274679dea36dddd0",
+  "virtio-pci.rs": "8fcd07fa92f17a6785afb4d46387479deba22f5e405cb9c728bb277a3c2554af"
+}

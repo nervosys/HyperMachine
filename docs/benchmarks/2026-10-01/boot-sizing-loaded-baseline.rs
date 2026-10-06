@@ -1,0 +1,798 @@
+//! Declarative boot sources for a VM.
+//!
+//! [`BootSource`] is the *configuration* half of booting: a serializable
+//! description of what a VM should boot, suitable for a TOML file, a REST
+//! request body, or an agent tool call. [`LoadedBoot`] is the *resolved* half:
+//! the same description with every image read off disk and validated, ready to
+//! hand to a hypervisor backend.
+//!
+//! Splitting the two keeps file I/O at the edge — a backend receives bytes it
+//! can write straight into guest memory and never touches the filesystem, so
+//! the boot path is testable without a kernel image on disk.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use hv2_core::boot::source::BootSource;
+//!
+//! # fn example() -> hv2_core::Result<()> {
+//! let source = BootSource::linux("/boot/vmlinuz")
+//!     .with_initrd("/boot/initrd.img")
+//!     .with_cmdline("console=ttyS0 root=/dev/vda");
+//!
+//! // Read the images and validate the kernel header.
+//! let loaded = source.load()?;
+//! println!("boot entry point: {:#x}", loaded.entry_point()?);
+//! # Ok(())
+//! # }
+//! ```
+
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+use crate::boot::linux::{LinuxBootParams, LinuxBootProtocol};
+use crate::boot::multiboot::{MultibootInfo, MultibootLayout, MultibootModule, MultibootProtocol};
+use crate::{Error, Result};
+
+/// Default guest physical address a Linux protected-mode kernel is loaded at.
+pub const DEFAULT_KERNEL_ADDR: u64 = 0x100000;
+
+/// Default guest physical address of the Linux `boot_params` structure.
+pub const DEFAULT_SETUP_ADDR: u64 = 0x90000;
+
+/// Guest physical address a legacy boot sector is loaded at and entered from.
+pub const BOOT_SECTOR_ADDR: u64 = 0x7C00;
+
+/// What a VM should boot.
+///
+/// Each variant names images by path; nothing is read until [`BootSource::load`]
+/// is called.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum BootSource {
+    /// A Linux kernel in bzImage format, booted via the Linux boot protocol.
+    Linux {
+        /// Path to the bzImage kernel.
+        kernel: PathBuf,
+        /// Optional initial ramdisk.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        initrd: Option<PathBuf>,
+        /// Kernel command line.
+        #[serde(default)]
+        cmdline: String,
+        /// Guest physical address to load the protected-mode kernel at.
+        #[serde(default = "default_kernel_addr")]
+        kernel_addr: u64,
+        /// Guest physical address of the `boot_params` structure.
+        #[serde(default = "default_setup_addr")]
+        setup_addr: u64,
+    },
+
+    /// A Multiboot 1.0 compliant kernel.
+    Multiboot {
+        /// Path to the kernel image.
+        kernel: PathBuf,
+        /// Additional modules, loaded in order.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        modules: Vec<PathBuf>,
+        /// Kernel command line.
+        #[serde(default)]
+        cmdline: String,
+    },
+
+    /// A raw image copied verbatim into guest memory.
+    ///
+    /// Used for boot sectors, unikernels, and hand-written guest code: the
+    /// image is written at `load_addr` and the vCPU starts at `entry`.
+    Raw {
+        /// Path to the image.
+        image: PathBuf,
+        /// Guest physical address to load the image at.
+        #[serde(default = "default_boot_sector_addr")]
+        load_addr: u64,
+        /// Guest physical address to begin execution at.
+        #[serde(default = "default_boot_sector_addr")]
+        entry: u64,
+    },
+}
+
+fn default_kernel_addr() -> u64 {
+    DEFAULT_KERNEL_ADDR
+}
+
+fn default_setup_addr() -> u64 {
+    DEFAULT_SETUP_ADDR
+}
+
+fn default_boot_sector_addr() -> u64 {
+    BOOT_SECTOR_ADDR
+}
+
+impl BootSource {
+    /// A Linux boot source with default load addresses and no initrd.
+    pub fn linux(kernel: impl Into<PathBuf>) -> Self {
+        Self::Linux {
+            kernel: kernel.into(),
+            initrd: None,
+            cmdline: String::new(),
+            kernel_addr: DEFAULT_KERNEL_ADDR,
+            setup_addr: DEFAULT_SETUP_ADDR,
+        }
+    }
+
+    /// A Multiboot boot source with no modules.
+    pub fn multiboot(kernel: impl Into<PathBuf>) -> Self {
+        Self::Multiboot {
+            kernel: kernel.into(),
+            modules: Vec::new(),
+            cmdline: String::new(),
+        }
+    }
+
+    /// A raw image loaded at, and entered from, the legacy boot sector address.
+    pub fn raw(image: impl Into<PathBuf>) -> Self {
+        Self::Raw {
+            image: image.into(),
+            load_addr: BOOT_SECTOR_ADDR,
+            entry: BOOT_SECTOR_ADDR,
+        }
+    }
+
+    /// Attach an initial ramdisk (Linux only; ignored by other variants).
+    #[must_use]
+    pub fn with_initrd(mut self, path: impl Into<PathBuf>) -> Self {
+        if let Self::Linux { initrd, .. } = &mut self {
+            *initrd = Some(path.into());
+        }
+        self
+    }
+
+    /// Kernel arguments that stop a guest probing hardware a microVM does not
+    /// have.
+    ///
+    /// Measured on a 6.6.52 guest under this hypervisor, timestamps from the
+    /// guest's own log, from power-on to `rdinit`:
+    ///
+    /// ```text
+    ///   260.8 ms  Serial: 8250/16550 driver, 4 ports, IRQ sharing enabled
+    ///   258.9 ms  i8042: If AUX port is really absent please use 'i8042.noaux'
+    ///   ------
+    ///   519.7 ms  of a 914 ms boot -- 57% of it, spent looking for a PS/2
+    ///             controller that is not there and three UARTs that are not
+    ///             either
+    /// ```
+    ///
+    /// These arguments remove the second of those. End to end, the agent
+    /// cold start went from **960.75 ms to 705.60 ms** -- 26.6% -- with the
+    /// hypervisor's own share unchanged at 18 ms, which is the control: only
+    /// the guest was touched.
+    ///
+    /// The first is *not* fixed by these, and the reason is written down
+    /// because it cost an experiment to find out: `8250.nr_uarts=1` reduces
+    /// the reported ports from four to one and saves nothing, and
+    /// `8250.skip_txen_test=1` saves nothing either. The 260 ms is a fixed
+    /// cost inside the probe of the one port that remains, and whether it
+    /// belongs to the kernel or to this project's own 8250 emulation is not
+    /// yet established.
+    ///
+    /// Not applied automatically. A caller who wants a PS/2 device, or four
+    /// UARTs, should get them.
+    pub const MICROVM_FAST_BOOT_ARGS: &'static str =
+        "8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd";
+
+    /// Append [`BootSource::MICROVM_FAST_BOOT_ARGS`] to the command line.
+    ///
+    /// Separate from [`BootSource::with_cmdline`] so that the arguments are a
+    /// decision a caller makes rather than something that happens to its
+    /// guest.
+    #[must_use]
+    pub fn with_fast_microvm_probes(mut self) -> Self {
+        match &mut self {
+            Self::Linux { cmdline, .. } | Self::Multiboot { cmdline, .. } => {
+                if !cmdline.is_empty() {
+                    cmdline.push(' ');
+                }
+                cmdline.push_str(Self::MICROVM_FAST_BOOT_ARGS);
+            }
+            Self::Raw { .. } => {}
+        }
+        self
+    }
+
+    /// Set the kernel command line (Linux and Multiboot; ignored by `Raw`).
+    #[must_use]
+    pub fn with_cmdline(mut self, line: impl Into<String>) -> Self {
+        match &mut self {
+            Self::Linux { cmdline, .. } | Self::Multiboot { cmdline, .. } => *cmdline = line.into(),
+            Self::Raw { .. } => {}
+        }
+        self
+    }
+
+    /// Add a Multiboot module (Multiboot only; ignored by other variants).
+    #[must_use]
+    pub fn with_module(mut self, path: impl Into<PathBuf>) -> Self {
+        if let Self::Multiboot { modules, .. } = &mut self {
+            modules.push(path.into());
+        }
+        self
+    }
+
+    /// Load and place a raw image at an explicit address, entering at `entry`.
+    #[must_use]
+    pub fn at(mut self, load_addr: u64, entry: u64) -> Self {
+        if let Self::Raw {
+            load_addr: la,
+            entry: e,
+            ..
+        } = &mut self
+        {
+            *la = load_addr;
+            *e = entry;
+        }
+        self
+    }
+
+    /// Path of the primary image this source boots.
+    pub fn image_path(&self) -> &Path {
+        match self {
+            Self::Linux { kernel, .. } | Self::Multiboot { kernel, .. } => kernel,
+            Self::Raw { image, .. } => image,
+        }
+    }
+
+    /// Short protocol name, for logs and API responses.
+    pub fn protocol(&self) -> &'static str {
+        match self {
+            Self::Linux { .. } => "linux",
+            Self::Multiboot { .. } => "multiboot",
+            Self::Raw { .. } => "raw",
+        }
+    }
+
+    /// Read every image off disk and validate it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Io`] if an image cannot be read, and [`Error::VM`] if a
+    /// Linux kernel fails header validation or an image is empty.
+    pub fn load(&self) -> Result<LoadedBoot> {
+        match self {
+            Self::Linux {
+                kernel,
+                initrd,
+                cmdline,
+                kernel_addr,
+                setup_addr,
+            } => {
+                let params = LinuxBootParams {
+                    kernel_image: read_image(kernel)?,
+                    initrd: initrd.as_deref().map(read_image).transpose()?,
+                    cmdline: cmdline.clone(),
+                    setup_addr: *setup_addr,
+                    kernel_addr: *kernel_addr,
+                    // Filled in by `set_memory_size` once a VM exists.
+                    memory_size: 0,
+                };
+                // Fail here — with the path in hand — rather than deep inside a
+                // backend where the error has lost its context.
+                LinuxBootProtocol::validate_params(&params).map_err(|e| {
+                    Error::VM(format!("invalid Linux kernel {}: {e}", kernel.display()))
+                })?;
+                Ok(LoadedBoot::Linux(Box::new(params)))
+            }
+
+            Self::Multiboot {
+                kernel,
+                modules,
+                cmdline,
+            } => {
+                let mut loaded_modules = Vec::with_capacity(modules.len());
+                for path in modules {
+                    loaded_modules.push(MultibootModule {
+                        data: read_image(path)?,
+                        cmdline: path.display().to_string(),
+                    });
+                }
+                Ok(LoadedBoot::Multiboot(Box::new(MultibootInfo {
+                    kernel_image: read_image(kernel)?,
+                    modules: loaded_modules,
+                    cmdline: cmdline.clone(),
+                    ..MultibootInfo::default()
+                })))
+            }
+
+            Self::Raw {
+                image,
+                load_addr,
+                entry,
+            } => Ok(LoadedBoot::Raw {
+                data: read_image(image)?,
+                load_addr: *load_addr,
+                entry: *entry,
+            }),
+        }
+    }
+}
+
+/// Read an image file, rejecting an empty one.
+fn read_image(path: &Path) -> Result<Vec<u8>> {
+    let data = std::fs::read(path)
+        .map_err(|e| Error::VM(format!("failed to read {}: {e}", path.display())))?;
+    if data.is_empty() {
+        return Err(Error::VM(format!("boot image {} is empty", path.display())));
+    }
+    Ok(data)
+}
+
+/// A [`BootSource`] with every image read and validated.
+///
+/// This is what a hypervisor backend consumes: bytes plus the addresses they
+/// belong at. Backends never read files.
+#[derive(Debug, Clone)]
+pub enum LoadedBoot {
+    /// Linux boot protocol parameters, kernel image included.
+    Linux(Box<LinuxBootParams>),
+    /// Multiboot information, kernel and modules included.
+    Multiboot(Box<MultibootInfo>),
+    /// A raw image and where it goes.
+    Raw {
+        /// Image bytes.
+        data: Vec<u8>,
+        /// Guest physical address to load at.
+        load_addr: u64,
+        /// Guest physical address to begin execution at.
+        entry: u64,
+    },
+}
+
+impl LoadedBoot {
+    /// Guest physical address the vCPU begins executing at.
+    ///
+    /// For Multiboot this is read out of the image -- its header's address
+    /// fields, or its ELF entry -- and only falls back to the conventional 1 MB
+    /// for a flat image that says nothing. It used to be 1 MB unconditionally,
+    /// with a comment claiming the backend refined it from the ELF header; no
+    /// backend did, so every compiled kernel was entered at the first byte of
+    /// its own file header.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::VM`] if a Multiboot image cannot be placed: no header,
+    /// address fields pointing outside the file, or an ELF this loader cannot
+    /// enter.
+    pub fn entry_point(&self) -> Result<u64> {
+        match self {
+            Self::Linux(params) => Ok(params.kernel_addr),
+            Self::Multiboot(info) => Ok(MultibootProtocol::place_kernel(
+                &info.kernel_image,
+                &MultibootLayout::default(),
+            )?
+            .entry),
+            Self::Raw { entry, .. } => Ok(*entry),
+        }
+    }
+
+    /// Tell a Linux boot how much RAM the guest has.
+    ///
+    /// Separate from [`BootSource::load`] because that reads and validates
+    /// images, which callers do before a VM exists — an API server checking an
+    /// image is admissible has no memory size to give. The kernel's `e820` map
+    /// is built from this and it has no other source of one, so a VM must set
+    /// it before asking for the memory regions.
+    ///
+    /// Does nothing for protocols that do not carry a memory map.
+    pub fn set_memory_size(&mut self, bytes: u64) {
+        if let Self::Linux(params) = self {
+            params.memory_size = bytes;
+        }
+    }
+
+    /// Add an argument to the kernel command line, if this protocol has one.
+    ///
+    /// For a device the VM attaches after the boot source was written down: a
+    /// guest cannot be told about a vsock window at build time, because the
+    /// window does not exist yet, and requiring the caller to go back and
+    /// rewrite the command line is a rule that gets forgotten. Ignored by
+    /// `Raw`, which has no command line to add to.
+    ///
+    /// Adding the same argument twice is a caller error rather than a silent
+    /// one -- but an argument already present is left alone, so a caller who
+    /// did write it down by hand is not punished with a duplicate.
+    pub fn append_cmdline(&mut self, arg: &str) {
+        let arg = arg.trim();
+        if arg.is_empty() {
+            return;
+        }
+        let cmdline = match self {
+            Self::Linux(params) => &mut params.cmdline,
+            Self::Multiboot(info) => &mut info.cmdline,
+            Self::Raw { .. } => return,
+        };
+        if cmdline.split_whitespace().any(|token| token == arg) {
+            return;
+        }
+        if !cmdline.is_empty() {
+            cmdline.push(' ');
+        }
+        cmdline.push_str(arg);
+    }
+
+    /// The kernel command line this will boot with, if the protocol has one.
+    ///
+    /// Worth having separately from the field: after
+    /// [`append_cmdline`](Self::append_cmdline) the command line is no longer
+    /// just what the caller wrote, and a caller reporting what a guest will be
+    /// booted with should report what it will actually be booted with.
+    #[must_use]
+    pub fn cmdline(&self) -> Option<&str> {
+        match self {
+            Self::Linux(params) => Some(&params.cmdline),
+            Self::Multiboot(info) => Some(&info.cmdline),
+            Self::Raw { .. } => None,
+        }
+    }
+
+    /// Short protocol name, matching [`BootSource::protocol`].
+    pub fn protocol(&self) -> &'static str {
+        match self {
+            Self::Linux(_) => "linux",
+            Self::Multiboot(_) => "multiboot",
+            Self::Raw { .. } => "raw",
+        }
+    }
+
+    /// The primary image's bytes — the kernel, or the raw image itself.
+    ///
+    /// This is what identifies a boot for admission control. Initrds and
+    /// Multiboot modules are deliberately excluded: they are separate artifacts
+    /// that a registry tracks under their own entries, so folding them in would
+    /// make the digest depend on which modules happened to accompany the kernel.
+    pub fn primary_image(&self) -> &[u8] {
+        match self {
+            Self::Linux(params) => &params.kernel_image,
+            Self::Multiboot(info) => &info.kernel_image,
+            Self::Raw { data, .. } => data,
+        }
+    }
+
+    /// Lower-case hex SHA-256 of [`Self::primary_image`].
+    ///
+    /// No longer conditional. This used to need the `ring` feature and fail
+    /// closed without it, which meant image admission control could not run at
+    /// all on a build that left `ring` out. IronCrypto's SHA-256 is pure Rust
+    /// with no feature to forget, so the enforcement point always has a digest
+    /// to enforce on.
+    pub fn primary_image_digest(&self) -> Result<String> {
+        use ic_core::traits::Digest;
+        let hash = ic_hash::Sha256::digest(self.primary_image());
+        Ok(hash.iter().map(|b| format!("{b:02x}")).collect())
+    }
+
+    /// Total bytes that will be written into guest memory.
+    pub fn image_bytes(&self) -> usize {
+        match self {
+            Self::Linux(params) => {
+                params.kernel_image.len() + params.initrd.as_ref().map_or(0, Vec::len)
+            }
+            Self::Multiboot(info) => {
+                info.kernel_image.len() + info.modules.iter().map(|m| m.data.len()).sum::<usize>()
+            }
+            Self::Raw { data, .. } => data.len(),
+        }
+    }
+
+    /// The `(guest_physical_address, bytes)` regions to write into guest memory.
+    ///
+    /// Backends that only have a "write these bytes there" primitive — and no
+    /// protocol-specific boot helper — can load a guest with this alone, then
+    /// set the vCPU to [`Self::entry_point`].
+    pub fn memory_regions(&self) -> Result<Vec<(u64, Vec<u8>)>> {
+        match self {
+            Self::Linux(params) => LinuxBootProtocol::prepare_guest_memory(params),
+            Self::Multiboot(info) => {
+                MultibootProtocol::prepare_guest_memory(info, &MultibootLayout::default())
+            }
+            Self::Raw {
+                data, load_addr, ..
+            } => Ok(vec![(*load_addr, data.clone())]),
+        }
+    }
+
+    /// The ranges that must read as zero, without materialising the zeros.
+    ///
+    /// A `.bss`. Separate from [`Self::memory_regions`] because the two cost
+    /// very differently: writing zeros into guest memory makes every page of
+    /// them resident on the host, per guest, whether or not the guest ever
+    /// touches them. A caller whose guest memory is already zero — a freshly
+    /// created VM, whose RAM is a fresh anonymous mapping — need write nothing
+    /// at all, and at fleet scale that is the difference between a guest heap
+    /// costing nothing and costing its full size once per agent.
+    ///
+    /// The caller decides, because only the caller knows which case it is in.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::memory_regions`].
+    pub fn zero_ranges(&self) -> Result<Vec<(u64, u64)>> {
+        match self {
+            Self::Multiboot(info) => Ok(MultibootProtocol::place_kernel(
+                &info.kernel_image,
+                &MultibootLayout::default(),
+            )?
+            .zeroed),
+            // Neither of these has a zero-fill region: a Linux image and a raw
+            // one are both entirely bytes.
+            Self::Linux(_) | Self::Raw { .. } => Ok(Vec::new()),
+        }
+    }
+
+    /// Everything with bytes in it, excluding whatever [`Self::zero_ranges`]
+    /// covers.
+    ///
+    /// Together the two are exactly [`Self::memory_regions`], and a caller that
+    /// writes both has written the same thing.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::memory_regions`].
+    pub fn data_regions(&self) -> Result<Vec<(u64, Vec<u8>)>> {
+        let zeroed = self.zero_ranges()?;
+        if zeroed.is_empty() {
+            return self.memory_regions();
+        }
+        // The zero ranges are appended by `prepare_guest_memory` as regions of
+        // exactly that address and length, so removing them by address is
+        // precise rather than heuristic.
+        Ok(self
+            .memory_regions()?
+            .into_iter()
+            .filter(|(addr, data)| {
+                !zeroed
+                    .iter()
+                    .any(|(zaddr, zlen)| zaddr == addr && *zlen == data.len() as u64)
+            })
+            .collect())
+    }
+
+    /// The largest guest physical address any region touches.
+    ///
+    /// A VM whose memory is smaller than this cannot hold the boot images.
+    pub fn highest_address(&self) -> Result<u64> {
+        Ok(self
+            .memory_regions()?
+            .iter()
+            .map(|(addr, data)| addr + data.len() as u64)
+            .max()
+            .unwrap_or(0))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A bzImage header the Linux protocol accepts: boot flag, "HdrS"
+    /// signature, protocol 2.12, and 4 setup sectors.
+    fn valid_bzimage() -> Vec<u8> {
+        let mut image = vec![0u8; 8192];
+        image[0x1F1] = 4;
+        image[0x1FE] = 0x55;
+        image[0x1FF] = 0xAA;
+        image[0x202..0x206].copy_from_slice(b"HdrS");
+        image[0x206] = 0x0C;
+        image[0x207] = 0x02;
+        image
+    }
+
+    fn temp_file(name: &str, bytes: &[u8]) -> PathBuf {
+        let path = std::env::temp_dir().join(format!("hv2-boot-{name}"));
+        std::fs::write(&path, bytes).expect("write temp boot image");
+        path
+    }
+
+    #[test]
+    fn linux_builder_sets_defaults() {
+        let source = BootSource::linux("/boot/vmlinuz");
+        let BootSource::Linux {
+            kernel_addr,
+            setup_addr,
+            initrd,
+            ..
+        } = &source
+        else {
+            panic!("expected a Linux source");
+        };
+        assert_eq!(*kernel_addr, DEFAULT_KERNEL_ADDR);
+        assert_eq!(*setup_addr, DEFAULT_SETUP_ADDR);
+        assert!(initrd.is_none());
+        assert_eq!(source.protocol(), "linux");
+    }
+
+    #[test]
+    fn builders_are_variant_scoped() {
+        // with_initrd applies to Linux and is a no-op elsewhere, so a config
+        // built by a generic caller can't silently produce a wrong boot.
+        let raw = BootSource::raw("/boot/disk.img").with_initrd("/boot/initrd");
+        assert_eq!(raw, BootSource::raw("/boot/disk.img"));
+
+        let multi = BootSource::multiboot("/boot/kernel.elf").with_module("/boot/mod");
+        let BootSource::Multiboot { modules, .. } = &multi else {
+            panic!("expected a Multiboot source");
+        };
+        assert_eq!(modules.len(), 1);
+    }
+
+    #[test]
+    fn raw_at_overrides_addresses() {
+        let source = BootSource::raw("/boot/code.bin").at(0x2000, 0x2010);
+        let BootSource::Raw {
+            load_addr, entry, ..
+        } = &source
+        else {
+            panic!("expected a Raw source");
+        };
+        assert_eq!(*load_addr, 0x2000);
+        assert_eq!(*entry, 0x2010);
+    }
+
+    #[test]
+    fn load_reads_and_validates_a_linux_kernel() {
+        let kernel = temp_file("kernel-ok.bin", &valid_bzimage());
+        let loaded = BootSource::linux(&kernel)
+            .with_cmdline("console=ttyS0")
+            .load()
+            .expect("valid bzImage should load");
+
+        assert_eq!(loaded.protocol(), "linux");
+        assert_eq!(loaded.entry_point().expect("entry"), DEFAULT_KERNEL_ADDR);
+        assert_eq!(loaded.image_bytes(), 8192);
+
+        let _ = std::fs::remove_file(kernel);
+    }
+
+    #[test]
+    fn load_rejects_a_malformed_kernel_with_its_path() {
+        let kernel = temp_file("kernel-bad.bin", &[0u8; 8192]);
+        let err = BootSource::linux(&kernel)
+            .load()
+            .expect_err("a kernel with no HdrS signature must be rejected");
+
+        // The path matters: the operator needs to know *which* image is bad.
+        assert!(
+            err.to_string().contains("kernel-bad.bin"),
+            "error should name the image: {err}"
+        );
+
+        let _ = std::fs::remove_file(kernel);
+    }
+
+    #[test]
+    fn load_rejects_an_empty_image() {
+        let image = temp_file("empty.bin", &[]);
+        let err = BootSource::raw(&image)
+            .load()
+            .expect_err("an empty image must be rejected");
+        assert!(err.to_string().contains("empty"), "got: {err}");
+
+        let _ = std::fs::remove_file(image);
+    }
+
+    #[test]
+    fn load_reports_a_missing_image() {
+        let err = BootSource::raw("/nonexistent/boot/image.bin")
+            .load()
+            .expect_err("a missing image must be rejected");
+        assert!(err.to_string().contains("image.bin"), "got: {err}");
+    }
+
+    #[test]
+    fn raw_regions_place_the_image_at_its_load_address() {
+        let image = temp_file("raw.bin", &[0xF4, 0xEB, 0xFD]);
+        let loaded = BootSource::raw(&image).at(0x7C00, 0x7C00).load().unwrap();
+
+        let regions = loaded.memory_regions().unwrap();
+        assert_eq!(regions.len(), 1);
+        assert_eq!(regions[0].0, 0x7C00);
+        assert_eq!(regions[0].1, vec![0xF4, 0xEB, 0xFD]);
+        assert_eq!(loaded.highest_address().unwrap(), 0x7C03);
+
+        let _ = std::fs::remove_file(image);
+    }
+
+    #[test]
+    fn linux_regions_cover_kernel_boot_params_and_cmdline() {
+        let kernel = temp_file("kernel-regions.bin", &valid_bzimage());
+        let mut loaded = BootSource::linux(&kernel)
+            .with_cmdline("quiet")
+            .load()
+            .unwrap();
+
+        // Loading reads and validates the images; the memory map needs a size
+        // that only a VM has, and asking for the regions without one is
+        // refused rather than answered with an empty map.
+        assert!(
+            loaded.memory_regions().is_err(),
+            "regions without a memory size would carry an empty e820 map"
+        );
+        loaded.set_memory_size(256 * 1024 * 1024);
+
+        let regions = loaded.memory_regions().unwrap();
+        let addrs: Vec<u64> = regions.iter().map(|(a, _)| *a).collect();
+        assert!(addrs.contains(&DEFAULT_SETUP_ADDR), "boot_params region");
+        assert!(
+            addrs.contains(&(DEFAULT_SETUP_ADDR + 0x1000)),
+            "cmdline region"
+        );
+        assert!(addrs.contains(&DEFAULT_KERNEL_ADDR), "kernel region");
+
+        let _ = std::fs::remove_file(kernel);
+    }
+
+    #[test]
+    fn boot_source_round_trips_through_json() {
+        let source = BootSource::linux("/boot/vmlinuz")
+            .with_initrd("/boot/initrd.img")
+            .with_cmdline("root=/dev/vda");
+
+        let json = serde_json::to_string(&source).unwrap();
+        assert!(json.contains("\"type\":\"linux\""), "tagged: {json}");
+
+        let back: BootSource = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, source);
+    }
+
+    #[test]
+    fn minimal_json_fills_in_default_addresses() {
+        // An API caller should only have to name a kernel.
+        let source: BootSource =
+            serde_json::from_str(r#"{"type":"linux","kernel":"/boot/vmlinuz"}"#).unwrap();
+        assert_eq!(source, BootSource::linux("/boot/vmlinuz"));
+    }
+
+    /// A device attached after the boot source was described still gets its
+    /// argument to the guest.
+    ///
+    /// This is the defect the API-level probe hit first: `attach_guest_channel`
+    /// reported the argument a guest needs and left putting it on the command
+    /// line to the caller, so a guest booted perfectly and enumerated nothing.
+    /// That reads as a broken device rather than a missing argument, and the
+    /// caller has no way to be reminded.
+    #[test]
+    fn a_device_argument_reaches_a_command_line_that_was_written_first() {
+        let mut boot = LoadedBoot::Linux(Box::new(LinuxBootParams {
+            kernel_image: Vec::new(),
+            initrd: None,
+            cmdline: "console=ttyS0,115200".to_string(),
+            setup_addr: 0,
+            kernel_addr: 0,
+            memory_size: 0,
+        }));
+
+        boot.append_cmdline("virtio_mmio.device=4K@0xd0000000:5");
+        assert_eq!(
+            boot.cmdline(),
+            Some("console=ttyS0,115200 virtio_mmio.device=4K@0xd0000000:5")
+        );
+    }
+
+    /// A caller who did write the argument down by hand is not punished with a
+    /// duplicate, and an empty command line does not gain a leading space.
+    #[test]
+    fn appending_an_argument_twice_leaves_one_of_it() {
+        let mut boot = LoadedBoot::Linux(Box::new(LinuxBootParams {
+            kernel_image: Vec::new(),
+            initrd: None,
+            cmdline: String::new(),
+            setup_addr: 0,
+            kernel_addr: 0,
+            memory_size: 0,
+        }));
+
+        boot.append_cmdline("quiet");
+        boot.append_cmdline("quiet");
+        boot.append_cmdline("  ");
+        assert_eq!(boot.cmdline(), Some("quiet"));
+    }
+}

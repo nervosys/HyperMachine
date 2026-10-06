@@ -178,7 +178,7 @@ impl ConfigStats {
 }
 
 /// BAR configuration
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BarConfig {
     /// Current value
     pub value: u32,
@@ -272,6 +272,17 @@ impl BarConfig {
     }
 }
 
+/// Serializable guest configuration plus BAR probing state.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ConfigSnapshot {
+    pub data: Vec<u8>,
+    pub write_mask: Vec<u8>,
+    pub bars: [BarConfig; 6],
+    pub rom_bar: BarConfig,
+    pub cap_ptr: u8,
+    pub sizing_active: bool,
+}
+
 /// PCI Configuration Space (Type 0 - Standard Device)
 #[derive(Debug)]
 pub struct ConfigSpace {
@@ -298,6 +309,60 @@ impl Default for ConfigSpace {
 }
 
 impl ConfigSpace {
+    pub fn save_state(&self) -> ConfigSnapshot {
+        ConfigSnapshot {
+            data: self.data.to_vec(),
+            write_mask: self.write_mask.to_vec(),
+            bars: self.bars.clone(),
+            rom_bar: self.rom_bar.clone(),
+            cap_ptr: self.cap_ptr,
+            sizing_active: self.sizing_active,
+        }
+    }
+
+    pub fn validate_state(&self, state: &ConfigSnapshot) -> crate::Result<()> {
+        let invalid =
+            || crate::Error::InvalidState("PCI configuration layout differs from snapshot".into());
+        if state.data.len() != PCIE_CONFIG_SIZE
+            || state.write_mask != self.write_mask
+            || state.cap_ptr != self.cap_ptr
+        {
+            return Err(invalid());
+        }
+        for (index, (&saved, &current)) in state.data.iter().zip(&self.data).enumerate() {
+            // BAR backing bytes include guest writes and size-probe reads.
+            if (0x10..0x28).contains(&index) || (0x30..0x34).contains(&index) {
+                continue;
+            }
+            if (saved ^ current) & !self.write_mask[index] != 0 {
+                return Err(invalid());
+            }
+        }
+        for (saved, current) in state
+            .bars
+            .iter()
+            .chain(std::iter::once(&state.rom_bar))
+            .zip(self.bars.iter().chain(std::iter::once(&self.rom_bar)))
+        {
+            if saved.size_mask != current.size_mask
+                || saved.is_upper != current.is_upper
+                || saved.enabled != current.enabled
+            {
+                return Err(invalid());
+            }
+        }
+        Ok(())
+    }
+
+    pub fn restore_state(&mut self, state: &ConfigSnapshot) -> crate::Result<()> {
+        self.validate_state(state)?;
+        self.data.copy_from_slice(&state.data);
+        self.bars.clone_from(&state.bars);
+        self.rom_bar.clone_from(&state.rom_bar);
+        self.sizing_active = state.sizing_active;
+        Ok(())
+    }
+
     /// Create new configuration space
     pub fn new() -> Self {
         let mut space = Self {
@@ -986,6 +1051,40 @@ mod tests {
         let bar = BarConfig::new_io(0x100);
         assert!(bar.enabled);
         assert!(bar.bar_type().is_io());
+    }
+
+    #[test]
+    fn snapshots_preserve_command_bar_and_probe_state_and_reject_layout_changes() {
+        let mut source =
+            ConfigSpace::with_device(VendorId::INTEL, DeviceId(0x1237), ClassCode::HOST_BRIDGE, 2);
+        source.write_u16(u16::from(registers::COMMAND), 7);
+        source.bars[0] = BarConfig::new_memory32(0x4000, false);
+        source.write_u32(u16::from(registers::BAR0), 0xd0010000);
+        source.write_u32(u16::from(registers::BAR0), u32::MAX);
+        let saved = source.save_state();
+        let mut target =
+            ConfigSpace::with_device(VendorId::INTEL, DeviceId(0x1237), ClassCode::HOST_BRIDGE, 2);
+        target.bars[0] = BarConfig::new_memory32(0x4000, false);
+        target.restore_state(&saved).unwrap();
+        assert_eq!(target.save_state(), saved);
+        assert_eq!(target.read_u16(u16::from(registers::COMMAND)), 7);
+        assert_eq!(
+            target.read_u32(u16::from(registers::BAR0)),
+            source.read_u32(u16::from(registers::BAR0))
+        );
+        let before = target.save_state();
+        let mut corrupt = saved.clone();
+        corrupt.data[0] ^= 1;
+        assert!(target.restore_state(&corrupt).is_err());
+        assert_eq!(target.save_state(), before);
+        let mut corrupt = saved.clone();
+        corrupt.bars[0].size_mask ^= 0x1000;
+        assert!(target.restore_state(&corrupt).is_err());
+        assert_eq!(target.save_state(), before);
+        let mut corrupt = saved;
+        corrupt.write_mask[0] = 0xff;
+        assert!(target.restore_state(&corrupt).is_err());
+        assert_eq!(target.save_state(), before);
     }
 
     #[test]

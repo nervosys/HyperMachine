@@ -1,0 +1,6 @@
+{
+  "exit_code": 0,
+  "stdout": "{\"ipv6_loopback\":true,\"payload_sizes\":[0,4,65507],\"exact_datagrams\":true,\"max_payload_requires_local_fragmentation\":false}\n",
+  "stderr": "",
+  "timed_out": false
+}

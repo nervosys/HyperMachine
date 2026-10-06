@@ -1,0 +1,131 @@
+[2m2026-10-04T16:11:09.025614Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:11:09.027761Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-10-04T16:11:09.027811Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:11:09.050429Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'template' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:11:09.063823Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T16:11:09.063905Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T16:11:09.063925Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'template' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:11:09.064402Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'template' with 1 vCPUs
+[2m2026-10-04T16:11:09.064457Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:11:09.064955Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:11:09.467614Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' paused
+[2m2026-10-04T16:11:11.471917Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' snapshotted to /var/tmp/hm-mmio-daemon-api-v1-tvoyd0u_/store/templates/.37de3c86757a5d45e91157d204612b2e.c5791cb283364c989eb15358fc0f4605/template.snap
+[2m2026-10-04T16:11:11.472053Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' resumed
+[2m2026-10-04T16:11:11.472165Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3067)
+[2m2026-10-04T16:11:11.472584Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'template'
+[2m2026-10-04T16:11:11.472696Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' stopped
+[2m2026-10-04T16:11:11.472737Z[0m [32m INFO[0m [2mhv2_sandboxd[0m[2m:[0m template ready in 2.447300429s at /var/tmp/hm-mmio-daemon-api-v1-tvoyd0u_/store/templates/.37de3c86757a5d45e91157d204612b2e.c5791cb283364c989eb15358fc0f4605/template.snap; working set 0 pages in 0 ranges
+[2m2026-10-04T16:11:11.510882Z[0m [32m INFO[0m [2mhv2_sandboxd[0m[2m:[0m published the shared template 37de3c86757a5d45e91157d204612b2e
+[2m2026-10-04T16:11:11.511648Z[0m [32m INFO[0m [2mhv2_api::sandbox_proxy[0m[2m:[0m sandbox proxy listening on 0.0.0.0:45481
+hv2-sandboxd: listening on 0.0.0.0:59489, capacity 8
+  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)
+  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)
+  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls
+  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener
+  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules
+  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy
+  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies
+  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log
+sandboxes get no network interface (--network to change that)
+sandboxes are restored from template snapshots: base
+
+sandbox proxy on 0.0.0.0:45481 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>
+  grpcurl -plaintext -authority 49983-$SBX.local -H "X-Access-Token: $TOKEN" -import-path crates/hv2-api/proto -proto process.proto \
+      -d '{"process":{"cmd":"/bin/sh","args":["-c","echo hi"]}}' \
+      localhost:45481 process.Process/Start
+[2m2026-10-04T16:11:11.582329Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:11:11.584140Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-10-04T16:11:11.584176Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:11:11.585838Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-2bf4f38f59224bc5ae37' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:11:11.587384Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37' restored from /var/tmp/hm-mmio-daemon-api-v1-tvoyd0u_/store/templates/37de3c86757a5d45e91157d204612b2e/template.snap
+[2m2026-10-04T16:11:11.587430Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-2bf4f38f59224bc5ae37' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:11:11.587665Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-2bf4f38f59224bc5ae37' with 1 vCPUs
+[2m2026-10-04T16:11:11.587684Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:11:11.587923Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:11:11.617420Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37' paused
+[2m2026-10-04T16:11:11.627418Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37' snapshotted to /var/tmp/hm-mmio-daemon-api-v1-tvoyd0u_/store/paused/sbx-2bf4f38f59224bc5ae37-fork-fd8d5e5a8d624881bbbca08e24bf0161.snap
+[2m2026-10-04T16:11:11.627514Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37' resumed
+[2m2026-10-04T16:11:11.627719Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:11:11.627719Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:11:11.629234Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1f63c974a5d44b119d3d': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-10-04T16:11:11.629236Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-5beb06d1f9b44dc7ac0d': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-10-04T16:11:11.629253Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:11:11.629254Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:11:11.630096Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1f63c974a5d44b119d3d' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:11:11.630100Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-5beb06d1f9b44dc7ac0d' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:11:11.633487Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1f63c974a5d44b119d3d' restored from /var/tmp/hm-mmio-daemon-api-v1-tvoyd0u_/store/paused/sbx-2bf4f38f59224bc5ae37-fork-fd8d5e5a8d624881bbbca08e24bf0161.snap
+[2m2026-10-04T16:11:11.633487Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-5beb06d1f9b44dc7ac0d' restored from /var/tmp/hm-mmio-daemon-api-v1-tvoyd0u_/store/paused/sbx-2bf4f38f59224bc5ae37-fork-fd8d5e5a8d624881bbbca08e24bf0161.snap
+[2m2026-10-04T16:11:11.633549Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1f63c974a5d44b119d3d' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:11:11.633551Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-5beb06d1f9b44dc7ac0d' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:11:11.633845Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1f63c974a5d44b119d3d' with 1 vCPUs
+[2m2026-10-04T16:11:11.633866Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:11:11.634200Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-5beb06d1f9b44dc7ac0d' with 1 vCPUs
+[2m2026-10-04T16:11:11.634215Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:11:11.634333Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:11:11.634478Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:11:11.666090Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37' paused
+[2m2026-10-04T16:11:11.674800Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37' snapshotted to /var/tmp/hm-mmio-daemon-api-v1-tvoyd0u_/store/paused/sbx-2bf4f38f59224bc5ae37.snap
+[2m2026-10-04T16:11:11.674915Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=66)
+[2m2026-10-04T16:11:11.675081Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-2bf4f38f59224bc5ae37'
+[2m2026-10-04T16:11:11.675106Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37' stopped
+[2m2026-10-04T16:11:11.712028Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:11:11.713645Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-10-04T16:11:11.713682Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:11:11.714559Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-2bf4f38f59224bc5ae37' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:11:11.717931Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37' restored from /var/tmp/hm-mmio-daemon-api-v1-tvoyd0u_/store/paused/sbx-2bf4f38f59224bc5ae37.snap
+[2m2026-10-04T16:11:11.717982Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-2bf4f38f59224bc5ae37' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:11:11.718240Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-2bf4f38f59224bc5ae37' with 1 vCPUs
+[2m2026-10-04T16:11:11.718261Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:11:11.718561Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:11:11.733402Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37' paused
+[2m2026-10-04T16:11:11.742016Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37' snapshotted to /var/tmp/hm-mmio-daemon-api-v1-tvoyd0u_/store/paused/sbx-2bf4f38f59224bc5ae37.snap
+[2m2026-10-04T16:11:11.742164Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=40)
+[2m2026-10-04T16:11:11.742369Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-2bf4f38f59224bc5ae37'
+[2m2026-10-04T16:11:11.742397Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37' stopped
+[2m2026-10-04T16:11:11.792100Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:11:11.793583Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-10-04T16:11:11.793613Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:11:11.794477Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-2bf4f38f59224bc5ae37' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:11:11.797839Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37' restored from /var/tmp/hm-mmio-daemon-api-v1-tvoyd0u_/store/paused/sbx-2bf4f38f59224bc5ae37.snap
+[2m2026-10-04T16:11:11.797888Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-2bf4f38f59224bc5ae37' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:11:11.798112Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-2bf4f38f59224bc5ae37' with 1 vCPUs
+[2m2026-10-04T16:11:11.798129Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:11:11.798347Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:11:11.814275Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37' paused
+[2m2026-10-04T16:11:11.822308Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37' snapshotted to /var/tmp/hm-mmio-daemon-api-v1-tvoyd0u_/store/paused/sbx-2bf4f38f59224bc5ae37.snap
+[2m2026-10-04T16:11:11.822468Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=38)
+[2m2026-10-04T16:11:11.822691Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-2bf4f38f59224bc5ae37'
+[2m2026-10-04T16:11:11.822720Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37' stopped
+[2m2026-10-04T16:11:11.860753Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:11:11.862545Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-10-04T16:11:11.862590Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:11:11.863382Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-2bf4f38f59224bc5ae37' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:11:11.866845Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37' restored from /var/tmp/hm-mmio-daemon-api-v1-tvoyd0u_/store/paused/sbx-2bf4f38f59224bc5ae37.snap
+[2m2026-10-04T16:11:11.866907Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-2bf4f38f59224bc5ae37' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:11:11.867117Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-2bf4f38f59224bc5ae37' with 1 vCPUs
+[2m2026-10-04T16:11:11.867136Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:11:11.867359Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:11:11.882761Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1f63c974a5d44b119d3d' paused
+[2m2026-10-04T16:11:11.890587Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1f63c974a5d44b119d3d' snapshotted to /var/tmp/hm-mmio-daemon-api-v1-tvoyd0u_/store/paused/sbx-1f63c974a5d44b119d3d-fork-df4341b9da194820b587ccfb22c4fd06.snap
+[2m2026-10-04T16:11:11.890673Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1f63c974a5d44b119d3d' resumed
+[2m2026-10-04T16:11:11.890856Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:11:11.892356Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-66ec3062490a455aa68f': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-10-04T16:11:11.892378Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:11:11.893219Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-66ec3062490a455aa68f' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:11:11.896698Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-66ec3062490a455aa68f' restored from /var/tmp/hm-mmio-daemon-api-v1-tvoyd0u_/store/paused/sbx-1f63c974a5d44b119d3d-fork-df4341b9da194820b587ccfb22c4fd06.snap
+[2m2026-10-04T16:11:11.896742Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-66ec3062490a455aa68f' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:11:11.896970Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-66ec3062490a455aa68f' with 1 vCPUs
+[2m2026-10-04T16:11:11.896996Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:11:11.897331Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:11:11.917712Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=41)
+[2m2026-10-04T16:11:11.917972Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-66ec3062490a455aa68f'
+[2m2026-10-04T16:11:11.918014Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-66ec3062490a455aa68f' stopped
+[2m2026-10-04T16:11:11.955995Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=74)
+[2m2026-10-04T16:11:11.956236Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-5beb06d1f9b44dc7ac0d'
+[2m2026-10-04T16:11:11.956273Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-5beb06d1f9b44dc7ac0d' stopped
+[2m2026-10-04T16:11:12.007826Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=116)
+[2m2026-10-04T16:11:12.008203Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1f63c974a5d44b119d3d'
+[2m2026-10-04T16:11:12.008241Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1f63c974a5d44b119d3d' stopped
+[2m2026-10-04T16:11:12.047898Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=40)
+[2m2026-10-04T16:11:12.048207Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-2bf4f38f59224bc5ae37'
+[2m2026-10-04T16:11:12.048260Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-2bf4f38f59224bc5ae37' stopped

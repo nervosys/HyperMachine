@@ -1,0 +1,25 @@
+   Compiling hv2-sandboxd v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-sandboxd)
+    Finished `test` profile [optimized + debuginfo] target(s) in 15.85s
+     Running unittests src/main.rs (/var/tmp/hm-object-backup/target/debug/deps/hv2_sandboxd-d2f2acabf9f53522)
+
+running 2 tests
+test guest_transport_tests::selection_is_explicit_and_invalid_values_are_refused ... ok
+test guest_transport_tests::pci_boot_keeps_network_config_but_changes_template_identity ... FAILED
+
+failures:
+
+---- guest_transport_tests::pci_boot_keeps_network_config_but_changes_template_identity stdout ----
+
+thread 'guest_transport_tests::pci_boot_keeps_network_config_but_changes_template_identity' (501) panicked at crates/hv2-sandboxd/src/main.rs:514:9:
+assertion `left != right` failed: template key incorporates this command line
+  left: "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd"
+ right: "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    guest_transport_tests::pci_boot_keeps_network_config_but_changes_template_identity
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 66 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p hv2-sandboxd --bin hv2-sandboxd`

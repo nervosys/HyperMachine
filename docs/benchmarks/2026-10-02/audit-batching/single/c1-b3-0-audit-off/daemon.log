@@ -1,0 +1,2 @@
+[2m2026-10-02T11:59:06.031731Z[0m [33m WARN[0m [2mhv2_control_plane[0m[2m:[0m no --mtls-*: nodes are reached in plaintext, the cluster token and envd traffic with them
+hv2-control-plane: E2B API on 0.0.0.0:49463, envd proxy on 0.0.0.0:47653, store memory:

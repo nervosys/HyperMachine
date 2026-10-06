@@ -1,0 +1,31 @@
+{
+  "functional_only": true,
+  "success": false,
+  "checks": [],
+  "dns_ownership_enabled": true,
+  "tls_bundle_enabled": true,
+  "acme_renewal_enabled": true,
+  "renewal_worker_enabled": true,
+  "artifact_sha256": {
+    "control_plane": "958d30f3ab8dc3e83c0455179b8868ceb5fb3a57a5a2d6f472c4b846155fbe1e",
+    "daemon": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "verifier": "0ddcfa73be963c3e25758b9b6e29addfe899bfd15b63c0052e9dcd42536fb403",
+    "deploy_hook": "09e9f6b7543cbe810b18c5db26306f2dee72cb733efd2d9bc3fd5f64bfe2189d",
+    "certificate_ca": "0e41662509087e4c25d8f30f595cda3d02c2af1d1c6cbb7f6b051cf6d9eed74a",
+    "renew_command_file": "3019c44430218c21e24c14a395d102487934893ba4a191f59b2d2b2880e958ea",
+    "renewal_worker": "b6dd26bc78de6495c355698356cb033f4990b5c5364b949727cb2ed5562698bd",
+    "acme_ca": "c9de574127755022a6f5e45d85dfd7fe733b1110fdb67e993aaf3a43ecb4764e"
+  },
+  "cleanup_errors": [],
+  "error": "owned service exited before readiness",
+  "owned_processes_reaped": true,
+  "owned_dns_server_stopped": true,
+  "log_tails": {
+    "node-1.log": "hv2-sandboxd: listening on 0.0.0.0:43355, capacity 4, cluster node domain-node\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes are restored from template snapshots: base\n\nsandbox proxy on 0.0.0.0:44715 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:44715 process.Process/Start\n",
+    "redis-0.log": "446:C 03 Oct 2026 05:05:11.414 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.\n446:C 03 Oct 2026 05:05:11.414 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo\n446:C 03 Oct 2026 05:05:11.414 * Redis version=8.0.2, bits=64, commit=00000000, modified=0, pid=446, just started\n446:C 03 Oct 2026 05:05:11.414 * Configuration loaded\n446:M 03 Oct 2026 05:05:11.414 * monotonic clock: POSIX clock_gettime\n446:M 03 Oct 2026 05:05:11.414 * Running mode=standalone, port=40097.\n446:M 03 Oct 2026 05:05:11.415 * Server initialized\n446:M 03 Oct 2026 05:05:11.415 * Ready to accept connections tcp\n446:signal-handler (1791029112) Received SIGTERM scheduling shutdown...\n446:M 03 Oct 2026 05:05:12.421 * User requested shutdown...\n446:M 03 Oct 2026 05:05:12.421 # Redis is now ready to exit, bye bye...\n",
+    "control-2.log": "hv2-control-plane: --tls-bundle-file cannot be combined with --tls-cert or --tls-key\n"
+  },
+  "artifacts_unchanged": true
+}

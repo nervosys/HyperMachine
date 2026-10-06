@@ -1,0 +1,43 @@
+--- baseline/main.rs
++++ candidate/main.rs
+@@ -2593,11 +2593,26 @@
+     // the request, and this node decides it as it would a create's.
+     let network = match (&paused.network, &paused.network_request) {
+         (Some(spec), _) => Some(spec.clone()),
+-        (None, Some(request)) if state.opts.network => match request.decide(&state.opts).await {
+-            Ok(spec) => Some(spec),
+-            Err(e) => {
+-                give_back(paused);
+-                return Err((StatusCode::INTERNAL_SERVER_ERROR, e));
++        (None, Some(request)) if state.opts.network => {
++            let request = request.clone();
++            let lookup_claim = match (&state.store, &claim) {
++                (Some(store), Some(path)) => Some(SnapshotClaim {
++                    store, id: sandbox_id, path: path.clone(), released: false,
++                }),
++                _ => None,
++            };
++            let (returned_paused, decision) = protected_paused_lookup(paused, |paused| {
++                if state.store.is_none() {
++                    state.paused.lock().insert(sandbox_id.to_string(), paused);
++                }
++            }, protected_snapshot_lookup(lookup_claim, request.decide(&state.opts))).await;
++            paused = returned_paused;
++            match decision {
++                Ok(spec) => Some(spec),
++                Err(e) => {
++                    give_back(paused);
++                    return Err((StatusCode::INTERNAL_SERVER_ERROR, e));
++                }
+             }
+         },
+         (None, Some(_)) => {
+@@ -2695,7 +2710,7 @@
+     (rollback.value.take().expect("paused state retained during lookup"), result)
+ }
+ 
+-// Only protect the ownership lookup, before VM startup can have side effects.
++// Protect pre-startup ownership/network decisions, before VM startup side effects.
+ // Completed lookups leave the claim with the caller's existing success/error path.
+ async fn protected_snapshot_lookup<T>(mut claim: Option<SnapshotClaim<'_>>, lookup: impl std::future::Future<Output = T>) -> T {
+     let result = lookup.await;

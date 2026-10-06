@@ -1,0 +1,47 @@
+diff --git a/crates/hv2-sandboxd/src/checkpoints.rs b/crates/hv2-sandboxd/src/checkpoints.rs
+index ec22be2..390e59d 100644
+--- a/crates/hv2-sandboxd/src/checkpoints.rs
++++ b/crates/hv2-sandboxd/src/checkpoints.rs
+@@ -237,6 +237,17 @@ pub(crate) async fn restore(
+     let Some((record, descriptor, network)) = source else {
+         return not_running(&state, &sandbox_id);
+     };
++    if state
++        .sandboxes
++        .lock()
++        .get(&sandbox_id)
++        .is_some_and(|live| live.pending_registration.is_some())
++    {
++        return api_error(
++            StatusCode::CONFLICT,
++            "reconcile registration before restoring a checkpoint",
++        );
++    }
+ 
+     // The replacement first: until it is up, the sandbox is untouched.
+     let started = std::time::Instant::now();
+diff --git a/crates/hv2-sandboxd/src/main.rs b/crates/hv2-sandboxd/src/main.rs
+index 19ac12c..9e3a2f0 100644
+--- a/crates/hv2-sandboxd/src/main.rs
++++ b/crates/hv2-sandboxd/src/main.rs
+@@ -864,8 +864,20 @@ async fn connect_sandbox(
+         }
+     }
+     let extend_to = requested.map(|secs| now_ms() + secs.min(MAX_TIMEOUT_SECS) * 1000);
++    let lock = transition_lock(&state, &sandbox_id);
++    let _held = lock.lock().await;
+     let found = {
+         let mut sandboxes = state.sandboxes.lock();
++        if extend_to.is_some()
++            && sandboxes
++                .get(&sandbox_id)
++                .is_some_and(|live| live.pending_registration.is_some())
++        {
++            return api_error(
++                StatusCode::CONFLICT,
++                "reconcile registration before changing timeout",
++            );
++        }
+         sandboxes.get_mut(&sandbox_id).map(|live| {
+             let mut changed = None;
+             if let Some(end) = extend_to {

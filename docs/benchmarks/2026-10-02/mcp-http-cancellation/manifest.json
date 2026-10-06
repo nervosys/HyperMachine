@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "files": {
+    "build.log": "71a23d6a5237eb14857667047f7b02665eb018c9926c555fae20ccfe55bdd56f",
+    "check-mcp-http-kvm.py": "7b14d44749668f112ace62a5b9b9658666066faca7e06da8ad25cb929585dff5",
+    "clippy-linux.log": "49f16a057380f7e004abb13b05b8389a60cff2eb69400492af895b8c5bc050f8",
+    "e2e-mcp-sandbox.py": "2f6839fb21672e46813b6a2f94a9179b2912a05439f10bf33618a662cbdbfc5e",
+    "first-client-stderr.log": "2bb412eae7d885b8999c590b4d98b5170bc2cb0761969a11750c81e5ea73504b",
+    "first-report.json": "30965e0682e53de7904b279e78347a1fcf8e10890da85e57fd55d077645bc681",
+    "first-sandbox_vm_mcp_http.rs": "c95f75f1e7a694951fd240feb35de587423f35975b85ee29bc5604835d093a70",
+    "mcp_cancellation_check.py": "b2ca939f8820a737065261578899a1da9629e8c02ac908959ff88b25e4820132",
+    "README.md": "f4739736caf5dd7419f4bd231b28c03cf0c7d00ded6b050f386ca269fed74467",
+    "report.json": "e191c0549198bdb788b89fa3c48764d4340b4b76b00dbf04e7d8f02d9c04bf46",
+    "sandbox_vm.rs": "9a01fbcaf91191f28d56cfcc95ff8145c9ce81d75ebf64715d0b95db469eb43e",
+    "sandbox_vm_mcp.rs": "e4271ceaade1daead894d12f098d694f0568a80800626ccfdd9abf0cc22625de",
+    "sandbox_vm_mcp_files.rs": "334ca7774060f4090200b7fdce414ff2e1a97379c11341f342575178f4b19c2c",
+    "sandbox_vm_mcp_http.rs": "a0d3c67508188331dbf5bb54966877c040889ef111c82a1f8bf20d6862d4ccaf",
+    "source-context.json": "21460a1590d2a5688a32af565672dcb0cf6bdb347636251307c2b71bcb12db11",
+    "tests-linux.log": "ff24bcf79e24fb877b07ae479ed8794eb3bb6364ca10103ce969202d2eb7e7bc"
+  }
+}

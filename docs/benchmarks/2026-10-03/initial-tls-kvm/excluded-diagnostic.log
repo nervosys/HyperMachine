@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-acme-issuance.py", line 720, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-acme-issuance.py", line 668, in main
+    raise RuntimeError("KVM verification failed; preserved report: " + str(failure))
+RuntimeError: KVM verification failed; preserved report: /var/tmp/hm-acme-tools/initial-kvm-diagnostic-failed-kvm.json

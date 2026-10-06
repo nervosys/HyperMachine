@@ -1,0 +1,5 @@
+# Discovery transport boundaries
+
+All 17 owned HTTP/Redis response checks pass against the unchanged strict-schema control binary. The four new wire cases accept a valid chunked page, refuse a 20,000-byte chunked body without Content-Length, refuse a body shorter than its declared length and refuse invalid chunk framing. Earlier schema/size/authentication checks also pass. Every node request carries cluster authentication and omits the client API key; all processes/listeners are reaped.
+
+This is an owned plaintext loopback HTTP boundary fixture, not KVM/TLS or a managed service benchmark. The same production control binary and source have already passed four 27-check KVM HTTPS/mTLS discovery/recovery profiles under ../pending-discovery-schema-runtime. No production code changed in this experiment, so those runs were not repeated. Checker/control hashes and observed status codes are recorded. Automatic reconciliation, accepted-request cancellation and durable crash recovery remain incomplete.

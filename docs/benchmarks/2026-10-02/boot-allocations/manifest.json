@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "files": {
+    "accepted-source-context.json": "47c75bbd4c4ebbb97efa150275bcfa418919f3231bde43721844aa72d537c943",
+    "analysis.json": "0b9a90daf641992bf9383c7f84d77af0db8adbf2568a13b8a6b6766ce774ee4e",
+    "analyze-boot-allocations.py": "35a65553706d7d26b2c72e5b841b6f6b23d90cf3036b66b150f6522e427c619d",
+    "bench-firecracker-local.py": "0bcdc13351d54d4c9658bf034aa97f7d86d96d99375a2df04e4c94eaf8d3b610",
+    "bench-local-engines.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "bench-prepared-engines.py": "c41c5e00184193a74a7da771e5e45289ce5fecd513bfa719bc40ca4541cb834a",
+    "build.log": "8b3c4f12cb9ddaa39ac27eae25b7b0c5bc4c8df86bd8ebf491567759b8f38a78",
+    "diagnose-boot-allocations.py": "0cdfb6c3b91c291837ca2db082070ba5ea065c6d16dbe3cde5e8b7a778a4a23e",
+    "experiment-boot-allocations.py": "16f6c6642fa9a827f69a504e69f76fd3b4a4fd5619289d981d78588fb95eb4fb",
+    "prepared-memory-mappings.py": "7470c429a974f6f876349dc1a473b654f7a002ceae99d49efc12a4aad3f95ab3",
+    "probe.patch": "ab33de1ed8d34ef8e7cb2f5b6fe1ec0c13b25bda11e1918010a37dd74cf81f4a",
+    "README.md": "d53aa6fab3fcc281311b9bbeff444d5a7f141695953c8c245dd2af6883211ac1",
+    "repeat-prepared.json": "a2636a11424136e7dfd0ea985ce9c262e6f3a42d11a6af710654dd128c131b4f",
+    "repeat-run.log": "e3aeed6629dbaebb8dc03aad58839f978c8d5e1e75f4876c2bec78f092d3c8fe",
+    "repeat.json": "9dc0f0f3c1f344c20cbe957acf4863641aca092d1852dadf42b8c571ec942aa6",
+    "report-prepared.json": "0136ef46c632844ae05bc3f48c18c03ef705c08836b2ff64c18aeb80d58afb70",
+    "report.json": "1789e0ebb1ba3f749f48a81bbcd0fb0b841fa21591fd8f7b9d16ff05d066ba65",
+    "run.log": "e3aeed6629dbaebb8dc03aad58839f978c8d5e1e75f4876c2bec78f092d3c8fe",
+    "source-context.json": "477867ecf00e6f1a1063ceaf38e48bad07877039bcff432acc4655362f28d0f3"
+  }
+}

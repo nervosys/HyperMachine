@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "files": {
+    "build.log": "c2293218f1db183910e5d956f0f33ef8a9810d233d284f7e06c2850141b48282",
+    "check-mcp-http-kvm.py": "b7c78ed2c252c49b4575545632dfa0bea971feacf7fffcdc4ac053894f66da63",
+    "clippy-linux.log": "94a5e00976123ef89bfb451f4d248634ab72ffc86c1e8c3c7a08281080f3383c",
+    "e2e-mcp-sandbox.py": "20b5341133cf6be4696263d7b72ae57a1836f2e698fc4989e25b73c3be125474",
+    "mcp_cancellation_check.py": "9996b14de8527e51c8ade1c1f6e4345b86472307b8b046b837a63a0f474cf831",
+    "README.md": "4e0f75bb02614be8fbb53ec37c63f84f8459c50ac55acc19e787d3e51c1c08c5",
+    "report.json": "3f656af9bf7f289f5e2f529dae9bd1ce8a373af2952eb40c9094bab0ddd6258b",
+    "sandbox_vm.rs": "bf305903b850a6343f14d79cfdc86561694ad5d833ae8a94e182acf6e377ecc4",
+    "sandbox_vm_mcp.rs": "fba0c4a19956a6cd70fc183d485831fb8a7e424ab66cc1774c529f6d912232bb",
+    "sandbox_vm_mcp_http.rs": "2e48bde8828c08b57b4dbd97410dd5827d2094e6d59139c8c571545b2bef8ce7",
+    "source-context.json": "9641116638a94d441e543abbc86928ef7e0729288903a08130fa4bc6496f0677",
+    "tests-linux.log": "6758e6dd4b0459090bb626c749c9bd882c8642ee4d91f87a7a35fac5414c30cd"
+  }
+}

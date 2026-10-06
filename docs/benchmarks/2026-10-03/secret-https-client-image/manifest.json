@@ -1,0 +1,7 @@
+{
+  "sha256": {
+    "README.md": "c2f9b9d205318b5f6228c7e6e8258025ac64bef5c1717c3448a560c4d1463297",
+    "build-egress-client-image.py": "e08645386d70c775f883a7d1937db4de4b8c4bd23a35fbb042bc594d370d2afc",
+    "result.json": "293cc6c3bae3609029ec6d81c830c611d7c9be2d6704670ac93a7286187101f8"
+  }
+}

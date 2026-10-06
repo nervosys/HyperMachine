@@ -1,0 +1,13 @@
+[2m2026-10-04T14:37:03.327005Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T14:37:03.329326Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-guest-probe': vsock device attached over PCI at slot 3, BAR 0xd0010000 (guest CID 3, IRQ 11) -- no kernel argument needed
+[2m2026-10-04T14:37:03.349821Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'pci-guest-probe' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T14:37:03.359167Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T14:37:03.359226Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-guest-probe': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T14:37:03.360232Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'pci-guest-probe' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T14:37:03.360549Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'pci-guest-probe' with 1 vCPUs
+[2m2026-10-04T14:37:03.360574Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T14:37:03.360957Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T14:37:18.362356Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3455)
+[2m2026-10-04T14:37:18.362897Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'pci-guest-probe'
+[2m2026-10-04T14:37:18.362985Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-guest-probe' stopped
+PCI_GUEST_PROBE_FAILED: Timeout: no answer from a guest agent on vsock port 1024 within 15s (0 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd

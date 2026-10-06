@@ -1,0 +1,22 @@
+{
+  "checks": [
+    "Secret policy requires networking",
+    "Unsafe policy permissions refuse startup",
+    "Symlink policy refuses startup",
+    "Malformed policy refuses startup",
+    "Private valid policy starts an empty owned daemon",
+    "Malformed SIGHUP reload is refused and daemon remains responsive",
+    "Valid SIGHUP reload completes and daemon remains responsive"
+  ],
+  "input_sha256": {
+    "daemon": "ab17aa376198409af0def38b569e8eede7925993a24368a5e596720f633f86d5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "processes_reaped": true,
+  "guests_created": 0,
+  "limits": [
+    "No guest substitution or policy retention contents observed",
+    "No performance comparison or managed competitor measurement"
+  ]
+}

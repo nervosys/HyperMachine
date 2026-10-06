@@ -1,0 +1,27 @@
+[
+  {
+    "interval": "0",
+    "budget_configured": true,
+    "exit_code": 1
+  },
+  {
+    "interval": "99",
+    "budget_configured": true,
+    "exit_code": 1
+  },
+  {
+    "interval": "60001",
+    "budget_configured": true,
+    "exit_code": 1
+  },
+  {
+    "interval": "bad",
+    "budget_configured": true,
+    "exit_code": 1
+  },
+  {
+    "interval": "250",
+    "budget_configured": false,
+    "exit_code": 1
+  }
+]

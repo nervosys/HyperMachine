@@ -1,0 +1,46 @@
+   Compiling hm-cli v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hm-cli)
+    Finished `test` profile [optimized + debuginfo] target(s) in 12.63s
+     Running unittests src/lib.rs (/var/tmp/hm-object-backup/target/debug/deps/hm_cli-11b919e56a3d067b)
+
+running 38 tests
+test sandbox_vm::mcp::tests::invalid_arguments_never_reach_the_api ... ok
+test sandbox_vm::mcp::tests::partial_forks_and_incomplete_guest_results_are_errors ... ok
+test sandbox_vm::mcp::tests::parse_errors_and_invalid_ids_are_protocol_errors ... ok
+test sandbox_vm::mcp::tests::file_tools_require_operator_configuration_and_validate_before_connect ... ok
+test sandbox_vm::mcp::files::tests::binary_roundtrip_keeps_credentials_and_query_paths_separate ... ok
+test sandbox_vm::mcp::tests::initialization_and_notifications_gate_tool_discovery ... ok
+test sandbox_vm::mcp::files::tests::invalid_arguments_cannot_select_hosts_or_exceed_bounds ... ok
+test sandbox_vm::mcp::tests::platform_tokens_are_removed_from_nested_results ... ok
+test sandbox_vm::mcp::transport_tests::initialize_and_malformed_cancellations_are_not_cancellable ... ok
+test sandbox_vm::mcp::transport_tests::input_eof_drops_the_active_client_wait ... ok
+test sandbox_vm::mcp::transport_tests::queued_cancellation_prevents_a_second_api_call ... ok
+test sandbox_vm::mcp::tests::transport_bounds_messages_without_a_newline ... ok
+test sandbox_vm::mcp::transport_tests::queued_requests_survive_completion_and_late_cancellation ... ok
+test sandbox_vm::mcp_http::tests::authentication_origin_and_version_precede_sessions ... ok
+test sandbox_vm::mcp_http::tests::invalid_initialization_and_expired_sessions_are_removed ... ok
+test sandbox_vm::tests::shell_arguments_keep_quotes_empty_values_and_shell_syntax_literal ... ok
+test sandbox_vm::tests::guest_failure_and_timeout_are_not_success ... ok
+test sandbox_vm::tests::percentiles_keep_the_tail_and_empty_samples_are_not_zero ... ok
+test sandbox_vm::mcp_http::tests::configured_file_tools_discover_and_reject_route_overrides_before_dispatch ... ok
+test sandbox_vm::mcp::transport_tests::read_ahead_is_bounded_by_count_and_bytes ... ok
+test sandbox_vm::mcp::files::tests::oversized_chunked_download_is_rejected ... ok
+test sandbox_vm::tests::public_port_cli_validates_destination_and_protocol_without_owner_override ... ok
+test sandbox_vm::tests::owner_adoption_cli_requires_valid_explicit_principal ... ok
+test sandbox_vm::tests::domain_ownership_cli_accepts_challenge_and_expiry_workflow ... ok
+test sandbox_vm::mcp_http::tests::saturated_workers_preserve_cancellation_and_recover ... ok
+test sandbox_vm::tests::reconciliation_cli_requires_explicit_node ... ok
+test sandbox_vm::mcp_http::tests::duplicate_headers_invalid_ids_and_oversized_bodies_are_refused ... ok
+test sandbox_vm::udp::tests::failed_tasks_release_peer_capacity ... ok
+test sandbox_vm::tests::sends_api_key_and_body_and_reports_server_errors ... ok
+test sandbox_vm::mcp_http::tests::invalid_origin_is_forbidden_without_credentials_and_auth_challenges_bearer ... ok
+test sandbox_vm::mcp_http::tests::saturated_body_admission_refuses_and_recovers_without_session_allocation ... ok
+test sandbox_vm::tests::failed_readiness_still_deletes_the_sandbox ... ok
+test sandbox_vm::tests::public_port_cli_uses_bounded_json_and_does_not_echo_server_error_bodies ... ok
+test sandbox_vm::mcp_http::tests::initialized_notification_discovery_and_termination ... ok
+test sandbox_vm::mcp_http::tests::explicit_cancellation_bypasses_busy_session_and_releases_wait ... ok
+test sandbox_vm::mcp_http::tests::sixteen_live_calls_saturate_admission_and_can_be_cancelled ... ok
+test sandbox_vm::mcp::transport_tests::cancellation_matches_id_type_and_keeps_the_session_usable ... ok
+test sandbox_vm::mcp::transport_tests::partial_frames_survive_a_cancelled_read_and_keep_the_cumulative_limit ... ok
+
+test result: ok. 38 passed; 0 failed; 0 ignored; 0 measured; 112 filtered out; finished in 0.04s
+

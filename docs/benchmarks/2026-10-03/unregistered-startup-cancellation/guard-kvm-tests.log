@@ -1,0 +1,9 @@
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.99s
+     Running unittests src/main.rs (/var/tmp/hm-object-backup/target/debug/deps/hv2_sandboxd-af5e94e01c79b019)
+
+running 2 tests
+test startup_cleanup_tests::startup_cleanup_kvm_cancellation_stops_unregistered_guests ... ok
+test startup_cleanup_tests::startup_cleanup_kvm_handoff_keeps_registered_guest_running ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 58 filtered out; finished in 1.00s
+

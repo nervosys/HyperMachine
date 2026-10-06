@@ -1,0 +1,37 @@
+--- baseline/native_udp.rs
++++ candidate/native_udp.rs
+@@ -98,8 +98,10 @@
+         }
+     };
+     let inbound = async {
++        // Reuse common replies; release exceptional large allocations after sending.
++        let mut payload = Vec::new();
+         loop {
+-            let payload = timeout(limits.idle_timeout + limits.io_timeout, async {
++            timeout(limits.idle_timeout + limits.io_timeout, async {
+                 let size = reader.read_u16().await? as usize;
+                 if size > MAX_UDP_PAYLOAD {
+                     return Err(io::Error::new(
+@@ -107,9 +109,9 @@
+                         "oversized UDP frame",
+                     ));
+                 }
+-                let mut bytes = vec![0; size];
+-                reader.read_exact(&mut bytes).await?;
+-                Ok::<_, io::Error>(bytes)
++                payload.resize(size, 0);
++                reader.read_exact(&mut payload).await?;
++                Ok::<_, io::Error>(())
+             })
+             .await
+             .map_err(timed_out)??;
+@@ -118,6 +120,9 @@
+                 .map_err(timed_out)??;
+             if sent != payload.len() {
+                 return Err(io::Error::new(io::ErrorKind::WriteZero, "partial UDP send"));
++            }
++            if payload.capacity() > 4096 {
++                payload = Vec::new();
+             }
+         }
+         #[allow(unreachable_code)]

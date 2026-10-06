@@ -1,0 +1,306 @@
+{
+  "cohorts": [
+    {
+      "cohort": 1,
+      "mmap_threshold": null,
+      "summary": {
+        "concurrency": 8,
+        "pairs": 4,
+        "profile_success": true,
+        "engines": {
+          "hypermachine": {
+            "passed": 32,
+            "attempted": 32,
+            "ready_ms": {
+              "p50": 482.7111730000979,
+              "p95": 520.006125999771,
+              "p99": 520.1278980002826
+            },
+            "median_held_pss_mib": 870.705078125,
+            "median_incremental_pss_mib": 699.36328125,
+            "memory_batches": 4,
+            "failures": []
+          },
+          "firecracker": {
+            "passed": 32,
+            "attempted": 32,
+            "ready_ms": {
+              "p50": 439.7624610001003,
+              "p95": 463.8660619998518,
+              "p99": 468.0778280003324
+            },
+            "median_held_pss_mib": 670.873046875,
+            "median_incremental_pss_mib": 670.873046875,
+            "memory_batches": 4,
+            "failures": []
+          }
+        }
+      },
+      "hm_memory_by_pair": [
+        {
+          "pair": 0,
+          "empty_baseline_pss_mib": 7.61328125,
+          "held_pss_mib": 820.421875,
+          "after_cleanup_pss_mib": 155.544921875
+        },
+        {
+          "pair": 1,
+          "empty_baseline_pss_mib": 155.466796875,
+          "held_pss_mib": 854.955078125,
+          "after_cleanup_pss_mib": 189.748046875
+        },
+        {
+          "pair": 2,
+          "empty_baseline_pss_mib": 189.662109375,
+          "held_pss_mib": 886.455078125,
+          "after_cleanup_pss_mib": 221.498046875
+        },
+        {
+          "pair": 3,
+          "empty_baseline_pss_mib": 221.400390625,
+          "held_pss_mib": 920.638671875,
+          "after_cleanup_pss_mib": 255.435546875
+        }
+      ]
+    },
+    {
+      "cohort": 2,
+      "mmap_threshold": 1048576,
+      "summary": {
+        "concurrency": 8,
+        "pairs": 4,
+        "profile_success": true,
+        "engines": {
+          "hypermachine": {
+            "passed": 32,
+            "attempted": 32,
+            "ready_ms": {
+              "p50": 575.9013050001158,
+              "p95": 866.4245429999937,
+              "p99": 892.3507079998672
+            },
+            "median_held_pss_mib": 680.1572265625,
+            "median_incremental_pss_mib": 665.5390625,
+            "memory_batches": 4,
+            "failures": []
+          },
+          "firecracker": {
+            "passed": 32,
+            "attempted": 32,
+            "ready_ms": {
+              "p50": 427.78682399966783,
+              "p95": 491.6290769997431,
+              "p99": 498.3271659998536
+            },
+            "median_held_pss_mib": 670.95166015625,
+            "median_incremental_pss_mib": 670.95166015625,
+            "memory_batches": 4,
+            "failures": []
+          }
+        }
+      },
+      "hm_memory_by_pair": [
+        {
+          "pair": 0,
+          "empty_baseline_pss_mib": 7.5087890625,
+          "held_pss_mib": 679.5322265625,
+          "after_cleanup_pss_mib": 14.4013671875
+        },
+        {
+          "pair": 1,
+          "empty_baseline_pss_mib": 14.3232421875,
+          "held_pss_mib": 680.1005859375,
+          "after_cleanup_pss_mib": 14.9970703125
+        },
+        {
+          "pair": 2,
+          "empty_baseline_pss_mib": 14.9130859375,
+          "held_pss_mib": 680.2138671875,
+          "after_cleanup_pss_mib": 15.1865234375
+        },
+        {
+          "pair": 3,
+          "empty_baseline_pss_mib": 15.0888671875,
+          "held_pss_mib": 680.2568359375,
+          "after_cleanup_pss_mib": 15.4169921875
+        }
+      ]
+    },
+    {
+      "cohort": 3,
+      "mmap_threshold": 1048576,
+      "summary": {
+        "concurrency": 8,
+        "pairs": 4,
+        "profile_success": true,
+        "engines": {
+          "hypermachine": {
+            "passed": 32,
+            "attempted": 32,
+            "ready_ms": {
+              "p50": 531.3573749999705,
+              "p95": 903.0787840001722,
+              "p99": 912.3201849997713
+            },
+            "median_held_pss_mib": 680.181640625,
+            "median_incremental_pss_mib": 665.62890625,
+            "memory_batches": 4,
+            "failures": []
+          },
+          "firecracker": {
+            "passed": 32,
+            "attempted": 32,
+            "ready_ms": {
+              "p50": 428.7882379999246,
+              "p95": 505.49485100009406,
+              "p99": 507.5079459998051
+            },
+            "median_held_pss_mib": 670.98974609375,
+            "median_incremental_pss_mib": 670.98974609375,
+            "memory_batches": 4,
+            "failures": []
+          }
+        }
+      },
+      "hm_memory_by_pair": [
+        {
+          "pair": 0,
+          "empty_baseline_pss_mib": 7.6552734375,
+          "held_pss_mib": 679.8193359375,
+          "after_cleanup_pss_mib": 14.7587890625
+        },
+        {
+          "pair": 1,
+          "empty_baseline_pss_mib": 14.6806640625,
+          "held_pss_mib": 679.5830078125,
+          "after_cleanup_pss_mib": 15.0986328125
+        },
+        {
+          "pair": 2,
+          "empty_baseline_pss_mib": 15.0087890625,
+          "held_pss_mib": 680.5439453125,
+          "after_cleanup_pss_mib": 15.3876953125
+        },
+        {
+          "pair": 3,
+          "empty_baseline_pss_mib": 15.2861328125,
+          "held_pss_mib": 681.0087890625,
+          "after_cleanup_pss_mib": 15.8955078125
+        }
+      ]
+    },
+    {
+      "cohort": 4,
+      "mmap_threshold": null,
+      "summary": {
+        "concurrency": 8,
+        "pairs": 4,
+        "profile_success": true,
+        "engines": {
+          "hypermachine": {
+            "passed": 32,
+            "attempted": 32,
+            "ready_ms": {
+              "p50": 499.47629600001164,
+              "p95": 536.2583179999092,
+              "p99": 571.2523090001014
+            },
+            "median_held_pss_mib": 903.9375,
+            "median_incremental_pss_mib": 685.841796875,
+            "memory_batches": 4,
+            "failures": []
+          },
+          "firecracker": {
+            "passed": 32,
+            "attempted": 32,
+            "ready_ms": {
+              "p50": 436.8149850001828,
+              "p95": 1396.8023910001648,
+              "p99": 1425.7903640000222
+            },
+            "median_held_pss_mib": 670.89208984375,
+            "median_incremental_pss_mib": 670.89208984375,
+            "memory_batches": 4,
+            "failures": []
+          }
+        }
+      },
+      "hm_memory_by_pair": [
+        {
+          "pair": 0,
+          "empty_baseline_pss_mib": 7.408203125,
+          "held_pss_mib": 876.990234375,
+          "after_cleanup_pss_mib": 211.89453125
+        },
+        {
+          "pair": 1,
+          "empty_baseline_pss_mib": 211.81640625,
+          "held_pss_mib": 889.57421875,
+          "after_cleanup_pss_mib": 224.46875
+        },
+        {
+          "pair": 2,
+          "empty_baseline_pss_mib": 224.375,
+          "held_pss_mib": 918.30078125,
+          "after_cleanup_pss_mib": 253.171875
+        },
+        {
+          "pair": 3,
+          "empty_baseline_pss_mib": 253.07421875,
+          "held_pss_mib": 920.48046875,
+          "after_cleanup_pss_mib": 254.98828125
+        }
+      ]
+    }
+  ],
+  "pooled": {
+    "None": {
+      "hypermachine": {
+        "passed": 64,
+        "ready_ms": {
+          "p50": 487.06871500007765,
+          "p95": 529.4379860001754,
+          "p99": 571.2523090001014
+        },
+        "median_held_pss_mib": 888.0146484375,
+        "median_incremental_pss_mib": 698.015625,
+        "median_empty_baseline_pss_mib": 200.7392578125
+      },
+      "firecracker": {
+        "passed": 64,
+        "ready_ms": {
+          "p50": 437.3165729998618,
+          "p95": 1269.1531650002617,
+          "p99": 1425.7903640000222
+        },
+        "median_held_pss_mib": 670.873046875,
+        "median_incremental_pss_mib": 670.873046875,
+        "median_empty_baseline_pss_mib": 0.0
+      }
+    },
+    "1048576": {
+      "hypermachine": {
+        "passed": 64,
+        "ready_ms": {
+          "p50": 547.3323910000545,
+          "p95": 892.3507079998672,
+          "p99": 912.3201849997713
+        },
+        "median_held_pss_mib": 680.1572265625,
+        "median_incremental_pss_mib": 665.62890625,
+        "median_empty_baseline_pss_mib": 14.796875
+      },
+      "firecracker": {
+        "passed": 64,
+        "ready_ms": {
+          "p50": 428.4150450002926,
+          "p95": 498.3271659998536,
+          "p99": 507.5079459998051
+        },
+        "median_held_pss_mib": 670.98046875,
+        "median_incremental_pss_mib": 670.98046875,
+        "median_empty_baseline_pss_mib": 0.0
+      }
+    }
+  }
+}

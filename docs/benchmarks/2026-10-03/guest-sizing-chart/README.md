@@ -1,0 +1,5 @@
+# Sandbox chart guest sizing validation
+
+All 12 chart tests and Helm lint passed. New rendering checks cover one/two/four guest vCPUs with one/two GiB defaults and verify exact --cpu-cores and --memory-gb arguments. Schema rejects zero, negative, boolean, fractional, string, and overflowing values before templates render. CPU maximum matches u32 parsing; memory maximum is floor(u64::MAX / 1024), guarding the daemon GiB-to-MiB multiplication. These are representational bounds, not capacity promises. Defaults remain one vCPU and one GiB.
+
+Existing independent snapshot/volume claims, private egress Secret copying, networking requirements, authentication and TLS checks also pass. The operator guide now exposes the two-vCPU configuration supported by the owned HTTPS scaling evidence. Template sizes can override node defaults; existing snapshots are not resized by these settings. No Kubernetes rollout, backend maximum-size boot, or host-capacity verification was performed. Helm binary identity and provenance remain in ../egress-secret-chart.

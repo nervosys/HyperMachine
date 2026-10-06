@@ -1,0 +1,448 @@
+{
+  "inputs_sha256": {
+    "/var/tmp/hm-owner-adoption-node-v3": "7c4cd332ed5c4b2dbcf6dd08ba9211ac15664f588c6118cf53041c4fecb3bad8",
+    "/var/tmp/hm-owner-adoption-control-v3": "b7ee6ddb17e71a5ae039366118632d5fe5bc3d40b3bfe48a60c2ad11969a9d9a",
+    "/var/tmp/hm-owner-adoption-cli-v1": "38e0402c0a26996a6601ad1c70eccbb0084570081d69135222eea5e5136f0c81",
+    "/var/tmp/hm-competitive/bzImage-known-uart-irq": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "/var/tmp/hm-tcp-capacity-guest-v1.cpio.gz": "a00cd88d52f5f0788b2113e26bf3bc45c66569b6dee21400aaaf5c9b12d29b7d",
+    "/var/tmp/hm-owner-adoption-gateway-v3": "8a6d2af7afca806d974697e55db8ca7be792808ea4ff352f370f93cb4bba42ad",
+    "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py": "6346ce3cb52aa7be787f007fef9afcd241a228d2cd3d0e566ac5c56ba9a1d9dc"
+  },
+  "checks": [
+    "Node mTLS refuses a peer without a client certificate",
+    "CLI refuses untrusted control certificate and trusted wrong hostname",
+    "Valid mTLS node peers cannot create with forged owner context and missing or wrong cluster credentials",
+    "Shipped CLI V2 legacy creation and administrator adoption establish owner before real native forwarding",
+    "Wrong control-plane API key refused",
+    "Empty binary and maximum-size IPv4 datagrams verified through real KVM",
+    "Oversized frame closes its real guest session without preventing a fresh valid session",
+    "2 CLI peers preserve empty binary and maximum-size datagrams through real control plane Redis node and KVM",
+    "Administrator CLI running adoption replay transfer refusal owner-only ports fork and pause resume retain assigned owner",
+    "Administrator paused adoption updates shared snapshot metadata and resume preserves assigned owner",
+    "Public port first reservation listing and removal refuse wrong observer inventory unassigned legacy principals and ownerless VMs",
+    "Native gateway real KVM TCP preserves 1 MiB and 2 UDP peers preserve empty binary and maximum datagrams on one public port",
+    "Authenticated policy creator overrides forged client context; two real KVM forks inherit owner without inheriting the source native allocation",
+    "Native real guest protocol updates retain public port and close old TCP",
+    "Owner API listing bounded pool invalid port and actual key rotation preserve VM ownership and allocation",
+    "Owner API removal closes live native sessions and reexposure publishes actual TCP UDP on reserved port",
+    "Shipped CLI exposes lists removes defaults to TCP updates to both and enforces owner and rotated credential refusals through real KVM",
+    "Sixteen simultaneous native UDP ports verify 1600 concurrent tagged guest replies and refuse a seventeenth reservation",
+    "Sixteen simultaneous native TCP connections verify 1600 distinct-destination 4096-byte round trips alongside live UDP peers",
+    "Thirty-two mixed TCP UDP workers verify 3200 simultaneous distinct-destination exchanges across sixteen both-protocol publications",
+    "Pause closes existing UDP session",
+    "Real guest pause closes native sessions and preserves exact public reservation",
+    "Pause closes all fifteen tagged TCP sessions and primary TCP session",
+    "Pause unbinds all sixteen UDP listeners and preserves exact owner reservations",
+    "Resumed guest accepts a new UDP session",
+    "Actual KVM pause and resume preserve trusted owner identity",
+    "Real guest resume restores native TCP and UDP on same reserved port",
+    "Resume restores all sixteen UDP destinations on unchanged reserved ports",
+    "Resume restores all sixteen TCP destinations on unchanged reserved ports",
+    "Delete closes UDP session and clears guest inventory",
+    "Deletion removes all sixteen allocations and unbinds their UDP listeners",
+    "Deletion closes all sixteen native TCP destination sessions",
+    "Real guest deletion removes native allocation and closes native sessions; gateway stops gracefully"
+  ],
+  "daemon_reaped": true,
+  "guests_remaining": 0,
+  "control_and_redis_reaped": true,
+  "cli_reaped": true,
+  "native_gateway_reaped": true,
+  "native_gateway_real_kvm": true,
+  "owner_public_port_api_real_kvm": true,
+  "owner_public_port_cli_real_kvm": true,
+  "native_udp_capacity": {
+    "simultaneous_udp_ports": 16,
+    "roundtrips_per_port": [
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100
+    ],
+    "payload_bytes": 512,
+    "destination_tag_bytes": 2,
+    "published_rows": [
+      {
+        "machinePort": 19000,
+        "protocol": "both",
+        "publicPort": 56711
+      },
+      {
+        "machinePort": 19001,
+        "protocol": "both",
+        "publicPort": 56712
+      },
+      {
+        "machinePort": 19002,
+        "protocol": "both",
+        "publicPort": 56713
+      },
+      {
+        "machinePort": 19003,
+        "protocol": "both",
+        "publicPort": 56714
+      },
+      {
+        "machinePort": 19004,
+        "protocol": "both",
+        "publicPort": 56715
+      },
+      {
+        "machinePort": 19005,
+        "protocol": "both",
+        "publicPort": 56716
+      },
+      {
+        "machinePort": 19006,
+        "protocol": "both",
+        "publicPort": 56717
+      },
+      {
+        "machinePort": 19007,
+        "protocol": "both",
+        "publicPort": 56718
+      },
+      {
+        "machinePort": 19008,
+        "protocol": "both",
+        "publicPort": 56719
+      },
+      {
+        "machinePort": 19009,
+        "protocol": "both",
+        "publicPort": 56720
+      },
+      {
+        "machinePort": 19010,
+        "protocol": "both",
+        "publicPort": 56721
+      },
+      {
+        "machinePort": 19011,
+        "protocol": "both",
+        "publicPort": 56722
+      },
+      {
+        "machinePort": 19012,
+        "protocol": "both",
+        "publicPort": 56723
+      },
+      {
+        "machinePort": 19013,
+        "protocol": "both",
+        "publicPort": 56724
+      },
+      {
+        "machinePort": 19014,
+        "protocol": "both",
+        "publicPort": 56725
+      },
+      {
+        "machinePort": 19015,
+        "protocol": "both",
+        "publicPort": 56726
+      }
+    ],
+    "seventeenth_refused_status": 409,
+    "simultaneous_tcp_ports": 16,
+    "tcp_roundtrips_per_port": [
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100,
+      100
+    ],
+    "tcp_payload_bytes": 4096,
+    "mixed_traffic": {
+      "workers": 32,
+      "roundtrips": [
+        {
+          "protocol": "tcp",
+          "destination": 19000,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "tcp",
+          "destination": 19001,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "tcp",
+          "destination": 19002,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "tcp",
+          "destination": 19003,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "tcp",
+          "destination": 19004,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "tcp",
+          "destination": 19005,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "tcp",
+          "destination": 19006,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "tcp",
+          "destination": 19007,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "tcp",
+          "destination": 19008,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "tcp",
+          "destination": 19009,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "tcp",
+          "destination": 19010,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "tcp",
+          "destination": 19011,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "tcp",
+          "destination": 19012,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "tcp",
+          "destination": 19013,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "tcp",
+          "destination": 19014,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "tcp",
+          "destination": 19015,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "udp",
+          "destination": 19000,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "udp",
+          "destination": 19001,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "udp",
+          "destination": 19002,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "udp",
+          "destination": 19003,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "udp",
+          "destination": 19004,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "udp",
+          "destination": 19005,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "udp",
+          "destination": 19006,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "udp",
+          "destination": 19007,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "udp",
+          "destination": 19008,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "udp",
+          "destination": 19009,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "udp",
+          "destination": 19010,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "udp",
+          "destination": 19011,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "udp",
+          "destination": 19012,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "udp",
+          "destination": 19013,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "udp",
+          "destination": 19014,
+          "roundtrips": 100
+        },
+        {
+          "protocol": "udp",
+          "destination": 19015,
+          "roundtrips": 100
+        }
+      ],
+      "tcp_payload_bytes": 4096,
+      "udp_payload_bytes": 512,
+      "retries": 0
+    }
+  },
+  "trusted_owner_context": [
+    {
+      "phase": "created-despite-client-forgery",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "cli-created-legacy-adopted",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "running-adoption",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "adopted-fork-inherits-owner",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "adopted-source-paused",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "adopted-source-resumed",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "paused-adoption",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "paused-adoption-resumed",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "fork-inherits-source-owner",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "fork-inherits-source-owner",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "key-rotated",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "paused",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "resumed",
+      "owner_id": "owned-principal-a"
+    }
+  ],
+  "guest_owner_from_store_at_creation": "owned-principal-a",
+  "native_cli_comparison": [],
+  "host_build_profile_declared": "development",
+  "guest_resources_from_inventory": {
+    "cpuCount": 1,
+    "memoryMB": 1024
+  },
+  "host_environment": {
+    "kernel": "6.18.33.2-microsoft-standard-WSL2",
+    "machine": "x86_64",
+    "logical_cpus": 24,
+    "affinity_cpus": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23
+    ],
+    "python": "3.13.5"
+  },
+  "native_cli_comparison_scope": "Internal paths; both processes remain live in every ABBA block; native TCP idle; one outstanding datagram per peer; no timed retries; unpinned host; operator-declared build profile; not competitor evidence.",
+  "guest_udp_ipv6": false,
+  "local_udp_ipv6": false,
+  "control_api_tls": true,
+  "node_mtls": true,
+  "latency_measurements": [],
+  "scope": "Owned shipped CLI/control-plane/Redis/daemon/KVM UDP; optional verified API TLS/node mTLS; Redis local plaintext."
+}

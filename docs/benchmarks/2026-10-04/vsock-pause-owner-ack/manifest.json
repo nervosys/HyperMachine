@@ -1,0 +1,17 @@
+{
+  "README.md": "a5c68d974232649319475c35e53bbb9585bd937714ec4664f1f98a7071bd99ec",
+  "agent-tests.txt": "6500f20a663967be3badec12e834038ad79d8b47c0d651ef7a475e1cff1c0283",
+  "build-driver.py": "f291d50fa32e3fb25f9964e9a05dd7dafa8d917cfcb0ae0cfbfe17be59b0e878",
+  "build.txt": "71afde899ea3502c956acf8d08abbaa7b4add85faa9cc888ea3718204178c1af",
+  "checker.py": "e651123dec9da73f3ddeccdc96382b035228d970cca56e1c1404f885d23aea34",
+  "daemon-tests.txt": "5b534b61cb7014474e7d6f0ebc4becb111da54ed01231738e5a8af1231735673",
+  "daemon.txt": "6c67c1ac009bf4b76eb84c86bd767e7b6f41c1e811fe4acddde4f7a2d75660c7",
+  "guest-agent.rs": "77ccb6c82cd2e1dca6fc770fca77444d76056b18c9af5eb10712d4e9e6f41375",
+  "process-inventory.json": "bf2b66dd74537205fd7645f3a27c260bacf590d615cbabd106181c05d4e203ce",
+  "resume-driver.py": "ae2f6d5583ddaf83452c2957621d1450339e05ce58bda888e2afc411221db7ec",
+  "source-context.json": "45bceb3a195e3f4dd607bfec674949d81b79a197c3fecb0934d832c38728e85c",
+  "stdout.txt": "93929ce2f3984f822707cc5385c2293ec06780f11be4a806d4ce82794ba2e4e1",
+  "virtio-vsock.rs": "b69099a26c87bf477e52c1056a81ae64faad19aeadfb464963685ce853595e16",
+  "vm-tests.txt": "0b10ce9ffa2bedae428bd62ab86b47f9640f4f48013166f286e472d47460d28f",
+  "vm.rs": "5911576ead92a58231a0592aee02c97c9c8549cb9e4af5e6d1250e21dd634f80"
+}

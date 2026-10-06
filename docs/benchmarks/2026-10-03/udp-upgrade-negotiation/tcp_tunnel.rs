@@ -1,0 +1,155 @@
+//! HTTP/1.1 upgrade carrying a sandbox port's raw byte stream.
+//!
+//! Authentication and sandbox selection belong to the calling router. This
+//! module only negotiates the transport; it never selects a host or port.
+
+use axum::extract::Request;
+use axum::http::{header, Method, StatusCode, Version};
+use axum::response::{IntoResponse, Response};
+use hyper_util::rt::TokioIo;
+use tokio::io::{AsyncRead, AsyncWrite};
+
+pub const PROTOCOL: &str = "hv2-tcp/1";
+
+/// Reject ambiguous framing before a caller opens the guest connection.
+pub fn validate(request: &Request) -> Result<(), &'static str> {
+    validate_protocol(request, PROTOCOL)
+}
+
+pub(crate) fn validate_protocol(request: &Request, protocol: &str) -> Result<(), &'static str> {
+    let upgrade = request
+        .headers()
+        .get(header::UPGRADE)
+        .and_then(|v| v.to_str().ok());
+    let connection = request
+        .headers()
+        .get_all(header::CONNECTION)
+        .iter()
+        .any(|v| {
+            v.to_str().is_ok_and(|v| {
+                v.split(',')
+                    .any(|token| token.trim().eq_ignore_ascii_case("upgrade"))
+            })
+        });
+    let has_body = request.headers().contains_key(header::TRANSFER_ENCODING)
+        || request
+            .headers()
+            .get_all(header::CONTENT_LENGTH)
+            .iter()
+            .any(|v| v != "0");
+    if request.method() != Method::GET
+        || request.version() != Version::HTTP_11
+        || upgrade != Some(protocol)
+        || !connection
+        || has_body
+    {
+        return Err("use a bodyless HTTP/1.1 GET with Connection: Upgrade and the required tunnel protocol");
+    }
+    Ok(())
+}
+
+/// Commit the upgrade after the caller has connected to the sandbox port.
+pub fn accept<T>(request: Request, backend: T) -> Response
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    accept_protocol(request, backend, PROTOCOL)
+}
+
+pub(crate) fn accept_protocol<T>(mut request: Request, mut backend: T, protocol: &'static str) -> Response
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let upgrade = hyper::upgrade::on(&mut request);
+    tokio::spawn(async move {
+        let Ok(Ok(client)) =
+            tokio::time::timeout(std::time::Duration::from_secs(10), upgrade).await
+        else {
+            return;
+        };
+        let mut client = TokioIo::new(client);
+        // copy_bidirectional propagates write-half EOF independently and
+        // drops both connections on error. Buffers are bounded by Tokio.
+        if let Err(error) = tokio::io::copy_bidirectional(&mut client, &mut backend).await {
+            tracing::debug!(%error, protocol, "sandbox tunnel closed");
+        }
+    });
+    (
+        StatusCode::SWITCHING_PROTOCOLS,
+        [(header::CONNECTION, "upgrade"), (header::UPGRADE, protocol)],
+    )
+        .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{routing::get, Router};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[test]
+    fn malformed_negotiation_is_rejected_before_connecting() {
+        for (version, upgrade, connection, length) in [
+            (Version::HTTP_11, PROTOCOL, "keep-alive, Upgrade", "0"),
+            (Version::HTTP_2, PROTOCOL, "upgrade", "0"),
+            (Version::HTTP_11, "websocket", "upgrade", "0"),
+            (Version::HTTP_11, PROTOCOL, "keep-alive", "0"),
+            (Version::HTTP_11, PROTOCOL, "upgrade", "1"),
+        ] {
+            let request = Request::builder()
+                .version(version)
+                .header("upgrade", upgrade)
+                .header("connection", connection)
+                .header("content-length", length)
+                .body(axum::body::Body::empty())
+                .unwrap();
+            let valid = version == Version::HTTP_11
+                && upgrade == PROTOCOL
+                && connection == "keep-alive, Upgrade"
+                && length == "0";
+            assert_eq!(validate(&request).is_ok(), valid);
+        }
+    }
+
+    #[tokio::test]
+    async fn binary_stream_and_client_eof_cross_the_http_upgrade() {
+        let app = Router::new().route(
+            "/tcp",
+            get(|request: Request| async {
+                validate(&request).unwrap();
+                let (relay, mut service) = tokio::io::duplex(4096);
+                tokio::spawn(async move {
+                    let mut bytes = Vec::new();
+                    service.read_to_end(&mut bytes).await.unwrap();
+                    service.write_all(&bytes).await.unwrap();
+                    service.shutdown().await.unwrap();
+                });
+                accept(request, relay)
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let response = reqwest::Client::new()
+            .get(format!("http://{address}/tcp"))
+            .header("connection", "upgrade")
+            .header("upgrade", PROTOCOL)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SWITCHING_PROTOCOLS);
+        let mut tunnel = response.upgrade().await.unwrap();
+        let bytes: Vec<u8> = (0..262144).map(|n| (n % 251) as u8).collect();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            tunnel.write_all(&bytes).await.unwrap();
+            tunnel.shutdown().await.unwrap();
+            let mut reply = Vec::new();
+            tunnel.read_to_end(&mut reply).await.unwrap();
+            assert_eq!(reply, bytes);
+        })
+        .await
+        .unwrap();
+        server.abort();
+        let _ = server.await;
+    }
+}

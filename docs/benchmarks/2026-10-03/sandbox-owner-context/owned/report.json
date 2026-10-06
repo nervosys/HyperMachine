@@ -1,0 +1,104 @@
+{
+  "inputs_sha256": {
+    "/var/tmp/hm-owner-context-node-v1": "66d083561b51805521bafa1cbb8dd569a614b0e602f25f11d9e11198c92ac643",
+    "/var/tmp/hm-owner-context-control-v1": "1e90cba23a3ea1405df1d2f04a1779c52790b6930447ea35fa34abc7ccb4344b",
+    "/var/tmp/hm-udp-ipv6-aligned-cli": "096bc74df05b953b5a857bcd8b494630abf5f954ac3266a5e734bf102d34155e",
+    "/var/tmp/hm-competitive/bzImage-known-uart-irq": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "/var/tmp/hm-native-kvm-guest.cpio.gz": "e042e7d080a32ff99c154d6c495eb351da3b89420282a9fd3e0ca14f44278e98",
+    "/var/tmp/hm-owner-context-gateway-v1": "1f554b668e71db79f7b05df52c621712d6e8bdc3daa25923c50c9144fe2621e2",
+    "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py": "41ec238bb8f7b4802323eae696d6aa4c63c419b1087d771fab38fe5e02a7b344"
+  },
+  "checks": [
+    "Node mTLS refuses a peer without a client certificate",
+    "CLI refuses untrusted control certificate and trusted wrong hostname",
+    "Valid mTLS node peers cannot create with forged owner context and missing or wrong cluster credentials",
+    "Wrong control-plane API key refused",
+    "Empty binary and maximum-size IPv4 datagrams verified through real KVM",
+    "Oversized frame closes its real guest session without preventing a fresh valid session",
+    "2 CLI peers preserve empty binary and maximum-size datagrams through real control plane Redis node and KVM",
+    "Native gateway real KVM TCP preserves 1 MiB and 2 UDP peers preserve empty binary and maximum datagrams on one public port",
+    "Authenticated policy creator overrides forged client context; two real KVM forks inherit owner without inheriting the source native allocation",
+    "Native real guest protocol updates retain public port and close old TCP",
+    "Pause closes existing UDP session",
+    "Real guest pause closes native sessions and preserves exact public reservation",
+    "Resumed guest accepts a new UDP session",
+    "Actual KVM pause and resume preserve trusted owner identity",
+    "Real guest resume restores native TCP and UDP on same reserved port",
+    "Delete closes UDP session and clears guest inventory",
+    "Real guest deletion removes native allocation and closes native sessions; gateway stops gracefully"
+  ],
+  "daemon_reaped": true,
+  "guests_remaining": 0,
+  "control_and_redis_reaped": true,
+  "cli_reaped": true,
+  "native_gateway_reaped": true,
+  "native_gateway_real_kvm": true,
+  "trusted_owner_context": [
+    {
+      "phase": "created-despite-client-forgery",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "fork-inherits-source-owner",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "fork-inherits-source-owner",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "paused",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "resumed",
+      "owner_id": "owned-principal-a"
+    }
+  ],
+  "guest_owner_from_store_at_creation": "owned-principal-a",
+  "native_cli_comparison": [],
+  "host_build_profile_declared": "development",
+  "guest_resources_from_inventory": {
+    "cpuCount": 1,
+    "memoryMB": 1024
+  },
+  "host_environment": {
+    "kernel": "6.18.33.2-microsoft-standard-WSL2",
+    "machine": "x86_64",
+    "logical_cpus": 24,
+    "affinity_cpus": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23
+    ],
+    "python": "3.13.5"
+  },
+  "native_cli_comparison_scope": "Internal paths; both processes remain live in every ABBA block; native TCP idle; one outstanding datagram per peer; no timed retries; unpinned host; operator-declared build profile; not competitor evidence.",
+  "guest_udp_ipv6": false,
+  "local_udp_ipv6": false,
+  "control_api_tls": true,
+  "node_mtls": true,
+  "latency_measurements": [],
+  "scope": "Owned shipped CLI/control-plane/Redis/daemon/KVM UDP; optional verified API TLS/node mTLS; Redis local plaintext."
+}

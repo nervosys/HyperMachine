@@ -1,0 +1,36 @@
+{
+  "input_sha256": {
+    "daemon": "540ccada1f7ccc6534fed475b3b2bb89f17b137b9413df3a3af10008f3c8f28e",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "checker_sha256": "ce6d5a15534906602f49d5d6a595892f2a94605f1779d6b9231c57cf5508234e",
+  "runs": [
+    {
+      "atomic": false,
+      "report": "run-0-in-place.json",
+      "median_ms": 7.625313500000175
+    },
+    {
+      "atomic": true,
+      "report": "run-1-atomic.json",
+      "median_ms": 7.524938500012013
+    },
+    {
+      "atomic": true,
+      "report": "run-2-atomic.json",
+      "median_ms": 10.628631999992422
+    },
+    {
+      "atomic": false,
+      "report": "run-3-in-place.json",
+      "median_ms": 6.836962999983598
+    }
+  ],
+  "limits": [
+    "One immutable daemon binary, two alternating pairs on local WSL storage",
+    "Sequential host HTTP PUTs; exact readback excluded from request timing",
+    "No guest, power-loss, network-filesystem, fleet P99 or competitor measurement",
+    "Build profile and provenance require external evidence"
+  ]
+}

@@ -1,0 +1,13 @@
+   Compiling hv2-cluster v1.1.0 (/var/tmp/hm-domain-verification/source/crates/hv2-cluster)
+    Finished `test` profile [optimized + debuginfo] target(s) in 25.01s
+     Running unittests src/lib.rs (/var/tmp/hm-object-backup/target/debug/deps/hv2_cluster-4c0c7067673ba509)
+
+running 5 tests
+test domain_verification::tests::only_exact_txt_answers_to_the_exact_query_are_accepted ... ok
+test domain_verification::tests::challenges_bind_namespace_key_domain_and_sandbox ... ok
+test domain_verification::tests::resolver_and_secret_configuration_are_restricted ... ok
+test domain_verification::tests::trusted_tls_transport_enforces_exact_proof_expiry_redirect_and_size_bounds ... ok
+test domain_verification::tests::ownership_api_refuses_missing_transferred_and_failed_proofs_without_mutating_bindings ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+

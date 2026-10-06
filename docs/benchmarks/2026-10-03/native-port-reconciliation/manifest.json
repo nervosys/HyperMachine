@@ -1,0 +1,12 @@
+{
+  "sha256": {
+    "README.md": "1b4c369c6ab591d927f21bb3f313068adf056f6147315562b4d4a7856da4736f",
+    "control-plane.log": "f46574f4b0ceb8966fd950c7c05f00e9161b6e9d642efdf83f402f86c19680ce",
+    "lib.rs": "f2799d8c221eb3a0234fd5561701098012bdefe8cd6a7255b174a71b4c275bee",
+    "library.log": "8fcca87d05fd28aa8b545476b0049bc7660a7a43e5e3f8f50bb912c68f6f731c",
+    "native_ports.rs": "4e422aac10b8fec0ee5b5b80c8aa6b0c0a79f40143081437c5292d9de67dd4fc",
+    "ports.rs": "bc04f9f69f8b413dfda91aef5b16bca25e9303dadd84d1876d62ea80bef44e20",
+    "redis-owned.log": "567570fd5c638f281a58e0969778280d605bb12c298b29ac3b8981e76b1271a6",
+    "store.rs": "195e2719201ff84dd8fbcdf15756a09bdfc634514639bf1ce5e44f9e7ff92f57"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "build.txt": "0fba6c7aaf8660553b837a80bbf7d4feb795d971eb28eeabab27cac73bcb33bb",
+  "crates__hv2-agent__examples__pci_snapshot_probe.rs": "7f0950b0eda3c7c4ea30bc1760794486a3f4fc21599506ee8ee63e1db949dce4",
+  "crates__hv2-core__src__devices__virtio_pci.rs": "a2494223b1f88c5d43afc48e9c04588e9d3660ed105ef7a9742acca0d495c344",
+  "crates__hv2-core__src__snapshot__device.rs": "0ad4dcb62a7cf58dffacaf99a41f6d0516176177ae5264be052ffecb6b7e3bbf",
+  "crates__hv2-core__src__snapshot__file.rs": "832ecbb8ec4000215859de29a7dc783b534c788206c886647b2c3af44555283f",
+  "crates__hv2-core__src__vm.rs": "e03a7f82ee85c17b92956095d46a72d5bd8ad4e52233f01253b0292f48ab4b84",
+  "README.md": "1de82d88d757f9b8c13234c65f9bf9c52ee101bf24087ab5284c02a13d334961",
+  "runtime.txt": "ebb9a207d5a56913aca090a3b3846d8d248c39af6259232f42703aca1c4c3a76",
+  "source-context.json": "84b7c4ebcabc268c7ea2708743fc49ae0224dd8367ed2a59b47350764b931e5d"
+}

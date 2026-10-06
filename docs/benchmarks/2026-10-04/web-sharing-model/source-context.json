@@ -1,0 +1,10 @@
+{
+  "source_sha256": {
+    "crates/hv2-cluster/src/web_sharing.rs": "bfb056c588e24fe8ae0d69933b6d28c9f3c9a517e0e877b4558c9096e6c2b055",
+    "crates/hv2-cluster/src/lib.rs": "313fdcb985d6517acc3c0497e30a7abff68286e64f9a5f85cc25ab59ab109313"
+  },
+  "isolated_tree": "/var/tmp/hm-egress-log-mA2CCL",
+  "command": "cargo test --locked -p hv2-cluster --lib web_sharing::tests",
+  "target_dir": "/var/tmp/hm-object-backup/target",
+  "protected_hash_guards": "Accepted isolated hashes checked before and after each test run; root protected sources were not read."
+}

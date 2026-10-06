@@ -1,0 +1,12 @@
+{
+  "README.md": "afbd0bef508c47a47d65119d16449657a85a0c4b8bfd0c7f1246f0ea7c781969",
+  "before-store.rs": "0766e8a02349fee927b0cd105df3fcc57e5075839883e714378d4f87e10255ce",
+  "candidate-store.rs": "b80f15b4e1f12b1d6c9c74a6d3fb2491a554697b9ab717d428dffef94a463187",
+  "candidate-web-sharing.rs": "da4414e6bed69d84419a4b9de5fa9d53fd51af6637946e24ea4ab0825a53db37",
+  "hm-web-sharing-redis-v1.txt": "241f7545eed5fcdc39e3ad8e339725c5921b7673dd669889a47a46abab7b8198",
+  "hm-web-sharing-redis-v2.txt": "d479be4fa5c6b25906bc0905acffcaf0b4d9de964e8b21eb9b875b06b116d623",
+  "hm-web-sharing-store-tests-v1.txt": "e1323185f2ab60efc48b64509e3b27949ba26e76774c649918011fb9ae0f1656",
+  "hm-web-sharing-store-tests-v2.txt": "fd4e58680933f4e3adc501dd841986dfd5427850d7c689c4aa4d4be75023fbd0",
+  "source-context.json": "c57b0f828698ca042ddbe6153bea6d19111b4989f41f80bd3cc3aec9b1410859",
+  "tested-store.rs": "c8f97e15e36be337ed29b611e4a9696d5f990674dc8613d632a00c7a55c7f6cc"
+}

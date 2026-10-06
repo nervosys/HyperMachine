@@ -1,0 +1,21 @@
+{
+  "candidate-driver.py": "06fd16e282f88150a346cb3bf894c38e878fb06f4f84992cd93d983fea483afe",
+  "independent-check.json": "8768202334b2dbede988ef600ae7f5a54ca8d051fef27813fc35756a76db62f6",
+  "initial-failure/control.log.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "initial-failure/node.log.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "initial-failure/redis.log.txt": "4fa37c4f14953cbca78088a363b6996bd5a905e9f8aca2dd10bca315c6e263a3",
+  "initial-failure/report.json": "d2353c40d354cc5708caa4d8825dea1459f565af75bf8d88d209aec468c36956",
+  "initial-failure/runner.txt": "3cc447bfe292dfd19f4bd56b4d41a593a4ea641612816f631a7e7095e917d2dc",
+  "raw/control-restarted.log.txt": "99d89220cdfd43a1dcf2dd4d703ba995dc83f68a68c1d7d663b0d9af7757d541",
+  "raw/control-revoked-restarted.log.txt": "a985d3aaf2336f8316ea1b41efa0582916611e898923bab73870327f26117f79",
+  "raw/control.log.txt": "99d89220cdfd43a1dcf2dd4d703ba995dc83f68a68c1d7d663b0d9af7757d541",
+  "raw/node.log.txt": "d4a1f9389c761aeb6972bc2bf90205e93eb8c9ba54b6201ec6cef3b62810cc21",
+  "raw/redis-active-recovered.log.txt": "c0ea9865961183c1fa65dba141e5d36224349e761274cc1a0935877e87c3aff3",
+  "raw/redis-revoked-recovered.log.txt": "4749bde52412d7cc62397d354610bdf169ff398a10f750b85e5c2122a693c5f7",
+  "raw/redis.log.txt": "f92718728d40187d095dd643f6e0b7f9cbb267d6132289e3268e71de33c65f63",
+  "release-build.txt": "3bc53f7a948483f90683dc4254d2e237fbe4634fa29503504209b0f6211f1458",
+  "release-context.json": "9e4212fd85af2c0830b1e12d829f66252ce0ca5ab9e594fb6480158796bb6e50",
+  "report.json": "30a6a5f42ed952fd702475b87de6095b786f608330ff17595b3d37fb015b5ae0",
+  "runner.txt": "3641e9fcc4af85959dc904bbf4f31f78293a9106e95576e57a105f882d260f50",
+  "verify.py": "875ed03610e7f0931713596e7faab6b19d8e931331a3a8ea29d90819dcb65bcc"
+}

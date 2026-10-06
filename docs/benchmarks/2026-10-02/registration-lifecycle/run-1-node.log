@@ -1,0 +1,23 @@
+hv2-sandboxd: listening on 0.0.0.0:39939, capacity 4, cluster node tcp-kvm-node
+  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)
+  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)
+  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls
+  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener
+  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules
+  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy
+  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies
+  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log
+sandboxes get no network interface (--network to change that)
+sandboxes are restored from template snapshots: base
+
+sandbox proxy on 0.0.0.0:44459 -- HTTP/2 over TLS, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>
+  grpcurl -plaintext -authority 49983-$SBX.local -H "X-Access-Token: $TOKEN" -import-path crates/hv2-api/proto -proto process.proto \
+      -d '{"process":{"cmd":"/bin/sh","args":["-c","echo hi"]}}' \
+      localhost:44459 process.Process/Start
+[2m2026-10-02T10:07:43.604072Z[0m [33m WARN[0m [2mhv2_sandboxd[0m[2m:[0m named registration outcome requires reconciliation [3msandbox_id[0m[2m=[0msbx-94e51a65f0844b099ffe [3merror[0m[2m=[0mcluster store: NoPerm: User default has no permissions to run the 'xadd' command
+[2m2026-10-02T10:07:43.794630Z[0m [33m WARN[0m [2mhv2_sandboxd[0m[2m:[0m named registration outcome requires reconciliation [3msandbox_id[0m[2m=[0msbx-3886c90be1ca4fe4a5ca [3merror[0m[2m=[0mcluster store: "named": registration write permission refused
+[2m2026-10-02T10:08:13.889553Z[0m [33m WARN[0m [2mhv2_sandboxd::idle[0m[2m:[0m pausing idle sandbox sbx-3886c90be1ca4fe4a5ca: reconcile registration before pausing
+[2m2026-10-02T10:08:14.891007Z[0m [33m WARN[0m [2mhv2_sandboxd::idle[0m[2m:[0m pausing idle sandbox sbx-3886c90be1ca4fe4a5ca: reconcile registration before pausing
+[2m2026-10-02T10:08:15.891728Z[0m [33m WARN[0m [2mhv2_sandboxd::idle[0m[2m:[0m pausing idle sandbox sbx-3886c90be1ca4fe4a5ca: reconcile registration before pausing
+[2m2026-10-02T10:08:16.893206Z[0m [33m WARN[0m [2mhv2_sandboxd::idle[0m[2m:[0m pausing idle sandbox sbx-3886c90be1ca4fe4a5ca: reconcile registration before pausing
+[2m2026-10-02T10:08:17.894988Z[0m [33m WARN[0m [2mhv2_sandboxd::idle[0m[2m:[0m pausing idle sandbox sbx-3886c90be1ca4fe4a5ca: reconcile registration before pausing

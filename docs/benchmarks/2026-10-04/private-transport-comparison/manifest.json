@@ -1,0 +1,10 @@
+{
+  "checker.py": "077b7406a15a6d8e52c3942deb333a17705d2cf0292e2eb0daaa5c6c5806234d",
+  "daemon.txt": "8a4d375d1b3ec4cf3beac79edc4f5b33ebfccaba4188ef6a22c4210c568068cb",
+  "driver.py": "434b7ac6174e9f15a44bb25b21857b8c3cb6a7df93bff8ecb586249626afa2c2",
+  "README.md": "90cccf31dc94c200a48f78e26fa15ae3689680566d4b0fc93bfca27680c2973f",
+  "report.json": "fdad76d6bb3d9e67331a2ab1b96d58bb589871f4c11084a6b348b624aeb8667b",
+  "source-context.json": "5cb7f78fb5e846763250dc9d23ce548e2406c96036bd9aa383de7edc1e83bc5b",
+  "stdout.txt": "fdad76d6bb3d9e67331a2ab1b96d58bb589871f4c11084a6b348b624aeb8667b",
+  "verify-results.py": "91401a453378f8a4c98168e549dfeafa0e19b4af10fe65484ba978473001695c"
+}

@@ -1,0 +1,153 @@
+{
+  "cohort": "readiness-e2b-sdk-c8.json",
+  "note": "Independent debug stage percentiles; shared nested-KVM host; no competitor or optimization claim.",
+  "samples": [
+    {
+      "sandbox_id": "sbx-5eb36a2b01bb42b19f91",
+      "blocking_queue_ms": 1.10124,
+      "connect_ms": 87.381662,
+      "restored_ms": 9.937471
+    },
+    {
+      "sandbox_id": "sbx-c4ccf4dcf66b430c801e",
+      "blocking_queue_ms": 0.765279,
+      "connect_ms": 75.468608,
+      "restored_ms": 7.156344
+    },
+    {
+      "sandbox_id": "sbx-501db4dab82c403ca9bd",
+      "blocking_queue_ms": 0.7602880000000001,
+      "connect_ms": 94.55027100000001,
+      "restored_ms": 15.769167000000001
+    },
+    {
+      "sandbox_id": "sbx-f88df3e1985b46428c9f",
+      "blocking_queue_ms": 0.271316,
+      "connect_ms": 104.951781,
+      "restored_ms": 27.537381
+    },
+    {
+      "sandbox_id": "sbx-ec165d84d85741e5a9f7",
+      "blocking_queue_ms": 2.079479,
+      "connect_ms": 79.85715,
+      "restored_ms": 12.630606
+    },
+    {
+      "sandbox_id": "sbx-e1dc6cb567744c918288",
+      "blocking_queue_ms": 2.859549,
+      "connect_ms": 51.107646,
+      "restored_ms": 9.263580000000001
+    },
+    {
+      "sandbox_id": "sbx-e314df2535d9480da292",
+      "blocking_queue_ms": 1.488029,
+      "connect_ms": 109.010336,
+      "restored_ms": 14.973099
+    },
+    {
+      "sandbox_id": "sbx-0d31f82a821a45c49ebf",
+      "blocking_queue_ms": 0.8081339999999999,
+      "connect_ms": 134.175828,
+      "restored_ms": 24.691412
+    },
+    {
+      "sandbox_id": "sbx-fd5ddcd33e994b9b88bf",
+      "blocking_queue_ms": 0.060538999999999996,
+      "connect_ms": 61.335994,
+      "restored_ms": 25.007185
+    },
+    {
+      "sandbox_id": "sbx-ff0e65ac00634b4cbcb6",
+      "blocking_queue_ms": 0.07664399999999999,
+      "connect_ms": 46.386314999999996,
+      "restored_ms": 6.935493
+    },
+    {
+      "sandbox_id": "sbx-fb025d8bc5ab4b7eb2d0",
+      "blocking_queue_ms": 0.065503,
+      "connect_ms": 48.189459,
+      "restored_ms": 28.395895
+    },
+    {
+      "sandbox_id": "sbx-2d522e9e86234c64a0d0",
+      "blocking_queue_ms": 0.059281,
+      "connect_ms": 50.834382999999995,
+      "restored_ms": 4.311438
+    },
+    {
+      "sandbox_id": "sbx-ebc9fdf8af6541438216",
+      "blocking_queue_ms": 0.056462000000000005,
+      "connect_ms": 44.192331,
+      "restored_ms": 3.96695
+    },
+    {
+      "sandbox_id": "sbx-c54904c901044700964f",
+      "blocking_queue_ms": 0.056396,
+      "connect_ms": 77.189737,
+      "restored_ms": 31.931498
+    },
+    {
+      "sandbox_id": "sbx-27adca4e69db4637a894",
+      "blocking_queue_ms": 0.061315999999999996,
+      "connect_ms": 47.627085,
+      "restored_ms": 25.189539
+    },
+    {
+      "sandbox_id": "sbx-92dbb2fde84943f49dce",
+      "blocking_queue_ms": 6.990698,
+      "connect_ms": 51.716115,
+      "restored_ms": 4.86357
+    },
+    {
+      "sandbox_id": "sbx-58d99c0e1ceb45cea923",
+      "blocking_queue_ms": 0.046172,
+      "connect_ms": 50.524601000000004,
+      "restored_ms": 23.098945
+    },
+    {
+      "sandbox_id": "sbx-0368a755d8d8461eab00",
+      "blocking_queue_ms": 0.088877,
+      "connect_ms": 58.307818,
+      "restored_ms": 19.06025
+    },
+    {
+      "sandbox_id": "sbx-83125ce9c2a74c6191ab",
+      "blocking_queue_ms": 0.044209000000000005,
+      "connect_ms": 68.83250100000001,
+      "restored_ms": 16.063615
+    },
+    {
+      "sandbox_id": "sbx-2a760321ed1542d5bc09",
+      "blocking_queue_ms": 0.047639999999999995,
+      "connect_ms": 76.09747999999999,
+      "restored_ms": 26.536049
+    }
+  ],
+  "blocking_queue_ms": {
+    "n": 20,
+    "min": 0.044209000000000005,
+    "max": 6.990698,
+    "mean": 0.8893525499999999,
+    "p50": 0.07664399999999999,
+    "p95": 2.859549,
+    "p99": 6.990698
+  },
+  "connect_ms": {
+    "n": 20,
+    "min": 44.192331,
+    "max": 134.175828,
+    "mean": 70.88685505,
+    "p50": 61.335994,
+    "p95": 109.010336,
+    "p99": 134.175828
+  },
+  "restored_ms": {
+    "n": 20,
+    "min": 3.96695,
+    "max": 31.931498,
+    "mean": 16.86597435,
+    "p50": 15.769167000000001,
+    "p95": 28.395895,
+    "p99": 31.931498
+  }
+}

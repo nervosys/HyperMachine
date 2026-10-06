@@ -1,0 +1,46 @@
+  + Exception Group Traceback (most recent call last):
+  |   File "/var/tmp/hm-mcp-http-kvm-tools/e2e-mcp-sandbox.py", line 169, in <module>
+  |     raise SystemExit(asyncio.run(check(args)))
+  |                      ~~~~~~~~~~~^^^^^^^^^^^^^
+  |   File "/usr/lib/python3.13/asyncio/runners.py", line 195, in run
+  |     return runner.run(main)
+  |            ~~~~~~~~~~^^^^^^
+  |   File "/usr/lib/python3.13/asyncio/runners.py", line 118, in run
+  |     return self._loop.run_until_complete(task)
+  |            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  |   File "/usr/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+  |     return future.result()
+  |            ~~~~~~~~~~~~~^^
+  |   File "/var/tmp/hm-mcp-http-kvm-tools/e2e-mcp-sandbox.py", line 47, in check
+  |     async with connection() as streams:
+  |                ~~~~~~~~~~^^
+  |   File "/usr/lib/python3.13/contextlib.py", line 235, in __aexit__
+  |     await self.gen.athrow(value)
+  |   File "/var/tmp/hm-mcp-http-kvm-tools/e2e-mcp-sandbox.py", line 42, in connection
+  |     async with streamablehttp_client(args.http_url, headers={"Authorization":"Bearer "+os.environ["HM_MCP_TOKEN"]}, httpx_client_factory=factory) as (read, write, _):
+  |                ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "/usr/lib/python3.13/contextlib.py", line 235, in __aexit__
+  |     await self.gen.athrow(value)
+  |   File "/var/tmp/hm-mcp-venv/lib/python3.13/site-packages/mcp/client/streamable_http.py", line 596, in streamablehttp_client
+  |     async with anyio.create_task_group() as tg:
+  |                ~~~~~~~~~~~~~~~~~~~~~~~^^
+  |   File "/var/tmp/hm-mcp-venv/lib/python3.13/site-packages/anyio/_backends/_asyncio.py", line 847, in __aexit__
+  |     raise BaseExceptionGroup(
+  |         "unhandled errors in a TaskGroup", self._exceptions
+  |     ) from None
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "/var/tmp/hm-mcp-venv/lib/python3.13/site-packages/anyio/_core/_tasks.py", line 327, in _run_coro
+    |     retval = await self._coro
+    |              ^^^^^^^^^^^^^^^^
+    |   File "/var/tmp/hm-mcp-venv/lib/python3.13/site-packages/mcp/client/streamable_http.py", line 527, in handle_request_async
+    |     await self._handle_post_request(ctx)
+    |   File "/var/tmp/hm-mcp-venv/lib/python3.13/site-packages/mcp/client/streamable_http.py", line 317, in _handle_post_request
+    |     response.raise_for_status()
+    |     ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+    |   File "/var/tmp/hm-mcp-venv/lib/python3.13/site-packages/httpx/_models.py", line 829, in raise_for_status
+    |     raise HTTPStatusError(message, request=request, response=self)
+    | httpx.HTTPStatusError: Client error '408 Request Timeout' for url 'https://127.0.0.1:45139/mcp'
+    | For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/408
+    +------------------------------------

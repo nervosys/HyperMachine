@@ -1,0 +1,306 @@
+{
+  "cohorts": [
+    {
+      "cohort": 1,
+      "jemalloc": false,
+      "summary": {
+        "concurrency": 8,
+        "pairs": 4,
+        "profile_success": true,
+        "engines": {
+          "hypermachine": {
+            "passed": 32,
+            "attempted": 32,
+            "ready_ms": {
+              "p50": 1489.2059459999984,
+              "p95": 2245.43743000001,
+              "p99": 2310.5796450000184
+            },
+            "median_held_pss_mib": 826.94677734375,
+            "median_incremental_pss_mib": 669.181640625,
+            "memory_batches": 4,
+            "failures": []
+          },
+          "firecracker": {
+            "passed": 32,
+            "attempted": 32,
+            "ready_ms": {
+              "p50": 1118.868961000004,
+              "p95": 1680.298492999981,
+              "p99": 1739.5601569999997
+            },
+            "median_held_pss_mib": 670.37646484375,
+            "median_incremental_pss_mib": 670.37646484375,
+            "memory_batches": 4,
+            "failures": []
+          }
+        }
+      },
+      "hm_memory_by_pair": [
+        {
+          "pair": 0,
+          "empty_baseline_pss_mib": 7.392578125,
+          "held_pss_mib": 820.134765625,
+          "after_cleanup_pss_mib": 155.6142578125
+        },
+        {
+          "pair": 1,
+          "empty_baseline_pss_mib": 155.49609375,
+          "held_pss_mib": 824.234375,
+          "after_cleanup_pss_mib": 160.1416015625
+        },
+        {
+          "pair": 2,
+          "empty_baseline_pss_mib": 160.0341796875,
+          "held_pss_mib": 829.6591796875,
+          "after_cleanup_pss_mib": 165.5654296875
+        },
+        {
+          "pair": 3,
+          "empty_baseline_pss_mib": 165.470703125,
+          "held_pss_mib": 829.861328125,
+          "after_cleanup_pss_mib": 165.654296875
+        }
+      ]
+    },
+    {
+      "cohort": 2,
+      "jemalloc": true,
+      "summary": {
+        "concurrency": 8,
+        "pairs": 4,
+        "profile_success": true,
+        "engines": {
+          "hypermachine": {
+            "passed": 32,
+            "attempted": 32,
+            "ready_ms": {
+              "p50": 1291.1571380000169,
+              "p95": 1723.985550000009,
+              "p99": 1924.2608479999603
+            },
+            "median_held_pss_mib": 688.43212890625,
+            "median_incremental_pss_mib": 668.572265625,
+            "memory_batches": 4,
+            "failures": []
+          },
+          "firecracker": {
+            "passed": 32,
+            "attempted": 32,
+            "ready_ms": {
+              "p50": 1038.80932200002,
+              "p95": 1381.342568999969,
+              "p99": 1386.2171289999878
+            },
+            "median_held_pss_mib": 670.40625,
+            "median_incremental_pss_mib": 670.40625,
+            "memory_batches": 4,
+            "failures": []
+          }
+        }
+      },
+      "hm_memory_by_pair": [
+        {
+          "pair": 0,
+          "empty_baseline_pss_mib": 9.7890625,
+          "held_pss_mib": 686.54296875,
+          "after_cleanup_pss_mib": 19.75390625
+        },
+        {
+          "pair": 1,
+          "empty_baseline_pss_mib": 19.1767578125,
+          "held_pss_mib": 688.0283203125,
+          "after_cleanup_pss_mib": 21.2958984375
+        },
+        {
+          "pair": 2,
+          "empty_baseline_pss_mib": 20.8095703125,
+          "held_pss_mib": 688.8359375,
+          "after_cleanup_pss_mib": 21.7734375
+        },
+        {
+          "pair": 3,
+          "empty_baseline_pss_mib": 21.6474609375,
+          "held_pss_mib": 689.9404296875,
+          "after_cleanup_pss_mib": 22.7412109375
+        }
+      ]
+    },
+    {
+      "cohort": 3,
+      "jemalloc": true,
+      "summary": {
+        "concurrency": 8,
+        "pairs": 4,
+        "profile_success": true,
+        "engines": {
+          "hypermachine": {
+            "passed": 32,
+            "attempted": 32,
+            "ready_ms": {
+              "p50": 1035.2718660000164,
+              "p95": 1699.106238000013,
+              "p99": 1721.6738860000191
+            },
+            "median_held_pss_mib": 688.99365234375,
+            "median_incremental_pss_mib": 668.33203125,
+            "memory_batches": 4,
+            "failures": []
+          },
+          "firecracker": {
+            "passed": 32,
+            "attempted": 32,
+            "ready_ms": {
+              "p50": 572.2283960000141,
+              "p95": 2737.204571999996,
+              "p99": 2771.5884830000164
+            },
+            "median_held_pss_mib": 670.626953125,
+            "median_incremental_pss_mib": 670.626953125,
+            "memory_batches": 4,
+            "failures": []
+          }
+        }
+      },
+      "hm_memory_by_pair": [
+        {
+          "pair": 0,
+          "empty_baseline_pss_mib": 10.33984375,
+          "held_pss_mib": 687.3408203125,
+          "after_cleanup_pss_mib": 20.25
+        },
+        {
+          "pair": 1,
+          "empty_baseline_pss_mib": 20.1357421875,
+          "held_pss_mib": 688.7607421875,
+          "after_cleanup_pss_mib": 21.9326171875
+        },
+        {
+          "pair": 2,
+          "empty_baseline_pss_mib": 21.376953125,
+          "held_pss_mib": 689.2265625,
+          "after_cleanup_pss_mib": 22.5634765625
+        },
+        {
+          "pair": 3,
+          "empty_baseline_pss_mib": 21.9853515625,
+          "held_pss_mib": 690.0244140625,
+          "after_cleanup_pss_mib": 22.7275390625
+        }
+      ]
+    },
+    {
+      "cohort": 4,
+      "jemalloc": false,
+      "summary": {
+        "concurrency": 8,
+        "pairs": 4,
+        "profile_success": true,
+        "engines": {
+          "hypermachine": {
+            "passed": 32,
+            "attempted": 32,
+            "ready_ms": {
+              "p50": 656.0187110000015,
+              "p95": 743.5532680000279,
+              "p99": 759.9252800000045
+            },
+            "median_held_pss_mib": 786.177734375,
+            "median_incremental_pss_mib": 680.736328125,
+            "memory_batches": 4,
+            "failures": []
+          },
+          "firecracker": {
+            "passed": 32,
+            "attempted": 32,
+            "ready_ms": {
+              "p50": 613.2843969999726,
+              "p95": 891.6402570000059,
+              "p99": 902.9394479999837
+            },
+            "median_held_pss_mib": 670.3935546875,
+            "median_incremental_pss_mib": 670.3935546875,
+            "memory_batches": 4,
+            "failures": []
+          }
+        }
+      },
+      "hm_memory_by_pair": [
+        {
+          "pair": 0,
+          "empty_baseline_pss_mib": 7.560546875,
+          "held_pss_mib": 806.447265625,
+          "after_cleanup_pss_mib": 141.771484375
+        },
+        {
+          "pair": 1,
+          "empty_baseline_pss_mib": 141.693359375,
+          "held_pss_mib": 768.986328125,
+          "after_cleanup_pss_mib": 104.552734375
+        },
+        {
+          "pair": 2,
+          "empty_baseline_pss_mib": 104.458984375,
+          "held_pss_mib": 771.041015625,
+          "after_cleanup_pss_mib": 106.521484375
+        },
+        {
+          "pair": 3,
+          "empty_baseline_pss_mib": 106.423828125,
+          "held_pss_mib": 801.314453125,
+          "after_cleanup_pss_mib": 136.568359375
+        }
+      ]
+    }
+  ],
+  "pooled": {
+    "False": {
+      "hypermachine": {
+        "passed": 64,
+        "ready_ms": {
+          "p50": 721.817638999994,
+          "p95": 2045.6260079999993,
+          "p99": 2310.5796450000184
+        },
+        "median_held_pss_mib": 813.291015625,
+        "median_incremental_pss_mib": 669.181640625,
+        "median_empty_baseline_pss_mib": 124.05859375
+      },
+      "firecracker": {
+        "passed": 64,
+        "ready_ms": {
+          "p50": 891.6402570000059,
+          "p95": 1658.2126590000144,
+          "p99": 1739.5601569999997
+        },
+        "median_held_pss_mib": 670.38330078125,
+        "median_incremental_pss_mib": 670.38330078125,
+        "median_empty_baseline_pss_mib": 0.0
+      }
+    },
+    "True": {
+      "hypermachine": {
+        "passed": 64,
+        "ready_ms": {
+          "p50": 1233.4111440000015,
+          "p95": 1699.106238000013,
+          "p99": 1924.2608479999603
+        },
+        "median_held_pss_mib": 688.79833984375,
+        "median_incremental_pss_mib": 668.458984375,
+        "median_empty_baseline_pss_mib": 20.47265625
+      },
+      "firecracker": {
+        "passed": 64,
+        "ready_ms": {
+          "p50": 1038.80932200002,
+          "p95": 2409.7366480000346,
+          "p99": 2771.5884830000164
+        },
+        "median_held_pss_mib": 670.4326171875,
+        "median_incremental_pss_mib": 670.4326171875,
+        "median_empty_baseline_pss_mib": 0.0
+      }
+    }
+  }
+}

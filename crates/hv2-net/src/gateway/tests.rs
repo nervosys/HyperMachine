@@ -21,6 +21,37 @@ use crate::network_policy::{Headers, NetworkPolicy, Verdict};
 const EXAMPLE: Ipv4Addr = Ipv4Addr::new(93, 184, 216, 34);
 const OTHER: Ipv4Addr = Ipv4Addr::new(198, 18, 0, 7);
 
+#[tokio::test]
+async fn host_bound_store_requires_interception_and_does_not_change_policy() {
+    let secrets = Arc::new(
+        crate::secret_substitution::Store::new(vec![crate::secret_substitution::Binding {
+            placeholder: format!("hms_{}", "a".repeat(64)),
+            value: b"owned-secret".to_vec(),
+            hosts: vec!["api.example.test".into()],
+        }])
+        .unwrap(),
+    );
+    let gateway = Gateway::builder(NetworkPolicy::new(Verdict::Deny))
+        .build()
+        .unwrap();
+    assert!(gateway
+        .handle()
+        .set_secret_store(Some(Arc::clone(&secrets)))
+        .is_err());
+    let gateway = Gateway::builder(NetworkPolicy::new(Verdict::Deny))
+        .intercept_with(Arc::new(mitm::Authority::generate().unwrap()))
+        .build()
+        .unwrap();
+    let handle = gateway.handle();
+    let original = format!("{:?}", handle.policy());
+    handle.set_secret_store(Some(Arc::clone(&secrets))).unwrap();
+    assert_eq!(format!("{:?}", handle.policy()), original);
+    assert!(secrets.has_host("API.example.test"));
+    secrets.rotate(vec![]).unwrap();
+    assert!(!secrets.has_host("api.example.test"));
+    handle.set_secret_store(None).unwrap();
+}
+
 struct MapResolver(HashMap<String, Vec<IpAddr>>);
 
 #[async_trait::async_trait]
@@ -89,12 +120,30 @@ async fn banner_server() -> SocketAddr {
     addr
 }
 
+fn is_udp_fragment(frame: &[u8]) -> bool {
+    let Ok(eth) = EthernetFrame::new_checked(frame) else {
+        return false;
+    };
+    if eth.ethertype() != EthernetProtocol::Ipv4 {
+        return false;
+    }
+    let Ok(ip) = Ipv4Packet::new_checked(eth.payload()) else {
+        return false;
+    };
+    ip.next_header() == IpProtocol::Udp && (ip.more_frags() || ip.frag_offset() != 0)
+}
 struct Guest {
     start: std::time::Instant,
     device: Queues,
     iface: Interface,
     sockets: SocketSet<'static>,
     next_port: u16,
+    fragment_tx: usize,
+    fragment_rx: usize,
+    fragment_gap: bool,
+    fragment_capture: bool,
+    fragment_reorder: bool,
+    fragment_frames: Vec<Vec<u8>>,
 }
 
 impl Guest {
@@ -118,11 +167,68 @@ impl Guest {
             iface,
             sockets: SocketSet::new(Vec::new()),
             next_port: 49152,
+            fragment_tx: 0,
+            fragment_rx: 0,
+            fragment_gap: false,
+            fragment_capture: false,
+            fragment_reorder: false,
+            fragment_frames: Vec::new(),
         }
     }
 
     fn now(&self) -> smoltcp::time::Instant {
         smoltcp::time::Instant::from_micros(self.start.elapsed().as_micros() as i64)
+    }
+
+    async fn tls_request(
+        &mut self,
+        gateway: &Gateway,
+        config: Arc<rustls::ClientConfig>,
+        request: &[u8],
+    ) -> Vec<u8> {
+        let mut tls = rustls::ClientConnection::new(
+            config,
+            rustls::pki_types::ServerName::try_from("api.example.com").unwrap(),
+        )
+        .unwrap();
+        let handle = self.connect(EXAMPLE, 443);
+        let mut pending = Vec::new();
+        let mut sent = false;
+        let mut response = Vec::new();
+        self.until(gateway, Duration::from_secs(5), |sockets| {
+            let socket = sockets.get_mut::<tcp::Socket>(handle);
+            if !tls.is_handshaking() && !sent {
+                std::io::Write::write_all(&mut tls.writer(), request).unwrap();
+                sent = true;
+            }
+            while tls.wants_write() {
+                tls.write_tls(&mut pending).unwrap();
+            }
+            if socket.can_send() && !pending.is_empty() {
+                let count = socket.send_slice(&pending).unwrap();
+                pending.drain(..count);
+            }
+            while socket.can_recv() {
+                socket
+                    .recv(|bytes| {
+                        let count = tls.read_tls(&mut std::io::Cursor::new(bytes)).unwrap();
+                        tls.process_new_packets().unwrap();
+                        (count, ())
+                    })
+                    .unwrap();
+            }
+            let mut bytes = [0; 1024];
+            while let Ok(count) = std::io::Read::read(&mut tls.reader(), &mut bytes) {
+                if count == 0 {
+                    break;
+                }
+                response.extend_from_slice(&bytes[..count]);
+            }
+            response.ends_with(b"auth=bearer owned-secret guest=kept")
+        })
+        .await;
+        self.sockets.get_mut::<tcp::Socket>(handle).abort();
+        response
     }
 
     async fn step(&mut self, gateway: &Gateway) {
@@ -131,12 +237,41 @@ impl Guest {
             if frame.is_empty() {
                 break;
             }
+            if is_udp_fragment(&frame) {
+                self.fragment_rx += 1;
+            }
+            assert!(frame.len() <= hv2_core::devices::virtio_net_mmio::MAX_FRAME_LEN);
             self.device.rx.push_back(frame);
         }
         let now = self.now();
         self.iface.poll(now, &mut self.device, &mut self.sockets);
         while let Some(frame) = self.device.tx.pop_front() {
+            if is_udp_fragment(&frame) {
+                self.fragment_tx += 1;
+            }
+            assert!(frame.len() <= hv2_core::devices::virtio_net_mmio::MAX_FRAME_LEN);
+            if is_udp_fragment(&frame) && self.fragment_capture {
+                self.fragment_frames.push(frame);
+                continue;
+            }
+            if is_udp_fragment(&frame) && self.fragment_reorder {
+                let last =
+                    !Ipv4Packet::new_checked(EthernetFrame::new_checked(&frame).unwrap().payload())
+                        .unwrap()
+                        .more_frags();
+                self.fragment_frames.push(frame);
+                if last {
+                    for frame in self.fragment_frames.drain(..).rev() {
+                        gateway.send(&frame).await.unwrap();
+                    }
+                }
+                continue;
+            }
             gateway.send(&frame).await.unwrap();
+            if self.fragment_gap && is_udp_fragment(&frame) {
+                self.fragment_gap = false;
+                tokio::time::sleep(Duration::from_millis(1100)).await;
+            }
         }
         tokio::time::sleep(Duration::from_millis(1)).await;
     }
@@ -213,6 +348,49 @@ impl Guest {
         } else {
             Some(received)
         }
+    }
+
+    async fn udp_exchange(
+        &mut self,
+        gateway: &Gateway,
+        address: Ipv4Addr,
+        port: u16,
+        data: &[u8],
+    ) -> Option<Vec<u8>> {
+        let mut socket = udp::Socket::new(
+            udp::PacketBuffer::new(
+                vec![udp::PacketMetadata::EMPTY; 4],
+                vec![0; private_udp::MAX_PAYLOAD * 2],
+            ),
+            udp::PacketBuffer::new(
+                vec![udp::PacketMetadata::EMPTY; 4],
+                vec![0; private_udp::MAX_PAYLOAD * 2],
+            ),
+        );
+        self.next_port += 1;
+        socket.bind(self.next_port).unwrap();
+        let handle = self.sockets.add(socket);
+        self.sockets
+            .get_mut::<udp::Socket>(handle)
+            .send_slice(data, (IpAddress::Ipv4(address), port))
+            .unwrap();
+        let mut answer = None;
+        self.until(gateway, Duration::from_secs(3), |sockets| {
+            match sockets.get_mut::<udp::Socket>(handle).recv() {
+                Ok((data, meta)) => {
+                    assert_eq!(
+                        meta.endpoint,
+                        IpEndpoint::new(IpAddress::Ipv4(address), port)
+                    );
+                    answer = Some(data.to_vec());
+                    true
+                }
+                Err(_) => false,
+            }
+        })
+        .await;
+        self.sockets.remove(handle);
+        answer
     }
 
     /// Ask the gateway's DNS, returning the response's rcode and addresses.
@@ -722,6 +900,46 @@ async fn header_echo_upstream(
 
 /// The guest's TLS client, over a `GuestStream`-shaped pipe into `intercept`.
 #[tokio::test]
+async fn ethernet_gateway_selects_secret_interception_without_header_rule() {
+    let (upstream, root) = header_echo_upstream("api.example.com").await;
+    let authority = Arc::new(mitm::Authority::generate().unwrap());
+    let guest_config = mitm::upstream_config(&[authority.ca_der().clone()]).unwrap();
+    let names = HashMap::from([("api.example.com".into(), vec![IpAddr::V4(EXAMPLE)])]);
+    let routes = HashMap::from([(SocketAddr::new(IpAddr::V4(EXAMPLE), 443), upstream)]);
+    let gateway = Gateway::builder(e2b(&["api.example.com"], &["0.0.0.0/0"]))
+        .resolver(Arc::new(MapResolver(names)))
+        .dialer(Arc::new(MapDialer(routes)))
+        .intercept_with(authority)
+        .upstream_root(root)
+        .build()
+        .unwrap();
+    let token = format!("hms_{}", "a".repeat(64));
+    let store = Arc::new(
+        crate::secret_substitution::Store::new(vec![crate::secret_substitution::Binding {
+            placeholder: token.clone(),
+            value: b"owned-secret".to_vec(),
+            hosts: vec!["api.example.com".into()],
+        }])
+        .unwrap(),
+    );
+    gateway.handle().set_secret_store(Some(store)).unwrap();
+    let mut guest = Guest::new();
+    let request = format!(
+        "GET / HTTP/1.1\r\nHost: api.example.com\r\nAuthorization: Bearer {token}\r\nX-Guest: kept\r\nConnection: close\r\n\r\n"
+    );
+    let response = guest
+        .tls_request(&gateway, guest_config, request.as_bytes())
+        .await;
+    assert!(response.ends_with(b"auth=bearer owned-secret guest=kept"));
+    assert!(gateway
+        .handle()
+        .decisions()
+        .iter()
+        .any(|d| d.kind == "https-intercept"));
+}
+
+/// The guest's TLS client, over a `GuestStream`-shaped pipe into `intercept`.
+#[tokio::test]
 async fn interception_injects_the_header_and_the_guest_never_holds_it() {
     let (upstream_addr, upstream_root) = header_echo_upstream("api.example.com").await;
     let authority = Arc::new(mitm::Authority::generate().unwrap());
@@ -832,4 +1050,428 @@ fn the_kernel_argument_configures_the_guest_for_this_gateway() {
         GatewayConfig::default().kernel_ip_arg(),
         "ip=10.0.2.15::10.0.2.2:255.255.255.0::eth0:off:10.0.2.3"
     );
+}
+
+const PRIVATE: Ipv4Addr = Ipv4Addr::new(10, 254, 0, 2);
+struct OwnedPrivate {
+    target: SocketAddr,
+    allowed: bool,
+    invalid_dns: bool,
+}
+#[async_trait::async_trait]
+impl PrivateNetwork for OwnedPrivate {
+    fn owns_name(&self, name: &str) -> bool {
+        name.ends_with(".hv2.internal")
+    }
+    fn owns_address(&self, address: IpAddr) -> bool {
+        matches!(address, IpAddr::V4(a) if a.octets()[..2] == [10, 254])
+    }
+    async fn resolve(&self, name: &str) -> io::Result<Vec<IpAddr>> {
+        if self.allowed && name == "destination.team.hv2.internal" {
+            Ok(vec![IpAddr::V4(if self.invalid_dns {
+                EXAMPLE
+            } else {
+                PRIVATE
+            })])
+        } else {
+            Err(io::ErrorKind::PermissionDenied.into())
+        }
+    }
+    async fn dial(&self, destination: SocketAddr) -> io::Result<Box<dyn Upstream>> {
+        if self.allowed && destination == SocketAddr::new(PRIVATE.into(), 8080) {
+            Ok(Box::new(tokio::net::TcpStream::connect(self.target).await?))
+        } else {
+            Err(io::ErrorKind::PermissionDenied.into())
+        }
+    }
+}
+#[tokio::test]
+async fn private_dns_and_tcp_work_with_internet_disabled_and_ignore_socks() {
+    let echo = echo_server().await;
+    let gw = Gateway::builder(NetworkPolicy::new(Verdict::Deny))
+        .private_network(Arc::new(OwnedPrivate {
+            target: echo,
+            allowed: true,
+            invalid_dns: false,
+        }))
+        .build()
+        .unwrap();
+    gw.handle().set_egress_proxy(Some(
+        socks::Socks5Proxy::new("127.0.0.1:1", None, None).unwrap(),
+    ));
+    let mut guest = Guest::new();
+    assert_eq!(
+        guest.lookup(&gw, "destination.team.hv2.internal").await,
+        (0, vec![PRIVATE])
+    );
+    let data = b"GET / HTTP/1.1\r\nHost: forbidden.example\r\n\r\n\0\xff";
+    let mut expected = b"echo:".to_vec();
+    expected.extend_from_slice(data);
+    assert_eq!(
+        guest.exchange(&gw, PRIVATE, 8080, data).await,
+        Some(expected)
+    );
+    assert_eq!(guest.lookup(&gw, "example.com").await.0, 5);
+    assert_eq!(guest.exchange(&gw, EXAMPLE, 8080, b"no").await, None);
+    assert!(gw
+        .handle()
+        .decisions()
+        .iter()
+        .any(|d| d.reason == "private network"));
+}
+#[tokio::test]
+async fn private_refusal_never_uses_internet_dns_or_direct_fallback() {
+    let echo = echo_server().await;
+    let gw = Gateway::builder(NetworkPolicy::new(Verdict::Allow))
+        .resolver(Arc::new(MapResolver(HashMap::from([(
+            "unknown.team.hv2.internal".into(),
+            vec![EXAMPLE.into()],
+        )]))))
+        .dialer(Arc::new(MapDialer(HashMap::from([(
+            SocketAddr::new(PRIVATE.into(), 8080),
+            echo,
+        )]))))
+        .private_network(Arc::new(OwnedPrivate {
+            target: echo,
+            allowed: false,
+            invalid_dns: false,
+        }))
+        .build()
+        .unwrap();
+    let mut guest = Guest::new();
+    assert_eq!(
+        guest.lookup(&gw, "unknown.team.hv2.internal").await,
+        (5, vec![])
+    );
+    assert_eq!(guest.exchange(&gw, PRIVATE, 8080, b"no").await, None);
+    assert!(gw.shared.resolved.lock().is_empty());
+}
+#[tokio::test]
+async fn private_dns_rejects_answers_outside_reserved_pool() {
+    let echo = echo_server().await;
+    let gw = Gateway::builder(NetworkPolicy::new(Verdict::Allow))
+        .private_network(Arc::new(OwnedPrivate {
+            target: echo,
+            allowed: true,
+            invalid_dns: true,
+        }))
+        .build()
+        .unwrap();
+    let mut guest = Guest::new();
+    assert_eq!(
+        guest.lookup(&gw, "destination.team.hv2.internal").await,
+        (5, vec![])
+    );
+    assert!(gw.shared.resolved.lock().is_empty());
+}
+
+struct OwnedUdpPrivate {
+    allowed: bool,
+    opened: Arc<std::sync::atomic::AtomicUsize>,
+    closed: Arc<std::sync::atomic::AtomicUsize>,
+    received: Arc<std::sync::Mutex<Vec<Vec<u8>>>>,
+}
+#[async_trait::async_trait]
+impl PrivateNetwork for OwnedUdpPrivate {
+    fn owns_name(&self, name: &str) -> bool {
+        name.ends_with(".hv2.internal")
+    }
+    fn owns_address(&self, address: IpAddr) -> bool {
+        matches!(address,IpAddr::V4(a) if a.octets()[..2]==[10,254])
+    }
+    async fn resolve(&self, name: &str) -> io::Result<Vec<IpAddr>> {
+        if self.allowed && name == "destination.team.hv2.internal" {
+            Ok(vec![PRIVATE.into()])
+        } else {
+            Err(io::ErrorKind::PermissionDenied.into())
+        }
+    }
+    async fn dial(&self, _destination: SocketAddr) -> io::Result<Box<dyn Upstream>> {
+        Err(io::ErrorKind::Unsupported.into())
+    }
+    async fn dial_udp(&self, destination: SocketAddr) -> io::Result<Box<dyn Upstream>> {
+        if !self.allowed || destination != SocketAddr::new(PRIVATE.into(), 8080) {
+            return Err(io::ErrorKind::PermissionDenied.into());
+        }
+        self.opened
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let (client, mut peer) = tokio::io::duplex(2048);
+        let closed = self.closed.clone();
+        let received = self.received.clone();
+        tokio::spawn(async move {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            while let Ok(size) = peer.read_u16().await {
+                let mut data = vec![0; size as usize];
+                if peer.read_exact(&mut data).await.is_err() {
+                    break;
+                }
+                received.lock().unwrap().push(data.clone());
+                if peer.write_u16(size).await.is_err() || peer.write_all(&data).await.is_err() {
+                    break;
+                }
+            }
+            closed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        });
+        Ok(Box::new(client))
+    }
+}
+fn udp_private(allowed: bool) -> Arc<OwnedUdpPrivate> {
+    Arc::new(OwnedUdpPrivate {
+        allowed,
+        opened: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        closed: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        received: Arc::new(std::sync::Mutex::new(Vec::new())),
+    })
+}
+#[tokio::test]
+async fn private_udp_ethernet_preserves_empty_binary_and_payload_with_internet_disabled() {
+    let private = udp_private(true);
+    let gw = Gateway::builder(NetworkPolicy::new(Verdict::Deny))
+        .private_network(private.clone())
+        .build()
+        .unwrap();
+    gw.handle().set_egress_proxy(Some(
+        socks::Socks5Proxy::new("127.0.0.1:1", None, None).unwrap(),
+    ));
+    let mut guest = Guest::new();
+    assert_eq!(
+        guest.lookup(&gw, "destination.team.hv2.internal").await,
+        (0, vec![PRIVATE])
+    );
+    for payload in [
+        vec![],
+        b"GET / HTTP/1.1\r\nHost: blocked.example\r\n\r\n\0\xff".to_vec(),
+        vec![42; 1280],
+        vec![42; private_udp::MAX_PAYLOAD],
+    ] {
+        assert_eq!(
+            guest.udp_exchange(&gw, PRIVATE, 8080, &payload).await,
+            Some(payload),
+            "opened={} closed={} decisions={:?}",
+            private.opened.load(std::sync::atomic::Ordering::SeqCst),
+            private.closed.load(std::sync::atomic::Ordering::SeqCst),
+            gw.handle().decisions()
+        );
+    }
+    assert!(
+        guest.fragment_tx > 1 && guest.fragment_rx > 1,
+        "full-size UDP must fragment in both Ethernet directions"
+    );
+    assert_eq!(
+        guest.udp_exchange(&gw, EXAMPLE, 8080, b"ordinary").await,
+        None
+    );
+    assert!(gw
+        .handle()
+        .decisions()
+        .iter()
+        .any(|d| d.kind == "udp" && d.reason == "private network"));
+}
+#[tokio::test]
+async fn private_udp_refusal_never_falls_back_under_permissive_internet_policy() {
+    let private = udp_private(false);
+    let gw = Gateway::builder(NetworkPolicy::new(Verdict::Allow))
+        .private_network(private.clone())
+        .build()
+        .unwrap();
+    let mut guest = Guest::new();
+    assert_eq!(
+        guest.udp_exchange(&gw, PRIVATE, 8080, b"denied").await,
+        None
+    );
+    assert_eq!(private.opened.load(std::sync::atomic::Ordering::SeqCst), 0);
+    assert!(gw
+        .handle()
+        .decisions()
+        .iter()
+        .any(|d| d.kind == "udp" && d.verdict == Verdict::Deny));
+}
+#[tokio::test]
+async fn private_udp_shares_tcp_admission_and_gateway_drop_releases_transport() {
+    let private = udp_private(true);
+    let config = GatewayConfig {
+        max_connections: 1,
+        ..GatewayConfig::default()
+    };
+    let gw = Gateway::builder(NetworkPolicy::new(Verdict::Deny))
+        .config(config)
+        .private_network(private.clone())
+        .build()
+        .unwrap();
+    let mut guest = Guest::new();
+    assert_eq!(
+        guest.udp_exchange(&gw, PRIVATE, 8080, b"first").await,
+        Some(b"first".to_vec())
+    );
+    assert_eq!(
+        guest.udp_exchange(&gw, PRIVATE, 8080, b"second-peer").await,
+        None
+    );
+    assert_eq!(guest.exchange(&gw, PRIVATE, 8080, b"tcp").await, None);
+    assert_eq!(private.opened.load(std::sync::atomic::Ordering::SeqCst), 1);
+    drop(gw);
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while private.closed.load(std::sync::atomic::Ordering::SeqCst) != 1 {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn private_udp_delayed_fragments_keep_destination_until_reassembly() {
+    let private = udp_private(true);
+    let gw = Gateway::builder(NetworkPolicy::new(Verdict::Deny))
+        .private_network(private.clone())
+        .build()
+        .unwrap();
+    let mut guest = Guest::new();
+    guest.fragment_gap = true;
+    let payload = vec![73; private_udp::MAX_PAYLOAD];
+    let reply = guest.udp_exchange(&gw, PRIVATE, 8080, &payload).await;
+    assert!(
+        reply.as_ref() == Some(&payload),
+        "valid delayed fragment set lost its private destination socket"
+    );
+    assert!(guest.fragment_tx > 1 && guest.fragment_rx > 1);
+}
+
+#[tokio::test]
+async fn private_udp_reordered_fragments_preserve_maximum_payload() {
+    let private = udp_private(true);
+    let gw = Gateway::builder(NetworkPolicy::new(Verdict::Deny))
+        .private_network(private.clone())
+        .build()
+        .unwrap();
+    let mut guest = Guest::new();
+    guest.fragment_reorder = true;
+    let payload: Vec<u8> = (0..private_udp::MAX_PAYLOAD)
+        .map(|i| (i % 251) as u8)
+        .collect();
+    assert_eq!(
+        guest.udp_exchange(&gw, PRIVATE, 8080, &payload).await,
+        Some(payload.clone())
+    );
+    assert!(guest.fragment_frames.is_empty() && guest.fragment_tx > 1 && guest.fragment_rx > 1);
+    assert_eq!(*private.received.lock().unwrap(), vec![payload]);
+}
+
+async fn captured_private_fragments(gw: &Gateway) -> (Vec<Vec<u8>>, Vec<u8>) {
+    let mut guest = Guest::new();
+    guest.fragment_capture = true;
+    let payload: Vec<u8> = (0..private_udp::MAX_PAYLOAD)
+        .map(|i| (i % 251) as u8)
+        .collect();
+    assert_eq!(guest.udp_exchange(gw, PRIVATE, 8080, &payload).await, None);
+    let frames = std::mem::take(&mut guest.fragment_frames);
+    assert!(frames.len() > 2);
+    assert_eq!(
+        Ipv4Packet::new_checked(EthernetFrame::new_checked(&frames[0]).unwrap().payload())
+            .unwrap()
+            .frag_offset(),
+        0
+    );
+    assert!(!Ipv4Packet::new_checked(
+        EthernetFrame::new_checked(frames.last().unwrap())
+            .unwrap()
+            .payload()
+    )
+    .unwrap()
+    .more_frags());
+    (frames, payload)
+}
+fn fragment_ident(frames: &[Vec<u8>], ident: u16) -> Vec<Vec<u8>> {
+    frames
+        .iter()
+        .map(|frame| {
+            let mut frame = frame.clone();
+            let mut eth = EthernetFrame::new_unchecked(frame.as_mut_slice());
+            let mut ip = Ipv4Packet::new_unchecked(eth.payload_mut());
+            ip.set_ident(ident);
+            ip.fill_checksum();
+            frame
+        })
+        .collect()
+}
+async fn send_fragment_set(gw: &Gateway, frames: &[Vec<u8>]) {
+    for frame in frames {
+        gw.send(frame).await.unwrap();
+    }
+    tokio::time::sleep(Duration::from_millis(100)).await;
+}
+async fn wait_private_datagrams(private: &OwnedUdpPrivate, count: usize) {
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while private.received.lock().unwrap().len() < count {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(private.received.lock().unwrap().len(), count);
+}
+
+#[tokio::test]
+async fn private_udp_reassembly_capacity_refuses_incomplete_third_and_recovers() {
+    let private = udp_private(true);
+    let gw = Gateway::builder(NetworkPolicy::new(Verdict::Deny))
+        .private_network(private.clone())
+        .build()
+        .unwrap();
+    let (frames, payload) = captured_private_fragments(&gw).await;
+    let first = fragment_ident(&frames, 101);
+    let second = fragment_ident(&frames, 102);
+    let third = fragment_ident(&frames, 103);
+    send_fragment_set(&gw, &first[..1]).await;
+    send_fragment_set(&gw, &second[..1]).await;
+    send_fragment_set(&gw, &third).await;
+    assert_eq!(private.opened.load(std::sync::atomic::Ordering::SeqCst), 0);
+    assert!(
+        private.received.lock().unwrap().is_empty(),
+        "incomplete or capacity-refused fragments must not dial private transport"
+    );
+    send_fragment_set(&gw, &first[1..]).await;
+    send_fragment_set(&gw, &second[1..]).await;
+    wait_private_datagrams(&private, 2).await;
+    assert!(private
+        .received
+        .lock()
+        .unwrap()
+        .iter()
+        .all(|data| data == &payload));
+    send_fragment_set(&gw, &third).await;
+    wait_private_datagrams(&private, 3).await;
+    assert!(private
+        .received
+        .lock()
+        .unwrap()
+        .iter()
+        .all(|data| data == &payload));
+}
+
+#[tokio::test]
+async fn private_udp_expired_fragments_refuse_and_reassembly_slots_recover() {
+    let private = udp_private(true);
+    let gw = Gateway::builder(NetworkPolicy::new(Verdict::Deny))
+        .private_network(private.clone())
+        .build()
+        .unwrap();
+    let (frames, payload) = captured_private_fragments(&gw).await;
+    let old_a = fragment_ident(&frames, 201);
+    let old_b = fragment_ident(&frames, 202);
+    send_fragment_set(&gw, &old_a[..1]).await;
+    send_fragment_set(&gw, &old_b[..1]).await;
+    tokio::time::sleep(Duration::from_millis(5300)).await;
+    send_fragment_set(&gw, &old_a[1..]).await;
+    send_fragment_set(&gw, &old_b[1..]).await;
+    assert_eq!(private.opened.load(std::sync::atomic::Ordering::SeqCst), 0);
+    assert!(
+        private.received.lock().unwrap().is_empty(),
+        "expired datagrams must not be delivered"
+    );
+    // Incomplete late tails consume the two slots until their own expiry.
+    tokio::time::sleep(Duration::from_millis(5300)).await;
+    send_fragment_set(&gw, &fragment_ident(&frames, 203)).await;
+    wait_private_datagrams(&private, 1).await;
+    assert_eq!(*private.received.lock().unwrap(), vec![payload]);
 }

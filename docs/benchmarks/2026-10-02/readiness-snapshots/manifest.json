@@ -1,0 +1,14 @@
+{
+  "sha256": {
+    "bench-firecracker-local.py": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6",
+    "build-context.json": "2d52f234f1a5edd6b2dc380baee900453d82858b9a1ae028e8a56b4653e4afe4",
+    "diagnose-readiness-failures.py": "f931fbb97bc2e577601d2a72d9449b482ae5f33a8055a1c09a93a8ff51174f13",
+    "failure-report.json": "48be07f8831171dc0255a9045b7896da1699242594b181ceb62547349b7592e9",
+    "guest_agent.rs.txt": "a6dfe88b1b2a6c08ddbde08cfcf40f56f6df2cab3de3594ad8673083e2d1a656",
+    "linux-agent-tests.log": "a975569bbe84413e5e0260e5b8c1f1eb45fa475b9e3aaecd6ff53c214c614d9e",
+    "README.md": "ba3be844b885033c727f9919be9406efed5c4466e0bb994436cd6698204e46c2",
+    "report.json": "b86d63921e8ff3e996e258206ceae4c2a157d308e89ab6b30e9e9c1f37325fb5",
+    "verify-readiness-snapshots.py": "dde60e678141bbb3dc88bf6c58c3307192d9b876417e8b8fdb1cc8c94cdec3f0",
+    "windows-agent-tests.log": "24d99aaa85c6411c32b2303915646f1ed21a86dc340cbf6071455097dc418fd3"
+  }
+}

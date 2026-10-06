@@ -1,0 +1,113 @@
+--- baseline/main.rs
++++ candidate/main.rs
+@@ -193,6 +193,7 @@
+     memory_mb: u64,
+     cpu_cores: u32,
+     ready_timeout: Duration,
++    cold_start_concurrency: Option<usize>,
+     /// Give each sandbox a NIC behind a gateway. Off by default.
+     network: bool,
+     /// What a sandbox that configures no network policy gets.
+@@ -284,6 +285,7 @@
+         memory_mb: 1024,
+         cpu_cores: 1,
+         ready_timeout: Duration::from_secs(15),
++        cold_start_concurrency: None,
+         network: false,
+         egress_default: Verdict::Deny,
+         allow_private_egress_proxy: false,
+@@ -369,6 +371,13 @@
+             "--identity-issuer" => opts.identity_issuer = Some(value(&mut i)?),
+             "--trust-domain" => opts.trust_domain = value(&mut i)?,
+             "--identity-key" => opts.identity_key = Some(value(&mut i)?.into()),
++            "--cold-start-concurrency" => {
++                let limit: usize = value(&mut i)?.parse().map_err(|_| "--cold-start-concurrency requires 1..1024")?;
++                if !(1..=1024).contains(&limit) {
++                    return Err("--cold-start-concurrency requires 1..1024".into());
++                }
++                opts.cold_start_concurrency = Some(limit);
++            }
+             "--capacity" => opts.capacity = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
+             "--cluster-store" => opts.cluster_store = Some(value(&mut i)?),
+             "--cluster-namespace" => opts.cluster_namespace = value(&mut i)?,
+@@ -408,7 +417,7 @@
+             "--help" | "-h" => {
+                 println!(
+                     "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N | --memory-mb N] [--cpu-cores N] \
+-                     [--capacity N] [--no-template | --require-template] [--prefault] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] [--idle-pause-after SECS] \
++                     [--capacity N] [--cold-start-concurrency N] [--no-template | --require-template] [--prefault] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] [--idle-pause-after SECS] \
+                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy] \
+                      [--tenant-reserved-cidr CIDR]...] \
+                      [--tls-cert F --tls-key F] \
+@@ -489,6 +498,8 @@
+     /// request parked for a slot is not overtaken, again and again, by
+     /// creates that arrived after it.
+     slots: Arc<tokio::sync::Semaphore>,
++    /// Optional cold-boot budget, held through agent readiness. Restores bypass it.
++    cold_boot_slots: Option<Arc<tokio::sync::Semaphore>>,
+     /// This node's membership of a cluster, if it has one.
+     node: Option<NodeAgent>,
+     /// Sends lifecycle events to webhooks; over the cluster store, or this
+@@ -1267,6 +1278,19 @@
+     process_addr: std::net::SocketAddr,
+ }
+ 
++/// One cold-boot permit. Failures and cancellation release it through Drop.
++struct ColdBootAdmission {
++    _permit: tokio::sync::OwnedSemaphorePermit,
++    sandbox_id: String,
++}
++
++impl Drop for ColdBootAdmission {
++    fn drop(&mut self) {
++        tracing::debug!(target: "hv2_sandboxd::cold_admission", vm = %self.sandbox_id,
++            "cold boot admission released");
++    }
++}
++
+ /// Bring up a sandbox's VM: from `snapshot` when given, else from the
+ /// template, else by booting; then its network and its envd listener.
+ async fn bring_up(
+@@ -1298,6 +1322,18 @@
+     };
+ 
+     let t0 = std::time::Instant::now();
++    let cold_boot_permit = if snapshot.is_none() {
++        match &state.cold_boot_slots {
++            Some(slots) => {
++                let permit = Arc::clone(slots).acquire_owned().await.map_err(|_| (
++                    StatusCode::SERVICE_UNAVAILABLE, "cold boot admission unavailable".to_string()))?;
++                tracing::debug!(target: "hv2_sandboxd::cold_admission", vm = sandbox_id,
++                    queue_ms = t0.elapsed().as_secs_f64() * 1000.0, "cold boot admitted");
++                Some(ColdBootAdmission { _permit: permit, sandbox_id: sandbox_id.to_owned() })
++            }
++            None => None,
++        }
++    } else { None };
+     let initrd = state
+         .initrds
+         .read()
+@@ -1363,6 +1399,7 @@
+             format!("guest never became ready: {e}; {tail}"),
+         ));
+     }
++    drop(cold_boot_permit);
+     let answered = t0.elapsed();
+ 
+     let vm = Arc::new(vm);
+@@ -4367,6 +4404,7 @@
+ 
+     let routes = Arc::new(PortMap::new());
+     let opts_capacity = opts.capacity as usize;
++    let cold_boot_slots = opts.cold_start_concurrency.map(|limit| Arc::new(tokio::sync::Semaphore::new(limit)));
+     let event_store: Arc<dyn hv2_cluster::store::ClusterStore> = match &node {
+         Some(node) => Arc::clone(node.store()),
+         None => Arc::new(hv2_cluster::store::MemoryStore::new()),
+@@ -4382,6 +4420,7 @@
+         next_cid: Mutex::new(0),
+         routes: Arc::clone(&routes),
+         slots: Arc::new(tokio::sync::Semaphore::new(opts_capacity)),
++        cold_boot_slots,
+         templates: parking_lot::RwLock::new(templates),
+         initrds: parking_lot::RwLock::new(initrds),
+         builds: Mutex::new(BTreeMap::new()),

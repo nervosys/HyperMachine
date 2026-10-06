@@ -47,7 +47,8 @@ use crate::boot::multiboot::{MultibootLayout, MultibootProtocol};
 use crate::boot::BootSetup;
 use crate::descriptors::GdtBuilder;
 use crate::hypervisor::{
-    HypervisorBackend, HypervisorCapabilities, HypervisorPlatform, HypervisorVm,
+    HypervisorBackend, HypervisorCapabilities, HypervisorPlatform, HypervisorVm, VCpuDiagnostic,
+    VCpuInterruptState, VCpuRunRetries,
 };
 use crate::snapshot::vcpu::{
     DescriptorTable, FpuState, GeneralRegisters, Msr, RunState, Segment, SystemRegisters,
@@ -58,7 +59,7 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::os::unix::io::RawFd;
 use std::ptr::NonNull;
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
 use std::sync::{Arc, Once, RwLock};
 
 // ── Boot-time architectural constants ───────────────────────────────────────
@@ -90,12 +91,136 @@ fn patch_topology(entries: &mut [kvm_cpuid_entry2], vcpu_id: u32, vcpu_count: u3
                 entry.ebx = (entry.ebx & 0x0000_FFFF)
                     | ((vcpu_id & 0xFF) << 24)
                     | ((vcpu_count.min(0xFF)) << 16);
-                entry.edx |= 1 << 28;
+                if vcpu_count == 1 {
+                    entry.edx &= !(1 << 28);
+                } else {
+                    entry.edx |= 1 << 28;
+                }
             }
-            0xB | 0x1F => entry.edx = vcpu_id,
+            0xB | 0x1F | 0x8000_0026 => {
+                entry.edx = vcpu_id;
+                if vcpu_count == 1 && entry.ebx & 0xffff != 0 {
+                    // Preserve supported level types and terminating subleaves.
+                    entry.eax &= !0x1f;
+                    entry.ebx = (entry.ebx & !0xffff) | 1;
+                }
+            }
+            4 | 0x8000_001D if vcpu_count == 1 && entry.eax & 0x1f != 0 => {
+                // Retain cache geometry; only topology/sharing changes.
+                entry.eax &= !(0xfff << 14);
+                if entry.function == 4 {
+                    entry.eax &= !(0x3f << 26);
+                }
+            }
+            0x8000_0008 if vcpu_count == 1 => entry.ecx &= !0xf0ff,
+            0x8000_001E if vcpu_count == 1 => {
+                entry.eax = vcpu_id;
+                entry.ebx = 0; // core 0, one thread per core
+                entry.ecx = 0; // node 0, one node per package
+            }
             _ => {}
         }
     }
+}
+
+fn interrupt_state(events: kvm_vcpu_events) -> VCpuInterruptState {
+    // asm/kvm.h: fields marked optional must not be interpreted without flags.
+    const VALID_NMI_PENDING: u32 = 1;
+    const VALID_SHADOW: u32 = 4;
+    const VALID_PAYLOAD: u32 = 0x10;
+    VCpuInterruptState {
+        flags: events.flags,
+        injected: events.interrupt.injected,
+        vector: events.interrupt.nr,
+        soft: events.interrupt.soft,
+        shadow: (events.flags & VALID_SHADOW != 0).then_some(events.interrupt.shadow),
+        exception_injected: events.exception.injected,
+        exception_vector: events.exception.nr,
+        exception_pending: (events.flags & VALID_PAYLOAD != 0).then_some(events.exception.pending),
+        nmi_injected: events.nmi.injected,
+        nmi_pending: (events.flags & VALID_NMI_PENDING != 0).then_some(events.nmi.pending),
+        nmi_masked: events.nmi.masked,
+    }
+}
+
+/// Encode every initialized ABI field explicitly, without reading Rust padding.
+fn event_bytes(events: &kvm_vcpu_events) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(64);
+    bytes.extend([
+        events.exception.injected,
+        events.exception.nr,
+        events.exception.has_error_code,
+        events.exception.pending,
+    ]);
+    bytes.extend(events.exception.error_code.to_le_bytes());
+    bytes.extend([
+        events.interrupt.injected,
+        events.interrupt.nr,
+        events.interrupt.soft,
+        events.interrupt.shadow,
+        events.nmi.injected,
+        events.nmi.pending,
+        events.nmi.masked,
+        events.nmi.pad,
+    ]);
+    bytes.extend(events.sipi_vector.to_le_bytes());
+    bytes.extend(events.flags.to_le_bytes());
+    bytes.extend([
+        events.smi.smm,
+        events.smi.pending,
+        events.smi.smm_inside_nmi,
+        events.smi.latched_init,
+    ]);
+    bytes.extend(events.reserved);
+    bytes.push(events.exception_has_payload);
+    bytes.extend(events.exception_payload.to_le_bytes());
+    bytes
+}
+
+fn events_from_bytes(bytes: &[u8]) -> Result<kvm_vcpu_events> {
+    let bytes: &[u8; 64] = bytes.try_into().map_err(|_| {
+        Error::InvalidState(format!(
+            "this snapshot's KVM vCPU events are {} bytes, not 64",
+            bytes.len()
+        ))
+    })?;
+    let word = |at| u32::from_le_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]]);
+    let mut reserved = [0; 27];
+    reserved.copy_from_slice(&bytes[28..55]);
+    let mut payload = [0; 8];
+    payload.copy_from_slice(&bytes[56..64]);
+    Ok(kvm_vcpu_events {
+        exception: kvm_vcpu_events_exception {
+            injected: bytes[0],
+            nr: bytes[1],
+            has_error_code: bytes[2],
+            pending: bytes[3],
+            error_code: word(4),
+        },
+        interrupt: kvm_vcpu_events_interrupt {
+            injected: bytes[8],
+            nr: bytes[9],
+            soft: bytes[10],
+            shadow: bytes[11],
+        },
+        nmi: kvm_vcpu_events_nmi {
+            injected: bytes[12],
+            pending: bytes[13],
+            masked: bytes[14],
+            pad: bytes[15],
+        },
+        sipi_vector: word(16),
+        flags: word(20),
+        smi: kvm_vcpu_events_smi {
+            smm: bytes[24],
+            pending: bytes[25],
+            smm_inside_nmi: bytes[26],
+            latched_init: bytes[27],
+        },
+        reserved,
+        exception_has_payload: bytes[55],
+        exception_payload: u64::from_le_bytes(payload),
+    })
 }
 
 /// Put `sregs` into 32-bit protected mode with flat 4 GB segments and paging
@@ -467,6 +592,14 @@ impl HypervisorBackend for KvmBackend {
             }
         };
 
+        // Event injection is separate from the LAPIC's pending/in-service
+        // registers. Failing this read must not silently produce a snapshot
+        // that drops an interrupt or exception already handed to the vCPU.
+        let mut events = kvm_vcpu_events::default();
+        // SAFETY: the paused vCPU's descriptor and an initialized owned payload.
+        unsafe { kvm_get_vcpu_events(fd, &mut events) }
+            .map_err(|e| Error::Hypervisor(format!("KVM_GET_VCPU_EVENTS: {e}")))?;
+
         Ok(VCpuSnapshot {
             id: vcpu.id(),
             general: general_from(&regs),
@@ -476,6 +609,7 @@ impl HypervisorBackend for KvmBackend {
             lapic,
             xsave,
             xcrs,
+            kvm_events: event_bytes(&events),
             run_state: match mp_state.mp_state {
                 KVM_MP_STATE_RUNNABLE => RunState::Runnable,
                 KVM_MP_STATE_HALTED => RunState::Halted,
@@ -484,9 +618,30 @@ impl HypervisorBackend for KvmBackend {
         })
     }
 
+    async fn inspect_vcpu(&self, vcpu: &VCpu) -> Result<VCpuDiagnostic> {
+        let architecture = self.save_vcpu(vcpu).await?;
+        let interrupts = self
+            .kvm_vcpu(vcpu)?
+            .get_vcpu_events()
+            .map(|events| Some(interrupt_state(events)));
+        Ok(VCpuDiagnostic {
+            architecture,
+            interrupts,
+            run_retries: Some(VCpuRunRetries {
+                eintr: self.kvm_vcpu(vcpu)?.retry_eintr.load(Ordering::Relaxed),
+                eagain: self.kvm_vcpu(vcpu)?.retry_eagain.load(Ordering::Relaxed),
+            }),
+        })
+    }
+
     async fn restore_vcpu(&self, vcpu: &VCpu, state: &VCpuSnapshot) -> Result<()> {
         let kvm_vcpu = self.kvm_vcpu(vcpu)?;
         let fd = kvm_vcpu.fd();
+        let events = if state.kvm_events.is_empty() {
+            None // Legacy snapshots retain their prior event-restore behavior.
+        } else {
+            Some(events_from_bytes(&state.kvm_events)?)
+        };
 
         let regs = general_into(&state.general);
         let sregs = system_into(&state.system);
@@ -585,6 +740,17 @@ impl HypervisorBackend for KvmBackend {
                     msr.index
                 ))
             })?;
+        }
+        if let Some(mut events) = events {
+            // All vCPUs are paused. GET always supplies NMI pending and SIPI
+            // state; SET requires explicit validity bits to restore them.
+            // Preserve GET's capability-dependent shadow/SMM/payload flags.
+            events.flags |= KVM_VCPUEVENT_VALID_NMI_PENDING | KVM_VCPUEVENT_VALID_SIPI_VECTOR;
+            // Apply after special registers, LAPIC and clock MSRs, which can
+            // otherwise reset or replace parts of the injection state.
+            // SAFETY: a paused vCPU fd and a validated, initialized ABI payload.
+            unsafe { kvm_set_vcpu_events(fd, &events) }
+                .map_err(|e| Error::Hypervisor(format!("KVM_SET_VCPU_EVENTS: {e}")))?;
         }
         Ok(())
     }
@@ -864,7 +1030,7 @@ impl HypervisorBackend for KvmBackend {
         // here is a fresh anonymous mapping made in `create_vm` and nothing has
         // touched it since, so it already reads as zero and writing zeros over
         // it would achieve nothing except making every page of it resident.
-        for (addr, data) in boot.data_regions()? {
+        for (addr, data) in boot.data_regions_borrowed()? {
             kvm_vm.write_guest_memory(addr, &data)?;
         }
         if !self.guest_memory_starts_zeroed() {
@@ -891,24 +1057,23 @@ impl HypervisorBackend for KvmBackend {
                     .build();
                 kvm_vm.write_guest_memory(gdt_base, &gdt)?;
 
-                // More than one vCPU: an MP table, or Linux never learns of
-                // the others. One vCPU gets none, as before -- the guest stays
-                // on the PIC's virtual wire, the path every template so far
-                // was booted and snapshotted on.
-                if kvm_vm.vcpu_count > 1 {
-                    use crate::boot::mptable;
-                    if kvm_vm.vcpu_count > mptable::MAX_CPUS {
-                        return Err(Error::Config(format!(
-                            "{} vCPUs: a Linux guest here has at most {}",
-                            kvm_vm.vcpu_count,
-                            mptable::MAX_CPUS
-                        )));
-                    }
-                    kvm_vm.write_guest_memory(
-                        mptable::MPTABLE_ADDR,
-                        &mptable::build(kvm_vm.vcpu_count),
-                    )?;
+                // Describe the I/O APIC even with a single processor. Omitting
+                // this table leaves singleton Linux guests on the PIC virtual
+                // wire instead of describing the interrupt controller we made.
+                // This is cold-boot setup; restored guests retain the tables
+                // and interrupt-controller state from their snapshot.
+                use crate::boot::mptable;
+                if kvm_vm.vcpu_count > mptable::MAX_CPUS {
+                    return Err(Error::Config(format!(
+                        "{} vCPUs: a Linux guest here has at most {}",
+                        kvm_vm.vcpu_count,
+                        mptable::MAX_CPUS
+                    )));
                 }
+                kvm_vm.write_guest_memory(
+                    mptable::MPTABLE_ADDR,
+                    &mptable::build(kvm_vm.vcpu_count),
+                )?;
 
                 let mut sregs = kvm_vcpu.get_sregs()?;
                 sregs.gdt.base = gdt_base;
@@ -1254,7 +1419,10 @@ impl KvmVm {
 
             // Create PIT (timer)
             let pit_config = kvm_pit_config {
-                flags: 0,
+                // Port 0x61 exposes channel 2's gate/output during Linux timer
+                // calibration. Without the KVM stub it reaches our unmapped
+                // I/O fallback (0xff), instead of the PIT's actual state.
+                flags: KVM_PIT_SPEAKER_DUMMY,
                 pad: [0; 15],
             };
             if let Err(e) = kvm_create_pit2(vm_fd, &pit_config) {
@@ -1764,6 +1932,8 @@ pub struct KvmVcpu {
     /// since exited — tids are reused, and the one that inherits it would be
     /// some unrelated thread of this process.
     tid: AtomicI32,
+    retry_eintr: AtomicU64,
+    retry_eagain: AtomicU64,
 }
 
 /// Clears the published tid however `run()` returns, including on an error
@@ -1842,6 +2012,8 @@ impl KvmVcpu {
                 irqchip_in_kernel,
                 kick: AtomicBool::new(false),
                 tid: AtomicI32::new(0),
+                retry_eintr: AtomicU64::new(0),
+                retry_eagain: AtomicU64::new(0),
             })
         }
     }
@@ -1949,7 +2121,10 @@ impl KvmVcpu {
                 }
                 match kvm_run(self.vcpu_fd) {
                     Ok(()) => return self.convert_exit(),
-                    Err(e) if e.raw_os_error() == Some(libc::EINTR) => continue,
+                    Err(e) if e.raw_os_error() == Some(libc::EINTR) => {
+                        self.retry_eintr.fetch_add(1, Ordering::Relaxed);
+                        continue;
+                    }
                     // An application processor that has not been started
                     // blocks in KVM_RUN until an INIT or startup IPI reaches
                     // it, then returns EAGAIN for the VMM to run it again --
@@ -1957,7 +2132,10 @@ impl KvmVcpu {
                     // an error, it ended that vCPU's thread at the moment the
                     // guest woke it, and Linux gave up waiting ("CPU1 failed
                     // to report alive state") ten seconds later.
-                    Err(e) if e.raw_os_error() == Some(libc::EAGAIN) => continue,
+                    Err(e) if e.raw_os_error() == Some(libc::EAGAIN) => {
+                        self.retry_eagain.fetch_add(1, Ordering::Relaxed);
+                        continue;
+                    }
                     Err(e) => {
                         return Err(Error::Hypervisor(format!(
                             "KVM_RUN failed for vCPU {}: {}",
@@ -2021,6 +2199,29 @@ impl KvmVcpu {
     unsafe fn convert_exit(&self) -> Result<VmExit> {
         let run = self.run.as_ref();
         let exit_reason = run.exit_reason;
+
+        // Opt-in diagnostics run on the owning thread after KVM_RUN returns.
+        // Register ioctls and trace output change timing; disable for benchmarks.
+        if tracing::enabled!(target: "hv2_core::backends::kvm::boot", tracing::Level::TRACE) {
+            match self.get_regs() {
+                Ok(regs) => tracing::trace!(
+                    target: "hv2_core::backends::kvm::boot",
+                    vcpu = self.vcpu_id,
+                    exit_reason,
+                    io_port = if exit_reason == KVM_EXIT_IO { Some(run.exit_data.io.port) } else { None },
+                    rip = format_args!("{:#x}", regs.rip),
+                    rflags = format_args!("{:#x}", regs.rflags),
+                    "KVM boot exit"
+                ),
+                Err(error) => tracing::trace!(
+                    target: "hv2_core::backends::kvm::boot",
+                    vcpu = self.vcpu_id,
+                    exit_reason,
+                    %error,
+                    "KVM boot register read failed"
+                ),
+            }
+        }
 
         match exit_reason {
             KVM_EXIT_HLT => Ok(VmExit::Hlt),
@@ -2630,7 +2831,8 @@ impl KvmVcpu {
     /// many share the package (leaf 1, and the x2APIC ID of leaves 0xB and
     /// 0x1F): the supported set describes whichever host CPU answered, the
     /// same for every vCPU, and a guest reading one APIC ID from all of them
-    /// cannot tell them apart. A one-vCPU VM's CPUID is left as it was.
+    /// cannot tell them apart. A one-vCPU VM also receives consistent singleton
+    /// topology, including AMD extended leaves and cache-sharing identifiers.
     pub fn apply_supported_cpuid(&self, kvm_fd: RawFd, vcpu_count: u32) -> Result<()> {
         // KVM_GET_SUPPORTED_CPUID and KVM_SET_CPUID2 take the same layout: a
         // header whose `nent` counts the entries that follow it. Filling one
@@ -2652,11 +2854,9 @@ impl KvmVcpu {
                 .map_err(|e| Error::Hypervisor(format!("Failed to get supported CPUID: {e}")))?;
 
             let entries = header.nent;
-            if vcpu_count > 1 {
-                let first = buf.as_mut_ptr().add(header_size) as *mut kvm_cpuid_entry2;
-                let table = std::slice::from_raw_parts_mut(first, entries as usize);
-                patch_topology(table, self.vcpu_id, vcpu_count);
-            }
+            let first = buf.as_mut_ptr().add(header_size) as *mut kvm_cpuid_entry2;
+            let table = std::slice::from_raw_parts_mut(first, entries as usize);
+            patch_topology(table, self.vcpu_id, vcpu_count);
             let header = &mut *(buf.as_mut_ptr() as *mut kvm_cpuid2);
             kvm_set_cpuid2(self.vcpu_fd, header).map_err(|e| {
                 Error::Hypervisor(format!(
@@ -2883,10 +3083,8 @@ fn system_into(system: &SystemRegisters) -> kvm_sregs {
         cr8: system.cr8,
         efer: system.efer,
         apic_base: system.apic_base,
-        // Pending interrupts are not captured. A restored vCPU therefore
-        // loses an interrupt that had been injected but not yet taken --
-        // named in `VCpuSnapshot`'s own documentation rather than zeroed
-        // quietly here.
+        // KVM_SET_VCPU_EVENTS restores injection state after special registers.
+        // Older snapshots without that payload retain their prior omission.
         interrupt_bitmap: [0; 4],
     }
 }
@@ -2943,6 +3141,349 @@ fn fpu_into(state: &FpuState) -> Result<kvm_fpu> {
 
 #[cfg(test)]
 mod tests {
+    /// Isolate deadline-timer wakeup from Linux, vsock and daemon retries.
+    #[tokio::test]
+    #[ignore = "requires /dev/kvm; run explicitly with --ignored --nocapture"]
+    async fn restored_deadline_timer_wakes_halted_guest() {
+        let source = KvmBackend::new().expect("KVM is required for this explicit test");
+        source.create_vm(1, 2 * 1024 * 1024).await.unwrap();
+        let vcpu = VCpu::new(0);
+        let owned = source.kvm_vcpu(&vcpu).unwrap();
+        let mut sregs = owned.get_sregs().unwrap();
+        sregs.cs.base = 0;
+        sregs.cs.selector = 0;
+        sregs.idt.base = 0;
+        sregs.idt.limit = 0x3ff;
+        owned.set_sregs(&sregs).unwrap();
+        let mut regs = owned.get_regs().unwrap();
+        regs.rip = 0x400;
+        regs.rsp = 0x1000;
+        regs.rflags = 0x202;
+        owned.set_regs(&regs).unwrap();
+        let mut lapic = kvm_lapic_state::default();
+        // SAFETY: owned idle vCPU descriptor and initialized ABI structures.
+        unsafe {
+            kvm_get_lapic(owned.fd(), &mut lapic).unwrap();
+            lapic.regs[0xf0..0xf4].copy_from_slice(&0x1ffu32.to_le_bytes());
+            lapic.regs[0x320..0x324].copy_from_slice(&0x40022u32.to_le_bytes());
+            kvm_set_lapic(owned.fd(), &lapic).unwrap();
+            kvm_set_msr(owned.fd(), 0x10, 1 << 40).unwrap();
+            kvm_set_msr(owned.fd(), 0x6e0, (1 << 40) + 1_000_000_000).unwrap();
+            kvm_set_mp_state(
+                owned.fd(),
+                &kvm_mp_state {
+                    mp_state: KVM_MP_STATE_HALTED,
+                },
+            )
+            .unwrap();
+        }
+        let captured = source.save_vcpu(&vcpu).await.unwrap();
+        assert_eq!(captured.run_state, RunState::Halted);
+        assert_eq!(
+            captured
+                .msrs
+                .iter()
+                .find(|m| m.index == 0x6e0)
+                .unwrap()
+                .value,
+            (1 << 40) + 1_000_000_000
+        );
+        for (omit_deadline, delayed_entry) in [(false, false), (false, true), (true, false)] {
+            let destination = KvmBackend::new().unwrap();
+            destination.create_vm(1, 2 * 1024 * 1024).await.unwrap();
+            let vm = destination.vm.read().unwrap().clone().unwrap();
+            vm.write_guest_memory(0x22 * 4, &[0, 5, 0, 0]).unwrap();
+            vm.write_guest_memory(0x400, &[0xb0, 0x11, 0xe6, 0xe9, 0xf4])
+                .unwrap();
+            vm.write_guest_memory(0x500, &[0xb0, 0x22, 0xe6, 0xe9, 0xcf])
+                .unwrap();
+            let mut state = captured.clone();
+            if omit_deadline {
+                state.msrs.retain(|m| m.index != 0x6e0);
+            }
+            destination.restore_vcpu(&vcpu, &state).await.unwrap();
+            let target = destination.kvm_vcpu(&vcpu).unwrap();
+            if delayed_entry {
+                // Let the restored timer expire before the first KVM_RUN.
+                // Read the guest counters to verify this is an expired-deadline
+                // case on this host, rather than infer it from a wall delay.
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                // SAFETY: an owned idle vCPU descriptor, before runner entry.
+                let tsc = unsafe { kvm_get_msr(target.fd(), 0x10) }.unwrap();
+                let captured_deadline = (1 << 40) + 1_000_000_000;
+                assert!(tsc >= captured_deadline, "guest deadline must have elapsed");
+                println!(
+                    "KVM_DEADLINE_DELAY_EVIDENCE tsc={tsc} captured_deadline={captured_deadline}"
+                );
+            }
+            let runner = target.clone();
+            let (send, receive) = std::sync::mpsc::channel();
+            let thread = std::thread::spawn(move || send.send(runner.run()).unwrap());
+            let result = receive.recv_timeout(std::time::Duration::from_secs(2));
+            if result.is_err() {
+                target.kick();
+            }
+            thread.join().unwrap();
+            println!("KVM_DEADLINE_EVIDENCE omit_deadline={omit_deadline} delayed_entry={delayed_entry} result={result:?}");
+            if omit_deadline {
+                assert!(
+                    result.is_err(),
+                    "control must remain halted without a timer"
+                );
+            } else {
+                match result
+                    .expect("restored timer must wake within two seconds")
+                    .unwrap()
+                {
+                    VmExit::Io {
+                        port,
+                        direction,
+                        size,
+                        data,
+                    } => assert_eq!(
+                        (port, direction, size, data),
+                        (0xe9, IoDirection::Out, 1, 0x22)
+                    ),
+                    other => panic!("expected timer interrupt handler, got {other:?}"),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn event_payload_matches_the_x86_abi_and_rejects_truncation() {
+        assert_eq!(std::mem::size_of::<kvm_vcpu_events>(), 64);
+        assert_eq!(std::mem::offset_of!(kvm_vcpu_events, flags), 20);
+        assert_eq!(std::mem::offset_of!(kvm_vcpu_events, exception_payload), 56);
+        let bytes: Vec<u8> = (0..64).collect();
+        let events = events_from_bytes(&bytes).unwrap();
+        assert_eq!(events.interrupt.nr, 9);
+        assert_eq!(events.exception.error_code, 0x07060504);
+        assert_eq!(events.exception_payload, 0x3f3e3d3c3b3a3938);
+        assert_eq!(event_bytes(&events), bytes);
+        for size in [0, 1, 63, 65, 128] {
+            assert!(events_from_bytes(&vec![0; size]).is_err());
+        }
+    }
+
+    /// Explicitly run on a KVM host; no unavailable-host success fallback.
+    #[tokio::test]
+    #[ignore = "requires /dev/kvm; run explicitly with --ignored --nocapture"]
+    async fn captured_kvm_events_restore_pending_handoffs() {
+        fn irq_guest_memory(backend: &KvmBackend) {
+            let vm = backend.vm.read().unwrap().clone().unwrap();
+            // Real-mode vector 0x22 -> 0000:0500. The handler writes 0x22;
+            // the uninterrupted main path writes 0x11 to the same I/O port.
+            vm.write_guest_memory(0x22 * 4, &[0, 5, 0, 0]).unwrap();
+            vm.write_guest_memory(0x400, &[0xb0, 0x11, 0xe6, 0xe9, 0xf4])
+                .unwrap();
+            vm.write_guest_memory(0x500, &[0xb0, 0x22, 0xe6, 0xe9, 0xcf])
+                .unwrap();
+        }
+
+        let mut cases = Vec::new();
+        let mut irq = kvm_vcpu_events::default();
+        irq.interrupt.injected = 1;
+        irq.interrupt.nr = 0x22;
+        cases.push(("interrupt", irq));
+        let mut nmi = kvm_vcpu_events::default();
+        nmi.nmi.pending = 1;
+        nmi.nmi.masked = 1;
+        nmi.flags = KVM_VCPUEVENT_VALID_NMI_PENDING;
+        cases.push(("nmi", nmi));
+        let mut shadow = kvm_vcpu_events::default();
+        shadow.interrupt.shadow = 1;
+        shadow.flags = 4; // KVM_VCPUEVENT_VALID_SHADOW
+        cases.push(("shadow", shadow));
+        let mut exception = kvm_vcpu_events::default();
+        exception.exception.injected = 1;
+        exception.exception.nr = 13;
+        exception.exception.has_error_code = 1;
+        exception.exception.error_code = 0x1234;
+        cases.push(("exception", exception));
+
+        for (name, events) in cases {
+            let source = KvmBackend::new().expect("KVM must be available for this explicit test");
+            source.create_vm(1, 2 * 1024 * 1024).await.unwrap();
+            let vcpu = VCpu::new(0);
+            let owned = source.kvm_vcpu(&vcpu).unwrap();
+            if name == "interrupt" {
+                irq_guest_memory(&source);
+                let mut sregs = owned.get_sregs().unwrap();
+                sregs.cs.base = 0;
+                sregs.cs.selector = 0;
+                sregs.idt.base = 0;
+                sregs.idt.limit = 0x3ff;
+                owned.set_sregs(&sregs).unwrap();
+                let mut regs = owned.get_regs().unwrap();
+                regs.rip = 0x400;
+                regs.rsp = 0x1000;
+                regs.rflags = 0x202;
+                owned.set_regs(&regs).unwrap();
+            }
+            // SAFETY: an owned idle vCPU fd and initialized event payload.
+            unsafe { kvm_set_vcpu_events(owned.fd(), &events) }.unwrap();
+            let before = owned.get_vcpu_events().unwrap();
+            let captured = source.save_vcpu(&vcpu).await.unwrap();
+            assert_eq!(captured.kvm_events, event_bytes(&before));
+
+            let destination = KvmBackend::new().unwrap();
+            destination.create_vm(1, 2 * 1024 * 1024).await.unwrap();
+            if name == "interrupt" {
+                irq_guest_memory(&destination);
+            }
+            destination.restore_vcpu(&vcpu, &captured).await.unwrap();
+            let after = destination
+                .kvm_vcpu(&vcpu)
+                .unwrap()
+                .get_vcpu_events()
+                .unwrap();
+            assert_eq!(event_bytes(&after), event_bytes(&before), "{name}");
+            let mut evidence = serde_json::json!({
+                "case": name, "captured": event_bytes(&before), "restored": event_bytes(&after)
+            });
+            if name == "interrupt" {
+                let legacy = KvmBackend::new().unwrap();
+                legacy.create_vm(1, 2 * 1024 * 1024).await.unwrap();
+                irq_guest_memory(&legacy);
+                let mut without_events = captured.clone();
+                without_events.kvm_events.clear();
+                legacy.restore_vcpu(&vcpu, &without_events).await.unwrap();
+                let omitted = legacy.kvm_vcpu(&vcpu).unwrap().get_vcpu_events().unwrap();
+                assert_eq!(before.interrupt.injected, 1);
+                assert_eq!(omitted.interrupt.injected, 0);
+                evidence["legacy_restored"] = serde_json::json!(event_bytes(&omitted));
+                for (backend, expected) in [(&destination, 0x22), (&legacy, 0x11)] {
+                    match backend.run_vcpu(&vcpu).await.unwrap() {
+                        VmExit::Io {
+                            port,
+                            direction,
+                            size,
+                            data,
+                        } => {
+                            assert_eq!(
+                                (port, direction, size, data),
+                                (0xe9, IoDirection::Out, 1, expected)
+                            );
+                        }
+                        other => panic!("expected guest handler/main I/O marker, got {other:?}"),
+                    }
+                }
+                evidence["restored_guest_marker"] = serde_json::json!(0x22);
+                evidence["legacy_guest_marker"] = serde_json::json!(0x11);
+            }
+            println!("KVM_EVENTS_EVIDENCE {evidence}");
+        }
+    }
+
+    #[test]
+    fn interrupt_events_require_validity_flags_for_optional_fields() {
+        let mut events = kvm_vcpu_events::default();
+        events.interrupt.shadow = 3;
+        events.interrupt.injected = 1;
+        events.interrupt.nr = 0x30;
+        events.nmi.pending = 1;
+        events.exception.pending = 1;
+        let invalid = interrupt_state(events);
+        assert_eq!(invalid.shadow, None);
+        assert_eq!(invalid.nmi_pending, None);
+        assert_eq!(invalid.exception_pending, None);
+        assert_eq!((invalid.injected, invalid.vector), (1, 0x30));
+        events.flags = 5;
+        let valid = interrupt_state(events);
+        assert_eq!(valid.shadow, Some(3));
+        assert_eq!(valid.nmi_pending, Some(1));
+        assert_eq!(valid.exception_pending, None);
+        events.flags |= 0x10;
+        assert_eq!(interrupt_state(events).exception_pending, Some(1));
+    }
+    #[test]
+    fn singleton_topology_preserves_cache_geometry_and_level_terminators() {
+        let mut entries = vec![
+            kvm_cpuid_entry2 {
+                function: 1,
+                ebx: 0x1f200800,
+                edx: 1 << 28,
+                ..Default::default()
+            },
+            kvm_cpuid_entry2 {
+                function: 0xb,
+                eax: 5,
+                ebx: 32,
+                ecx: 0x201,
+                edx: 31,
+                ..Default::default()
+            },
+            kvm_cpuid_entry2 {
+                function: 0xb,
+                index: 2,
+                ecx: 2,
+                ..Default::default()
+            },
+            kvm_cpuid_entry2 {
+                function: 4,
+                eax: 0xffffc121,
+                ebx: 0x12345678,
+                ecx: 4095,
+                ..Default::default()
+            },
+            kvm_cpuid_entry2 {
+                function: 0x80000008,
+                ecx: 0x1234501f,
+                ..Default::default()
+            },
+            kvm_cpuid_entry2 {
+                function: 0x8000001e,
+                eax: 31,
+                ebx: 0x107,
+                ecx: 0x102,
+                ..Default::default()
+            },
+            kvm_cpuid_entry2 {
+                function: 0x8000001d,
+                eax: 0x03ffc121,
+                ebx: 0x87654321,
+                ..Default::default()
+            },
+            kvm_cpuid_entry2 {
+                function: 0x80000026,
+                eax: 5,
+                ebx: 32,
+                ecx: 0x401,
+                edx: 31,
+                ..Default::default()
+            },
+        ];
+        patch_topology(&mut entries, 0, 1);
+        assert_eq!(entries[0].ebx, 0x00010800);
+        assert_eq!(entries[0].edx & (1 << 28), 0);
+        assert_eq!(
+            (
+                entries[1].eax,
+                entries[1].ebx,
+                entries[1].ecx,
+                entries[1].edx
+            ),
+            (0, 1, 0x201, 0)
+        );
+        assert_eq!((entries[2].eax, entries[2].ebx, entries[2].ecx), (0, 0, 2));
+        assert_eq!(
+            (entries[3].eax, entries[3].ebx, entries[3].ecx),
+            (0x121, 0x12345678, 4095)
+        );
+        assert_eq!(entries[4].ecx, 0x12340000);
+        assert_eq!((entries[5].eax, entries[5].ebx, entries[5].ecx), (0, 0, 0));
+        assert_eq!((entries[6].eax, entries[6].ebx), (0x121, 0x87654321));
+        assert_eq!(
+            (
+                entries[7].eax,
+                entries[7].ebx,
+                entries[7].ecx,
+                entries[7].edx
+            ),
+            (0, 1, 0x401, 0)
+        );
+    }
     use super::*;
     use crate::hypervisor::HypervisorBackend;
 

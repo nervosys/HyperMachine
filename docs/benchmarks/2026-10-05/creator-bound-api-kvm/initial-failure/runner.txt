@@ -1,0 +1,6 @@
+{
+  "success": false,
+  "cases": 0,
+  "output": "/var/tmp/hm-creator-bound-kvm-v1-a7a4ffab",
+  "error": "[Errno 13] Permission denied: '/var/tmp/hm-creator-bound-release-control-v1'"
+}

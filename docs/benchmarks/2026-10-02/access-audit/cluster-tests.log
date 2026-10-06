@@ -1,0 +1,89 @@
+   Compiling serde_json v1.0.151
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-core)
+   Compiling axum v0.8.9
+   Compiling hv2-guest-agent v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-guest-agent)
+   Compiling hv2-context v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-context)
+   Compiling reqwest v0.12.28
+   Compiling tracing-subscriber v0.3.23
+   Compiling tonic v0.14.6
+   Compiling tonic-prost v0.14.6
+   Compiling hv2-agent v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-agent)
+   Compiling hv2-runtime v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-runtime)
+   Compiling hv2-api v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-api)
+   Compiling hv2-cluster v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-cluster)
+    Finished `test` profile [optimized + debuginfo] target(s) in 1m 27s
+     Running unittests src/lib.rs (/var/tmp/hm-competitive-target/debug/deps/hv2_cluster-d11e2ffea6d6e6f2)
+
+running 40 tests
+test domains::tests::canonical_names_and_binding_fields_survive_round_trip ... ok
+test domains::tests::rejects_authorities_ips_bad_labels_and_reserved_routes ... ok
+test domains::tests::stored_json_cannot_bypass_binding_validation ... ok
+test events::tests::events_map_to_e2b_types ... ok
+test events::tests::a_webhook_payload_has_e2bs_documented_shape ... ok
+test events::tests::only_public_addresses_are_global ... ok
+test events::tests::the_signature_is_what_e2bs_documented_verifier_expects ... ok
+test keys::tests::capability_scopes_do_not_cross_resource_families ... ok
+test keys::tests::expiry_is_enforced_at_the_exact_boundary ... ok
+test keys::tests::inventory_cannot_obtain_access_tokens_or_modify_resources ... ok
+test events::tests::signatures_are_e2bs ... ok
+test keys::tests::malformed_policy_never_silently_disables_authentication ... ok
+test audit::tests::failed_write_permanently_stops_all_queued_and_future_appends ... ok
+test metrics::tests::a_histogram_is_cumulative_and_carries_sum_and_count ... ok
+test metrics::tests::counters_render_one_line_per_label_value ... ok
+test keys::tests::legacy_admin_collision_is_rejected_even_for_expired_policies ... ok
+test model::tests::detail_adds_the_token_and_where_it_runs ... ok
+test model::tests::a_paused_record_lists_as_paused ... ok
+test model::tests::listed_carries_every_required_field ... ok
+test model::tests::metadata_filters_need_every_pair ... ok
+test model::tests::template_names_as_e2b_spells_them ... ok
+test names::tests::name_grammar_matches_cli_and_keeps_case ... ok
+test names::tests::operation_context_is_validated_pending_and_matches_only_its_owner ... ok
+test names::tests::ownership_survives_round_trip_and_never_transfers ... ok
+test node::tests::an_end_is_reported_once ... ok
+test node::tests::joining_forgets_what_a_previous_run_left_behind ... ok
+test node::tests::named_completion_binds_before_announcement_and_refuses_unowned_records ... ok
+test scheduler::tests::a_zero_capacity_node_takes_nothing_and_breaks_nothing ... ok
+test scheduler::tests::a_full_node_is_not_a_candidate ... ok
+test control::access_audit_tests::audit_failure_before_dispatch_blocks_mutation_and_after_dispatch_preserves_uncertainty ... ok
+test node::tests::template_metadata_is_published_with_names_and_legacy_updates_clear_it ... ok
+test scheduler::tests::the_least_loaded_fraction_goes_first ... ok
+test store::tests::redis_store_keeps_the_contract ... ok
+test store::tests::redis_named_registration_checks_write_permissions_before_writing ... ok
+test store::tests::a_logged_store_url_carries_no_password ... ok
+test store::tests::redis_named_registration_checks_index_types_before_writing ... ok
+test mtls::tests::tcp_client_uses_http1_alpn_and_retains_mutual_tls ... ok
+test keys::tests::policy_reads_and_parsing_are_bounded_without_content_in_errors ... ok
+test mtls::tests::a_node_serves_only_peers_its_ca_signed ... ok
+test store::tests::memory_store_keeps_the_contract ... ok
+
+test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.11s
+
+     Running tests/control_plane.rs (/var/tmp/hm-competitive-target/debug/deps/control_plane-cfc6cb046148296c)
+
+running 23 tests
+test template_metadata_distinguishes_snapshot_cold_legacy_and_heterogeneous_nodes ... ok
+test the_jwks_lists_each_nodes_key_once_and_discovery_points_at_it ... ok
+test the_api_key_is_required_when_set ... ok
+test named_creation_never_forwards_client_operation_context ... ok
+test scoped_keys_expire_and_inventory_cannot_leak_guest_credentials ... ok
+test checkpoints_forward_collection_and_named_operations_to_the_owner ... ok
+test a_full_node_refuses_and_the_next_one_takes_it ... ok
+test embedded_admin_collision_never_bypasses_scope_or_expiry ... ok
+test policy_replacement_revokes_old_keys_and_rejects_invalid_updates ... ok
+test creates_go_to_a_node_with_the_template ... ok
+test listing_detail_and_pagination_come_from_the_store ... ok
+test per_sandbox_calls_reach_the_owning_node ... ok
+test envd_routes_go_to_the_owning_nodes_proxy ... ok
+test name_assignment_is_authenticated_exclusive_and_reusable_after_deletion ... ok
+test custom_domains_are_authenticated_owned_and_follow_port_updates ... ok
+test named_creation_reserves_before_forwarding_across_control_planes ... ok
+test tcp_tunnels_route_authenticated_binary_streams_and_both_half_closes ... ok
+test reserved_name_lookup_authenticates_and_never_returns_operation_tokens ... ok
+test durable_access_records_survive_restart_without_credentials_or_request_values ... ok
+test creations_spread_across_nodes_and_answer_with_this_proxy ... ok
+test custom_domain_https_reaches_the_node_with_guest_routing_and_host_intact ... ok
+test uncertain_named_creation_keeps_ownership_and_never_tries_another_node ... ok
+test a_dead_nodes_sandboxes_are_reaped ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.56s
+

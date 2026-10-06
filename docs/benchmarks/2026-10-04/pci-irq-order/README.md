@@ -1,0 +1,7 @@
+# PCI IRQ ordering and reset follow-up (runtime failed)
+
+The candidate serializes ISR status and nonblocking line transitions, and deasserts outstanding IRQs during register/device reset. Three deterministic new tests fail with the old implementation and pass with the fix. Isolated regressions pass: 16 PCI, 47 selected core (2 ignored), 531 agent and 64 daemon (2 ignored). The first red-test compilation used an incorrect three-argument write_common call; the corrected two-argument test produced all three expected failures. Both logs are retained.
+
+The frozen debug probe attempts a real owned Linux guest using PCI vsock, with 64 pings and 64 exact command outputs and explicit stop. It timed out before the first ping (15 seconds, zero refusals). The vCPU owner exited and VM stopped; no command or successful PCI operation is claimed. Kernel/guest/probe identities and build/runtime logs are preserved. Cause is unproven; discovery/boot diagnostics are the next gate. Linux defaults already attach the legacy PC set in VM provisioning, so missing PC devices have not been established as the cause.
+
+The archive pins 147 permitted root/isolated source pairs, including the probe, and accepted isolated backend/boot inputs. Protected root sources are excluded. PCI production/probe changes remain unstaged pending real guest verification. The earlier successful MMIO performance comparison is immutable and unaffected; it does not prove PCI behavior.

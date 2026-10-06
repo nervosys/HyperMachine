@@ -1,0 +1,8 @@
+{
+  "source_sha256": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+  "output_sha256": "ba6454e28b54c21459399120c4c666fd8756c9ef2e3dd70e02b20a15fce3ff54",
+  "builder_sha256": "f5b199736c1e7973f6ed6784cb8690971d96149df36f0d09e0800466eab752ab",
+  "diagnostic_only": true,
+  "change": "Single init agent-launch line replaced by comment",
+  "diagnostic_init": "#!/bin/busybox sh\n# PID 1 of the sandbox guest image. Mounts the kernel filesystems, starts the\n# guest agent, and leaves a shell on the console for whoever is debugging.\n/bin/busybox --install -s /bin\nmount -t proc proc /proc\nmount -t sysfs sysfs /sys\nmount -t devtmpfs devtmpfs /dev\nmkdir -p /dev/pts /etc /tmp /root\nmount -t devpts devpts /dev/pts\nmount -t tmpfs tmpfs /tmp\n\n# The kernel configured the network from `ip=` on its command line and wrote\n# the nameserver to /proc/net/pnp, which is in resolv.conf's own format.\n[ -e /etc/resolv.conf ] || ln -s /proc/net/pnp /etc/resolv.conf\nip link set lo up 2>/dev/null\n\nexport PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/root\n# An image built from an OCI image carries that image's ENV here, so what the\n# agent runs sees the environment the image was made for (its PATH first).\n[ -f /etc/hv2-env ] && . /etc/hv2-env\n# Negative control: omit guest agent launch\necho \"=== HV2 READY ===\"\nexec setsid sh -c \"exec sh </dev/console >/dev/console 2>&1\"\n"
+}

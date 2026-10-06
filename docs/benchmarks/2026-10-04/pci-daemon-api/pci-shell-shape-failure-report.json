@@ -1,0 +1,13 @@
+{
+  "passed": false,
+  "checks": [
+    "authenticated node startup with required PCI template",
+    "API create",
+    "API deletion sbx-76bae03b212b4d0d895f",
+    "empty node inventory"
+  ],
+  "failure": "(200, {'exit_code': 0, 'stdout': '', 'stderr': '', 'timed_out': False})",
+  "binary_sha256": "d69de5c7f1f1806a86145779f288e1c01addddae0c86c906d60bffbcadcbb4f7",
+  "output": "/var/tmp/hm-pci-daemon-api-v1-u6aitkf2",
+  "daemon_exit": 0
+}

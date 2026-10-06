@@ -1,0 +1,12 @@
+{
+  "sha256": {
+    "cli-tests.log": "ff8bed38e3533eb11f2b35a3c775aab8576e61ae1caf713bac8e8006c2a18c7b",
+    "inputs.json": "cc5b8a24e00c709175e3d86ab83cf1d4c4934c04b7b88cd34956dbf479dbca40",
+    "README.md": "229621103447d62c97193ecebeb5d682381a1c5abd5626a04f91124baecec11d",
+    "real-tests.log": "058c47878afc32c0b9aa198a9eefaddfd49a60cf0bfb25fde3b9cf334be9ec92",
+    "regression-tests.log": "49137febdac5ef3beccc4f72d16e16da9b4a5a7d623557570a1e89505ad12e12",
+    "sandbox_vm.rs": "57227cde719be4fe905489b160093e271c37ab07c36b2b861134a9603238ab6b",
+    "volume_client.rs": "f0a0748edd4798f1dc40f649198f9226565701aca4b663ece3c4eb79709cf50e",
+    "volume_routing.rs": "651c2548446b3dde7376649c956863a378c2b462eef9b004e5102192760172d3"
+  }
+}

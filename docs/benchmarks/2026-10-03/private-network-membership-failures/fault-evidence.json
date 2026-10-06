@@ -1,0 +1,60 @@
+{
+  "faults": [
+    {
+      "mode": 1,
+      "status": 503,
+      "elapsed_ms": 0,
+      "committed": false
+    },
+    {
+      "mode": 2,
+      "status": 503,
+      "elapsed_ms": 5001,
+      "committed": false
+    },
+    {
+      "mode": 3,
+      "status": 503,
+      "elapsed_ms": 0,
+      "committed": false
+    },
+    {
+      "mode": 4,
+      "status": 503,
+      "elapsed_ms": 5001,
+      "committed": false
+    },
+    {
+      "mode": 5,
+      "status": 503,
+      "elapsed_ms": 0,
+      "committed": false
+    },
+    {
+      "mode": 6,
+      "status": 503,
+      "elapsed_ms": 5001,
+      "committed": false
+    },
+    {
+      "mode": 8,
+      "status": 503,
+      "elapsed_ms": 0,
+      "committed": true
+    },
+    {
+      "mode": 7,
+      "status": 503,
+      "elapsed_ms": 5001,
+      "committed": true
+    }
+  ],
+  "exact_replays": 2,
+  "changed_payload_refusals": 2,
+  "changed_revision_refusals": 2,
+  "cancelled_store_futures": 4,
+  "cluster_passed": 98,
+  "cluster_failed": 0,
+  "cluster_ignored": 1,
+  "scope": "real HTTP with fault-injected MemoryStore adapter; no real Redis fault injection or guest routing"
+}

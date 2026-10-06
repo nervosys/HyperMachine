@@ -1,0 +1,13 @@
+# Established guest UDP target deletion
+
+**47 checks pass** on two owned daemon nodes sharing one WSL host. The fixture creates a dedicated Internet-disabled UDP target on the primary node with the same trusted owner as the source, launches its owned UDP echo server, publishes team membership and verifies private DNS plus exact empty/13/1,280/65,507-byte datagrams from the Internet-disabled source guest on the secondary node.
+
+The source establishes a connected UDP socket through production Ethernet/private-router/mTLS routing and confirms uniquely sequenced exact 64-byte echoes. The fixture deletes only the dedicated target. After the delete API returns, it writes a guest-local marker. On the original socket, the client requires three unsuccessful attempts after a three-second marker-relative grace. This passes with zero successful grace replies. New numeric access and private DNS refuse, and the target's cluster record is absent. Another existing target still returns all four exact payload sizes, showing this deletion does not break that unrelated route.
+
+Earlier membership, target pause/resume, verified lookup-outage and recovery gates repeat successfully. Zero guests remain and all tracked daemon/control/Redis/CLI/gateway processes are reaped. This is bounded functional refusal, without precise revocation latency, EOF, retained-record garbage-collection or SLA claims.
+
+Production sources, frozen dev daemon and static client/image are unchanged. This turn extends only the owned checker with dedicated-target creation/deletion and route-isolation gates. All 139 permitted root/isolate source pairs, accepted isolated core, fixture tool and runtime hashes are revalidated. Protected root core files were not read or built. The unchanged image's earlier independent byte-identical rebuild and negative echo control are retained with their hashes; they were not newly run this turn. The control uses the exact current client and rejects continued replies after the grace. Prior daemon build evidence is in `../private-udp-max-source-guest-kvm/`.
+
+Run `python3 verify-results.py` for result scope, same-socket deletion refusal, numeric/DNS refusal, absent target record, unrelated maximum-payload delivery, cleanup and reusable fixture evidence. Frozen drivers retain owned inputs and require fresh output paths. The manifest pins payloads and source context pins runtime/source hashes.
+
+Private IPv6, active source UDP pause/delete, owner/pending/local-VM races, other outage modes, pressure/idle/cancellation, reassembly reorder/exhaustion/expiry, independent hosts and crash recovery remain unfinished or unverified. No competitor superiority or performance result follows.

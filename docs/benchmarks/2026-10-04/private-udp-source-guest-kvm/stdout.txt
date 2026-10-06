@@ -1,0 +1,312 @@
+{
+  "paused_state_mode": "shared-store",
+  "inputs_sha256": {
+    "/var/tmp/hm-private-udp-guest-node-v1": "07e5b23c30e4b3a88a436aee211404211e60b77af34dead0f2e9b151d5f58846",
+    "/var/tmp/hm-private-receiving-control-v1": "23a0a1c13714bf8b3cbec8aa0b20d547194db3ca4db95631095f970f9daffad4",
+    "/var/tmp/hm-discovery-cli-v1": "e399a43bd30cdb62450c2fbdafb81c712b8859a951626f3b973faee3fc281dc5",
+    "/var/tmp/hm-competitive/bzImage-known-uart-irq": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "/var/tmp/hm-private-udp-guest-v1.cpio.gz": "fec7f96b2851c9ac6a2943b4a170978fcef2a84627579299afa4aa092cacd9a0",
+    "/var/tmp/hm-owner-adoption-gateway-v3": "8a6d2af7afca806d974697e55db8ca7be792808ea4ff352f370f93cb4bba42ad",
+    "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py": "f4cd9ce15c60e32b55b681f8b367e98206ea166ceb02ec3a1de36ed96c231c57"
+  },
+  "checks": [
+    "Node mTLS refuses a peer without a client certificate",
+    "CLI refuses untrusted control certificate and trusted wrong hostname",
+    "Valid mTLS node peers cannot create with forged owner context and missing or wrong cluster credentials",
+    "Wrong control-plane API key refused",
+    "Empty binary and maximum-size IPv4 datagrams verified through real KVM",
+    "Oversized frame closes its real guest session without preventing a fresh valid session",
+    "2 CLI peers preserve empty binary and maximum-size datagrams through real control plane Redis node and KVM",
+    "Private source and target KVM guests run on distinct owned daemon nodes",
+    "Source KVM guest private DNS and exact binary TCP work with Internet disabled",
+    "Source KVM guest transfers exact one MiB through private TCP",
+    "Private guest DNS refuses another owner and ordinary Internet DNS remains disabled",
+    "Target rejoin refuses stale guest address and recovers through a fresh private DNS binding",
+    "Long-lived source KVM guest TCP closes after target membership removal and refuses stale-address reconnect",
+    "Long-lived source KVM guest TCP closes after source membership removal and refuses reconnect",
+    "Source membership rejoin refuses old numeric binding and restores exact traffic through fresh DNS",
+    "Source KVM guest private UDP preserves empty, binary and MTU-sized datagrams through production Ethernet/mTLS routing",
+    "Other-owner KVM guest cannot use the source private UDP address binding",
+    "Target membership rejoin refuses stale guest UDP binding and fresh DNS restores exact datagrams",
+    "Private receiving UDP preserves empty, binary and maximum-sized guest datagrams",
+    "Private receiving UDP rejects oversized framing, wrong protocol and unauthorized contexts",
+    "Private receiving UDP closes after source generation change and refuses stale claims",
+    "Source KVM guest private DNS refuses peers after leaving their network tag",
+    "Source KVM guest pause/resume rebuilds its private gateway and preserves generation-safe address publication",
+    "Private receiving TCP verifies exact KVM target bytes, owner/tag/generation isolation, live revocation, source pause/resume/delete and store outage closure",
+    "Public port first reservation listing and removal refuse wrong observer inventory unassigned legacy principals and ownerless VMs",
+    "Native gateway real KVM TCP preserves 1 MiB and 2 UDP peers preserve empty binary and maximum datagrams on one public port",
+    "Authenticated policy creator overrides forged client context; two real KVM forks inherit owner without inheriting the source native allocation",
+    "Native real guest protocol updates retain public port and close old TCP",
+    "Owner API listing bounded pool invalid port and actual key rotation preserve VM ownership and allocation",
+    "Owner API removal closes live native sessions and reexposure publishes actual TCP UDP on reserved port",
+    "Pause closes existing UDP session",
+    "Real guest pause closes native sessions and preserves exact public reservation",
+    "Resumed guest accepts a new UDP session",
+    "Actual KVM pause and resume preserve trusted owner identity",
+    "Real guest resume restores native TCP and UDP on same reserved port",
+    "Delete closes UDP session and clears guest inventory",
+    "Real guest deletion removes native allocation and closes native sessions; gateway stops gracefully"
+  ],
+  "daemon_reaped": true,
+  "guests_remaining": 0,
+  "control_and_redis_reaped": true,
+  "cli_reaped": true,
+  "native_gateway_reaped": true,
+  "native_gateway_real_kvm": true,
+  "owner_public_port_api_real_kvm": true,
+  "owner_public_port_cli_real_kvm": false,
+  "native_udp_capacity": null,
+  "cross_node_adoption": null,
+  "native_port_migration": null,
+  "private_receiving_tcp": {
+    "origin": "owned host mTLS client with running KVM source identity; source guest gateway not involved",
+    "checks": [
+      {
+        "check": "wrong-cluster-token",
+        "status": 401
+      },
+      {
+        "check": "wrong-source-node",
+        "status": 403
+      },
+      {
+        "check": "duplicate-context",
+        "status": 400
+      },
+      {
+        "check": "wrong-path-port",
+        "status": 400
+      },
+      {
+        "check": "cross-owner",
+        "status": 403
+      },
+      {
+        "check": "exact-target-guest-tcp",
+        "payload_bytes": [
+          1048576,
+          23
+        ]
+      },
+      {
+        "check": "stale-source-generation",
+        "status": 403
+      },
+      {
+        "check": "cross-network-new-stream",
+        "status": 403
+      },
+      {
+        "check": "removed-target-membership",
+        "status": 403
+      },
+      {
+        "check": "stale-target-generation",
+        "status": 403
+      },
+      {
+        "check": "paused-source",
+        "status": 403
+      },
+      {
+        "check": "deleted-source",
+        "status": 403
+      }
+    ],
+    "live_stream_closures": [
+      {
+        "check": "source-rejoin-revokes-live-stream",
+        "elapsed_ms": 892.4210950000031
+      },
+      {
+        "check": "source-rejoin-revokes-private-udp",
+        "elapsed_ms": 0.07411000001411594
+      },
+      {
+        "check": "cross-network-revokes-live-stream",
+        "elapsed_ms": 987.1660889999987
+      },
+      {
+        "check": "target-removal-revokes-live-stream",
+        "elapsed_ms": 997.1166950000168
+      },
+      {
+        "check": "source-pause-closes-target-stream",
+        "elapsed_ms": 942.4613289999968
+      },
+      {
+        "check": "lookup-outage-closes-live-stream",
+        "elapsed_ms": 964.050009999994
+      },
+      {
+        "check": "source-deletion-closes-target-stream",
+        "elapsed_ms": 968.6008479999941
+      }
+    ],
+    "same_node": false,
+    "initial_source_node": "owned-private-secondary",
+    "destination_node": "owned-udp-node",
+    "source_gateway_verified": false,
+    "guest_dns_verified": false,
+    "payload_target_real_kvm": true
+  },
+  "private_receiving_udp": {
+    "origin": "owned host mTLS client to target KVM UDP server; source guest UDP gateway not involved",
+    "payload_bytes": [
+      0,
+      13,
+      65507
+    ],
+    "oversized_frame_closed": true,
+    "refusals": [
+      {
+        "check": "wrong-upgrade",
+        "status": 400
+      },
+      {
+        "check": "wrong-cluster-token",
+        "status": 401
+      },
+      {
+        "check": "wrong-source-node",
+        "status": 403
+      },
+      {
+        "check": "duplicate-context",
+        "status": 400
+      },
+      {
+        "check": "cross-owner",
+        "status": 403
+      },
+      {
+        "check": "stale-source-generation",
+        "status": 403
+      }
+    ],
+    "source_gateway_verified": false,
+    "same_node": false,
+    "source_rejoin_stream_closed": true
+  },
+  "private_guest_udp": {
+    "origin": "actual source KVM guest IPv4 UDP through Ethernet gateway, committed source router, Rust mTLS connector and target KVM UDP server",
+    "source_gateway_verified": true,
+    "source_node": "owned-private-secondary",
+    "destination_node": "owned-udp-node",
+    "same_node": false,
+    "internet_disabled": true,
+    "payload_bytes": [
+      0,
+      13,
+      1280
+    ],
+    "owner_numeric_address_refused": true,
+    "stale_target_binding_refused": true,
+    "fresh_dns_rejoin_recovery_verified": true
+  },
+  "private_guest_gateway": {
+    "origin": "owned source KVM guest Ethernet gateway through Rust source router and mTLS connector into target KVM guest",
+    "source_gateway_verified": true,
+    "guest_dns_verified": true,
+    "internet_disabled": true,
+    "same_node": false,
+    "source_node": "owned-private-secondary",
+    "destination_node": "owned-udp-node",
+    "payload_bytes": [
+      19,
+      1048576,
+      19
+    ],
+    "owner_dns_isolation_verified": true,
+    "ordinary_dns_refused": true,
+    "stale_address_refused": true,
+    "target_rejoin_recovery_verified": true,
+    "long_lived_guest_revocation_verified": true,
+    "revoked_guest_address_reconnect_refused": true,
+    "guest_revocation_elapsed_ms": 966.6111329999865,
+    "source_membership_stream_revocation_verified": true,
+    "source_membership_revocation_elapsed_ms": 962.0344889999899,
+    "source_rejoin_stale_binding_refused": true,
+    "source_rejoin_fresh_binding_recovery_verified": true,
+    "cross_network_dns_refused": true,
+    "source_guest_resume_verified": true,
+    "resume_source_node": "owned-private-secondary"
+  },
+  "private_transport_benchmark": null,
+  "native_resources": [],
+  "secondary_node_reaped": true,
+  "trusted_owner_context": [
+    {
+      "phase": "created-despite-client-forgery",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "fork-inherits-source-owner",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "fork-inherits-source-owner",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "key-rotated",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "paused",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "resumed",
+      "owner_id": "owned-principal-a"
+    }
+  ],
+  "guest_owner_from_store_at_creation": "owned-principal-a",
+  "native_cli_comparison": [],
+  "host_build_profile_declared": "development",
+  "guest_resources_from_inventory": {
+    "cpuCount": 1,
+    "memoryMB": 1024
+  },
+  "host_environment": {
+    "kernel": "6.18.33.2-microsoft-standard-WSL2",
+    "machine": "x86_64",
+    "logical_cpus": 24,
+    "affinity_cpus": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23
+    ],
+    "requested_affinity_cpus": null,
+    "python": "3.13.5"
+  },
+  "native_cli_comparison_scope": "Unrestricted current CPU affinity. Internal paths; both processes remain live in every ABBA block; native TCP idle; one outstanding datagram per peer; no timed retries; operator-declared build profile; not competitor evidence.",
+  "guest_udp_ipv6": false,
+  "local_udp_ipv6": false,
+  "control_api_tls": true,
+  "node_mtls": true,
+  "latency_measurements": [],
+  "scope": "Owned shipped CLI/control-plane/Redis/daemon/KVM UDP; optional verified API TLS/node mTLS; Redis local plaintext."
+}

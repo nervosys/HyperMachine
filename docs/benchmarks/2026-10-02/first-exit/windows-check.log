@@ -1,0 +1,8 @@
+   Compiling serde_json v1.0.151
+    Checking hv2-sandbox v1.1.0 (C:\Users\user\dev\nervosys\os\HyperMachine\crates\hv2-sandbox)
+    Checking hv2-agent-proto v1.1.0 (C:\Users\user\dev\nervosys\os\HyperMachine\crates\hv2-agent-proto)
+    Checking tinytemplate v1.2.1
+    Checking tracing-subscriber v0.3.23
+    Checking hv2-core v1.1.0 (C:\Users\user\dev\nervosys\os\HyperMachine\crates\hv2-core)
+    Checking criterion v0.5.1
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 14.68s

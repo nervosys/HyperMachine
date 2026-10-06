@@ -534,6 +534,47 @@ impl AgentVM {
         .map_err(|e| AgentError::Script(format!("guest forward task failed: {e}")))?
     }
 
+    /// Open a framed UDP connection to a guest loopback port over vsock.
+    ///
+    /// # Errors
+    /// Requires GuestExec, a nonzero port and successful guest socket setup.
+    /// A successful setup does not establish that a UDP peer is listening.
+    pub async fn forward_udp_port(
+        &self,
+        port: u16,
+        timeout: Duration,
+    ) -> Result<(crate::guest_agent::VsockStream, Vec<u8>)> {
+        if port == 0 {
+            return Err(AgentError::Script("UDP port must be nonzero".into()));
+        }
+        let device = self.file_channel()?;
+        tokio::task::spawn_blocking(move || {
+            GuestAgent::over_vsock(device, timeout)?.forward_udp(port, timeout)
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest UDP forward task failed: {e}")))?
+    }
+
+    /// Open a framed IPv6 loopback UDP connection over vsock.
+    ///
+    /// # Errors
+    /// Requires GuestExec, a nonzero port and guest IPv6 socket support.
+    pub async fn forward_udp_port_ipv6(
+        &self,
+        port: u16,
+        timeout: Duration,
+    ) -> Result<(crate::guest_agent::VsockStream, Vec<u8>)> {
+        if port == 0 {
+            return Err(AgentError::Script("UDP port must be nonzero".into()));
+        }
+        let device = self.file_channel()?;
+        tokio::task::spawn_blocking(move || {
+            GuestAgent::over_vsock(device, timeout)?.forward_udp_ipv6(port, timeout)
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest IPv6 UDP forward task failed: {e}")))?
+    }
+
     /// Have the guest mount a volume at `path`, served over a connection of
     /// its own: returned, with whatever already arrived on it, for a 9P
     /// server to run on.
@@ -746,14 +787,32 @@ impl AgentVM {
     /// The agent could not be reached, or could not reseed.
     pub async fn after_restore(&self, timeout: Duration) -> Result<()> {
         let device = self.guest_channel("resynchronise a restored guest")?;
-        let now_ns = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_nanos() as u64);
         let mut entropy = rand::random::<[u8; 32]>().to_vec();
         entropy.extend_from_slice(&rand::random::<[u8; 32]>());
+        let vm_name = self.vm.config().name.clone();
+        let queued_at = std::time::Instant::now();
         let reseeded = tokio::task::spawn_blocking(move || {
-            let mut agent = GuestAgent::over_vsock(device, timeout)?;
-            agent.restored(now_ns, entropy, timeout)
+            let started_at = std::time::Instant::now();
+            let mut agent = match GuestAgent::over_vsock(device, timeout) {
+                Ok(agent) => agent,
+                Err(error) => {
+                    tracing::debug!(vm = %vm_name,
+                        blocking_queue_ms = (started_at - queued_at).as_secs_f64() * 1000.0,
+                        connect_ms = started_at.elapsed().as_secs_f64() * 1000.0,
+                        succeeded = false, phase = "connect",
+                        "restored guest readiness stages");
+                    return Err(error);
+                }
+            };
+            let connected_at = std::time::Instant::now();
+            let result = agent.restored_now(entropy, timeout);
+            tracing::debug!(vm = %vm_name,
+                blocking_queue_ms = (started_at - queued_at).as_secs_f64() * 1000.0,
+                connect_ms = (connected_at - started_at).as_secs_f64() * 1000.0,
+                restored_ms = connected_at.elapsed().as_secs_f64() * 1000.0,
+                succeeded = result.is_ok(), phase = "restored",
+                "restored guest readiness stages");
+            result
         })
         .await
         .map_err(|e| AgentError::Script(format!("guest restore task failed: {e}")))?;
@@ -825,9 +884,30 @@ impl AgentVM {
             ));
         };
 
+        let vm_name = self.vm.config().name.clone();
+        let queued_at = std::time::Instant::now();
         tokio::task::spawn_blocking(move || {
-            let mut agent = GuestAgent::over_vsock(device, timeout)?;
-            agent.ping(timeout)
+            let started_at = std::time::Instant::now();
+            let mut agent = match GuestAgent::over_vsock(device, timeout) {
+                Ok(agent) => agent,
+                Err(error) => {
+                    tracing::debug!(target: "hv2_agent::cold_readiness", vm = %vm_name,
+                        blocking_queue_ms = (started_at - queued_at).as_secs_f64() * 1000.0,
+                        connect_ms = started_at.elapsed().as_secs_f64() * 1000.0,
+                        succeeded = false, phase = "connect",
+                        "cold guest readiness stages");
+                    return Err(error);
+                }
+            };
+            let connected_at = std::time::Instant::now();
+            let result = agent.ping(timeout);
+            tracing::debug!(target: "hv2_agent::cold_readiness", vm = %vm_name,
+                blocking_queue_ms = (started_at - queued_at).as_secs_f64() * 1000.0,
+                connect_ms = (connected_at - started_at).as_secs_f64() * 1000.0,
+                ping_ms = connected_at.elapsed().as_secs_f64() * 1000.0,
+                succeeded = result.is_ok(), phase = "ping",
+                "cold guest readiness stages");
+            result
         })
         .await
         .map_err(|e| AgentError::Script(format!("guest ping task failed: {e}")))?

@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "checks": [
+    "resumed then deleted sbx-7bd99a132efc4f5aac08",
+    "resumed then deleted sbx-803dffb7719249aeb610",
+    "already deleted sbx-ff3cc4c257d14fa78939",
+    "empty inventory after fixture recovery"
+  ],
+  "failure": null
+}

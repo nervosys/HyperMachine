@@ -1,0 +1,94 @@
+{
+  "inputs": {
+    "hypermachine": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "cohorts": [
+    {
+      "report": "setup-1-report.json",
+      "coordinator": "setup-1-coordinator.py",
+      "concurrency": 1,
+      "pairs": 2,
+      "setup_failed": true,
+      "reported_remaining_sandboxes": 1
+    },
+    {
+      "report": "setup-2-report.json",
+      "coordinator": "setup-2-coordinator.py",
+      "concurrency": 1,
+      "pairs": 2,
+      "setup_failed": true,
+      "reported_remaining_sandboxes": 0
+    },
+    {
+      "report": "setup-3-report.json",
+      "coordinator": "setup-3-coordinator.py",
+      "concurrency": 1,
+      "pairs": 2,
+      "setup_failed": true,
+      "reported_remaining_sandboxes": 0
+    },
+    {
+      "report": "smoke-report.json",
+      "coordinator": "smoke-coordinator.py",
+      "concurrency": 1,
+      "pairs": 2,
+      "setup_failed": false,
+      "analysis": "smoke-analysis.json"
+    },
+    {
+      "report": "c1-report.json",
+      "coordinator": "bench-prepared-engines.py",
+      "concurrency": 1,
+      "pairs": 20,
+      "setup_failed": false,
+      "analysis": "c1-analysis.json"
+    },
+    {
+      "report": "c8-report.json",
+      "coordinator": "bench-prepared-engines.py",
+      "concurrency": 8,
+      "pairs": 20,
+      "setup_failed": false,
+      "analysis": "c8-analysis.json"
+    },
+    {
+      "report": "c8-repeat-report.json",
+      "coordinator": "bench-prepared-engines.py",
+      "concurrency": 8,
+      "pairs": 20,
+      "setup_failed": false,
+      "analysis": "c8-repeat-analysis.json"
+    }
+  ],
+  "sha256": {
+    "README.md": "335979f55a594e210e202e51f94c00d9461c761644cc7b330a8c10704dcf5026",
+    "analyze-prepared-engines.py": "6391a62d630da7a61ef7ea55f801e396b3e385bba27a680b9bf80373a9fd4590",
+    "bench-firecracker-local.py": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6",
+    "bench-local-engines.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "bench-prepared-engines.py": "10d76f353999d52cae2d16f531a218935603cce76b09327e5847c73c4846aa8b",
+    "build-context.json": "1f58ce32de276164c11736c6b2c661b590795766d2a525bcb51d72406b1f6e9d",
+    "c1-analysis.json": "e9c2be1756cce9d51a47a371036e84524f44dc8bce4a44cc699ab3a50f908aca",
+    "c1-report.json": "c28712e2937139ad47238fde9c954a3eb509d3d0fee4c1b57715e737b9fb3c23",
+    "c8-analysis.json": "c5cff8f683393bfc19dab9e64c14a8ad8f00ae0a8ad63230121fee60d3bf5176",
+    "c8-repeat-analysis.json": "ba87262026bb4538e5721f379e8fcef33d6c376b1099b428e718b7a198d47cb5",
+    "c8-repeat-report.json": "15bbc83a6db001c873d43af73b1fc4261ec0cdd43b6d00563a9cb070c0a5b3ed",
+    "c8-report.json": "b3c910b0b8170d2a10c6937ff2d430558b68cb43cb2898f7a4de6ae4f12b88dc",
+    "check-prepared-analysis.py": "0ce60881463856967a046c3c727e90e08ccee23f0430d2672d49736fe179c549",
+    "compiled-main.rs": "5b8d92902845f748bcfd497cdaa349a7509b4ed27fd6dd867935c8f27e59fb52",
+    "negative-linux.log": "90a57893015f97ee59c0705c69c1208b4de7c914efe4d4a3c80b3555f96a727b",
+    "negative-windows.log": "3ae45ead1248b8c0b2c0fc5267da87ef3347225386a16e55b1c90f5e9e7f8332",
+    "setup-1-coordinator.py": "70c04762238902ec3471db3fbc815f189c77a00f5db5a54fd9ef3f6438b3e0ed",
+    "setup-1-report.json": "3fb83fa7e8bb43a24f90ab3c2c9db5efefcbe53ccdcd495f22c0d82392ceac5a",
+    "setup-2-coordinator.py": "1a289bbb906c11b5b629ad551417d0100f853be5b54ca053c59c86aa46348017",
+    "setup-2-report.json": "143739c4c4e82e45973a0c9145feaf1be61276118d1818db39c01da80d9c04ec",
+    "setup-3-coordinator.py": "3de91443adb6a01987c3710fdb6af6dd57886c02b06aa5befb0efc8d34eb8ff7",
+    "setup-3-report.json": "775a07c4fdd581c1823542478566d9be8fef49055ebcb787d61457420fada289",
+    "smoke-analysis.json": "6e1b11002ad3cd0685feb85f1dac0a88b39910d26f58255ee3fb6d35ce4bcaae",
+    "smoke-coordinator.py": "66a87fc160697d94f2ffd4ce6dd9f6a4066f54771b95e2094ddcfba5c71114b1",
+    "smoke-report.json": "9dbde65634fbd2caa12b1949470554d51174e27059385cabc657c46706c8999d",
+    "verify-prepared-engines.py": "377f2bcd326f46d310e58529d9bb9e07a70b5d112db3e1b7150057534b391b1e"
+  }
+}

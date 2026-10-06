@@ -1,0 +1,66 @@
+{
+  "engines": {
+    "hypermachine": {
+      "planned": 400,
+      "attempted": 400,
+      "passed": 400,
+      "failed": 0,
+      "successful_p50_ms": 831.9382940007927,
+      "successful_p95_ms": 987.5588509985391,
+      "successful_p99_ms": 1155.309543999465,
+      "median_held_pss_mib": 343.8681640625,
+      "median_incremental_pss_mib": 263.345703125
+    },
+    "firecracker": {
+      "planned": 400,
+      "attempted": 400,
+      "passed": 400,
+      "failed": 0,
+      "successful_p50_ms": 841.1410810003872,
+      "successful_p95_ms": 1195.891148998271,
+      "successful_p99_ms": 1215.072576998864,
+      "median_held_pss_mib": 286.59033203125,
+      "median_incremental_pss_mib": 286.59033203125
+    }
+  },
+  "pairs": [
+    {
+      "pair": 0,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 177.10273087985115,
+      "hypermachine_p99_reduction_ms": 12.351616000159993,
+      "hypermachine_held_pss_reduction_mib": -50.34765625
+    },
+    {
+      "pair": 1,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 53.24258893993829,
+      "hypermachine_p99_reduction_ms": 50.68100499920547,
+      "hypermachine_held_pss_reduction_mib": -56.7490234375
+    },
+    {
+      "pair": 2,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": -116.81786713008478,
+      "hypermachine_p99_reduction_ms": -109.75917399991886,
+      "hypermachine_held_pss_reduction_mib": -57.458984375
+    },
+    {
+      "pair": 3,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": -60.66900633990372,
+      "hypermachine_p99_reduction_ms": -117.31853199853504,
+      "hypermachine_held_pss_reduction_mib": -58.744140625
+    }
+  ],
+  "artifacts_unchanged": true,
+  "prepared_sources_unchanged": true,
+  "cohort_success": true,
+  "latencies_conditional_on_success": true,
+  "memory_conditional_on_complete_successful_batches": true,
+  "runtime_change_adopted": false,
+  "managed_competitor_win_established": false,
+  "cleanup_verified": true,
+  "hypermachine_faster_complete_pairs": 2,
+  "matched_guest_restore_contract": true
+}

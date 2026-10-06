@@ -1,0 +1,67 @@
+--- /var/tmp/hm-registration-mutations/source/crates/hv2-agent/src/guest_agent.rs	2026-10-02 01:47:33.000000000 -0700
++++ /var/tmp/hm-event-connect/source/crates/hv2-agent/src/guest_agent.rs	2026-10-02 03:54:29.377882811 -0700
+@@ -164,10 +164,11 @@
+                 Some(VsockConnectionState::Connecting) => {}
+                 _ => return Settled::Refused,
+             }
+-            if Instant::now() >= deadline {
++            let remaining = deadline.saturating_duration_since(Instant::now());
++            if remaining.is_zero() {
+                 return Settled::Deadline;
+             }
+-            progress.wait_past(seen, POLL_INTERVAL);
++            progress.wait_past(seen, remaining);
+         }
+     }
+ 
+@@ -1258,4 +1259,50 @@
+             "a caller reading this must know the tail is missing"
+         );
+     }
++    #[test]
++    fn connection_settle_observes_host_teardown_without_waiting_for_deadline() {
++        use hv2_core::devices::VirtioMmioDevice;
++        for operation in 0..3 {
++            let device = Arc::new(Mutex::new(VsockDevice::new(3).unwrap()));
++            let id = device.lock().connect_ephemeral(GUEST_AGENT_PORT).unwrap();
++            let progress = device.lock().progress();
++            let waiting_device = device.clone();
++            let (send, recv) = std::sync::mpsc::channel();
++            let worker = std::thread::spawn(move || {
++                let result = VsockChannel::settle(&waiting_device, &progress, id,
++                    Instant::now() + Duration::from_secs(3));
++                send.send(matches!(result, Settled::Refused)).unwrap();
++            });
++            std::thread::sleep(Duration::from_millis(20));
++            match operation {
++                0 => device.lock().close(id).unwrap(),
++                1 => device.lock().forget(id),
++                _ => device.lock().reset(),
++            }
++            assert!(recv.recv_timeout(Duration::from_secs(1)).unwrap());
++            worker.join().unwrap();
++        }
++    }
++
++    #[test]
++    fn unrelated_connection_progress_does_not_extend_settle_deadline() {
++        let device = Arc::new(Mutex::new(VsockDevice::new(3).unwrap()));
++        let id = device.lock().connect_ephemeral(GUEST_AGENT_PORT).unwrap();
++        let progress = device.lock().progress();
++        let deadline = Instant::now() + Duration::from_millis(100);
++        let busy_device = device.clone();
++        let worker = std::thread::spawn(move || {
++            while Instant::now() < deadline + Duration::from_millis(100) {
++                let mut device = busy_device.lock();
++                let other = device.connect_ephemeral(1234).unwrap();
++                device.forget(other);
++                drop(device);
++                std::thread::sleep(Duration::from_millis(1));
++            }
++        });
++        assert!(matches!(VsockChannel::settle(&device, &progress, id, deadline), Settled::Deadline));
++        assert!(Instant::now() < deadline + Duration::from_millis(100));
++        worker.join().unwrap();
++    }
++
+ }

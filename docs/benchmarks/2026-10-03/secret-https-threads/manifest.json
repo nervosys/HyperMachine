@@ -1,0 +1,16 @@
+{
+  "sha256": {
+    "bench-secret-https-kvm.py": "43c7a6dc8d29dddd672de1baf72b414c5b93a47852e8cf336d40091b22a2f418",
+    "check-secret-substitution-kvm.py": "ed608bd17a755e02de0ebe1fb32aca3ad8c3fae77ccde000ce5a8947bba4585e",
+    "pair-0-baseline.json": "734dba69ee609bc90421958b3ef543074522049a4562b190cf29a49e91206682",
+    "pair-0-baseline.log": "734dba69ee609bc90421958b3ef543074522049a4562b190cf29a49e91206682",
+    "pair-0-candidate.json": "f3279f37a65a2f5fc2e9afaff91273b972a6f0bf9f05ca96635764d77cf37bbc",
+    "pair-0-candidate.log": "f3279f37a65a2f5fc2e9afaff91273b972a6f0bf9f05ca96635764d77cf37bbc",
+    "pair-1-baseline.json": "5f8445f3b5807caf7fbe5969de803c61d23a93f7164508c72b54bba4e3a2d9af",
+    "pair-1-baseline.log": "5f8445f3b5807caf7fbe5969de803c61d23a93f7164508c72b54bba4e3a2d9af",
+    "pair-1-candidate.json": "a0db5290a2a69719ee15d10da937f3be5284c637a39c295ce4b428bcc49af3cd",
+    "pair-1-candidate.log": "a0db5290a2a69719ee15d10da937f3be5284c637a39c295ce4b428bcc49af3cd",
+    "README.md": "d0fedf8fe91e0e0785ea7872331a7fdf229e9f795c55ec1931b5570cd5e62f8f",
+    "summary.json": "6ea96223c5a9e6367103e6047797bf6a17c24380468fe27748c885e8c3e89b64"
+  }
+}

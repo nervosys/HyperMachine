@@ -1,0 +1,45 @@
+[
+  {
+    "cycle": 1,
+    "pause_completed": true,
+    "resume_completed": true,
+    "exact_udp": true,
+    "elapsed_seconds": 1.029094667999999
+  },
+  {
+    "cycle": 2,
+    "pause_completed": true,
+    "resume_completed": true,
+    "exact_udp": true,
+    "elapsed_seconds": 1.0267573710000004
+  },
+  {
+    "cycle": 3,
+    "pause_completed": true,
+    "resume_completed": true,
+    "exact_udp": true,
+    "elapsed_seconds": 1.027580842999999
+  },
+  {
+    "cycle": 4,
+    "pause_completed": true,
+    "resume_completed": true,
+    "exact_udp": true,
+    "elapsed_seconds": 1.0276828580000004
+  },
+  {
+    "cycle": 5,
+    "pause_completed": true,
+    "resume_completed": true,
+    "exact_udp": true,
+    "elapsed_seconds": 1.0274800729999995
+  },
+  {
+    "cycle": 6,
+    "pause_completed": true,
+    "resume_completed": false,
+    "exact_udp": false,
+    "failure_type": "TimeoutError",
+    "elapsed_seconds": 30.08749297
+  }
+]

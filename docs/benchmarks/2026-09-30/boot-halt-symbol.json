@@ -1,0 +1,29 @@
+{
+  "diagnostic_only": true,
+  "sample": {
+    "index": 0,
+    "success": true,
+    "cleanup_success": true,
+    "ready_ms": 473.97697799999605
+  },
+  "symbol_query": {
+    "command": "grep -E '^ffffffff81eda950 |^ffffffff816481' /proc/kallsyms",
+    "response": {
+      "kind": "exited",
+      "exit_code": 0,
+      "signal": null,
+      "stdout": "ffffffff81648100 t io_serial_out\nffffffff81648120 t __pfx_set_io_from_upio\nffffffff81648130 t set_io_from_upio\nffffffff816481e0 t __pfx___enable_rsa\nffffffff816481f0 t __enable_rsa\nffffffff81eda950 T default_idle\n",
+      "stderr": "",
+      "truncated": false,
+      "timed_out": false
+    }
+  },
+  "artifact_sha256": {
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "0e1962a290ad92bff749d3b736001c2f22782fcbcaf716ecff0db6543631adc2",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "harness": "6bdeb9c0d34f41984e69a91ed7180a3a297213b6681d5b65250969e6a71656f1",
+    "coordinator": "e7a9c7e18a2cb6aeec77a9664784d652e9bda27abba7b13b9639a0662c161444"
+  },
+  "artifacts_unchanged": true
+}

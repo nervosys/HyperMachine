@@ -1,0 +1,9 @@
+# Explicit benchmark CPU affinity
+
+The checker now accepts `--host-cpus 0,1,2,3`. It validates comma-separated nonnegative ASCII CPU IDs, rejects duplicates and CPUs outside the current allowed affinity, applies Linux scheduler affinity before fixture creation, and requires the observed harness affinity to equal the request. Child processes and newly created threads inherit that restriction through Linux process creation; this archive records the harness affinity, not individual child-thread observations.
+
+One real release baseline KVM profile passed all 23 checks, with two IPv4 peers, internal CLI/native/native/CLI blocks, 2000 timed 4096-byte exchanges per peer and untimed gateway memory snapshots. The report confirms requested and observed harness CPU sets `[0,1,2,3]`. Every owned process was reaped and zero guests remained. Six malformed requests were rejected with exit code 2 before output directory creation. Runtime inputs were verified against recorded SHA256 identities.
+
+Affinity does not reserve CPUs, eliminate other host activity, bind guest memory, control CPU frequency, or establish statistically stable performance. This single profile validates the harness option and functional behavior, not a performance improvement. A subsequent candidate comparison needs freshly matched counterbalanced profiles under the same CPU restriction; earlier unrestricted results cannot serve as its matched control. Production UDP source remains unchanged.
+
+Reproduction: use the immutable runtime paths and hashes in report.json with the archived checker, `--tls --mtls --owner-context --owner-port-api --owner-port-cli --native-comparison-samples 2000 --native-comparison-bytes 4096 --native-resource-samples --host-build-profile release --host-cpus 0,1,2,3`, and a fresh output directory. Required daemon/control-plane/CLI/kernel/initrd/native-gateway parameters correspond to those recorded paths.

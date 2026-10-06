@@ -1,0 +1,17 @@
+55 KVM checks, actual 125 additional private UDP tunnels, excess/refilled 503, existing/standard traffic, slot recovery, 128 scored operations and full cleanup verified.
+32 workers, 3200 exact completed datagrams, independently recomputed byte totals/throughput, 55 KVM checks and full cleanup verified.
+Matched concurrent ABBA: 12800 exact scored datagrams, independently recomputed throughput, zero UDP error/drop deltas, 55 KVM checks and full cleanup verified.
+Stable process identity, raw tick CPU deltas/per-MiB normalization and bracketing PSS independently verified for every matched block.
+55 KVM checks, actual 125 additional private UDP tunnels, excess/refilled 503, existing/standard traffic, slot recovery, 128 scored operations and full cleanup verified.
+32 workers, 3200 exact completed datagrams, independently recomputed byte totals/throughput, 55 KVM checks and full cleanup verified.
+Matched concurrent ABBA: 12800 exact scored datagrams, independently recomputed throughput, zero UDP error/drop deltas, 55 KVM checks and full cleanup verified.
+Stable process identity, raw tick CPU deltas/per-MiB normalization and bracketing PSS independently verified for every matched block.
+55 KVM checks, actual 125 additional private UDP tunnels, excess/refilled 503, existing/standard traffic, slot recovery, 128 scored operations and full cleanup verified.
+32 workers, 3200 exact completed datagrams, independently recomputed byte totals/throughput, 55 KVM checks and full cleanup verified.
+Matched concurrent ABBA: 12800 exact scored datagrams, independently recomputed throughput, zero UDP error/drop deltas, 55 KVM checks and full cleanup verified.
+Stable process identity, raw tick CPU deltas/per-MiB normalization and bracketing PSS independently verified for every matched block.
+55 KVM checks, actual 125 additional private UDP tunnels, excess/refilled 503, existing/standard traffic, slot recovery, 128 scored operations and full cleanup verified.
+32 workers, 3200 exact completed datagrams, independently recomputed byte totals/throughput, 55 KVM checks and full cleanup verified.
+Matched concurrent ABBA: 12800 exact scored datagrams, independently recomputed throughput, zero UDP error/drop deltas, 55 KVM checks and full cleanup verified.
+Stable process identity, raw tick CPU deltas/per-MiB normalization and bracketing PSS independently verified for every matched block.
+Two changed shared catalog entries plus two additional candidate source snapshots; no exact whole-source delta claim. Four release cohorts, shared fixture identities, 220 KVM checks, 512 regression operations, 51200 matched datagrams and all resource/drop/cleanup evidence independently verified.

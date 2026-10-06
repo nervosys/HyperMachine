@@ -1,0 +1,110 @@
+{
+  "daemon_sha256": "a330a12fbcfd9bf803a83a7b177448b1742feaea3b2f6bb5feed197c9a674209",
+  "checks": [
+    {
+      "flag": "--cpu-cores",
+      "value": "0",
+      "exit_code": 1,
+      "error": "hv2-sandboxd: --cpu-cores requires a positive u32 integer"
+    },
+    {
+      "flag": "--cpu-cores",
+      "value": "-1",
+      "exit_code": 1,
+      "error": "hv2-sandboxd: --cpu-cores requires a positive u32 integer"
+    },
+    {
+      "flag": "--cpu-cores",
+      "value": "true",
+      "exit_code": 1,
+      "error": "hv2-sandboxd: --cpu-cores requires a positive u32 integer"
+    },
+    {
+      "flag": "--cpu-cores",
+      "value": "1.5",
+      "exit_code": 1,
+      "error": "hv2-sandboxd: --cpu-cores requires a positive u32 integer"
+    },
+    {
+      "flag": "--cpu-cores",
+      "value": "18446744073709551616",
+      "exit_code": 1,
+      "error": "hv2-sandboxd: --cpu-cores requires a positive u32 integer"
+    },
+    {
+      "flag": "--cpu-cores",
+      "value": "4294967296",
+      "exit_code": 1,
+      "error": "hv2-sandboxd: --cpu-cores requires a positive u32 integer"
+    },
+    {
+      "flag": "--memory-mb",
+      "value": "0",
+      "exit_code": 1,
+      "error": "hv2-sandboxd: guest memory requires a positive integer with a representable MiB size"
+    },
+    {
+      "flag": "--memory-mb",
+      "value": "-1",
+      "exit_code": 1,
+      "error": "hv2-sandboxd: guest memory requires a positive integer with a representable MiB size"
+    },
+    {
+      "flag": "--memory-mb",
+      "value": "true",
+      "exit_code": 1,
+      "error": "hv2-sandboxd: guest memory requires a positive integer with a representable MiB size"
+    },
+    {
+      "flag": "--memory-mb",
+      "value": "1.5",
+      "exit_code": 1,
+      "error": "hv2-sandboxd: guest memory requires a positive integer with a representable MiB size"
+    },
+    {
+      "flag": "--memory-mb",
+      "value": "18446744073709551616",
+      "exit_code": 1,
+      "error": "hv2-sandboxd: guest memory requires a positive integer with a representable MiB size"
+    },
+    {
+      "flag": "--memory-gb",
+      "value": "0",
+      "exit_code": 1,
+      "error": "hv2-sandboxd: guest memory requires a positive integer with a representable MiB size"
+    },
+    {
+      "flag": "--memory-gb",
+      "value": "-1",
+      "exit_code": 1,
+      "error": "hv2-sandboxd: guest memory requires a positive integer with a representable MiB size"
+    },
+    {
+      "flag": "--memory-gb",
+      "value": "true",
+      "exit_code": 1,
+      "error": "hv2-sandboxd: guest memory requires a positive integer with a representable MiB size"
+    },
+    {
+      "flag": "--memory-gb",
+      "value": "1.5",
+      "exit_code": 1,
+      "error": "hv2-sandboxd: guest memory requires a positive integer with a representable MiB size"
+    },
+    {
+      "flag": "--memory-gb",
+      "value": "18446744073709551616",
+      "exit_code": 1,
+      "error": "hv2-sandboxd: guest memory requires a positive integer with a representable MiB size"
+    },
+    {
+      "flag": "--memory-gb",
+      "value": "18014398509481984",
+      "exit_code": 1,
+      "error": "hv2-sandboxd: guest memory requires a positive integer with a representable MiB size"
+    }
+  ],
+  "limits": [
+    "Invalid configuration exits before guest startup; no maximum-sized guest allocation attempted"
+  ]
+}

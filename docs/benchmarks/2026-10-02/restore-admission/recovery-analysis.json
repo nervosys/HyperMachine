@@ -1,0 +1,12 @@
+{
+  "diagnostic_only": true,
+  "expected_failure_attempts": 64,
+  "observed_launch_rejections": 64,
+  "recovery_restore_attempts": 128,
+  "recovery_restore_passed": 128,
+  "cleanup_verified": true,
+  "matched_guest_restore_contract": true,
+  "runtime_change_adopted": false,
+  "performance_win_established": false,
+  "request_cancellation_verified": false
+}

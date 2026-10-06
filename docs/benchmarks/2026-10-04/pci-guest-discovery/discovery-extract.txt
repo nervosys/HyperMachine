@@ -1,0 +1,9 @@
+2026-10-04T14:42:48.321071Z  INFO hv2_core::vm: VM 'pci-guest-probe': vsock device attached over PCI at slot 3, BAR 0xd0010000 (guest CID 3, IRQ 11) -- no kernel argument needed
+[    0.163722] PCI: Fatal: No config space access function found
+[    0.197843] PCI: System does not support PCI
+[    0.233206] PCI: CLS 0 bytes, default 64
+[    0.603575] NET: Registered PF_VSOCK protocol family
+=== HV2 READY ===
+hv2-guest-agentd 1.1.0 listening on vsock port 1024
+2026-10-04T14:43:03.356279Z  INFO hv2_core::vm: VM 'pci-guest-probe' stopped
+PCI_GUEST_PROBE_FAILED: Timeout: no answer from a guest agent on vsock port 1024 within 15s (0 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd

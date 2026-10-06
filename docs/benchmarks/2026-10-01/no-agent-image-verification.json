@@ -1,0 +1,11 @@
+{
+  "source_sha256": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+  "output_sha256": "ba6454e28b54c21459399120c4c666fd8756c9ef2e3dd70e02b20a15fce3ff54",
+  "changed_contents": [
+    "init"
+  ],
+  "changed_modes": [],
+  "agent_and_busybox_exact": true,
+  "entry_sets_equal": true,
+  "verifier_sha256": "c45aafcc30f30288a9748b9a929ac24e1341acde23b58c43698ffa9d0eb78cd8"
+}

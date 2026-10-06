@@ -1,0 +1,10 @@
+{
+  "binary": "/var/tmp/hm-startup-cleanup-node-v2",
+  "sha256": "372f7e5310d3facca7a695b2ff3a29234c8984d080f3484a55b1e8358840aeb6",
+  "checker_sha256": "bc122926fcdc02e177f699a26e02b9029e976253734c0d078fac3f3bfcdce5ba",
+  "expected_failure": "pending oldest guest prevented eviction of eligible idle guest",
+  "selected_pending_victim_counts": {
+    "sbx-20a01e0861684d3996f1": 552
+  },
+  "structured_cleanup_report_available": false
+}

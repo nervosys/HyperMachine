@@ -1,0 +1,814 @@
+{
+  "diagnostic_only": true,
+  "performance_win_established": false,
+  "runtime_change_adopted": false,
+  "cohort_success": true,
+  "cleanup_verified": true,
+  "same_executable_verified": true,
+  "runtime_activation_verified": true,
+  "creation_analysis": {
+    "diagnostic_only": true,
+    "performance_win_established": false,
+    "runtime_change_adopted": false,
+    "managed_competitor_win_established": false,
+    "same_executable_verified": true,
+    "runtime_activation_verified": true,
+    "cohort_success": true,
+    "cleanup_verified": true,
+    "runs": [
+      {
+        "pair": 0,
+        "mode": "owned",
+        "activation": [
+          {
+            "requested": "owned",
+            "observed": "owned",
+            "captured_before_scoring": true
+          }
+        ],
+        "client_phases": {
+          "diagnostic_phase_accounting": true,
+          "engines": {
+            "hypermachine": {
+              "readiness": {
+                "planned": 1,
+                "attempted": 1,
+                "passed": 1,
+                "failed": 0,
+                "successful_p50_ms": 125.38479599999874,
+                "successful_p95_ms": 125.38479599999874,
+                "successful_p99_ms": 125.38479599999874,
+                "median_held_pss_mib": 70.892578125,
+                "median_incremental_pss_mib": 29.8486328125
+              },
+              "phases": {
+                "create_and_notice": {
+                  "mean_ms": 39.15735100000006,
+                  "p50_ms": 39.15735100000006,
+                  "p95_ms": 39.15735100000006,
+                  "p99_ms": 39.15735100000006,
+                  "at_least_1000_ms": 0
+                },
+                "exec": {
+                  "mean_ms": 86.22744499999868,
+                  "p50_ms": 86.22744499999868,
+                  "p95_ms": 86.22744499999868,
+                  "p99_ms": 86.22744499999868,
+                  "at_least_1000_ms": 0
+                }
+              },
+              "slow_successful_attempts": 0,
+              "slow_phase_time_fractions": {
+                "create_and_notice": null,
+                "exec": null
+              },
+              "ten_slowest": [
+                {
+                  "pair": 0,
+                  "index": 0,
+                  "ready_ms": 125.38479599999874,
+                  "latency_phases_ms": {
+                    "create_and_notice": 39.15735100000006,
+                    "exec": 86.22744499999868
+                  }
+                }
+              ]
+            },
+            "firecracker": {
+              "readiness": {
+                "planned": 1,
+                "attempted": 1,
+                "passed": 1,
+                "failed": 0,
+                "successful_p50_ms": 98.69234900000023,
+                "successful_p95_ms": 98.69234900000023,
+                "successful_p99_ms": 98.69234900000023,
+                "median_held_pss_mib": 23.14453125,
+                "median_incremental_pss_mib": 23.14453125
+              },
+              "phases": {
+                "process_and_load": {
+                  "mean_ms": 17.138936000002047,
+                  "p50_ms": 17.138936000002047,
+                  "p95_ms": 17.138936000002047,
+                  "p99_ms": 17.138936000002047,
+                  "at_least_1000_ms": 0
+                },
+                "connect_and_notice": {
+                  "mean_ms": 59.16464499999918,
+                  "p50_ms": 59.16464499999918,
+                  "p95_ms": 59.16464499999918,
+                  "p99_ms": 59.16464499999918,
+                  "at_least_1000_ms": 0
+                },
+                "exec": {
+                  "mean_ms": 22.388767999999004,
+                  "p50_ms": 22.388767999999004,
+                  "p95_ms": 22.388767999999004,
+                  "p99_ms": 22.388767999999004,
+                  "at_least_1000_ms": 0
+                }
+              },
+              "slow_successful_attempts": 0,
+              "slow_phase_time_fractions": {
+                "process_and_load": null,
+                "connect_and_notice": null,
+                "exec": null
+              },
+              "ten_slowest": [
+                {
+                  "pair": 0,
+                  "index": 0,
+                  "ready_ms": 98.69234900000023,
+                  "latency_phases_ms": {
+                    "process_and_load": 17.138936000002047,
+                    "connect_and_notice": 59.16464499999918,
+                    "exec": 22.388767999999004
+                  }
+                }
+              ]
+            }
+          },
+          "cleanup_verified": true,
+          "attempted": 2,
+          "passed": 2,
+          "cohort_success": true,
+          "runtime_change_adopted": false,
+          "managed_competitor_win_established": false,
+          "slow_threshold_ms": 1000,
+          "limitations": [
+            "Client create includes HTTP queueing, provisioning, snapshot restore, guest maintenance and response delivery",
+            "Client phases do not separate server CPU, blocking queues or guest scheduling",
+            "Phase percentiles need not sum to total readiness percentiles",
+            "Slow samples are described, never discarded from overall statistics"
+          ]
+        },
+        "server_creation": {
+          "diagnostic_only": true,
+          "runtime_change_adopted": false,
+          "performance_win_established": false,
+          "cohort_success": true,
+          "cleanup_verified": true,
+          "matched_successful_hypermachine_attempts": 1,
+          "unmatched_failed_attempts": [],
+          "uncorrelated_creation_trace_ids": [
+            "sbx-2bf55ba45da84223ab52"
+          ],
+          "slow_threshold_ms": 1000,
+          "slow_attempts": 0,
+          "all_stages": {
+            "build": {
+              "mean_ms": 0.699558,
+              "p50_ms": 0.699558,
+              "p95_ms": 0.699558,
+              "p99_ms": 0.699558,
+              "fraction_of_total_time": 0.005579288895601083
+            },
+            "launch": {
+              "mean_ms": 5.361275,
+              "p50_ms": 5.361275,
+              "p95_ms": 5.361275,
+              "p99_ms": 5.361275,
+              "fraction_of_total_time": 0.04275857337599412
+            },
+            "agent_answering": {
+              "mean_ms": 22.999189,
+              "p50_ms": 22.999189,
+              "p95_ms": 22.999189,
+              "p99_ms": 22.999189,
+              "fraction_of_total_time": 0.18342885049635707
+            },
+            "network_envd": {
+              "mean_ms": 0.18154499999999998,
+              "p50_ms": 0.18154499999999998,
+              "p95_ms": 0.18154499999999998,
+              "p99_ms": 0.18154499999999998,
+              "fraction_of_total_time": 0.0014479028222847833
+            },
+            "outside_creation": {
+              "mean_ms": 9.915784000000063,
+              "p50_ms": 9.915784000000063,
+              "p95_ms": 9.915784000000063,
+              "p99_ms": 9.915784000000063,
+              "fraction_of_total_time": 0.07908282595921887
+            },
+            "exec": {
+              "mean_ms": 86.22744499999868,
+              "p50_ms": 86.22744499999868,
+              "p95_ms": 86.22744499999868,
+              "p99_ms": 86.22744499999868,
+              "fraction_of_total_time": 0.6877025584505441
+            }
+          },
+          "slow_stages": {
+            "build": {
+              "mean_ms": null,
+              "p50_ms": null,
+              "p95_ms": null,
+              "p99_ms": null,
+              "fraction_of_total_time": null
+            },
+            "launch": {
+              "mean_ms": null,
+              "p50_ms": null,
+              "p95_ms": null,
+              "p99_ms": null,
+              "fraction_of_total_time": null
+            },
+            "agent_answering": {
+              "mean_ms": null,
+              "p50_ms": null,
+              "p95_ms": null,
+              "p99_ms": null,
+              "fraction_of_total_time": null
+            },
+            "network_envd": {
+              "mean_ms": null,
+              "p50_ms": null,
+              "p95_ms": null,
+              "p99_ms": null,
+              "fraction_of_total_time": null
+            },
+            "outside_creation": {
+              "mean_ms": null,
+              "p50_ms": null,
+              "p95_ms": null,
+              "p99_ms": null,
+              "fraction_of_total_time": null
+            },
+            "exec": {
+              "mean_ms": null,
+              "p50_ms": null,
+              "p95_ms": null,
+              "p99_ms": null,
+              "fraction_of_total_time": null
+            }
+          },
+          "ten_slowest": [
+            {
+              "pair": 0,
+              "index": 0,
+              "sandbox_id": "sbx-78a7a6d7ac1a45e5b6c7",
+              "ready_ms": 125.38479599999874,
+              "create_ms": 39.15735100000006,
+              "exec_ms": 86.22744499999868,
+              "creation_stages_ms": {
+                "logged_up": 29.240535,
+                "build": 0.699558,
+                "launch": 5.361275,
+                "agent_answering": 22.999189,
+                "network_envd": 0.18154499999999998
+              },
+              "component_sum_ms": 29.241567,
+              "outside_creation_ms": 9.915784000000063,
+              "readiness_ms": 22.580699,
+              "agent_other_ms": 0.418490000000002
+            }
+          ],
+          "limitations": [
+            "Existing selective logging can perturb timing; this is not a ranking cohort",
+            "Build includes preparation before new_vm returns; launch covers accepted launch_from_snapshot_prefaulted",
+            "Agent answering encloses existing queue/connection/Restored observations plus other scheduling time",
+            "Network/envd is the existing elapsed phase name; this fixture has no network or volume mounts",
+            "Outside creation includes HTTP/handler and registration/response work, not a measured internal cause",
+            "Logged up total and final phase use separate elapsed readings; component sum is retained independently",
+            "Stage percentiles are not additive; all slow observations remain in overall summaries"
+          ]
+        }
+      },
+      {
+        "pair": 0,
+        "mode": "borrowed",
+        "activation": [
+          {
+            "requested": "borrowed",
+            "observed": "borrowed",
+            "captured_before_scoring": true
+          }
+        ],
+        "client_phases": {
+          "diagnostic_phase_accounting": true,
+          "engines": {
+            "hypermachine": {
+              "readiness": {
+                "planned": 1,
+                "attempted": 1,
+                "passed": 1,
+                "failed": 0,
+                "successful_p50_ms": 90.9211749999983,
+                "successful_p95_ms": 90.9211749999983,
+                "successful_p99_ms": 90.9211749999983,
+                "median_held_pss_mib": 56.927734375,
+                "median_incremental_pss_mib": 30.041015625
+              },
+              "phases": {
+                "create_and_notice": {
+                  "mean_ms": 46.895474999999465,
+                  "p50_ms": 46.895474999999465,
+                  "p95_ms": 46.895474999999465,
+                  "p99_ms": 46.895474999999465,
+                  "at_least_1000_ms": 0
+                },
+                "exec": {
+                  "mean_ms": 44.025699999998835,
+                  "p50_ms": 44.025699999998835,
+                  "p95_ms": 44.025699999998835,
+                  "p99_ms": 44.025699999998835,
+                  "at_least_1000_ms": 0
+                }
+              },
+              "slow_successful_attempts": 0,
+              "slow_phase_time_fractions": {
+                "create_and_notice": null,
+                "exec": null
+              },
+              "ten_slowest": [
+                {
+                  "pair": 0,
+                  "index": 0,
+                  "ready_ms": 90.9211749999983,
+                  "latency_phases_ms": {
+                    "create_and_notice": 46.895474999999465,
+                    "exec": 44.025699999998835
+                  }
+                }
+              ]
+            },
+            "firecracker": {
+              "readiness": {
+                "planned": 1,
+                "attempted": 1,
+                "passed": 1,
+                "failed": 0,
+                "successful_p50_ms": 263.0779369999985,
+                "successful_p95_ms": 263.0779369999985,
+                "successful_p99_ms": 263.0779369999985,
+                "median_held_pss_mib": 22.32421875,
+                "median_incremental_pss_mib": 22.32421875
+              },
+              "phases": {
+                "process_and_load": {
+                  "mean_ms": 100.96548199999944,
+                  "p50_ms": 100.96548199999944,
+                  "p95_ms": 100.96548199999944,
+                  "p99_ms": 100.96548199999944,
+                  "at_least_1000_ms": 0
+                },
+                "connect_and_notice": {
+                  "mean_ms": 59.77917899999596,
+                  "p50_ms": 59.77917899999596,
+                  "p95_ms": 59.77917899999596,
+                  "p99_ms": 59.77917899999596,
+                  "at_least_1000_ms": 0
+                },
+                "exec": {
+                  "mean_ms": 102.33327600000308,
+                  "p50_ms": 102.33327600000308,
+                  "p95_ms": 102.33327600000308,
+                  "p99_ms": 102.33327600000308,
+                  "at_least_1000_ms": 0
+                }
+              },
+              "slow_successful_attempts": 0,
+              "slow_phase_time_fractions": {
+                "process_and_load": null,
+                "connect_and_notice": null,
+                "exec": null
+              },
+              "ten_slowest": [
+                {
+                  "pair": 0,
+                  "index": 0,
+                  "ready_ms": 263.0779369999985,
+                  "latency_phases_ms": {
+                    "process_and_load": 100.96548199999944,
+                    "connect_and_notice": 59.77917899999596,
+                    "exec": 102.33327600000308
+                  }
+                }
+              ]
+            }
+          },
+          "cleanup_verified": true,
+          "attempted": 2,
+          "passed": 2,
+          "cohort_success": true,
+          "runtime_change_adopted": false,
+          "managed_competitor_win_established": false,
+          "slow_threshold_ms": 1000,
+          "limitations": [
+            "Client create includes HTTP queueing, provisioning, snapshot restore, guest maintenance and response delivery",
+            "Client phases do not separate server CPU, blocking queues or guest scheduling",
+            "Phase percentiles need not sum to total readiness percentiles",
+            "Slow samples are described, never discarded from overall statistics"
+          ]
+        },
+        "server_creation": {
+          "diagnostic_only": true,
+          "runtime_change_adopted": false,
+          "performance_win_established": false,
+          "cohort_success": true,
+          "cleanup_verified": true,
+          "matched_successful_hypermachine_attempts": 1,
+          "unmatched_failed_attempts": [],
+          "uncorrelated_creation_trace_ids": [
+            "sbx-3e32bd045dec4f7bafe3"
+          ],
+          "slow_threshold_ms": 1000,
+          "slow_attempts": 0,
+          "all_stages": {
+            "build": {
+              "mean_ms": 1.054982,
+              "p50_ms": 1.054982,
+              "p95_ms": 1.054982,
+              "p99_ms": 1.054982,
+              "fraction_of_total_time": 0.011603259636713008
+            },
+            "launch": {
+              "mean_ms": 8.485451,
+              "p50_ms": 8.485451,
+              "p95_ms": 8.485451,
+              "p99_ms": 8.485451,
+              "fraction_of_total_time": 0.09332755543469558
+            },
+            "agent_answering": {
+              "mean_ms": 21.176355,
+              "p50_ms": 21.176355,
+              "p95_ms": 21.176355,
+              "p99_ms": 21.176355,
+              "fraction_of_total_time": 0.23290894557841335
+            },
+            "network_envd": {
+              "mean_ms": 0.165394,
+              "p50_ms": 0.165394,
+              "p95_ms": 0.165394,
+              "p99_ms": 0.165394,
+              "fraction_of_total_time": 0.0018190921971697254
+            },
+            "outside_creation": {
+              "mean_ms": 16.013292999999464,
+              "p50_ms": 16.013292999999464,
+              "p95_ms": 16.013292999999464,
+              "p99_ms": 16.013292999999464,
+              "fraction_of_total_time": 0.17612281187522888
+            },
+            "exec": {
+              "mean_ms": 44.025699999998835,
+              "p50_ms": 44.025699999998835,
+              "p95_ms": 44.025699999998835,
+              "p99_ms": 44.025699999998835,
+              "fraction_of_total_time": 0.48421833527777947
+            }
+          },
+          "slow_stages": {
+            "build": {
+              "mean_ms": null,
+              "p50_ms": null,
+              "p95_ms": null,
+              "p99_ms": null,
+              "fraction_of_total_time": null
+            },
+            "launch": {
+              "mean_ms": null,
+              "p50_ms": null,
+              "p95_ms": null,
+              "p99_ms": null,
+              "fraction_of_total_time": null
+            },
+            "agent_answering": {
+              "mean_ms": null,
+              "p50_ms": null,
+              "p95_ms": null,
+              "p99_ms": null,
+              "fraction_of_total_time": null
+            },
+            "network_envd": {
+              "mean_ms": null,
+              "p50_ms": null,
+              "p95_ms": null,
+              "p99_ms": null,
+              "fraction_of_total_time": null
+            },
+            "outside_creation": {
+              "mean_ms": null,
+              "p50_ms": null,
+              "p95_ms": null,
+              "p99_ms": null,
+              "fraction_of_total_time": null
+            },
+            "exec": {
+              "mean_ms": null,
+              "p50_ms": null,
+              "p95_ms": null,
+              "p99_ms": null,
+              "fraction_of_total_time": null
+            }
+          },
+          "ten_slowest": [
+            {
+              "pair": 0,
+              "index": 0,
+              "sandbox_id": "sbx-87d7a8d36c364ab2967a",
+              "ready_ms": 90.9211749999983,
+              "create_ms": 46.895474999999465,
+              "exec_ms": 44.025699999998835,
+              "creation_stages_ms": {
+                "logged_up": 30.881511,
+                "build": 1.054982,
+                "launch": 8.485451,
+                "agent_answering": 21.176355,
+                "network_envd": 0.165394
+              },
+              "component_sum_ms": 30.882182,
+              "outside_creation_ms": 16.013292999999464,
+              "readiness_ms": 20.924788,
+              "agent_other_ms": 0.25156700000000143
+            }
+          ],
+          "limitations": [
+            "Existing selective logging can perturb timing; this is not a ranking cohort",
+            "Build includes preparation before new_vm returns; launch covers accepted launch_from_snapshot_prefaulted",
+            "Agent answering encloses existing queue/connection/Restored observations plus other scheduling time",
+            "Network/envd is the existing elapsed phase name; this fixture has no network or volume mounts",
+            "Outside creation includes HTTP/handler and registration/response work, not a measured internal cause",
+            "Logged up total and final phase use separate elapsed readings; component sum is retained independently",
+            "Stage percentiles are not additive; all slow observations remain in overall summaries"
+          ]
+        }
+      }
+    ],
+    "limitations": [
+      "Debug logging may change timing; excluded from rankings",
+      "Client execution remains an aggregate phase",
+      "Stage timing does not identify CPU ownership or a causal runtime fix"
+    ]
+  },
+  "execution_analysis": [
+    {
+      "pair": 0,
+      "mode": "owned",
+      "matched_attempts": 1,
+      "slow_attempts": 0,
+      "all_exec_stages": {
+        "blocking_queue": {
+          "mean_ms": 0.046488,
+          "p50_ms": 0.046488,
+          "p95_ms": 0.046488,
+          "p99_ms": 0.046488,
+          "fraction_of_exec_time": 0.0005391322913487778,
+          "fraction_of_readiness_time": 0.0003707626561038586
+        },
+        "connect": {
+          "mean_ms": 1.0401049999999998,
+          "p50_ms": 1.0401049999999998,
+          "p95_ms": 1.0401049999999998,
+          "p99_ms": 1.0401049999999998,
+          "fraction_of_exec_time": 0.012062342795846679,
+          "fraction_of_readiness_time": 0.00829530400161125
+        },
+        "command_rpc": {
+          "mean_ms": 73.02651,
+          "p50_ms": 73.02651,
+          "p95_ms": 73.02651,
+          "p99_ms": 73.02651,
+          "fraction_of_exec_time": 0.8469056458764506,
+          "fraction_of_readiness_time": 0.5824191794354455
+        },
+        "guest_exec_other": {
+          "mean_ms": 0.9258159999999975,
+          "p50_ms": 0.9258159999999975,
+          "p95_ms": 0.9258159999999975,
+          "p99_ms": 0.9258159999999975,
+          "fraction_of_exec_time": 0.010736906329533615,
+          "fraction_of_readiness_time": 0.007383797952664107
+        },
+        "handler_other": {
+          "mean_ms": 0.0025250000000056616,
+          "p50_ms": 0.0025250000000056616,
+          "p95_ms": 0.0025250000000056616,
+          "p99_ms": 0.0025250000000056616,
+          "fraction_of_exec_time": 2.9283020040843148e-05,
+          "fraction_of_readiness_time": 2.0138007801246387e-05
+        },
+        "outside_handler": {
+          "mean_ms": 11.186000999998683,
+          "p50_ms": 11.186000999998683,
+          "p95_ms": 11.186000999998683,
+          "p99_ms": 11.186000999998683,
+          "fraction_of_exec_time": 0.12972668968677958,
+          "fraction_of_readiness_time": 0.08921337639691813
+        }
+      },
+      "slow_exec_stages": {
+        "blocking_queue": {
+          "mean_ms": null,
+          "p50_ms": null,
+          "p95_ms": null,
+          "p99_ms": null,
+          "fraction_of_exec_time": null,
+          "fraction_of_readiness_time": null
+        },
+        "connect": {
+          "mean_ms": null,
+          "p50_ms": null,
+          "p95_ms": null,
+          "p99_ms": null,
+          "fraction_of_exec_time": null,
+          "fraction_of_readiness_time": null
+        },
+        "command_rpc": {
+          "mean_ms": null,
+          "p50_ms": null,
+          "p95_ms": null,
+          "p99_ms": null,
+          "fraction_of_exec_time": null,
+          "fraction_of_readiness_time": null
+        },
+        "guest_exec_other": {
+          "mean_ms": null,
+          "p50_ms": null,
+          "p95_ms": null,
+          "p99_ms": null,
+          "fraction_of_exec_time": null,
+          "fraction_of_readiness_time": null
+        },
+        "handler_other": {
+          "mean_ms": null,
+          "p50_ms": null,
+          "p95_ms": null,
+          "p99_ms": null,
+          "fraction_of_exec_time": null,
+          "fraction_of_readiness_time": null
+        },
+        "outside_handler": {
+          "mean_ms": null,
+          "p50_ms": null,
+          "p95_ms": null,
+          "p99_ms": null,
+          "fraction_of_exec_time": null,
+          "fraction_of_readiness_time": null
+        }
+      },
+      "uncorrelated_agent_ids": [
+        "sbx-2bf55ba45da84223ab52"
+      ],
+      "uncorrelated_handler_ids": [
+        "sbx-2bf55ba45da84223ab52"
+      ],
+      "auxiliary_template_exec_traces": 1,
+      "ten_slowest": [
+        {
+          "pair": 0,
+          "index": 0,
+          "sandbox_id": "sbx-78a7a6d7ac1a45e5b6c7",
+          "ready_ms": 125.38479599999874,
+          "client_exec_ms": 86.22744499999868,
+          "components_ms": {
+            "blocking_queue": 0.046488,
+            "connect": 1.0401049999999998,
+            "command_rpc": 73.02651,
+            "guest_exec_other": 0.9258159999999975,
+            "handler_other": 0.0025250000000056616,
+            "outside_handler": 11.186000999998683
+          }
+        }
+      ]
+    },
+    {
+      "pair": 0,
+      "mode": "borrowed",
+      "matched_attempts": 1,
+      "slow_attempts": 0,
+      "all_exec_stages": {
+        "blocking_queue": {
+          "mean_ms": 0.064582,
+          "p50_ms": 0.064582,
+          "p95_ms": 0.064582,
+          "p99_ms": 0.064582,
+          "fraction_of_exec_time": 0.0014669159150224008,
+          "fraction_of_readiness_time": 0.0007103075823646275
+        },
+        "connect": {
+          "mean_ms": 0.958719,
+          "p50_ms": 0.958719,
+          "p95_ms": 0.958719,
+          "p99_ms": 0.958719,
+          "fraction_of_exec_time": 0.02177634881444305,
+          "fraction_of_readiness_time": 0.01054450737135786
+        },
+        "command_rpc": {
+          "mean_ms": 33.277423999999996,
+          "p50_ms": 33.277423999999996,
+          "p95_ms": 33.277423999999996,
+          "p99_ms": 33.277423999999996,
+          "fraction_of_exec_time": 0.7558635978530921,
+          "fraction_of_readiness_time": 0.36600301304949723
+        },
+        "guest_exec_other": {
+          "mean_ms": 0.35649600000000703,
+          "p50_ms": 0.35649600000000703,
+          "p95_ms": 0.35649600000000703,
+          "p99_ms": 0.35649600000000703,
+          "fraction_of_exec_time": 0.008097452169982906,
+          "fraction_of_readiness_time": 0.003920934809740566
+        },
+        "handler_other": {
+          "mean_ms": 0.004379000000000133,
+          "p50_ms": 0.004379000000000133,
+          "p95_ms": 0.004379000000000133,
+          "p99_ms": 0.004379000000000133,
+          "fraction_of_exec_time": 9.94646308860563e-05,
+          "fraction_of_readiness_time": 4.8162597986664984e-05
+        },
+        "outside_handler": {
+          "mean_ms": 9.364099999998835,
+          "p50_ms": 9.364099999998835,
+          "p95_ms": 9.364099999998835,
+          "p99_ms": 9.364099999998835,
+          "fraction_of_exec_time": 0.21269622061657356,
+          "fraction_of_readiness_time": 0.10299140986683257
+        }
+      },
+      "slow_exec_stages": {
+        "blocking_queue": {
+          "mean_ms": null,
+          "p50_ms": null,
+          "p95_ms": null,
+          "p99_ms": null,
+          "fraction_of_exec_time": null,
+          "fraction_of_readiness_time": null
+        },
+        "connect": {
+          "mean_ms": null,
+          "p50_ms": null,
+          "p95_ms": null,
+          "p99_ms": null,
+          "fraction_of_exec_time": null,
+          "fraction_of_readiness_time": null
+        },
+        "command_rpc": {
+          "mean_ms": null,
+          "p50_ms": null,
+          "p95_ms": null,
+          "p99_ms": null,
+          "fraction_of_exec_time": null,
+          "fraction_of_readiness_time": null
+        },
+        "guest_exec_other": {
+          "mean_ms": null,
+          "p50_ms": null,
+          "p95_ms": null,
+          "p99_ms": null,
+          "fraction_of_exec_time": null,
+          "fraction_of_readiness_time": null
+        },
+        "handler_other": {
+          "mean_ms": null,
+          "p50_ms": null,
+          "p95_ms": null,
+          "p99_ms": null,
+          "fraction_of_exec_time": null,
+          "fraction_of_readiness_time": null
+        },
+        "outside_handler": {
+          "mean_ms": null,
+          "p50_ms": null,
+          "p95_ms": null,
+          "p99_ms": null,
+          "fraction_of_exec_time": null,
+          "fraction_of_readiness_time": null
+        }
+      },
+      "uncorrelated_agent_ids": [
+        "sbx-3e32bd045dec4f7bafe3"
+      ],
+      "uncorrelated_handler_ids": [
+        "sbx-3e32bd045dec4f7bafe3"
+      ],
+      "auxiliary_template_exec_traces": 1,
+      "ten_slowest": [
+        {
+          "pair": 0,
+          "index": 0,
+          "sandbox_id": "sbx-87d7a8d36c364ab2967a",
+          "ready_ms": 90.9211749999983,
+          "client_exec_ms": 44.025699999998835,
+          "components_ms": {
+            "blocking_queue": 0.064582,
+            "connect": 0.958719,
+            "command_rpc": 33.277423999999996,
+            "guest_exec_other": 0.35649600000000703,
+            "handler_other": 0.004379000000000133,
+            "outside_handler": 9.364099999998835
+          }
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Instrumentation changes allocation and timing; excluded from rankings",
+    "Command RPC includes host transport/polling and guest work, not guest CPU alone",
+    "Outside-handler time includes HTTP, scheduling and response work; its cause is unmeasured",
+    "Individual percentiles are not additive; original slow attempts remain included"
+  ]
+}

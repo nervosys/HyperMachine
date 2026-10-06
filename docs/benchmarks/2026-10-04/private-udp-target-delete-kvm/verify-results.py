@@ -1,0 +1,28 @@
+from pathlib import Path
+import json
+p=Path(__file__).parent;r=json.loads((p/'report.json').read_text());u=r['private_guest_udp'];assert len(r['checks'])==47 and r['guests_remaining']==0
+for k in ['daemon_reaped','secondary_node_reaped','control_and_redis_reaped','cli_reaped','native_gateway_reaped']:assert r[k]
+for k in ['source_gateway_verified','internet_disabled','owner_numeric_address_refused','stale_target_binding_refused','fresh_dns_rejoin_recovery_verified']:assert u[k]
+assert u['payload_bytes']==[0,13,1280,65507] and not u['same_node'] and u['source_node']!=u['destination_node']
+a=json.loads((p/'image.json').read_text());b=json.loads((p/'repeated-image.json').read_text());assert a==b
+c=json.loads((p/'image-reproducibility.json').read_text());assert c['identical_rebuild'] and c['image_sha256']==a['image_sha256']
+assert r['inputs_sha256']['/var/tmp/hm-private-udp-pause-guest-v1.cpio.gz']==a['image_sha256']
+
+
+assert u['revocation_grace_seconds']==3 and u['post_grace_attempts']==3
+for phase in ['target_membership_active_udp_revocation','source_membership_active_udp_revocation']:
+ v=u[phase];assert v['revoked'] and v['same_socket'] and v['replies_before']>=1 and v['post_grace_refusals']==3
+assert u['source_rejoin_stale_binding_refused'] and u['source_rejoin_fresh_binding_recovery_verified']
+n=json.loads((p/'negative-control.json').read_text());assert n['ready'] and n['marker_created_with_echo_still_active'] and n['exit_code']==5 and not n['false_revocation_report'] and n['client_reaped']
+
+v=u['target_pause_active_udp_revocation'];assert v['revoked'] and v['same_socket'] and v['replies_before']>=1 and v['post_grace_refusals']==3
+for key in ['target_pause_numeric_refused','target_pause_dns_refused','target_resume_max_payload_recovery_verified','target_resume_address_preserved']:assert u[key]
+
+v=u['store_lookup_outage_active_udp_revocation'];assert v['revoked'] and v['same_socket'] and v['replies_before']>=1 and v['post_grace_refusals']==3
+for key in ['store_lookup_outage_numeric_refused','store_lookup_outage_dns_refused','store_lookup_outage_verified','store_recovery_max_payload_verified']:assert u[key]
+assert u['outage_control']=='owned operator mTLS direct source-node exec independent of route store'
+
+v=u['target_delete_active_udp_revocation'];assert v['revoked'] and v['same_socket'] and v['replies_before']>=1 and v['post_grace_refusals']==3
+for key in ['target_delete_numeric_refused','target_delete_dns_refused','target_delete_record_absent','target_delete_other_target_max_payload_preserved']:assert u[key]
+assert u['deleted_target_node']==u['destination_node'] and u['deleted_target_node']!=u['source_node']
+print('47 KVM checks, active target-deletion UDP refusal, numeric/DNS refusal, absent record, unrelated maximum-payload delivery, full cleanup and reusable fixture evidence verified.')

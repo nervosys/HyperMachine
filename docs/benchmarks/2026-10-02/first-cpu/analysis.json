@@ -1,0 +1,332 @@
+{
+  "1": {
+    "diagnostic_only": true,
+    "performance_comparison": false,
+    "cohort_sha256": "d157edec625e701c3c3106651e8cc93751b1ef1ee0a47be942bec78b594d70fb",
+    "cohort_success": true,
+    "hm_attempted": 2,
+    "hm_passed_and_cleaned": 2,
+    "matched_successful_ids": 2,
+    "unmatched_passed_ids": [],
+    "other_first_exit_ids": [],
+    "first_exit_histogram": [
+      {
+        "kind": "io_out",
+        "io_port": 3320,
+        "n": 2
+      }
+    ],
+    "successful_dispatch_ms": {
+      "dispatch_queue_ms": {
+        "n": 2,
+        "mean": 0.09520400000000001,
+        "median": 0.09520400000000001,
+        "maximum": 0.09957300000000001
+      },
+      "wrapper_queue_ms": {
+        "n": 2,
+        "mean": 0.0028305,
+        "median": 0.0028305,
+        "maximum": 0.003196
+      },
+      "thread_start_ms": {
+        "n": 2,
+        "mean": 0.138029,
+        "median": 0.138029,
+        "maximum": 0.18662600000000001
+      },
+      "owner_setup_ms": {
+        "n": 2,
+        "mean": 0.047071,
+        "median": 0.047071,
+        "maximum": 0.063613
+      },
+      "first_backend_ms": {
+        "n": 2,
+        "mean": 174.6038565,
+        "median": 174.6038565,
+        "maximum": 175.994062
+      }
+    },
+    "successful_readiness_ms": {
+      "blocking_queue_ms": {
+        "n": 2,
+        "mean": 0.1284035,
+        "median": 0.1284035,
+        "maximum": 0.163426
+      },
+      "connect_ms": {
+        "n": 2,
+        "mean": 350.776532,
+        "median": 350.776532,
+        "maximum": 353.227132
+      },
+      "ping_ms": {
+        "n": 2,
+        "mean": 2.039165,
+        "median": 2.039165,
+        "maximum": 3.784851
+      }
+    },
+    "limitations": [
+      "Summaries are conditional on successful, cleaned-up matched guests; raw failures remain in the cohort",
+      "Backend duration includes host scheduling and guest execution; no CPU-work attribution",
+      "First exit does not identify where the failed earlier cohort stalled",
+      "Tracing affects timing; excluded from competitor latency rankings",
+      "CPU consumption includes all calling-thread CPU charged inside the bracket, not guest decompression alone",
+      "Wall minus CPU is elapsed time not charged to this thread; it does not separate scheduling, blocking and nested-host effects",
+      "The CPU bracket excludes the preceding diagnostic log and encloses the CPU clock reads",
+      "No matching Firecracker first-backend CPU measurement or competitor CPU ranking"
+    ],
+    "cpu_clock": "Linux CLOCK_THREAD_CPUTIME_ID",
+    "matched_cpu_ids": 2,
+    "unmatched_cpu_ids": [],
+    "other_cpu_ids": [],
+    "first_backend_cpu": {
+      "thread_cpu_ms": {
+        "n": 2,
+        "mean": 174.5268605,
+        "median": 174.5268605,
+        "maximum": 175.96837
+      },
+      "bracket_wall_ms": {
+        "n": 2,
+        "mean": 174.5967535,
+        "median": 174.5967535,
+        "maximum": 175.988552
+      },
+      "elapsed_not_cpu_ms": {
+        "n": 2,
+        "mean": 0.069893,
+        "median": 0.069893,
+        "maximum": 0.119604
+      },
+      "cpu_fraction": {
+        "n": 2,
+        "mean": 0.999597393784424,
+        "median": 0.999597393784424,
+        "maximum": 0.9998853220861775
+      }
+    }
+  },
+  "8": {
+    "diagnostic_only": true,
+    "performance_comparison": false,
+    "cohort_sha256": "7579b1e4edb6d85b1d1a314eb25a2b01fa0681a72f55d65bca3679b51cb14c88",
+    "cohort_success": true,
+    "hm_attempted": 16,
+    "hm_passed_and_cleaned": 16,
+    "matched_successful_ids": 16,
+    "unmatched_passed_ids": [],
+    "other_first_exit_ids": [],
+    "first_exit_histogram": [
+      {
+        "kind": "io_out",
+        "io_port": 3320,
+        "n": 16
+      }
+    ],
+    "successful_dispatch_ms": {
+      "dispatch_queue_ms": {
+        "n": 16,
+        "mean": 0.6617546875,
+        "median": 0.311563,
+        "maximum": 2.706624
+      },
+      "wrapper_queue_ms": {
+        "n": 16,
+        "mean": 0.0031273125,
+        "median": 0.0020340000000000002,
+        "maximum": 0.008336
+      },
+      "thread_start_ms": {
+        "n": 16,
+        "mean": 1.35002475,
+        "median": 0.79802,
+        "maximum": 5.43396
+      },
+      "owner_setup_ms": {
+        "n": 16,
+        "mean": 2.2003784375,
+        "median": 0.037593,
+        "maximum": 34.236456
+      },
+      "first_backend_ms": {
+        "n": 16,
+        "mean": 195.0300110625,
+        "median": 191.6732535,
+        "maximum": 212.787961
+      }
+    },
+    "successful_readiness_ms": {
+      "blocking_queue_ms": {
+        "n": 16,
+        "mean": 1.2777799374999999,
+        "median": 0.654656,
+        "maximum": 4.942997999999999
+      },
+      "connect_ms": {
+        "n": 16,
+        "mean": 388.7084829375,
+        "median": 388.816424,
+        "maximum": 416.07227
+      },
+      "ping_ms": {
+        "n": 16,
+        "mean": 0.8684661875,
+        "median": 0.356642,
+        "maximum": 4.062799
+      }
+    },
+    "limitations": [
+      "Summaries are conditional on successful, cleaned-up matched guests; raw failures remain in the cohort",
+      "Backend duration includes host scheduling and guest execution; no CPU-work attribution",
+      "First exit does not identify where the failed earlier cohort stalled",
+      "Tracing affects timing; excluded from competitor latency rankings",
+      "CPU consumption includes all calling-thread CPU charged inside the bracket, not guest decompression alone",
+      "Wall minus CPU is elapsed time not charged to this thread; it does not separate scheduling, blocking and nested-host effects",
+      "The CPU bracket excludes the preceding diagnostic log and encloses the CPU clock reads",
+      "No matching Firecracker first-backend CPU measurement or competitor CPU ranking"
+    ],
+    "cpu_clock": "Linux CLOCK_THREAD_CPUTIME_ID",
+    "matched_cpu_ids": 16,
+    "unmatched_cpu_ids": [],
+    "other_cpu_ids": [],
+    "first_backend_cpu": {
+      "thread_cpu_ms": {
+        "n": 16,
+        "mean": 188.824291125,
+        "median": 188.0603735,
+        "maximum": 197.959524
+      },
+      "bracket_wall_ms": {
+        "n": 16,
+        "mean": 195.0201589375,
+        "median": 191.6634945,
+        "maximum": 212.784044
+      },
+      "elapsed_not_cpu_ms": {
+        "n": 16,
+        "mean": 6.1958678125,
+        "median": 2.6910935,
+        "maximum": 30.33697
+      },
+      "cpu_fraction": {
+        "n": 16,
+        "mean": 0.9698832382088177,
+        "median": 0.9865116732499258,
+        "maximum": 0.9998201001753934
+      }
+    }
+  },
+  "100": {
+    "diagnostic_only": true,
+    "performance_comparison": false,
+    "cohort_sha256": "8f49cce89f6a223a278123a926271fe9b1f8bbdb4a964a3148ea4ad6686a89ea",
+    "cohort_success": true,
+    "hm_attempted": 200,
+    "hm_passed_and_cleaned": 200,
+    "matched_successful_ids": 200,
+    "unmatched_passed_ids": [],
+    "other_first_exit_ids": [],
+    "first_exit_histogram": [
+      {
+        "kind": "io_out",
+        "io_port": 3320,
+        "n": 200
+      }
+    ],
+    "successful_dispatch_ms": {
+      "dispatch_queue_ms": {
+        "n": 200,
+        "mean": 4.253948115,
+        "median": 2.7938555,
+        "maximum": 39.305843
+      },
+      "wrapper_queue_ms": {
+        "n": 200,
+        "mean": 0.0052851799999999996,
+        "median": 0.0044385,
+        "maximum": 0.050658
+      },
+      "thread_start_ms": {
+        "n": 200,
+        "mean": 7.5000653150000005,
+        "median": 4.8582175,
+        "maximum": 114.781357
+      },
+      "owner_setup_ms": {
+        "n": 200,
+        "mean": 1.188667225,
+        "median": 0.096246,
+        "maximum": 39.297505
+      },
+      "first_backend_ms": {
+        "n": 200,
+        "mean": 2967.342648585,
+        "median": 2986.042367,
+        "maximum": 3565.516991
+      }
+    },
+    "successful_readiness_ms": {
+      "blocking_queue_ms": {
+        "n": 200,
+        "mean": 7.919881525,
+        "median": 6.5279845000000005,
+        "maximum": 43.747015
+      },
+      "connect_ms": {
+        "n": 200,
+        "mean": 7495.751090775,
+        "median": 7275.7434665,
+        "maximum": 9946.961846
+      },
+      "ping_ms": {
+        "n": 200,
+        "mean": 10.122640105,
+        "median": 4.323283999999999,
+        "maximum": 105.867223
+      }
+    },
+    "limitations": [
+      "Summaries are conditional on successful, cleaned-up matched guests; raw failures remain in the cohort",
+      "Backend duration includes host scheduling and guest execution; no CPU-work attribution",
+      "First exit does not identify where the failed earlier cohort stalled",
+      "Tracing affects timing; excluded from competitor latency rankings",
+      "CPU consumption includes all calling-thread CPU charged inside the bracket, not guest decompression alone",
+      "Wall minus CPU is elapsed time not charged to this thread; it does not separate scheduling, blocking and nested-host effects",
+      "The CPU bracket excludes the preceding diagnostic log and encloses the CPU clock reads",
+      "No matching Firecracker first-backend CPU measurement or competitor CPU ranking"
+    ],
+    "cpu_clock": "Linux CLOCK_THREAD_CPUTIME_ID",
+    "matched_cpu_ids": 200,
+    "unmatched_cpu_ids": [],
+    "other_cpu_ids": [],
+    "first_backend_cpu": {
+      "thread_cpu_ms": {
+        "n": 200,
+        "mean": 218.41637486,
+        "median": 218.025297,
+        "maximum": 250.28738
+      },
+      "bracket_wall_ms": {
+        "n": 200,
+        "mean": 2967.3131203,
+        "median": 2986.0351579999997,
+        "maximum": 3565.510218
+      },
+      "elapsed_not_cpu_ms": {
+        "n": 200,
+        "mean": 2748.89674544,
+        "median": 2770.8216105,
+        "maximum": 3341.498515
+      },
+      "cpu_fraction": {
+        "n": 200,
+        "mean": 0.07414730843313577,
+        "median": 0.07296130947462459,
+        "maximum": 0.11092663582794085
+      }
+    }
+  }
+}

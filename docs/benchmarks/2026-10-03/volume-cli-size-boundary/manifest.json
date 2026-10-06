@@ -1,0 +1,9 @@
+{
+  "sha256": {
+    "README.md": "86e76d9ae73b9935c67fd5355b41495fda46e8b082e169bac12689a0ff98f794",
+    "check-volume-cli-streaming.py": "9fc5faadebc3e0328a9b9aa17bacc62fdbf11fd88023e58bfcd33171e3e0ac7a",
+    "report.json": "a5e5144002d7dfad2d6125b051fc6dc822216fd077cb168812a41426c8f0904b",
+    "tests.log": "4cdfb263ce1378c368d56c28689c7b5f4176400df5fb312ba59e3d387858a17d",
+    "volume_client.rs": "80624a4d6bf2be2e18a9a8e0d2c5607b00f6ab85f90f2be2724d2dab84b88e3f"
+  }
+}

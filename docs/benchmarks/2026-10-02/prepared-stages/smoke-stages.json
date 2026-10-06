@@ -1,0 +1,155 @@
+{
+  "diagnostic_only": true,
+  "runtime_change_adopted": false,
+  "performance_win_established": false,
+  "cleanup_verified": true,
+  "cohort_success": true,
+  "matched_successful_hypermachine_attempts": 2,
+  "unmatched_failed_attempts": [],
+  "uncorrelated_trace_ids": [
+    "sbx-04d726cfb029480db175"
+  ],
+  "slow_threshold_ms": 1000,
+  "slow_attempts": 0,
+  "all_stages": {
+    "blocking_queue": {
+      "mean_ms": 0.2028805,
+      "p50_ms": 0.083856,
+      "p95_ms": 0.321905,
+      "p99_ms": 0.321905
+    },
+    "connect": {
+      "mean_ms": 7.3827175,
+      "p50_ms": 7.1614119999999994,
+      "p95_ms": 7.604023,
+      "p99_ms": 7.604023
+    },
+    "restored": {
+      "mean_ms": 8.3761855,
+      "p50_ms": 5.190541,
+      "p95_ms": 11.56183,
+      "p99_ms": 11.56183
+    },
+    "server_readiness": {
+      "mean_ms": 15.9617835,
+      "p50_ms": 12.87842,
+      "p95_ms": 19.045147,
+      "p99_ms": 19.045147
+    },
+    "other_create": {
+      "mean_ms": 55.94645900028527,
+      "p50_ms": 16.58627000016805,
+      "p95_ms": 95.30664800040249,
+      "p99_ms": 95.30664800040249
+    },
+    "exec": {
+      "mean_ms": 51.165854500140995,
+      "p50_ms": 42.09421099949395,
+      "p95_ms": 60.23749800078804,
+      "p99_ms": 60.23749800078804
+    },
+    "ready": {
+      "mean_ms": 123.07409700042626,
+      "p50_ms": 71.558900999662,
+      "p95_ms": 174.58929300119053,
+      "p99_ms": 174.58929300119053
+    }
+  },
+  "slow_stages": {
+    "blocking_queue": {
+      "mean_ms": null,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null
+    },
+    "connect": {
+      "mean_ms": null,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null
+    },
+    "restored": {
+      "mean_ms": null,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null
+    },
+    "server_readiness": {
+      "mean_ms": null,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null
+    },
+    "other_create": {
+      "mean_ms": null,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null
+    },
+    "exec": {
+      "mean_ms": null,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null
+    },
+    "ready": {
+      "mean_ms": null,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null
+    }
+  },
+  "all_time_fractions": {
+    "blocking_queue": 0.0016484419138114604,
+    "connect": 0.05998595707734041,
+    "restored": 0.06805806992815872,
+    "other_create": 0.4545754172796531,
+    "exec": 0.4157321138010363
+  },
+  "slow_time_fractions": {
+    "blocking_queue": null,
+    "connect": null,
+    "restored": null,
+    "other_create": null,
+    "exec": null
+  },
+  "ten_slowest": [
+    {
+      "pair": 1,
+      "index": 0,
+      "sandbox_id": "sbx-e5e5f7664c164d6a99ea",
+      "ready_ms": 174.58929300119053,
+      "create_and_notice_ms": 114.35179500040249,
+      "exec_ms": 60.23749800078804,
+      "server_stages_ms": {
+        "blocking_queue": 0.321905,
+        "connect": 7.1614119999999994,
+        "restored": 11.56183
+      },
+      "server_readiness_ms": 19.045147,
+      "other_create_ms": 95.30664800040249
+    },
+    {
+      "pair": 0,
+      "index": 0,
+      "sandbox_id": "sbx-fe72d38910b746e486c4",
+      "ready_ms": 71.558900999662,
+      "create_and_notice_ms": 29.464690000168048,
+      "exec_ms": 42.09421099949395,
+      "server_stages_ms": {
+        "blocking_queue": 0.083856,
+        "connect": 7.604023,
+        "restored": 5.190541
+      },
+      "server_readiness_ms": 12.87842,
+      "other_create_ms": 16.58627000016805
+    }
+  ],
+  "limitations": [
+    "Selective logging can perturb timings; this is not a ranking cohort",
+    "Server queue, connection and Restored RPC durations are existing accepted-daemon observations",
+    "Other create time includes HTTP, provisioning, restore and response work; its internal cause is not identified",
+    "Successful creates are correlated by source-bound VM name equal to sandbox ID; failed creates may return no ID",
+    "Individual stage percentiles are not additive; slow samples remain in overall summaries"
+  ]
+}

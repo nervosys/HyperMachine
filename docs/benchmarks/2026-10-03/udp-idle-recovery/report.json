@@ -1,0 +1,27 @@
+{
+  "inputs_sha256": {
+    "/var/tmp/hm-object-backup/target/debug/hv2-sandboxd": "d7f14558021a057135437b2998344ea2dea746aa778612e1a0a85b71a0299956",
+    "/var/tmp/hm-object-backup/target/debug/hv2-control-plane": "2d7c3e820d6788fdeb8934a3b344899a0767be9922e55ee5dbe9dd99e48c638a",
+    "/var/tmp/hm-object-backup/target/debug/hm": "3d30423e212fd8640a49977b62e5857967b26571824563f0ca51bf5052b3d24e",
+    "/var/tmp/hm-competitive/bzImage-known-uart-irq": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "/var/tmp/hm-udp-echo-guest.cpio.gz": "2f0a4ac491bfc9c500cda05bdb0c9706e5d37d0189224db595ed37abfe5418db"
+  },
+  "checks": [
+    "CLI refuses untrusted control certificate and trusted wrong hostname",
+    "Wrong control-plane API key refused",
+    "Empty binary and maximum-size IPv4 datagrams verified through real KVM",
+    "Oversized frame closes its real guest session without preventing a fresh valid session",
+    "Idle CLI sessions release peer slots and accept existing/new peers",
+    "Two CLI peers preserve empty binary and maximum-size datagrams through real control plane Redis node and KVM",
+    "Pause closes existing UDP session",
+    "Resumed guest accepts a new UDP session",
+    "Delete closes UDP session and clears guest inventory"
+  ],
+  "daemon_reaped": true,
+  "guests_remaining": 0,
+  "control_and_redis_reaped": true,
+  "cli_reaped": true,
+  "control_api_tls": true,
+  "latency_measurements": [],
+  "scope": "Owned shipped CLI/control-plane/Redis/daemon/KVM UDP; optional verified API TLS, node hop HTTP, no mTLS."
+}

@@ -1,0 +1,20 @@
+{
+  "sha256": {
+    "README.md": "d4f612aaded8eb6201451c3f79dbd6640306f22d58e9eda3899bc0c45391ca71",
+    "check-acme-issuance.py": "062f469e653bbd4fea895c0d4223041e21e756245dda78b17d5ee2439285e76e",
+    "control-build-context.json": "ceb56f3c405d21bdcfc2451a73c03ae4008165d395a2b1237493b86668c5bbe9",
+    "daemon-build-context.json": "b1048f146b326d48662c45e8851cf15da12f3a77f5d0fefdfb6f75f3731b5a55",
+    "deploy-tls-certificate.py": "09e9f6b7543cbe810b18c5db26306f2dee72cb733efd2d9bc3fd5f64bfe2189d",
+    "domain-certificate-jobs.py": "3b8c3b5db70434c2ae4100632353d850adbb63d2afe607f3ccb5c1341bcee45d",
+    "excluded-diagnostic.log": "ca95f440aac67e0524d5941ca875f20c4d87e6ef1b5d52099c2ad800d8ef1b96",
+    "excluded-first-run.log": "ca95f440aac67e0524d5941ca875f20c4d87e6ef1b5d52099c2ad800d8ef1b96",
+    "excluded-kvm-report.json": "bd11653fc84bc24fbc423e9cc5754a2d8b391312a2285263c5a7a42e03bf53a1",
+    "renew-tls-certificates.py": "b6dd26bc78de6495c355698356cb033f4990b5c5364b949727cb2ed5562698bd",
+    "report.json": "2a1971d75297c1209a01d986df4314deaca5a4ddd8ed3526daaca526a0ecc38f",
+    "run.log": "2a1971d75297c1209a01d986df4314deaca5a4ddd8ed3526daaca526a0ecc38f",
+    "verify-custom-domains.py": "a9b1ce2a566c4a83fbbe8efa3fc4c1f0f7bfb426e3280abb0d0634bf36c6fc6e"
+  },
+  "public_ca_contacted": false,
+  "automatic_claim_job_discovery_verified": true,
+  "performance_win_established": false
+}

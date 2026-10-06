@@ -1,0 +1,17 @@
+{
+  "owned_redis": true,
+  "redis_exit_code": 0,
+  "process_reaped": true,
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "-p",
+    "hv2-cluster",
+    "--lib",
+    "private_membership_http_tests::redis_membership_api_enforces_owners_revisions_and_request_bounds",
+    "--",
+    "--nocapture"
+  ],
+  "test_exit_code": 0
+}

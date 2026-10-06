@@ -1,0 +1,410 @@
+[
+  {
+    "block": 1,
+    "path": "private",
+    "matched_threads": 351,
+    "matched_cpu_ms": 22220.0,
+    "process_cpu_ms": 22360.0,
+    "cpu_ms_by_name": {
+      "tokio-rt-worker": 20600.0,
+      "vcpu-0": 1240.0,
+      "hv2-vsock-sbx-4": 210.0,
+      "hv2-irq-sbx-4ea": 170.0,
+      "hm-private-setu": 0.0,
+      "hv2-net-sbx-4ea": 0.0,
+      "kvm-nx-lpage-re": 0.0
+    },
+    "top_threads": [
+      {
+        "tid": 517,
+        "name": "vcpu-0",
+        "start_ticks": 30794,
+        "cpu_ticks": 124,
+        "cpu_ms": 1240.0
+      },
+      {
+        "tid": 513,
+        "name": "hv2-vsock-sbx-4",
+        "start_ticks": 30793,
+        "cpu_ticks": 21,
+        "cpu_ms": 210.0
+      },
+      {
+        "tid": 516,
+        "name": "hv2-irq-sbx-4ea",
+        "start_ticks": 30794,
+        "cpu_ticks": 17,
+        "cpu_ms": 170.0
+      },
+      {
+        "tid": 306,
+        "name": "tokio-rt-worker",
+        "start_ticks": 27689,
+        "cpu_ticks": 14,
+        "cpu_ms": 140.0
+      },
+      {
+        "tid": 338,
+        "name": "tokio-rt-worker",
+        "start_ticks": 27689,
+        "cpu_ticks": 14,
+        "cpu_ms": 140.0
+      },
+      {
+        "tid": 554,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32058,
+        "cpu_ticks": 14,
+        "cpu_ms": 140.0
+      },
+      {
+        "tid": 575,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32066,
+        "cpu_ticks": 14,
+        "cpu_ms": 140.0
+      },
+      {
+        "tid": 605,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32073,
+        "cpu_ticks": 14,
+        "cpu_ms": 140.0
+      },
+      {
+        "tid": 614,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32075,
+        "cpu_ticks": 14,
+        "cpu_ms": 140.0
+      },
+      {
+        "tid": 620,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32077,
+        "cpu_ticks": 14,
+        "cpu_ms": 140.0
+      },
+      {
+        "tid": 626,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32083,
+        "cpu_ticks": 14,
+        "cpu_ms": 140.0
+      },
+      {
+        "tid": 641,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32086,
+        "cpu_ticks": 14,
+        "cpu_ms": 140.0
+      }
+    ]
+  },
+  {
+    "block": 2,
+    "path": "standard",
+    "matched_threads": 351,
+    "matched_cpu_ms": 21010.0,
+    "process_cpu_ms": 21360.0,
+    "cpu_ms_by_name": {
+      "tokio-rt-worker": 19480.0,
+      "vcpu-0": 1160.0,
+      "hv2-vsock-sbx-4": 200.0,
+      "hv2-irq-sbx-4ea": 170.0,
+      "hm-private-setu": 0.0,
+      "hv2-net-sbx-4ea": 0.0,
+      "kvm-nx-lpage-re": 0.0
+    },
+    "top_threads": [
+      {
+        "tid": 517,
+        "name": "vcpu-0",
+        "start_ticks": 30794,
+        "cpu_ticks": 116,
+        "cpu_ms": 1160.0
+      },
+      {
+        "tid": 513,
+        "name": "hv2-vsock-sbx-4",
+        "start_ticks": 30793,
+        "cpu_ticks": 20,
+        "cpu_ms": 200.0
+      },
+      {
+        "tid": 516,
+        "name": "hv2-irq-sbx-4ea",
+        "start_ticks": 30794,
+        "cpu_ticks": 17,
+        "cpu_ms": 170.0
+      },
+      {
+        "tid": 328,
+        "name": "tokio-rt-worker",
+        "start_ticks": 27689,
+        "cpu_ticks": 14,
+        "cpu_ms": 140.0
+      },
+      {
+        "tid": 357,
+        "name": "tokio-rt-worker",
+        "start_ticks": 27692,
+        "cpu_ticks": 13,
+        "cpu_ms": 130.0
+      },
+      {
+        "tid": 449,
+        "name": "tokio-rt-worker",
+        "start_ticks": 27807,
+        "cpu_ticks": 13,
+        "cpu_ms": 130.0
+      },
+      {
+        "tid": 572,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32063,
+        "cpu_ticks": 13,
+        "cpu_ms": 130.0
+      },
+      {
+        "tid": 599,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32072,
+        "cpu_ticks": 13,
+        "cpu_ms": 130.0
+      },
+      {
+        "tid": 623,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32082,
+        "cpu_ticks": 13,
+        "cpu_ms": 130.0
+      },
+      {
+        "tid": 632,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32084,
+        "cpu_ticks": 13,
+        "cpu_ms": 130.0
+      },
+      {
+        "tid": 758,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32116,
+        "cpu_ticks": 13,
+        "cpu_ms": 130.0
+      },
+      {
+        "tid": 776,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32120,
+        "cpu_ticks": 13,
+        "cpu_ms": 130.0
+      }
+    ]
+  },
+  {
+    "block": 3,
+    "path": "standard",
+    "matched_threads": 351,
+    "matched_cpu_ms": 21910.0,
+    "process_cpu_ms": 21860.0,
+    "cpu_ms_by_name": {
+      "tokio-rt-worker": 20340.0,
+      "vcpu-0": 1180.0,
+      "hv2-vsock-sbx-4": 220.0,
+      "hv2-irq-sbx-4ea": 170.0,
+      "hm-private-setu": 0.0,
+      "hv2-net-sbx-4ea": 0.0,
+      "kvm-nx-lpage-re": 0.0
+    },
+    "top_threads": [
+      {
+        "tid": 517,
+        "name": "vcpu-0",
+        "start_ticks": 30794,
+        "cpu_ticks": 118,
+        "cpu_ms": 1180.0
+      },
+      {
+        "tid": 513,
+        "name": "hv2-vsock-sbx-4",
+        "start_ticks": 30793,
+        "cpu_ticks": 22,
+        "cpu_ms": 220.0
+      },
+      {
+        "tid": 516,
+        "name": "hv2-irq-sbx-4ea",
+        "start_ticks": 30794,
+        "cpu_ticks": 17,
+        "cpu_ms": 170.0
+      },
+      {
+        "tid": 986,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32483,
+        "cpu_ticks": 14,
+        "cpu_ms": 140.0
+      },
+      {
+        "tid": 998,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32486,
+        "cpu_ticks": 14,
+        "cpu_ms": 140.0
+      },
+      {
+        "tid": 1013,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32489,
+        "cpu_ticks": 14,
+        "cpu_ms": 140.0
+      },
+      {
+        "tid": 1031,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32493,
+        "cpu_ticks": 14,
+        "cpu_ms": 140.0
+      },
+      {
+        "tid": 1037,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32495,
+        "cpu_ticks": 14,
+        "cpu_ms": 140.0
+      },
+      {
+        "tid": 563,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32061,
+        "cpu_ticks": 13,
+        "cpu_ms": 130.0
+      },
+      {
+        "tid": 593,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32070,
+        "cpu_ticks": 13,
+        "cpu_ms": 130.0
+      },
+      {
+        "tid": 596,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32071,
+        "cpu_ticks": 13,
+        "cpu_ms": 130.0
+      },
+      {
+        "tid": 608,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32074,
+        "cpu_ticks": 13,
+        "cpu_ms": 130.0
+      }
+    ]
+  },
+  {
+    "block": 4,
+    "path": "private",
+    "matched_threads": 351,
+    "matched_cpu_ms": 21400.0,
+    "process_cpu_ms": 21350.0,
+    "cpu_ms_by_name": {
+      "tokio-rt-worker": 19850.0,
+      "vcpu-0": 1170.0,
+      "hv2-vsock-sbx-4": 210.0,
+      "hv2-irq-sbx-4ea": 170.0,
+      "hm-private-setu": 0.0,
+      "hv2-net-sbx-4ea": 0.0,
+      "kvm-nx-lpage-re": 0.0
+    },
+    "top_threads": [
+      {
+        "tid": 517,
+        "name": "vcpu-0",
+        "start_ticks": 30794,
+        "cpu_ticks": 117,
+        "cpu_ms": 1170.0
+      },
+      {
+        "tid": 513,
+        "name": "hv2-vsock-sbx-4",
+        "start_ticks": 30793,
+        "cpu_ticks": 21,
+        "cpu_ms": 210.0
+      },
+      {
+        "tid": 516,
+        "name": "hv2-irq-sbx-4ea",
+        "start_ticks": 30794,
+        "cpu_ticks": 17,
+        "cpu_ms": 170.0
+      },
+      {
+        "tid": 330,
+        "name": "tokio-rt-worker",
+        "start_ticks": 27689,
+        "cpu_ticks": 15,
+        "cpu_ms": 150.0
+      },
+      {
+        "tid": 587,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32069,
+        "cpu_ticks": 14,
+        "cpu_ms": 140.0
+      },
+      {
+        "tid": 342,
+        "name": "tokio-rt-worker",
+        "start_ticks": 27689,
+        "cpu_ticks": 13,
+        "cpu_ms": 130.0
+      },
+      {
+        "tid": 554,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32058,
+        "cpu_ticks": 13,
+        "cpu_ms": 130.0
+      },
+      {
+        "tid": 569,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32062,
+        "cpu_ticks": 13,
+        "cpu_ms": 130.0
+      },
+      {
+        "tid": 575,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32066,
+        "cpu_ticks": 13,
+        "cpu_ms": 130.0
+      },
+      {
+        "tid": 584,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32068,
+        "cpu_ticks": 13,
+        "cpu_ms": 130.0
+      },
+      {
+        "tid": 590,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32070,
+        "cpu_ticks": 13,
+        "cpu_ms": 130.0
+      },
+      {
+        "tid": 602,
+        "name": "tokio-rt-worker",
+        "start_ticks": 32072,
+        "cpu_ticks": 13,
+        "cpu_ms": 130.0
+      }
+    ]
+  }
+]

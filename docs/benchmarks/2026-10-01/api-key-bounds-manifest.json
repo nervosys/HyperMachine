@@ -1,0 +1,12 @@
+{
+  "source_commit": "25215b157b99e1b1f8bb6db79d777b7825b2aac1",
+  "binary_profile": "debug (functional verification only)",
+  "binary_sha256": "ce0a25b692422dc096ea9fc09ba584790cf0f3d9508660356ba8af14ca9f5928",
+  "report_sha256": "0f3f8e94698fa85ed06da9509b03a0ae380f465a8f46e5cb44fa0f088ecffc74",
+  "source_sha256": {
+    "api-key-bounds-coordinator.py": "d4cfdd80010aac039c09e742270a0807b054bc684a5c0eae58c971863cdc9d06",
+    "scheduled-worker-core-source.patch": "e6c015334bb04b1c96768c54bfb869ff3a9b2624b95210fc2bce9dc2ed0a1728"
+  },
+  "checks": 20,
+  "scope": "Owned Unix process on WSL Debian; memory cluster store, plain loopback HTTP. Includes oversized and invalid UTF-8 rejection. No VM, TLS, distributed rotation or performance claim."
+}

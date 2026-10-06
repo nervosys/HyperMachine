@@ -1,0 +1,11 @@
+published-runtime-claim: rejected
+changed-artifact: rejected
+missing-outer-run: rejected
+wrong-order: rejected
+missing-source-binding: rejected
+diagnostic-scored: rejected
+wrong-binary: rejected
+missing-guest-sample: rejected
+failed-guest-cleanup: rejected
+unmatched-clock-rng: rejected
+real comparison accepted; ten damaged contracts rejected

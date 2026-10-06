@@ -1,0 +1,21 @@
+   Compiling hv2-cluster v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-cluster)
+   Compiling hv2-sandboxd v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-sandboxd)
+error[E0599]: no function or associated item named `new` found for struct `OwnerId` in the current scope
+   --> crates/hv2-sandboxd/src/private_source.rs:100:61
+    |
+100 |             owner_id: Some(hv2_cluster::ownership::OwnerId::new("owner-a").unwrap()),
+    |                                                             ^^^ function or associated item not found in `OwnerId`
+    |
+note: if you're trying to build a new `OwnerId`, consider using `OwnerId::parse` which returns `Result<OwnerId, &'static str>`
+   --> crates/hv2-cluster/src/ownership.rs:13:5
+    |
+ 13 |     pub fn parse(value: &str) -> Result<Self, &'static str> {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: there is a method `ne` with a similar name
+    |
+100 -             owner_id: Some(hv2_cluster::ownership::OwnerId::new("owner-a").unwrap()),
+100 +             owner_id: Some(hv2_cluster::ownership::OwnerId::ne("owner-a").unwrap()),
+    |
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `hv2-sandboxd` (bin "hv2-sandboxd" test) due to 1 previous error

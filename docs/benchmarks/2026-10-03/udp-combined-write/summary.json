@@ -1,0 +1,76 @@
+{
+  "binary_sha256": {
+    "/var/tmp/hm-udp-cli-two-write": "3d30423e212fd8640a49977b62e5857967b26571824563f0ca51bf5052b3d24e",
+    "/var/tmp/hm-udp-cli-one-write": "0e772bfdf10ea8b5c26a62897031268c1cbee254c871e20eadd02c99b43c88be"
+  },
+  "cohorts": [
+    {
+      "engine": "baseline",
+      "cohort": "0-baseline",
+      "measured_rate": 1529.7702312648194,
+      "peers": [
+        {
+          "p50_ms": 1.0612845,
+          "p95_ms": 1.319583,
+          "p99_ms": 1.661599
+        },
+        {
+          "p50_ms": 1.0600455,
+          "p95_ms": 1.302069,
+          "p99_ms": 1.59218
+        }
+      ]
+    },
+    {
+      "engine": "candidate",
+      "cohort": "1-candidate",
+      "measured_rate": 1823.0860954577536,
+      "peers": [
+        {
+          "p50_ms": 1.069291,
+          "p95_ms": 1.326207,
+          "p99_ms": 1.494334
+        },
+        {
+          "p50_ms": 1.0728975,
+          "p95_ms": 1.330324,
+          "p99_ms": 1.515408
+        }
+      ]
+    },
+    {
+      "engine": "candidate",
+      "cohort": "2-candidate",
+      "measured_rate": 1827.4212767700994,
+      "peers": [
+        {
+          "p50_ms": 1.0763515,
+          "p95_ms": 1.321918,
+          "p99_ms": 1.609202
+        },
+        {
+          "p50_ms": 1.0728689999999999,
+          "p95_ms": 1.316607,
+          "p99_ms": 1.536383
+        }
+      ]
+    },
+    {
+      "engine": "baseline",
+      "cohort": "3-baseline",
+      "measured_rate": 1501.0755194839091,
+      "peers": [
+        {
+          "p50_ms": 1.0784025000000002,
+          "p95_ms": 1.356275,
+          "p99_ms": 1.87332
+        },
+        {
+          "p50_ms": 1.0796845,
+          "p95_ms": 1.382202,
+          "p99_ms": 1.780964
+        }
+      ]
+    }
+  ]
+}

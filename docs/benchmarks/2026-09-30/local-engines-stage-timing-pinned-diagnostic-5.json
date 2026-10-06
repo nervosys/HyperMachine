@@ -1,0 +1,244 @@
+{
+  "schema_version": 1,
+  "lifecycle": "native-cold-create-to-command",
+  "concurrency": 1,
+  "hypermachine_log_filter": "hv2_sandboxd=debug",
+  "diagnostic_tracing": true,
+  "pairs": 5,
+  "order": "alternating AB/BA",
+  "environment": "shared-WSL-nested-KVM-one-pinned-CPU-worker-create-stage-timing-DIAGNOSTIC",
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "artifact_sha256": {
+    "hyperMachine": "8ea52a369067d99f281b96bc513c59216304ac8e7eea0462d746f854e9d7aa5d",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "0e1962a290ad92bff749d3b736001c2f22782fcbcaf716ecff0db6543631adc2",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "firecracker_harness": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6"
+  },
+  "artifacts_unchanged": true,
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "driver_cpu_affinity": [
+    0
+  ],
+  "guest_readiness_timeout_s": {
+    "hypermachine": 15,
+    "firecracker": 15
+  },
+  "firecracker_total_startup_timeout_s": 30,
+  "common_boot_args": "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd",
+  "hypermachine_template_preflight": [
+    {
+      "aliases": [
+        "base"
+      ],
+      "buildID": "base",
+      "buildStatus": "ready",
+      "cpuCount": 1,
+      "envdVersion": "0.6.3",
+      "memoryMB": 1024,
+      "public": false,
+      "snapshot": false,
+      "templateID": "base"
+    }
+  ],
+  "setup_error": null,
+  "cleanup_error": null,
+  "samples": [
+    {
+      "index": 0,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1964.896385999964,
+      "node_memory_ready": {
+        "Rss_kib": 110708,
+        "Pss_kib": 108718,
+        "Private_Clean_kib": 7716,
+        "Private_Dirty_kib": 100888,
+        "Anonymous_kib": 100880
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 25804,
+        "Pss_kib": 23693,
+        "Private_Clean_kib": 7844,
+        "Private_Dirty_kib": 15728,
+        "Anonymous_kib": 15728
+      },
+      "engine": "hypermachine",
+      "pair": 0
+    },
+    {
+      "index": 0,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1081.1584319999383,
+      "engine": "firecracker",
+      "pair": 0
+    },
+    {
+      "index": 1,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1256.6342810005153,
+      "engine": "firecracker",
+      "pair": 1
+    },
+    {
+      "index": 1,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1319.3581349996748,
+      "node_memory_ready": {
+        "Rss_kib": 125412,
+        "Pss_kib": 123301,
+        "Private_Clean_kib": 7844,
+        "Private_Dirty_kib": 115336,
+        "Anonymous_kib": 115328
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 40292,
+        "Pss_kib": 38181,
+        "Private_Clean_kib": 7844,
+        "Private_Dirty_kib": 30216,
+        "Anonymous_kib": 30216
+      },
+      "engine": "hypermachine",
+      "pair": 1
+    },
+    {
+      "index": 2,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1775.988469999902,
+      "node_memory_ready": {
+        "Rss_kib": 127132,
+        "Pss_kib": 125021,
+        "Private_Clean_kib": 7844,
+        "Private_Dirty_kib": 117048,
+        "Anonymous_kib": 117048
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42112,
+        "Pss_kib": 40001,
+        "Private_Clean_kib": 7844,
+        "Private_Dirty_kib": 32036,
+        "Anonymous_kib": 32036
+      },
+      "engine": "hypermachine",
+      "pair": 2
+    },
+    {
+      "index": 2,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1278.7847609997698,
+      "engine": "firecracker",
+      "pair": 2
+    },
+    {
+      "index": 3,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1125.1245330004167,
+      "engine": "firecracker",
+      "pair": 3
+    },
+    {
+      "index": 3,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1663.6634189999313,
+      "node_memory_ready": {
+        "Rss_kib": 127192,
+        "Pss_kib": 125081,
+        "Private_Clean_kib": 7844,
+        "Private_Dirty_kib": 117116,
+        "Anonymous_kib": 117108
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42112,
+        "Pss_kib": 40001,
+        "Private_Clean_kib": 7844,
+        "Private_Dirty_kib": 32036,
+        "Anonymous_kib": 32036
+      },
+      "engine": "hypermachine",
+      "pair": 3
+    },
+    {
+      "index": 4,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1640.0649240003986,
+      "node_memory_ready": {
+        "Rss_kib": 127176,
+        "Pss_kib": 125065,
+        "Private_Clean_kib": 7844,
+        "Private_Dirty_kib": 117100,
+        "Anonymous_kib": 117092
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42112,
+        "Pss_kib": 40001,
+        "Private_Clean_kib": 7844,
+        "Private_Dirty_kib": 32036,
+        "Anonymous_kib": 32036
+      },
+      "engine": "hypermachine",
+      "pair": 4
+    },
+    {
+      "index": 4,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 878.2080289993246,
+      "engine": "firecracker",
+      "pair": 4
+    }
+  ],
+  "node_memory_baseline": {
+    "Rss_kib": 8980,
+    "Pss_kib": 6990,
+    "Private_Clean_kib": 6032,
+    "Private_Dirty_kib": 844,
+    "Anonymous_kib": 844
+  },
+  "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:47277, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:60661 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:60661 process.Process/Start\n\u001b[2m2026-10-01T04:40:22.253073Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 5.47\u00b5s\n\u001b[2m2026-10-01T04:40:24.183096Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-2d99a352596246eab052 up in 1.933466261s: build 1.486659ms, launch 162.240966ms, agent answering 1.769673426s,          network and envd 65.631\u00b5s\n\u001b[2m2026-10-01T04:40:27.031167Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 1.533\u00b5s\n\u001b[2m2026-10-01T04:40:28.329038Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-466e6d3feddd4228aabc up in 1.297812953s: build 508.771\u00b5s, launch 47.469109ms, agent answering 1.249764724s,          network and envd 70.74\u00b5s\n\u001b[2m2026-10-01T04:40:28.790873Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 1.303\u00b5s\n\u001b[2m2026-10-01T04:40:30.216452Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-d2021297af17494ca3bf up in 1.425525119s: build 378.943\u00b5s, launch 229.375617ms, agent answering 1.195698938s,          network and envd 72.132\u00b5s\n\u001b[2m2026-10-01T04:40:33.030413Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 1.252\u00b5s\n\u001b[2m2026-10-01T04:40:34.659761Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-00dcc4485c254f78ba9e up in 1.629290992s: build 697.694\u00b5s, launch 49.437688ms, agent answering 1.579076865s,          network and envd 79.146\u00b5s\n\u001b[2m2026-10-01T04:40:34.816535Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 3.556\u00b5s\n\u001b[2m2026-10-01T04:40:36.423237Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-0329bf258d274962a64c up in 1.606610681s: build 834.094\u00b5s, launch 61.298917ms, agent answering 1.544409575s,          network and envd 68.716\u00b5s\n",
+  "ready_ms": {
+    "hypermachine": {
+      "n": 5,
+      "min": 1319.3581349996748,
+      "max": 1964.896385999964,
+      "mean": 1672.7942667999741,
+      "p50": 1663.6634189999313,
+      "p95": 1964.896385999964,
+      "p99": 1964.896385999964
+    },
+    "firecracker": {
+      "n": 5,
+      "min": 878.2080289993246,
+      "max": 1278.7847609997698,
+      "mean": 1123.982007199993,
+      "p50": 1125.1245330004167,
+      "p95": 1278.7847609997698,
+      "p99": 1278.7847609997698
+    }
+  },
+  "limitations": [
+    "Shared nested-KVM host; no dedicated hardware; inspect driver/coordinator affinity metadata",
+    "Different native control paths: persistent HyperMachine HTTP node versus Firecracker process and Unix API",
+    "Cold lifecycle only; no snapshot/SDK/platform comparison",
+    "Engine-generated device kernel arguments differ"
+  ],
+  "success": true,
+  "controlled_cpu_load": {
+    "workers": 1,
+    "worker_code": "import time\nend=time.monotonic()+7200\nx=1\nwhile time.monotonic()<end:\n for _ in range(10000): x=(x*1664525+1013904223)&0xffffffff\n",
+    "all_alive_through_cohort": true,
+    "pinning": true,
+    "cpu": 0,
+    "workers_cleaned_up": true,
+    "coordinator_sha256": "7e7e70ae1c28d3c9592af35564e6f1f35c3f5f23c3ede33659affa9976f42d32"
+  }
+}

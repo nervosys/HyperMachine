@@ -1,0 +1,30 @@
+{
+  "readiness_rejected": [
+    "not_diagnostic",
+    "truncated_log",
+    "wrong_filter",
+    "byte_count",
+    "missing_sample_identity",
+    "unmatched_sample_identity",
+    "missing_traces",
+    "duplicate_trace",
+    "nan_duration",
+    "negative_duration",
+    "stage_exceeds_create",
+    "failed_server_trace",
+    "missing_stage"
+  ],
+  "creation_rejected": [
+    "creation_metadata_absent",
+    "creation_traces_absent",
+    "creation_duplicate",
+    "creation_negative",
+    "creation_nan",
+    "creation_unknown_unit",
+    "creation_exceeds_client",
+    "agent_phase_excludes_readiness",
+    "creation_wrong_target",
+    "creation_unmatched_identity"
+  ],
+  "count": 23
+}

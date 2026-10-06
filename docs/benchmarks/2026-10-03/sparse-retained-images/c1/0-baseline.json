@@ -1,0 +1,365 @@
+{
+  "success": true,
+  "purpose": "prepared snapshot startup, no managed endpoint or universal performance claim",
+  "artifact_sha256": {
+    "hypermachine": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "coordinator": "b076ca1aefd11fec49b23575deb0b23b55b2c784238f86766c43897383a4bfc0",
+    "engines": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "firecracker_harness": "0bcdc13351d54d4c9658bf034aa97f7d86d96d99375a2df04e4c94eaf8d3b610"
+  },
+  "driver_cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "concurrency": 1,
+  "pairs": 2,
+  "guest_readiness_timeout_s": 15,
+  "preparation": {
+    "hypermachine": {
+      "duration_ms": 101.71450300001084,
+      "named_capture_ms": 12.130365999993842,
+      "offering": {
+        "createdAt": 1791011999313,
+        "names": [
+          "warm-benchmark:default"
+        ],
+        "sandboxID": "sbx-cfc60f4feee1483d89f2",
+        "snapshotID": "warm-benchmark:default",
+        "templateID": "base"
+      },
+      "base_template": {
+        "aliases": [
+          "base"
+        ],
+        "buildID": "base",
+        "buildStatus": "ready",
+        "cpuCount": 1,
+        "envdVersion": "0.6.3",
+        "memoryMB": 1024,
+        "public": false,
+        "snapshot": true,
+        "templateID": "base"
+      },
+      "source_files": {
+        ".backup.lock": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "snapshots/warm-benchmark-1ed92edd44bb4935a665871972947ef1.snap": {
+          "bytes": 1726540,
+          "sha256": "4680098970e38183596bceea68797ce6f03186a21c5c2c041ae570dc78b9c261"
+        },
+        "snapshots/warm-benchmark.json": {
+          "bytes": 142,
+          "sha256": "f87328bcb22f51620e31183c78907262358505241a430910b22cb17d0acff9d0"
+        },
+        "templates/94cbb63bd81baf1783adfe6c07e8d944/template.snap": {
+          "bytes": 50742,
+          "sha256": "c0a0751101acafa339a4b0f67cb3b3db7b472fceca76a65acfb7a4df5b56a3f8"
+        },
+        "templates/94cbb63bd81baf1783adfe6c07e8d944/template.snap.mem": {
+          "bytes": 1073741824,
+          "sha256": "8386c8614c2ca54663e47e3bd39dfac98da0654802e34fc9717d311c990095a8"
+        }
+      },
+      "source_unchanged": true
+    },
+    "firecracker": {
+      "duration_ms": 2111.780710000005,
+      "state_sha256": "2f5729235497f3178400e3061cf77bfa029a55edad784a9742bf85c3dec02263",
+      "memory_sha256": "c838ae6db7b125143db99e58b07803d25f8e15ea1e08f95de1b508349a06c1a4",
+      "memory_bytes": 1073741824,
+      "snapshot_type": "Full",
+      "source_parent_stopped": true,
+      "source_unchanged": true
+    }
+  },
+  "runs": [
+    {
+      "engine": "hypermachine",
+      "pair": 0,
+      "samples": [
+        {
+          "index": 0,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 110.923156271,
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 35.948177999998165,
+          "latency_phases_ms": {
+            "create_and_notice": 17.94708300000991,
+            "exec": 18.001094999988254
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        }
+      ],
+      "success": true,
+      "cleanup_errors": [],
+      "resource_validation_phase": "after_all_timed_attempts",
+      "held_process_memory_kib": {
+        "Rss_kib": 74964,
+        "Pss_kib": 72750,
+        "Private_Clean_kib": 36972,
+        "Private_Dirty_kib": 35500,
+        "Anonymous_kib": 35496
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 43152,
+        "Pss_kib": 40928,
+        "Private_Clean_kib": 7920,
+        "Private_Dirty_kib": 32740,
+        "Anonymous_kib": 32740
+      },
+      "incremental_process_memory_kib": {
+        "Rss_kib": 31812,
+        "Pss_kib": 31822,
+        "Private_Clean_kib": 29052,
+        "Private_Dirty_kib": 2760,
+        "Anonymous_kib": 2756
+      },
+      "memory_hold_seconds": 5,
+      "memory_read_ms": 1.3233420000062779,
+      "remaining_sandboxes": 0,
+      "start_spread_ms": 0.0
+    },
+    {
+      "engine": "firecracker",
+      "pair": 0,
+      "samples": [
+        {
+          "index": 0,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 116.016202317,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "5348c8689ffd47997afbfd6714458278304df2439ec7a2a41de422617a9b6384",
+            "unix_time_ns": 1791012010396424050,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 116.044114715
+          },
+          "ready_ms": 41.79929600000776,
+          "latency_phases_ms": {
+            "process_and_load": 10.68369500001154,
+            "connect_and_notice": 17.228703000000678,
+            "exec": 13.88689799999554
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        }
+      ],
+      "success": true,
+      "cleanup_errors": [],
+      "resource_validation_phase": "after_all_timed_attempts",
+      "held_process_memory_kib": {
+        "Rss_kib": 23160,
+        "Pss_kib": 23152,
+        "Private_Clean_kib": 20468,
+        "Private_Dirty_kib": 2680,
+        "Anonymous_kib": 2672
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 0,
+        "Pss_kib": 0,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 0,
+        "Anonymous_kib": 0
+      },
+      "incremental_process_memory_kib": {
+        "Rss_kib": 23160,
+        "Pss_kib": 23152,
+        "Private_Clean_kib": 20468,
+        "Private_Dirty_kib": 2680,
+        "Anonymous_kib": 2672
+      },
+      "memory_hold_seconds": 5,
+      "memory_read_ms": 0.8231629999926326,
+      "start_spread_ms": 0.0
+    },
+    {
+      "engine": "firecracker",
+      "pair": 1,
+      "samples": [
+        {
+          "index": 0,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 121.126857763,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "6430a2f7e52843319c9787950cf8087d216a6d94871e24844bd29151030ce9aa",
+            "unix_time_ns": 1791012015513840089,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 121.160309968
+          },
+          "ready_ms": 49.016590999997334,
+          "latency_phases_ms": {
+            "process_and_load": 16.1864989999998,
+            "connect_and_notice": 17.265706000003433,
+            "exec": 15.564385999994101
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        }
+      ],
+      "success": true,
+      "cleanup_errors": [],
+      "resource_validation_phase": "after_all_timed_attempts",
+      "held_process_memory_kib": {
+        "Rss_kib": 23168,
+        "Pss_kib": 23160,
+        "Private_Clean_kib": 20456,
+        "Private_Dirty_kib": 2700,
+        "Anonymous_kib": 2692
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 0,
+        "Pss_kib": 0,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 0,
+        "Anonymous_kib": 0
+      },
+      "incremental_process_memory_kib": {
+        "Rss_kib": 23168,
+        "Pss_kib": 23160,
+        "Private_Clean_kib": 20456,
+        "Private_Dirty_kib": 2700,
+        "Anonymous_kib": 2692
+      },
+      "memory_hold_seconds": 5,
+      "memory_read_ms": 0.5619070000051352,
+      "start_spread_ms": 0.0
+    },
+    {
+      "engine": "hypermachine",
+      "pair": 1,
+      "samples": [
+        {
+          "index": 0,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 126.212724735,
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 34.61511200001155,
+          "latency_phases_ms": {
+            "create_and_notice": 17.27002399999833,
+            "exec": 17.34508800001322
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        }
+      ],
+      "success": true,
+      "cleanup_errors": [],
+      "resource_validation_phase": "after_all_timed_attempts",
+      "held_process_memory_kib": {
+        "Rss_kib": 75388,
+        "Pss_kib": 73174,
+        "Private_Clean_kib": 36972,
+        "Private_Dirty_kib": 35924,
+        "Anonymous_kib": 35920
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 43656,
+        "Pss_kib": 41438,
+        "Private_Clean_kib": 7920,
+        "Private_Dirty_kib": 33244,
+        "Anonymous_kib": 33244
+      },
+      "incremental_process_memory_kib": {
+        "Rss_kib": 31732,
+        "Pss_kib": 31736,
+        "Private_Clean_kib": 29052,
+        "Private_Dirty_kib": 2680,
+        "Anonymous_kib": 2676
+      },
+      "memory_hold_seconds": 5,
+      "memory_read_ms": 1.2247450000018034,
+      "remaining_sandboxes": 0,
+      "start_spread_ms": 0.0
+    }
+  ],
+  "cleanup_errors": [],
+  "limitations": [
+    "Shared WSL nested KVM and uncontrolled host background load",
+    "Persistent HyperMachine HTTP daemon versus fresh Firecracker process/Unix API",
+    "Prepared resident/cache-warm sources; no dropped-cache or storage durability comparison",
+    "PSS excludes kernel memory and unmapped page cache; not fleet density",
+    "Failed attempts retained; conditional latency and memory summaries",
+    "Engine-generated device kernel arguments differ"
+  ],
+  "diagnostic_only": false,
+  "guest_restore_contract": {
+    "clock_rng_resynchronised": true,
+    "entropy_bytes": 64,
+    "hypermachine": "acknowledged by successful create, source-bound after_restore",
+    "firecracker": "Restored RPC acknowledgement before exec; replaces readiness ping"
+  },
+  "latency_phase_measurement": "client_monotonic_no_added_rpc",
+  "resource_validation_phase": "after_all_timed_attempts",
+  "preparation_phase": "complete",
+  "owned_firecracker_processes": [
+    {
+      "pid": 291,
+      "exit_code": -15
+    },
+    {
+      "pid": 302,
+      "exit_code": -15
+    },
+    {
+      "pid": 308,
+      "exit_code": -15
+    }
+  ],
+  "remaining_sandboxes_before_cleanup": 0,
+  "remaining_sandboxes": 0,
+  "owned_node_stopped": true,
+  "owned_node_exit_code": 0,
+  "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:57159, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes are restored from template snapshots: base\n\nsandbox proxy on 0.0.0.0:43863 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:43863 process.Process/Start\n",
+  "artifacts_unchanged": true
+}

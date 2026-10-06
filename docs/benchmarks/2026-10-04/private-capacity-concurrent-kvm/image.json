@@ -1,0 +1,7 @@
+{
+  "base_sha256": "c7dae4197f4939ec344de2245d94fed38f98c36e8564ecf2a61d51caab634883",
+  "old_echo_sha256": "d03c8ba9e917356f17c948d567f36aa1a02700e8d937624a75a3fed83de71fb5",
+  "echo_sha256": "3a705fd72f2bfbfc81016b2ed1627620285a3982c8a91811c2e00c78a971e5d5",
+  "image_sha256": "28c839a0969728c2c579fa9fdc7274714266ce4308f48a2ee1090d6c34537294",
+  "only_replaced_path": "bin/hm-udp-echo"
+}

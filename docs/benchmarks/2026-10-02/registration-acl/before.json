@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "test_exit_code": 101,
+  "owned_redis_stopped": true,
+  "redis_exit_code": 0,
+  "temporary_acl_users_removed": true,
+  "filter": "redis_named_registration_checks_write_permissions_before_writing"
+}

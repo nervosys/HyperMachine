@@ -1,0 +1,52 @@
+--- baseline/main.rs
++++ candidate/main.rs
+@@ -745,6 +745,13 @@
+     opts: &Options,
+     network: Option<&SandboxNetworkConfig>,
+ ) -> Result<Option<Socks5Proxy>, String> {
++    resolve_egress_proxy(opts.allow_private_egress_proxy, network).await
++}
++
++async fn resolve_egress_proxy(
++    allow_private: bool,
++    network: Option<&SandboxNetworkConfig>,
++) -> Result<Option<Socks5Proxy>, String> {
+     let Some(config) = network.and_then(|n| n.egress_proxy.as_ref()) else {
+         return Ok(None);
+     };
+@@ -760,7 +767,7 @@
+     if addresses.is_empty() {
+         return Err(format!("egress proxy {} does not resolve", proxy.address));
+     }
+-    if !opts.allow_private_egress_proxy
++    if !allow_private
+         && addresses.iter().any(|a| NetworkPolicy::is_reserved(a.ip()))
+     {
+         return Err(format!(
+@@ -5321,6 +5328,26 @@
+ mod adoption_claim_tests {
+     use super::*;
+     #[tokio::test]
++    async fn real_proxy_resolution_refusal_preserves_paused_value() {
++        let network=SandboxNetworkConfig {
++            egress_proxy:Some(SandboxEgressProxyConfig { address:"localhost:1080".into(),username:None,password:None }),
++            ..SandboxNetworkConfig::default()
++        };
++        let (paused,result)=protected_paused_lookup(vec![0,255,42], |_| panic!("completed refusal must use caller cleanup"),resolve_egress_proxy(false,Some(&network))).await;
++        assert_eq!(paused,vec![0,255,42]);
++        assert!(result.err().unwrap().contains("private or internal range"));
++    }
++    #[tokio::test]
++    async fn real_proxy_resolution_operator_override_preserves_paused_value() {
++        let network=SandboxNetworkConfig {
++            egress_proxy:Some(SandboxEgressProxyConfig { address:"localhost:1080".into(),username:None,password:None }),
++            ..SandboxNetworkConfig::default()
++        };
++        let (paused,result)=protected_paused_lookup(vec![0,255,42], |_| panic!("completed lookup must not roll back"),resolve_egress_proxy(true,Some(&network))).await;
++        assert_eq!(paused,vec![0,255,42]);assert!(result.unwrap().is_some());
++    }
++
++    #[tokio::test]
+     async fn cancelled_lookup_restores_owned_paused_value() {
+         let restored=Arc::new(Mutex::new(None));
+         let output=restored.clone();

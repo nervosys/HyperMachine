@@ -1,0 +1,10 @@
+    Checking hv2-sandbox v1.1.0 (/var/tmp/hm-first-exit/source/crates/hv2-sandbox)
+    Checking hv2-core v1.1.0 (/var/tmp/hm-first-exit/source/crates/hv2-core)
+    Checking hv2-context v1.1.0 (/var/tmp/hm-first-exit/source/crates/hv2-context)
+    Checking hv2-agent v1.1.0 (/var/tmp/hm-first-exit/source/crates/hv2-agent)
+    Checking hv2-net v1.1.0 (/var/tmp/hm-first-exit/source/crates/hv2-net)
+    Checking hv2-runtime v1.1.0 (/var/tmp/hm-first-exit/source/crates/hv2-runtime)
+    Checking hv2-api v1.1.0 (/var/tmp/hm-first-exit/source/crates/hv2-api)
+    Checking hv2-cluster v1.1.0 (/var/tmp/hm-first-exit/source/crates/hv2-cluster)
+    Checking hv2-sandboxd v1.1.0 (/var/tmp/hm-first-exit/source/crates/hv2-sandboxd)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 40.25s

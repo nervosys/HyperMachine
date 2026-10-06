@@ -1,0 +1,5 @@
+# Volume path command HTTPS verification
+
+All six owned transport tests pass for the shipped CLI. The added check runs ls, stat and mkdir against a proper CA-signed localhost leaf. Each succeeds with the configured CA, emits valid directory JSON and sends the exact volume bearer without an API-key header, even when HV2_API_KEY contains an invalid header value. All three refuse an untrusted certificate and a trusted certificate with the wrong hostname before any HTTP request reaches the fixture. Existing upload/download TLS, redirects, timeout and partial-file cleanup tests remain passing.
+
+Reproduce with `python3 tools/test-volume-cli-tls.py --cli /path/to/hm`. Private fixture certificates, keys, tokens and payloads are created in an owned temporary directory and removed, not archived. This checks direct HTTPS protocol fixtures, not the separately launched control plane, Redis, mTLS, public CA operation or production storage. It complements the real HTTP router/daemon tests, without combining their scopes into an untested service-process HTTPS claim.

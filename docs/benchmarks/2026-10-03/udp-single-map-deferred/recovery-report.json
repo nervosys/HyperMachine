@@ -1,0 +1,13 @@
+{
+  "cli_sha256": "43dfbd34dc3724d01c7f2bf2c4680626ccd015b33c88b8437576d72acd9ea04b",
+  "checks": [
+    "Live peer cap enforced",
+    "Upstream EOF releases capacity for a new source peer",
+    "Existing source peer reconnects after upstream EOF",
+    "CLI exits cleanly after recovery"
+  ],
+  "sessions": 3,
+  "max_peers": 1,
+  "cli_reaped": true,
+  "server_reaped": true
+}

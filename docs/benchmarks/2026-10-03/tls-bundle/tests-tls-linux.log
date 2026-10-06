@@ -1,0 +1,36 @@
+   Compiling serde v1.0.229
+   Compiling regex-automata v0.4.18
+   Compiling half v2.7.1
+   Compiling rhai v1.26.1
+   Compiling hv2-api v1.1.0 (/var/tmp/hm-tls-bundle/source/crates/hv2-api)
+   Compiling ciborium-ll v0.2.2
+   Compiling serde_urlencoded v0.7.1
+   Compiling hv2-sandbox v1.1.0 (/var/tmp/hm-tls-bundle/source/crates/hv2-sandbox)
+   Compiling bincode v1.3.3
+   Compiling hv2-guest-agent v1.1.0 (/var/tmp/hm-tls-bundle/source/crates/hv2-guest-agent)
+   Compiling pbjson v0.9.0
+   Compiling tracing-serde v0.2.0
+   Compiling ciborium v0.2.2
+   Compiling tinytemplate v1.2.1
+   Compiling pbjson-types v0.9.0
+   Compiling axum v0.8.9
+   Compiling reqwest v0.12.28
+   Compiling hv2-context v1.1.0 (/var/tmp/hm-tls-bundle/source/crates/hv2-context)
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-tls-bundle/source/crates/hv2-core)
+   Compiling matchers v0.2.0
+   Compiling regex v1.13.1
+   Compiling tracing-subscriber v0.3.23
+   Compiling criterion v0.5.1
+   Compiling tonic v0.14.6
+   Compiling tonic-prost v0.14.6
+   Compiling hv2-agent v1.1.0 (/var/tmp/hm-tls-bundle/source/crates/hv2-agent)
+   Compiling hv2-runtime v1.1.0 (/var/tmp/hm-tls-bundle/source/crates/hv2-runtime)
+    Finished `test` profile [optimized + debuginfo] target(s) in 2m 51s
+     Running unittests src/lib.rs (/var/tmp/hm-object-backup/target/debug/deps/hv2_api-08c5f29e8c914cff)
+
+running 2 tests
+test tls_bundle::tests::full_generation_validation_refuses_duplicate_names_wrong_sans_and_key_mismatch ... ok
+test tls_bundle::tests::a_new_tls_connection_observes_renewal_and_a_failed_reload_preserves_the_previous_leaf ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1064 filtered out; finished in 0.09s
+

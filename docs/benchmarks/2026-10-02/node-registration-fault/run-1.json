@@ -1,0 +1,24 @@
+{
+  "success": false,
+  "purpose": "functional verification, no performance comparison",
+  "artifact_sha256": {
+    "daemon": "eb2fcadae38d2441bb26265055e563d0a376f401492782159b11cd2e667f3839",
+    "control-plane": "b145e7f6badabd8e848f966d67fd1734cfd0c15a68e7db8ef78403886c0e61b8",
+    "cli": "c385bd2d2996c660d2e9e0a1f7387980339abbb19ee8fdec518890ec52dd6bd5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d520964ff11dff3bc7090af9ee988eedd3c5c5ffb23a5a3708250e3248a2cb17",
+    "coordinator": "879167f3a6a1a47a2da30bfb7aa6003d04c1bdaac1b41b675855a5b73c53ef7c"
+  },
+  "cases": [],
+  "cleanup_errors": [
+    "<urlopen error [Errno 111] Connection refused>"
+  ],
+  "environment": "local WSL nested KVM; 1 vCPU / 1024 MiB guests",
+  "error": "[Errno 13] Permission denied: '/var/tmp/hm-node-registration-fault/daemon'",
+  "owned_processes_stopped": [
+    {
+      "name": "redis",
+      "exit_code": 0
+    }
+  ]
+}

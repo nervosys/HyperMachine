@@ -1,0 +1,18 @@
+{
+  "baseline_commit": "5c91befd2bad03bf3cb9a2bc359c9840d5f44bf6",
+  "artifact_sha256": {
+    "baseline_binary": "d420dabe8ad568ed7d90b0806ad4fe186e42be0dfbf3a46f8997174871400159",
+    "optimized_binary": "2803535a73c6feb6236c8a06a44f4211ff3531a8031d453d47cce1938a6d1ee0",
+    "optimized_linux_source": "956a4300a1cfadbff819ea8a848be028c62d1369c336ade215603953538feace",
+    "optimized_loaded_boot_source": "99bd9133df15e3400008297648d79e8fce24bfacf2f992e6f10ffab5859638b7",
+    "baseline_linux_source": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+    "baseline_loaded_boot_source": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c",
+    "cargo_lock": "483b5c6c12d6964be69035547b60bc2ea773fb1daaa735db2d09526852516211",
+    "cargo_manifest": "eac295c2848417c20a49c14bce5f15c24bd129ca4b2c178a3b2cce744ab37b8d"
+  },
+  "rustc": "rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)\nbinary: rustc\ncommit-hash: 59807616e1fa2540724bfbac14d7976d7e4a3860\ncommit-date: 2026-04-14\nhost: x86_64-unknown-linux-gnu\nrelease: 1.95.0\nLLVM version: 21.1.8\n",
+  "cargo": "cargo 1.95.0 (f2d3ce0bd 2026-03-21) (built from a source tarball)\n",
+  "build_command": "CARGO_TARGET_DIR=/var/tmp/hm-competitive-target cargo build --locked --release -p hv2-sandboxd",
+  "build_note": "Separate baseline worktree and optimized working tree; identical Cargo.lock and release flags. Shared target reuse initially skipped the optimized core. That unscored binary was replaced after touching both changed source files and observing hv2-core and dependents rebuild. The original scored artifact was restored. Checkout paths may differ in embedded source paths.",
+  "comparison": "Only Linux boot-region sizing copies removed; image loading remains allocated; current parent baseline includes recent feature additions."
+}

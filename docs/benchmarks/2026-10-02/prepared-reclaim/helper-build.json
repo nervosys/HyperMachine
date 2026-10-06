@@ -1,0 +1,7 @@
+{
+  "command": "gcc -Wall -Wextra -Werror -O2 -fPIC -shared -pthread tools/heap-reclaim-probe.c -o helper.so",
+  "compiler": "gcc (Debian 14.2.0-19) 14.2.0",
+  "source_sha256": "6ab9373a559f410c047ee04ff95599a354e9f2efc2536fe39955660b8a55b56f",
+  "binary_sha256": "2bc5c5bbd7975d40158fb096c79a089f66fac38cdfc550f37591e97a75216668",
+  "identical_rebuild": true
+}

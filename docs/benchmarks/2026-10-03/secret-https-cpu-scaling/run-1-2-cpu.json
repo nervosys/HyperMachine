@@ -1,0 +1,394 @@
+{
+  "checks": [
+    "Unscoped guest sends placeholders over verified owned HTTPS",
+    "Exact sandbox scope rewrites headers, Basic auth, query and JSON with correct framing",
+    "Raw body substitution preserves surrounding bytes and fixes framing",
+    "Binary body substitution preserves NUL and non-UTF8 bytes with correct framing",
+    "Form substitution preserves unrelated plus and percent decoding",
+    "Malformed reload preserves the active secret observed upstream",
+    "Delimiter-bearing secrets round-trip through query, Basic auth, JSON, form and raw bodies",
+    "Different authenticated hostname preserves placeholders",
+    "Upstream hostname mismatch refuses the request before any owned HTTP payload arrives",
+    "SIGHUP rotation preserves placeholders and uses updated secret",
+    "Large raw requests preserve all 15000 replacements and framing during HTTPS timing",
+    "Fork inherits network policy but not parent operator secret scope",
+    "Pause/resume reattaches the exact sandbox scope",
+    "Four resume/revoke/re-add overlaps converge to the current exact sandbox scope",
+    "SIGHUP scope removal revokes substitution"
+  ],
+  "input_sha256": {
+    "daemon": "dfef62b16cb2b80eca0860f70e5ddd90d09f3b95bc9a8fe047d9cdd7070c6706",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "f4b9228e965d5c03a5747348693e81c9f52a0793a7b6f957f4a81301e0a9d2fa"
+  },
+  "policy_bindings": 128,
+  "guest_cpu_cores": 2,
+  "http_timings": {
+    "warmup_requests": 24,
+    "request_concurrency": 8,
+    "peak_concurrent_http_requests": 3,
+    "input_bytes": 1035000,
+    "output_bytes": 180000,
+    "placeholders_per_body": 15000,
+    "samples_seconds": [
+      0.032319,
+      0.039204,
+      0.029566,
+      0.055334,
+      0.027339,
+      0.032885,
+      0.033783,
+      0.018167,
+      0.034486,
+      0.051046,
+      0.049475,
+      0.0421,
+      0.043375,
+      0.0434,
+      0.049373,
+      0.054353,
+      0.050745,
+      0.046286,
+      0.051994,
+      0.045066,
+      0.054543,
+      0.032701,
+      0.050915,
+      0.054478,
+      0.049826,
+      0.055586,
+      0.031331,
+      0.05256,
+      0.061672,
+      0.033035,
+      0.040205,
+      0.055509,
+      0.051006,
+      0.048028,
+      0.04716,
+      0.053516,
+      0.050201,
+      0.053396,
+      0.048386,
+      0.062652,
+      0.039245,
+      0.038258,
+      0.060961,
+      0.043889,
+      0.04921,
+      0.046233,
+      0.060803,
+      0.043824,
+      0.049596,
+      0.031694,
+      0.036674,
+      0.065269,
+      0.067331,
+      0.046541,
+      0.048719,
+      0.058235,
+      0.059149,
+      0.06271,
+      0.066156,
+      0.059814,
+      0.064295,
+      0.055481,
+      0.06421,
+      0.064772,
+      0.03996,
+      0.048628,
+      0.026618,
+      0.051437,
+      0.064935,
+      0.023715,
+      0.036961,
+      0.053535,
+      0.019058,
+      0.022512,
+      0.028143,
+      0.042589,
+      0.017504,
+      0.038232,
+      0.03173,
+      0.038671,
+      0.025054,
+      0.060632,
+      0.052597,
+      0.054675,
+      0.061567,
+      0.058358,
+      0.03983,
+      0.039233,
+      0.040927,
+      0.0411,
+      0.030135,
+      0.044116,
+      0.049459,
+      0.036578,
+      0.045135,
+      0.04447
+    ],
+    "metric": "guest curl time_total",
+    "server_tcp_nodelay": true,
+    "batch_accounting": {
+      "wall_seconds": 0.9455977769999997,
+      "driver_and_https_server_cpu_seconds": 0.12647163600000003,
+      "daemon_cpu": {
+        "user_seconds": 1.31,
+        "system_seconds": 1.02,
+        "guest_seconds": 0.88,
+        "clock_ticks_per_second": 100
+      },
+      "daemon_threads": {
+        "surviving_threads": [
+          {
+            "user_seconds": 0.43,
+            "system_seconds": 0.36,
+            "guest_seconds": 0.36,
+            "clock_ticks_per_second": 100,
+            "name": "vcpu-0"
+          },
+          {
+            "user_seconds": 0.53,
+            "system_seconds": 0.15,
+            "guest_seconds": 0.51,
+            "clock_ticks_per_second": 100,
+            "name": "vcpu-1"
+          },
+          {
+            "user_seconds": 0.05,
+            "system_seconds": 0.09,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.08,
+            "system_seconds": 0.06,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.08,
+            "system_seconds": 0.06,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.02,
+            "system_seconds": 0.12,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "hv2-net-sbx-89d"
+          },
+          {
+            "user_seconds": 0.04,
+            "system_seconds": 0.07,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "hv2-irq-sbx-89d"
+          },
+          {
+            "user_seconds": 0.06,
+            "system_seconds": 0.04,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.02,
+            "system_seconds": 0.05,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.01,
+            "system_seconds": 0.02,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "hm-secret-http-"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "kvm-nx-lpage-re"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "hv2-vsock-sbx-8"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          },
+          {
+            "user_seconds": 0.0,
+            "system_seconds": 0.0,
+            "guest_seconds": 0.0,
+            "clock_ticks_per_second": 100,
+            "name": "tokio-rt-worker"
+          }
+        ],
+        "threads_before": 32,
+        "threads_after": 32,
+        "limits": [
+          "Only threads present at both snapshots with matching start times are included",
+          "Thread names are Linux comm values truncated to 15 bytes",
+          "Thread totals need not equal process totals; snapshots are sequential"
+        ]
+      },
+      "scope": "12 measured batches including guest exec API and response validation",
+      "limits": [
+        "User CPU includes guest CPU; do not sum user and guest",
+        "100 Hz counters are quantized on this host",
+        "Driver and owned HTTPS server share one process",
+        "CPU accounting does not establish a causal bottleneck"
+      ]
+    }
+  },
+  "upstream_requests": 139,
+  "processes_reaped": true,
+  "limits": [
+    "No managed competitor measurement or performance claim",
+    "New TLS connection per curl invocation",
+    "Pending resume/reload calls overlap; exact registration interleavings are not controlled",
+    "Failed-pause reinsertion path not forced"
+  ]
+}

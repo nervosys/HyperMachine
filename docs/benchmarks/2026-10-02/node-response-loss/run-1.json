@@ -1,0 +1,401 @@
+{
+  "success": true,
+  "purpose": "functional verification, no performance comparison",
+  "artifact_sha256": {
+    "daemon": "3b01e16b3e03397a5df6456bb8cc9f6f6419dc9778ae2348c48575b420449c45",
+    "control-plane": "b3bba0b7792b84d0d76ef1bec6d6e286f20e6b78b957b7673b0f23db3e3d8d94",
+    "cli": "c385bd2d2996c660d2e9e0a1f7387980339abbb19ee8fdec518890ec52dd6bd5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d520964ff11dff3bc7090af9ee988eedd3c5c5ffb23a5a3708250e3248a2cb17",
+    "coordinator": "7aa0addb490eae5326c4c195d70eb92b953b67ac66d473d7b056ade1bc840870"
+  },
+  "cases": [
+    {
+      "name": "reserved-name-creation-and-duplicate-refusal",
+      "success": true,
+      "result": {
+        "creation_bound_name": true,
+        "CLI_inspection": true,
+        "both_create_routes_refuse_duplicate": true,
+        "inventory_creation_refused": true
+      }
+    },
+    {
+      "name": "node-name-operation-refused-before-boot",
+      "success": true,
+      "result": {
+        "missing_context_status": 409,
+        "invalid_context_status": 400,
+        "unowned_context_status": 409,
+        "cluster_authentication_status": 401,
+        "inventory_unchanged": true
+      }
+    },
+    {
+      "name": "node-atomic-completion-with-discarded-descriptor",
+      "success": true,
+      "result": {
+        "creation_descriptor_discarded": true,
+        "CLI_inspection_recovers_ID": true,
+        "named_SSH_reaches_recovered_guest": true,
+        "duplicate_creation_refused": true,
+        "operation_absent_from_guest_environment": true,
+        "deleted_name_released": true
+      }
+    },
+    {
+      "name": "control-plane-node-response-drop-after-commit",
+      "success": true,
+      "result": {
+        "control_plane_status": 502,
+        "node_committed_before_response_loss": true,
+        "backend_requests": 1,
+        "elapsed_seconds": 0.02218504701158963,
+        "CLI_recovers_ID": true,
+        "named_SSH_reaches_same_guest": true,
+        "duplicate_creation_refused": true,
+        "no_extra_VM": true,
+        "deleted_name_released": true,
+        "relay_listener_and_handler_stopped": true
+      }
+    },
+    {
+      "name": "control-plane-node-response-timeout-after-commit",
+      "success": true,
+      "result": {
+        "control_plane_status": 502,
+        "node_committed_before_response_loss": true,
+        "backend_requests": 1,
+        "elapsed_seconds": 60.00414799099963,
+        "CLI_recovers_ID": true,
+        "named_SSH_reaches_same_guest": true,
+        "duplicate_creation_refused": true,
+        "no_extra_VM": true,
+        "deleted_name_released": true,
+        "relay_listener_and_handler_stopped": true
+      }
+    },
+    {
+      "name": "OpenSSH-API-TLS-node-mTLS-binary-roundtrip",
+      "success": true,
+      "result": {
+        "bytes": 1048576,
+        "sha256": "631b84027d6b9e52b539c4e8373622d23032dfadc64d60af87339c9037e4f769",
+        "strict_host_key_checking": true
+      }
+    },
+    {
+      "name": "OpenSSH-preserves-remote-exit-code",
+      "success": true,
+      "result": {
+        "exit_code": 7
+      }
+    },
+    {
+      "name": "OpenSSH-rejects-unregistered-client-key",
+      "success": true,
+      "result": {
+        "exit_code": 255,
+        "authentication_rejected": true
+      }
+    },
+    {
+      "name": "OpenSSH-rejects-mismatched-guest-host-key",
+      "success": true,
+      "result": {
+        "exit_code": 255,
+        "host_identity_rejected": true
+      }
+    },
+    {
+      "name": "bad-api-key",
+      "success": true,
+      "result": {
+        "status": 401
+      }
+    },
+    {
+      "name": "inventory-key-cannot-tunnel",
+      "success": true,
+      "result": {
+        "status": 403
+      }
+    },
+    {
+      "name": "invalid-port-zero",
+      "success": true,
+      "result": {
+        "status": 400
+      }
+    },
+    {
+      "name": "unavailable-guest-port",
+      "success": true,
+      "result": {
+        "status": 502
+      }
+    },
+    {
+      "name": "node-cluster-token-required",
+      "success": true,
+      "result": {
+        "status": 401
+      }
+    },
+    {
+      "name": "node-client-certificate-required",
+      "success": true,
+      "result": {
+        "rejected_before_HTTP": true
+      }
+    },
+    {
+      "name": "direct-node-mTLS-binary",
+      "success": true,
+      "result": {
+        "bytes": 65536,
+        "sha256": "7daca2095d0438260fa849183dfc67faa459fdf4936e1bc91eec6b281b27e4c2"
+      }
+    },
+    {
+      "name": "CLI-TLS-binary-client-EOF-multiple-connections",
+      "success": true,
+      "result": {
+        "connections": 2,
+        "bytes_per_connection": 262144,
+        "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+      }
+    },
+    {
+      "name": "CLI-graceful-interrupt-after-transfer-repeated",
+      "success": true,
+      "result": [
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        }
+      ]
+    },
+    {
+      "name": "CLI-TLS-server-EOF-preserves-client-write",
+      "success": true,
+      "result": {
+        "received_request_bytes": 262144,
+        "guest_sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+      }
+    },
+    {
+      "name": "CLI-rejects-untrusted-API-certificate",
+      "success": true,
+      "result": {
+        "exit_code": 1,
+        "TLS_trust_enforced": true
+      }
+    },
+    {
+      "name": "open-tunnel-prevents-automatic-idle-pause",
+      "success": true,
+      "result": {
+        "idle_window_seconds": 30,
+        "held_seconds": 35,
+        "state": "running"
+      }
+    },
+    {
+      "name": "pause-closes-active-tunnel-resume-reopens-guest-port",
+      "success": true,
+      "result": {
+        "connections": 1,
+        "bytes_per_connection": 262144,
+        "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+      }
+    },
+    {
+      "name": "fork-preserves-guest-listener",
+      "success": true,
+      "result": {
+        "connections": 1,
+        "bytes_per_connection": 262144,
+        "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9",
+        "alias_transfer_refused": true,
+        "reserved_name_keeps_parent_after_fork": true,
+        "child_name_not_inherited": true,
+        "parent_metadata_name_unchanged": true,
+        "other_metadata_preserved": true,
+        "name_resolves_after_duplicate_deleted": true
+      }
+    },
+    {
+      "name": "delete-closes-active-tunnel-and-refuses-reopen",
+      "success": true,
+      "result": {
+        "active_connection_closed": true,
+        "subsequent_handshake_status": 404,
+        "creation_name_deleted_and_reused": true
+      }
+    }
+  ],
+  "cleanup_errors": [],
+  "environment": "local WSL nested KVM; 1 vCPU / 1024 MiB guests",
+  "transport": "CLI -> verified API TLS -> control plane -> node mTLS plus cluster token -> vsock -> loopback guest TCP",
+  "ssh_fixture": {
+    "build_sha256": "e4ca03bc9d67b1eb5ec2c829616f60cc5b7d309fb806562148d6b0b7512af5f5",
+    "resolution": "reserved creation",
+    "server_version": "Dropbear v2025.89",
+    "host_public_key_sha256": "051bfaea0d67633b8aed656133f554fb5f43251eda3efb5b33d20e7d9a69ea4d",
+    "client_public_key_sha256": "16962bfe15c065c53913b37d078755fb2320f0b03f8a58f8eb988caab86c8dc6",
+    "openssh_version": "OpenSSH_10.0p2 Debian-7+deb13u4, OpenSSL 3.5.7 9 Jun 2026"
+  },
+  "idle_probe": {
+    "idle_window_seconds": 30,
+    "held_seconds": 35,
+    "observed_state": "running"
+  },
+  "remaining_sandboxes": 0,
+  "owned_processes_stopped": [
+    {
+      "name": "cli-21",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-20",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-19",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-18",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-17",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-16",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-15",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-14",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-13",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-12",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-11",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-10",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-9",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-8",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-7",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-6",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-5",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-4",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-3",
+      "exit_code": 0
+    },
+    {
+      "name": "control",
+      "exit_code": -15
+    },
+    {
+      "name": "node",
+      "exit_code": 0
+    },
+    {
+      "name": "redis",
+      "exit_code": 0
+    }
+  ]
+}

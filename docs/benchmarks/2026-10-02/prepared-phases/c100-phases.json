@@ -1,0 +1,288 @@
+{
+  "diagnostic_phase_accounting": true,
+  "engines": {
+    "hypermachine": {
+      "readiness": {
+        "planned": 400,
+        "attempted": 400,
+        "passed": 400,
+        "failed": 0,
+        "successful_p50_ms": 662.3290370007453,
+        "successful_p95_ms": 1008.8018770002236,
+        "successful_p99_ms": 1268.887371999881,
+        "median_held_pss_mib": 325.3984375,
+        "median_incremental_pss_mib": 244.4375
+      },
+      "phases": {
+        "create_and_notice": {
+          "mean_ms": 455.6083370300348,
+          "p50_ms": 448.30651699885493,
+          "p95_ms": 735.5575099991256,
+          "p99_ms": 845.8651020009711,
+          "at_least_1000_ms": 1
+        },
+        "exec": {
+          "mean_ms": 251.47036835495783,
+          "p50_ms": 218.2762359989283,
+          "p95_ms": 480.72639900055947,
+          "p99_ms": 706.1667790003412,
+          "at_least_1000_ms": 0
+        }
+      },
+      "slow_successful_attempts": 24,
+      "slow_phase_time_fractions": {
+        "create_and_notice": 0.6025135892728193,
+        "exec": 0.3974864107271808
+      },
+      "ten_slowest": [
+        {
+          "pair": 0,
+          "index": 75,
+          "ready_ms": 1314.3683690013859,
+          "latency_phases_ms": {
+            "create_and_notice": 1004.0344550016016,
+            "exec": 310.3339139997843
+          }
+        },
+        {
+          "pair": 0,
+          "index": 30,
+          "ready_ms": 1311.2302959998487,
+          "latency_phases_ms": {
+            "create_and_notice": 846.2624099993263,
+            "exec": 464.9678860005224
+          }
+        },
+        {
+          "pair": 0,
+          "index": 7,
+          "ready_ms": 1309.1678000000684,
+          "latency_phases_ms": {
+            "create_and_notice": 980.7100919988443,
+            "exec": 328.4577080012241
+          }
+        },
+        {
+          "pair": 0,
+          "index": 68,
+          "ready_ms": 1276.4568380007404,
+          "latency_phases_ms": {
+            "create_and_notice": 811.1303290006617,
+            "exec": 465.32650900007866
+          }
+        },
+        {
+          "pair": 0,
+          "index": 37,
+          "ready_ms": 1268.887371999881,
+          "latency_phases_ms": {
+            "create_and_notice": 845.8651020009711,
+            "exec": 423.0222699989099
+          }
+        },
+        {
+          "pair": 0,
+          "index": 63,
+          "ready_ms": 1247.901669001294,
+          "latency_phases_ms": {
+            "create_and_notice": 829.5448010012478,
+            "exec": 418.35686800004623
+          }
+        },
+        {
+          "pair": 0,
+          "index": 98,
+          "ready_ms": 1243.877582001005,
+          "latency_phases_ms": {
+            "create_and_notice": 770.3831369999534,
+            "exec": 473.49444500105164
+          }
+        },
+        {
+          "pair": 0,
+          "index": 78,
+          "ready_ms": 1238.5256990000926,
+          "latency_phases_ms": {
+            "create_and_notice": 912.8366860004462,
+            "exec": 325.68901299964637
+          }
+        },
+        {
+          "pair": 0,
+          "index": 73,
+          "ready_ms": 1237.3753909996594,
+          "latency_phases_ms": {
+            "create_and_notice": 600.1890789993922,
+            "exec": 637.1863120002672
+          }
+        },
+        {
+          "pair": 0,
+          "index": 44,
+          "ready_ms": 1232.1571860011318,
+          "latency_phases_ms": {
+            "create_and_notice": 676.6048210010922,
+            "exec": 555.5523650000396
+          }
+        }
+      ]
+    },
+    "firecracker": {
+      "readiness": {
+        "planned": 400,
+        "attempted": 400,
+        "passed": 400,
+        "failed": 0,
+        "successful_p50_ms": 828.9011750002828,
+        "successful_p95_ms": 989.6509089994652,
+        "successful_p99_ms": 1019.4714019999083,
+        "median_held_pss_mib": 280.244140625,
+        "median_incremental_pss_mib": 280.244140625
+      },
+      "phases": {
+        "process_and_load": {
+          "mean_ms": 230.8650120350694,
+          "p50_ms": 184.43481699978292,
+          "p95_ms": 488.54240699984075,
+          "p99_ms": 576.1832459993457,
+          "at_least_1000_ms": 0
+        },
+        "connect_and_notice": {
+          "mean_ms": 316.12661810742793,
+          "p50_ms": 314.785820999532,
+          "p95_ms": 471.20153199830384,
+          "p99_ms": 580.8638779999455,
+          "at_least_1000_ms": 0
+        },
+        "exec": {
+          "mean_ms": 266.5689280850529,
+          "p50_ms": 271.2046670003474,
+          "p95_ms": 388.3006089999981,
+          "p99_ms": 429.1188429997419,
+          "at_least_1000_ms": 0
+        }
+      },
+      "slow_successful_attempts": 16,
+      "slow_phase_time_fractions": {
+        "process_and_load": 0.5010091842708916,
+        "connect_and_notice": 0.3595360575172053,
+        "exec": 0.13945475821190312
+      },
+      "ten_slowest": [
+        {
+          "pair": 3,
+          "index": 68,
+          "ready_ms": 1031.3854220003122,
+          "latency_phases_ms": {
+            "process_and_load": 584.4978299992363,
+            "connect_and_notice": 421.34263700063457,
+            "exec": 25.544955000441405
+          }
+        },
+        {
+          "pair": 3,
+          "index": 53,
+          "ready_ms": 1024.1001790000155,
+          "latency_phases_ms": {
+            "process_and_load": 600.7415610001772,
+            "connect_and_notice": 403.7215619991912,
+            "exec": 19.637056000647135
+          }
+        },
+        {
+          "pair": 3,
+          "index": 62,
+          "ready_ms": 1023.2055470005434,
+          "latency_phases_ms": {
+            "process_and_load": 496.3832539997384,
+            "connect_and_notice": 438.87401100073475,
+            "exec": 87.94828200007032
+          }
+        },
+        {
+          "pair": 3,
+          "index": 5,
+          "ready_ms": 1023.1123749999824,
+          "latency_phases_ms": {
+            "process_and_load": 496.615006999491,
+            "connect_and_notice": 426.42921799961186,
+            "exec": 100.06815000087954
+          }
+        },
+        {
+          "pair": 3,
+          "index": 44,
+          "ready_ms": 1019.4714019999083,
+          "latency_phases_ms": {
+            "process_and_load": 589.3064560004859,
+            "connect_and_notice": 331.59350599999016,
+            "exec": 98.57143999943219
+          }
+        },
+        {
+          "pair": 3,
+          "index": 74,
+          "ready_ms": 1016.6623599998275,
+          "latency_phases_ms": {
+            "process_and_load": 584.552000000258,
+            "connect_and_notice": 348.96714400019846,
+            "exec": 83.14321599937102
+          }
+        },
+        {
+          "pair": 3,
+          "index": 2,
+          "ready_ms": 1013.4215459984262,
+          "latency_phases_ms": {
+            "process_and_load": 472.766162998596,
+            "connect_and_notice": 380.0089750002371,
+            "exec": 160.64640799959307
+          }
+        },
+        {
+          "pair": 3,
+          "index": 38,
+          "ready_ms": 1011.9161920010811,
+          "latency_phases_ms": {
+            "process_and_load": 485.2468160006538,
+            "connect_and_notice": 464.2290949996095,
+            "exec": 62.44028100081778
+          }
+        },
+        {
+          "pair": 3,
+          "index": 63,
+          "ready_ms": 1011.7403399999603,
+          "latency_phases_ms": {
+            "process_and_load": 472.70654199928686,
+            "connect_and_notice": 434.8014770002919,
+            "exec": 104.23232100038149
+          }
+        },
+        {
+          "pair": 3,
+          "index": 46,
+          "ready_ms": 1010.6768740006373,
+          "latency_phases_ms": {
+            "process_and_load": 516.0927260003518,
+            "connect_and_notice": 326.1658890005492,
+            "exec": 168.41825899973628
+          }
+        }
+      ]
+    }
+  },
+  "cleanup_verified": true,
+  "attempted": 800,
+  "passed": 800,
+  "cohort_success": true,
+  "runtime_change_adopted": false,
+  "managed_competitor_win_established": false,
+  "slow_threshold_ms": 1000,
+  "limitations": [
+    "Client create includes HTTP queueing, provisioning, snapshot restore, guest maintenance and response delivery",
+    "Client phases do not separate server CPU, blocking queues or guest scheduling",
+    "Phase percentiles need not sum to total readiness percentiles",
+    "Slow samples are described, never discarded from overall statistics"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "kernel": "6.18.33.2-microsoft-standard-WSL2",
+  "architecture": "x86_64",
+  "host_logical_cpus": 24,
+  "affinity": "not pinned",
+  "daemon_profile": "development",
+  "guest_cpu_cores": 1,
+  "guest_memory_gib": 1,
+  "model_name": "AMD Ryzen 9 9900X 12-Core Processor"
+}

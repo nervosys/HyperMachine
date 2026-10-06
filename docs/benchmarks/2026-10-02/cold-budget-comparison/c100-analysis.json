@@ -1,0 +1,67 @@
+{
+  "variants": {
+    "baseline": {
+      "planned": 400,
+      "attempted": 400,
+      "passed": 400,
+      "failed": 0,
+      "successful_p50_ms": 4134.477225001319,
+      "successful_p99_ms": 13000.666890991852,
+      "failed_runs": 0
+    },
+    "candidate": {
+      "planned": 400,
+      "attempted": 400,
+      "passed": 400,
+      "failed": 0,
+      "successful_p50_ms": 4958.840033999877,
+      "successful_p99_ms": 8873.830600001384,
+      "failed_runs": 0
+    }
+  },
+  "pairs": [
+    {
+      "pair": 0,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": -177.04746025963686,
+      "candidate_p50_reduction_ms": -559.0773800067836,
+      "candidate_p99_reduction_ms": 2967.43948799849
+    },
+    {
+      "pair": 1,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": 1110.4107986294548,
+      "candidate_p50_reduction_ms": 499.7247480059741,
+      "candidate_p99_reduction_ms": 976.3289800030179
+    },
+    {
+      "pair": 2,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": 738.4629936907731,
+      "candidate_p50_reduction_ms": -1054.2224499949953,
+      "candidate_p99_reduction_ms": 3291.007932013599
+    },
+    {
+      "pair": 3,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": -54.5159179494658,
+      "candidate_p50_reduction_ms": -2573.0524029931985,
+      "candidate_p99_reduction_ms": 4454.66498901078
+    }
+  ],
+  "complete_successful_pairs": 4,
+  "candidate_faster_pairs": 2,
+  "median_paired_mean_reduction_ms": 341.9735378706537,
+  "cleanup_verified": true,
+  "artifacts_unchanged": true,
+  "cohort_success": true,
+  "latencies_conditional_on_success": true,
+  "runtime_change_adopted": false,
+  "competitor_win_established": false,
+  "candidate_limit": 16,
+  "same_binary": true,
+  "queue_included_in_ready_ms": true,
+  "experimental_candidate": true,
+  "note": "Incomplete pairs remain in failure totals; their mean latency difference is unavailable",
+  "baseline_limit": 8
+}

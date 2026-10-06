@@ -1,0 +1,55 @@
+{
+  "checks": [
+    "Unscoped guest sends placeholders over verified owned HTTPS",
+    "Exact sandbox scope rewrites headers, Basic auth, query and JSON with correct framing",
+    "Raw body substitution preserves surrounding bytes and fixes framing",
+    "Binary body substitution preserves NUL and non-UTF8 bytes with correct framing",
+    "Form substitution preserves unrelated plus and percent decoding",
+    "Malformed reload preserves the active secret observed upstream",
+    "Delimiter-bearing secrets round-trip through query, Basic auth, JSON, form and raw bodies",
+    "Different authenticated hostname preserves placeholders",
+    "Upstream hostname mismatch refuses the request before any owned HTTP payload arrives",
+    "SIGHUP rotation preserves placeholders and uses updated secret",
+    "Large raw requests preserve all 15000 replacements and framing during HTTPS timing",
+    "Fork inherits network policy but not parent operator secret scope",
+    "Pause/resume reattaches the exact sandbox scope",
+    "Four resume/revoke/re-add overlaps converge to the current exact sandbox scope",
+    "SIGHUP scope removal revokes substitution"
+  ],
+  "input_sha256": {
+    "daemon": "eb91da10a1c32ea4e61c4e668ad2a9c4c95edb8142cc9ca713b3f4beada0f80d",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "f4b9228e965d5c03a5747348693e81c9f52a0793a7b6f957f4a81301e0a9d2fa"
+  },
+  "policy_bindings": 128,
+  "http_timings": {
+    "warmup_requests": 3,
+    "input_bytes": 1035000,
+    "output_bytes": 180000,
+    "placeholders_per_body": 15000,
+    "samples_seconds": [
+      0.017628,
+      0.018253,
+      0.018391,
+      0.01769,
+      0.017351,
+      0.017098,
+      0.017342,
+      0.017396,
+      0.017299,
+      0.017282,
+      0.017557,
+      0.017104
+    ],
+    "metric": "guest curl time_total",
+    "server_tcp_nodelay": true
+  },
+  "upstream_requests": 34,
+  "processes_reaped": true,
+  "limits": [
+    "No managed competitor measurement or performance claim",
+    "New TLS connection per curl invocation",
+    "Pending resume/reload calls overlap; exact registration interleavings are not controlled",
+    "Failed-pause reinsertion path not forced"
+  ]
+}

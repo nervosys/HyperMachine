@@ -1,0 +1,72 @@
+{
+  "functional_only": true,
+  "success": true,
+  "checks": [
+    "missing, absent and expired DNS proofs are refused without binding a real guest",
+    "trusted owned HTTPS resolver proves sandbox-bound TXT before routing",
+    "certificate-verified HTTPS alias reaches guest web server through both proxies",
+    "new TLS handshakes use the renewed certificate while the old guest stream completes",
+    "mismatched certificate/key reload preserves the active TLS identity and guest route",
+    "unconfigured SNI handshake is refused without a default certificate",
+    "optional default certificate activates and is removed through validated TLS reload",
+    "owner port update reaches a distinct guest web server without proxy restart",
+    "failed TXT revalidation preserves existing guest port and HTTPS response",
+    "Redis binding survives control-plane restart",
+    "alias request resumes paused guest with retained web-server state",
+    "unbind and sandbox deletion stop alias routing",
+    "prior sandbox TXT cannot bind a replacement sandbox",
+    "deleted sandbox releases hostname ownership for a new sandbox"
+  ],
+  "dns_ownership_enabled": true,
+  "tls_bundle_enabled": true,
+  "artifact_sha256": {
+    "control_plane": "958d30f3ab8dc3e83c0455179b8868ceb5fb3a57a5a2d6f472c4b846155fbe1e",
+    "daemon": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "verifier": "5e41ee5ca1710d400d8521c8d4d971ddc74683041e2f3396454fcc67484bdc44"
+  },
+  "cleanup_errors": [],
+  "template": {
+    "aliases": [
+      "base"
+    ],
+    "buildID": "base",
+    "buildStatus": "ready",
+    "cpuCount": 1,
+    "memoryMB": 1024,
+    "nodeIDs": [
+      "domain-node"
+    ],
+    "nodes": [
+      {
+        "cpuCount": 1,
+        "memoryMB": 1024,
+        "nodeID": "domain-node",
+        "snapshot": true
+      }
+    ],
+    "public": false,
+    "snapshot": true,
+    "templateID": "base"
+  },
+  "tls_reload": {
+    "initial_leaf_sha256": "70db459b88e30859eba43e037d1575082c873e72fb012a735732b4ad800c0c3a",
+    "renewed_leaf_sha256": "e5085cb926912a77973b3c92002c2e1d2b0c7dfdf1d212b7d5f3fa9b5c6e6adc",
+    "rejected_reload_retained_leaf_sha256": "e5085cb926912a77973b3c92002c2e1d2b0c7dfdf1d212b7d5f3fa9b5c6e6adc",
+    "default_leaf_sha256": "e5085cb926912a77973b3c92002c2e1d2b0c7dfdf1d212b7d5f3fa9b5c6e6adc",
+    "old_connection_guest_bytes_verified": 16777216,
+    "control_plane_pid": 337,
+    "control_plane_alive_after_reload": true,
+    "rejected_reload_observed_in_log": true
+  },
+  "owned_processes_reaped": true,
+  "owned_dns_server_stopped": true,
+  "log_tails": {
+    "control-restarted-3.log": "\u001b[2m2026-10-03T08:54:36.751539Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_control_plane\u001b[0m\u001b[2m:\u001b[0m no --mtls-*: nodes are reached in plaintext, the cluster token and envd traffic with them\nhv2-control-plane: E2B API on 0.0.0.0:35445, envd proxy on 0.0.0.0:42087, store redis://127.0.0.1:33943\n",
+    "node-1.log": "hv2-sandboxd: listening on 0.0.0.0:34061, capacity 4, cluster node domain-node\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes are restored from template snapshots: base\n\nsandbox proxy on 0.0.0.0:34347 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:34347 process.Process/Start\n",
+    "redis-0.log": "301:C 03 Oct 2026 01:54:35.351 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.\n301:C 03 Oct 2026 01:54:35.351 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo\n301:C 03 Oct 2026 01:54:35.351 * Redis version=8.0.2, bits=64, commit=00000000, modified=0, pid=301, just started\n301:C 03 Oct 2026 01:54:35.351 * Configuration loaded\n301:M 03 Oct 2026 01:54:35.351 * monotonic clock: POSIX clock_gettime\n301:M 03 Oct 2026 01:54:35.352 * Running mode=standalone, port=33943.\n301:M 03 Oct 2026 01:54:35.353 * Server initialized\n301:M 03 Oct 2026 01:54:35.353 * Ready to accept connections tcp\n301:signal-handler (1791017677) Received SIGTERM scheduling shutdown...\n301:M 03 Oct 2026 01:54:37.264 * User requested shutdown...\n301:M 03 Oct 2026 01:54:37.264 # Redis is now ready to exit, bye bye...\n",
+    "control-2.log": "\u001b[2m2026-10-03T08:54:36.261752Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_control_plane\u001b[0m\u001b[2m:\u001b[0m no --mtls-*: nodes are reached in plaintext, the cluster token and envd traffic with them\nhv2-control-plane: E2B API on 0.0.0.0:35445, envd proxy on 0.0.0.0:42087, store redis://127.0.0.1:33943\n\u001b[2m2026-10-03T08:54:36.570836Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_control_plane\u001b[0m\u001b[2m:\u001b[0m TLS certificate bundle reload rejected; active certificates retained \u001b[3merror\u001b[0m\u001b[2m=\u001b[0minvalid TLS certificate/key pair\n"
+  },
+  "artifacts_unchanged": true
+}

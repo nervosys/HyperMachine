@@ -1,0 +1,74 @@
+{
+  "cohort_success": true,
+  "cleanup_verified": true,
+  "variants": {
+    "baseline": {
+      "engines": {
+        "hypermachine": {
+          "planned": 32,
+          "passed": 32,
+          "failed": 0,
+          "successful_mean_ms": 507.8988204062497,
+          "successful_p50_ms": 500.0562500000001,
+          "successful_p99_ms": 600.9331479999993
+        },
+        "firecracker": {
+          "planned": 32,
+          "passed": 32,
+          "failed": 0,
+          "successful_mean_ms": 430.9518803125005,
+          "successful_p50_ms": 425.39620399998057,
+          "successful_p99_ms": 472.37002299999983
+        }
+      },
+      "median_held_pss_mib": 879.548828125,
+      "median_empty_pss_mib": 94.76220703125
+    },
+    "candidate": {
+      "engines": {
+        "hypermachine": {
+          "planned": 32,
+          "passed": 32,
+          "failed": 0,
+          "successful_mean_ms": 517.6158262812509,
+          "successful_p50_ms": 514.0393229999986,
+          "successful_p99_ms": 552.6050029999965
+        },
+        "firecracker": {
+          "planned": 32,
+          "passed": 32,
+          "failed": 0,
+          "successful_mean_ms": 416.73200571875003,
+          "successful_p50_ms": 416.04075699999754,
+          "successful_p99_ms": 493.50734899999793
+        }
+      },
+      "median_held_pss_mib": 678.24365234375,
+      "median_empty_pss_mib": 10.041015625
+    }
+  },
+  "pairs": [
+    {
+      "pair": 0,
+      "complete": true,
+      "mean_reduction_ms": 4.751725062499304,
+      "p99_reduction_ms": 64.61446899999498,
+      "held_reduction_mib": 217.556640625,
+      "empty_reduction_mib": 98.70654296875,
+      "firecracker_control_mean_shift_ms": -35.12670187500163
+    },
+    {
+      "pair": 1,
+      "complete": true,
+      "mean_reduction_ms": -24.185736812501887,
+      "p99_reduction_ms": 11.788380000012921,
+      "held_reduction_mib": 187.29248046875,
+      "empty_reduction_mib": 84.9853515625,
+      "firecracker_control_mean_shift_ms": 6.68695268750065
+    }
+  ],
+  "runtime_change_adopted": false,
+  "managed_competitor_win_established": false,
+  "latencies_conditional_on_success": true,
+  "memory_conditional_on_complete_batches": true
+}

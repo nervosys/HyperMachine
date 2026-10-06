@@ -1,0 +1,13 @@
+{
+  "sha256": {
+    "cli-tests.log": "a2979e55dd06bd3a922067d6d6eb98bef4aa1cd624bfa9bece192ed0976b319c",
+    "inputs.json": "81623e8cb9cba42f581dbfea1e9f66690f36b9b83ebee7e1856477080ef05900",
+    "isolated-Cargo.lock": "3700d1a6296952a0243c59627ac11ceada402fd6cd7b535aa033f5390ac1e7d3",
+    "README.md": "8128241381fd60f1b1609327ca6c0fe37938e2459a5ff134fa82bb75008e9fb9",
+    "real-tests.log": "8eb0743699114274f1d4e0f65b781b351088eadb62f3b2003c3f0c2dbdebf852",
+    "regression-tests.log": "c0a2dd9e73fadbc061eb719f09beff1345182c7f6e03a5acbf5611b6adfc41b9",
+    "sandbox_vm.rs": "7ce14d35a2e0d9e906dcddea4ce2cdc870f77645ffd2eac717cec0d5faf0da8a",
+    "volume_client.rs": "ac653a6ea5a164a5e59c37f4a67d043fe6acc44936df332d74235e564160bd6e",
+    "volume_routing.rs": "042e36941c618ee708d225377fdc3545dfbd4fe8c0c23e46666d193a07750ea0"
+  }
+}

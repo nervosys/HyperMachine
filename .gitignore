@@ -93,3 +93,7 @@ PROGRESS.md
 # Python bytecode: build output, and it embeds the absolute path it was compiled from.
 __pycache__/
 *.pyc
+
+# Scratch output of benchmark runs; evidence worth keeping is copied into
+# docs/benchmarks/<date>/ after its local paths are scrubbed.
+.benchmark-artifacts/

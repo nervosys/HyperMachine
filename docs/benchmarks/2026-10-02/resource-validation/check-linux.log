@@ -1,0 +1,31 @@
+{
+  "rejected": [
+    "missing_run",
+    "resources",
+    "state",
+    "time",
+    "hold",
+    "memory",
+    "order",
+    "count",
+    "source",
+    "full",
+    "changed",
+    "cleanup",
+    "resource_phase",
+    "resource_batch_missing",
+    "verified_resources_missing",
+    "verified_resources_mismatch",
+    "verified_resources_boolean",
+    "no_clock_rng",
+    "wrong_entropy_size",
+    "missing_ack",
+    "bad_clock",
+    "reused_entropy",
+    "phase_sum",
+    "phase_negative",
+    "phase_nan",
+    "phase_missing"
+  ],
+  "count": 26
+}

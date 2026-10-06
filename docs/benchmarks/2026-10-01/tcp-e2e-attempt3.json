@@ -1,0 +1,125 @@
+{
+  "success": false,
+  "purpose": "functional verification, no performance comparison",
+  "artifact_sha256": {
+    "daemon": "8a9b0213c268e34f74033c4ec1a16365d7fe09f6acbc0612450af70ba7f9653b",
+    "control-plane": "a386eb3d2ed2c9eb374482858519180584e67dbcd5ea85ea741bf1267f731672",
+    "cli": "72018dd6ba51c03f2aede745853becdd02ff73d4ef2d3ffe44c6219a31f516fd",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "557bd4614c6b73822bf911f99dcab2f9cd38ac263a0b8f8395b85f28d8382dfa",
+    "coordinator": "dcf2aea2db95aa0ac47a98dfcb712a043c715f4747ce07979d281dfdef9ecab0"
+  },
+  "cases": [
+    {
+      "name": "bad-api-key",
+      "success": true,
+      "result": {
+        "status": 401
+      }
+    },
+    {
+      "name": "inventory-key-cannot-tunnel",
+      "success": true,
+      "result": {
+        "status": 403
+      }
+    },
+    {
+      "name": "invalid-port-zero",
+      "success": true,
+      "result": {
+        "status": 400
+      }
+    },
+    {
+      "name": "unavailable-guest-port",
+      "success": true,
+      "result": {
+        "status": 502
+      }
+    },
+    {
+      "name": "node-cluster-token-required",
+      "success": true,
+      "result": {
+        "status": 401
+      }
+    },
+    {
+      "name": "node-client-certificate-required",
+      "success": true,
+      "result": {
+        "rejected_before_HTTP": true
+      }
+    },
+    {
+      "name": "direct-node-mTLS-binary",
+      "success": true,
+      "result": {
+        "bytes": 65536,
+        "sha256": "7daca2095d0438260fa849183dfc67faa459fdf4936e1bc91eec6b281b27e4c2"
+      }
+    },
+    {
+      "name": "CLI-TLS-binary-client-EOF-multiple-connections",
+      "success": true,
+      "result": {
+        "connections": 2,
+        "bytes_per_connection": 262144,
+        "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+      }
+    },
+    {
+      "name": "CLI-TLS-server-EOF-preserves-client-write",
+      "success": true,
+      "result": {
+        "received_request_bytes": 262144,
+        "guest_sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+      }
+    },
+    {
+      "name": "CLI-rejects-untrusted-API-certificate",
+      "success": true,
+      "result": {
+        "exit_code": 1,
+        "TLS_trust_enforced": true
+      }
+    },
+    {
+      "name": "pause-closes-active-tunnel-resume-reopens-guest-port",
+      "success": false,
+      "error": "POST /sandboxes/sbx-ea6d8d5cfd9b484b8318/pause: 400: b'Failed to parse the request body as JSON: EOF while parsing a value at line 1 column 0'"
+    }
+  ],
+  "cleanup_errors": [],
+  "environment": "local WSL nested KVM; 1 vCPU / 1024 MiB guests",
+  "transport": "CLI -> verified API TLS -> control plane -> node mTLS plus cluster token -> vsock -> loopback guest TCP",
+  "error": "POST /sandboxes/sbx-ea6d8d5cfd9b484b8318/pause: 400: b'Failed to parse the request body as JSON: EOF while parsing a value at line 1 column 0'",
+  "remaining_sandboxes": 0,
+  "owned_processes_stopped": [
+    {
+      "name": "cli-5",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-4",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-3",
+      "exit_code": 0
+    },
+    {
+      "name": "control",
+      "exit_code": -15
+    },
+    {
+      "name": "node",
+      "exit_code": 0
+    },
+    {
+      "name": "redis",
+      "exit_code": 0
+    }
+  ]
+}

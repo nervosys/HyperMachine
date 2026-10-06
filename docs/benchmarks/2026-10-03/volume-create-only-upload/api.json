@@ -1,0 +1,33 @@
+{
+  "input_sha256": {
+    "daemon": "12e585d9a72e3540eac862fc0dcdade92d90aa650527180509806e78551218a7",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "nodes": 2,
+  "concurrent_requests": 16,
+  "created": 1,
+  "conflicts": 15,
+  "checks": [
+    "One concurrent creator wins",
+    "Winner token matches published metadata",
+    "Duplicate preserves metadata and data",
+    "All nodes observe the same winning token",
+    "Winning daemon restart preserves token and data",
+    "One volume listed and cleaned up on all nodes",
+    "Nested binary upload and replacement visible on all nodes after restart",
+    "Wrong volume bearer token refuses overwrite",
+    "One of sixteen create-only uploads wins in atomic and in-place modes",
+    "Streaming atomic upload client preserves binary bytes on all nodes",
+    "Root-level atomic upload succeeds with the pinned data-root flush",
+    "Incomplete atomic upload preserves prior file and removes staging file"
+  ],
+  "processes_reaped": true,
+  "guests_created": 0,
+  "atomic_uploads": true,
+  "upload_timings": null,
+  "limits": [
+    "Independent daemons share one local filesystem; network filesystem not exercised",
+    "No power-loss durability, performance or competitor comparison"
+  ]
+}

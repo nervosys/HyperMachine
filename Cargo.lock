@@ -1061,6 +1061,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "chrono-tz"
+version = "0.10.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6139a8597ed92cf816dfb33f5dd6cf0bb93a6adc938f11039f371bc5bcd26c3"
+dependencies = [
+ "chrono",
+ "phf 0.12.1",
+]
+
+[[package]]
 name = "ciborium"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2452,6 +2462,7 @@ version = "1.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "base64 0.22.1",
  "chrono",
  "clap",
  "clap_complete",
@@ -2461,6 +2472,9 @@ dependencies = [
  "hv2-core",
  "hv2-jobs",
  "hv2-sandbox",
+ "hyper",
+ "hyper-util",
+ "libc",
  "reqwest",
  "serde",
  "serde_json",
@@ -2469,6 +2483,7 @@ dependencies = [
  "tower-http 0.7.1",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
@@ -2652,6 +2667,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "x509-parser",
 ]
 
 [[package]]
@@ -2679,9 +2695,12 @@ version = "1.1.0"
 dependencies = [
  "async-trait",
  "axum",
+ "base64 0.22.1",
  "chrono",
  "form_urlencoded",
+ "hmac",
  "hv2-api",
+ "hv2-core",
  "parking_lot",
  "rcgen",
  "redis",
@@ -2690,13 +2709,16 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "socket2",
  "subtle",
+ "tempfile",
  "thiserror 2.0.21",
  "tokio",
  "tokio-rustls",
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "zeroize",
 ]
 
 [[package]]
@@ -2804,6 +2826,8 @@ name = "hv2-jobs"
 version = "1.1.0"
 dependencies = [
  "axum",
+ "chrono",
+ "chrono-tz",
  "hv2-sandbox",
  "serde",
  "serde_json",
@@ -2823,13 +2847,19 @@ version = "1.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
+ "bytes",
+ "http-body-util",
  "hv2-core",
  "hyper",
  "hyper-util",
  "libc",
+ "memchr",
  "parking_lot",
  "rcgen",
  "rustls",
+ "serde",
+ "serde_json",
  "smoltcp",
  "thiserror 2.0.21",
  "tokio",
@@ -2837,6 +2867,7 @@ dependencies = [
  "tracing",
  "webpki-roots",
  "windows-sys 0.61.2",
+ "zeroize",
 ]
 
 [[package]]
@@ -2896,6 +2927,7 @@ dependencies = [
  "sha2",
  "subtle",
  "tar",
+ "tempfile",
  "tokio",
  "tokio-rustls",
  "tokio-stream",
@@ -4581,6 +4613,15 @@ dependencies = [
 
 [[package]]
 name = "phf"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "913273894cec178f401a31ec4b656318d95473527be05c0752cc41cdc32be8b7"
+dependencies = [
+ "phf_shared 0.12.1",
+]
+
+[[package]]
+name = "phf"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1562dc717473dbaa4c1f85a36410e03c047b2e7df7f45ee938fbef64ae7fadf"
@@ -4645,6 +4686,15 @@ checksum = "67eabc2ef2a60eb7faa00097bd1ffdb5bd28e62bf39990626a582201b7a754e5"
 dependencies = [
  "siphasher",
  "unicase",
+]
+
+[[package]]
+name = "phf_shared"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06005508882fb681fd97892ecff4b7fd0fee13ef1aa569f8695dae7ab9099981"
+dependencies = [
+ "siphasher",
 ]
 
 [[package]]

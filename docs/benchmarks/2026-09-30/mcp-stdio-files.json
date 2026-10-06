@@ -1,0 +1,68 @@
+{
+  "artifact_sha256": {
+    "daemon": "8ea52a369067d99f281b96bc513c59216304ac8e7eea0462d746f854e9d7aa5d",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "cli": "222d69c735187b6be44dfd84b8e611c8b819630a3dcc973fa53f1fd4a476fc31",
+    "probe": "de61c516a25e73d839356dd52042daf68bc284763032a5fc31ea05778833b09d",
+    "harness": "8a5da5b9491a1243dd63a729849ef0d0cb7757061c493cc371a2832e8e754e3d"
+  },
+  "success": true,
+  "error": null,
+  "cleanup_errors": [],
+  "template": {
+    "aliases": [
+      "base"
+    ],
+    "buildID": "base",
+    "buildStatus": "ready",
+    "cpuCount": 1,
+    "envdVersion": "0.6.3",
+    "memoryMB": 1024,
+    "public": false,
+    "snapshot": true,
+    "templateID": "base"
+  },
+  "client": {
+    "schema_version": 1,
+    "client": "official-mcp-python",
+    "client_version": "1.23.3",
+    "harness_sha256": "8a5da5b9491a1243dd63a729849ef0d0cb7757061c493cc371a2832e8e754e3d",
+    "binary_sha256": "222d69c735187b6be44dfd84b8e611c8b819630a3dcc973fa53f1fd4a476fc31",
+    "environment": "WSL2 Debian Linux KVM, local snapshot template, 1 vCPU/1024 MiB",
+    "operations": [
+      "sandbox_create",
+      "sandbox_exec",
+      "file_upload",
+      "file_download",
+      "sandbox_exec",
+      "file_download",
+      "sandbox_inspect",
+      "sandbox_list",
+      "checkpoint_save",
+      "checkpoint_list",
+      "sandbox_exec",
+      "checkpoint_restore",
+      "sandbox_exec",
+      "checkpoint_delete",
+      "sandbox_pause",
+      "sandbox_resume",
+      "sandbox_exec",
+      "sandbox_fork",
+      "sandbox_exec",
+      "sandbox_exec",
+      "sandbox_exec",
+      "sandbox_exec",
+      "sandbox_inspect",
+      "sandbox_delete",
+      "sandbox_delete"
+    ],
+    "errors": [],
+    "remaining_known_sandboxes": [],
+    "success": true
+  },
+  "client_exit_code": 0,
+  "remaining_sandboxes": [],
+  "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:52827, capacity 8\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes are restored from template snapshots: base\n\nsandbox proxy on 0.0.0.0:50749 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:50749 process.Process/Start\n",
+  "artifacts_unchanged": true
+}

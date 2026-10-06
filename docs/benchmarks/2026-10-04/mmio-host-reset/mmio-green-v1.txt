@@ -1,0 +1,25 @@
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-core)
+    Finished `test` profile [optimized + debuginfo] target(s) in 13.21s
+     Running unittests src/lib.rs (/var/tmp/hm-object-backup/target/debug/deps/hv2_core-e659a1d473ebec97)
+
+running 17 tests
+test devices::virtio_mmio::tests::a_misaligned_register_write_is_refused ... ok
+test devices::virtio_mmio::tests::a_notify_before_the_driver_is_ready_is_ignored ... ok
+test devices::virtio_mmio::tests::a_notify_the_device_acted_on_raises_an_interrupt_the_driver_can_clear ... ok
+test devices::virtio_mmio::tests::a_notify_the_device_ignored_raises_nothing ... ok
+test devices::virtio_mmio::tests::a_new_interrupt_cannot_overtake_acknowledgement_deassertion ... ok
+test devices::virtio_mmio::tests::a_probing_driver_finds_the_magic_version_and_device_id ... ok
+test devices::virtio_mmio::tests::a_queue_address_published_in_halves_lands_whole ... ok
+test devices::virtio_mmio::tests::a_register_read_may_not_straddle_two_registers ... ok
+test devices::virtio_mmio::tests::a_vsock_device_comes_up_through_the_register_file ... ok
+test devices::virtio_mmio::tests::accepted_features_from_both_banks_reach_the_device ... ok
+test devices::virtio_mmio::tests::config_space_reads_and_writes_reach_the_device ... ok
+test devices::virtio_mmio::tests::device_features_are_reported_in_two_banks ... ok
+test devices::virtio_mmio::tests::driver_ok_requires_the_whole_handshake ... ok
+test devices::virtio_mmio::tests::acknowledgement_cannot_overtake_an_interrupt_line_assertion ... ok
+test devices::virtio_mmio::tests::register_and_host_reset_release_outstanding_interrupts ... ok
+test devices::virtio_mmio::tests::selecting_a_queue_that_does_not_exist_reports_no_queue ... ok
+test devices::virtio_mmio::tests::writing_zero_to_status_resets_the_device ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 2301 filtered out; finished in 0.00s
+

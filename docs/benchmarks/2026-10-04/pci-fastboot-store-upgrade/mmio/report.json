@@ -1,0 +1,51 @@
+{
+  "mode": "mmio",
+  "passed": true,
+  "failure": null,
+  "checks": [
+    "before required-template startup",
+    "exact saved guest command",
+    "old release guest paused into store",
+    "old release clean shutdown preserves paused guest",
+    "after required-template startup",
+    "existing MMIO template key reused",
+    "same guest identity and access token after upgrade",
+    "exact saved guest command",
+    "exact saved guest command",
+    "exact saved guest command",
+    "exact saved guest command",
+    "upgraded guest fork isolation",
+    "exact saved guest command",
+    "exact saved guest command",
+    "candidate disk resume cycle 0",
+    "exact saved guest command",
+    "exact saved guest command",
+    "candidate disk resume cycle 1",
+    "guest deleted",
+    "guest deleted",
+    "empty inventory"
+  ],
+  "daemon_exits": [
+    0,
+    0
+  ],
+  "cache_keys": [
+    [
+      "37de3c86757a5d45e91157d204612b2e"
+    ],
+    [
+      "37de3c86757a5d45e91157d204612b2e"
+    ]
+  ],
+  "paused_files_before_upgrade": [
+    {
+      "path": "paused/sbx-968de52fc5b34c9c87de.snap",
+      "size": 1538178
+    },
+    {
+      "path": "paused/sbx-968de52fc5b34c9c87de.json",
+      "size": 961
+    }
+  ],
+  "owned_store_removed": true
+}

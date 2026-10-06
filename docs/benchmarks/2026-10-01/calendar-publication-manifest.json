@@ -1,0 +1,12 @@
+{
+  "baseline_source_commit": "af8fac24df20ce052d89646b1bca20154dcbadad",
+  "binary_sha256": {
+    "baseline": "a1be1c7381d41164c4aded1fe466d5fa08b6c318c7c13a32f33ab6dfcffa2390",
+    "candidate": "f5fde8a8bd04977c98e2f77408eff2bbd617e568adc4d5bc22b86388c373754f"
+  },
+  "files_sha256": {
+    "calendar-publication-comparison.json": "399921fe374d2741111840ed1a0acfe76b18f8a579b6fa0c59f1db20fc3bec0f",
+    "calendar-publication-source.rs": "72e6eb373fffaf1d1a0708b656fd9178f9beee52ece833267e92a91e5633f979",
+    "calendar-publication.patch": "91ff851b50ea5ad87aa1b1177fc5bab7e6dc782b29e74515595093fe3031f037"
+  }
+}

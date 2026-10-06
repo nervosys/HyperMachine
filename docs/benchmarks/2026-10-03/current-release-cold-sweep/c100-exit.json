@@ -1,0 +1,33 @@
+{
+  "exit_code": 0,
+  "argv": [
+    "python3",
+    "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/bench-local-engines-concurrent.py",
+    "--environment",
+    "owned WSL KVM, optimized current isolated daemon, same 8-CPU affinity, one vCPU and 1024 MiB per guest, cold-start budget disabled",
+    "--concurrency",
+    "100",
+    "--pairs",
+    "2",
+    "--memory-idle-seconds",
+    "5",
+    "--hypermachine",
+    "/var/tmp/hm-current-competitive-release-node-v1",
+    "--firecracker",
+    "/var/tmp/hm-competitive/firecracker/firecracker-v1.17.0-x86_64",
+    "--kernel",
+    "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+    "--initrd",
+    "/var/tmp/hm-competitive/guest-output-drain.cpio.gz"
+  ],
+  "driver_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ]
+}

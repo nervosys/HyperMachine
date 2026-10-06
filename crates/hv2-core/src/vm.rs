@@ -3,6 +3,7 @@
 //! This module provides the core VM abstraction including multi-vCPU
 //! parallel execution support using tokio tasks.
 
+use crate::hypervisor::VCpuDiagnostic;
 use crate::snapshot::device as snapshot_device;
 use crate::snapshot::file as snapshot_file;
 use crate::snapshot::vcpu::VCpuSnapshot;
@@ -17,6 +18,32 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, Notify};
 use tokio::task::JoinHandle;
+
+/// Linux's calling-thread CPU clock, used only by opt-in cold diagnostics.
+/// Missing clocks or invalid values leave the measurement unavailable.
+#[cfg(target_os = "linux")]
+fn diagnostic_thread_cpu_ns() -> Option<u64> {
+    let mut value = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // SAFETY: value is a writable timespec owned by this stack frame, and
+    // CLOCK_THREAD_CPUTIME_ID reads the calling thread without modifying it.
+    if unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut value) } != 0 {
+        return None;
+    }
+    let seconds = u64::try_from(value.tv_sec).ok()?;
+    let nanos = u64::try_from(value.tv_nsec).ok()?;
+    if nanos >= 1_000_000_000 {
+        return None;
+    }
+    seconds.checked_mul(1_000_000_000)?.checked_add(nanos)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn diagnostic_thread_cpu_ns() -> Option<u64> {
+    None
+}
 
 /// VM state
 #[non_exhaustive]
@@ -225,12 +252,70 @@ const VCPU_REAP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5)
 enum VCpuMessage {
     /// Stop the vCPU
     Stop,
-    /// Pause the vCPU
-    Pause,
+    /// Acknowledge only after the owner has left guest execution.
+    Pause {
+        reply: tokio::sync::oneshot::Sender<()>,
+    },
     /// Resume the vCPU
     Resume,
     /// Inject an interrupt
     Interrupt { vector: u8 },
+    /// Read architectural state on the execution owner between KVM_RUN calls.
+    Inspect {
+        reply: tokio::sync::oneshot::Sender<Result<VCpuDiagnostic>>,
+    },
+}
+
+/// Reserved rollback capacity makes cancellation safe even on a full channel.
+struct PauseRollback(Vec<mpsc::OwnedPermit<VCpuMessage>>);
+impl Drop for PauseRollback {
+    fn drop(&mut self) {
+        for permit in self.0.drain(..) {
+            permit.send(VCpuMessage::Resume);
+        }
+    }
+}
+
+fn prepare_pause(
+    senders: &[mpsc::Sender<VCpuMessage>],
+) -> Result<(PauseRollback, Vec<tokio::sync::oneshot::Receiver<()>>)> {
+    let mut commands = Vec::new();
+    let mut rollback = Vec::new();
+    let mut replies = Vec::new();
+    // Reserve every pause and rollback slot before changing any owner.
+    for sender in senders {
+        let command = sender
+            .clone()
+            .try_reserve_owned()
+            .map_err(|_| Error::InvalidState("vCPU control queue cannot admit pause".into()))?;
+        let resume = sender.clone().try_reserve_owned().map_err(|_| {
+            Error::InvalidState("vCPU control queue cannot reserve pause rollback".into())
+        })?;
+        let (reply, receive) = tokio::sync::oneshot::channel();
+        commands.push((command, reply));
+        rollback.push(resume);
+        replies.push(receive);
+    }
+    for (permit, reply) in commands {
+        permit.send(VCpuMessage::Pause { reply });
+    }
+    Ok((PauseRollback(rollback), replies))
+}
+
+async fn wait_for_pause(
+    replies: Vec<tokio::sync::oneshot::Receiver<()>>,
+    timeout: std::time::Duration,
+) -> Result<()> {
+    let deadline = tokio::time::Instant::now() + timeout;
+    for reply in replies {
+        tokio::time::timeout_at(deadline, reply)
+            .await
+            .map_err(|_| Error::InvalidState("vCPU pause acknowledgement timed out".into()))?
+            .map_err(|_| {
+                Error::InvalidState("vCPU owner exited before acknowledging pause".into())
+            })?;
+    }
+    Ok(())
 }
 
 /// vCPU execution statistics
@@ -912,6 +997,14 @@ impl VM {
         if let Some(loaded) = boot {
             let boot_vcpu = &self.vcpus[0];
             self.backend.load_boot(boot_vcpu, &loaded).await?;
+            if loaded.protocol() == "linux" {
+                let pci_irq = self.vsock.read().as_ref().and_then(|attached| {
+                    matches!(attached.transport, VsockTransport::Pci(_)).then_some(attached.irq)
+                });
+                if let Some(irq) = pci_irq {
+                    crate::pci::firmware::route_intx(&self.memory, Self::VSOCK_PCI_SLOT, 0, irq)?;
+                }
+            }
 
             // Backends that keep no vCPU state of their own (TCG, mocks) read
             // the shared `VCpu`, so the entry point has to land there too.
@@ -1079,7 +1172,11 @@ impl VM {
         }
 
         let vm = Arc::clone(self);
+        let queued_at = std::time::Instant::now();
         let handle = tokio::spawn(async move {
+            tracing::debug!(target: "hv2_core::cold_dispatch", vm = %vm.config.name,
+                dispatch_queue_ms = queued_at.elapsed().as_secs_f64() * 1000.0,
+                "VM background dispatch");
             match vm.run().await {
                 // A `stop()` that lands before the spawned loop is scheduled
                 // leaves it starting against a VM that is already stopped.
@@ -1398,6 +1495,16 @@ impl VM {
         };
 
         let devices = self.device_states().await;
+        let (pci_devices, pci_configs) = self.pci_device_states().await;
+        let pci_config_address = if pci_devices.is_empty() {
+            None
+        } else {
+            let handle =
+                self.devices.find_io_device(0xcf8).await.ok_or_else(|| {
+                    Error::InvalidState("PCI config port missing at snapshot".into())
+                })?;
+            Some(handle.read_register(0, 4).await?)
+        };
         let machine = self.backend.save_machine().await?;
         let header = snapshot_file::Header {
             vm_name: self.config.name.clone(),
@@ -1408,6 +1515,9 @@ impl VM {
             present_pages: present.count(),
             device_state_included: true,
             devices,
+            pci_devices,
+            pci_configs,
+            pci_config_address,
             machine,
             memory_image: image_name,
             memory_base,
@@ -1510,6 +1620,8 @@ impl VM {
         // back to where the regions start before anything reads them.
         std::io::Seek::seek(&mut file, std::io::SeekFrom::Start(8 + 4 + 4 + header_len))
             .map_err(|e| Error::Config(format!("rewinding {}: {e}", path.display())))?;
+
+        self.validate_pci_device_states(&snapshot.header).await?;
 
         let memory = self.memory();
         if snapshot.header.memory_size != memory.total_size() {
@@ -1679,6 +1791,7 @@ impl VM {
         };
         self.restore_vcpu_states(&vcpus).await?;
         self.restore_device_states(&snapshot.header.devices).await?;
+        self.restore_pci_device_states(&snapshot.header).await?;
 
         tracing::info!("VM '{}' restored from {}", self.config.name, path.display());
         Ok(())
@@ -1787,17 +1900,9 @@ impl VM {
     pub async fn device_states(&self) -> Vec<snapshot_device::MmioDeviceState> {
         let mut states = Vec::new();
 
-        // Only the MMIO variant. A PCI transport keeps its configuration in
-        // guest-visible BAR space rather than in host-side registers, so
-        // capturing it is a different job from this one, and claiming to have
-        // done it would be worse than saying nothing.
         let vsock_mmio = match self.vsock.read().as_ref().map(|a| a.transport.clone()) {
             Some(VsockTransport::Mmio(transport)) => Some(transport),
-            Some(VsockTransport::Pci(_)) => {
-                tracing::warn!("the vsock device is on PCI; its state is not captured");
-                None
-            }
-            None => None,
+            _ => None,
         };
         if let Some(transport) = vsock_mmio {
             states.push(transport.read().await.save_state());
@@ -1808,6 +1913,143 @@ impl VM {
             states.push(transport.read().await.save_state());
         }
         states
+    }
+
+    async fn pci_device_states(
+        &self,
+    ) -> (
+        Vec<snapshot_device::PciDeviceState>,
+        Vec<(u8, u8, u8, crate::pci::ConfigSnapshot)>,
+    ) {
+        let transport = match self.vsock.read().as_ref().map(|a| a.transport.clone()) {
+            Some(VsockTransport::Pci(transport)) => transport,
+            _ => return (Vec::new(), Vec::new()),
+        };
+        let state = transport.read().await.save_state();
+        let root = self.pci_root.read();
+        let configs = root
+            .bus(0)
+            .into_iter()
+            .flat_map(|bus| bus.devices())
+            .filter_map(|slot| {
+                slot.config().map(|config| {
+                    (
+                        slot.info.address.bus,
+                        slot.info.address.device,
+                        slot.info.address.function,
+                        config.save_state(),
+                    )
+                })
+            })
+            .collect();
+        (vec![state], configs)
+    }
+
+    async fn validate_pci_device_states(&self, header: &snapshot_file::Header) -> Result<()> {
+        let transport = match self.vsock.read().as_ref().map(|a| a.transport.clone()) {
+            Some(VsockTransport::Pci(transport)) => Some(transport),
+            _ => None,
+        };
+        let Some(transport) = transport else {
+            if !header.pci_devices.is_empty()
+                || !header.pci_configs.is_empty()
+                || header.pci_config_address.is_some()
+            {
+                return Err(Error::InvalidState(
+                    "snapshot requires a PCI vsock device".into(),
+                ));
+            }
+            return Ok(());
+        };
+        if header.pci_devices.len() != 1 {
+            return Err(Error::InvalidState(
+                "snapshot does not contain exactly one PCI vsock state".into(),
+            ));
+        }
+        if header.pci_config_address.is_none() || self.devices.find_io_device(0xcf8).await.is_none()
+        {
+            return Err(Error::InvalidState(
+                "PCI configuration address state missing".into(),
+            ));
+        }
+        transport
+            .read()
+            .await
+            .validate_state(&header.pci_devices[0])?;
+        let root = self.pci_root.read();
+        let current_count = root
+            .bus(0)
+            .into_iter()
+            .flat_map(|bus| bus.devices())
+            .filter(|slot| slot.config().is_some())
+            .count();
+        if header.pci_configs.len() != current_count {
+            return Err(Error::InvalidState(
+                "PCI configuration function count differs".into(),
+            ));
+        }
+        let mut seen = std::collections::HashSet::new();
+        for (bus, slot, function, saved) in &header.pci_configs {
+            if *bus != 0 || !seen.insert((*bus, *slot, *function)) {
+                return Err(Error::InvalidState(
+                    "invalid or duplicate PCI function".into(),
+                ));
+            }
+            let address = crate::pci::PciAddress::new(*bus, *slot, *function);
+            let config = root
+                .device(&address)
+                .and_then(|d| d.config())
+                .ok_or_else(|| Error::InvalidState("PCI snapshot function missing".into()))?;
+            config.validate_state(saved)?;
+            if *slot == Self::VSOCK_PCI_SLOT {
+                let bar =
+                    u64::from(saved.bars[0].value & !0x0f) | (u64::from(saved.bars[1].value) << 32);
+                if bar != header.pci_devices[0].bar_base {
+                    return Err(Error::InvalidState(
+                        "PCI snapshot BAR was relocated outside the mapped transport".into(),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn restore_pci_device_states(&self, header: &snapshot_file::Header) -> Result<()> {
+        self.validate_pci_device_states(header).await?;
+        let transport = match self.vsock.read().as_ref().map(|a| a.transport.clone()) {
+            Some(VsockTransport::Pci(transport)) => Some(transport),
+            _ => None,
+        };
+        if let Some(transport) = transport {
+            {
+                let mut root = self.pci_root.write();
+                for (bus, slot, function, saved) in &header.pci_configs {
+                    let address = crate::pci::PciAddress::new(*bus, *slot, *function);
+                    root.device_mut(&address)
+                        .and_then(|d| d.config_mut())
+                        .ok_or_else(|| Error::InvalidState("PCI snapshot function missing".into()))?
+                        .restore_state(saved)?;
+                }
+            }
+            transport
+                .read()
+                .await
+                .restore_state(&header.pci_devices[0])?;
+            let handle =
+                self.devices.find_io_device(0xcf8).await.ok_or_else(|| {
+                    Error::InvalidState("PCI config port missing at restore".into())
+                })?;
+            handle
+                .write_register(
+                    0,
+                    header.pci_config_address.ok_or_else(|| {
+                        Error::InvalidState("PCI configuration address state missing".into())
+                    })?,
+                    4,
+                )
+                .await?;
+        }
+        Ok(())
     }
 
     /// Put every captured device back into the state it was in.
@@ -1888,6 +2130,62 @@ impl VM {
         Ok(states)
     }
 
+    /// Read diagnostic state on each running vCPU's execution thread.
+    ///
+    /// A kick brings even a halted or spinning guest out of its backend run.
+    /// The owner reads registers before re-entering the guest, avoiding a
+    /// concurrent register ioctl. These are independent samples, not an atomic
+    /// multi-vCPU snapshot, and must not be used for restoring a VM.
+    /// The whole response wait is bounded to five seconds.
+    pub async fn diagnostic_vcpu_states(&self) -> Result<Vec<VCpuSnapshot>> {
+        Ok(self
+            .diagnostic_vcpu_samples()
+            .await?
+            .into_iter()
+            .map(|sample| sample.architecture)
+            .collect())
+    }
+
+    /// Owner-thread architecture and interrupt-event observations.
+    pub async fn diagnostic_vcpu_samples(&self) -> Result<Vec<VCpuDiagnostic>> {
+        if self.state() != VMState::Running {
+            return Err(Error::InvalidState(
+                "diagnostics require a running VM".into(),
+            ));
+        }
+        let senders: Vec<_> = {
+            let tasks = self.vcpu_tasks.read();
+            if tasks.is_empty() || tasks.len() != self.vcpus.len() {
+                return Err(Error::InvalidState(
+                    "diagnostics require launched vCPU owners".into(),
+                ));
+            }
+            tasks.iter().map(|task| task.tx.clone()).collect()
+        };
+        let mut replies = Vec::with_capacity(senders.len());
+        for (sender, vcpu) in senders.into_iter().zip(&self.vcpus) {
+            let (reply, receive) = tokio::sync::oneshot::channel();
+            sender
+                .try_send(VCpuMessage::Inspect { reply })
+                .map_err(|error| {
+                    Error::InvalidState(format!("cannot request vCPU diagnostics: {error}"))
+                })?;
+            self.backend.kick_vcpu(vcpu).await?;
+            replies.push(receive);
+        }
+        tokio::time::timeout(Duration::from_secs(5), async {
+            let mut states = Vec::with_capacity(replies.len());
+            for reply in replies {
+                states.push(reply.await.map_err(|_| {
+                    Error::InvalidState("vCPU owner ended before diagnostic reply".into())
+                })??);
+            }
+            Ok(states)
+        })
+        .await
+        .map_err(|_| Error::InvalidState("vCPU diagnostic response exceeded five seconds".into()))?
+    }
+
     /// Put every vCPU back into the state these snapshots describe.
     ///
     /// The VM must be paused, for the mirror of the reason above: writing
@@ -1947,19 +2245,16 @@ impl VM {
             }
         }
 
-        {
+        let senders = {
             let tasks = self.vcpu_tasks.read();
             if tasks.is_empty() {
                 return Err(Error::InvalidState(
-                    "this VM has no running vCPU tasks; it was started but never launched, so \
-                     there is nothing to suspend"
-                        .into(),
+                    "this VM has no running vCPU tasks to pause".into(),
                 ));
             }
-            for task in tasks.iter() {
-                let _ = task.tx.try_send(VCpuMessage::Pause);
-            }
-        }
+            tasks.iter().map(|task| task.tx.clone()).collect::<Vec<_>>()
+        };
+        let (mut rollback, replies) = prepare_pause(&senders)?;
 
         for vcpu in &self.vcpus {
             if let Err(e) = self.backend.kick_vcpu(vcpu).await {
@@ -1967,7 +2262,9 @@ impl VM {
             }
         }
 
+        wait_for_pause(replies, VCPU_REAP_TIMEOUT).await?;
         *self.state.write() = VMState::Paused;
+        rollback.0.clear();
         tracing::info!("VM '{}' paused", self.config.name);
         Ok(())
     }
@@ -2343,6 +2640,10 @@ impl VM {
                 self.memory.total_size()
             )));
         }
+
+        // Permit Linux's conventional configuration-access sanity check to
+        // discover this PCI endpoint without changing MMIO-only machines.
+        self.pci_root.write().ensure_host_bridge()?;
 
         let device = Arc::new(parking_lot::Mutex::new(VsockDevice::new(guest_cid)?));
         let transport = Arc::new(tokio::sync::RwLock::new(
@@ -3026,13 +3327,20 @@ impl VM {
         // A thread per vCPU is what a blocking ioctl wants anyway: the kernel
         // is the scheduler here, the thread is descheduled inside the ioctl
         // rather than spinning, and an idle guest costs a parked thread.
+        let queued_at = std::time::Instant::now();
         tokio::spawn(async move {
+            let dispatched_at = std::time::Instant::now();
             let (done_tx, done_rx) = tokio::sync::oneshot::channel();
             let name = match core {
                 Some(core) => format!("vcpu-{vcpu_id}-core{core}"),
                 None => format!("vcpu-{vcpu_id}"),
             };
             let spawned = std::thread::Builder::new().name(name).spawn(move || {
+                let owner_entered_at = std::time::Instant::now();
+                tracing::debug!(target: "hv2_core::cold_dispatch", vm = %vm_name, vcpu_id,
+                    wrapper_queue_ms = (dispatched_at - queued_at).as_secs_f64() * 1000.0,
+                    thread_start_ms = dispatched_at.elapsed().as_secs_f64() * 1000.0,
+                    "vCPU owner thread entry");
                 if let Some(core) = core {
                     match crate::cpu_affinity::pin_current_thread(core) {
                         Ok(()) => {
@@ -3068,6 +3376,7 @@ impl VM {
                     memory,
                     event_bus,
                     vm_name,
+                    owner_entered_at,
                 ));
                 let _ = done_tx.send(res);
             });
@@ -3096,9 +3405,11 @@ impl VM {
         memory: Arc<GuestMemory>,
         event_bus: EventBus,
         vm_name: String,
+        owner_entered_at: std::time::Instant,
     ) -> Result<()> {
         tracing::info!("vCPU {} task started", vcpu.id());
         let mut paused = false;
+        let mut first_run = true;
 
         loop {
             // Check for control messages (non-blocking)
@@ -3107,14 +3418,19 @@ impl VM {
                     tracing::debug!("vCPU {} received stop", vcpu.id());
                     break;
                 }
-                Ok(VCpuMessage::Pause) => {
+                Ok(VCpuMessage::Pause { reply }) => {
                     tracing::debug!("vCPU {} paused", vcpu.id());
                     paused = true;
+                    let _ = reply.send(());
                     continue;
                 }
                 Ok(VCpuMessage::Resume) => {
                     tracing::debug!("vCPU {} resumed", vcpu.id());
                     paused = false;
+                }
+                Ok(VCpuMessage::Inspect { reply }) => {
+                    let _ = reply.send(backend.inspect_vcpu(&vcpu).await);
+                    continue;
                 }
                 Ok(VCpuMessage::Interrupt { vector }) => {
                     tracing::debug!("vCPU {} injecting interrupt {}", vcpu.id(), vector);
@@ -3134,7 +3450,15 @@ impl VM {
             if paused {
                 match rx.recv().await {
                     Some(VCpuMessage::Resume) => paused = false,
+                    Some(VCpuMessage::Pause { reply }) => {
+                        let _ = reply.send(());
+                        continue;
+                    }
                     Some(VCpuMessage::Stop) | None => break,
+                    Some(VCpuMessage::Inspect { reply }) => {
+                        let _ = reply.send(backend.inspect_vcpu(&vcpu).await);
+                        continue;
+                    }
                     _ => continue,
                 }
             }
@@ -3146,6 +3470,20 @@ impl VM {
 
             // Run vCPU until exit
             let start = std::time::Instant::now();
+            if first_run {
+                tracing::debug!(target: "hv2_core::cold_dispatch", vm = %vm_name,
+                    vcpu_id = vcpu.id(),
+                    owner_setup_ms = (start - owner_entered_at).as_secs_f64() * 1000.0,
+                    "vCPU first backend call");
+            }
+            let first_cpu_clock = if first_run
+                && tracing::enabled!(target: "hv2_core::cold_dispatch", tracing::Level::DEBUG)
+            {
+                let wall = std::time::Instant::now();
+                diagnostic_thread_cpu_ns().map(|cpu| (wall, cpu))
+            } else {
+                None
+            };
             let exit = match backend.run_vcpu(&vcpu).await {
                 Ok(exit) => exit,
                 Err(e) => {
@@ -3155,6 +3493,52 @@ impl VM {
                     return Err(e);
                 }
             };
+            if first_run {
+                let first_cpu_sample = first_cpu_clock.and_then(|(wall, cpu)| {
+                    let elapsed_cpu = diagnostic_thread_cpu_ns()?.checked_sub(cpu)?;
+                    let elapsed_wall = u64::try_from(wall.elapsed().as_nanos()).ok()?;
+                    Some((elapsed_cpu, elapsed_wall))
+                });
+                let first_exit_kind = match &exit {
+                    VmExit::Hlt => "hlt",
+                    VmExit::Io {
+                        direction: IoDirection::Out,
+                        ..
+                    } => "io_out",
+                    VmExit::Io {
+                        direction: IoDirection::In,
+                        ..
+                    } => "io_in",
+                    VmExit::Mmio {
+                        is_write: false, ..
+                    } => "mmio_read",
+                    VmExit::Mmio { is_write: true, .. } => "mmio_write",
+                    VmExit::InterruptWindow => "interrupt_window",
+                    VmExit::Exception { .. } => "exception",
+                    VmExit::Shutdown => "shutdown",
+                    VmExit::Debug { .. } => "debug",
+                    VmExit::Hypercall { .. } => "hypercall",
+                    VmExit::SystemEvent { .. } => "system_event",
+                    VmExit::Nmi => "nmi",
+                    VmExit::Rdmsr { .. } => "rdmsr",
+                    VmExit::Wrmsr { .. } => "wrmsr",
+                    VmExit::IoapicEoi { .. } => "ioapic_eoi",
+                    VmExit::Interrupted => "interrupted",
+                    VmExit::Unknown { .. } => "unknown",
+                };
+                let first_exit_port = match &exit {
+                    VmExit::Io { port, .. } => Some(*port),
+                    _ => None,
+                };
+                tracing::debug!(target: "hv2_core::cold_dispatch", vm = %vm_name,
+                    vcpu_id = vcpu.id(), first_backend_ms = start.elapsed().as_secs_f64() * 1000.0,
+                    first_exit_kind,
+                    first_exit_port = ?first_exit_port,
+                    first_backend_cpu_ns = ?first_cpu_sample.map(|value| value.0),
+                    first_backend_cpu_wall_ns = ?first_cpu_sample.map(|value| value.1),
+                    "vCPU first backend return");
+                first_run = false;
+            }
             stats
                 .run_time_ns
                 .fetch_add(start.elapsed().as_nanos() as u64, Ordering::Relaxed);
@@ -3951,6 +4335,82 @@ impl VM {
 
 #[cfg(test)]
 mod tests {
+
+    #[tokio::test]
+    async fn pause_requires_every_owner_and_reserves_cancellation_rollback() {
+        let (a, mut ar) = mpsc::channel(2);
+        let (b, mut br) = mpsc::channel(2);
+        let (rollback, replies) = prepare_pause(&[a.clone(), b.clone()]).unwrap();
+        assert!(a.try_send(VCpuMessage::Stop).is_err());
+        let waiting = tokio::spawn(wait_for_pause(replies, std::time::Duration::from_secs(1)));
+        match ar.recv().await.unwrap() {
+            VCpuMessage::Pause { reply } => {
+                reply.send(()).unwrap();
+            }
+            _ => panic!("pause expected"),
+        }
+        tokio::task::yield_now().await;
+        assert!(!waiting.is_finished());
+        match br.recv().await.unwrap() {
+            VCpuMessage::Pause { reply } => {
+                reply.send(()).unwrap();
+            }
+            _ => panic!("pause expected"),
+        }
+        waiting.await.unwrap().unwrap();
+        drop(rollback);
+        assert!(matches!(ar.recv().await, Some(VCpuMessage::Resume)));
+        assert!(matches!(br.recv().await, Some(VCpuMessage::Resume)));
+    }
+
+    #[tokio::test]
+    async fn aborting_pause_future_resumes_parked_owner_with_reserved_slot() {
+        let (sender, mut receiver) = mpsc::channel(2);
+        let task = tokio::spawn(async move {
+            let (_rollback, replies) = prepare_pause(&[sender]).unwrap();
+            wait_for_pause(replies, std::time::Duration::from_secs(30)).await
+        });
+        // Retain the owner reply so the future stays pending after admission.
+        let reply = match receiver.recv().await.unwrap() {
+            VCpuMessage::Pause { reply } => reply,
+            _ => panic!("pause expected"),
+        };
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        assert!(matches!(receiver.recv().await, Some(VCpuMessage::Resume)));
+        assert!(reply.send(()).is_err());
+    }
+
+    #[tokio::test]
+    async fn failed_pause_reservation_sends_no_partial_commands() {
+        let (a, mut ar) = mpsc::channel(2);
+        let (b, mut br) = mpsc::channel(1);
+        assert!(prepare_pause(&[a.clone(), b.clone()]).is_err());
+        assert!(ar.try_recv().is_err());
+        assert!(br.try_recv().is_err());
+        assert_eq!(a.capacity(), 2);
+        assert_eq!(b.capacity(), 1);
+    }
+
+    #[tokio::test]
+    async fn pause_timeout_and_owner_exit_allow_rollback() {
+        let (a, mut ar) = mpsc::channel(2);
+        let (rollback, replies) = prepare_pause(std::slice::from_ref(&a)).unwrap();
+        assert!(wait_for_pause(replies, std::time::Duration::ZERO)
+            .await
+            .is_err());
+        drop(rollback);
+        assert!(matches!(ar.recv().await, Some(VCpuMessage::Pause { .. })));
+        assert!(matches!(ar.recv().await, Some(VCpuMessage::Resume)));
+        let (rollback, replies) = prepare_pause(&[a]).unwrap();
+        let command = ar.recv().await.unwrap();
+        drop(command);
+        assert!(wait_for_pause(replies, std::time::Duration::from_secs(1))
+            .await
+            .is_err());
+        drop(rollback);
+        assert!(matches!(ar.recv().await, Some(VCpuMessage::Resume)));
+    }
     use super::*;
 
     /// Build a VM for tests that need a real hypervisor backend, returning

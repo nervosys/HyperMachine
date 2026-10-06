@@ -1,0 +1,231 @@
+{
+  "success": true,
+  "coordinator_sha256": "340b03285fddfc7e56e0826b1d74ef53bd44bf115ebc9e20cd011ddbaf3ef7ef",
+  "results": [
+    {
+      "name": "run-1-baseline",
+      "command": [
+        "python3",
+        "tools/bench-tcp-local.py",
+        "--hypermachine",
+        "/var/tmp/hm-tcp-bench/hv2-sandboxd-release",
+        "--output",
+        "/var/tmp/hm-tcp-api-nodelay/final/run-1-baseline.json",
+        "--firecracker",
+        "/var/tmp/hm-competitive/firecracker/firecracker-v1.17.0-x86_64",
+        "--kernel",
+        "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+        "--initrd",
+        "/var/tmp/hm-tcp/guest-tcp.cpio.gz",
+        "--pairs",
+        "20",
+        "--rounds",
+        "5",
+        "--environment",
+        "shared-WSL-nested-KVM-eight-host-CPU-affinity-API-socket-comparison"
+      ],
+      "exit_code": 0,
+      "started_at_unix": 1790872039.9996207,
+      "load_before": [
+        1.09716796875,
+        1.45849609375,
+        1.7724609375
+      ],
+      "load_after": [
+        1.2734375,
+        1.4697265625,
+        1.767578125
+      ],
+      "output_utf8": "{\"success\": true, \"rows\": 400, \"summaries\": {\"hypermachine-4096\": {\"handshake_ms\": {\"n\": 100, \"min\": 1.2677960039582103, \"max\": 14.947511997888796, \"mean\": 2.478020660128095, \"p50\": 2.2220859973458573, \"p95\": 4.144824000832159, \"p99\": 4.481134994421154}, \"transfer_ms\": {\"n\": 100, \"min\": 0.5578109994530678, \"max\": 2.0800260026589967, \"mean\": 0.9665271701669553, \"p50\": 0.9129620011663064, \"p95\": 1.4064749993849546, \"p99\": 1.8080290028592572}, \"transaction_ms\": {\"n\": 100, \"min\": 1.918227004352957, \"max\": 16.200076999666635, \"mean\": 3.4445478302950505, \"p50\": 3.1429800001205876, \"p95\": 5.310068998369388, \"p99\": 5.966409000393469}, \"aggregate_payload_mib_s\": {\"n\": 100, \"min\": 3.7559626610498653, \"max\": 14.0056399168538, \"mean\": 8.511214155144605, \"p50\": 8.507355259846042, \"p95\": 11.150073889077877, \"p99\": 11.934896934002502}}, \"hypermachine-1048576\": {\"handshake_ms\": {\"n\": 100, \"min\": 1.0959770006593317, \"max\": 3.35389200336067, \"mean\": 1.6065662801702274, \"p50\": 1.5635669988114387, \"p95\": 2.3005089969956316, \"p99\": 2.767895995930303}, \"transfer_ms\": {\"n\": 100, \"min\": 4.666799002734479, \"max\": 59.08451099821832, \"mean\": 39.75415417990007, \"p50\": 49.12885799421929, \"p95\": 55.04367200046545, \"p99\": 57.07677199825412}, \"transaction_ms\": {\"n\": 100, \"min\": 6.071371004509274, \"max\": 61.78202999581117, \"mean\": 41.3607204600703, \"p50\": 50.76084699976491, \"p95\": 56.4427790013724, \"p99\": 59.36367600224912}, \"aggregate_payload_mib_s\": {\"n\": 100, \"min\": 33.84981894934037, \"max\": 428.55927560370907, \"mean\": 104.93480727185211, \"p50\": 40.600894868999845, \"p95\": 365.2318959496577, \"p99\": 412.55044462126756}}, \"firecracker-4096\": {\"handshake_ms\": {\"n\": 100, \"min\": 0.4943040039506741, \"max\": 3.89248500141548, \"mean\": 1.0342606301855994, \"p50\": 0.8942400017986074, \"p95\": 1.7160130009870045, \"p99\": 2.2531470021931455}, \"transfer_ms\": {\"n\": 100, \"min\": 0.3363840005476959, \"max\": 4.396953001560178, \"mean\": 0.5661783296818612, \"p50\": 0.49926700012292713, \"p95\": 0.8580399953643791, \"p99\": 0.9289079971495084}, \"transaction_ms\": {\"n\": 100, \"min\": 0.8370130017283373, \"max\": 8.289438002975658, \"mean\": 1.6004389598674607, \"p50\": 1.368360004562419, \"p95\": 2.4288810018333606, \"p99\": 2.907353002228774}, \"aggregate_payload_mib_s\": {\"n\": 100, \"min\": 1.7767986142285075, \"max\": 23.224945262794286, \"mean\": 15.437354705006385, \"p50\": 15.386690929029893, \"p95\": 21.28914827095111, \"p99\": 22.796308386009926}}, \"firecracker-1048576\": {\"handshake_ms\": {\"n\": 100, \"min\": 0.4132760004722513, \"max\": 2.7120410013594665, \"mean\": 0.7122255599097116, \"p50\": 0.6431559959310107, \"p95\": 0.9747869989951141, \"p99\": 2.6886659979936667}, \"transfer_ms\": {\"n\": 100, \"min\": 3.0435060034506023, \"max\": 47.60694200376747, \"mean\": 8.367106500154478, \"p50\": 4.798533998837229, \"p95\": 43.39257100218674, \"p99\": 46.348099000169896}, \"transaction_ms\": {\"n\": 100, \"min\": 3.5797990058199503, \"max\": 48.2453410004382, \"mean\": 9.07933206006419, \"p50\": 5.464776993903797, \"p95\": 43.91486800159328, \"p99\": 47.0103219995508}, \"aggregate_payload_mib_s\": {\"n\": 100, \"min\": 42.01067986769085, \"max\": 657.1368670646557, \"mean\": 391.6997483891822, \"p50\": 412.2999808547838, \"p95\": 592.963655941462, \"p99\": 646.6168035029791}}}}\n",
+      "output_sha256": "d2d48e0dc1613db433a0d37dcd59bfa46299e955bcff792109d3cc33d932837f"
+    },
+    {
+      "name": "run-2-candidate",
+      "command": [
+        "python3",
+        "tools/bench-tcp-local.py",
+        "--hypermachine",
+        "/var/tmp/hm-tcp-api-nodelay/final/hv2-sandboxd-release",
+        "--output",
+        "/var/tmp/hm-tcp-api-nodelay/final/run-2-candidate.json",
+        "--firecracker",
+        "/var/tmp/hm-competitive/firecracker/firecracker-v1.17.0-x86_64",
+        "--kernel",
+        "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+        "--initrd",
+        "/var/tmp/hm-tcp/guest-tcp.cpio.gz",
+        "--pairs",
+        "20",
+        "--rounds",
+        "5",
+        "--environment",
+        "shared-WSL-nested-KVM-eight-host-CPU-affinity-API-socket-comparison"
+      ],
+      "exit_code": 0,
+      "started_at_unix": 1790872065.8734357,
+      "load_before": [
+        1.2734375,
+        1.4697265625,
+        1.767578125
+      ],
+      "load_after": [
+        1.1953125,
+        1.4384765625,
+        1.75
+      ],
+      "output_utf8": "{\"success\": true, \"rows\": 400, \"summaries\": {\"hypermachine-4096\": {\"handshake_ms\": {\"n\": 100, \"min\": 1.103743001294788, \"max\": 3.011715001775883, \"mean\": 1.6895207101333654, \"p50\": 1.5171270060818642, \"p95\": 2.549176999309566, \"p99\": 2.9833839944330975}, \"transfer_ms\": {\"n\": 100, \"min\": 0.5400510053732432, \"max\": 1.4855499975965358, \"mean\": 0.74100458958128, \"p50\": 0.7149149969336577, \"p95\": 1.038046000758186, \"p99\": 1.2049419965478592}, \"transaction_ms\": {\"n\": 100, \"min\": 1.6902469942579046, \"max\": 4.200224997475743, \"mean\": 2.4305252997146454, \"p50\": 2.235095002106391, \"p95\": 3.4608089990797453, \"p99\": 3.8999929965939373}, \"aggregate_payload_mib_s\": {\"n\": 100, \"min\": 5.258994993530885, \"max\": 14.46622619395103, \"mean\": 10.916178593660055, \"p50\": 10.897979590037368, \"p95\": 14.042293132626208, \"p99\": 14.339177418928145}}, \"hypermachine-1048576\": {\"handshake_ms\": {\"n\": 100, \"min\": 1.0125359985977411, \"max\": 3.565409002476372, \"mean\": 1.358775019980385, \"p50\": 1.272588997380808, \"p95\": 1.874346999102272, \"p99\": 2.134235000994522}, \"transfer_ms\": {\"n\": 100, \"min\": 3.642878000391647, \"max\": 52.559885996743105, \"mean\": 9.135942539433017, \"p50\": 5.56730899552349, \"p95\": 45.67615999985719, \"p99\": 49.92164299619617}, \"transaction_ms\": {\"n\": 100, \"min\": 4.782598996825982, \"max\": 53.92397499963408, \"mean\": 10.494717559413402, \"p50\": 6.981421996897552, \"p95\": 47.17558400443522, \"p99\": 51.35382699518232}, \"aggregate_payload_mib_s\": {\"n\": 100, \"min\": 38.05183291538971, \"max\": 549.0164643957276, \"mean\": 339.84200877445056, \"p50\": 356.2005162051884, \"p95\": 512.1657287905042, \"p99\": 535.9773456437057}}, \"firecracker-4096\": {\"handshake_ms\": {\"n\": 100, \"min\": 0.4288460040697828, \"max\": 2.4469980053254403, \"mean\": 0.8450876199640334, \"p50\": 0.7184019996202551, \"p95\": 1.5850909985601902, \"p99\": 2.201043003879022}, \"transfer_ms\": {\"n\": 100, \"min\": 0.31291000050259754, \"max\": 2.298389001225587, \"mean\": 0.46674734010593966, \"p50\": 0.4095879994565621, \"p95\": 0.7243849977385253, \"p99\": 1.1892509937752038}, \"transaction_ms\": {\"n\": 100, \"min\": 0.7417560045723803, \"max\": 3.3074149978347123, \"mean\": 1.311834960069973, \"p50\": 1.1352920046192594, \"p95\": 2.2521910068462603, \"p99\": 2.9844630043953657}, \"aggregate_payload_mib_s\": {\"n\": 100, \"min\": 3.3991199904951177, \"max\": 24.96724293711139, \"mean\": 18.46814498245021, \"p50\": 19.06459640470312, \"p95\": 24.392414107039567, \"p99\": 24.62049014535452}}, \"firecracker-1048576\": {\"handshake_ms\": {\"n\": 100, \"min\": 0.40952800191007555, \"max\": 1.698333006061148, \"mean\": 0.5711815701215528, \"p50\": 0.5218769947532564, \"p95\": 0.8413239993387833, \"p99\": 1.037016001646407}, \"transfer_ms\": {\"n\": 100, \"min\": 2.966428000945598, \"max\": 8.848247001878917, \"mean\": 4.7087419503804995, \"p50\": 4.224691998388153, \"p95\": 7.30134599871235, \"p99\": 7.662007003091276}, \"transaction_ms\": {\"n\": 100, \"min\": 3.403347000130452, \"max\": 9.587016997102182, \"mean\": 5.279923520502052, \"p50\": 4.827972006751224, \"p95\": 7.975487002113368, \"p99\": 8.578590000979602}, \"aggregate_payload_mib_s\": {\"n\": 100, \"min\": 226.0334730229956, \"max\": 674.2115430957592, \"mean\": 460.0660440114284, \"p50\": 471.05674262693844, \"p95\": 638.9651833198282, \"p99\": 665.2218059316185}}}}\n",
+      "output_sha256": "01eaea6b11c30caca2b763a91cfd88f245fcae8c77098269c8b98f5181dea0f1"
+    },
+    {
+      "name": "run-3-candidate",
+      "command": [
+        "python3",
+        "tools/bench-tcp-local.py",
+        "--hypermachine",
+        "/var/tmp/hm-tcp-api-nodelay/final/hv2-sandboxd-release",
+        "--output",
+        "/var/tmp/hm-tcp-api-nodelay/final/run-3-candidate.json",
+        "--firecracker",
+        "/var/tmp/hm-competitive/firecracker/firecracker-v1.17.0-x86_64",
+        "--kernel",
+        "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+        "--initrd",
+        "/var/tmp/hm-tcp/guest-tcp.cpio.gz",
+        "--pairs",
+        "20",
+        "--rounds",
+        "5",
+        "--environment",
+        "shared-WSL-nested-KVM-eight-host-CPU-affinity-API-socket-comparison"
+      ],
+      "exit_code": 0,
+      "started_at_unix": 1790872086.8558123,
+      "load_before": [
+        1.1953125,
+        1.4384765625,
+        1.75
+      ],
+      "load_after": [
+        1.06005859375,
+        1.38623046875,
+        1.72314453125
+      ],
+      "output_utf8": "{\"success\": true, \"rows\": 400, \"summaries\": {\"hypermachine-4096\": {\"handshake_ms\": {\"n\": 100, \"min\": 1.1812189986812882, \"max\": 4.419279997819103, \"mean\": 1.9723534095101058, \"p50\": 1.7480859969509766, \"p95\": 3.112010999757331, \"p99\": 3.5091929967165925}, \"transfer_ms\": {\"n\": 100, \"min\": 0.5206700006965548, \"max\": 1.7582590007805265, \"mean\": 0.8458473700011382, \"p50\": 0.7987200006027706, \"p95\": 1.2379539984976873, \"p99\": 1.6188070003408939}, \"transaction_ms\": {\"n\": 100, \"min\": 1.701888999377843, \"max\": 5.412024998804554, \"mean\": 2.818200779511244, \"p50\": 2.5702400016598403, \"p95\": 4.308848001528531, \"p99\": 5.110131998662837}, \"aggregate_payload_mib_s\": {\"n\": 100, \"min\": 4.443315800761932, \"max\": 15.004705455563794, \"mean\": 9.842441422973673, \"p50\": 9.754918992264633, \"p95\": 13.727429986793313, \"p99\": 14.940315215988234}}, \"hypermachine-1048576\": {\"handshake_ms\": {\"n\": 100, \"min\": 1.0676919991965406, \"max\": 2.815149004163686, \"mean\": 1.5222516903304495, \"p50\": 1.4229070002329536, \"p95\": 2.3575480008730665, \"p99\": 2.7603000053204596}, \"transfer_ms\": {\"n\": 100, \"min\": 4.063631997269113, \"max\": 52.534878996084444, \"mean\": 8.26792363957793, \"p50\": 6.3051359975361265, \"p95\": 12.830554995161947, \"p99\": 46.72824400040554}, \"transaction_ms\": {\"n\": 100, \"min\": 5.195655001443811, \"max\": 54.13241999485763, \"mean\": 9.79017532990838, \"p50\": 7.919554998807143, \"p95\": 14.356519997818395, \"p99\": 48.457520999363624}, \"aggregate_payload_mib_s\": {\"n\": 100, \"min\": 38.06994587632085, \"max\": 492.17055120740815, \"mean\": 305.4471062758071, \"p50\": 312.87065397976824, \"p95\": 437.86489212369634, \"p99\": 474.76595247941447}}, \"firecracker-4096\": {\"handshake_ms\": {\"n\": 100, \"min\": 0.4497069967328571, \"max\": 2.089825997245498, \"mean\": 0.9658616201340919, \"p50\": 0.858077997690998, \"p95\": 1.727350005239714, \"p99\": 1.9197580040781759}, \"transfer_ms\": {\"n\": 100, \"min\": 0.29186900064814836, \"max\": 1.1668970037135296, \"mean\": 0.5297378804971231, \"p50\": 0.5044780045864172, \"p95\": 0.8793660017545335, \"p99\": 1.0156909993384033}, \"transaction_ms\": {\"n\": 100, \"min\": 0.7812539988663048, \"max\": 2.8594569957931526, \"mean\": 1.495599500631215, \"p50\": 1.3535960024455562, \"p95\": 2.495672000804916, \"p99\": 2.844974005711265}, \"aggregate_payload_mib_s\": {\"n\": 100, \"min\": 6.695106744757698, \"max\": 26.767145475027903, \"mean\": 16.199722544903622, \"p50\": 15.40930060372485, \"p95\": 23.575155577451127, \"p99\": 26.5665330391838}}, \"firecracker-1048576\": {\"handshake_ms\": {\"n\": 100, \"min\": 0.42906599992420524, \"max\": 1.4461159953498282, \"mean\": 0.6617290504073026, \"p50\": 0.6117120065027848, \"p95\": 1.1117329995613545, \"p99\": 1.324627002759371}, \"transfer_ms\": {\"n\": 100, \"min\": 2.8430179954739287, \"max\": 45.027560998278204, \"mean\": 6.169105219960329, \"p50\": 5.02344399865251, \"p95\": 9.94162799906917, \"p99\": 43.39200699905632}, \"transaction_ms\": {\"n\": 100, \"min\": 3.4547300019767135, \"max\": 45.699121001234744, \"mean\": 6.830834270367632, \"p50\": 5.655025001033209, \"p95\": 11.115747998701409, \"p99\": 43.83262700139312}, \"aggregate_payload_mib_s\": {\"n\": 100, \"min\": 44.41724036699384, \"max\": 703.4777842363259, \"mean\": 406.8945589935564, \"p50\": 394.6118904134797, \"p95\": 624.3171537484025, \"p99\": 660.0376882853003}}}}\n",
+      "output_sha256": "b846c32976a387950f685b3700039d3b18b623ab0a51c0437d3af8541146474f"
+    },
+    {
+      "name": "run-4-baseline",
+      "command": [
+        "python3",
+        "tools/bench-tcp-local.py",
+        "--hypermachine",
+        "/var/tmp/hm-tcp-bench/hv2-sandboxd-release",
+        "--output",
+        "/var/tmp/hm-tcp-api-nodelay/final/run-4-baseline.json",
+        "--firecracker",
+        "/var/tmp/hm-competitive/firecracker/firecracker-v1.17.0-x86_64",
+        "--kernel",
+        "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+        "--initrd",
+        "/var/tmp/hm-tcp/guest-tcp.cpio.gz",
+        "--pairs",
+        "20",
+        "--rounds",
+        "5",
+        "--environment",
+        "shared-WSL-nested-KVM-eight-host-CPU-affinity-API-socket-comparison"
+      ],
+      "exit_code": 0,
+      "started_at_unix": 1790872110.1430311,
+      "load_before": [
+        1.06005859375,
+        1.38623046875,
+        1.72314453125
+      ],
+      "load_after": [
+        1.0419921875,
+        1.3603515625,
+        1.70751953125
+      ],
+      "output_utf8": "{\"success\": true, \"rows\": 400, \"summaries\": {\"hypermachine-4096\": {\"handshake_ms\": {\"n\": 100, \"min\": 1.1024400009773672, \"max\": 2.906223999161739, \"mean\": 1.8257021495810477, \"p50\": 1.8619780021253973, \"p95\": 2.2761650034226477, \"p99\": 2.5690890033729374}, \"transfer_ms\": {\"n\": 100, \"min\": 0.5218030055402778, \"max\": 1.0780730008264072, \"mean\": 0.733000060354243, \"p50\": 0.7323579993681051, \"p95\": 0.9557840021443553, \"p99\": 1.067642995622009}, \"transaction_ms\": {\"n\": 100, \"min\": 1.6311110011884011, \"max\": 3.9079119960661046, \"mean\": 2.5587022099352907, \"p50\": 2.582579996669665, \"p95\": 3.0958279967308044, \"p99\": 3.4095510054612532}, \"aggregate_payload_mib_s\": {\"n\": 100, \"min\": 7.246726329303538, \"max\": 14.972125336669713, \"mean\": 10.94597467648709, \"p50\": 10.666213478693878, \"p95\": 14.583041741580612, \"p99\": 14.777621615109245}}, \"hypermachine-1048576\": {\"handshake_ms\": {\"n\": 100, \"min\": 0.9265039989259094, \"max\": 2.0697869986179285, \"mean\": 1.2723158700828208, \"p50\": 1.2277620044187643, \"p95\": 1.6163480031536892, \"p99\": 1.7937910015461966}, \"transfer_ms\": {\"n\": 100, \"min\": 3.872312998282723, \"max\": 54.70721999881789, \"mean\": 38.28676174998691, \"p50\": 47.1792180032935, \"p95\": 51.82223299925681, \"p99\": 54.170590003195684}, \"transaction_ms\": {\"n\": 100, \"min\": 5.099973001051694, \"max\": 56.19594400195638, \"mean\": 39.55907762006973, \"p50\": 48.455698997713625, \"p95\": 53.19042200426338, \"p99\": 55.20536699623335}, \"aggregate_payload_mib_s\": {\"n\": 100, \"min\": 36.55824587765958, \"max\": 516.4871746904115, \"mean\": 121.82675755248499, \"p50\": 42.33949145794063, \"p95\": 469.4561281060981, \"p99\": 497.73431372336347}}, \"firecracker-4096\": {\"handshake_ms\": {\"n\": 100, \"min\": 0.3713140031322837, \"max\": 1.838354000938125, \"mean\": 0.7446503597748233, \"p50\": 0.5741089989896864, \"p95\": 1.4436009951168671, \"p99\": 1.7817859989008866}, \"transfer_ms\": {\"n\": 100, \"min\": 0.279445004707668, \"max\": 0.7602059995406307, \"mean\": 0.3966439699433977, \"p50\": 0.3739589956239797, \"p95\": 0.5118689950904809, \"p99\": 0.6967080043978058}, \"transaction_ms\": {\"n\": 100, \"min\": 0.7084309982019477, \"max\": 2.5419919984415174, \"mean\": 1.141294329718221, \"p50\": 0.9386700039613061, \"p95\": 2.0379330017021857, \"p99\": 2.212022001913283}, \"aggregate_payload_mib_s\": {\"n\": 100, \"min\": 10.276819710342796, \"max\": 27.957200409335588, \"mean\": 20.366308193108317, \"p50\": 20.8110239202519, \"p95\": 24.853424415953967, \"p99\": 27.38000128059058}}, \"firecracker-1048576\": {\"handshake_ms\": {\"n\": 100, \"min\": 0.3592099965317175, \"max\": 1.9014280042028986, \"mean\": 0.5258535098982975, \"p50\": 0.48155900003621355, \"p95\": 0.7678780020796694, \"p99\": 1.2076950006303377}, \"transfer_ms\": {\"n\": 100, \"min\": 2.864354995836038, \"max\": 44.54338700452354, \"mean\": 4.70242990013503, \"p50\": 3.7062060000607744, \"p95\": 7.353116998274345, \"p99\": 7.743018999462947}, \"transaction_ms\": {\"n\": 100, \"min\": 3.2768300006864592, \"max\": 44.99132100318093, \"mean\": 5.2282834100333275, \"p50\": 4.2526839970378205, \"p95\": 7.909431995358318, \"p99\": 8.265928998298477}, \"aggregate_payload_mib_s\": {\"n\": 100, \"min\": 44.90004318254678, \"max\": 698.2374750711537, \"mean\": 500.063095080754, \"p50\": 528.8337340928783, \"p95\": 664.7636701063306, \"p99\": 697.105548310074}}}}\n",
+      "output_sha256": "ef03d0762a5d1ef1cbbd5b37ce979143ecb6c425f039f26689f5be69474be5d3"
+    },
+    {
+      "name": "e2e",
+      "command": [
+        "python3",
+        "tools/e2e-tcp-tunnel.py",
+        "--daemon",
+        "/var/tmp/hm-tcp-api-nodelay/final/hv2-sandboxd-release",
+        "--control-plane",
+        "/var/tmp/hm-tcp-api-nodelay/final/hv2-control-plane-release",
+        "--cli",
+        "/var/tmp/hm-tcp/hm",
+        "--kernel",
+        "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+        "--initrd",
+        "/var/tmp/hm-tcp/guest-tcp.cpio.gz",
+        "--output",
+        "/var/tmp/hm-tcp-api-nodelay/final/e2e.json"
+      ],
+      "exit_code": 0,
+      "started_at_unix": 1790872133.1803617,
+      "load_before": [
+        1.0419921875,
+        1.3603515625,
+        1.70751953125
+      ],
+      "load_after": [
+        0.6455078125,
+        1.21826171875,
+        1.64404296875
+      ],
+      "output_utf8": "{\"success\": true, \"purpose\": \"functional verification, no performance comparison\", \"artifact_sha256\": {\"daemon\": \"03043e33a6efe017bf0f9d2f0d7ee9caf4e0c09705abeaf849f21825128f799d\", \"control-plane\": \"67059d67fc9dfc3a2d2fc55d958245dc5220bf48fb48bdb7475a8e6ede9a1029\", \"cli\": \"2e3cc622ff8715db401796a5719175b1dfb014f1b30c1d34d0bbb75657e6f2bf\", \"kernel\": \"afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd\", \"initrd\": \"f226c599d385609fc03af2223b6829a5249b28193c96179daeb7d47383005d1b\", \"coordinator\": \"274fdf87885d59eb83cd05d1b6b8c7d32b56970e2f81eca018f43c1ca60fa587\"}, \"cases\": [{\"name\": \"bad-api-key\", \"success\": true, \"result\": {\"status\": 401}}, {\"name\": \"inventory-key-cannot-tunnel\", \"success\": true, \"result\": {\"status\": 403}}, {\"name\": \"invalid-port-zero\", \"success\": true, \"result\": {\"status\": 400}}, {\"name\": \"unavailable-guest-port\", \"success\": true, \"result\": {\"status\": 502}}, {\"name\": \"node-cluster-token-required\", \"success\": true, \"result\": {\"status\": 401}}, {\"name\": \"node-client-certificate-required\", \"success\": true, \"result\": {\"rejected_before_HTTP\": true}}, {\"name\": \"direct-node-mTLS-binary\", \"success\": true, \"result\": {\"bytes\": 65536, \"sha256\": \"7daca2095d0438260fa849183dfc67faa459fdf4936e1bc91eec6b281b27e4c2\"}}, {\"name\": \"CLI-TLS-binary-client-EOF-multiple-connections\", \"success\": true, \"result\": {\"connections\": 2, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}}, {\"name\": \"CLI-graceful-interrupt-after-transfer-repeated\", \"success\": true, \"result\": [{\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}]}, {\"name\": \"CLI-TLS-server-EOF-preserves-client-write\", \"success\": true, \"result\": {\"received_request_bytes\": 262144, \"guest_sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}}, {\"name\": \"CLI-rejects-untrusted-API-certificate\", \"success\": true, \"result\": {\"exit_code\": 1, \"TLS_trust_enforced\": true}}, {\"name\": \"open-tunnel-prevents-automatic-idle-pause\", \"success\": true, \"result\": {\"idle_window_seconds\": 30, \"held_seconds\": 35, \"state\": \"running\"}}, {\"name\": \"pause-closes-active-tunnel-resume-reopens-guest-port\", \"success\": true, \"result\": {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}}, {\"name\": \"fork-preserves-guest-listener\", \"success\": true, \"result\": {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}}, {\"name\": \"delete-closes-active-tunnel-and-refuses-reopen\", \"success\": true, \"result\": {\"active_connection_closed\": true, \"subsequent_handshake_status\": 404}}], \"cleanup_errors\": [], \"environment\": \"local WSL nested KVM; 1 vCPU / 1024 MiB guests\", \"transport\": \"CLI -> verified API TLS -> control plane -> node mTLS plus cluster token -> vsock -> loopback guest TCP\", \"idle_probe\": {\"idle_window_seconds\": 30, \"held_seconds\": 35, \"observed_state\": \"running\"}, \"remaining_sandboxes\": 0, \"owned_processes_stopped\": [{\"name\": \"cli-21\", \"exit_code\": 0}, {\"name\": \"cli-20\", \"exit_code\": 0}, {\"name\": \"cli-19\", \"exit_code\": 0}, {\"name\": \"cli-18\", \"exit_code\": 0}, {\"name\": \"cli-17\", \"exit_code\": 0}, {\"name\": \"cli-16\", \"exit_code\": 0}, {\"name\": \"cli-15\", \"exit_code\": 0}, {\"name\": \"cli-14\", \"exit_code\": 0}, {\"name\": \"cli-13\", \"exit_code\": 0}, {\"name\": \"cli-12\", \"exit_code\": 0}, {\"name\": \"cli-11\", \"exit_code\": 0}, {\"name\": \"cli-10\", \"exit_code\": 0}, {\"name\": \"cli-9\", \"exit_code\": 0}, {\"name\": \"cli-8\", \"exit_code\": 0}, {\"name\": \"cli-7\", \"exit_code\": 0}, {\"name\": \"cli-6\", \"exit_code\": 0}, {\"name\": \"cli-5\", \"exit_code\": 0}, {\"name\": \"cli-4\", \"exit_code\": 0}, {\"name\": \"cli-3\", \"exit_code\": 0}, {\"name\": \"control\", \"exit_code\": -15}, {\"name\": \"node\", \"exit_code\": 0}, {\"name\": \"redis\", \"exit_code\": 0}]}\n",
+      "output_sha256": "a909c8190faf00273d6e6b465969e6dfa6294dfeb0939bd302481c4a83c24210"
+    },
+    {
+      "name": "linux-checks",
+      "command": [
+        "python3",
+        "target/check-tcp-final.py",
+        "--output",
+        "/var/tmp/hm-tcp-api-nodelay/final/checks-linux.json"
+      ],
+      "exit_code": 0,
+      "started_at_unix": 1790872172.2887285,
+      "load_before": [
+        0.6455078125,
+        1.21826171875,
+        1.64404296875
+      ],
+      "load_after": [
+        3.7470703125,
+        2.64306640625,
+        2.10791015625
+      ],
+      "output_utf8": "{\"platform\": \"Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41\", \"success\": true, \"exit_codes\": [0, 0, 0, 0, 0]}\n",
+      "output_sha256": "44c1352c2b63d35b1afc4681a788c632a1a93cdfbf3be008fc2f169b3eaeb3a2"
+    },
+    {
+      "name": "python-scorer",
+      "command": [
+        "python3",
+        "tools/test-bench-tcp-local.py"
+      ],
+      "exit_code": 0,
+      "started_at_unix": 1790872426.3577642,
+      "load_before": [
+        3.7470703125,
+        2.64306640625,
+        2.10791015625
+      ],
+      "load_after": [
+        3.7470703125,
+        2.64306640625,
+        2.10791015625
+      ],
+      "output_utf8": "....\n----------------------------------------------------------------------\nRan 4 tests in 0.012s\n\nOK\n",
+      "output_sha256": "3b0dbb90387b342ccecc50446a0fb5e4385d86a3f467e5b97d63f8924fc08aff"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "sha256": {
+    "README.md": "17bcbdc5a70cf4c02b0353b6e65f372b3bde855c6890bf9a3aa5135c08215619",
+    "network-tests.txt": "50b0b94b10b3a53bc2005b5d42687e9e531a04a6194e358954f54d3d987b957f",
+    "secret_substitution.rs": "bea1ed67e30953c9bb06c6d81d9eff433ec200a291a51e3e99df104a62407cea"
+  }
+}

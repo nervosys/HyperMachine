@@ -1,0 +1,10 @@
+{
+  "success": true,
+  "sample": {
+    "index": 0,
+    "success": true,
+    "cleanup_success": true,
+    "ready_ms": 1734.4334129999907
+  },
+  "artifacts_unchanged": true
+}

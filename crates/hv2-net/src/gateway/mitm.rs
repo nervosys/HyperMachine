@@ -231,6 +231,39 @@ pub fn upstream_config(extra: &[CertificateDer<'static>]) -> io::Result<Arc<Clie
     Ok(Arc::new(config))
 }
 
+/// Explicit operator roots for intercepted upstream TLS. The owned 0600 file
+/// and immediate owned 0700 directory follow the private-policy file contract.
+/// This never trusts the guest interception CA implicitly. Restart to reload.
+#[cfg(target_os = "linux")]
+pub fn upstream_roots_from_private_file(
+    path: &std::path::Path,
+) -> io::Result<Vec<CertificateDer<'static>>> {
+    let input = crate::secret_substitution::private_policy_file(path)?;
+    upstream_roots_from_pem(&input)
+}
+
+fn upstream_roots_from_pem(input: &[u8]) -> io::Result<Vec<CertificateDer<'static>>> {
+    use rustls::pki_types::pem::PemObject;
+    let invalid = || io::Error::new(io::ErrorKind::InvalidInput, "invalid upstream root bundle");
+    if input.len() > 1024 * 1024 {
+        return Err(invalid());
+    }
+    let mut roots = Vec::new();
+    let mut validator = RootCertStore::empty();
+    for certificate in CertificateDer::pem_slice_iter(input) {
+        let certificate = certificate.map_err(|_| invalid())?;
+        if roots.len() == 128 {
+            return Err(invalid());
+        }
+        validator.add(certificate.clone()).map_err(|_| invalid())?;
+        roots.push(certificate);
+    }
+    if roots.is_empty() {
+        return Err(invalid());
+    }
+    Ok(roots)
+}
+
 /// Resolves a workload token by name, freshly, for one request: what an
 /// injected header's `${e2b.identity.tokens.NAME}` becomes. `None` leaves
 /// the placeholder as it was -- a name the sandbox never registered.
@@ -287,6 +320,54 @@ where
     G: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     U: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
+    intercept_policy(guest, upstream, name, headers, tokens, server, client, None).await
+}
+
+/// Intercept using the same verified upstream TLS handshake before enabling
+/// host-bound secret substitution. Failed authentication sends no HTTP request.
+#[allow(clippy::too_many_arguments)]
+pub async fn intercept_with_secrets<G, U>(
+    guest: G,
+    upstream: U,
+    name: &str,
+    headers: &Headers,
+    tokens: Option<TokenSource>,
+    server: Arc<ServerConfig>,
+    client: Arc<ClientConfig>,
+    secrets: Arc<crate::secret_substitution::Store>,
+) -> io::Result<()>
+where
+    G: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    U: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    intercept_policy(
+        guest,
+        upstream,
+        name,
+        headers,
+        tokens,
+        server,
+        client,
+        Some(secrets),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn intercept_policy<G, U>(
+    guest: G,
+    upstream: U,
+    name: &str,
+    headers: &Headers,
+    tokens: Option<TokenSource>,
+    server: Arc<ServerConfig>,
+    client: Arc<ClientConfig>,
+    secrets: Option<Arc<crate::secret_substitution::Store>>,
+) -> io::Result<()>
+where
+    G: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    U: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
     let server_name = ServerName::try_from(name.to_string()).map_err(io::Error::other)?;
 
     // Bounded, so a client that stops mid-handshake does not hold a task and
@@ -308,7 +389,11 @@ where
     .await
     .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "upstream TLS handshake"))??;
     tracing::debug!("egress intercept: upstream handshake for {name} done");
-    relay_http(guest, upstream, headers, tokens).await
+    if let Some(secrets) = secrets {
+        relay_http_with_secrets(guest, upstream, headers, tokens, name.to_string(), secrets).await
+    } else {
+        relay_http(guest, upstream, headers, tokens).await
+    }
 }
 
 /// Relay HTTP/1 requests from `guest` to `upstream`, setting `headers` on
@@ -333,6 +418,39 @@ where
     G: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     U: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
+    relay_http_policy(guest, upstream, headers, tokens, None).await
+}
+
+/// Opt-in host-bound substitution. The caller must establish verified upstream
+/// TLS for `hostname` before supplying the stream. No network access is granted.
+/// Bodies are collected up to 1 MiB with a ten-second deadline; trailers fail.
+pub async fn relay_http_with_secrets<G, U>(
+    guest: G,
+    upstream: U,
+    headers: &Headers,
+    tokens: Option<TokenSource>,
+    hostname: String,
+    secrets: Arc<crate::secret_substitution::Store>,
+) -> io::Result<()>
+where
+    G: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    U: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    relay_http_policy(guest, upstream, headers, tokens, Some((hostname, secrets))).await
+}
+
+async fn relay_http_policy<G, U>(
+    guest: G,
+    upstream: U,
+    headers: &Headers,
+    tokens: Option<TokenSource>,
+    secrets: Option<(String, Arc<crate::secret_substitution::Store>)>,
+) -> io::Result<()>
+where
+    G: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    U: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    use http_body_util::{BodyExt, Either, Full, Limited};
     // Parsed once, up front, so a bad rule fails the connection rather than
     // every request on it. A value with a placeholder is kept as text, and
     // becomes a header value only once its tokens are in.
@@ -361,6 +479,7 @@ where
         let sender = Arc::clone(&sender);
         let inject = Arc::clone(&inject);
         let tokens = tokens.clone();
+        let secrets = secrets.clone();
         async move {
             for (name, value) in inject.iter() {
                 let value = match (value, &tokens) {
@@ -378,12 +497,39 @@ where
                 };
                 request.headers_mut().insert(name.clone(), value);
             }
+            let request = if let Some((hostname, secrets)) = secrets {
+                let (mut parts, body) = request.into_parts();
+                let collected = tokio::time::timeout(
+                    HANDSHAKE_TIMEOUT,
+                    Limited::new(body, 1024 * 1024).collect(),
+                )
+                .await
+                .map_err(|_| io::Error::other("secret request body deadline exceeded"))?
+                .map_err(|_| io::Error::other("secret request body collection failed"))?;
+                if collected.trailers().is_some() {
+                    return Err(io::Error::other("secret request trailers refused"));
+                }
+                // Hyper has decoded transfer framing; the rewriter supplies
+                // the new Content-Length after replacing the complete body.
+                parts.headers.remove(hyper::header::TRANSFER_ENCODING);
+                let mut buffered = Request::from_parts(parts, collected.to_bytes().to_vec());
+                secrets.rewrite_request(&hostname, &mut buffered)?;
+                let (parts, body) = buffered.into_parts();
+                Request::from_parts(parts, Either::Right(Full::new(bytes::Bytes::from(body))))
+            } else {
+                request.map(Either::Left)
+            };
             let mut sender = sender.lock().await;
-            sender.ready().await?;
-            tracing::debug!("egress relay: {} {}", request.method(), request.uri());
-            let response: Response<Incoming> = sender.send_request(request).await?;
+            sender.ready().await.map_err(io::Error::other)?;
+            // Query strings and paths can carry guest credentials or bound
+            // secret placeholders. Keep them out of operator tracing.
+            tracing::debug!("egress relay: request method {}", request.method());
+            let response: Response<Incoming> = sender
+                .send_request(request)
+                .await
+                .map_err(io::Error::other)?;
             tracing::debug!("egress relay: upstream answered {}", response.status());
-            Ok::<_, hyper::Error>(response)
+            Ok::<_, io::Error>(response)
         }
     });
 
@@ -403,6 +549,266 @@ enum Injected {
 mod tests {
     use super::*;
     use rustls::client::danger::ServerCertVerifier;
+
+    #[test]
+    fn operator_upstream_roots_are_bounded_and_validated() {
+        let authority = Authority::generate().unwrap();
+        let pem = authority.ca_pem();
+        let roots = upstream_roots_from_pem(pem.as_bytes()).unwrap();
+        assert_eq!(roots.as_slice(), std::slice::from_ref(authority.ca_der()));
+        assert!(upstream_config(&roots).is_ok());
+        assert!(upstream_roots_from_pem(b"").is_err());
+        assert!(upstream_roots_from_pem(
+            b"-----BEGIN CERTIFICATE-----\ninvalid\n-----END CERTIFICATE-----"
+        )
+        .is_err());
+        assert!(upstream_roots_from_pem(
+            b"-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----"
+        )
+        .is_err());
+        assert!(upstream_roots_from_pem(&vec![b' '; 1024 * 1024 + 1]).is_err());
+        assert_eq!(
+            upstream_roots_from_pem(pem.repeat(128).as_bytes())
+                .unwrap()
+                .len(),
+            128
+        );
+        assert!(upstream_roots_from_pem(pem.repeat(129).as_bytes()).is_err());
+    }
+
+    #[tokio::test]
+    async fn secret_interception_requires_trusted_upstream_tls() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        for trusted in [true, false] {
+            let guest_ca = Arc::new(Authority::generate().unwrap());
+            let upstream_ca = Arc::new(Authority::generate().unwrap());
+            let guest_server = guest_ca.server_config().unwrap();
+            let guest_client = upstream_config(&[guest_ca.ca_der().clone()]).unwrap();
+            let upstream_server = upstream_ca.server_config().unwrap();
+            let upstream_client = upstream_config(if trusted {
+                std::slice::from_ref(upstream_ca.ca_der())
+            } else {
+                &[]
+            })
+            .unwrap();
+            let token = format!("hms_{}", "a".repeat(64));
+            let secrets = Arc::new(
+                crate::secret_substitution::Store::new(vec![crate::secret_substitution::Binding {
+                    placeholder: token.clone(),
+                    value: b"owned-secret".to_vec(),
+                    hosts: vec!["api.example.test".into()],
+                }])
+                .unwrap(),
+            );
+            let (client, guest) = tokio::io::duplex(16384);
+            let (upstream, server) = tokio::io::duplex(16384);
+            let relay = tokio::spawn(async move {
+                intercept_with_secrets(
+                    guest,
+                    upstream,
+                    "api.example.test",
+                    &Headers::new(),
+                    None,
+                    guest_server,
+                    upstream_client,
+                    secrets,
+                )
+                .await
+            });
+            let receiver = tokio::spawn(async move {
+                let accepted = tokio_rustls::TlsAcceptor::from(upstream_server)
+                    .accept(server)
+                    .await;
+                if !trusted {
+                    assert!(accepted.is_err());
+                    return;
+                }
+                let mut server = accepted.unwrap();
+                let mut request = Vec::new();
+                let mut buffer = [0; 1024];
+                while !request.ends_with(b"\r\n\r\n") {
+                    let count = server.read(&mut buffer).await.unwrap();
+                    assert!(count > 0 && request.len() + count <= 8192);
+                    request.extend_from_slice(&buffer[..count]);
+                }
+                let request = String::from_utf8(request).unwrap();
+                assert!(request.starts_with("GET /?key=owned-secret HTTP/1.1\r\n"));
+                assert!(request.contains("x-key: owned-secret\r\n"));
+                server
+                    .write_all(
+                        b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK",
+                    )
+                    .await
+                    .unwrap();
+                server.shutdown().await.unwrap();
+            });
+            let mut client = tokio_rustls::TlsConnector::from(guest_client)
+                .connect(ServerName::try_from("api.example.test").unwrap(), client)
+                .await
+                .unwrap();
+            client.write_all(format!("GET /?key={token} HTTP/1.1\r\nHost: api.example.test\r\nX-Key: {token}\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+            let mut response = Vec::new();
+            let read = tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                client.read_to_end(&mut response),
+            )
+            .await
+            .unwrap();
+            if trusted {
+                assert!(response.ends_with(b"OK"));
+            } else {
+                assert!(response.is_empty());
+            }
+            let _ = read; // TLS close-notify behavior is independent of request verification.
+            let result = tokio::time::timeout(std::time::Duration::from_secs(5), relay)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(result.is_ok(), trusted);
+            receiver.await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn opt_in_secret_relay_rewrites_actual_http_bytes() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let token = format!("hms_{}", "a".repeat(64));
+        let secrets = Arc::new(
+            crate::secret_substitution::Store::new(vec![crate::secret_substitution::Binding {
+                placeholder: token.clone(),
+                value: b"secret".to_vec(),
+                hosts: vec!["api.example.test".into()],
+            }])
+            .unwrap(),
+        );
+        let (mut client, guest) = tokio::io::duplex(8192);
+        let (upstream, mut server) = tokio::io::duplex(8192);
+        let relay = tokio::spawn(async move {
+            relay_http_with_secrets(
+                guest,
+                upstream,
+                &Headers::new(),
+                None,
+                "api.example.test".into(),
+                secrets,
+            )
+            .await
+        });
+        let receiver = tokio::spawn(async move {
+            let mut received = Vec::new();
+            let mut buffer = [0; 1024];
+            while !received.ends_with(b"\r\n\r\nsecret") {
+                let count = server.read(&mut buffer).await.unwrap();
+                assert!(count > 0 && received.len() + count <= 8192);
+                received.extend_from_slice(&buffer[..count]);
+            }
+            let text = String::from_utf8(received).unwrap();
+            assert!(text.starts_with("POST /path?key=secret HTTP/1.1\r\n"));
+            assert!(text.contains("x-key: secret\r\n"));
+            assert!(text.contains("content-length: 6\r\n"));
+            server
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK")
+                .await
+                .unwrap();
+        });
+        let request = format!(
+            "POST /path?key={token} HTTP/1.1\r\nHost: api.example.test\r\nX-Key: {token}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{token}",
+            token.len()
+        );
+        client.write_all(request.as_bytes()).await.unwrap();
+        let mut response = Vec::new();
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            client.read_to_end(&mut response),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(response.ends_with(b"OK"));
+        receiver.await.unwrap();
+        relay.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn open_relay_uses_rotated_and_revoked_policy_on_next_request() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let token = format!("hms_{}", "a".repeat(64));
+        let binding = |value: &[u8]| crate::secret_substitution::Binding {
+            placeholder: token.clone(),
+            value: value.to_vec(),
+            hosts: vec!["api.example.test".into()],
+        };
+        let store =
+            Arc::new(crate::secret_substitution::Store::new(vec![binding(b"first")]).unwrap());
+        let (mut client, guest) = tokio::io::duplex(8192);
+        let (upstream, mut server) = tokio::io::duplex(8192);
+        let selected = Arc::clone(&store);
+        let relay = tokio::spawn(async move {
+            relay_http_with_secrets(
+                guest,
+                upstream,
+                &Headers::new(),
+                None,
+                "api.example.test".into(),
+                selected,
+            )
+            .await
+        });
+        let expected = vec!["first".to_string(), "rotated".to_string(), token.clone()];
+        let receiver = tokio::spawn(async move {
+            for (index, expected) in expected.into_iter().enumerate() {
+                let mut request = Vec::new();
+                let mut buffer = [0; 1024];
+                let ending = format!("\r\n\r\n{expected}");
+                while !request.ends_with(ending.as_bytes()) {
+                    let count = server.read(&mut buffer).await.unwrap();
+                    assert!(count > 0 && request.len() + count <= 8192);
+                    request.extend_from_slice(&buffer[..count]);
+                }
+                let text = String::from_utf8(request).unwrap();
+                assert!(text.starts_with(&format!("POST /?key={expected} HTTP/1.1\r\n")));
+                assert!(text.contains(&format!("x-key: {expected}\r\n")));
+                assert!(text.contains(&format!("content-length: {}\r\n", expected.len())));
+                let close = if index == 2 {
+                    "Connection: close\r\n"
+                } else {
+                    ""
+                };
+                server
+                    .write_all(
+                        format!("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n{close}\r\nOK").as_bytes(),
+                    )
+                    .await
+                    .unwrap();
+            }
+        });
+        for index in 0..3 {
+            if index == 1 {
+                store.rotate(vec![binding(b"rotated")]).unwrap();
+            }
+            if index == 2 {
+                store.rotate(vec![]).unwrap();
+            }
+            client.write_all(format!("POST /?key={token} HTTP/1.1\r\nHost: api.example.test\r\nX-Key: {token}\r\nContent-Length: {}\r\n\r\n{token}", token.len()).as_bytes()).await.unwrap();
+            let mut response = Vec::new();
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                let mut buffer = [0; 1024];
+                while !response.ends_with(b"\r\n\r\nOK") {
+                    let count = client.read(&mut buffer).await.unwrap();
+                    assert!(count > 0 && response.len() + count <= 8192);
+                    response.extend_from_slice(&buffer[..count]);
+                }
+            })
+            .await
+            .unwrap();
+        }
+        receiver.await.unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), relay)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+    }
 
     #[test]
     fn placeholders_expand_by_name_and_only_once() {
