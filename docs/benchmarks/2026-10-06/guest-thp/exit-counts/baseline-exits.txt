@@ -1,0 +1,8 @@
+== hypermachine: 3 guests, exits per guest [24557, 24624, 24159], traced span ms [1841, 1973, 889]
+  exits by reason, per guest: npf 22100, cpuid 671, io 653, msr 528, interrupt 359, vintr 82, write_cr4 19, read_cr4 10, hlt 9, wbinvd 4, cr0_sel_write 3, read_cr0 2
+  port I/O, per guest: write 0x3f8 242, read 0x3fa 75, write 0x70 63, read 0x71 61, write 0x3f9 52, read 0x3fd 34, read 0x3fe 31, write 0x21 17, write 0xa1 14, read 0x64 11
+  MMIO pages, per guest: write 0xfec00000 289, read 0xfec00000 150, write 0xd0000000 84, read 0xd0000000 47, write 0xfee00000 35, read 0xfee00000 30
+== firecracker: 3 guests, exits per guest [24603, 25061, 23841], traced span ms [2089, 1780, 793]
+  exits by reason, per guest: npf 21891, msr 723, cpuid 669, interrupt 546, io 538, vintr 89, write_cr4 18, read_cr4 9, wbinvd 4, hlt 4, write_cr0 3, cr0_sel_write 2
+  port I/O, per guest: write 0x3f8 242, read 0x3fa 59, read 0x3fd 52, write 0x3f9 51, read 0x3fe 31, write 0x70 21, read 0x71 19, read 0x64 14, write 0x3fa 11, write 0x3fb 8
+  MMIO pages, per guest: write 0xc0001000 140, read 0xc0001000 86, write 0xfec00000 45, write 0xfee00000 44, read 0xfee00000 29, read 0xfec00000 5
