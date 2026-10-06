@@ -6,7 +6,7 @@
     "daemon": "fd8cb6c412192a9aa3b948d4348fa210dc6dc7a835a7fe0d0eb99a57eda504b7",
     "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
     "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
-    "coordinator": "0ac705d9d442d19b5d4473359857f65e97d93ae1e2790cbd03cbf00a5dc7de37",
+    "coordinator": "69a615daae2b36460faddbcfd72c2621f2c7935944afdba3883c1f861efa8bfa",
     "request_harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433"
   },
   "host_affinity": [

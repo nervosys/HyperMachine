@@ -3050,6 +3050,6 @@
     "pinning": true,
     "cpu": 0,
     "workers_cleaned_up": true,
-    "coordinator_sha256": "c8923876f0bd4ec31a8e34a88682ef83ed68f1c87f77a6a0b525a952abb9e793"
+    "coordinator_sha256": "ae80af52fc82e2f4e3263aeb4cc5395347fbaee23b660225ce32736369e06386"
   }
 }

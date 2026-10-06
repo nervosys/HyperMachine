@@ -1,7 +1,7 @@
 {
   "success": true,
   "purpose": "fixture buffering diagnostic; production daemon unchanged",
-  "coordinator_sha256": "63ebf401881815ee9e4f4d468bc8c10a2b8778b5b500d0336dbaa253fe103d95",
+  "coordinator_sha256": "062a6bd1bb5288f3d562aabc1111df06766d8457a9bedceaf6b3c6b3ff05efd2",
   "results": [
     {
       "index": 1,

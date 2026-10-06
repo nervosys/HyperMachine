@@ -1,6 +1,6 @@
 {
   "success": false,
-  "coordinator_sha256": "fbc03d12bb5f00ae52fe54930f6005d704136cb2ca36841ee6d416449cc5c12c",
+  "coordinator_sha256": "668e6b854309144dd2128ae79158f2fc1b6d9523ef074385a0a2cc55bcfae791",
   "results": [
     {
       "name": "c1-run-1-baseline",

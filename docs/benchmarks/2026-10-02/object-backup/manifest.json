@@ -73,7 +73,7 @@
     "third-check-object-backup.py": "5adfb65e4ba996a1b1fce6a5f06a03c4132386b20c7e035b0121cda8cc49ac1a",
     "verify-access-audit.py": "1816a4c07d49a9d9389b71d583a0fd4c21b233461a77c43a4c0a1b4aba27e054",
     "verify-object-backup.py": "ba095529eccce01d0483eaa39194a2ef9df71417ce6f6f050cfde09703649ea1",
-    "windows-clippy.log": "83bde876d070a5e123e5190ceb1d0840e194ef61876f54d9280c270aaeaeda17",
-    "windows-tests.log": "7b44e27969b8ac732a5ddebd1189f1a5325cbbb713587d8bb6c9f951a71d6567"
+    "windows-clippy.log": "36bfeea4b006030c3c73456f94743213e14d0b8d7128021d683e7439d9e6d334",
+    "windows-tests.log": "f42db9f4dae410bd0573ff0aa14da35908f238011dd79eb251278d6b19707e20"
   }
 }

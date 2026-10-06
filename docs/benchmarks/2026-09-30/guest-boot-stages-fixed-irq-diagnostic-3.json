@@ -239,7 +239,7 @@
       }
     }
   ],
-  "coordinator_sha256": "991fb932847ab178a2150c546a2ad4a0d8fc32fc719f2ca0537767b7bef22179",
+  "coordinator_sha256": "0fb6c41abdf28bf56e73f4299fab4ebed6cdea22809c819bbba21d23dc567577",
   "controlled_cpu_load": {
     "cpu": 0,
     "workers": 1,

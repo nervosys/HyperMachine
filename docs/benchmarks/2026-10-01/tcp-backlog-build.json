@@ -8,7 +8,7 @@
   },
   "source_initrd_sha256": "f226c599d385609fc03af2223b6829a5249b28193c96179daeb7d47383005d1b",
   "rustc": "rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)",
-  "coordinator_sha256": "67679dfad13490e8c1ce297c255c00a308a6ebe39ee073deb540313c41fde356",
+  "coordinator_sha256": "c8e753885fe024cee363af8b0e9f1516a5f7c01b9df9e9d34522412321936466",
   "command": [
     "cargo",
     "build",

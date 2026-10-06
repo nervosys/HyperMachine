@@ -4,7 +4,7 @@
     "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
     "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
     "cli": "cf66e0132895c5f1b0880228df278fe470fb68a95fee4a4537231c683d8250f1",
-    "probe": "f574e81ddd3de107020134477cb52ecaea6d7fdd30a1cb00328c6b29e86f485f",
+    "probe": "483f6fbedf526af079f652e97a0698b7f3b6a72e68d7a75a8e9f48df917cd44f",
     "harness": "1bc6caf813998af6ee4016e1e3e633efbdc58f5ccac0e25601f5be268128f3e3",
     "cancellation_harness": "9996b14de8527e51c8ade1c1f6e4345b86472307b8b046b837a63a0f474cf831"
   },

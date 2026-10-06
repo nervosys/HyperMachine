@@ -5,7 +5,7 @@
     "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
     "sdk_harness": "30ac43be27ab656d3aac52d617b167471f5772b298430c695258e6e581f5a028",
     "request_harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
-    "coordinator": "a47c5ab0a1c21291755f1cbe818afc830389cde23c48f57f4880a6c083c151bb"
+    "coordinator": "f118b89cbbbfb3f0bece9eaefd12ef3758da71deb70768fa68a8c615350f4e5c"
   },
   "success": true,
   "error": null,

@@ -2078,7 +2078,7 @@ Both engines, the driver and one contending CPU worker inherited CPU-0 affinity.
 The worker stayed alive throughout and was terminated and reaped afterward;
 artifact hashes were unchanged and node cleanup completed. Its
 [exact coordinator](benchmarks/2026-09-30/owner-pinned-load-coordinator.py) SHA256
-is `c98e6289443031d49dc5cde7dd49727c28bff4aa7e13ec2489c25decf91b60e7`,
+is `e89f9e673e16b4bdc78c8b3ac2357b23e201f194b293c318472c817bae0bb577`,
 matching the raw report. Failed attempts invalidate this performance comparison;
 the successful-sample percentiles in the table are not a reliability-adjusted win.
 

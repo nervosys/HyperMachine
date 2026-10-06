@@ -1,6 +1,6 @@
 {
   "success": true,
-  "coordinator_sha256": "57d4a8bf5d2d45f2b57f39e8f8c19a2ca5a9a962d0f86f9bdd136dd0a3178350",
+  "coordinator_sha256": "3b95c306cec2085d115d85bab3c2c42b5379ba1fa33040b904ce7dd2ba78f6c4",
   "results": [
     {
       "name": "c8-run-3-candidate",

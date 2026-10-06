@@ -1,6 +1,6 @@
 {
   "success": true,
-  "coordinator_sha256": "8591c298f6d309610f0cf62c0ec5bc6d03509da6f8772c767c1f5911612f5511",
+  "coordinator_sha256": "39b8a8e176ca82135bd2cef9cc1fb71be1f592837f2701c92dd31d6011572d45",
   "source_commit": "23543edca3a0bfeea8a2b1917694ed430b00f234",
   "source_sha256": {
     "Cargo.toml": "eac295c2848417c20a49c14bce5f15c24bd129ca4b2c178a3b2cce744ab37b8d",

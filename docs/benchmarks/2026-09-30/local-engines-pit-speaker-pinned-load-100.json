@@ -2990,6 +2990,6 @@
     "pinning": true,
     "cpu": 0,
     "workers_cleaned_up": true,
-    "coordinator_sha256": "f0e6b1022f2bab58b658cacd79f4998f8c588795cff4f0a2f4adc7603faaa9a3"
+    "coordinator_sha256": "5d1bdee52afbba20ddb11c825190ccd3d2f3f2126313ce0c68f8bf22e4aa52fc"
   }
 }

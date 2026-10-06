@@ -240,7 +240,7 @@
       "lz4_faster_blocks": 6
     }
   },
-  "manifest_sha256": "04bb1499f1743ec23ddb8cf6ecf3f8ba4435a725d24d11478b5e36b1d35c8b91",
+  "manifest_sha256": "77b484ca390f01d49738ea5dd60370dcb2bdbf938e5c3896cb930a74bd43a829",
   "analysis_sha256": "3e8358a073cfab6507ef53d83541d37cb1e30e7b79ab39a2a16708f6d6b52d0c",
   "limitation": "Latency quantiles include successful attempts only. Paired latency deltas exclude incomplete-success engine blocks, whose failures remain reported. Six paired kernel blocks on shared nested hardware; within-batch guests are correlated. Native cold readiness includes image loading and guest command validation; it does not establish fleet, managed-platform or universal performance."
 }

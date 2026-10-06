@@ -2,16 +2,16 @@
   "date": "2026-10-01",
   "measurement_kind": "fixed-idle-process-pss",
   "sha256": {
-    "idle-memory-c1.json": "b410b83d363ad82c49ba1fef5d9c02c7c9b7e6382777210cb73997bc04255857",
-    "idle-memory-c8.json": "c0c20d427a939ab6cc600f6d986b6a5e8968c4347971b32a783576b0cd9090e5",
-    "idle-memory-c50.json": "47022e8e2c61269d2a2c9dfbb003d96d287e6f1cf64dbb847dd6d49c68c2862c",
-    "idle-memory-c100.json": "3f81d19e156d81c5737d01ce24539b59b48ca981bc7f3b06a7ab6ce4d39ed336",
-    "idle-memory-summary.json": "d5cf5cf83fd691f4fbbb39fd24b04b26a98f0e9433b69e0ac5f25cb553f18c40",
+    "idle-memory-c1.json": "e679a2a2d3431189e5edcdcef80baf5b429c69db9356815f26b317d9eb53c1f4",
+    "idle-memory-c8.json": "c3c9294cffd3dba18c26b4df35a97f7ee881f0829d2fbe78fd9f1fb63671e9a9",
+    "idle-memory-c50.json": "a63d838888d7fa26d3871a486401b8953820aa6b24ddc9637919e7d999f3a8ec",
+    "idle-memory-c100.json": "c25a9575892b7aaf6858660ee8113ed8bc9c27a0df9e7fef47cb8ff7578dfa5c",
+    "idle-memory-summary.json": "1d8e7b82a6397ad819c6dab40a31c1dae4bce58ae9184070827e87f0bd56d257",
     "idle-memory-harness.py": "8d6715e98077f76e9120a8c61100e558cb3c7d5d8e57d48df425880734afc6fa",
     "idle-memory-shared-harness.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
     "idle-memory-firecracker-harness.py": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6",
-    "idle-memory-coordinator.py": "1ae1bbe32507c5693c7e44bce52e05007eb13e61e3a299e508454a84061e9b8a",
-    "idle-memory-matrix.py": "5606d1a8ac6419fb3226872712aba88ddf03f14fd086e12bc56232d92b0b39ff",
+    "idle-memory-coordinator.py": "bfb7598b3a37cbe88d8787eaea1238a9f14e763fa4d4204398a9842f4bb12fc7",
+    "idle-memory-matrix.py": "83f4c1fb3258b36693749acc8bbe708311b73b8bb5f6988d363440f45c56990c",
     "analyze-idle-memory.py": "ac3a5c8c890f534e0931bbb480ef231962693dddacc3f7493ecef306375fff04"
   },
   "artifact_sha256": {

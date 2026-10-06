@@ -3,7 +3,7 @@
   "output_sha256": "7f7344bcc003045ef39139d955c8b08c2a0e08915cd2f2a0d72c6614ce0bc778",
   "old_init_sha256": "25879880540c60aeabff8f2d708b1acfaf8441fe617b228e644953b635ba5098",
   "diagnostic_init_sha256": "502899f18efb6214ba9989af268d61b6092914161df90c256dbd7b76c9a859ef",
-  "builder_sha256": "77694ee630c64d6b548e89ff1b3dfa4445b81f18968abe42220fa8d3ca7b82b5",
+  "builder_sha256": "85ce88886008534fc92c9b8d5fc156d6a93c456bd7064b88597e11ece8d38788",
   "agent_sha256": "817e8b857aa4d3f55636cf706ea74078b4fbc08e5b86a860e5eb6f10ef3aec8f",
   "agent_source_sha256": "398d488bc34baec879ba155d24e79f5a1506913bfc92be7f64769ba39c973cf8",
   "change": "Init and guest agent change; listener milestone diagnostic",

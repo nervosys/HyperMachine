@@ -48,7 +48,7 @@
     "ssh-initial-e2e-redis.log": "5417ca20d7996830eab5b97519cf3f2b0748f9696983cfb3c3725a0e49751811",
     "ssh-initial-e2e.json": "3dca20ca77620e0ff92f2c0dcb098093853e134193230e8da6a8b24afb8b66fb",
     "ssh-image-build.json": "e4ca03bc9d67b1eb5ec2c829616f60cc5b7d309fb806562148d6b0b7512af5f5",
-    "ssh-cli-build.json": "1d139dfaaa43d6ac352ea016e026906d369322870ffa75466582bb90c7efe1ba",
+    "ssh-cli-build.json": "83263e339fe2de71ccfde2f3e059d33d53fbcbd3cff410f3a564f3f103de0903",
     "ssh-cli-source-Cargo.lock.txt": "4c9d2ed68cf63118d05119ed1f237d34124a24f94af32bc120cfd50bec1a78e4",
     "ssh-cli-source-Cargo.toml.txt": "eac295c2848417c20a49c14bce5f15c24bd129ca4b2c178a3b2cce744ab37b8d",
     "ssh-cli-source-crates--hm-cli--Cargo.toml.txt": "c58611a2b367ba40e0de32a6b3f2f82aed74bde0520d050d2f30db136c737210",
@@ -74,7 +74,7 @@
     "ssh-cli-source-crates--hv2-jobs--src--worker.rs.txt": "85cb6d8ccd39a17e8b3eba0d71a606edfa3047a8df00f77584a970ef6737d366",
     "ssh-measured-e2e.py": "3890ceb9a276c04ad65aa2da9aeab9009d886a16302c7a0ed2bd3e928b282274",
     "ssh-measured-image-builder.py": "223ed4c1894ac1494ba934993240a3ac2240dfef0bf698545f88399e5dcf59cf",
-    "ssh-measured-cli-builder.py": "6461e95f377756b12204356c14a7a6e25a3518c36f544438cf3353678122999a",
+    "ssh-measured-cli-builder.py": "f99dd43fa955608079904da1dcce82425154e7a100f90e7247e38c780e660d5a",
     "ssh-package-provenance.json": "aa53f5e35620af7a46416c9cd2a5f71ce0c6f75bd1de6f63b99f9b0bd5823985",
     "verify-ssh.py": "77a1dee13dda459828c59e74ded4b2169aa1d8b5fd1ba69859f34b2dba19c5ff"
   },

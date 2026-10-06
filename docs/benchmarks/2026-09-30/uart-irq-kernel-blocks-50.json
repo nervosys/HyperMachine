@@ -9,7 +9,7 @@
     "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
     "harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
     "firecracker_harness": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6",
-    "coordinator": "cb0fd60ab78dc809dced437239a2b2f473512501cf7915e2a8cbbc76a0f446b3"
+    "coordinator": "84e140ecad0b447db29bdea11bf82919192f2dea2c79233d3cb2b6f80b3e2b37"
   },
   "profile": "native cold create-to-command, concurrency 1, two pairs per node",
   "design": "50 blocks, alternate kernel order; each kernel run alternates engine AB/BA",

@@ -38,7 +38,7 @@
       "target_dir": "/var/tmp/hm-competitive-target",
       "rustflags": null,
       "exit_code": 0,
-      "output_sha256": "f040d6d8ef834b7d2e77f3750c774014954ed1fae815a9d177f99e9fcd009eb7"
+      "output_sha256": "66a4fb349ad741686350d30843442f0b7bdcb34f3e9923d60b5e23f3689d93f7"
     },
     {
       "command": [
@@ -54,7 +54,7 @@
       "target_dir": "/var/tmp/hm-tcp-static-target",
       "rustflags": "-C target-feature=+crt-static",
       "exit_code": 0,
-      "output_sha256": "88c03997e0abd0df99182fa61334863cd03d363a239e3a6ad53bf56500e4989a"
+      "output_sha256": "cb395f13c3445218cfdbce5f1afdadcd466d829f2134890fe20cb823cee1f4b1"
     }
   ],
   "success": true,

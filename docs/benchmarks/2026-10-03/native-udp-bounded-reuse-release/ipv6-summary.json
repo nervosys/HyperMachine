@@ -3,7 +3,7 @@
     {
       "variant": "baseline",
       "report": "ipv6-0-baseline-report.json",
-      "report_sha256": "6388c39b739f695c0a1e465a3e1e3e2c3bcc1a0dd09889fa6e7fff69cbc5e740",
+      "report_sha256": "954f3f11cd532a0883430ca629e2044e2a9f94fff932df229665a5c7079a1075",
       "native_mean_block_rps": 7284.0821246327805,
       "mean_peer_p50_ms": 1.04614475,
       "mean_peer_p99_ms": 1.90662525
@@ -11,7 +11,7 @@
     {
       "variant": "baseline",
       "report": "ipv6-3-baseline-report.json",
-      "report_sha256": "bbecf1e41eb730a4f1d47b392b1bb4a3d9f6f311b628191802c719478df4b3d7",
+      "report_sha256": "f4d235950494f73b2c3fb730b46292438590999f231d81b2ad4db2f846e60533",
       "native_mean_block_rps": 7305.141475055569,
       "mean_peer_p50_ms": 1.0449656875,
       "mean_peer_p99_ms": 1.903080125
@@ -19,7 +19,7 @@
     {
       "variant": "candidate",
       "report": "ipv6-1-candidate-report.json",
-      "report_sha256": "374780c1d74d1f0c08850284bf989b16c5ce137c8321d225183369e0e6b561d1",
+      "report_sha256": "8445096e8b47485838760f89699c1a027a2637482870e6f4cc0421288e340d91",
       "native_mean_block_rps": 7302.505053626621,
       "mean_peer_p50_ms": 1.0427036875,
       "mean_peer_p99_ms": 1.911512375
@@ -27,7 +27,7 @@
     {
       "variant": "candidate",
       "report": "ipv6-2-candidate-report.json",
-      "report_sha256": "ae76dc7683d756b2cc970ce7ed50e84d0207da533a1fdcd77cc730b35dad5363",
+      "report_sha256": "78cfd293c171e78935eec0c8496717405c8f8b0d74b342eab7a1bb332cb356dc",
       "native_mean_block_rps": 7173.275104296154,
       "mean_peer_p50_ms": 1.0574513125,
       "mean_peer_p99_ms": 1.94006475

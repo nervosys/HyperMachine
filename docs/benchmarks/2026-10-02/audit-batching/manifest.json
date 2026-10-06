@@ -499,8 +499,8 @@
     "single-default/summary.json": "5dc6d16a374033e0e08309cea23226b81f50a04d500f592cf1604af3452e4808",
     "verify-access-audit.py": "731162d8a9b9457c5a7f9eac972b7423b023732a0c991b98f65b192f54591b03",
     "verify.py": "056af2daade398416adadac0b2353a13405f8ac2ee97a750fec6965d8ef237c2",
-    "windows-clippy.log": "3212170e0102010a9176254d68c4d77d9fcfe7cf357008105c2a52d94ddbf2d7",
-    "windows-cluster-tests.log": "3ce2852ebfafcef305f76313aed96c7e602a1b0e5b12096dc5f528a8e56d043f",
-    "windows-core-tests.log": "c28cc6d0e55a0fe01b249f2bf453be7e322eab375afd7f1541de117dd92fac1b"
+    "windows-clippy.log": "744b1f7fd25073354092a430d678886a17bea98d5ec6286ece0845b46c5a65dc",
+    "windows-cluster-tests.log": "8321bf5e0c9a471d8b553b6180e284126955d9d5e7e809baf431b4e0a755f7d6",
+    "windows-core-tests.log": "3e28bdc5db070dcb00b9060819a02c6f5846c542577e7b6d1dcd9132e7543ffb"
   }
 }

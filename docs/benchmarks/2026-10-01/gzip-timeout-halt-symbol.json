@@ -23,7 +23,7 @@
     "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
     "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
     "harness": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6",
-    "coordinator": "9d0d6ebb8cffdb4cb5cdf1d3fe21dea19afe17e89bc0f843df26add73f5edd4a"
+    "coordinator": "682ff70174368cad66ca00b69441393223219abc736ab7cc65c3d9dc4a577d1c"
   },
   "artifacts_unchanged": true
 }

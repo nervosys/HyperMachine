@@ -107,10 +107,10 @@
     "verify-access-audit-first.py": "a8ff97fe80b683c4ec8aaaab4e9fd4f5fefaf6e92e9882b2718cf7025b4993db",
     "verify-access-audit.py": "731162d8a9b9457c5a7f9eac972b7423b023732a0c991b98f65b192f54591b03",
     "verify.py": "9bc807f2a85273572bcf01a257e58e73edc0d6a94a7d961b2b3cf8efecefe10f",
-    "windows-clippy-first.log": "23ce23a7735f0671da87b765aba3320f1b60bde6c583c710cefa4cd93b412de7",
-    "windows-clippy.log": "2bb41a43ab62e44065a954f20702aa8e2cced6bc1ab2ace543e6756f91db0eae",
-    "windows-cluster-tests.log": "76dce19ac27ff8f78d5f722d1ff89d3e0ec69cca4659c30f03255d68bf3115bd",
-    "windows-core-tests.log": "a0a51c138ebf2efdab7cb45dfad8b8ba808c92774f6e9a9dec359369ed4b42cb",
-    "windows-float-roundtrip-failure.log": "bc43a07d84083f578162455f28333cb03b4a9708fedaa9ae0bc7eeef18632185"
+    "windows-clippy-first.log": "f2e366b9808ebc5c39e9e9008d4c9837c19a5e1498181beb3381e47688298feb",
+    "windows-clippy.log": "4754d8ef47e3ae2753aa77dfa89bd1e1fdb5a8a6f1208f158236ee357ea3f6ee",
+    "windows-cluster-tests.log": "68d4de121c7f3bcb63cac26dfce06f517f75ea37a79cd3ac8e89baf3100c5f69",
+    "windows-core-tests.log": "c3b29ccddb4981b11854f06ae2009e6dc7282b25c9f3601aef399f2284736488",
+    "windows-float-roundtrip-failure.log": "631f3d62ac7221abf37e65e51f78110abdedaee2e0c0fc59a4d95ba7683484bd"
   }
 }

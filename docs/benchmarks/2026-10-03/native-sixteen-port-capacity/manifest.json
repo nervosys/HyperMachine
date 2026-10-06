@@ -7,9 +7,9 @@
     "host-source-context.json": "3c110fc9f30266fc49a0b5499b41f4e22fa680a257db5519d6de1af8b6e7ebec",
     "image-report.json": "1e9e5e10463208da0b76f23b257e2061063cd3b7b5d8e2d15ebb3534b40ad59d",
     "ipv4/daemon.log": "3f9dcfd571eab2adb1ee49767b854a1e85296935bf46b016d015f7e6c726801b",
-    "ipv4/report.json": "07e74675420af13d5e4d7a33a9c8ee9e96b0da28223fe49647435b943018a674",
+    "ipv4/report.json": "00c98c48cf9184c1e17ba953f4938c304a8f54a9b7ecce28f4a3eccd1486c585",
     "ipv6/daemon.log": "9c52a80d212531dcded84c39afc6902aa6ec418a445317cd7a2fd0c946284fd1",
-    "ipv6/report.json": "b090d7f3f764f1c9770be740d725fdd09a59971c85b1fd1aef932f90dfc6925c",
+    "ipv6/report.json": "e91bfb056da004e1806dcfc23c3ede072f3309a86aceea89fd72a551c7cadf7b",
     "udp-guest-echo.c": "2b6f25d583a6aed57c2468d1746ee0ccbc1484e695a4195068c086876139396d"
   }
 }

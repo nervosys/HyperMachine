@@ -42,8 +42,8 @@
     "README.md": "a54f0458fdd534c8daee71f388d099ec92676300a16159786db51839ff93da29",
     "verify-access-audit.py": "1816a4c07d49a9d9389b71d583a0fd4c21b233461a77c43a4c0a1b4aba27e054",
     "verify-private-web.py": "e182a534f9563ddef4ee74f07f9fa99d37f39086f023ef224ed6be8912866d7c",
-    "windows-api-clippy.log": "c7413376d0481c65c7c18f82181c67ba8b946eb07a0f2527d837464acf051386",
-    "windows-clippy.log": "47ea50fc8da7240ee3e36916c9dc7b0e800c5ea993175bd21171b47dfa7d7973",
-    "windows-tests.log": "66684b5212d05080f60620840f1940b7ce93dc77749d0087689c160fea5de175"
+    "windows-api-clippy.log": "da1377d22a2dc6160d848610585f565d0f8566fe12fe7df1c6357ac0f0726609",
+    "windows-clippy.log": "f4a49293bcc556a7bf473e9c79b9e60767891c9ff3830c831388c17246dab8de",
+    "windows-tests.log": "f92f0f1203fcbc3e69bc107fd9d7dc7deabf6111aadd3f01745a5aa5ce544237"
   }
 }

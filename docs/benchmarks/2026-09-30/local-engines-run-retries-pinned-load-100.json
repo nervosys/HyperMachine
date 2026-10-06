@@ -2972,6 +2972,6 @@
     "pinning": true,
     "cpu": 0,
     "workers_cleaned_up": true,
-    "coordinator_sha256": "959fd682d878f8d9d86fd321de87beca17a45728063401edd5dfddf4f08a338f"
+    "coordinator_sha256": "2d948a8c66b08cb1af8e88436d0f78d357cb0eeba452e9838f2b4764494de801"
   }
 }

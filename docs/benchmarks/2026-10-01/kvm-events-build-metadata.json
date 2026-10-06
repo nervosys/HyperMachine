@@ -9,8 +9,8 @@
     "snapshot_source": "464d913cdbd286f14639d33bafa453af2271a12eeab12df72b55560710176784",
     "cargo_lock": "483b5c6c12d6964be69035547b60bc2ea773fb1daaa735db2d09526852516211",
     "cargo_manifest": "eac295c2848417c20a49c14bce5f15c24bd129ca4b2c178a3b2cce744ab37b8d",
-    "test_log": "f07e31866ea0103302c91a1906ccc37d49d5c9407ae7323b7e21ba5e6f6a5bd2",
-    "release_build_log": "168a2927af6bb2a319e0c0fe3466aa44b9bbdcad6614616a045741e482359093"
+    "test_log": "097ecb5bc56239d3db03bd2780d962a068d22930ee7b73e15f7a1308e34066fa",
+    "release_build_log": "425f57a446b5f4b324b2aba58b372893e9d1b459057e9ea44e89a936812d0f73"
   },
   "compiler": "rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)\nbinary: rustc\ncommit-hash: 59807616e1fa2540724bfbac14d7976d7e4a3860\ncommit-date: 2026-04-14\nhost: x86_64-unknown-linux-gnu\nrelease: 1.95.0\nLLVM version: 21.1.8\n",
   "cargo": "cargo 1.95.0 (f2d3ce0bd 2026-03-21) (built from a source tarball)\n",

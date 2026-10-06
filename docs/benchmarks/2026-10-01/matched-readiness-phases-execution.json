@@ -25,7 +25,7 @@
   ],
   "exit_code": 0,
   "stderr": "",
-  "coordinator_sha256": "11d34e4dfb4b61f92ea263ac7d10d52043211ebc44d9e3f4d841dd804c1f8280",
+  "coordinator_sha256": "c7b41a3de6732d9799867de2ca15186c1a093f05c815a08eaa57bdf16053fb8b",
   "affinity": [
     0,
     1,

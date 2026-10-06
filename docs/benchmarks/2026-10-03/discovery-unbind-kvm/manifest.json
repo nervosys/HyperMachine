@@ -7,8 +7,8 @@
     "deploy-tls-certificate.py": "09e9f6b7543cbe810b18c5db26306f2dee72cb733efd2d9bc3fd5f64bfe2189d",
     "domain-certificate-jobs.py": "3b8c3b5db70434c2ae4100632353d850adbb63d2afe607f3ccb5c1341bcee45d",
     "renew-tls-certificates.py": "b6dd26bc78de6495c355698356cb033f4990b5c5364b949727cb2ed5562698bd",
-    "report.json": "3f2cdee979fae78f21675f9929e9e6f8c49e7045b5f86d6dabacf4b84379dcc1",
-    "run.log": "3f2cdee979fae78f21675f9929e9e6f8c49e7045b5f86d6dabacf4b84379dcc1",
+    "report.json": "53defccba1755ed4797436c0a55b4beb94a2f8e776a1aba675910a906c6cbd45",
+    "run.log": "53defccba1755ed4797436c0a55b4beb94a2f8e776a1aba675910a906c6cbd45",
     "verify-custom-domains.py": "675cabe8121db9c1a52e8095baa13d96adff93de5a2336b4dc419575ce643da8"
   },
   "public_ca_contacted": false,

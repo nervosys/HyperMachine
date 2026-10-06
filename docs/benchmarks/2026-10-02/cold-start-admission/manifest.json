@@ -28,7 +28,7 @@
     "adoption/kvm-verified.json": "cefff5fc547aeaf0aa8af0de0b5439579134fd0ab409a0a31dd3ed1210b74840",
     "adoption/kvm.json": "8b724e5a542a0e2767fcc757996cedd08710118417631c7b7d389cc63d2d43ff",
     "adoption/tests.log": "61832f2f906b392b1f8f64c0304ec4b36b3fd0e25f4652996ffb93dfa1793e5d",
-    "adoption/windows-tests.log": "527aef926e9b73182fdede2946b90f6f3c31cc6f1abdaefb831b545173553403",
+    "adoption/windows-tests.log": "2984a1f9386b49f86a6bdbba4bc96fd55560b91f61a61f8a061c7e9585c953cf",
     "analyze-cold-start-limit.py": "91c0314d2d8cf6cfe7a42e12994eae6ab01e55e622516eb29d2cef501f6145e1",
     "analyze-connection-wait.py": "6c919d1d109490cba2e889648825fed8f4977a09bc9a78390d9801ace031dd14",
     "bench-cold-start-limit.py": "086b5209d77f3b5c909f67ae13535dfccae0a8b867b824f4550af1ebdca2d8b1",

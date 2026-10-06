@@ -266,7 +266,7 @@
       "max": 6855.038291996607
     }
   },
-  "raw_sha256": "b73d4555923c9cc63bb567b67d6d317ca3f586d35d02a99f6adf948a309e35e2",
+  "raw_sha256": "bce31ec7769bd94844ce41e91d519b76d37998663815248d1a3e29dffcdfb5d4",
   "analysis_sha256": "0e3d5246c359ab3ada6c387388fe26a208c42dbd43863ddf5f929cb3fdc5caaa",
   "limitation": "Two uptime observations test only their interval, not earlier boot-time clock stability. Guest clock epoch is not VM entry. Conditional epoch bounds cannot establish dispatch delay or transport root cause. Shared host, sampling and post-readiness commands remain diagnostic limitations."
 }

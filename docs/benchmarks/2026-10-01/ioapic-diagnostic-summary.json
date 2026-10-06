@@ -12,7 +12,7 @@
   },
   "failures": [],
   "failures_with_timer_fields": 0,
-  "raw_sha256": "0a0983b1889ebcec4a386c5c0efb7b967a5afc1ae632289944e13954709a676c",
+  "raw_sha256": "301a69bf441f02672f21e2139ca5941e2108a1fdd75c6e590a86076eadd4d27e",
   "analysis_sha256": "be75035582cbeb9a0d9e0dd6eecadb28eae0b656be805abdbeed6d568f2477c1",
   "limitation": "Failure-only formatter change; no runtime timer fix. MSRs are sequential owner-safe reads, not atomic. A cohort without failures yields no failed-boot timer state and cannot establish reliability resolution. Shared nested host; diagnostic evidence excluded from scored comparisons."
 }

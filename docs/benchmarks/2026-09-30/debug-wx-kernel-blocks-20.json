@@ -9,7 +9,7 @@
     "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
     "harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
     "firecracker_harness": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6",
-    "coordinator": "94135a8bcfa2c805266466da3ea77ca3762ef9d653d041cd8805700412fb4a06",
+    "coordinator": "9c779c4564b2c31d59fabdcb606d66162f4eae0207724d0a757371df1760ec74",
     "kernel_config": "e6da8d562cfbc4cdc836c7562e12d0aad44db53fc54434d72c893d243753ed39",
     "kernel_defconfig": "ff884e6aeeea41c91bba3a7f3924d122c1a4a131f3ae28491be7d66acd0793fc",
     "kernel_builder": "5ac2ce82e405721466a87441568c72fac2b681f38d687e76435471115f6b8c6c"

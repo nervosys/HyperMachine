@@ -6,8 +6,8 @@
     "deploy-tls-certificate.py": "e9e0b2d9cf5b106b08f7388b48fb426b3bf63fcbb2aeeb4ee048ef79f2c01940",
     "renew-tls-certificates.py": "b6dd26bc78de6495c355698356cb033f4990b5c5364b949727cb2ed5562698bd",
     "renewal-tests.log": "579b28eae86e2d4a8c88a0f67494fbe880595ccf286636a56ddd8900aa93144f",
-    "report.json": "7afb6ecc91bf0d535dcbee192350386ea454fc7068e143cb4b055ad09e232414",
-    "run.log": "7afb6ecc91bf0d535dcbee192350386ea454fc7068e143cb4b055ad09e232414",
+    "report.json": "811544a4d7b209a967e65abfd91d7eb00ecfb947afeae2abcbfb506f6f7003fa",
+    "run.log": "811544a4d7b209a967e65abfd91d7eb00ecfb947afeae2abcbfb506f6f7003fa",
     "test-renew-tls-certificates.py": "cc44971315c9e8d6beb9e98ecf7145ff983c6aa42c22731e5340f7fe48031175",
     "test-tls-group-provisioning.py": "70b98e41d576f39cba1b7bbf0d7a4888c098c6dadbe2a7144f0c923984159e9a",
     "tests.log": "637ad693971420b70a01476cd5d51065ecc3c7af270c41cfe91899ec8c2db4bd"

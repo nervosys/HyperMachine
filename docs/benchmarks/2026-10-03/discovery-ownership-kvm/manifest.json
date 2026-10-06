@@ -8,8 +8,8 @@
     "domain-certificate-jobs.py": "3b8c3b5db70434c2ae4100632353d850adbb63d2afe607f3ccb5c1341bcee45d",
     "excluded-failure-summary.json": "66eed8eda334025f9a0aab75cbdd40a21301110401a73d36d50e48d156895dbb",
     "renew-tls-certificates.py": "b6dd26bc78de6495c355698356cb033f4990b5c5364b949727cb2ed5562698bd",
-    "report.json": "3da655a1afc3dfdcdcddf85feb968e8990abd70b2b0b38cd1d020a054e176fda",
-    "run.log": "3da655a1afc3dfdcdcddf85feb968e8990abd70b2b0b38cd1d020a054e176fda",
+    "report.json": "cc36135353ff679a0661baa60a12782a1c519292706eaa74a2f13e826334bd22",
+    "run.log": "cc36135353ff679a0661baa60a12782a1c519292706eaa74a2f13e826334bd22",
     "verify-custom-domains.py": "c34adf92ed701abe949f2875be3ca2d0d145849ce9d6f65826bcd378c1240e73"
   },
   "public_ca_contacted": false,

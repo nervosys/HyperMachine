@@ -3080,6 +3080,6 @@
     "all_alive_through_cohort": true,
     "pinning": false,
     "workers_cleaned_up": true,
-    "coordinator_sha256": "aa0bc87c0ee6e5919d108adcb51f2f5e9a434dbdde238a2e3b3008a966b29eb2"
+    "coordinator_sha256": "d162ab82b5dea6c47977b5e7afe0333f9d5047c381dbe43f7735dfb13b03d612"
   }
 }

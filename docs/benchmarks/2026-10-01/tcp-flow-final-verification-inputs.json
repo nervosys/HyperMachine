@@ -3,7 +3,7 @@
     "tools/bench-tcp-local.py": "cc9df787719005ca7e1a3c8f149c923e1492c2dfa645e97b64d07aee3f446f8c",
     "tools/guest-image/tcp-fixture.c": "06af649798cf5639f275730dd6ea59c58ab1bb707d1bdd76b925489941db862d",
     "tools/e2e-tcp-tunnel.py": "274fdf87885d59eb83cd05d1b6b8c7d32b56970e2f81eca018f43c1ca60fa587",
-    "target/verify-tcp-api-nodelay.py": "dc994a1581a432f000dd052f84f6cad4bc13f2de4d69fe28174243fd59c219f1",
+    "target/verify-tcp-api-nodelay.py": "340b03285fddfc7e56e0826b1d74ef53bd44bf115ebc9e20cd011ddbaf3ef7ef",
     "target/check-tcp-final.py": "a97ba9b7e28e1d3854b755429578d0ef512debfe4bb71082a3f8a9c69c7095e3"
   }
 }

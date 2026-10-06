@@ -38,7 +38,7 @@
       "target_dir": "/var/tmp/hm-competitive-target",
       "rustflags": null,
       "exit_code": 0,
-      "output_sha256": "231b4c200e84d28d43210a5a004ac3923281c5b4ec65e3020d42d4b5ceabc3a3"
+      "output_sha256": "d6ddcf14b121968ce2d2efe8e961997b0cae48ac4ed87439cce55a389d4d8740"
     },
     {
       "command": [
