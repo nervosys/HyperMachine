@@ -357,14 +357,27 @@ mod tests {
     }
     #[tokio::test]
     async fn failed_dual_bind_releases_partial_tcp_socket() {
-        let occupied = crate::udp_socket::bind("127.0.0.1:0").await.unwrap();
-        let address = occupied.local_addr().unwrap();
-        assert!(
-            NativePortBinding::bind(address.ip(), row(address.port(), PortProtocol::Both))
-                .await
-                .is_err()
-        );
-        let _tcp = TcpListener::bind(address).await.unwrap();
+        // The UDP port is ephemeral but its TCP twin is not reserved, so a
+        // concurrent test binding TCP port 0 can be handed it. A leaked
+        // partial socket fails every attempt; that race fails one at random.
+        let mut attempts = 0;
+        let (_occupied, address, _tcp) = loop {
+            let occupied = crate::udp_socket::bind("127.0.0.1:0").await.unwrap();
+            let address = occupied.local_addr().unwrap();
+            assert!(
+                NativePortBinding::bind(address.ip(), row(address.port(), PortProtocol::Both))
+                    .await
+                    .is_err()
+            );
+            match TcpListener::bind(address).await {
+                Ok(tcp) => break (occupied, address, tcp),
+                Err(error) if attempts < 4 => {
+                    attempts += 1;
+                    eprintln!("TCP {address} unavailable ({error}); retrying");
+                }
+                Err(error) => panic!("TCP {address} still held after a failed dual bind: {error}"),
+            }
+        };
         assert!(
             NativePortBinding::bind(address.ip(), row(0, PortProtocol::Tcp))
                 .await
