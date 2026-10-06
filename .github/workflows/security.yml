@@ -68,7 +68,7 @@ jobs:
       # output is worth reading.
       - name: Upload audit results
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cargo-audit-results
           path: |
@@ -123,7 +123,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload Clippy results
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: clippy-security-results
           path: clippy-output.txt
@@ -215,7 +215,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload SBOM
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: sbom
           path: sbom.json
@@ -228,7 +228,7 @@ jobs:
           cargo tree --edges features > feature-deps.txt || true
 
       - name: Upload dependency analysis
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dependency-analysis
           path: |
@@ -279,7 +279,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload geiger report
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cargo-geiger-report
           path: geiger-report.txt
@@ -326,7 +326,7 @@ jobs:
           cat security-summary.md
 
       - name: Upload security summary
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: security-summary
           path: security-summary.md
