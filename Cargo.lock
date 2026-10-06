@@ -3077,24 +3077,24 @@ dependencies = [
 
 [[package]]
 name = "ic-cipher"
-version = "0.2.3"
+version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d07118fffbb6c3dc3b6d4143120f804e897b5670d21c0db8d0ba09d5e5fe13d0"
+checksum = "364cf6c9ebbe8fec87dd87893f82624e2c1e08d969ea6b5e3ac92681f957b43a"
 dependencies = [
  "ic-core",
 ]
 
 [[package]]
 name = "ic-core"
-version = "0.2.3"
+version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1725582ae71bb3760a0c74599e2b15dd2cbc1cbbc349590153bc1532119f8106"
+checksum = "99b796891cbe491d2dff8a9ec6c1b33dfab6ccf09104bc7a7d79fb4a202ec1cd"
 
 [[package]]
 name = "ic-drbg"
-version = "0.2.3"
+version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a841794a67a39210082a100a1fc76fe2888f79c9aa15c320367205a61a44471f"
+checksum = "536b696fc693140d03c9dc075aa2a49ee654e5a273bd22471781ca6712646d74"
 dependencies = [
  "ic-cipher",
  "ic-core",
@@ -3104,9 +3104,9 @@ dependencies = [
 
 [[package]]
 name = "ic-ec"
-version = "0.2.3"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1fe80866478c12013abe5e733e5746a9649914ad069e57e9059eda212b8b5d9"
+checksum = "9b9eaf8c71b12da96f2508b0fcae37ba20f7181156d27c7d0a098cf1b6e1f1fd"
 dependencies = [
  "ic-core",
  "ic-hash",
@@ -3115,9 +3115,9 @@ dependencies = [
 
 [[package]]
 name = "ic-fips"
-version = "0.2.3"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2b8905f99dca84a160c2850f2304a6a790900d8bf6b3408275929fe5a818ce7"
+checksum = "aef5953b0eabcbbb7266093efc141cadf3b2a8197b4ade71b857ff06b1e5a520"
 dependencies = [
  "ic-cipher",
  "ic-core",
@@ -3134,18 +3134,18 @@ dependencies = [
 
 [[package]]
 name = "ic-hash"
-version = "0.2.3"
+version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7168b3979cb90d99f53bab01e2170a05ca8eeb15e691b4cd36662ea635e0edb2"
+checksum = "fe234707f6f016d69f4468b892d7f5c2ca94446697e3a3cb89c3b913f7cdedf8"
 dependencies = [
  "ic-core",
 ]
 
 [[package]]
 name = "ic-kdf"
-version = "0.2.3"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "059eb06b35c830f8d72cea9ec5bd1b1f6c2659d08195eb9c06d5a401d3f21aa8"
+checksum = "d4e26f2514f98fbd5a79c565e4b32a2e3a3cecdb5d578416800594d549320e39"
 dependencies = [
  "ic-core",
  "ic-hash",
@@ -3154,9 +3154,9 @@ dependencies = [
 
 [[package]]
 name = "ic-mac"
-version = "0.2.3"
+version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0898d9000a7d174e02d45096f9bdea5dce2eeb3d6eb1688f922678e02946dbc1"
+checksum = "2476a9c38b448ee30cfeecb5cb1edb72cac3ecdae6f3476315eaf233f2f66e9c"
 dependencies = [
  "ic-cipher",
  "ic-core",
@@ -3165,9 +3165,9 @@ dependencies = [
 
 [[package]]
 name = "ic-mldsa"
-version = "0.2.3"
+version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df97af1bc3e0b071ccd2077f1862f1fb7dda8acf325f3c8f63212e2708c117de"
+checksum = "9ff0bf85514a9a6b006f8efc1b2b83a6133d871a5b0a1ceab1accd3a74510bc4"
 dependencies = [
  "ic-core",
  "ic-hash",
@@ -3175,9 +3175,9 @@ dependencies = [
 
 [[package]]
 name = "ic-mlkem"
-version = "0.2.3"
+version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e45b3fb6098d43562f1874fd9b013ff32c4136bfdf0d5fa4541285a0d4d197bc"
+checksum = "18e4eb4f038d5c30d32a24cacbbd0dd8c99c15c761192cdbf503841d49c60add"
 dependencies = [
  "ic-core",
  "ic-hash",
@@ -3185,27 +3185,27 @@ dependencies = [
 
 [[package]]
 name = "ic-ontology"
-version = "0.2.3"
+version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6725488eee82111bb979b647f1cbc5a01944b5310af979df070c2b089ab0fb3"
+checksum = "8578761672fad073086a35c504350846b2c9535dfa97ec1b5bcf2d9ec805d6d9"
 dependencies = [
  "ic-core",
 ]
 
 [[package]]
 name = "ic-pkix"
-version = "0.2.3"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a465a692c8100e2f58c9d05e4634755f228cd3d0746d40102955b7af014e53cd"
+checksum = "3abf7c91c250ea952b17ef1f9c8ffce6ffcaaddfc10ee0bd34f897f8b2da2f21"
 dependencies = [
  "ic-core",
 ]
 
 [[package]]
 name = "ic-rsa"
-version = "0.2.3"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43dba055717d1da07909753b19493a620481f62d55ae957b575daf597894472c"
+checksum = "fb1af80313b65ea55667f588c9b4800c988ee2f2c06c3be2974c29b0830fa237"
 dependencies = [
  "ic-core",
  "ic-hash",
@@ -3593,9 +3593,9 @@ checksum = "7a79a3332a6609480d7d0c9eab957bca6b455b91bb84e66d19f5ff66294b85b8"
 
 [[package]]
 name = "libc"
-version = "0.2.189"
+version = "0.2.190"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
+checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
 
 [[package]]
 name = "libfuzzer-sys"
@@ -6548,9 +6548,9 @@ checksum = "8d2d250f87fb3fb6f225c907cf54381509f47b40b74b1d1f12d2dccbc915bdfe"
 
 [[package]]
 name = "tokio"
-version = "1.53.1"
+version = "1.53.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "202caea871b69668250d242070849eb495be178ed697a3e98aebce5bc81a0bed"
+checksum = "e95f91fcc7a621e8b030f6aa23c71fe9838ae2fb4d8118b75602a328f5144044"
 dependencies = [
  "bytes",
  "libc",
@@ -6576,9 +6576,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-rustls"
-version = "0.26.5"
+version = "0.26.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0c85f2c3ef0b1cd58b36682f4b17aaa995f0e5db534d85692b4903abce21f67"
+checksum = "c9cc2678c2cdd569ef8215e2afd7954ada2ae20b4fdd2c5fe6139a3b02d105db"
 dependencies = [
  "rustls",
  "tokio",
@@ -7021,9 +7021,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.26.1"
+version = "1.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ef6dac1e96601b4fb3acccccff2139741fcb757cb9a36089bf5be91cfb285ce"
+checksum = "97277d36b9c3ace13e58fa6e753f8b0bbbf302a18dd193240d70f9e29681059a"
 dependencies = [
  "getrandom 0.4.3",
  "js-sys",
