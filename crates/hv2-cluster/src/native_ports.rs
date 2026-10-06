@@ -33,7 +33,7 @@ impl NativePortBinding {
             None
         };
         let udp = if wants_udp(allocation.protocol()) {
-            Some(UdpSocket::bind(address).await?)
+            Some(crate::udp_socket::bind(address).await?)
         } else {
             None
         };
@@ -87,7 +87,7 @@ impl NativePortBinding {
             None
         };
         let new_udp = if wants_udp(protocol) && self.udp.is_none() {
-            Some(UdpSocket::bind(self.address).await?)
+            Some(crate::udp_socket::bind(self.address).await?)
         } else {
             None
         };
@@ -271,7 +271,7 @@ mod tests {
         assert_eq!(&bytes, b"tcp\0binary");
     }
     async fn udp_exchange(binding: &NativePortBinding) {
-        let client = UdpSocket::bind(SocketAddr::new(binding.address().ip(), 0))
+        let client = crate::udp_socket::bind(SocketAddr::new(binding.address().ip(), 0))
             .await
             .unwrap();
         for payload in [b"".as_slice(), b"udp\0binary", &[7; 65507]] {
@@ -307,7 +307,7 @@ mod tests {
             NativePortBinding::bind("127.0.0.1".parse().unwrap(), row(port, PortProtocol::Tcp))
                 .await
                 .unwrap();
-        let occupied_udp = UdpSocket::bind(binding.address()).await.unwrap();
+        let occupied_udp = crate::udp_socket::bind(binding.address()).await.unwrap();
         assert!(binding.update(row(port, PortProtocol::Both)).await.is_err());
         assert_eq!(binding.allocation().protocol(), PortProtocol::Tcp);
         tcp_exchange(&binding).await;
@@ -316,7 +316,7 @@ mod tests {
         tcp_exchange(&binding).await;
         udp_exchange(&binding).await;
         assert!(TcpListener::bind(binding.address()).await.is_err());
-        assert!(UdpSocket::bind(binding.address()).await.is_err());
+        assert!(crate::udp_socket::bind(binding.address()).await.is_err());
         let mut foreign = row(port, PortProtocol::Udp);
         foreign.owner_id = "owner-b".into();
         assert!(binding.update(foreign).await.is_err());
@@ -335,7 +335,7 @@ mod tests {
         let address = binding.address();
         drop(binding);
         let _tcp = TcpListener::bind(address).await.unwrap();
-        let _udp = UdpSocket::bind(address).await.unwrap();
+        let _udp = crate::udp_socket::bind(address).await.unwrap();
     }
     #[tokio::test]
     async fn ipv6_dual_protocol_datagrams_and_exclusive_bind() {
@@ -357,7 +357,7 @@ mod tests {
     }
     #[tokio::test]
     async fn failed_dual_bind_releases_partial_tcp_socket() {
-        let occupied = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let occupied = crate::udp_socket::bind("127.0.0.1:0").await.unwrap();
         let address = occupied.local_addr().unwrap();
         assert!(
             NativePortBinding::bind(address.ip(), row(address.port(), PortProtocol::Both))
@@ -391,7 +391,9 @@ mod tests {
             .await
             .unwrap()
             .is_empty());
-        let occupied = UdpSocket::bind(SocketAddr::new(ip, port)).await.unwrap();
+        let occupied = crate::udp_socket::bind(SocketAddr::new(ip, port))
+            .await
+            .unwrap();
         let errors = registry
             .reconcile(vec![row(port, PortProtocol::Both)])
             .await
@@ -420,7 +422,9 @@ mod tests {
         restarted.reconcile(vec![]).await.unwrap();
         assert!(restarted.is_empty());
         let _tcp = TcpListener::bind(SocketAddr::new(ip, port)).await.unwrap();
-        let _udp = UdpSocket::bind(SocketAddr::new(ip, port)).await.unwrap();
+        let _udp = crate::udp_socket::bind(SocketAddr::new(ip, port))
+            .await
+            .unwrap();
     }
     #[tokio::test]
     async fn registry_rejects_ambiguous_and_oversized_snapshots() {
@@ -458,6 +462,8 @@ mod tests {
             .is_err());
         assert!(registry.is_empty());
         let _tcp = TcpListener::bind(SocketAddr::new(ip, port)).await.unwrap();
-        let _udp = UdpSocket::bind(SocketAddr::new(ip, port)).await.unwrap();
+        let _udp = crate::udp_socket::bind(SocketAddr::new(ip, port))
+            .await
+            .unwrap();
     }
 }

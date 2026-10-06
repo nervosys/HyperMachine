@@ -332,7 +332,7 @@ mod tests {
         oneshot::Sender<()>,
         OwnedTask<io::Result<UdpRelayStats>>,
     ) {
-        let socket = UdpSocket::bind(if ipv6 { "[::1]:0" } else { "127.0.0.1:0" })
+        let socket = crate::udp_socket::bind(if ipv6 { "[::1]:0" } else { "127.0.0.1:0" })
             .await
             .unwrap();
         let address = socket.local_addr().unwrap();
@@ -370,10 +370,10 @@ mod tests {
             )
             .unwrap();
             let (address, stop, task) = start(echo.clone(), limits, ipv6).await;
-            let a = UdpSocket::bind(SocketAddr::new(address.ip(), 0))
+            let a = crate::udp_socket::bind(SocketAddr::new(address.ip(), 0))
                 .await
                 .unwrap();
-            let b = UdpSocket::bind(SocketAddr::new(address.ip(), 0))
+            let b = crate::udp_socket::bind(SocketAddr::new(address.ip(), 0))
                 .await
                 .unwrap();
             for (left, right) in [
@@ -382,7 +382,7 @@ mod tests {
             ] {
                 tokio::join!(exchange(&a, address, &left), exchange(&b, address, &right));
             }
-            let third = UdpSocket::bind(SocketAddr::new(address.ip(), 0))
+            let third = crate::udp_socket::bind(SocketAddr::new(address.ip(), 0))
                 .await
                 .unwrap();
             third.send_to(b"capped", address).await.unwrap();
@@ -395,7 +395,7 @@ mod tests {
             assert_eq!(stats.admitted, 2);
             assert_eq!(stats.refused, 1);
             assert_eq!(stats.cancelled, 2);
-            let _released = UdpSocket::bind(address).await.unwrap();
+            let _released = crate::udp_socket::bind(address).await.unwrap();
             echo.close().await;
         }
     }
@@ -411,7 +411,7 @@ mod tests {
             )
             .unwrap();
             let (address, stop, task) = start(echo.clone(), limits, false).await;
-            let client = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+            let client = crate::udp_socket::bind("127.0.0.1:0").await.unwrap();
             client.send_to(b"failure", address).await.unwrap();
             echo.wait(1).await;
             // Observe no reply across the bounded opening failure, then verify
@@ -443,7 +443,7 @@ mod tests {
         )
         .unwrap();
         let (address, stop, task) = start(echo.clone(), limits, false).await;
-        let client = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let client = crate::udp_socket::bind("127.0.0.1:0").await.unwrap();
         exchange(&client, address, b"idle").await;
         timeout(Duration::from_millis(60), std::future::pending::<()>())
             .await
@@ -464,7 +464,7 @@ mod tests {
         // Await owned peer teardown before testing exact release.
         let _released = timeout(Duration::from_secs(2), async {
             loop {
-                match UdpSocket::bind(address).await {
+                match crate::udp_socket::bind(address).await {
                     Ok(socket) => break socket,
                     Err(_) => tokio::task::yield_now().await,
                 }
@@ -491,7 +491,7 @@ mod tests {
         )
         .unwrap();
         let (address, stop, task) = start(echo.clone(), limits, true).await;
-        let client = UdpSocket::bind("[::1]:0").await.unwrap();
+        let client = crate::udp_socket::bind("[::1]:0").await.unwrap();
         client
             .send_to(&vec![0; MAX_UDP_PAYLOAD + 1], address)
             .await
@@ -531,7 +531,7 @@ mod tests {
         )
         .unwrap();
         for tcp in [false, true] {
-            let socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+            let socket = crate::udp_socket::bind("127.0.0.1:0").await.unwrap();
             let address = socket.local_addr().unwrap();
             let mut allocation = row(address.port());
             if tcp {
@@ -552,7 +552,7 @@ mod tests {
             )
             .await
             .is_err());
-            let _released = UdpSocket::bind(address).await.unwrap();
+            let _released = crate::udp_socket::bind(address).await.unwrap();
         }
         assert_eq!(echo.opened.load(Ordering::SeqCst), 0);
     }

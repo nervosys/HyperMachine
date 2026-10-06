@@ -628,7 +628,7 @@ pub(crate) mod tests {
         for ipv6 in [false, true] {
             let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
             let node_address = listener.local_addr().unwrap();
-            let socket = tokio::net::UdpSocket::bind(if ipv6 { "[::1]:0" } else { "127.0.0.1:0" })
+            let socket = crate::udp_socket::bind(if ipv6 { "[::1]:0" } else { "127.0.0.1:0" })
                 .await
                 .unwrap();
             let address = socket.local_addr().unwrap();
@@ -673,7 +673,7 @@ pub(crate) mod tests {
                     let _ = stopped.await;
                 },
             )));
-            let client = tokio::net::UdpSocket::bind(std::net::SocketAddr::new(address.ip(), 0))
+            let client = crate::udp_socket::bind(std::net::SocketAddr::new(address.ip(), 0))
                 .await
                 .unwrap();
             for payload in [Vec::new(), vec![0, 255, 13, 10], vec![7; MAX_UDP_PAYLOAD]] {
@@ -695,7 +695,7 @@ pub(crate) mod tests {
                 .await
                 .unwrap()
                 .unwrap();
-            let _released = tokio::net::UdpSocket::bind(address).await.unwrap();
+            let _released = crate::udp_socket::bind(address).await.unwrap();
         }
     }
     #[tokio::test]
@@ -810,7 +810,7 @@ pub(crate) mod tests {
         let identity = identity(DEFAULT_NODE_NAME);
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let node_address = listener.local_addr().unwrap();
-        let probe = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let probe = crate::udp_socket::bind("127.0.0.1:0").await.unwrap();
         let address = probe.local_addr().unwrap();
         drop(probe);
         let store = Arc::new(MemoryStore::new());
@@ -857,7 +857,7 @@ pub(crate) mod tests {
         )
         .unwrap();
         assert!(gateway.refresh().await.unwrap().is_empty());
-        let peer = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let peer = crate::udp_socket::bind("127.0.0.1:0").await.unwrap();
         for payload in [Vec::new(), vec![0, 255, 13, 10], vec![7; 65507]] {
             peer.send_to(&payload, address).await.unwrap();
             let mut bytes = vec![0; 65508];
@@ -878,7 +878,7 @@ pub(crate) mod tests {
             .await
             .unwrap()
             .unwrap();
-        let _released = tokio::net::UdpSocket::bind(address).await.unwrap();
+        let _released = crate::udp_socket::bind(address).await.unwrap();
         assert_eq!(
             store.port_allocations(Some("owned-vm")).await.unwrap()[0].public_port(),
             address.port()

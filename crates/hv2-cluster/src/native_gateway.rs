@@ -447,7 +447,7 @@ mod tests {
         let mut worker = gateway(store.clone(), echo.clone(), budget.clone());
         assert!(worker.refresh().await.unwrap().is_empty());
         let mut client = TcpStream::connect(address).await.unwrap();
-        let peer = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let peer = crate::udp_socket::bind("127.0.0.1:0").await.unwrap();
         tcp_echo(&mut client).await;
         udp_echo(&peer, address).await;
         assert_eq!(budget.available(), 0);
@@ -481,7 +481,7 @@ mod tests {
         assert_eq!(worker.refresh().await.unwrap().len(), 1);
         assert!(worker.is_empty());
         assert_eq!(budget.available(), 2);
-        let released_udp = UdpSocket::bind(address).await.unwrap();
+        let released_udp = crate::udp_socket::bind(address).await.unwrap();
         drop(released_udp);
         drop(occupied);
         assert!(worker.refresh().await.unwrap().is_empty());
@@ -529,7 +529,7 @@ mod tests {
         assert!(restarted.is_empty());
         assert_eq!(budget.available(), 2);
         let _tcp = TcpListener::bind(address).await.unwrap();
-        let _udp = UdpSocket::bind(address).await.unwrap();
+        let _udp = crate::udp_socket::bind(address).await.unwrap();
         echo.close().await;
     }
     #[tokio::test]
@@ -567,7 +567,7 @@ mod tests {
         assert!(worker.is_empty());
         assert_eq!(budget.available(), 2);
         let _tcp = TcpListener::bind(address).await.unwrap();
-        let _udp = UdpSocket::bind(address).await.unwrap();
+        let _udp = crate::udp_socket::bind(address).await.unwrap();
         echo.close().await;
     }
 }

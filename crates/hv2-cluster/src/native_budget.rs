@@ -49,7 +49,7 @@ mod tests {
     };
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
-        net::{TcpListener, TcpStream, UdpSocket},
+        net::{TcpListener, TcpStream},
         sync::{oneshot, Mutex},
         task::JoinSet,
         time::timeout,
@@ -118,7 +118,7 @@ mod tests {
         });
         let tcp = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = tcp.local_addr().unwrap();
-        let udp = UdpSocket::bind(address).await.unwrap();
+        let udp = crate::udp_socket::bind(address).await.unwrap();
         let tcp_limits =
             TcpRelayLimits::new(2, Duration::from_secs(1), Duration::from_secs(10)).unwrap();
         let udp_limits = UdpRelayLimits::new(
@@ -159,7 +159,7 @@ mod tests {
             .unwrap();
         assert_eq!(&bytes, b"tcp");
         assert_eq!(budget.available(), 0);
-        let peer = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let peer = crate::udp_socket::bind("127.0.0.1:0").await.unwrap();
         peer.send_to(b"capped", address).await.unwrap();
         assert!(timeout(Duration::from_millis(30), peer.recv(&mut [0; 16]))
             .await
@@ -210,7 +210,7 @@ mod tests {
         tasks.abort_all();
         while tasks.join_next().await.is_some() {}
         let _tcp = TcpListener::bind(address).await.unwrap();
-        let _udp = UdpSocket::bind(address).await.unwrap();
+        let _udp = crate::udp_socket::bind(address).await.unwrap();
         assert!(NativeSessionBudget::new(0).is_err());
         assert!(NativeSessionBudget::new(65537).is_err());
     }
