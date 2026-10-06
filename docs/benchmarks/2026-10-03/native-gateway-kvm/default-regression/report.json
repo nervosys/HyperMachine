@@ -1,0 +1,32 @@
+{
+  "inputs_sha256": {
+    "/var/tmp/hm-native-kvm-node-v1": "c7fdb42f9367b1a250dbca2077eedb3719d8151ee40d3929b64643c75cb116c1",
+    "/var/tmp/hm-native-kvm-control-v1": "094a3a735b39a7a04237b312e754389a3c43ed3c74b87a0a5833ea212523942e",
+    "/var/tmp/hm-udp-ipv6-aligned-cli": "096bc74df05b953b5a857bcd8b494630abf5f954ac3266a5e734bf102d34155e",
+    "/var/tmp/hm-competitive/bzImage-known-uart-irq": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "/var/tmp/hm-udp-ipv6-guest.cpio.gz": "508d95c3a07849c72ab41b152e7dbaf5157f3eee446e0fbeffdc3e26353d9887"
+  },
+  "checks": [
+    "Node mTLS refuses a peer without a client certificate",
+    "CLI refuses untrusted control certificate and trusted wrong hostname",
+    "Wrong control-plane API key refused",
+    "Empty binary and maximum-size IPv4 datagrams verified through real KVM",
+    "Oversized frame closes its real guest session without preventing a fresh valid session",
+    "2 CLI peers preserve empty binary and maximum-size datagrams through real control plane Redis node and KVM",
+    "Pause closes existing UDP session",
+    "Resumed guest accepts a new UDP session",
+    "Delete closes UDP session and clears guest inventory"
+  ],
+  "daemon_reaped": true,
+  "guests_remaining": 0,
+  "control_and_redis_reaped": true,
+  "cli_reaped": true,
+  "native_gateway_reaped": true,
+  "native_gateway_real_kvm": false,
+  "guest_udp_ipv6": false,
+  "local_udp_ipv6": false,
+  "control_api_tls": true,
+  "node_mtls": true,
+  "latency_measurements": [],
+  "scope": "Owned shipped CLI/control-plane/Redis/daemon/KVM UDP; optional verified API TLS/node mTLS; Redis local plaintext."
+}

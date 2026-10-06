@@ -1,0 +1,65 @@
+--- mode/crates/hv2-agent/src/agent_vm.rs
++++ diagnostic/crates/hv2-agent/src/agent_vm.rs
+@@ -468,9 +468,30 @@
+         // stops one slow guest from stalling every other task.
+         let program = program.to_string();
+         let args = args.to_vec();
++        let vm_name = self.vm.config().name.clone();
++        let queued_at = std::time::Instant::now();
+         tokio::task::spawn_blocking(move || {
+-            let mut agent = GuestAgent::over_vsock(device, timeout)?;
+-            agent.exec(&program, &args, timeout)
++            let started_at = std::time::Instant::now();
++            let mut agent = match GuestAgent::over_vsock(device, timeout) {
++                Ok(agent) => agent,
++                Err(error) => {
++                    tracing::debug!(vm = %vm_name,
++                        blocking_queue_ms = (started_at - queued_at).as_secs_f64() * 1000.0,
++                        connect_ms = started_at.elapsed().as_secs_f64() * 1000.0,
++                        command_ms = 0.0, succeeded = false, phase = "connect",
++                        "guest command execution stages");
++                    return Err(error);
++                }
++            };
++            let connected_at = std::time::Instant::now();
++            let result = agent.exec(&program, &args, timeout);
++            tracing::debug!(vm = %vm_name,
++                blocking_queue_ms = (started_at - queued_at).as_secs_f64() * 1000.0,
++                connect_ms = (connected_at - started_at).as_secs_f64() * 1000.0,
++                command_ms = connected_at.elapsed().as_secs_f64() * 1000.0,
++                succeeded = result.is_ok(), phase = "command",
++                "guest command execution stages");
++            result
+         })
+         .await
+         .map_err(|e| AgentError::Script(format!("guest exec task failed: {e}")))?
+--- mode/crates/hv2-sandboxd/src/main.rs
++++ diagnostic/crates/hv2-sandboxd/src/main.rs
+@@ -4025,6 +4025,7 @@
+     Path(sandbox_id): Path<String>,
+     Json(req): Json<ExecRequest>,
+ ) -> Response {
++    let handler_started = std::time::Instant::now();
+     let (vm, _active) = {
+         let sandboxes = state.sandboxes.lock();
+         match sandboxes.get(&sandbox_id) {
+@@ -4046,6 +4047,7 @@
+     // doc comment. Run through /bin/sh -c only when the caller's "cmd" is
+     // meant as a shell line, which is the common case for a code-exec
+     // endpoint (E2B's own run_code passes a whole script, not argv).
++    let execution_started = std::time::Instant::now();
+     let result = vm
+         .exec_in_guest(
+             "/bin/sh",
+@@ -4056,6 +4058,11 @@
+             timeout,
+         )
+         .await;
++    let execution_elapsed = execution_started.elapsed();
++    tracing::debug!(vm = %sandbox_id,
++        handler_ms = handler_started.elapsed().as_secs_f64() * 1000.0,
++        guest_exec_ms = execution_elapsed.as_secs_f64() * 1000.0,
++        succeeded = result.is_ok(), "sandbox command handler stages");
+ 
+     match result {
+         Ok(exec) => Json(ExecResponse {

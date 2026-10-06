@@ -1,0 +1,11 @@
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:52773
+[33mPress CTRL+C to quit[0m
+127.0.0.1 - - [02/Oct/2026 10:25:14] "PUT /hm-owned-multipart-fixture HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:25:14] "POST /hm-owned-multipart-fixture/success.hmb?uploads HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:25:14] "PUT /hm-owned-multipart-fixture/success.hmb?uploadId=I7ps3PtirnE6dNrRKqsKmbWygsqDryioUXPqtwM8cKAMiXGIRnV8FMYdg&partNumber=1 HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:25:14] "PUT /hm-owned-multipart-fixture/success.hmb?uploadId=I7ps3PtirnE6dNrRKqsKmbWygsqDryioUXPqtwM8cKAMiXGIRnV8FMYdg&partNumber=2 HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:25:14] "PUT /hm-owned-multipart-fixture/success.hmb?uploadId=I7ps3PtirnE6dNrRKqsKmbWygsqDryioUXPqtwM8cKAMiXGIRnV8FMYdg&partNumber=3 HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:25:14] "POST /hm-owned-multipart-fixture/success.hmb?uploadId=I7ps3PtirnE6dNrRKqsKmbWygsqDryioUXPqtwM8cKAMiXGIRnV8FMYdg HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:25:14] "GET /hm-owned-multipart-fixture/success.hmb HTTP/1.1" 200 -
+127.0.0.1 - - [02/Oct/2026 10:25:14] "HEAD /hm-owned-multipart-fixture/success.hmb HTTP/1.1" 200 -

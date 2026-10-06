@@ -1,0 +1,417 @@
+{
+  "diagnostic_only": true,
+  "performance_win_established": false,
+  "runtime_change_adopted": false,
+  "cleanup_verified": true,
+  "attempts": 8,
+  "counter_profile": "anonymous_private_clean",
+  "restore_stage_profile": "host_restore",
+  "hypermachine_boundary_guests": 4,
+  "auxiliary_events_excluded": 8,
+  "guests": [
+    {
+      "vm": "sbx-0a1208c35ff648ab8dad",
+      "boundaries": [
+        {
+          "phase": "after_map",
+          "size_kib": 1048576,
+          "rss_kib": 0,
+          "pss_kib": 0,
+          "private_dirty_kib": 0,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 0,
+          "private_clean_kib": 0,
+          "read_us": 1081
+        },
+        {
+          "phase": "after_machine",
+          "size_kib": 1048576,
+          "rss_kib": 1412,
+          "pss_kib": 1412,
+          "private_dirty_kib": 1412,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1412,
+          "private_clean_kib": 0,
+          "read_us": 897
+        },
+        {
+          "phase": "after_vcpu",
+          "size_kib": 1048576,
+          "rss_kib": 1412,
+          "pss_kib": 1412,
+          "private_dirty_kib": 1412,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1412,
+          "private_clean_kib": 0,
+          "read_us": 802
+        },
+        {
+          "phase": "after_devices",
+          "size_kib": 1048576,
+          "rss_kib": 1412,
+          "pss_kib": 1412,
+          "private_dirty_kib": 1412,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1412,
+          "private_clean_kib": 0,
+          "read_us": 929
+        },
+        {
+          "phase": "before_run",
+          "size_kib": 1048576,
+          "rss_kib": 1412,
+          "pss_kib": 1412,
+          "private_dirty_kib": 1412,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1412,
+          "private_clean_kib": 0,
+          "read_us": 822
+        },
+        {
+          "phase": "after_notice",
+          "size_kib": 1048576,
+          "rss_kib": 21840,
+          "pss_kib": 21840,
+          "private_dirty_kib": 21564,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1440,
+          "private_clean_kib": 276,
+          "read_us": 1083
+        },
+        {
+          "phase": "after_exec",
+          "size_kib": 1048576,
+          "rss_kib": 27296,
+          "pss_kib": 27296,
+          "private_dirty_kib": 26900,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1872,
+          "private_clean_kib": 396,
+          "read_us": 1328
+        }
+      ],
+      "private_dirty_after_notice_minus_before_run_kib": 20152,
+      "private_dirty_after_exec_minus_after_notice_kib": 5336,
+      "anonymous_after_notice_minus_before_run_kib": 28,
+      "anonymous_after_exec_minus_after_notice_kib": 432,
+      "host_stage_anonymous_deltas_kib": {
+        "after_machine": 1412,
+        "after_vcpu": 0,
+        "after_devices": 0,
+        "before_run": 0
+      }
+    },
+    {
+      "vm": "sbx-b592c5b1efc443a58f74",
+      "boundaries": [
+        {
+          "phase": "after_map",
+          "size_kib": 1048576,
+          "rss_kib": 0,
+          "pss_kib": 0,
+          "private_dirty_kib": 0,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 0,
+          "private_clean_kib": 0,
+          "read_us": 1378
+        },
+        {
+          "phase": "after_machine",
+          "size_kib": 1048576,
+          "rss_kib": 1412,
+          "pss_kib": 1412,
+          "private_dirty_kib": 1412,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1412,
+          "private_clean_kib": 0,
+          "read_us": 925
+        },
+        {
+          "phase": "after_vcpu",
+          "size_kib": 1048576,
+          "rss_kib": 1412,
+          "pss_kib": 1412,
+          "private_dirty_kib": 1412,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1412,
+          "private_clean_kib": 0,
+          "read_us": 774
+        },
+        {
+          "phase": "after_devices",
+          "size_kib": 1048576,
+          "rss_kib": 1412,
+          "pss_kib": 1412,
+          "private_dirty_kib": 1412,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1412,
+          "private_clean_kib": 0,
+          "read_us": 761
+        },
+        {
+          "phase": "before_run",
+          "size_kib": 1048576,
+          "rss_kib": 1412,
+          "pss_kib": 1412,
+          "private_dirty_kib": 1412,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1412,
+          "private_clean_kib": 0,
+          "read_us": 776
+        },
+        {
+          "phase": "after_notice",
+          "size_kib": 1048576,
+          "rss_kib": 21880,
+          "pss_kib": 21880,
+          "private_dirty_kib": 21584,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1440,
+          "private_clean_kib": 296,
+          "read_us": 1258
+        },
+        {
+          "phase": "after_exec",
+          "size_kib": 1048576,
+          "rss_kib": 27252,
+          "pss_kib": 27252,
+          "private_dirty_kib": 26856,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1828,
+          "private_clean_kib": 396,
+          "read_us": 2023
+        }
+      ],
+      "private_dirty_after_notice_minus_before_run_kib": 20172,
+      "private_dirty_after_exec_minus_after_notice_kib": 5272,
+      "anonymous_after_notice_minus_before_run_kib": 28,
+      "anonymous_after_exec_minus_after_notice_kib": 388,
+      "host_stage_anonymous_deltas_kib": {
+        "after_machine": 1412,
+        "after_vcpu": 0,
+        "after_devices": 0,
+        "before_run": 0
+      }
+    },
+    {
+      "vm": "sbx-4dd1086e6b7f47af814d",
+      "boundaries": [
+        {
+          "phase": "after_map",
+          "size_kib": 1048576,
+          "rss_kib": 0,
+          "pss_kib": 0,
+          "private_dirty_kib": 0,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 0,
+          "private_clean_kib": 0,
+          "read_us": 923
+        },
+        {
+          "phase": "after_machine",
+          "size_kib": 1048576,
+          "rss_kib": 1412,
+          "pss_kib": 1412,
+          "private_dirty_kib": 1412,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1412,
+          "private_clean_kib": 0,
+          "read_us": 934
+        },
+        {
+          "phase": "after_vcpu",
+          "size_kib": 1048576,
+          "rss_kib": 1412,
+          "pss_kib": 1412,
+          "private_dirty_kib": 1412,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1412,
+          "private_clean_kib": 0,
+          "read_us": 871
+        },
+        {
+          "phase": "after_devices",
+          "size_kib": 1048576,
+          "rss_kib": 1412,
+          "pss_kib": 1412,
+          "private_dirty_kib": 1412,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1412,
+          "private_clean_kib": 0,
+          "read_us": 800
+        },
+        {
+          "phase": "before_run",
+          "size_kib": 1048576,
+          "rss_kib": 1412,
+          "pss_kib": 1412,
+          "private_dirty_kib": 1412,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1412,
+          "private_clean_kib": 0,
+          "read_us": 842
+        },
+        {
+          "phase": "after_notice",
+          "size_kib": 1048576,
+          "rss_kib": 21880,
+          "pss_kib": 21880,
+          "private_dirty_kib": 21584,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1440,
+          "private_clean_kib": 296,
+          "read_us": 1042
+        },
+        {
+          "phase": "after_exec",
+          "size_kib": 1048576,
+          "rss_kib": 28272,
+          "pss_kib": 28272,
+          "private_dirty_kib": 27876,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1828,
+          "private_clean_kib": 396,
+          "read_us": 1292
+        }
+      ],
+      "private_dirty_after_notice_minus_before_run_kib": 20172,
+      "private_dirty_after_exec_minus_after_notice_kib": 6292,
+      "anonymous_after_notice_minus_before_run_kib": 28,
+      "anonymous_after_exec_minus_after_notice_kib": 388,
+      "host_stage_anonymous_deltas_kib": {
+        "after_machine": 1412,
+        "after_vcpu": 0,
+        "after_devices": 0,
+        "before_run": 0
+      }
+    },
+    {
+      "vm": "sbx-80725b8658124dd6ab42",
+      "boundaries": [
+        {
+          "phase": "after_map",
+          "size_kib": 1048576,
+          "rss_kib": 0,
+          "pss_kib": 0,
+          "private_dirty_kib": 0,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 0,
+          "private_clean_kib": 0,
+          "read_us": 1029
+        },
+        {
+          "phase": "after_machine",
+          "size_kib": 1048576,
+          "rss_kib": 1412,
+          "pss_kib": 1412,
+          "private_dirty_kib": 1412,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1412,
+          "private_clean_kib": 0,
+          "read_us": 1002
+        },
+        {
+          "phase": "after_vcpu",
+          "size_kib": 1048576,
+          "rss_kib": 1412,
+          "pss_kib": 1412,
+          "private_dirty_kib": 1412,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1412,
+          "private_clean_kib": 0,
+          "read_us": 811
+        },
+        {
+          "phase": "after_devices",
+          "size_kib": 1048576,
+          "rss_kib": 1412,
+          "pss_kib": 1412,
+          "private_dirty_kib": 1412,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1412,
+          "private_clean_kib": 0,
+          "read_us": 794
+        },
+        {
+          "phase": "before_run",
+          "size_kib": 1048576,
+          "rss_kib": 1412,
+          "pss_kib": 1412,
+          "private_dirty_kib": 1412,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1412,
+          "private_clean_kib": 0,
+          "read_us": 814
+        },
+        {
+          "phase": "after_notice",
+          "size_kib": 1048576,
+          "rss_kib": 21840,
+          "pss_kib": 21840,
+          "private_dirty_kib": 1440,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1440,
+          "private_clean_kib": 20400,
+          "read_us": 1158
+        },
+        {
+          "phase": "after_exec",
+          "size_kib": 1048576,
+          "rss_kib": 28312,
+          "pss_kib": 28312,
+          "private_dirty_kib": 1868,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1868,
+          "private_clean_kib": 26444,
+          "read_us": 1303
+        }
+      ],
+      "private_dirty_after_notice_minus_before_run_kib": 28,
+      "private_dirty_after_exec_minus_after_notice_kib": 428,
+      "anonymous_after_notice_minus_before_run_kib": 28,
+      "anonymous_after_exec_minus_after_notice_kib": 428,
+      "host_stage_anonymous_deltas_kib": {
+        "after_machine": 1412,
+        "after_vcpu": 0,
+        "after_devices": 0,
+        "before_run": 0
+      }
+    }
+  ],
+  "limitations": [
+    "Guest/device activity continues during the after-notice and after-exec observations",
+    "Counters describe residency, not every write or its code origin",
+    "Private dirty can include uniquely mapped dirty file-cache pages; Anonymous distinguishes anonymous residency but not the code that wrote it",
+    "Before-run mapping may contain preexisting private state from required restoration",
+    "Procfs reads and debug logs perturb timing; excluded from rankings",
+    "No equivalent Firecracker boundary observations in this study"
+  ]
+}

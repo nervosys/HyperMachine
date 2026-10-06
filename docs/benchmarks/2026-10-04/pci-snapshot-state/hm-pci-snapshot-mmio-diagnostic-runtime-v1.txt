@@ -1,0 +1,82 @@
+[2m2026-10-04T15:49:00.455588Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T15:49:00.457457Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-10-04T15:49:00.476912Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'template' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T15:49:00.486382Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T15:49:00.486448Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T15:49:00.487407Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'template' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T15:49:00.487716Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'template' with 1 vCPUs
+[2m2026-10-04T15:49:00.487743Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T15:49:00.488119Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+boot          :   379.4 ms to a guest agent that answers
+template      : warm 6.6.52
+[2m2026-10-04T15:49:00.839059Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' paused
+[2m2026-10-04T15:49:02.772064Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' snapshotted to /tmp/hv2-linux-483.snap
+[2m2026-10-04T15:49:02.772186Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' resumed
+snapshot      :  1933.2 ms; memory image 81.1 MiB allocated of 1024 MiB
+[2m2026-10-04T15:49:02.772295Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=2939)
+[2m2026-10-04T15:49:02.772702Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'template'
+[2m2026-10-04T15:49:02.772814Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' stopped
+[2m2026-10-04T15:49:02.772874Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T15:49:02.774337Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'restored-0': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-10-04T15:49:02.775517Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'restored-0' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T15:49:02.776845Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'restored-0' restored from /tmp/hv2-linux-483.snap
+[2m2026-10-04T15:49:02.776873Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'restored-0' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T15:49:02.777046Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'restored-0' with 1 vCPUs
+[2m2026-10-04T15:49:02.777062Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T15:49:02.777563Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+MMIO_TIMER_BEFORE
+CPU0       
+  1:          0   IO-APIC   1-edge      i8042
+  2:          0    XT-PIC      cascade
+  4:         40   IO-APIC   4-edge      ttyS0
+  5:         39   IO-APIC   5-edge      virtio0
+  8:          0   IO-APIC   8-edge      rtc0
+NMI:          0   Non-maskable interrupts
+LOC:        144   Local timer interrupts
+SPU:          0   Spurious interrupts
+PMI:          0   Performance monitoring interrupts
+IWI:          0   IRQ work interrupts
+RTR:          0   APIC ICR read retries
+RES:          0   Rescheduling interrupts
+CAL:          0   Function call interrupts
+TLB:          0   TLB shootdowns
+TRM:          0   Thermal event interrupts
+THR:          0   Threshold APIC interrupts
+DFR:          0   Deferred Error APIC interrupts
+MCE:          0   Machine check exceptions
+MCP:          1   Machine check polls
+HYP:          2   Hypervisor callback interrupts
+ERR:          0
+MIS:          0
+PIN:          0   Posted-interrupt notification event
+NPI:          0   Nested posted-interrupt event
+PIW:          0   Posted-interrupt wakeup event
+MMIO_TIMER_AFTER
+CPU0       
+  1:          0   IO-APIC   1-edge      i8042
+  2:          0    XT-PIC      cascade
+  4:         40   IO-APIC   4-edge      ttyS0
+  5:         49   IO-APIC   5-edge      virtio0
+  8:          0   IO-APIC   8-edge      rtc0
+NMI:          0   Non-maskable interrupts
+LOC:        154   Local timer interrupts
+SPU:          0   Spurious interrupts
+PMI:          0   Performance monitoring interrupts
+IWI:          0   IRQ work interrupts
+RTR:          0   APIC ICR read retries
+RES:          0   Rescheduling interrupts
+CAL:          0   Function call interrupts
+TLB:          0   TLB shootdowns
+TRM:          0   Thermal event interrupts
+THR:          0   Threshold APIC interrupts
+DFR:          0   Deferred Error APIC interrupts
+MCE:          0   Machine check exceptions
+MCP:          1   Machine check polls
+HYP:          2   Hypervisor callback interrupts
+ERR:          0
+MIS:          0
+PIN:          0   Posted-interrupt notification event
+NPI:          0   Nested posted-interrupt event
+PIW:          0   Posted-interrupt wakeup event
+restore 0     :    2.7 ms to running,   19.9 ms to an answering agent (next ping 3.1 ms); timer 0->0, clock skew 0s, 6*7=42
+restore 0   : the guest is not healthy

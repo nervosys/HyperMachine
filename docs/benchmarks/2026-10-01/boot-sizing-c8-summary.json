@@ -1,0 +1,107 @@
+{
+  "experiment": "boot sizing allocation removal",
+  "profiles": {
+    "baseline": {
+      "hypermachine": {
+        "attempts": 32,
+        "passed": 32,
+        "failed": 0,
+        "p50_ready_ms": 517.7556529997673,
+        "p95_ready_ms": 688.1220020004548,
+        "p99_ready_ms": 718.8794479989156,
+        "valid_memory_batches": 4,
+        "failed_rows": [],
+        "median_held_idle_pss_mib": 791.44775390625,
+        "median_incremental_idle_pss_mib": 722.83984375,
+        "median_post_cleanup_pss_mib": 126.302734375
+      },
+      "firecracker": {
+        "attempts": 32,
+        "passed": 32,
+        "failed": 0,
+        "p50_ready_ms": 425.60748499818146,
+        "p95_ready_ms": 602.9088380018948,
+        "p99_ready_ms": 604.538132000016,
+        "valid_memory_batches": 4,
+        "failed_rows": [],
+        "median_held_idle_pss_mib": 671.00439453125,
+        "median_incremental_idle_pss_mib": 671.00439453125
+      }
+    },
+    "sized": {
+      "hypermachine": {
+        "attempts": 32,
+        "passed": 32,
+        "failed": 0,
+        "p50_ready_ms": 501.496347002103,
+        "p95_ready_ms": 657.3605660014437,
+        "p99_ready_ms": 716.5598529973067,
+        "valid_memory_batches": 4,
+        "failed_rows": [],
+        "median_held_idle_pss_mib": 723.35693359375,
+        "median_incremental_idle_pss_mib": 704.705078125,
+        "median_post_cleanup_pss_mib": 58.22607421875
+      },
+      "firecracker": {
+        "attempts": 32,
+        "passed": 32,
+        "failed": 0,
+        "p50_ready_ms": 427.8999109992583,
+        "p95_ready_ms": 570.6427419972897,
+        "p99_ready_ms": 591.6677690001961,
+        "valid_memory_batches": 4,
+        "failed_rows": [],
+        "median_held_idle_pss_mib": 670.90673828125,
+        "median_incremental_idle_pss_mib": 670.90673828125
+      }
+    }
+  },
+  "paired_block_deltas": [
+    {
+      "block": 0,
+      "hypermachine": {
+        "sized_minus_baseline_mean_ready_ms": -16.659056751223034,
+        "sized_minus_baseline_mean_held_idle_pss_mib": -28.158203125,
+        "sized_minus_baseline_mean_post_cleanup_pss_mib": -28.2275390625
+      },
+      "firecracker": {
+        "sized_minus_baseline_mean_ready_ms": -11.07084962495719,
+        "sized_minus_baseline_mean_held_idle_pss_mib": -0.03369140625
+      }
+    },
+    {
+      "block": 1,
+      "hypermachine": {
+        "sized_minus_baseline_mean_ready_ms": -17.060527374042067,
+        "sized_minus_baseline_mean_held_idle_pss_mib": -74.3486328125,
+        "sized_minus_baseline_mean_post_cleanup_pss_mib": -74.2744140625
+      },
+      "firecracker": {
+        "sized_minus_baseline_mean_ready_ms": -7.359104000215666,
+        "sized_minus_baseline_mean_held_idle_pss_mib": -0.18994140625
+      }
+    }
+  ],
+  "candidate_sizing_changed": true,
+  "candidate_adopted": false,
+  "limitations": [
+    "2 counterbalanced blocks on shared nested WSL/KVM; no dedicated hardware",
+    "Within-batch guests share load and are not independent samples",
+    "Successful latency quantiles exclude failed attempts; paired latency means exclude incomplete blocks",
+    "Fixed five-second process PSS excludes host kernel memory, long idle and density",
+    "Cold creation only; no snapshot, resume, fork, sustained arrivals or managed competitors"
+  ],
+  "artifact_sha256": {
+    "hypermachine": "d420dabe8ad568ed7d90b0806ad4fe186e42be0dfbf3a46f8997174871400159",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "harness": "aa75da562719e49ea0955c31278327f4c32e2504f431006dc8cc2a9a56799efa",
+    "shared_harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "firecracker_harness": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6"
+  },
+  "daemon_sha256": {
+    "baseline": "d420dabe8ad568ed7d90b0806ad4fe186e42be0dfbf3a46f8997174871400159",
+    "sized": "2803535a73c6feb6236c8a06a44f4211ff3531a8031d453d47cce1938a6d1ee0"
+  }
+}

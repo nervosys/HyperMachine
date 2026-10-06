@@ -1,0 +1,31 @@
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-core)
+error[E0603]: module `config` is private
+   --> crates/hv2-core/src/snapshot/file.rs:116:51
+    |
+116 |     pub pci_configs: Vec<(u8, u8, u8, crate::pci::config::ConfigSnapshot)>,
+    |                                                   ^^^^^^  -------------- struct `ConfigSnapshot` is not publicly re-exported
+    |                                                   |
+    |                                                   private module
+    |
+note: the module `config` is defined here
+   --> crates/hv2-core/src/pci/mod.rs:11:1
+    |
+ 11 | mod config;
+    | ^^^^^^^^^^^
+
+error[E0603]: module `config` is private
+    --> crates/hv2-core/src/vm.rs:1912:38
+     |
+1912 |         Vec<(u8, u8, u8, crate::pci::config::ConfigSnapshot)>,
+     |                                      ^^^^^^  -------------- struct `ConfigSnapshot` is not publicly re-exported
+     |                                      |
+     |                                      private module
+     |
+note: the module `config` is defined here
+    --> crates/hv2-core/src/pci/mod.rs:11:1
+     |
+  11 | mod config;
+     | ^^^^^^^^^^^
+
+For more information about this error, try `rustc --explain E0603`.
+error: could not compile `hv2-core` (lib test) due to 2 previous errors

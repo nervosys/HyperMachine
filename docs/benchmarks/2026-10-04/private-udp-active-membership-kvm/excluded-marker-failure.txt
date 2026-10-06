@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py", line 1832, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py", line 1073, in main
+    target_live=guest_udp_live_remove(sandbox,udp_new_address.group(0),'target-live')
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py", line 1061, in guest_udp_live_remove
+    if ended.get('stdout','').strip()!='0' or len(lines)!=2:raise ValueError('active UDP failed: '+repr(result))
+                                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: active UDP failed: {'exit_code': 0, 'stdout': '{"ready":true}\n{"ready":true}\n{"ready":true}\n{"ready":true}\n{"ready":true}\n{"ready":true}\n{"ready":true}\n{"ready":true}\n{"ready":true}\n{"ready":true}\n{"revoked":true,"same_socket":true,"replies_before":1,"grace_replies":9,"post_grace_refusals":3}\n', 'stderr': '', 'timed_out': False}

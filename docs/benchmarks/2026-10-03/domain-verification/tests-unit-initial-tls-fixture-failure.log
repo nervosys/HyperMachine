@@ -1,0 +1,12 @@
+   Compiling hv2-api v1.1.0 (/var/tmp/hm-domain-verification/source/crates/hv2-api)
+   Compiling hv2-cluster v1.1.0 (/var/tmp/hm-domain-verification/source/crates/hv2-cluster)
+error[E0609]: no field `key_pair` on type `rcgen::CertifiedKey<rcgen::KeyPair>`
+   --> crates/hv2-cluster/src/domain_verification.rs:286:68
+    |
+286 |                 rustls::pki_types::PrivatePkcs8KeyDer::from(issued.key_pair.serialize_der()).into(),
+    |                                                                    ^^^^^^^^ unknown field
+    |
+    = note: available fields are: `cert`, `signing_key`
+
+For more information about this error, try `rustc --explain E0609`.
+error: could not compile `hv2-cluster` (lib test) due to 1 previous error

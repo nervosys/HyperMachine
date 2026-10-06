@@ -1,0 +1,11 @@
+{
+  "sha256": {
+    "atomic-api.json": "1b4f3a71f53d08ddbd2db2f39f5238aa43776ee4de174086050aee28a070504f",
+    "build.log": "3be11f881442fddd6f3c36b11440fe31acef7be5c2520d2a2cf65c0c8fa33862",
+    "check-volume-creation.py": "c226a25b6a172fec69301f95232a90a884ed034984f0d13758fde9d30d1aa059",
+    "default-api.json": "3bd9dc078cf0450f674df0cbed7445ee12462438f417f0f162710c5b0f18143a",
+    "README.md": "09f909538730befbee522cb74ad74f802a2d187f6eb835acc7418fd50411bd48",
+    "tests.log": "60600b0c63061feece24b66e46d5886767d4c5c3607344666bfb2edc0c67345d",
+    "volumes.rs": "d1186db208881726af94dfb9e848f2a1e46ee074ef8b903b5477e553ef47f557"
+  }
+}

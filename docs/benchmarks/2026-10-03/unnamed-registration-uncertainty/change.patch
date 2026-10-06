@@ -1,0 +1,78 @@
+--- baseline/main.rs
++++ candidate/main.rs
+@@ -509,7 +509,13 @@
+     record: SandboxRecord,
+     /// Original trusted owner, retained only while registration is uncertain.
+     /// This is local state and is never serialized into records or guests.
+-    pending_registration: Option<NameReservation>,
++    pending_registration: Option<PendingRegistration>,
++}
++
++#[derive(Clone)]
++enum PendingRegistration {
++    Named(NameReservation),
++    Unnamed { event: String },
+ }
+ 
+ struct LiveNetwork {
+@@ -1649,7 +1655,10 @@
+                 descriptor,
+                 network: running.network,
+                 record: record.clone(),
+-                pending_registration: context.name_operation.cloned(),
++                pending_registration: context.name_operation.cloned().map(PendingRegistration::Named)
++                    .or_else(|| state.node.as_ref().map(|_| PendingRegistration::Unnamed {
++                        event: event.unwrap_or("sandbox-created").to_string(),
++                    })),
+                 lifecycle,
+                 network_request,
+                 activity: Activity::new(),
+@@ -1708,6 +1717,26 @@
+                 ));
+             }
+         }
++    } else if let Some(node) = &state.node {
++        let kind = event.unwrap_or("sandbox-created");
++        let published = if kind == "sandbox-created" {
++            node.created(&record, count).await
++        } else {
++            node.transitioned(&record, kind, count).await
++        };
++        match published {
++            Ok(event) => {
++                if let Some(live) = state.sandboxes.lock().get_mut(&sandbox_id) {
++                    live.pending_registration = None;
++                }
++                state.events.deliver(&event);
++            }
++            Err(error) => {
++                tracing::warn!(%sandbox_id,%error,"registration outcome requires reconciliation");
++                return Err((StatusCode::SERVICE_UNAVAILABLE,
++                    "registration outcome requires reconciliation".into()));
++            }
++        }
+     } else {
+         record_event(state, &record, event.unwrap_or("sandbox-created"), count).await;
+     }
+@@ -1779,10 +1808,17 @@
+             live.descriptor.clone(),
+         )
+     };
+-    match node
+-        .created_named(&record, state.running(), &operation)
+-        .await
+-    {
++    let published = match operation {
++        PendingRegistration::Named(operation) => node.created_named(&record, state.running(), &operation).await,
++        PendingRegistration::Unnamed { event } => {
++            if event == "sandbox-created" {
++                node.created(&record, state.running()).await.map(Some)
++            } else {
++                node.transitioned(&record, &event, state.running()).await.map(Some)
++            }
++        }
++    };
++    match published {
+         Ok(Some(event)) => {
+             if let Some(live) = state.sandboxes.lock().get_mut(&sandbox_id) {
+                 live.pending_registration = None;

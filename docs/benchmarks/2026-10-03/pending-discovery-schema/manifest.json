@@ -1,0 +1,8 @@
+{
+  "README.md": "909ef6fb69af39b0ae0c05e6eb8e422db003dddbcbc23227007802338084cb2c",
+  "baseline-control.rs": "a66ad2c23d5d6e668a756f73fd2cd3d351511fa4cc06180c949f7b741106262b",
+  "candidate-control.rs": "6dd61ca913b4d86277447ed5ab6e12fb5f5fad35f7586cb9df540502e3b05fec",
+  "change.patch": "aedb02110715cc3899cd879a265be867f6feb0efe8a62c840167def45d0ca724",
+  "cluster-tests.log": "f734f75b21c8b45689fc4c70c16e977fe6e5ad3e5615bc9770dca847dc03d28f",
+  "source-context.json": "6d5d106b8f3a6110e7848e14f9b9eb1f6b69bee28a8f05259fe3489c753907c9"
+}

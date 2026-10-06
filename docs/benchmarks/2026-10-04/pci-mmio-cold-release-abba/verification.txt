@@ -1,0 +1,41 @@
+Verified 72 exact/create/delete gates, 64 scored samples, stable process identities and recomputed metrics.
+{
+  "mmio": {
+    "samples": 32,
+    "latencies": {
+      "create_ms": {
+        "p50": 425.675368,
+        "p95": 2114.158777
+      },
+      "command_ms": {
+        "p50": 2.739339,
+        "p95": 36.572132
+      },
+      "total_ms": {
+        "p50": 428.023551,
+        "p95": 2130.406565
+      }
+    },
+    "cpu_ms_per_operation": 978.75,
+    "held_pss_kib_p50": 198278
+  },
+  "pci": {
+    "samples": 32,
+    "latencies": {
+      "create_ms": {
+        "p50": 753.925822,
+        "p95": 1346.201546
+      },
+      "command_ms": {
+        "p50": 2.867575,
+        "p95": 17.573788
+      },
+      "total_ms": {
+        "p50": 757.188572,
+        "p95": 1363.775334
+      }
+    },
+    "cpu_ms_per_operation": 570.625,
+    "held_pss_kib_p50": 167646
+  }
+}

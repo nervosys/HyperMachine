@@ -1,0 +1,25 @@
+{
+  "sha256": {
+    "README.md": "23ec8dab7c0f5af2962d8c1ebfe8ea6ac8e7c3caad4ef291fcb6a1f5ddc28803",
+    "cluster-tests.log": "bf2cb9c76f4d8a652b6be79b222a6e9df92aa109360c8255fde2606b92f93d51",
+    "control-tests.log": "60bcdde55a0678e94e99a3b5f67a558d2a1a234d644ed0a7e9d0b3de60a42968",
+    "host-build.log": "509af0f438484a150f6d3aed220b4eab5db545e18668fb0e87c75455cd18901b",
+    "host-inputs.json": "876496634b10cc49d7795e9db311650ff15fdfe532822fc78e4b89bf5589a361",
+    "legacy/daemon.log": "8d44081c13abd79fd8c7365314d5d17cc58fe4ce5af4c68d226eae4535dff27d",
+    "legacy/report.json": "9b2309447c80f61e889b373600597727f3b994dc2b8e0a2d8d03d6278c868033",
+    "node-tests.log": "5d3066e291bff65375f1f32b58be80743f7b4be31d854b9e5320ccb6c99bfe49",
+    "owned/daemon.log": "5809ca3521ca7351d36e7b43a9ee78a5993da47275f62c2fbdc84c67cbc7d4fa",
+    "owned/report.json": "1ad46b348ca1fe5a6a0bb7f43eabd6be2c4c684e2a8ca22cb17c2b2091312f8d",
+    "source/crates/hv2-cluster/src/control.rs": "e5473c47cf5d2283305cc2213a82f3df09a056e83f692ada0297bd976ab9a5a2",
+    "source/crates/hv2-cluster/src/events.rs": "7190a2373ca82458df71ee72ffe17acb23b642a1beed4cf646f482e009f6c8c5",
+    "source/crates/hv2-cluster/src/keys.rs": "f04302a9762ad6d9604af086a95f461ed361052d2fc8a66ab97565f6eaa21ac0",
+    "source/crates/hv2-cluster/src/lib.rs": "44a8c8174a9e0eaa3e7ba1fdc9013182a50f2ed51fc5395b0f56ed945f50583a",
+    "source/crates/hv2-cluster/src/model.rs": "b99f9040ab1b299a7625b02c097766d8ce9b185d841bf9f6d2934e50d0050f4d",
+    "source/crates/hv2-cluster/src/ownership.rs": "3dfd5daeca13e8330bf7a390508b50d02d9122ebd6131df4d1bd727e62e04e2e",
+    "source/crates/hv2-cluster/src/store.rs": "7beee47887996d6981cd8878488cf4188763f508466f63fdb9a99f7bf1e0d16e",
+    "source/crates/hv2-cluster/tests/control_plane.rs": "e34f7555515c2c0833e86338063a5a1891a95cf5ad034096ab09c4e3fef0ec21",
+    "source/crates/hv2-sandboxd/src/main.rs": "622855b062415c967bfcc09323ecf1dd3ad6ef52941306a2d96fe4875cc04cd9",
+    "source/tools/check-udp-cluster-kvm.py": "41ec238bb8f7b4802323eae696d6aa4c63c419b1087d771fab38fe5e02a7b344",
+    "source-context.json": "38dfefa74f6a45727e925c36f29043f2cd6dd2e7822a7cda86b054f89cf8c713"
+  }
+}

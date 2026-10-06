@@ -1,0 +1,1441 @@
+{
+  "binary_sha256": {
+    "baseline": "ac17a004d464215f4cb74470d1aed1d3898d29179e3efa9cec06d0e6062cd454",
+    "candidate": "8a1f1b55700e35df8268785665d2a1c389995556dc6a68b8ac1fe740e9f2450b"
+  },
+  "pairs": 4,
+  "runs": [
+    {
+      "pair": 0,
+      "engine": "baseline",
+      "report": {
+        "cases": [
+          {
+            "bindings": 1,
+            "case": "small-header",
+            "input_bytes": 256,
+            "output_bytes": 144,
+            "output_checksum": 6759715117407302504,
+            "samples_us": [
+              0.15030000000000002,
+              0.1363,
+              0.13620000000000002,
+              0.1353,
+              0.1353,
+              0.1352,
+              0.1373,
+              0.1353,
+              0.1352
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "plain-64k",
+            "input_bytes": 65536,
+            "output_bytes": 65536,
+            "output_checksum": 1457271603152814080,
+            "samples_us": [
+              46.2589,
+              74.3282,
+              44.0957,
+              41.5147,
+              46.0635,
+              37.5594,
+              37.7567,
+              37.80069999999999,
+              39.441900000000004
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "plain-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 2129110625945649152,
+            "samples_us": [
+              679.5674,
+              635.3375,
+              680.0193,
+              695.8284000000001,
+              764.2992999999999,
+              719.9191,
+              656.1891,
+              700.1445000000001,
+              641.7005
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "unscoped-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 2129110625945649152,
+            "samples_us": [
+              678.3161,
+              632.2075,
+              684.61,
+              723.0991,
+              644.3586,
+              646.1089,
+              697.239,
+              655.7511999999999,
+              652.8387
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "sparse-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1047680,
+            "output_checksum": 10577171518889654432,
+            "samples_us": [
+              678.5636000000001,
+              634.0631000000001,
+              648.6147,
+              630.6344999999999,
+              676.2822,
+              655.5599,
+              658.3131000000001,
+              690.3078,
+              628.9413
+            ]
+          },
+          {
+            "bindings": 1,
+            "case": "dense-one",
+            "input_bytes": 1048576,
+            "output_bytes": 185056,
+            "output_checksum": 11711949077640362416,
+            "samples_us": [
+              43.792100000000005,
+              43.5156,
+              44.631800000000005,
+              43.9665,
+              46.6045,
+              43.4645,
+              58.4971,
+              43.2211,
+              43.265100000000004
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "dense-last-of-128",
+            "input_bytes": 1048576,
+            "output_bytes": 185056,
+            "output_checksum": 5498732423273084696,
+            "samples_us": [
+              3940.5998999999997,
+              3954.9030999999995,
+              3945.7977999999994,
+              3961.8032,
+              3993.6907,
+              3971.0507,
+              3971.4355000000005,
+              3958.3676,
+              4154.7986
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "dense-unmatched",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 16043909461110685704,
+            "samples_us": [
+              4809.2123,
+              4910.9274000000005,
+              5073.201599999999,
+              5073.1034,
+              4902.259,
+              5046.4047,
+              4678.2386,
+              4673.2852,
+              4672.540800000001
+            ]
+          }
+        ],
+        "iterations_per_sample": 10,
+        "limits": [
+          "Synthetic in-process raw substitution only",
+          "No HTTP, TLS, KVM, concurrency or competitor timing",
+          "Single process, unpinned CPU"
+        ],
+        "samples_per_case": 9,
+        "version": 1
+      }
+    },
+    {
+      "pair": 0,
+      "engine": "candidate",
+      "report": {
+        "cases": [
+          {
+            "bindings": 1,
+            "case": "small-header",
+            "input_bytes": 256,
+            "output_bytes": 144,
+            "output_checksum": 6759715117407302504,
+            "samples_us": [
+              0.0651,
+              0.0511,
+              0.0501,
+              0.0501,
+              0.0501,
+              0.0501,
+              0.0501,
+              0.0501,
+              0.0501
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "plain-64k",
+            "input_bytes": 65536,
+            "output_bytes": 65536,
+            "output_checksum": 1457271603152814080,
+            "samples_us": [
+              1.0931,
+              1.1091,
+              1.1652,
+              1.1693,
+              1.1742000000000001,
+              1.1742000000000001,
+              1.1853,
+              1.1582000000000001,
+              1.1662
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "plain-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 2129110625945649152,
+            "samples_us": [
+              39.1934,
+              19.8327,
+              19.8677,
+              19.818599999999996,
+              19.8347,
+              19.7475,
+              21.343600000000002,
+              19.7745,
+              19.7986
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "unscoped-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 2129110625945649152,
+            "samples_us": [
+              13.217099999999999,
+              13.299299999999999,
+              13.268199999999998,
+              13.272199999999998,
+              15.6607,
+              13.967499999999998,
+              13.338400000000002,
+              13.322299999999998,
+              13.3553
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "sparse-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1047680,
+            "output_checksum": 10577171518889654432,
+            "samples_us": [
+              25.290000000000003,
+              24.929299999999998,
+              26.2459,
+              24.8742,
+              24.729999999999997,
+              25.9092,
+              27.822899999999997,
+              31.8815,
+              24.725
+            ]
+          },
+          {
+            "bindings": 1,
+            "case": "dense-one",
+            "input_bytes": 1048576,
+            "output_bytes": 185056,
+            "output_checksum": 11711949077640362416,
+            "samples_us": [
+              42.663,
+              43.9244,
+              44.033699999999996,
+              42.666999999999994,
+              42.7211,
+              43.8011,
+              44.2029,
+              44.4264,
+              44.259
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "dense-last-of-128",
+            "input_bytes": 1048576,
+            "output_bytes": 185056,
+            "output_checksum": 5498732423273084696,
+            "samples_us": [
+              3899.1572,
+              3885.5151999999994,
+              3907.2413,
+              3895.9431000000004,
+              3930.9846000000007,
+              3917.4509000000007,
+              4158.9286,
+              4664.8862,
+              3890.1710999999996
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "dense-unmatched",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 16043909461110685704,
+            "samples_us": [
+              3894.9602,
+              3901.3364,
+              3915.1666000000005,
+              3916.1675000000005,
+              3907.2485,
+              3916.4670999999994,
+              3931.1429000000003,
+              4009.3163,
+              3911.5157
+            ]
+          }
+        ],
+        "iterations_per_sample": 10,
+        "limits": [
+          "Synthetic in-process raw substitution only",
+          "No HTTP, TLS, KVM, concurrency or competitor timing",
+          "Single process, unpinned CPU"
+        ],
+        "samples_per_case": 9,
+        "version": 1
+      }
+    },
+    {
+      "pair": 1,
+      "engine": "candidate",
+      "report": {
+        "cases": [
+          {
+            "bindings": 1,
+            "case": "small-header",
+            "input_bytes": 256,
+            "output_bytes": 144,
+            "output_checksum": 6759715117407302504,
+            "samples_us": [
+              0.0641,
+              0.0521,
+              0.0511,
+              0.0511,
+              0.0511,
+              0.0511,
+              0.0511,
+              0.0511,
+              0.0501
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "plain-64k",
+            "input_bytes": 65536,
+            "output_bytes": 65536,
+            "output_checksum": 1457271603152814080,
+            "samples_us": [
+              1.2013,
+              1.2163,
+              1.2423,
+              1.2484,
+              1.2613999999999999,
+              1.2494,
+              1.2452999999999999,
+              1.2453999999999998,
+              1.2524000000000002
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "plain-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 2129110625945649152,
+            "samples_us": [
+              20.424799999999998,
+              21.6661,
+              20.0491,
+              20.074099999999998,
+              22.4476,
+              20.7274,
+              19.9639,
+              20.6272,
+              20.562
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "unscoped-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 2129110625945649152,
+            "samples_us": [
+              14.739,
+              13.553700000000001,
+              13.590799999999998,
+              13.5958,
+              13.571800000000001,
+              14.8702,
+              13.5558,
+              13.574699999999998,
+              15.337200000000001
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "sparse-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1047680,
+            "output_checksum": 10577171518889654432,
+            "samples_us": [
+              25.573600000000003,
+              25.521499999999996,
+              25.538500000000003,
+              25.5224,
+              25.4644,
+              25.5065,
+              28.2065,
+              25.550600000000003,
+              28.97
+            ]
+          },
+          {
+            "bindings": 1,
+            "case": "dense-one",
+            "input_bytes": 1048576,
+            "output_bytes": 185056,
+            "output_checksum": 11711949077640362416,
+            "samples_us": [
+              43.0428,
+              43.1229,
+              43.1319,
+              44.3532,
+              44.5135,
+              45.1548,
+              43.3964,
+              43.56869999999999,
+              45.5946
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "dense-last-of-128",
+            "input_bytes": 1048576,
+            "output_bytes": 185056,
+            "output_checksum": 5498732423273084696,
+            "samples_us": [
+              3876.1205,
+              3876.8990000000003,
+              3877.4740000000006,
+              3881.7631,
+              3871.7981999999997,
+              3878.0962,
+              3885.1064999999994,
+              3890.3124,
+              3893.0926999999997
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "dense-unmatched",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 16043909461110685704,
+            "samples_us": [
+              3873.7830000000004,
+              3888.8134999999993,
+              3879.2804000000006,
+              3889.5328999999997,
+              3879.3075000000003,
+              3867.7756,
+              3872.7952000000005,
+              3870.4186,
+              3861.2131
+            ]
+          }
+        ],
+        "iterations_per_sample": 10,
+        "limits": [
+          "Synthetic in-process raw substitution only",
+          "No HTTP, TLS, KVM, concurrency or competitor timing",
+          "Single process, unpinned CPU"
+        ],
+        "samples_per_case": 9,
+        "version": 1
+      }
+    },
+    {
+      "pair": 1,
+      "engine": "baseline",
+      "report": {
+        "cases": [
+          {
+            "bindings": 1,
+            "case": "small-header",
+            "input_bytes": 256,
+            "output_bytes": 144,
+            "output_checksum": 6759715117407302504,
+            "samples_us": [
+              0.1463,
+              0.1232,
+              0.1223,
+              0.1222,
+              0.1232,
+              0.1222,
+              0.1212,
+              0.1213,
+              0.1212
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "plain-64k",
+            "input_bytes": 65536,
+            "output_bytes": 65536,
+            "output_checksum": 1457271603152814080,
+            "samples_us": [
+              37.3579,
+              38.7035,
+              37.2879,
+              37.288799999999995,
+              37.2407,
+              37.4972,
+              41.6481,
+              37.5844,
+              41.9336
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "plain-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 2129110625945649152,
+            "samples_us": [
+              644.017,
+              617.3032000000001,
+              631.0413,
+              703.6302000000001,
+              645.3223999999999,
+              653.2925,
+              656.8483,
+              622.0793,
+              651.1906
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "unscoped-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 2129110625945649152,
+            "samples_us": [
+              612.0262,
+              647.8923,
+              617.7782,
+              659.1166000000001,
+              700.5213,
+              641.2086,
+              643.491,
+              644.4137,
+              631.0332999999999
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "sparse-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1047680,
+            "output_checksum": 10577171518889654432,
+            "samples_us": [
+              679.4632,
+              620.342,
+              617.4304999999999,
+              639.7248000000001,
+              615.4146,
+              687.4584000000001,
+              708.9593,
+              621.1636000000001,
+              682.9148
+            ]
+          },
+          {
+            "bindings": 1,
+            "case": "dense-one",
+            "input_bytes": 1048576,
+            "output_bytes": 185056,
+            "output_checksum": 11711949077640362416,
+            "samples_us": [
+              43.424400000000006,
+              48.160399999999996,
+              44.0347,
+              44.9724,
+              44.4474,
+              44.9945,
+              45.1487,
+              46.4663,
+              44.6207
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "dense-last-of-128",
+            "input_bytes": 1048576,
+            "output_bytes": 185056,
+            "output_checksum": 5498732423273084696,
+            "samples_us": [
+              4015.982,
+              4284.9658,
+              3869.3635999999997,
+              3863.6137000000003,
+              3903.0615999999995,
+              3946.6704,
+              3929.5799999999995,
+              3971.9233999999997,
+              3941.9034
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "dense-unmatched",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 16043909461110685704,
+            "samples_us": [
+              4618.425,
+              4653.4125,
+              4795.519200000001,
+              4645.9653,
+              4772.5819,
+              5057.2303,
+              4589.1384,
+              4633.0508,
+              4640.7413
+            ]
+          }
+        ],
+        "iterations_per_sample": 10,
+        "limits": [
+          "Synthetic in-process raw substitution only",
+          "No HTTP, TLS, KVM, concurrency or competitor timing",
+          "Single process, unpinned CPU"
+        ],
+        "samples_per_case": 9,
+        "version": 1
+      }
+    },
+    {
+      "pair": 2,
+      "engine": "baseline",
+      "report": {
+        "cases": [
+          {
+            "bindings": 1,
+            "case": "small-header",
+            "input_bytes": 256,
+            "output_bytes": 144,
+            "output_checksum": 6759715117407302504,
+            "samples_us": [
+              0.15430000000000002,
+              0.1413,
+              0.1413,
+              0.14020000000000002,
+              0.14020000000000002,
+              0.1403,
+              0.1403,
+              0.1392,
+              0.14020000000000002
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "plain-64k",
+            "input_bytes": 65536,
+            "output_bytes": 65536,
+            "output_checksum": 1457271603152814080,
+            "samples_us": [
+              40.7294,
+              37.2979,
+              37.2577,
+              37.4211,
+              37.5002,
+              39.731500000000004,
+              37.940000000000005,
+              37.9441,
+              38.0382
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "plain-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 2129110625945649152,
+            "samples_us": [
+              637.5495,
+              669.0304,
+              672.2586,
+              720.8709,
+              656.2813,
+              629.9221,
+              654.8634999999999,
+              690.946,
+              719.1646000000001
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "unscoped-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 2129110625945649152,
+            "samples_us": [
+              637.241,
+              678.4263,
+              611.4471,
+              628.5505999999999,
+              645.2092,
+              658.3933,
+              791.1123,
+              628.3873,
+              683.3236
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "sparse-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1047680,
+            "output_checksum": 10577171518889654432,
+            "samples_us": [
+              683.4929,
+              672.2966,
+              648.1197,
+              712.484,
+              661.2236,
+              668.8129999999999,
+              677.3833,
+              678.7900000000001,
+              664.9336999999999
+            ]
+          },
+          {
+            "bindings": 1,
+            "case": "dense-one",
+            "input_bytes": 1048576,
+            "output_bytes": 185056,
+            "output_checksum": 11711949077640362416,
+            "samples_us": [
+              43.8823,
+              43.8643,
+              43.9935,
+              46.4673,
+              44.320100000000004,
+              45.5445,
+              46.0745,
+              46.1777,
+              43.697
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "dense-last-of-128",
+            "input_bytes": 1048576,
+            "output_bytes": 185056,
+            "output_checksum": 5498732423273084696,
+            "samples_us": [
+              4005.442,
+              3999.4786999999997,
+              4063.8489,
+              4093.9703,
+              4000.1940000000004,
+              4006.7984000000006,
+              4027.3255,
+              4052.8781000000004,
+              4054.4521
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "dense-unmatched",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 16043909461110685704,
+            "samples_us": [
+              4700.2144,
+              4553.2663,
+              4745.517400000001,
+              4612.3444,
+              4613.8574,
+              4632.3625,
+              4595.5205000000005,
+              4838.021,
+              4595.448399999999
+            ]
+          }
+        ],
+        "iterations_per_sample": 10,
+        "limits": [
+          "Synthetic in-process raw substitution only",
+          "No HTTP, TLS, KVM, concurrency or competitor timing",
+          "Single process, unpinned CPU"
+        ],
+        "samples_per_case": 9,
+        "version": 1
+      }
+    },
+    {
+      "pair": 2,
+      "engine": "candidate",
+      "report": {
+        "cases": [
+          {
+            "bindings": 1,
+            "case": "small-header",
+            "input_bytes": 256,
+            "output_bytes": 144,
+            "output_checksum": 6759715117407302504,
+            "samples_us": [
+              0.0631,
+              0.0511,
+              0.0501,
+              0.0501,
+              0.0501,
+              0.0501,
+              0.0501,
+              0.0501,
+              0.0501
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "plain-64k",
+            "input_bytes": 65536,
+            "output_bytes": 65536,
+            "output_checksum": 1457271603152814080,
+            "samples_us": [
+              1.1472,
+              1.1391,
+              1.2163,
+              1.2273,
+              1.2203,
+              1.2394,
+              1.2453999999999998,
+              1.2113,
+              1.2372999999999998
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "plain-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 2129110625945649152,
+            "samples_us": [
+              21.7363,
+              19.893800000000002,
+              20.1342,
+              27.352899999999998,
+              19.7996,
+              19.7916,
+              19.868699999999997,
+              19.8567,
+              19.8357
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "unscoped-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 2129110625945649152,
+            "samples_us": [
+              13.350399999999999,
+              14.671899999999999,
+              13.328299999999999,
+              13.366399999999999,
+              14.541599999999999,
+              13.3463,
+              13.334399999999999,
+              13.3062,
+              13.353400000000002
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "sparse-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1047680,
+            "output_checksum": 10577171518889654432,
+            "samples_us": [
+              25.3852,
+              25.249000000000002,
+              25.208799999999997,
+              25.1598,
+              26.6296,
+              25.1428,
+              25.099600000000002,
+              25.1207,
+              25.144700000000004
+            ]
+          },
+          {
+            "bindings": 1,
+            "case": "dense-one",
+            "input_bytes": 1048576,
+            "output_bytes": 185056,
+            "output_checksum": 11711949077640362416,
+            "samples_us": [
+              43.0036,
+              47.0293,
+              48.2556,
+              42.7993,
+              46.6125,
+              43.527699999999996,
+              45.832,
+              44.209,
+              43.0367
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "dense-last-of-128",
+            "input_bytes": 1048576,
+            "output_bytes": 185056,
+            "output_checksum": 5498732423273084696,
+            "samples_us": [
+              3886.2015999999994,
+              3910.8854,
+              3940.5968999999996,
+              3931.8572,
+              3880.7201999999997,
+              3903.4873999999995,
+              3904.4372000000003,
+              3896.2647000000006,
+              3903.254
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "dense-unmatched",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 16043909461110685704,
+            "samples_us": [
+              3929.5479,
+              3897.9299,
+              3950.1852,
+              3889.7491,
+              3899.6059999999998,
+              3947.1302000000005,
+              3907.3406999999997,
+              3907.5191,
+              3926.8929000000003
+            ]
+          }
+        ],
+        "iterations_per_sample": 10,
+        "limits": [
+          "Synthetic in-process raw substitution only",
+          "No HTTP, TLS, KVM, concurrency or competitor timing",
+          "Single process, unpinned CPU"
+        ],
+        "samples_per_case": 9,
+        "version": 1
+      }
+    },
+    {
+      "pair": 3,
+      "engine": "candidate",
+      "report": {
+        "cases": [
+          {
+            "bindings": 1,
+            "case": "small-header",
+            "input_bytes": 256,
+            "output_bytes": 144,
+            "output_checksum": 6759715117407302504,
+            "samples_us": [
+              0.0652,
+              0.0521,
+              0.048100000000000004,
+              0.048100000000000004,
+              0.0471,
+              0.0461,
+              0.0461,
+              0.0461,
+              0.0461
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "plain-64k",
+            "input_bytes": 65536,
+            "output_bytes": 65536,
+            "output_checksum": 1457271603152814080,
+            "samples_us": [
+              1.1481999999999999,
+              1.1682,
+              1.1923,
+              1.1993,
+              2.5118,
+              1.2033,
+              1.2023,
+              1.2063,
+              1.2133
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "plain-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 2129110625945649152,
+            "samples_us": [
+              22.8303,
+              19.4118,
+              19.464,
+              19.1594,
+              19.267599999999998,
+              19.1874,
+              19.1784,
+              19.463900000000002,
+              22.1291
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "unscoped-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 2129110625945649152,
+            "samples_us": [
+              13.200999999999999,
+              14.769,
+              13.278300000000002,
+              13.2541,
+              13.268199999999998,
+              13.265200000000002,
+              13.280200000000002,
+              13.281200000000002,
+              13.243200000000002
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "sparse-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1047680,
+            "output_checksum": 10577171518889654432,
+            "samples_us": [
+              43.035700000000006,
+              25.0966,
+              24.969499999999996,
+              37.434000000000005,
+              24.959400000000002,
+              24.767000000000003,
+              32.1471,
+              24.9834,
+              25.067600000000002
+            ]
+          },
+          {
+            "bindings": 1,
+            "case": "dense-one",
+            "input_bytes": 1048576,
+            "output_bytes": 185056,
+            "output_checksum": 11711949077640362416,
+            "samples_us": [
+              42.8834,
+              42.638,
+              44.4654,
+              42.4657,
+              43.3122,
+              42.7582,
+              46.090500000000006,
+              42.949600000000004,
+              42.9916
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "dense-last-of-128",
+            "input_bytes": 1048576,
+            "output_bytes": 185056,
+            "output_checksum": 5498732423273084696,
+            "samples_us": [
+              4596.4895,
+              6505.5715,
+              4988.8114,
+              3918.6682,
+              3874.4092000000005,
+              3854.0705000000003,
+              3864.7217999999993,
+              3850.9015,
+              3867.6814
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "dense-unmatched",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 16043909461110685704,
+            "samples_us": [
+              3901.2933,
+              3906.433,
+              3913.9393000000005,
+              3881.3514000000005,
+              3891.132,
+              3896.8788,
+              3904.7106999999996,
+              3869.9697,
+              3890.6089999999995
+            ]
+          }
+        ],
+        "iterations_per_sample": 10,
+        "limits": [
+          "Synthetic in-process raw substitution only",
+          "No HTTP, TLS, KVM, concurrency or competitor timing",
+          "Single process, unpinned CPU"
+        ],
+        "samples_per_case": 9,
+        "version": 1
+      }
+    },
+    {
+      "pair": 3,
+      "engine": "baseline",
+      "report": {
+        "cases": [
+          {
+            "bindings": 1,
+            "case": "small-header",
+            "input_bytes": 256,
+            "output_bytes": 144,
+            "output_checksum": 6759715117407302504,
+            "samples_us": [
+              0.1473,
+              0.1222,
+              0.1212,
+              0.1212,
+              0.1213,
+              0.1272,
+              0.1223,
+              0.1212,
+              0.1212
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "plain-64k",
+            "input_bytes": 65536,
+            "output_bytes": 65536,
+            "output_checksum": 1457271603152814080,
+            "samples_us": [
+              45.1558,
+              59.890699999999995,
+              39.903800000000004,
+              38.585300000000004,
+              37.4551,
+              37.3629,
+              37.375,
+              38.8267,
+              37.5574
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "plain-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 2129110625945649152,
+            "samples_us": [
+              670.7537,
+              666.3612999999999,
+              630.6686,
+              625.4697,
+              634.1422,
+              627.8072,
+              625.2393,
+              661.8869000000001,
+              634.3697
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "unscoped-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 2129110625945649152,
+            "samples_us": [
+              669.8049,
+              634.9357,
+              636.9105,
+              625.7062,
+              674.7143,
+              675.1971,
+              639.1467,
+              661.5862999999999,
+              643.4409
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "sparse-1m",
+            "input_bytes": 1048576,
+            "output_bytes": 1047680,
+            "output_checksum": 10577171518889654432,
+            "samples_us": [
+              632.1134,
+              635.7011,
+              630.3689999999999,
+              675.113,
+              630.6043999999999,
+              633.0281,
+              671.4350000000001,
+              680.0684,
+              670.8249000000001
+            ]
+          },
+          {
+            "bindings": 1,
+            "case": "dense-one",
+            "input_bytes": 1048576,
+            "output_bytes": 185056,
+            "output_checksum": 11711949077640362416,
+            "samples_us": [
+              44.0016,
+              44.1759,
+              45.7389,
+              44.5636,
+              48.5161,
+              44.7991,
+              47.7256,
+              45.1618,
+              45.4944
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "dense-last-of-128",
+            "input_bytes": 1048576,
+            "output_bytes": 185056,
+            "output_checksum": 5498732423273084696,
+            "samples_us": [
+              3949.4377,
+              3942.6277,
+              4049.7801999999997,
+              3881.5016000000005,
+              3885.5393000000004,
+              3881.4574999999995,
+              3892.3792999999996,
+              4404.0788,
+              4151.163699999999
+            ]
+          },
+          {
+            "bindings": 128,
+            "case": "dense-unmatched",
+            "input_bytes": 1048576,
+            "output_bytes": 1048576,
+            "output_checksum": 16043909461110685704,
+            "samples_us": [
+              4564.8274,
+              4565.2699999999995,
+              4593.8113,
+              4572.6592,
+              4586.9623,
+              4607.1666,
+              4583.7953,
+              4562.631,
+              4550.5822
+            ]
+          }
+        ],
+        "iterations_per_sample": 10,
+        "limits": [
+          "Synthetic in-process raw substitution only",
+          "No HTTP, TLS, KVM, concurrency or competitor timing",
+          "Single process, unpinned CPU"
+        ],
+        "samples_per_case": 9,
+        "version": 1
+      }
+    }
+  ],
+  "summary": [
+    {
+      "case": "small-header",
+      "baseline_run_medians_us": [
+        0.1353,
+        0.1222,
+        0.1403,
+        0.1213
+      ],
+      "candidate_run_medians_us": [
+        0.0501,
+        0.0511,
+        0.0501,
+        0.0471
+      ],
+      "baseline_us": 0.12875,
+      "candidate_us": 0.0501,
+      "change_percent": -61.0873786407767
+    },
+    {
+      "case": "plain-64k",
+      "baseline_run_medians_us": [
+        41.5147,
+        37.4972,
+        37.940000000000005,
+        38.585300000000004
+      ],
+      "candidate_run_medians_us": [
+        1.1662,
+        1.2453999999999998,
+        1.2203,
+        1.2023
+      ],
+      "baseline_us": 38.26265000000001,
+      "candidate_us": 1.2113,
+      "change_percent": -96.83424958804474
+    },
+    {
+      "case": "plain-1m",
+      "baseline_run_medians_us": [
+        680.0193,
+        645.3223999999999,
+        669.0304,
+        634.1422
+      ],
+      "candidate_run_medians_us": [
+        19.8327,
+        20.562,
+        19.868699999999997,
+        19.4118
+      ],
+      "baseline_us": 657.1764,
+      "candidate_us": 19.850699999999996,
+      "change_percent": -96.97939548650865
+    },
+    {
+      "case": "unscoped-1m",
+      "baseline_run_medians_us": [
+        655.7511999999999,
+        643.491,
+        645.2092,
+        643.4409
+      ],
+      "candidate_run_medians_us": [
+        13.322299999999998,
+        13.590799999999998,
+        13.350399999999999,
+        13.268199999999998
+      ],
+      "baseline_us": 644.3501,
+      "candidate_us": 13.33635,
+      "change_percent": -97.93026337700577
+    },
+    {
+      "case": "sparse-1m",
+      "baseline_run_medians_us": [
+        655.5599,
+        639.7248000000001,
+        672.2966,
+        635.7011
+      ],
+      "candidate_run_medians_us": [
+        25.290000000000003,
+        25.538500000000003,
+        25.1598,
+        25.067600000000002
+      ],
+      "baseline_us": 647.6423500000001,
+      "candidate_us": 25.2249,
+      "change_percent": -96.10511882059598
+    },
+    {
+      "case": "dense-one",
+      "baseline_run_medians_us": [
+        43.792100000000005,
+        44.9724,
+        44.320100000000004,
+        45.1618
+      ],
+      "candidate_run_medians_us": [
+        43.9244,
+        43.56869999999999,
+        44.209,
+        42.949600000000004
+      ],
+      "baseline_us": 44.64625,
+      "candidate_us": 43.74655,
+      "change_percent": -2.0151748467116537
+    },
+    {
+      "case": "dense-last-of-128",
+      "baseline_run_medians_us": [
+        3961.8032,
+        3941.9034,
+        4027.3255,
+        3942.6277
+      ],
+      "candidate_run_medians_us": [
+        3907.2413,
+        3878.0962,
+        3903.4873999999995,
+        3874.4092000000005
+      ],
+      "baseline_us": 3952.2154499999997,
+      "candidate_us": 3890.7918,
+      "change_percent": -1.5541574283355342
+    },
+    {
+      "case": "dense-unmatched",
+      "baseline_run_medians_us": [
+        4902.259,
+        4645.9653,
+        4613.8574,
+        4572.6592
+      ],
+      "candidate_run_medians_us": [
+        3915.1666000000005,
+        3873.7830000000004,
+        3907.5191,
+        3896.8788
+      ],
+      "baseline_us": 4629.91135,
+      "candidate_us": 3902.19895,
+      "change_percent": -15.717631396981291
+    }
+  ],
+  "limits": [
+    "Synthetic raw replacement only; no HTTP/TLS/KVM performance",
+    "Unpinned single processes; batch averages are not service P99",
+    "Output checksums are non-cryptographic; correctness needs separate tests",
+    "No managed competitor comparison"
+  ]
+}

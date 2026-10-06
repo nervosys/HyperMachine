@@ -1,0 +1,122 @@
+{
+  "success": true,
+  "purpose": "local KVM functional verification; no performance comparison",
+  "input_sha256": {
+    "daemon": "5d136c14b7ac36bd23af194ea82e844573a3ca18bfa7640e8e3d5e669db80f23",
+    "control": "633fff09e0c5f2703e1405d5a95f3764af351d1bbf9cdd784854dfccff59197b",
+    "cli": "c4b82db62ec7bc4e717ddff54d6edb1ed697d9738807bd2f3b29660d0d3d3c2f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "28c839a0969728c2c579fa9fdc7274714266ce4308f48a2ee1090d6c34537294",
+    "driver": "9a48fb3056074a054735287332bf11fb2a6f3ad1679c16f755d46e797849929e"
+  },
+  "cases": [
+    {
+      "name": "owner-permissions-and-no-grant-denial",
+      "success": true
+    },
+    {
+      "name": "owner-cli-exact-retry-and-real-guest-identity",
+      "success": true
+    },
+    {
+      "name": "custom-domain-uses-stored-grant",
+      "success": true
+    },
+    {
+      "name": "fork-does-not-inherit-parent-grant",
+      "success": true
+    },
+    {
+      "name": "shipped-control-plane-restart-preserves-active-grant",
+      "success": true
+    },
+    {
+      "name": "owner-revocation-does-not-wake-paused-guest",
+      "success": true
+    },
+    {
+      "name": "shipped-control-plane-restart-preserves-revocation",
+      "success": true
+    },
+    {
+      "name": "current-regrant-allows-auto-resume",
+      "success": true
+    },
+    {
+      "name": "redis-outage-denies-before-paused-guest-wake",
+      "success": true
+    },
+    {
+      "name": "live-redis-aof-recovery-preserves-active-grant",
+      "success": true
+    },
+    {
+      "name": "live-redis-restart-retains-revocation-and-refuses-stale-replay",
+      "success": true
+    },
+    {
+      "name": "operator-delegation-reload-controls-owner-grants",
+      "success": true
+    },
+    {
+      "name": "expired-stored-grant-denies-real-guest",
+      "success": true
+    }
+  ],
+  "cleanup_errors": [],
+  "redis_outage_requested": true,
+  "owned_directory": "/var/tmp/hm-owner-sharing-kvm-ia5frgzf",
+  "outage_denial_elapsed_ms": [
+    49.66,
+    5003.32
+  ],
+  "no_wake_checked_via_independent_node_mtls": true,
+  "final_inventory_empty": true,
+  "processes": [
+    {
+      "name": "redis-revoked-recovered",
+      "pid": 516,
+      "stopped": true
+    },
+    {
+      "name": "redis-active-recovered",
+      "pid": 504,
+      "stopped": true
+    },
+    {
+      "name": "control-revoked-restarted",
+      "pid": 474,
+      "stopped": true
+    },
+    {
+      "name": "control-restarted",
+      "pid": 423,
+      "stopped": true
+    },
+    {
+      "name": "control",
+      "pid": 284,
+      "stopped": true
+    },
+    {
+      "name": "node",
+      "pid": 283,
+      "stopped": true
+    },
+    {
+      "name": "redis",
+      "pid": 277,
+      "stopped": true
+    }
+  ],
+  "input_sha256_after": {
+    "daemon": "5d136c14b7ac36bd23af194ea82e844573a3ca18bfa7640e8e3d5e669db80f23",
+    "control": "633fff09e0c5f2703e1405d5a95f3764af351d1bbf9cdd784854dfccff59197b",
+    "cli": "c4b82db62ec7bc4e717ddff54d6edb1ed697d9738807bd2f3b29660d0d3d3c2f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "28c839a0969728c2c579fa9fdc7274714266ce4308f48a2ee1090d6c34537294",
+    "driver": "9a48fb3056074a054735287332bf11fb2a6f3ad1679c16f755d46e797849929e"
+  },
+  "inputs_unchanged": true,
+  "owned_directory_removed": true
+}

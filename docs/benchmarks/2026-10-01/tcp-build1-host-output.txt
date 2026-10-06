@@ -1,0 +1,81 @@
+   Compiling prost-derive v0.14.4
+   Compiling digest v0.11.3
+   Compiling tower v0.5.3
+   Compiling getrandom v0.4.3
+   Compiling pulldown-cmark v0.13.4
+   Compiling indexmap v2.14.0
+   Compiling hyper-util v0.1.21
+   Compiling const-random-macro v0.1.16
+   Compiling rustls v0.23.45
+   Compiling tokio-stream v0.1.19
+   Compiling parking v2.2.1
+   Compiling pin-project v1.1.13
+   Compiling simd-adler32 v0.3.10
+   Compiling adler2 v2.0.1
+   Compiling pbjson v0.9.0
+   Compiling deranged v0.5.8
+   Compiling time-core v0.1.9
+   Compiling crc32fast v1.5.0
+   Compiling openssl-probe v0.2.1
+   Compiling num-conv v0.2.2
+   Compiling powerfmt v0.2.0
+   Compiling byteorder v1.5.0
+   Compiling arc-swap v1.9.2
+   Compiling combine v4.6.8
+   Compiling backon v1.6.0
+   Compiling tempfile v3.27.0
+   Compiling hmac v0.13.0
+   Compiling sha3 v0.11.0
+   Compiling sha2 v0.11.0
+   Compiling event-listener v5.4.2
+   Compiling miniz_oxide v0.9.1
+   Compiling hash32 v0.3.1
+   Compiling rustls-native-certs v0.8.4
+   Compiling arcstr v1.2.0
+   Compiling xxhash-rust v0.8.18
+   Compiling pem v4.0.0
+   Compiling bitflags v1.3.2
+   Compiling heapless v0.9.3
+   Compiling managed v0.8.0
+   Compiling filetime v0.2.29
+   Compiling twox-hash v2.1.4
+   Compiling event-listener-strategy v0.5.4
+   Compiling ruzstd v0.8.3
+   Compiling tar v0.4.46
+   Compiling async-lock v3.4.2
+   Compiling flate2 v1.1.10
+   Compiling petgraph v0.8.3
+   Compiling slh-dsa v0.2.0-rc.5
+   Compiling smoltcp v0.14.0
+   Compiling pulldown-cmark-to-cmark v22.0.1
+   Compiling const-random v0.1.18
+   Compiling ahash v0.8.12
+   Compiling tower-http v0.6.11
+   Compiling time v0.3.55
+   Compiling rhai v1.26.1
+   Compiling hv2-core v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-core)
+   Compiling axum v0.8.9
+   Compiling hyper-timeout v0.5.2
+   Compiling yasna v0.6.0
+   Compiling prost v0.14.4
+   Compiling rcgen v0.14.10
+   Compiling prost-types v0.14.4
+   Compiling prost-build v0.14.4
+   Compiling pbjson-build v0.9.0
+   Compiling tokio-rustls v0.26.5
+   Compiling hyper-rustls v0.27.9
+   Compiling tonic-prost-build v0.14.6
+   Compiling reqwest v0.12.28
+   Compiling pbjson-types v0.9.0
+   Compiling hv2-api v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-api)
+   Compiling redis v1.7.1
+   Compiling tonic v0.14.6
+   Compiling hv2-jobs v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-jobs)
+   Compiling tonic-prost v0.14.6
+   Compiling hv2-agent v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-agent)
+   Compiling hv2-net v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-net)
+   Compiling hv2-runtime v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-runtime)
+   Compiling hm-cli v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hm-cli)
+   Compiling hv2-cluster v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-cluster)
+   Compiling hv2-sandboxd v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-sandboxd)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 31s

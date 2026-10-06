@@ -1,0 +1,22 @@
+{
+  "intervention": "sparse_named_snapshot_images",
+  "production_runtime_changed": false,
+  "source_files_verified": 550,
+  "candidate_source_sha256": {
+    "crates/hv2-sandboxd/src/snapshots.rs": "7d5a748a3d7f97c98444b12eb8ba3a75732543fbb4cd5f5754e3f6a87808b14f"
+  },
+  "adoption_requirements": [
+    "Matched restored state and latency/memory",
+    "Capture time and physical storage cost",
+    "Delete/replacement/failure sidecar cleanup",
+    "Shared-store create/delete races"
+  ],
+  "baseline_sha256": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+  "candidate_sha256": "99a3d60db28ddd6fbac6ea2c78a883492d1fe827ef7a3d21f0e9f2f350115f09",
+  "build_exit_code": 0,
+  "strict_daemon_clippy_passed": false,
+  "baseline_same_strict_clippy_failures": true,
+  "clippy_passed_with_existing_lint_waiver": "clippy::too_many_arguments",
+  "lifecycle_passed": false,
+  "runtime_change_adopted": false
+}

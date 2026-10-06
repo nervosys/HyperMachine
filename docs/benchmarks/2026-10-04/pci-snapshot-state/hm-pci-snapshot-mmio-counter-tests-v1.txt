@@ -1,0 +1,9 @@
+   Compiling hv2-agent v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-agent)
+    Finished `test` profile [optimized + debuginfo] target(s) in 21.93s
+     Running unittests examples/linux_snapshot_restore.rs (/var/tmp/hm-object-backup/target/debug/examples/linux_snapshot_restore-df771dc1d1a58bf5)
+
+running 1 test
+test timer_counter_covers_legacy_and_local_apic_and_all_cpu_columns ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -1,0 +1,6 @@
+{
+  "baseline_binary_sha256": "d40cf2805f4e22c4ede26a408e2aa547a472a0c6a82bcfb35cc32b558bc107d9",
+  "baseline_forwards_sha256": "a34a96c07ac4c56bad5228263d591bd74e9d6ed2e6ba45c4103d4aadae56a85a",
+  "candidate_forwards_sha256": "1dc935691552a9dc9a83b6ffbe4943bd0cd507d79d81f53bc0c8550ab8ad17a2",
+  "isolated_candidate_restored": true
+}

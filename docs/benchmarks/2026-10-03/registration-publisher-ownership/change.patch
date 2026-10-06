@@ -1,0 +1,70 @@
+--- baseline/main.rs
++++ candidate/main.rs
+@@ -510,6 +510,13 @@
+     /// Original trusted owner, retained only while registration is uncertain.
+     /// This is local state and is never serialized into records or guests.
+     pending_registration: Option<PendingRegistration>,
++    registration_in_progress: Arc<std::sync::atomic::AtomicBool>,
++}
++
++/// Own the first publisher independently of the per-sandbox transition lock.
++struct RegistrationPublication(Arc<std::sync::atomic::AtomicBool>);
++impl Drop for RegistrationPublication {
++    fn drop(&mut self) { self.0.store(false,std::sync::atomic::Ordering::Release); }
+ }
+ 
+ #[derive(Clone)]
+@@ -1628,6 +1635,8 @@
+     state
+         .routes
+         .insert(&sandbox_id, ENVD_PORT, running.process_addr);
++    let publishing=Arc::new(std::sync::atomic::AtomicBool::new(true));
++    let _publication=RegistrationPublication(publishing.clone());
+     let count = {
+         let mut sandboxes = state.sandboxes.lock();
+         // Reload also attaches stores under this registry lock. Refresh after
+@@ -1655,6 +1664,7 @@
+                 descriptor,
+                 network: running.network,
+                 record: record.clone(),
++                registration_in_progress: publishing.clone(),
+                 pending_registration: context.name_operation.cloned().map(PendingRegistration::Named)
+                     .or_else(|| state.node.as_ref().map(|_| PendingRegistration::Unnamed {
+                         event: event.unwrap_or("sandbox-created").to_string(),
+@@ -1830,6 +1840,9 @@
+         let Some(operation) = &live.pending_registration else {
+             return api_error(StatusCode::CONFLICT, "no uncertain local registration");
+         };
++        if live.registration_in_progress.load(std::sync::atomic::Ordering::Acquire) {
++            return api_error(StatusCode::CONFLICT,"registration publication still in progress");
++        }
+         (
+             operation.clone(),
+             live.record.clone(),
+@@ -5392,6 +5405,26 @@
+ #[cfg(test)]
+ mod adoption_claim_tests {
+     use super::*;
++    #[tokio::test]
++    async fn cancelled_publication_releases_initial_publisher_ownership() {
++        let flag=Arc::new(std::sync::atomic::AtomicBool::new(true));
++        let active=flag.clone();let ready=Arc::new(tokio::sync::Notify::new());let signal=ready.clone();
++        let task=tokio::spawn(async move {
++            let _publication=RegistrationPublication(active);
++            signal.notify_one();std::future::pending::<()>().await;
++        });
++        ready.notified().await;
++        assert!(flag.load(std::sync::atomic::Ordering::Acquire));
++        task.abort();assert!(task.await.unwrap_err().is_cancelled());
++        assert!(!flag.load(std::sync::atomic::Ordering::Acquire));
++    }
++    #[test]
++    fn completed_publication_releases_initial_publisher_ownership() {
++        let flag=Arc::new(std::sync::atomic::AtomicBool::new(true));
++        { let _publication=RegistrationPublication(flag.clone());assert!(flag.load(std::sync::atomic::Ordering::Acquire)); }
++        assert!(!flag.load(std::sync::atomic::Ordering::Acquire));
++    }
++
+     #[test]
+     fn pending_pages_preserve_all_ids_and_exclude_capability_fields() {
+         let rows:Vec<_>=(0..65).rev().map(|i|(format!("sbx-{i:03}"),"unnamed")).collect();

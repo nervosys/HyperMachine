@@ -1,0 +1,40 @@
+{
+  "success": true,
+  "storage": "owned in-process Moto S3 emulator",
+  "native_platform": "Linux",
+  "kvm_test": false,
+  "managed_storage_verified": false,
+  "versions": {
+    "boto3": "1.43.107",
+    "moto": "5.2.3",
+    "cryptography": "50.0.0"
+  },
+  "artifact_sha256": {
+    "runner": "0b6cc59c05ab3484f9c73c4c6a95d7bfaefbb3f74bb36798376833d2be7b639f",
+    "backup": "ded00f18a08abd2d46b001afd54b5f97c2c0e3cbd082bd91802eba7b3f12877a",
+    "retention": "5dc3efa5ddfd9914ef5bb7b6cbe930a89bd39e13bf3d210339fb1af1028b9be2",
+    "coordinator": "baff6f09c9c856d22b6d07df9b5a4004f96810393ab66963eac10b594efae093"
+  },
+  "checks": [
+    "scheduled_encrypted_capture_confirmed",
+    "same_slot_restart_no_duplicate",
+    "missed_slots_coalesced",
+    "live_store_refused_without_upload",
+    "offline_retry_confirmed",
+    "lost_upload_reply_journaled",
+    "uncertainty_blocks_later_slots",
+    "substituted_version_refused",
+    "exact_version_checksum_reconciliation",
+    "retention_catalog_registered",
+    "encrypted_version_pinned_restore_verified",
+    "explicit_skip_preserves_unconfirmed_object",
+    "skipped_receipt_history_survives_next_capture",
+    "catalog_repaired_from_committed_journal",
+    "exact_version_pin_preserved_during_catalog_repair",
+    "explicit_unpin_verified"
+  ],
+  "confirmed_backups": 5,
+  "retention_receipts": 5,
+  "known_object_versions": 7,
+  "artifacts_unchanged": true
+}

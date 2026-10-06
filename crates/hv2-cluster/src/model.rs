@@ -28,6 +28,14 @@ pub fn rfc3339(ms: u64) -> String {
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
+/// A template's actual preparation state and guest resources on one node.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TemplateInfo {
+    pub snapshot: bool,
+    pub cpu_count: u32,
+    pub memory_mb: u64,
+}
+
 /// A node, as it last reported itself.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeInfo {
@@ -51,6 +59,9 @@ pub struct NodeInfo {
     /// older than templates, which offered `base` alone.
     #[serde(default)]
     pub templates: Vec<String>,
+    /// Preparation state and resources, absent on older node heartbeats.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub template_metadata: BTreeMap<String, TemplateInfo>,
 }
 
 impl NodeInfo {
@@ -78,6 +89,9 @@ impl NodeInfo {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SandboxRecord {
     pub sandbox_id: String,
+    /// Trusted creator principal; legacy records remain explicitly ownerless.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_id: Option<crate::ownership::OwnerId>,
     pub node_id: String,
     pub template_id: String,
     pub started_at_ms: u64,
@@ -336,6 +350,7 @@ mod tests {
 
     fn record() -> SandboxRecord {
         SandboxRecord {
+            owner_id: None,
             sandbox_id: "sbx-1".into(),
             node_id: "node-a".into(),
             template_id: "base".into(),
@@ -350,6 +365,28 @@ mod tests {
             portable: false,
             volume_mounts: Vec::new(),
         }
+    }
+
+    #[test]
+    fn trusted_owner_roundtrips_and_legacy_records_stay_ownerless() {
+        let mut owned = record();
+        owned.owner_id = Some(crate::ownership::OwnerId::parse("principal-a").unwrap());
+        let encoded = serde_json::to_value(&owned).unwrap();
+        assert_eq!(encoded["owner_id"], "principal-a");
+        assert_eq!(
+            serde_json::from_value::<SandboxRecord>(encoded.clone()).unwrap(),
+            owned
+        );
+        let mut legacy = encoded;
+        legacy.as_object_mut().unwrap().remove("owner_id");
+        assert!(serde_json::from_value::<SandboxRecord>(legacy)
+            .unwrap()
+            .owner_id
+            .is_none());
+        let mut malformed = serde_json::to_value(&owned).unwrap();
+        malformed["owner_id"] = json!("untrusted/owner");
+        assert!(serde_json::from_value::<SandboxRecord>(malformed).is_err());
+        assert!(owned.listed().get("owner_id").is_none());
     }
 
     /// Every field E2B's `ListedSandbox` requires, because the SDK's

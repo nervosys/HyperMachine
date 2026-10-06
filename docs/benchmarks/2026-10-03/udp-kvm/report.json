@@ -1,0 +1,17 @@
+{
+  "inputs_sha256": {
+    "/var/tmp/hm-object-backup/target/debug/hv2-sandboxd": "d7f14558021a057135437b2998344ea2dea746aa778612e1a0a85b71a0299956",
+    "/var/tmp/hm-competitive/bzImage-known-uart-irq": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "/var/tmp/hm-udp-echo-guest.cpio.gz": "2f0a4ac491bfc9c500cda05bdb0c9706e5d37d0189224db595ed37abfe5418db"
+  },
+  "checks": [
+    "Wrong cluster credential refused",
+    "Empty binary and maximum-size IPv4 datagrams verified through real KVM",
+    "Pause closes existing UDP session",
+    "Resumed guest accepts a new UDP session",
+    "Delete closes UDP session and clears guest inventory"
+  ],
+  "daemon_reaped": true,
+  "guests_remaining": 0,
+  "scope": "Owned authenticated standalone daemon, actual KVM/vsock/guest UDP; no CLI/control plane/TLS."
+}

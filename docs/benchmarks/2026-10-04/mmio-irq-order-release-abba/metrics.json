@@ -1,0 +1,603 @@
+{
+  "scope": "Owned same-host combined candidate; not managed competitor evidence; eight matched concurrent blocks per kind, 32 workers x 100 exact datagrams per block.",
+  "concurrent": {
+    "private": {
+      "baseline": {
+        "blocks": 4,
+        "scored_datagrams": 12800,
+        "payload_mib": 269.3050537109375,
+        "aggregate_payload_mib_s": 21.731329826514102,
+        "block_payload_mib_s_range": [
+          21.450011062449423,
+          21.981770764334648
+        ],
+        "resources": {
+          "target_daemon": {
+            "total_cpu_ms": 85290.0,
+            "cpu_ms_per_payload_mib": 316.704045559974,
+            "block_cpu_ms_range": [
+              21090.0,
+              21940.0
+            ],
+            "pss_observation_mib_range": [
+              101.0263671875,
+              106.4453125
+            ]
+          },
+          "source_daemon": {
+            "total_cpu_ms": 300.0,
+            "cpu_ms_per_payload_mib": 1.113978352303813,
+            "block_cpu_ms_range": [
+              70.0,
+              80.0
+            ],
+            "pss_observation_mib_range": [
+              36.48828125,
+              36.6640625
+            ]
+          },
+          "redis": {
+            "total_cpu_ms": 190.0,
+            "cpu_ms_per_payload_mib": 0.7055196231257482,
+            "block_cpu_ms_range": [
+              40.0,
+              50.0
+            ],
+            "pss_observation_mib_range": [
+              6.8935546875,
+              6.9140625
+            ]
+          },
+          "checker": {
+            "total_cpu_ms": 2180.0,
+            "cpu_ms_per_payload_mib": 8.094909360074373,
+            "block_cpu_ms_range": [
+              510.0,
+              580.0
+            ],
+            "pss_observation_mib_range": [
+              47.998046875,
+              48.138671875
+            ]
+          }
+        }
+      },
+      "candidate": {
+        "blocks": 4,
+        "scored_datagrams": 12800,
+        "payload_mib": 269.3050537109375,
+        "aggregate_payload_mib_s": 22.603938608145526,
+        "block_payload_mib_s_range": [
+          22.493647989097646,
+          22.798818335880235
+        ],
+        "resources": {
+          "target_daemon": {
+            "total_cpu_ms": 9500.0,
+            "cpu_ms_per_payload_mib": 35.27598115628741,
+            "block_cpu_ms_range": [
+              2360.0,
+              2400.0
+            ],
+            "pss_observation_mib_range": [
+              101.2060546875,
+              107.14453125
+            ]
+          },
+          "source_daemon": {
+            "total_cpu_ms": 290.0,
+            "cpu_ms_per_payload_mib": 1.0768457405603524,
+            "block_cpu_ms_range": [
+              60.0,
+              80.0
+            ],
+            "pss_observation_mib_range": [
+              36.5,
+              37.1982421875
+            ]
+          },
+          "redis": {
+            "total_cpu_ms": 170.0,
+            "cpu_ms_per_payload_mib": 0.6312543996388273,
+            "block_cpu_ms_range": [
+              40.0,
+              50.0
+            ],
+            "pss_observation_mib_range": [
+              6.841796875,
+              6.869140625
+            ]
+          },
+          "checker": {
+            "total_cpu_ms": 2960.0,
+            "cpu_ms_per_payload_mib": 10.991253076064288,
+            "block_cpu_ms_range": [
+              720.0,
+              760.0
+            ],
+            "pss_observation_mib_range": [
+              48.04296875,
+              48.140625
+            ]
+          }
+        }
+      },
+      "observed_target_cpu_reduction_percent": 88.86153124633603,
+      "observed_aggregate_throughput_increase_percent": 4.015441248177853
+    },
+    "standard": {
+      "baseline": {
+        "blocks": 4,
+        "scored_datagrams": 12800,
+        "payload_mib": 269.3050537109375,
+        "aggregate_payload_mib_s": 22.014223633139515,
+        "block_payload_mib_s_range": [
+          21.779683935947062,
+          22.285887656955616
+        ],
+        "resources": {
+          "target_daemon": {
+            "total_cpu_ms": 85290.0,
+            "cpu_ms_per_payload_mib": 316.704045559974,
+            "block_cpu_ms_range": [
+              21140.0,
+              21600.0
+            ],
+            "pss_observation_mib_range": [
+              104.2041015625,
+              106.1337890625
+            ]
+          },
+          "source_daemon": {
+            "total_cpu_ms": 320.0,
+            "cpu_ms_per_payload_mib": 1.1882435757907337,
+            "block_cpu_ms_range": [
+              70.0,
+              90.0
+            ],
+            "pss_observation_mib_range": [
+              36.4833984375,
+              36.6982421875
+            ]
+          },
+          "redis": {
+            "total_cpu_ms": 170.0,
+            "cpu_ms_per_payload_mib": 0.6312543996388273,
+            "block_cpu_ms_range": [
+              40.0,
+              50.0
+            ],
+            "pss_observation_mib_range": [
+              6.8935546875,
+              6.90625
+            ]
+          },
+          "checker": {
+            "total_cpu_ms": 2170.0,
+            "cpu_ms_per_payload_mib": 8.057776748330914,
+            "block_cpu_ms_range": [
+              520.0,
+              560.0
+            ],
+            "pss_observation_mib_range": [
+              48.021484375,
+              48.130859375
+            ]
+          }
+        }
+      },
+      "candidate": {
+        "blocks": 4,
+        "scored_datagrams": 12800,
+        "payload_mib": 269.3050537109375,
+        "aggregate_payload_mib_s": 22.72401830949319,
+        "block_payload_mib_s_range": [
+          22.444974764197205,
+          23.228321578857976
+        ],
+        "resources": {
+          "target_daemon": {
+            "total_cpu_ms": 9410.0,
+            "cpu_ms_per_payload_mib": 34.94178765059627,
+            "block_cpu_ms_range": [
+              2320.0,
+              2390.0
+            ],
+            "pss_observation_mib_range": [
+              104.263671875,
+              107.0673828125
+            ]
+          },
+          "source_daemon": {
+            "total_cpu_ms": 300.0,
+            "cpu_ms_per_payload_mib": 1.113978352303813,
+            "block_cpu_ms_range": [
+              70.0,
+              80.0
+            ],
+            "pss_observation_mib_range": [
+              36.5087890625,
+              37.14453125
+            ]
+          },
+          "redis": {
+            "total_cpu_ms": 140.0,
+            "cpu_ms_per_payload_mib": 0.5198565644084461,
+            "block_cpu_ms_range": [
+              30.0,
+              40.0
+            ],
+            "pss_observation_mib_range": [
+              6.8271484375,
+              6.869140625
+            ]
+          },
+          "checker": {
+            "total_cpu_ms": 3030.0,
+            "cpu_ms_per_payload_mib": 11.25118135826851,
+            "block_cpu_ms_range": [
+              710.0,
+              820.0
+            ],
+            "pss_observation_mib_range": [
+              48.0849609375,
+              48.12890625
+            ]
+          }
+        }
+      },
+      "observed_target_cpu_reduction_percent": 88.96705358189706,
+      "observed_aggregate_throughput_increase_percent": 3.2242548644103586
+    },
+    "all": {
+      "baseline": {
+        "blocks": 8,
+        "scored_datagrams": 25600,
+        "payload_mib": 538.610107421875,
+        "aggregate_payload_mib_s": 21.87186202079357,
+        "block_payload_mib_s_range": [
+          21.450011062449423,
+          22.285887656955616
+        ],
+        "resources": {
+          "target_daemon": {
+            "total_cpu_ms": 170580.0,
+            "cpu_ms_per_payload_mib": 316.704045559974,
+            "block_cpu_ms_range": [
+              21090.0,
+              21940.0
+            ],
+            "pss_observation_mib_range": [
+              101.0263671875,
+              106.4453125
+            ]
+          },
+          "source_daemon": {
+            "total_cpu_ms": 620.0,
+            "cpu_ms_per_payload_mib": 1.1511109640472734,
+            "block_cpu_ms_range": [
+              70.0,
+              90.0
+            ],
+            "pss_observation_mib_range": [
+              36.4833984375,
+              36.6982421875
+            ]
+          },
+          "redis": {
+            "total_cpu_ms": 360.0,
+            "cpu_ms_per_payload_mib": 0.6683870113822877,
+            "block_cpu_ms_range": [
+              40.0,
+              50.0
+            ],
+            "pss_observation_mib_range": [
+              6.8935546875,
+              6.9140625
+            ]
+          },
+          "checker": {
+            "total_cpu_ms": 4350.0,
+            "cpu_ms_per_payload_mib": 8.076343054202644,
+            "block_cpu_ms_range": [
+              510.0,
+              580.0
+            ],
+            "pss_observation_mib_range": [
+              47.998046875,
+              48.138671875
+            ]
+          }
+        }
+      },
+      "candidate": {
+        "blocks": 8,
+        "scored_datagrams": 25600,
+        "payload_mib": 538.610107421875,
+        "aggregate_payload_mib_s": 22.6638194053824,
+        "block_payload_mib_s_range": [
+          22.444974764197205,
+          23.228321578857976
+        ],
+        "resources": {
+          "target_daemon": {
+            "total_cpu_ms": 18910.0,
+            "cpu_ms_per_payload_mib": 35.108884403441834,
+            "block_cpu_ms_range": [
+              2320.0,
+              2400.0
+            ],
+            "pss_observation_mib_range": [
+              101.2060546875,
+              107.14453125
+            ]
+          },
+          "source_daemon": {
+            "total_cpu_ms": 590.0,
+            "cpu_ms_per_payload_mib": 1.0954120464320827,
+            "block_cpu_ms_range": [
+              60.0,
+              80.0
+            ],
+            "pss_observation_mib_range": [
+              36.5,
+              37.1982421875
+            ]
+          },
+          "redis": {
+            "total_cpu_ms": 310.0,
+            "cpu_ms_per_payload_mib": 0.5755554820236367,
+            "block_cpu_ms_range": [
+              30.0,
+              50.0
+            ],
+            "pss_observation_mib_range": [
+              6.8271484375,
+              6.869140625
+            ]
+          },
+          "checker": {
+            "total_cpu_ms": 5990.0,
+            "cpu_ms_per_payload_mib": 11.121217217166398,
+            "block_cpu_ms_range": [
+              710.0,
+              820.0
+            ],
+            "pss_observation_mib_range": [
+              48.04296875,
+              48.140625
+            ]
+          }
+        }
+      },
+      "observed_target_cpu_reduction_percent": 88.91429241411655,
+      "observed_aggregate_throughput_increase_percent": 3.6208960345301966
+    }
+  },
+  "latency": [
+    {
+      "path": "private",
+      "payload_bytes": 64,
+      "baseline": {
+        "setup_ms_p50": [
+          2.0968515,
+          2.3366065000000003
+        ],
+        "setup_ms_p95": [
+          2.447769,
+          3.109603
+        ],
+        "echo_ms_p50": [
+          0.5436155,
+          0.58848
+        ],
+        "echo_ms_p95": [
+          0.763341,
+          1.096098
+        ],
+        "total_ms_p50": [
+          2.6683395,
+          2.9653415
+        ],
+        "total_ms_p95": [
+          3.209275,
+          3.756287
+        ]
+      },
+      "candidate": {
+        "setup_ms_p50": [
+          1.842362,
+          1.8916439999999999
+        ],
+        "setup_ms_p95": [
+          2.044498,
+          2.156982
+        ],
+        "echo_ms_p50": [
+          0.425423,
+          0.49364050000000004
+        ],
+        "echo_ms_p95": [
+          0.523748,
+          0.624894
+        ],
+        "total_ms_p50": [
+          2.3339540000000003,
+          2.3519430000000003
+        ],
+        "total_ms_p95": [
+          2.518863,
+          2.7139
+        ]
+      }
+    },
+    {
+      "path": "private",
+      "payload_bytes": 65507,
+      "baseline": {
+        "setup_ms_p50": [
+          2.15687,
+          2.2111925
+        ],
+        "setup_ms_p95": [
+          2.465783,
+          2.500328
+        ],
+        "echo_ms_p50": [
+          0.851664,
+          0.8525065000000001
+        ],
+        "echo_ms_p95": [
+          1.06233,
+          1.204476
+        ],
+        "total_ms_p50": [
+          3.0258545000000003,
+          3.080984
+        ],
+        "total_ms_p95": [
+          3.276071,
+          3.830728
+        ]
+      },
+      "candidate": {
+        "setup_ms_p50": [
+          1.9017914999999999,
+          1.904074
+        ],
+        "setup_ms_p95": [
+          2.166037,
+          2.217759
+        ],
+        "echo_ms_p50": [
+          0.7077755,
+          0.7231515
+        ],
+        "echo_ms_p95": [
+          0.97112,
+          1.03355
+        ],
+        "total_ms_p50": [
+          2.597847,
+          2.6260605000000004
+        ],
+        "total_ms_p95": [
+          3.009443,
+          3.0843
+        ]
+      }
+    },
+    {
+      "path": "standard",
+      "payload_bytes": 64,
+      "baseline": {
+        "setup_ms_p50": [
+          1.738598,
+          2.078893
+        ],
+        "setup_ms_p95": [
+          2.00589,
+          2.334891
+        ],
+        "echo_ms_p50": [
+          0.5298605000000001,
+          0.564758
+        ],
+        "echo_ms_p95": [
+          0.76253,
+          0.834885
+        ],
+        "total_ms_p50": [
+          2.305535,
+          2.664605
+        ],
+        "total_ms_p95": [
+          2.551134,
+          3.00522
+        ]
+      },
+      "candidate": {
+        "setup_ms_p50": [
+          1.5912250000000001,
+          1.595083
+        ],
+        "setup_ms_p95": [
+          1.787237,
+          1.943293
+        ],
+        "echo_ms_p50": [
+          0.4276315,
+          0.46327050000000003
+        ],
+        "echo_ms_p95": [
+          0.583076,
+          0.663973
+        ],
+        "total_ms_p50": [
+          2.0355455,
+          2.0965800000000003
+        ],
+        "total_ms_p95": [
+          2.269374,
+          2.477807
+        ]
+      }
+    },
+    {
+      "path": "standard",
+      "payload_bytes": 65507,
+      "baseline": {
+        "setup_ms_p50": [
+          1.7971045,
+          1.8967045
+        ],
+        "setup_ms_p95": [
+          1.978258,
+          2.078662
+        ],
+        "echo_ms_p50": [
+          0.794324,
+          0.8022455
+        ],
+        "echo_ms_p95": [
+          1.071815,
+          1.129446
+        ],
+        "total_ms_p50": [
+          2.5916715000000003,
+          2.666251
+        ],
+        "total_ms_p95": [
+          2.910742,
+          3.113475
+        ]
+      },
+      "candidate": {
+        "setup_ms_p50": [
+          1.540407,
+          1.55376
+        ],
+        "setup_ms_p95": [
+          1.729513,
+          1.830564
+        ],
+        "echo_ms_p50": [
+          0.689618,
+          0.693892
+        ],
+        "echo_ms_p95": [
+          0.8908,
+          0.978817
+        ],
+        "total_ms_p50": [
+          2.2278535,
+          2.231931
+        ],
+        "total_ms_p95": [
+          2.442953,
+          2.484888
+        ]
+      }
+    }
+  ]
+}

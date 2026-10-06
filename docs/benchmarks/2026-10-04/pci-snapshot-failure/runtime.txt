@@ -1,0 +1,32 @@
+[2m2026-10-04T15:31:50.985152Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T15:31:50.987202Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-template': vsock device attached over PCI at slot 3, BAR 0xd0010000 (guest CID 3, IRQ 11) -- no kernel argument needed
+[2m2026-10-04T15:31:51.021759Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'pci-checkpoint-template' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T15:31:51.036298Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T15:31:51.036376Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-template': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T15:31:51.037342Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'pci-checkpoint-template' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T15:31:51.037649Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'pci-checkpoint-template' with 1 vCPUs
+[2m2026-10-04T15:31:51.037672Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T15:31:51.037930Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+PCI_TEMPLATE_EXACT_COMMAND_PASS
+[2m2026-10-04T15:31:51.676052Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-template' paused
+[2m2026-10-04T15:31:53.716054Z[0m [33m WARN[0m [2mhv2_core::vm[0m[2m:[0m the vsock device is on PCI; its state is not captured
+[2m2026-10-04T15:31:53.718408Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-template' snapshotted to /tmp/hm-pci-checkpoint-260.snap
+[2m2026-10-04T15:31:53.718509Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-template' resumed
+PCI_SNAPSHOT_CAPTURE_PASS
+[2m2026-10-04T15:31:53.718626Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=2089)
+[2m2026-10-04T15:31:53.719014Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'pci-checkpoint-template'
+[2m2026-10-04T15:31:53.719115Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-template' stopped
+[2m2026-10-04T15:31:53.719212Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T15:31:53.720918Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-restored': vsock device attached over PCI at slot 3, BAR 0xd0010000 (guest CID 3, IRQ 11) -- no kernel argument needed
+[2m2026-10-04T15:31:53.722303Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'pci-checkpoint-restored' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T15:31:53.723594Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-restored' restored from /tmp/hm-pci-checkpoint-260.snap
+[2m2026-10-04T15:31:53.723612Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'pci-checkpoint-restored' with 1 vCPUs and 1 GB memory (parallel=true)
+PCI_SNAPSHOT_LAUNCH_PASS
+[2m2026-10-04T15:31:53.723779Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'pci-checkpoint-restored' with 1 vCPUs
+[2m2026-10-04T15:31:53.723794Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T15:31:53.724034Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T15:32:08.725027Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3)
+[2m2026-10-04T15:32:08.725559Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'pci-checkpoint-restored'
+[2m2026-10-04T15:32:08.725689Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'pci-checkpoint-restored' stopped
+PCI_SNAPSHOT_OUTPUT_CLEANUP_PASS
+PCI_SNAPSHOT_PROBE_FAILED: restore cycle 0 ping: Timeout: no answer from a guest agent on vsock port 1024 within 15s (0 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd

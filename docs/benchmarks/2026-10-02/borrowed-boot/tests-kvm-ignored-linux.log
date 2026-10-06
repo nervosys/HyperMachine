@@ -1,0 +1,17 @@
+    Finished `test` profile [optimized + debuginfo] target(s) in 1.07s
+     Running unittests src/lib.rs (/var/tmp/hm-object-backup/target/debug/deps/hv2_core-e659a1d473ebec97)
+
+running 2 tests
+KVM_EVENTS_EVIDENCE {"captured":[0,0,0,0,0,0,0,0,1,34,0,0,0,0,0,0,0,0,0,0,13,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"case":"interrupt","legacy_guest_marker":17,"legacy_restored":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,13,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"restored":[0,0,0,0,0,0,0,0,1,34,0,0,0,0,0,0,0,0,0,0,13,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"restored_guest_marker":34}
+KVM_EVENTS_EVIDENCE {"captured":[0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,13,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"case":"nmi","restored":[0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,13,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}
+KVM_EVENTS_EVIDENCE {"captured":[0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,0,0,13,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"case":"shadow","restored":[0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,0,0,13,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}
+KVM_DEADLINE_EVIDENCE omit_deadline=false delayed_entry=false result=Ok(Ok(Io { port: 233, direction: Out, size: 1, data: 34 }))
+KVM_EVENTS_EVIDENCE {"captured":[1,13,1,0,52,18,0,0,0,0,0,0,0,0,0,0,0,0,0,0,13,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"case":"exception","restored":[1,13,1,0,52,18,0,0,0,0,0,0,0,0,0,0,0,0,0,0,13,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}
+test backends::kvm::tests::captured_kvm_events_restore_pending_handoffs ... ok
+KVM_DEADLINE_DELAY_EVIDENCE tsc=1103903713371 captured_deadline=1100511627776
+KVM_DEADLINE_EVIDENCE omit_deadline=false delayed_entry=true result=Ok(Ok(Io { port: 233, direction: Out, size: 1, data: 34 }))
+KVM_DEADLINE_EVIDENCE omit_deadline=true delayed_entry=false result=Err(Timeout)
+test backends::kvm::tests::restored_deadline_timer_wakes_halted_guest ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 2302 filtered out; finished in 3.38s
+

@@ -1,0 +1,19 @@
+   Compiling chrono v0.4.45
+   Compiling hv2-guest-agent v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-guest-agent)
+   Compiling rhai v1.26.1
+   Compiling backon v1.6.0
+   Compiling hv2-api v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-api)
+   Compiling tower-http v0.6.11
+   Compiling redis v1.7.1
+   Compiling reqwest v0.12.28
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-core)
+   Compiling pbjson-types v0.9.0
+   Compiling chrono-tz v0.10.4
+   Compiling hv2-jobs v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-jobs)
+   Compiling hv2-agent v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-agent)
+   Compiling hv2-net v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-net)
+   Compiling hv2-runtime v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-runtime)
+   Compiling hm-cli v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hm-cli)
+   Compiling hv2-cluster v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-cluster)
+   Compiling hv2-sandboxd v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-sandboxd)
+    Finished `release` profile [optimized] target(s) in 3m 52s

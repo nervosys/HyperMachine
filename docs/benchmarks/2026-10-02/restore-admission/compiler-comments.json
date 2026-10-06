@@ -1,0 +1,5 @@
+{
+  "baseline": "\nString dump of section '.comment':\n  [     0]  GCC: (Debian 14.2.0-19) 14.2.0\n  [    1f]  rustc version 1.95.0 (59807616e 2026-04-14) (built from a source tarball)\n\n",
+  "candidate": "\nString dump of section '.comment':\n  [     0]  GCC: (Debian 14.2.0-19) 14.2.0\n  [    1f]  rustc version 1.95.0 (59807616e 2026-04-14) (built from a source tarball)\n\n",
+  "same_compiler_comment": true
+}

@@ -1,0 +1,95 @@
+{
+  "success": true,
+  "performance_comparison": false,
+  "transport": "official MCP client -> verified HTTPS fixture proxy -> MCP loopback -> verified control-plane TLS -> node mTLS -> KVM",
+  "artifact_sha256": {
+    "daemon": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+    "control-plane": "c16ce8e72fae0ef73f98abaee2656fd466711f995ce6ba918c9dbef6de8cd34d",
+    "cli": "fd55361af11bf5dd10d6ffa84a81d6b9200a66079bb4ece2c72a73ff13b55ed1",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d520964ff11dff3bc7090af9ee988eedd3c5c5ffb23a5a3708250e3248a2cb17",
+    "coordinator": "7b14d44749668f112ace62a5b9b9658666066faca7e06da8ad25cb929585dff5",
+    "client": "2f6839fb21672e46813b6a2f94a9179b2912a05439f10bf33618a662cbdbfc5e",
+    "cancellation": "b2ca939f8820a737065261578899a1da9629e8c02ac908959ff88b25e4820132"
+  },
+  "cleanup_errors": [],
+  "processes_stopped": [
+    {
+      "name": "mcp",
+      "exit_code": 0
+    },
+    {
+      "name": "control",
+      "exit_code": 0
+    },
+    {
+      "name": "node",
+      "exit_code": 0
+    },
+    {
+      "name": "redis",
+      "exit_code": 0
+    }
+  ],
+  "checks": [
+    "https_authentication_refused",
+    "https_invalid_origin_forbidden_before_authentication",
+    "https_origin_refused",
+    "official_https_client_real_kvm_lifecycle",
+    "real_guest_http_cancellation_and_continued_work",
+    "http_binary_file_roundtrip_and_download_limit",
+    "control_plane_inventory_empty"
+  ],
+  "client": {
+    "schema_version": 1,
+    "client": "official-mcp-python",
+    "client_version": "1.23.3",
+    "transport": "verified-https-json",
+    "harness_sha256": "2f6839fb21672e46813b6a2f94a9179b2912a05439f10bf33618a662cbdbfc5e",
+    "binary_sha256": "fd55361af11bf5dd10d6ffa84a81d6b9200a66079bb4ece2c72a73ff13b55ed1",
+    "environment": "owned WSL KVM; verified MCP/API TLS and node mTLS",
+    "operations": [
+      "sandbox_create",
+      "sandbox_exec",
+      "sandbox_exec_cancelled",
+      "ping_after_cancel",
+      "file_upload",
+      "file_download",
+      "sandbox_exec",
+      "file_download",
+      "sandbox_inspect",
+      "sandbox_list",
+      "checkpoint_save",
+      "checkpoint_list",
+      "sandbox_exec",
+      "checkpoint_restore",
+      "sandbox_exec",
+      "checkpoint_delete",
+      "sandbox_pause",
+      "sandbox_resume",
+      "sandbox_exec",
+      "sandbox_fork",
+      "sandbox_exec",
+      "sandbox_exec",
+      "sandbox_exec",
+      "sandbox_exec",
+      "sandbox_inspect",
+      "sandbox_delete",
+      "sandbox_delete"
+    ],
+    "errors": [],
+    "cancellation": {
+      "success": true,
+      "backend_accepted_before_cancel": true,
+      "backend_completed_after_cancel": true,
+      "cancelled_request_received_response": false,
+      "session_ping_after_cancel_ms": 31.396758000482805,
+      "scope": "MCP client wait cancelled; accepted remote guest work continues"
+    },
+    "cancellation_harness_sha256": "b2ca939f8820a737065261578899a1da9629e8c02ac908959ff88b25e4820132",
+    "remaining_known_sandboxes": [],
+    "success": true
+  },
+  "envd_transport": "operator-configured verified envd HTTPS fixture route -> owned loopback guest proxy; MCP and control-plane APIs use verified TLS",
+  "artifacts_unchanged": true
+}

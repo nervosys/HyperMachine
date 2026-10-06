@@ -1,0 +1,11 @@
+{
+  "runtime_change_adopted": false,
+  "performance_win_established": false,
+  "accepted_source_files": 550,
+  "candidate_sha256": {
+    "crates/hv2-core/src/boot/linux.rs": "7ec9d94bd894e818348726c8e49b2f3eb8385f84dbdd572b54ae9db449c815da",
+    "crates/hv2-core/src/boot/source.rs": "3127c3e472cacbeccca4ea7d38689968322145626c3a7cbf1693f3c37b499ab8",
+    "crates/hv2-core/src/backends/kvm.rs": "b3a41c9404a634f37a92c23e2a799bea77bd2f184842186184f6463f38a1bcfc"
+  },
+  "scope": "borrow Linux/raw image bytes for layout and KVM loading; retain Multiboot owned path"
+}

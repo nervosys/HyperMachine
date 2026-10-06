@@ -1,0 +1,19 @@
+published-runtime-claim: rejected
+changed-artifact: rejected
+missing-outer-run: rejected
+wrong-order: rejected
+missing-source-binding: rejected
+missing-runtime-activation: rejected
+activation-after-scoring: rejected
+wrong-runtime-mode: rejected
+diagnostic-scored: rejected
+different-executable: rejected
+missing-guest-sample: rejected
+failed-guest-cleanup: rejected
+unmatched-clock-rng: rejected
+resource-check-during-timing: rejected
+missing-batch-resource-phase: rejected
+missing-verified-resources: rejected
+wrong-verified-memory: rejected
+boolean-verified-cpu: rejected
+actual same-binary comparison accepted; 18 damaged contracts rejected

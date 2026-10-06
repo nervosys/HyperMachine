@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "files": {
+    "build.log": "9fd6e295efab9deb5900322327ecd755bfabb89098a4fdd1d4896903795c540d",
+    "check-mcp-http-kvm.py": "8550733954f9c51e05968ddae6b3cb74a453f51e5538b259e818da7bffd27a29",
+    "e2e-mcp-sandbox.py": "20b5341133cf6be4696263d7b72ae57a1836f2e698fc4989e25b73c3be125474",
+    "first-check-mcp-http-kvm.py": "b6ba71b0d99ae0bdfd9dc96a058144880d47b6164bb2760e37038c8be75d8084",
+    "first-report.json": "b4631fcdfc2de4944a569535c9ea55426c1d97775198fa77c1b8ba78fdd2c00b",
+    "mcp_cancellation_check.py": "9996b14de8527e51c8ade1c1f6e4345b86472307b8b046b837a63a0f474cf831",
+    "README.md": "37bc124972f3b37a251fdf33cee6d170d498e868d9df0cc487dd4a2aa04aafce",
+    "report.json": "d2524665d14ef8f8cde64ce2e9617bb397d9011b7c31dec278a1ef6893bc2f0c",
+    "sandbox_vm.rs": "bf305903b850a6343f14d79cfdc86561694ad5d833ae8a94e182acf6e377ecc4",
+    "sandbox_vm_mcp.rs": "fba0c4a19956a6cd70fc183d485831fb8a7e424ab66cc1774c529f6d912232bb",
+    "sandbox_vm_mcp_http.rs": "8df0c614af75d7e2787c858d611fa732cf9f4120ccb470fb7af96a90437b5054",
+    "source-context.json": "b9fe57a7def520e89217981779a437b4339b3844a04558a51eb6a2c79f40a9d3"
+  }
+}

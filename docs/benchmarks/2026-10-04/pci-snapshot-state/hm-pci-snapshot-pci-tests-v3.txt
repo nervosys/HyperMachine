@@ -1,0 +1,15 @@
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-core)
+error[E0616]: field `device` of struct `IoDeviceHandle` is private
+    --> crates/hv2-core/src/vm.rs:1507:20
+     |
+1507 |             handle.device.read().await.read(0, &mut data).await?;
+     |                    ^^^^^^ private field
+
+error[E0616]: field `device` of struct `IoDeviceHandle` is private
+    --> crates/hv2-core/src/vm.rs:2045:18
+     |
+2045 |                 .device
+     |                  ^^^^^^ private field
+
+For more information about this error, try `rustc --explain E0616`.
+error: could not compile `hv2-core` (lib test) due to 2 previous errors

@@ -1,0 +1,11 @@
+{
+  "README.md": "72cb71cb1b42b148ecec8ad62758378f2fd8be738caa900c99470e434d63c171",
+  "before-store.rs": "b80f15b4e1f12b1d6c9c74a6d3fb2491a554697b9ab717d428dffef94a463187",
+  "candidate-store.rs": "6f0341fe2c82423dfea133d862d2b5e28650fcc070f23d576a871cfe896c5f55",
+  "cleanup-check.json": "195697228e132adfe60e572f120c93c538bc7cb2691dab4cabc29f993f624ce6",
+  "final-tests.txt": "3499c855e8f828112fda7f88c844bb231f0dd05cc6dc1534bdac8c3cdc39b84f",
+  "initial-failed-store.rs": "92ee7b73c34578db7466c84ac28eca8a041e752b2c2c4eb2f09e969ccaa478c6",
+  "initial-tests.txt": "f91fefd6deebee6d0d1c683df01e32db82e10e9a12dd3098ce0037f5ad1a9f7e",
+  "source-context.json": "f76f5244018232201c5930775fd8a8d2bb9aec5dd9aead8ff48658f2d3050e55",
+  "verify.py": "23feb26f4bbfa1087c5d422467230d535fa8381710cda618877c65acf9b5b73a"
+}

@@ -1,0 +1,15 @@
+{
+  "sha256": {
+    "README.md": "3ac322bb1d83cd6c0c250c421cbbe22cb3ff082167bc550b5d70b2f34a54c289",
+    "bench-secret-rewriting.py": "b75194a0f5725c45c4884d5a9994b43cb808a67a031741473f80e96db0e64387",
+    "benchmark-build.txt": "a45402689b9bb959d94637a53ca3b35644673bf3b038369960bfcaf42509fd8e",
+    "benchmark.rs": "5f407bd6dc2c85fb14793cc59903fadf89c2e9a6eb6dc4327d9c49db7be8c246",
+    "build-context.json": "8e2ba07d9d1da438f80a0137cfda62e05e397984401b0bd6f8006ad4f167a681",
+    "daemon-build.txt": "ae41d5210afa534552e37794a3ccb25dc28cd5644a5f93334693483f699aabaf",
+    "kvm-checker.py": "0e4095a6058ec6f6f99468bc0b106ecb69ae0353b8c13ace027310430345d4d2",
+    "kvm-result.json": "32aa61de3ba1b8fcb07ec5503fe6f729254791ec94de49ca7a443cbe0dfdaf7d",
+    "network-tests.txt": "42981e8da1e0e7e747434e000ea1139a0d88bc93b30ecb4427d76709fd5ef8c2",
+    "paired.json": "0b485592309fcbc1e8375a1fff2b980e37e8015ca9c42c82c859f76b1ae961d8",
+    "secret_substitution.rs": "b76a95c8b5e822f65462f2c77a903347ad9e15883815416938d772c3c1a2967c"
+  }
+}

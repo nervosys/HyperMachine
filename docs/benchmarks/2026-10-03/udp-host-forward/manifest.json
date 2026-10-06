@@ -1,0 +1,8 @@
+{
+  "sha256": {
+    "README.md": "f341d9099e00dab294d7c0ef72daea07b8614ef62033a2a618a98dc28ffadf25",
+    "agent_vm.rs": "9fbe794db30305141dde4d1b72a802368552b1ff6f00ee7ff422128e21de3bef",
+    "guest_agent.rs": "6b046cd04aee1b92d70da47d32e9192bca4a2eec92f976c902beb9ea37d63301",
+    "tests.log": "08caa1c8bb9715abe3d05d8cd83c1631774d0224f9b5c744fe0f126fcb5aaf97"
+  }
+}

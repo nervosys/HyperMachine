@@ -1,0 +1,148 @@
+   Compiling hv2-cluster v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-cluster)
+    Finished `test` profile [optimized + debuginfo] target(s) in 19.43s
+     Running unittests src/lib.rs (/var/tmp/hm-object-backup/target/debug/deps/hv2_cluster-39b572a236a06967)
+
+running 117 tests
+fault mode=1 status=503 elapsed_ms=1
+test control::access_audit_tests::pending_page_refuses_capabilities_and_malformed_pagination ... ok
+test control::access_audit_tests::reconciliation_requires_administrator_cluster_auth_and_registered_node ... ok
+test audit::tests::sandbox_references_are_domain_separated_bounded_and_key_dependent ... ok
+test audit::tests::failed_write_permanently_stops_all_queued_and_future_appends ... ok
+test domain_verification::tests::challenges_bind_namespace_key_domain_and_sandbox ... ok
+test domain_verification::tests::only_exact_txt_answers_to_the_exact_query_are_accepted ... ok
+test domain_verification::tests::policy_file_reads_are_bounded_and_errors_do_not_expose_key_contents ... ok
+test domain_verification::tests::resolver_and_secret_configuration_are_restricted ... ok
+test domains::tests::canonical_names_and_binding_fields_survive_round_trip ... ok
+test domains::tests::stored_json_cannot_bypass_binding_validation ... ok
+test domains::tests::rejects_authorities_ips_bad_labels_and_reserved_routes ... ok
+test control::access_audit_tests::audit_failure_before_dispatch_blocks_mutation_and_after_dispatch_preserves_uncertainty ... ok
+test events::tests::a_webhook_payload_has_e2bs_documented_shape ... ok
+test events::tests::events_map_to_e2b_types ... ok
+test events::tests::only_public_addresses_are_global ... ok
+test events::tests::signatures_are_e2bs ... ok
+test events::tests::the_signature_is_what_e2bs_documented_verifier_expects ... ok
+test keys::tests::capability_scopes_do_not_cross_resource_families ... ok
+test keys::tests::configured_principal_survives_key_rotation_and_rejects_invalid_labels ... ok
+test keys::tests::expiry_is_enforced_at_the_exact_boundary ... ok
+test keys::tests::inventory_cannot_obtain_access_tokens_or_modify_resources ... ok
+test domain_verification::tests::trusted_tls_transport_enforces_exact_proof_expiry_redirect_and_size_bounds ... ok
+test control::private_membership_http_tests::memory_membership_api_enforces_owners_revisions_and_request_bounds ... ok
+test keys::tests::legacy_admin_collision_is_rejected_even_for_expired_policies ... ok
+test keys::tests::malformed_policy_never_silently_disables_authentication ... ok
+test keys::tests::observer_role_caps_even_admin_scope_and_defaults_preserve_operators ... ok
+test metrics::tests::a_histogram_is_cumulative_and_carries_sum_and_count ... ok
+test metrics::tests::counters_render_one_line_per_label_value ... ok
+test model::tests::a_paused_record_lists_as_paused ... ok
+test model::tests::listed_carries_every_required_field ... ok
+test model::tests::metadata_filters_need_every_pair ... ok
+test model::tests::template_names_as_e2b_spells_them ... ok
+test names::tests::name_grammar_matches_cli_and_keeps_case ... ok
+test names::tests::operation_context_is_validated_pending_and_matches_only_its_owner ... ok
+test model::tests::trusted_owner_roundtrips_and_legacy_records_stay_ownerless ... ok
+test model::tests::detail_adds_the_token_and_where_it_runs ... ok
+test names::tests::ownership_survives_round_trip_and_never_transfers ... ok
+test mtls::tests::tcp_client_uses_http1_alpn_and_retains_mutual_tls ... ok
+test native_ports::tests::registry_rejects_ambiguous_and_oversized_snapshots ... ok
+test keys::tests::policy_reads_and_parsing_are_bounded_without_content_in_errors ... ok
+test audit::tests::queued_records_share_a_write_and_nobody_is_acknowledged_before_it_finishes ... ok
+test native_ports::tests::failed_dual_bind_releases_partial_tcp_socket ... ok
+test native_tcp::tests::cancelling_owner_closes_live_stream_and_listener ... ok
+test native_ports::tests::ipv6_dual_protocol_datagrams_and_exclusive_bind ... ok
+test native_ports::tests::same_port_protocol_changes_preserve_existing_listener ... ok
+test native_node::tests::foreign_certificate_authority_is_refused ... ok
+test native_ports::tests::registry_recovers_same_ports_and_fails_closed_on_update ... ok
+test native_gateway::tests::gateway_owns_dual_relays_and_reconciles_live_lifecycle ... ok
+test native_node::tests::mutual_tls_exact_upgrade_and_early_bytes ... ok
+test native_tcp::tests::mismatched_and_udp_only_reservations_never_dispatch ... ok
+test domain_verification::tests::ownership_api_refuses_missing_transferred_and_failed_proofs_without_mutating_bindings ... ok
+test native_node::tests::wrong_node_certificate_name_is_refused ... ok
+test native_node::tests::exact_protocol_redirect_and_setup_deletion_are_refused ... ok
+test node::tests::an_end_is_reported_once ... ok
+test native_udp::tests::wrong_reservations_refuse_dispatch ... ok
+test node::tests::joining_forgets_what_a_previous_run_left_behind ... ok
+test node::tests::named_completion_binds_before_announcement_and_refuses_unowned_records ... ok
+test ownership::tests::owner_labels_are_bounded_and_validated_on_deserialization ... ok
+test node::tests::template_metadata_is_published_with_names_and_legacy_updates_clear_it ... ok
+test private_addresses::tests::rejoin_and_source_replacement_never_retarget_old_addresses ... ok
+test private_networks::tests::forged_source_and_zero_port_are_refused ... ok
+test mtls::tests::a_node_serves_only_peers_its_ca_signed ... ok
+test private_networks::tests::membership_state_rejects_mismatched_nested_identity_and_incarnation ... ok
+test private_networks::tests::pending_paused_expired_migrated_and_changed_owner_endpoints_are_refused ... ok
+test private_networks::tests::rejoining_or_replacing_a_destination_invalidates_old_claims ... ok
+test private_networks::tests::same_tag_never_grants_cross_owner_or_cross_network_access ... ok
+test private_networks::tests::route_wire_identity_is_bounded_and_generations_are_canonical ... ok
+test native_node::tests::lifecycle_protocol_and_same_url_relocation_during_setup_are_refused ... ok
+test private_networks::tests::tags_are_dns_labels_and_membership_wire_shape_is_strict ... ok
+test control::private_membership_http_tests::redis_membership_api_enforces_owners_revisions_and_request_bounds ... ok
+test private_node::tests::node_urls_are_https_origins_without_target_or_credentials ... ok
+test private_node::tests::leased_stream_refuses_revoked_source_and_releases_activity ... ok
+test native_node::tests::udp_setup_changes_and_early_binary_frames_are_checked ... ok
+test native_gateway::tests::polling_worker_observes_deletion_and_stops_owned_tasks ... ok
+test private_node::tests::mutual_tls_private_upgrade_preserves_context_early_and_binary_bytes ... ok
+test private_node::tests::target_requires_current_source_incarnation_lease_and_safe_destination_origin ... ok
+private_source_router_contract completed dns_commit_before_return=true concurrent_rebase=true cross_owner=refused stale_address=refused node_missing=refused
+test private_router::tests::memory_router_publishes_only_committed_current_bindings ... ok
+test private_router::tests::namespace_claims_unknown_names_without_accepting_malformed_routes ... ok
+test private_node::tests::changes_during_private_upgrade_refuse_stale_claims_and_release_lease ... ok
+test scheduler::tests::a_full_node_is_not_a_candidate ... ok
+test private_node::tests::private_transport_refuses_bad_cert_anonymous_peer_bad_token_and_wrong_upgrade ... ok
+test scheduler::tests::a_zero_capacity_node_takes_nothing_and_breaks_nothing ... ok
+test scheduler::tests::the_least_loaded_fraction_goes_first ... ok
+test private_node::tests::bound_private_transport_preserves_bytes_and_refuses_upgrade_races ... ok
+test private_addresses::tests::concurrent_allocations_are_idempotent_and_restore_preserves_bindings ... ok
+test store::tests::managed_ports_redis_owned_restart ... ignored, launches an owned Redis server; invoke explicitly on Linux
+test store::tests::a_logged_store_url_carries_no_password ... ok
+test store::tests::managed_ports_memory_contract ... ok
+test store::tests::memory_owned_port_operations_authorize_atomically ... ok
+test store::tests::memory_legacy_owner_adoption_is_atomic ... ok
+private_address_ledger_contract completed concurrent_single_winner=true rollback=refused replay=exact migration=preserved deleted=refused replacement=separate
+private_route_contract completed source_rejoin=refused cross_owner=refused cross_network=refused pause=refused expiration=refused stale_migration=refused removal=absent deletion=absent
+skipped: HV2_TEST_REDIS_ACL is unset (requires an owned Redis server)
+test store::tests::redis_named_registration_checks_write_permissions_before_writing ... ok
+test web_access::tests::expiry_rotation_and_invalid_replacements_fail_closed ... ok
+test web_access::tests::malformed_duplicate_and_oversized_auth_are_refused ... ok
+test web_access::tests::sandbox_scopes_are_exact_atomic_and_fail_closed ... ok
+test native_tcp::tests::exact_binary_half_close_and_shutdown_cleanup ... ok
+test private_node::tests::transient_source_validation_backpressures_both_halves_without_reviving_revocation ... ok
+test store::tests::redis_named_registration_checks_index_types_before_writing ... ok
+private_source_router_contract completed dns_commit_before_return=true concurrent_rebase=true cross_owner=refused stale_address=refused node_missing=refused
+test private_router::tests::redis_router_publishes_only_committed_current_bindings ... ok
+private_address_ledger_contract completed concurrent_single_winner=true rollback=refused replay=exact migration=preserved deleted=refused replacement=separate
+private_route_contract completed source_rejoin=refused cross_owner=refused cross_network=refused pause=refused expiration=refused stale_migration=refused removal=absent deletion=absent
+test native_node::tests::lifecycle_and_reservation_refusals_do_not_dial ... ok
+test native_budget::tests::tcp_and_udp_on_one_port_share_admission_and_return_slots ... ok
+test native_node::tests::udp_protocol_and_lifecycle_checks_refuse_invalid_destinations ... ok
+test native_tcp::tests::absolute_age_closes_idle_connections ... ok
+
+thread 'native_tcp::tests::limits_and_upstream_failures_release_slots' (690) panicked at crates/hv2-cluster/src/native_tcp.rs:212:22:
+owned fixture panic
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test native_tcp::tests::limits_and_upstream_failures_release_slots ... ok
+test native_node::tests::native_ingress_through_authenticated_node_relay ... ok
+test private_addresses::tests::snapshot_validation_and_capacity_fail_closed ... ok
+test native_udp::tests::idle_sessions_expire_and_owner_cancellation_releases_socket ... ok
+test native_udp::tests::exact_peer_datagrams_ipv4_ipv6_and_cap_refusal ... ok
+test native_node::tests::gateway_supervisor_uses_authenticated_udp_and_closes_on_pause ... ok
+test private_node::tests::stale_address_bindings_are_refused_without_contacting_destination ... ok
+
+thread 'native_udp::tests::failed_sessions_release_same_peer_slot' (693) panicked at crates/hv2-cluster/src/native_udp.rs:276:22:
+owned panic
+test native_udp::tests::pressure_is_dropped_and_oversized_ipv6_ingress_never_opens_a_peer ... ok
+test native_node::tests::native_udp_ingress_through_mutual_tls_preserves_frames ... ok
+test native_udp::tests::failed_sessions_release_same_peer_slot ... ok
+test private_node::tests::sustained_source_contention_closes_without_reading_unchecked_bytes ... ok
+test store::tests::memory_store_keeps_the_contract ... ok
+test store::tests::redis_store_keeps_the_contract ... ok
+fault mode=2 status=503 elapsed_ms=5001
+fault mode=3 status=503 elapsed_ms=0
+fault mode=4 status=503 elapsed_ms=5000
+fault mode=5 status=503 elapsed_ms=0
+fault mode=6 status=503 elapsed_ms=5001
+fault mode=8 status=503 elapsed_ms=0 committed=true
+test private_node::tests::stalled_private_upgrade_times_out_and_releases_source_lease ... ok
+fault mode=7 status=503 elapsed_ms=5001 committed=true
+fault recovery exact_replays=2 changed_payload_refusals=2 changed_revision_refusals=2 cancelled_store_futures=4
+test control::private_membership_failure_tests::http_store_failures_preserve_uncertainty_and_exact_replay_after_commit ... ok
+
+test result: ok. 116 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 20.01s
+

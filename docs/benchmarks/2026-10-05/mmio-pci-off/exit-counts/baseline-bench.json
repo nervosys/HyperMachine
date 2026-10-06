@@ -1,0 +1,198 @@
+{
+  "schema_version": 1,
+  "lifecycle": "native-cold-create-to-command",
+  "concurrency": 1,
+  "hypermachine_log_filter": "warn",
+  "diagnostic_tracing": false,
+  "pairs": 3,
+  "order": "alternating AB/BA",
+  "environment": "exit-count probe, shared WSL",
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "artifact_sha256": {
+    "hyperMachine": "ff8964fd5cdfaa24f5dee5c23188d1568ac7987ea701add52ab4825aba77777d",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "harness": "4a528cd8aaafd8c71a2e39722776e716b1390dc61a69e1dcd85ac51b30bc7f9f",
+    "firecracker_harness": "0bcdc13351d54d4c9658bf034aa97f7d86d96d99375a2df04e4c94eaf8d3b610"
+  },
+  "artifacts_unchanged": true,
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "driver_cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23
+  ],
+  "guest_readiness_timeout_s": {
+    "hypermachine": 15,
+    "firecracker": 15
+  },
+  "firecracker_total_startup_timeout_s": 30,
+  "common_boot_args": "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd",
+  "hypermachine_template_preflight": [
+    {
+      "aliases": [
+        "base"
+      ],
+      "buildID": "base",
+      "buildStatus": "ready",
+      "cpuCount": 1,
+      "envdVersion": "0.6.3",
+      "memoryMB": 1024,
+      "public": false,
+      "snapshot": false,
+      "templateID": "base"
+    }
+  ],
+  "setup_error": null,
+  "cleanup_error": null,
+  "samples": [
+    {
+      "index": 0,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 466.50927799987585,
+      "node_memory_ready": {
+        "Rss_kib": 113028,
+        "Pss_kib": 110839,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 110708,
+        "Anonymous_kib": 101436
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 28112,
+        "Pss_kib": 25800,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 25664,
+        "Anonymous_kib": 16400
+      },
+      "engine": "hypermachine",
+      "pair": 0
+    },
+    {
+      "index": 0,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 423.06497200002013,
+      "engine": "firecracker",
+      "pair": 0
+    },
+    {
+      "index": 1,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 404.61902200013355,
+      "engine": "firecracker",
+      "pair": 1
+    },
+    {
+      "index": 1,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 446.76610100009384,
+      "node_memory_ready": {
+        "Rss_kib": 142744,
+        "Pss_kib": 140432,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 140296,
+        "Anonymous_kib": 131024
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 57592,
+        "Pss_kib": 55280,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 55144,
+        "Anonymous_kib": 45880
+      },
+      "engine": "hypermachine",
+      "pair": 1
+    },
+    {
+      "index": 2,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 457.4403630001598,
+      "node_memory_ready": {
+        "Rss_kib": 144560,
+        "Pss_kib": 142248,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 142112,
+        "Anonymous_kib": 132840
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 59428,
+        "Pss_kib": 57116,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 56980,
+        "Anonymous_kib": 47716
+      },
+      "engine": "hypermachine",
+      "pair": 2
+    },
+    {
+      "index": 2,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 407.3260750001282,
+      "engine": "firecracker",
+      "pair": 2
+    }
+  ],
+  "node_memory_baseline": {
+    "Rss_kib": 10864,
+    "Pss_kib": 8675,
+    "Private_Clean_kib": 0,
+    "Private_Dirty_kib": 8544,
+    "Anonymous_kib": 1328
+  },
+  "node_log_tail": null,
+  "ready_ms": {
+    "hypermachine": {
+      "n": 3,
+      "min": 446.76610100009384,
+      "max": 466.50927799987585,
+      "mean": 456.9052473333765,
+      "p50": 457.4403630001598,
+      "p95": 466.50927799987585,
+      "p99": 466.50927799987585
+    },
+    "firecracker": {
+      "n": 3,
+      "min": 404.61902200013355,
+      "max": 423.06497200002013,
+      "mean": 411.670023000094,
+      "p50": 407.3260750001282,
+      "p95": 423.06497200002013,
+      "p99": 423.06497200002013
+    }
+  },
+  "limitations": [
+    "Shared nested-KVM host; no dedicated hardware; inspect driver/coordinator affinity metadata",
+    "Different native control paths: persistent HyperMachine HTTP node versus Firecracker process and Unix API",
+    "Cold lifecycle only; no snapshot/SDK/platform comparison",
+    "Engine-generated device kernel arguments differ"
+  ],
+  "success": true
+}

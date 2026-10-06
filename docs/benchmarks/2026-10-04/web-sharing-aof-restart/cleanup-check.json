@@ -1,0 +1,18 @@
+{
+  "test_exit_code": 0,
+  "five_restart_markers": [
+    true,
+    true,
+    true,
+    true,
+    true
+  ],
+  "owned_directory_removed": true,
+  "owned_process_absent": true,
+  "protected_before_after_hashes": {
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+    "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+  },
+  "candidate_store_sha256": "6f0341fe2c82423dfea133d862d2b5e28650fcc070f23d576a871cfe896c5f55"
+}

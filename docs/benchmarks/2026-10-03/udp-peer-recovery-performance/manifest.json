@@ -1,0 +1,14 @@
+{
+  "sha256": {
+    "0-baseline.json": "2cf06d8de1b00a29c0a25d171e9426999d593e30b7a47d817f5f01f8c7f1679e",
+    "1-candidate.json": "f9064dd06db3a40d85a430b85b86a521cc6f5664479f3cef0373960b3536befc",
+    "2-candidate.json": "f94b0debe26e51b7ace386f66f2a2019b6f98046a6c5f07507057ede9f224697",
+    "3-baseline.json": "b1d15297ab911e413e91ed3e1d774781e48b5a4956c49b33b41bc5cba3f76ea5",
+    "README.md": "896e7d18b5dffe485e937631875d286bc606ec2701403f4fe2e817d9ee9165fa",
+    "candidate-sandbox_vm_udp.rs": "936decd596d2989a60de9be2c8ed6bc4075fa5400987e59bae93c76456d4b1d2",
+    "candidate-source-context.json": "305713516fe7131f0c50bafc810e7df6333e00bc2c912fa8218f7ae6254c2b74",
+    "check-udp-cluster-kvm.py": "bbb04d665d866bafa54cc498b80d658ea0ddfc274d573e7f764b978eea08e6a0",
+    "compare-udp-cli.py": "6c4a08a3828501f40843c1f551140a6b7c0da73afdfc441cf23abb30dbb15d7c",
+    "summary.json": "134a15a5c604dba1413cf5eadba31db9ef4a2fd1d8dac294f652f8fc12b664cc"
+  }
+}

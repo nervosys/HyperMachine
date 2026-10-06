@@ -24,7 +24,10 @@ pub mod runtime_routes;
 pub mod sandbox_proxy;
 pub mod server;
 pub mod snapshot_routes;
+pub mod tcp_tunnel;
 pub mod tls;
+pub mod tls_bundle;
+pub mod udp_tunnel;
 pub mod ws_routes;
 
 use thiserror::Error;

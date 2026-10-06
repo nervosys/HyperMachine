@@ -1,0 +1,165 @@
+{
+  "artifact_sha256": {
+    "daemon": "d420dabe8ad568ed7d90b0806ad4fe186e42be0dfbf3a46f8997174871400159",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "sdk_harness": "30ac43be27ab656d3aac52d617b167471f5772b298430c695258e6e581f5a028",
+    "request_harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "coordinator": "f118b89cbbbfb3f0bece9eaefd12ef3758da71deb70768fa68a8c615350f4e5c"
+  },
+  "success": true,
+  "error": null,
+  "cleanup_errors": [],
+  "host_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "concurrency": 1,
+  "operation": "resume",
+  "batches": 1,
+  "memory_info_before": "MemTotal:       48111260 kB\nMemFree:        46183876 kB\nMemAvailable:   46516228 kB\nBuffers:           56568 kB\nCached:           683596 kB\nSwapCached:            0 kB\nActive:           194344 kB\nInactive:         860048 kB\nActive(anon):      32692 kB\nInactive(anon):   361948 kB\nActive(file):     161652 kB\nInactive(file):   498100 kB\nUnevictable:           0 kB\nMlocked:               0 kB\nSwapTotal:      12582912 kB\nSwapFree:       12582868 kB\nDirty:              2136 kB\nWriteback:             0 kB\nAnonPages:        315088 kB\nMapped:           338404 kB\nShmem:             80508 kB\nKReclaimable:     158888 kB\nSlab:             340272 kB\nSReclaimable:     158888 kB\nSUnreclaim:       181384 kB\nKernelStack:        9936 kB\nPageTables:        14256 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:    36638540 kB\nCommitted_AS:    2791884 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:       48936 kB\nVmallocChunk:          0 kB\nPercpu:            12096 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:         0 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:         0 kB\nFilePmdMapped:         0 kB\nUnaccepted:            0 kB\nBalloon:               0 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:      662528 kB\nDirectMap2M:    42139648 kB\nDirectMap1G:    14680064 kB\n",
+  "baseline_commit": "5c91befd2bad03bf3cb9a2bc359c9840d5f44bf6",
+  "daemon_guest_capacity": 6,
+  "controlled_cpu_load": {
+    "workers": 1,
+    "cpu": 0,
+    "worker_code": "import time\nend=time.monotonic()+7200\nx=1\nwhile time.monotonic()<end:\n for _ in range(10000): x=(x*1664525+1013904223)&0xffffffff\n",
+    "all_alive_through_cohort": true,
+    "workers_cleaned_up": true
+  },
+  "template": {
+    "aliases": [
+      "base"
+    ],
+    "buildID": "base",
+    "buildStatus": "ready",
+    "cpuCount": 1,
+    "envdVersion": "0.6.3",
+    "memoryMB": 1024,
+    "public": false,
+    "snapshot": true,
+    "templateID": "base"
+  },
+  "sdk_exit_code": 0,
+  "sdk_stderr": "",
+  "sdk": {
+    "schema_version": 1,
+    "transport": "e2b-python-sdk",
+    "sdk_version": "2.51.0",
+    "dependency_versions": {
+      "e2b": "2.51.0",
+      "pyqwest": "0.10.0",
+      "connectrpc": "0.11.1",
+      "httpx": "0.28.1",
+      "httpcore": "1.0.9"
+    },
+    "harness_sha256": "30ac43be27ab656d3aac52d617b167471f5772b298430c695258e6e581f5a028",
+    "harness_unchanged_during_run": true,
+    "provider": "HyperMachine",
+    "api_url": "http://127.0.0.1:45869",
+    "sandbox_url": "http://127.0.0.1:44009",
+    "template": "base",
+    "environment": "shared-WSL-nested-KVM-eight-host-CPU-affinity-one-pinned-worker-Linux-SDK-client",
+    "image_description": "fixed UART IRQ BusyBox guest with agent and envd; snapshot-backed base; 1 vCPU/1024 MiB; exact images in coordinator artifact hashes",
+    "workload": "posix",
+    "expected_cpus": 1,
+    "expected_memory_mb": 1024,
+    "operation": "resume",
+    "internet_access": false,
+    "sdk_debug": false,
+    "sdk_retries": 0,
+    "sandbox_lifetime_seconds": 300,
+    "request_timeout_seconds": 120,
+    "command_timeout_seconds": 30,
+    "samples_requested": 1,
+    "concurrency": 1,
+    "successful_samples": 1,
+    "synchronized_operation_batches": true,
+    "operation_batches": [
+      {
+        "batch_index": 0,
+        "attempted": 1,
+        "operations_started": 1,
+        "operation_start_spread_ms": 0.0
+      }
+    ],
+    "failed_samples": 0,
+    "elapsed_seconds": 0.4290549379984441,
+    "completed_lifecycles_per_second": 2.330703859661968,
+    "client_os": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+    "client_python": "3.13.5",
+    "finished_at": "2026-10-01T11:18:59.914304+00:00",
+    "create_ms": {
+      "n": 1,
+      "min": 91.88507400176604,
+      "max": 91.88507400176604,
+      "mean": 91.88507400176604,
+      "p50": 91.88507400176604,
+      "p95": 91.88507400176604,
+      "p99": 91.88507400176604
+    },
+    "exec_ms": {
+      "n": 1,
+      "min": 58.74884999866481,
+      "max": 58.74884999866481,
+      "mean": 58.74884999866481,
+      "p50": 58.74884999866481,
+      "p95": 58.74884999866481,
+      "p99": 58.74884999866481
+    },
+    "ready_ms": {
+      "n": 1,
+      "min": 71.70882299760706,
+      "max": 71.70882299760706,
+      "mean": 71.70882299760706,
+      "p50": 71.70882299760706,
+      "p95": 71.70882299760706,
+      "p99": 71.70882299760706
+    },
+    "operation_ms": {
+      "n": 1,
+      "min": 12.955844998941757,
+      "max": 12.955844998941757,
+      "mean": 12.955844998941757,
+      "p50": 12.955844998941757,
+      "p95": 12.955844998941757,
+      "p99": 12.955844998941757
+    },
+    "pause_ms": {
+      "n": 1,
+      "min": 55.020363000949146,
+      "max": 55.020363000949146,
+      "mean": 55.020363000949146,
+      "p50": 55.020363000949146,
+      "p95": 55.020363000949146,
+      "p99": 55.020363000949146
+    },
+    "max_p99_ready_ms": null,
+    "threshold_passed": null,
+    "samples": [
+      {
+        "index": 0,
+        "success": true,
+        "sandbox_id": "sbx-395d0e6e119640e48bae",
+        "create_ms": 91.88507400176604,
+        "pause_ms": 55.020363000949146,
+        "operation_start_offset_ms": 314.331225999922,
+        "operation_ms": 12.955844998941757,
+        "exec_ms": 58.74884999866481,
+        "ready_ms": 71.70882299760706,
+        "cpu_count": 1,
+        "memory_mb": 1024,
+        "batch_index": 0
+      }
+    ]
+  },
+  "remaining_sandbox_count": 0,
+  "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:45869, capacity 6\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes are restored from template snapshots: base\n\nsandbox proxy on 0.0.0.0:44009 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:44009 process.Process/Start\n",
+  "artifacts_unchanged": true
+}

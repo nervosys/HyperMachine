@@ -1,0 +1,8 @@
+    Checking hv2-sandbox v1.1.0 (/var/tmp/hm-mcp-http/source/crates/hv2-sandbox)
+    Checking hv2-guest-agent v1.1.0 (/var/tmp/hm-mcp-http/source/crates/hv2-guest-agent)
+    Checking hv2-context v1.1.0 (/var/tmp/hm-mcp-http/source/crates/hv2-context)
+    Checking hv2-core v1.1.0 (/var/tmp/hm-mcp-http/source/crates/hv2-core)
+    Checking hv2-jobs v1.1.0 (/var/tmp/hm-mcp-http/source/crates/hv2-jobs)
+    Checking hv2-agent v1.1.0 (/var/tmp/hm-mcp-http/source/crates/hv2-agent)
+    Checking hm-cli v1.1.0 (/var/tmp/hm-mcp-http/source/crates/hm-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 26.18s

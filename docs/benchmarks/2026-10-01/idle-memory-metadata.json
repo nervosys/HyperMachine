@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-01",
+  "measurement_kind": "fixed-idle-process-pss",
+  "sha256": {
+    "idle-memory-c1.json": "e679a2a2d3431189e5edcdcef80baf5b429c69db9356815f26b317d9eb53c1f4",
+    "idle-memory-c8.json": "c3c9294cffd3dba18c26b4df35a97f7ee881f0829d2fbe78fd9f1fb63671e9a9",
+    "idle-memory-c50.json": "a63d838888d7fa26d3871a486401b8953820aa6b24ddc9637919e7d999f3a8ec",
+    "idle-memory-c100.json": "c25a9575892b7aaf6858660ee8113ed8bc9c27a0df9e7fef47cb8ff7578dfa5c",
+    "idle-memory-summary.json": "1d8e7b82a6397ad819c6dab40a31c1dae4bce58ae9184070827e87f0bd56d257",
+    "idle-memory-harness.py": "8d6715e98077f76e9120a8c61100e558cb3c7d5d8e57d48df425880734afc6fa",
+    "idle-memory-shared-harness.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "idle-memory-firecracker-harness.py": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6",
+    "idle-memory-coordinator.py": "bfb7598b3a37cbe88d8787eaea1238a9f14e763fa4d4204398a9842f4bb12fc7",
+    "idle-memory-matrix.py": "83f4c1fb3258b36693749acc8bbe708311b73b8bb5f6988d363440f45c56990c",
+    "analyze-idle-memory.py": "ac3a5c8c890f534e0931bbb480ef231962693dddacc3f7493ecef306375fff04"
+  },
+  "artifact_sha256": {
+    "hypermachine": "8ea52a369067d99f281b96bc513c59216304ac8e7eea0462d746f854e9d7aa5d",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "harness": "8d6715e98077f76e9120a8c61100e558cb3c7d5d8e57d48df425880734afc6fa",
+    "shared_harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "firecracker_harness": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6"
+  },
+  "all_cohorts_passed": true,
+  "attempts_per_engine": 477,
+  "batch_measurements_per_engine_per_concurrency": 3,
+  "memory_or_density_win_established": false
+}

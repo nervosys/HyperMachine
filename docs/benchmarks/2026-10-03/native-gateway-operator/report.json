@@ -1,0 +1,27 @@
+{
+  "checks": [
+    "offline configuration check without store",
+    "exact 1 MiB TCP via executable Redis and mutual TLS",
+    "two UDP peers preserve empty binary and maximum datagrams",
+    "same-port UDP update closes old TCP",
+    "pause releases listeners and retains reservation",
+    "resume rebinds same public port",
+    "corrupt Redis snapshot closes sessions and correction recovers",
+    "SIGTERM graceful exit and live-session closure",
+    "gateway process restart retains same reserved port",
+    "owned sandbox/index removal closes gateway listeners",
+    "SIGINT graceful exit"
+  ],
+  "inputs_sha256": {
+    "gateway": "2765626337f4cf847cce92ec13f381018e2ca09f186f389ca2d7cfa7a443bb9f",
+    "checker": "dcc3a60c60c45b1ca7cc186733f9698d2fbabdb2f3f0f5ad827382369e936e9e"
+  },
+  "environment": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "scope": "owned executable Redis mutual-TLS echo fixture; no KVM or competitor performance evidence",
+  "cleanup": {
+    "gateway_reaped": true,
+    "redis_reaped": true,
+    "node_threads_joined": true,
+    "private_fixture_directory_removed": true
+  }
+}

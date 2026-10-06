@@ -1,0 +1,404 @@
+{
+  "transport": "pci",
+  "passed": true,
+  "failure": null,
+  "samples": [
+    {
+      "sample": 0,
+      "warmup": true,
+      "create_ms": 810.071467,
+      "command_ms": 5.564005,
+      "total_ms": 815.635472,
+      "before": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 0,
+        "pss_kib": 7561
+      },
+      "held": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 58,
+        "pss_kib": 114481
+      },
+      "exact_command": true,
+      "deleted": true,
+      "empty_inventory": true
+    },
+    {
+      "sample": 1,
+      "warmup": true,
+      "create_ms": 798.656806,
+      "command_ms": 4.904028,
+      "total_ms": 803.560834,
+      "before": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 59,
+        "pss_kib": 26140
+      },
+      "held": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 114,
+        "pss_kib": 99563
+      },
+      "exact_command": true,
+      "deleted": true,
+      "empty_inventory": true
+    },
+    {
+      "sample": 2,
+      "warmup": false,
+      "create_ms": 782.621744,
+      "command_ms": 4.64933,
+      "total_ms": 787.271074,
+      "before": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 117,
+        "pss_kib": 11114
+      },
+      "held": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 170,
+        "pss_kib": 99682
+      },
+      "exact_command": true,
+      "deleted": true,
+      "empty_inventory": true
+    },
+    {
+      "sample": 3,
+      "warmup": false,
+      "create_ms": 826.902519,
+      "command_ms": 3.33851,
+      "total_ms": 830.241029,
+      "before": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 172,
+        "pss_kib": 11170
+      },
+      "held": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 231,
+        "pss_kib": 130946
+      },
+      "exact_command": true,
+      "deleted": true,
+      "empty_inventory": true
+    },
+    {
+      "sample": 4,
+      "warmup": false,
+      "create_ms": 765.957686,
+      "command_ms": 2.832828,
+      "total_ms": 768.790514,
+      "before": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 232,
+        "pss_kib": 42466
+      },
+      "held": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 285,
+        "pss_kib": 133754
+      },
+      "exact_command": true,
+      "deleted": true,
+      "empty_inventory": true
+    },
+    {
+      "sample": 5,
+      "warmup": false,
+      "create_ms": 720.011375,
+      "command_ms": 2.867575,
+      "total_ms": 722.87895,
+      "before": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 286,
+        "pss_kib": 45290
+      },
+      "held": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 334,
+        "pss_kib": 133790
+      },
+      "exact_command": true,
+      "deleted": true,
+      "empty_inventory": true
+    },
+    {
+      "sample": 6,
+      "warmup": false,
+      "create_ms": 720.572428,
+      "command_ms": 2.188404,
+      "total_ms": 722.760832,
+      "before": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 335,
+        "pss_kib": 45290
+      },
+      "held": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 382,
+        "pss_kib": 133774
+      },
+      "exact_command": true,
+      "deleted": true,
+      "empty_inventory": true
+    },
+    {
+      "sample": 7,
+      "warmup": false,
+      "create_ms": 705.061043,
+      "command_ms": 2.602915,
+      "total_ms": 707.663958,
+      "before": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 383,
+        "pss_kib": 45318
+      },
+      "held": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 429,
+        "pss_kib": 165086
+      },
+      "exact_command": true,
+      "deleted": true,
+      "empty_inventory": true
+    },
+    {
+      "sample": 8,
+      "warmup": false,
+      "create_ms": 719.659008,
+      "command_ms": 2.571274,
+      "total_ms": 722.230282,
+      "before": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 430,
+        "pss_kib": 76637
+      },
+      "held": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 478,
+        "pss_kib": 165148
+      },
+      "exact_command": true,
+      "deleted": true,
+      "empty_inventory": true
+    },
+    {
+      "sample": 9,
+      "warmup": false,
+      "create_ms": 753.925822,
+      "command_ms": 3.26275,
+      "total_ms": 757.188572,
+      "before": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 479,
+        "pss_kib": 76636
+      },
+      "held": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 529,
+        "pss_kib": 165054
+      },
+      "exact_command": true,
+      "deleted": true,
+      "empty_inventory": true
+    },
+    {
+      "sample": 10,
+      "warmup": false,
+      "create_ms": 703.835416,
+      "command_ms": 3.921559,
+      "total_ms": 707.756975,
+      "before": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 530,
+        "pss_kib": 76622
+      },
+      "held": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 577,
+        "pss_kib": 165100
+      },
+      "exact_command": true,
+      "deleted": true,
+      "empty_inventory": true
+    },
+    {
+      "sample": 11,
+      "warmup": false,
+      "create_ms": 713.59332,
+      "command_ms": 2.855985,
+      "total_ms": 716.449305,
+      "before": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 577,
+        "pss_kib": 76624
+      },
+      "held": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 624,
+        "pss_kib": 168015
+      },
+      "exact_command": true,
+      "deleted": true,
+      "empty_inventory": true
+    },
+    {
+      "sample": 12,
+      "warmup": false,
+      "create_ms": 776.999533,
+      "command_ms": 2.169502,
+      "total_ms": 779.169035,
+      "before": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 625,
+        "pss_kib": 79491
+      },
+      "held": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 678,
+        "pss_kib": 167975
+      },
+      "exact_command": true,
+      "deleted": true,
+      "empty_inventory": true
+    },
+    {
+      "sample": 13,
+      "warmup": false,
+      "create_ms": 687.630741,
+      "command_ms": 2.465743,
+      "total_ms": 690.096484,
+      "before": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 679,
+        "pss_kib": 79491
+      },
+      "held": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 724,
+        "pss_kib": 168031
+      },
+      "exact_command": true,
+      "deleted": true,
+      "empty_inventory": true
+    },
+    {
+      "sample": 14,
+      "warmup": false,
+      "create_ms": 688.968957,
+      "command_ms": 2.501867,
+      "total_ms": 691.470824,
+      "before": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 725,
+        "pss_kib": 79495
+      },
+      "held": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 770,
+        "pss_kib": 167983
+      },
+      "exact_command": true,
+      "deleted": true,
+      "empty_inventory": true
+    },
+    {
+      "sample": 15,
+      "warmup": false,
+      "create_ms": 679.670844,
+      "command_ms": 4.23298,
+      "total_ms": 683.903824,
+      "before": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 770,
+        "pss_kib": 79495
+      },
+      "held": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 816,
+        "pss_kib": 168087
+      },
+      "exact_command": true,
+      "deleted": true,
+      "empty_inventory": true
+    },
+    {
+      "sample": 16,
+      "warmup": false,
+      "create_ms": 715.318802,
+      "command_ms": 2.495806,
+      "total_ms": 717.814608,
+      "before": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 817,
+        "pss_kib": 79495
+      },
+      "held": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 864,
+        "pss_kib": 167899
+      },
+      "exact_command": true,
+      "deleted": true,
+      "empty_inventory": true
+    },
+    {
+      "sample": 17,
+      "warmup": false,
+      "create_ms": 689.526333,
+      "command_ms": 2.533684,
+      "total_ms": 692.060017,
+      "before": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 865,
+        "pss_kib": 79495
+      },
+      "held": {
+        "pid": 830,
+        "start_ticks": 16770,
+        "cpu_ticks": 910,
+        "pss_kib": 168003
+      },
+      "exact_command": true,
+      "deleted": true,
+      "empty_inventory": true
+    }
+  ],
+  "daemon_exit": 0
+}

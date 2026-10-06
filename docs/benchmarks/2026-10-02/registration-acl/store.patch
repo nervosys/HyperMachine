@@ -1,0 +1,128 @@
+diff --git a/crates/hv2-cluster/src/store.rs b/crates/hv2-cluster/src/store.rs
+index a569d1d..2c9f44d 100644
+--- a/crates/hv2-cluster/src/store.rs
++++ b/crates/hv2-cluster/src/store.rs
+@@ -602,6 +602,22 @@ for i = 3, 4 do
+         return redis.error_reply('named registration index type mismatch')
+     end
+ end
++-- A script error does not undo earlier writes, including ACL denials.
++-- Fail closed on servers without the Redis 7 ACL preflight capability.
++if not redis.acl_check_cmd then
++    return redis.error_reply('named registration requires ACL preflight support')
++end
++local writes = {
++    {'SET', KEYS[2], ARGV[4]},
++    {'SADD', KEYS[3], ARGV[3]},
++    {'HSET', KEYS[1], ARGV[1], ARGV[5]},
++    {'SADD', KEYS[4], ARGV[1]}
++}
++for _, command in ipairs(writes) do
++    if not redis.acl_check_cmd(unpack(command)) then
++        return redis.error_reply('named registration write permission refused')
++    end
++end
+ redis.call('SET', KEYS[2], ARGV[4])
+ redis.call('SADD', KEYS[3], ARGV[3])
+ redis.call('HSET', KEYS[1], ARGV[1], ARGV[5])
+@@ -1602,6 +1618,100 @@ pub(crate) mod tests {
+         let store = RedisStore::connect(&url, &namespace).await.unwrap();
+         contract(&store).await;
+     }
++    #[tokio::test]
++    async fn redis_named_registration_checks_write_permissions_before_writing() {
++        // This opt-in endpoint must be an owned test server: the test creates
++        // and removes a uniquely named ACL user, never changes the default user.
++        let Ok(url) = std::env::var("HV2_TEST_REDIS_ACL") else {
++            eprintln!("skipped: HV2_TEST_REDIS_ACL is unset (requires an owned Redis server)");
++            return;
++        };
++        let identity = uuid::Uuid::new_v4().simple().to_string();
++        let namespace = format!("acl-test-{identity}");
++        let store = RedisStore::connect(&url, &namespace).await.unwrap();
++        let username = format!("registration-{identity}");
++        let password = uuid::Uuid::new_v4().simple().to_string();
++        let mut admin = store.connection.clone();
++        redis::cmd("ACL")
++            .arg("SETUSER")
++            .arg(&username)
++            .arg("on")
++            .arg(format!(">{password}"))
++            .arg(format!("~{}*", store.prefix))
++            .arg("+@all")
++            .query_async::<()>(&mut admin)
++            .await
++            .unwrap();
++        let restricted_url =
++            url.replacen("redis://", &format!("redis://{username}:{password}@"), 1);
++        let restricted = RedisStore::connect(&restricted_url, &namespace)
++            .await
++            .unwrap();
++        let mut outcomes = Vec::new();
++        for denied in ["set", "sadd", "hset"] {
++            let name = SandboxName::parse(&format!("acl-{denied}")).unwrap();
++            let owner = NameReservation::pending(name.clone());
++            let mut record = sandbox(&format!("acl-{denied}-vm"), "a");
++            record
++                .metadata
++                .insert("hm.name".into(), name.as_str().into());
++            assert!(store.reserve_name(&owner).await.unwrap());
++            redis::cmd("ACL")
++                .arg("SETUSER")
++                .arg(&username)
++                .arg(format!("-{denied}"))
++                .query_async::<()>(&mut admin)
++                .await
++                .unwrap();
++            let refused = restricted
++                .register_named_sandbox(&record, &owner)
++                .await
++                .is_err();
++            let absent = store.sandbox(&record.sandbox_id).await.unwrap().is_none();
++            let pending = store.name_reservation(&name).await.unwrap().as_ref() == Some(&owner);
++            let indexed: bool = redis::cmd("SISMEMBER")
++                .arg(store.key("sandboxes"))
++                .arg(&record.sandbox_id)
++                .query_async(&mut admin)
++                .await
++                .unwrap();
++            let names: u64 = redis::cmd("SCARD")
++                .arg(store.key(&format!("reserved-names:{}", record.sandbox_id)))
++                .query_async(&mut admin)
++                .await
++                .unwrap();
++            outcomes.push((
++                denied,
++                refused && absent && pending && !indexed && names == 0,
++            ));
++            redis::cmd("ACL")
++                .arg("SETUSER")
++                .arg(&username)
++                .arg(format!("+{denied}"))
++                .query_async::<()>(&mut admin)
++                .await
++                .unwrap();
++            // Clean even the old script's partial writes before asserting.
++            store.delete_sandbox(&record.sandbox_id).await.unwrap();
++            store
++                .release_pending_name(&name, owner.operation_token())
++                .await
++                .unwrap();
++        }
++        redis::cmd("ACL")
++            .arg("DELUSER")
++            .arg(&username)
++            .query_async::<u64>(&mut admin)
++            .await
++            .unwrap();
++        for (denied, intact) in outcomes {
++            assert!(
++                intact,
++                "registration partially wrote after denying {denied}"
++            );
++        }
++    }
++
+     #[tokio::test]
+     async fn redis_named_registration_checks_index_types_before_writing() {
+         let Ok(url) = std::env::var("HV2_TEST_REDIS") else {

@@ -1,0 +1,8 @@
+{
+  "report": "c8/report.json",
+  "scored": false,
+  "reason": "The first cohort overlapped our core-test compilation; exclude it from performance conclusions.",
+  "original_report_preserved": true,
+  "repeat": "c8-clean/report.json",
+  "repeat_started_after_core_tests_and_first_cohort_exited": true
+}

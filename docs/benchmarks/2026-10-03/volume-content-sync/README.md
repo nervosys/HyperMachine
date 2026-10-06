@@ -1,0 +1,7 @@
+# Volume content upload flushing
+
+Successful content uploads now flush buffered writes, apply requested ownership/mode, sync the file, then sync each containing directory back to the volume data root. This covers nested directories created with force=true. Real read-only directory descriptors are opened via the existing beneath-root/no-symlink resolver; O_PATH descriptors cannot be fsynced. Directory flushing uses Tokio file operations. Sync failures propagate rather than reporting upload success.
+
+All 45 daemon unit tests passed in the accepted isolated-core checkout. The expanded two-daemon fixture passed one-of-16 volume creation, duplicate/token preservation, a nested 1,048,586-byte binary upload, exact cross-node reads, replacement with NUL/non-UTF8 bytes, wrong-bearer overwrite refusal, winning-daemon restart, exact replacement reads on both nodes, and cleanup. No guests were created and all owned processes were reaped. Source, logs, report and binary/input identities are archived.
+
+This verifies normal upload/replacement/restart behavior, not power-loss survival or injected upload fsync errors. Content replacement remains streamed and in-place, not transactional; interrupted/error uploads can leave partial files. Concurrent guest or content writes require caller coordination. Local filesystem support was exercised; network-filesystem semantics, latency cost of flushing, guest 9P write durability and deletion durability remain unverified. No performance or competitor win is claimed.

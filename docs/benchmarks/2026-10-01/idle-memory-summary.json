@@ -1,0 +1,263 @@
+{
+  "measurement_kind": "fixed-idle-process-pss",
+  "profiles": [
+    {
+      "concurrency": 1,
+      "raw_sha256": "e679a2a2d3431189e5edcdcef80baf5b429c69db9356815f26b317d9eb53c1f4",
+      "cohort_success": true,
+      "engines": {
+        "hypermachine": {
+          "attempts": 3,
+          "passed": 3,
+          "valid_memory_batches": 3,
+          "failed_rows": [],
+          "incremental_idle_pss_mib_median": 99.56640625,
+          "incremental_idle_pss_mib_min": 84.984375,
+          "incremental_idle_pss_mib_max": 111.80859375,
+          "amortized_incremental_pss_mib_per_guest_median": 99.56640625,
+          "empty_pss_mib": [
+            6.9736328125,
+            23.51953125,
+            52.1171875
+          ],
+          "held_idle_pss_mib": [
+            106.5400390625,
+            135.328125,
+            137.1015625
+          ],
+          "post_cleanup_empty_pss_mib": [
+            23.4921875,
+            52.1171875,
+            53.9140625
+          ]
+        },
+        "firecracker": {
+          "attempts": 3,
+          "passed": 3,
+          "valid_memory_batches": 3,
+          "failed_rows": [],
+          "incremental_idle_pss_mib_median": 85.875,
+          "incremental_idle_pss_mib_min": 85.85546875,
+          "incremental_idle_pss_mib_max": 85.90234375,
+          "amortized_incremental_pss_mib_per_guest_median": 85.875,
+          "empty_pss_mib": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "held_idle_pss_mib": [
+            85.90234375,
+            85.875,
+            85.85546875
+          ],
+          "post_cleanup_empty_pss_mib": null
+        }
+      },
+      "paired_hm_minus_fc_incremental_pss_mib": [
+        13.6640625,
+        25.93359375,
+        -0.87109375
+      ],
+      "paired_hm_minus_fc_held_pss_mib": [
+        20.6376953125,
+        49.453125,
+        51.24609375
+      ]
+    },
+    {
+      "concurrency": 8,
+      "raw_sha256": "c3c9294cffd3dba18c26b4df35a97f7ee881f0829d2fbe78fd9f1fb63671e9a9",
+      "cohort_success": true,
+      "engines": {
+        "hypermachine": {
+          "attempts": 24,
+          "passed": 24,
+          "valid_memory_batches": 3,
+          "failed_rows": [],
+          "incremental_idle_pss_mib_median": 669.28125,
+          "incremental_idle_pss_mib_min": 653.92578125,
+          "incremental_idle_pss_mib_max": 785.18359375,
+          "amortized_incremental_pss_mib_per_guest_median": 83.66015625,
+          "empty_pss_mib": [
+            6.7890625,
+            127.0263671875,
+            115.7841796875
+          ],
+          "held_idle_pss_mib": [
+            791.97265625,
+            780.9521484375,
+            785.0654296875
+          ],
+          "post_cleanup_empty_pss_mib": [
+            127.1044921875,
+            115.8740234375,
+            119.7412109375
+          ]
+        },
+        "firecracker": {
+          "attempts": 24,
+          "passed": 24,
+          "valid_memory_batches": 3,
+          "failed_rows": [],
+          "incremental_idle_pss_mib_median": 670.9521484375,
+          "incremental_idle_pss_mib_min": 670.875,
+          "incremental_idle_pss_mib_max": 671.1943359375,
+          "amortized_incremental_pss_mib_per_guest_median": 83.8690185546875,
+          "empty_pss_mib": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "held_idle_pss_mib": [
+            670.875,
+            671.1943359375,
+            670.9521484375
+          ],
+          "post_cleanup_empty_pss_mib": null
+        }
+      },
+      "paired_hm_minus_fc_incremental_pss_mib": [
+        114.30859375,
+        -17.2685546875,
+        -1.6708984375
+      ],
+      "paired_hm_minus_fc_held_pss_mib": [
+        121.09765625,
+        109.7578125,
+        114.11328125
+      ]
+    },
+    {
+      "concurrency": 50,
+      "raw_sha256": "a63d838888d7fa26d3871a486401b8953820aa6b24ddc9637919e7d999f3a8ec",
+      "cohort_success": true,
+      "engines": {
+        "hypermachine": {
+          "attempts": 150,
+          "passed": 150,
+          "valid_memory_batches": 3,
+          "failed_rows": [],
+          "incremental_idle_pss_mib_median": 4157.66796875,
+          "incremental_idle_pss_mib_min": 4157.19140625,
+          "incremental_idle_pss_mib_max": 4222.640625,
+          "amortized_incremental_pss_mib_per_guest_median": 83.153359375,
+          "empty_pss_mib": [
+            7.0087890625,
+            73.1484375,
+            74.05859375
+          ],
+          "held_idle_pss_mib": [
+            4229.6494140625,
+            4230.81640625,
+            4231.25
+          ],
+          "post_cleanup_empty_pss_mib": [
+            73.59765625,
+            74.5390625,
+            75.171875
+          ]
+        },
+        "firecracker": {
+          "attempts": 150,
+          "passed": 150,
+          "valid_memory_batches": 3,
+          "failed_rows": [],
+          "incremental_idle_pss_mib_median": 4180.462890625,
+          "incremental_idle_pss_mib_min": 4180.251953125,
+          "incremental_idle_pss_mib_max": 4180.724609375,
+          "amortized_incremental_pss_mib_per_guest_median": 83.6092578125,
+          "empty_pss_mib": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "held_idle_pss_mib": [
+            4180.462890625,
+            4180.724609375,
+            4180.251953125
+          ],
+          "post_cleanup_empty_pss_mib": null
+        }
+      },
+      "paired_hm_minus_fc_incremental_pss_mib": [
+        42.177734375,
+        -23.056640625,
+        -23.060546875
+      ],
+      "paired_hm_minus_fc_held_pss_mib": [
+        49.1865234375,
+        50.091796875,
+        50.998046875
+      ]
+    },
+    {
+      "concurrency": 100,
+      "raw_sha256": "c25a9575892b7aaf6858660ee8113ed8bc9c27a0df9e7fef47cb8ff7578dfa5c",
+      "cohort_success": true,
+      "engines": {
+        "hypermachine": {
+          "attempts": 300,
+          "passed": 300,
+          "valid_memory_batches": 3,
+          "failed_rows": [],
+          "incremental_idle_pss_mib_median": 8320.546875,
+          "incremental_idle_pss_mib_min": 8313.61328125,
+          "incremental_idle_pss_mib_max": 8488.4375,
+          "amortized_incremental_pss_mib_per_guest_median": 83.20546875,
+          "empty_pss_mib": [
+            6.765625,
+            183.259765625,
+            189.990234375
+          ],
+          "held_idle_pss_mib": [
+            8495.203125,
+            8503.806640625,
+            8503.603515625
+          ],
+          "post_cleanup_empty_pss_mib": [
+            184.255859375,
+            190.947265625,
+            191.794921875
+          ]
+        },
+        "firecracker": {
+          "attempts": 300,
+          "passed": 300,
+          "valid_memory_batches": 3,
+          "failed_rows": [],
+          "incremental_idle_pss_mib_median": 8360.41796875,
+          "incremental_idle_pss_mib_min": 8359.890625,
+          "incremental_idle_pss_mib_max": 8367.44921875,
+          "amortized_incremental_pss_mib_per_guest_median": 83.6041796875,
+          "empty_pss_mib": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "held_idle_pss_mib": [
+            8360.41796875,
+            8359.890625,
+            8367.44921875
+          ],
+          "post_cleanup_empty_pss_mib": null
+        }
+      },
+      "paired_hm_minus_fc_incremental_pss_mib": [
+        128.01953125,
+        -39.34375,
+        -53.8359375
+      ],
+      "paired_hm_minus_fc_held_pss_mib": [
+        134.78515625,
+        143.916015625,
+        136.154296875
+      ]
+    }
+  ],
+  "limitations": [
+    "Three alternating batch pairs per concurrency; within-batch guests share load and are not independent samples",
+    "Shared nested WSL/KVM host, eight-CPU affinity and one pinned CPU worker",
+    "HM process increment subtracts its current empty daemon; FC sums fresh VMM processes against zero processes, excluding benchmark controller footprint",
+    "PSS excludes host kernel memory and is not a density or fleet-capacity result"
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "success": false,
+  "purpose": "functional verification, no performance comparison",
+  "artifact_sha256": {
+    "daemon": "3b01e16b3e03397a5df6456bb8cc9f6f6419dc9778ae2348c48575b420449c45",
+    "control-plane": "b3bba0b7792b84d0d76ef1bec6d6e286f20e6b78b957b7673b0f23db3e3d8d94",
+    "cli": "c385bd2d2996c660d2e9e0a1f7387980339abbb19ee8fdec518890ec52dd6bd5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d520964ff11dff3bc7090af9ee988eedd3c5c5ffb23a5a3708250e3248a2cb17",
+    "coordinator": "7a3cbc8532556044b18bff602b591673d0d2c0df6c594b494673cd7c046474f3"
+  },
+  "cases": [
+    {
+      "name": "reserved-name-creation-and-duplicate-refusal",
+      "success": true,
+      "result": {
+        "creation_bound_name": true,
+        "CLI_inspection": true,
+        "both_create_routes_refuse_duplicate": true,
+        "inventory_creation_refused": true
+      }
+    },
+    {
+      "name": "node-name-operation-refused-before-boot",
+      "success": true,
+      "result": {
+        "missing_context_status": 409,
+        "invalid_context_status": 400,
+        "unowned_context_status": 409,
+        "cluster_authentication_status": 401,
+        "inventory_unchanged": true
+      }
+    },
+    {
+      "name": "node-atomic-completion-with-discarded-descriptor",
+      "success": true,
+      "result": {
+        "creation_descriptor_discarded": true,
+        "CLI_inspection_recovers_ID": true,
+        "named_SSH_reaches_recovered_guest": true,
+        "duplicate_creation_refused": true,
+        "operation_absent_from_guest_environment": true,
+        "deleted_name_released": true
+      }
+    },
+    {
+      "name": "node-post-commit-event-publication-fault",
+      "success": false,
+      "error": "POST /v2/sandboxes: 201: b'{\"clientID\":\"sbx-604b3c18911f40c78f74\",\"envdAccessToken\":\"ceaab7a98d914d5387fe8eb34211a59b2ff7d7a425d24ab98ccca9010a5282c3\",\"envdHost\":\"49983-sbx-604b3c18911f40c78f74\",\"envdVersion\":\"0.6.3\",\"nodeID\":\"tcp-kvm-node\",\"processPort\":40575,\"proxyPort\":36181,\"sandboxID\":\"sbx-604b3c18911f40c78f74\",\"templateID\":\"base\"}'"
+    }
+  ],
+  "cleanup_errors": [],
+  "environment": "local WSL nested KVM; 1 vCPU / 1024 MiB guests",
+  "transport": "CLI -> verified API TLS -> control plane -> node mTLS plus cluster token -> vsock -> loopback guest TCP",
+  "ssh_fixture": {
+    "build_sha256": "e4ca03bc9d67b1eb5ec2c829616f60cc5b7d309fb806562148d6b0b7512af5f5",
+    "resolution": "reserved creation",
+    "server_version": "Dropbear v2025.89",
+    "host_public_key_sha256": "051bfaea0d67633b8aed656133f554fb5f43251eda3efb5b33d20e7d9a69ea4d",
+    "client_public_key_sha256": "16962bfe15c065c53913b37d078755fb2320f0b03f8a58f8eb988caab86c8dc6",
+    "openssh_version": "OpenSSH_10.0p2 Debian-7+deb13u4, OpenSSL 3.5.7 9 Jun 2026"
+  },
+  "error": "POST /v2/sandboxes: 201: b'{\"clientID\":\"sbx-604b3c18911f40c78f74\",\"envdAccessToken\":\"ceaab7a98d914d5387fe8eb34211a59b2ff7d7a425d24ab98ccca9010a5282c3\",\"envdHost\":\"49983-sbx-604b3c18911f40c78f74\",\"envdVersion\":\"0.6.3\",\"nodeID\":\"tcp-kvm-node\",\"processPort\":40575,\"proxyPort\":36181,\"sandboxID\":\"sbx-604b3c18911f40c78f74\",\"templateID\":\"base\"}'",
+  "remaining_sandboxes": 0,
+  "owned_processes_stopped": [
+    {
+      "name": "control",
+      "exit_code": -15
+    },
+    {
+      "name": "node",
+      "exit_code": 0
+    },
+    {
+      "name": "redis",
+      "exit_code": 0
+    }
+  ]
+}

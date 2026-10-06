@@ -1,0 +1,23 @@
+{
+  "runtime_inputs_sha256_by_kind": {
+    "baseline": {
+      "/var/tmp/hm-private-route-live-snapshot-release-node-v1": "8afb215a2ff476147b8ebf9ce96f25d161ae361876d16b32f9f72b97808c9fa3",
+      "/var/tmp/hm-private-receiving-control-v1": "23a0a1c13714bf8b3cbec8aa0b20d547194db3ca4db95631095f970f9daffad4",
+      "/var/tmp/hm-discovery-cli-v1": "e399a43bd30cdb62450c2fbdafb81c712b8859a951626f3b973faee3fc281dc5",
+      "/var/tmp/hm-competitive/bzImage-known-uart-irq": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+      "/var/tmp/hm-private-udp-pause-guest-v1.cpio.gz": "c7dae4197f4939ec344de2245d94fed38f98c36e8564ecf2a61d51caab634883",
+      "/var/tmp/hm-owner-adoption-gateway-v3": "8a6d2af7afca806d974697e55db8ca7be792808ea4ff352f370f93cb4bba42ad",
+      "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py": "8092ae98a8092dfa99a4446d6d1dd2799b5d7371472eeb383afc5839fed44869"
+    },
+    "candidate": {
+      "/var/tmp/hm-private-setup-overlap-release-node-v1": "aef812594544d708d6c0101c27b3cdc0c93f6c3ded3e408f1eff9e253be955ef",
+      "/var/tmp/hm-private-receiving-control-v1": "23a0a1c13714bf8b3cbec8aa0b20d547194db3ca4db95631095f970f9daffad4",
+      "/var/tmp/hm-discovery-cli-v1": "e399a43bd30cdb62450c2fbdafb81c712b8859a951626f3b973faee3fc281dc5",
+      "/var/tmp/hm-competitive/bzImage-known-uart-irq": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+      "/var/tmp/hm-private-udp-pause-guest-v1.cpio.gz": "c7dae4197f4939ec344de2245d94fed38f98c36e8564ecf2a61d51caab634883",
+      "/var/tmp/hm-owner-adoption-gateway-v3": "8a6d2af7afca806d974697e55db8ca7be792808ea4ff352f370f93cb4bba42ad",
+      "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py": "8092ae98a8092dfa99a4446d6d1dd2799b5d7371472eeb383afc5839fed44869"
+    }
+  },
+  "checker_sha256": "8092ae98a8092dfa99a4446d6d1dd2799b5d7371472eeb383afc5839fed44869"
+}

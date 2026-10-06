@@ -1,0 +1,9 @@
+# Administrator CLI discovery and recovery: KVM
+
+Four owned KVM profiles pass 27 checks each: SET and XADD refusals across IPv4/two-peer and IPv6/eight-peer ingress. Initial creation failure preserves one guest; administrator CLI discovery returns its ID/kind through the control plane even when SET refusal leaves no shared sandbox record. Recovery publishes the same guest, exact execution succeeds and its pending entry disappears. The same discovery-to-recovery checks pass for uncertain resumed guests, followed by exact TCP/UDP and cleanup.
+
+Observer/admin, inventory-only and sandbox-only keys refuse discovery. Unknown nodes refuse; the exclusive after cursor omits the current ID. Wrong cluster credentials cannot access direct node discovery. Actual page output is asserted to have registrations/nextCursor and only sandboxID/kind row fields, excluding guest capability data. All cohorts leave zero guests and reap every owned process. Redis permissions are restored in finally.
+
+Each runtime page contains one pending guest. Multi-page 32/32/1 behavior is covered by the separate 65-entry unit test, not a 65-guest KVM experiment. Concurrent page changes are not a transactional snapshot. Discovery is operator-invoked and does not reconcile automatically. Response-bound fault injection, accepted-request cancellation, VM-startup and durable crash recovery remain unverified or incomplete. No exactly-once lifecycle event or performance/competitor claim follows.
+
+Current node/control/CLI binaries were freshly built only in the isolated checkout and frozen before runs. Gateway/kernel/image remain immutable dependencies. Raw reports/logs, build/driver/checker/source snapshots, permitted catalog and verified SHA256 manifest preserve provenance. Guest descriptors, access tokens, API credentials, temporary policies and private keys are excluded.

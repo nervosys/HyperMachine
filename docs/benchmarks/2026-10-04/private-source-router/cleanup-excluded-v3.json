@@ -1,0 +1,16 @@
+{
+  "owned_redis": true,
+  "redis_exit_code": 0,
+  "process_reaped": true,
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "-p",
+    "hv2-cluster",
+    "--lib",
+    "--",
+    "--nocapture"
+  ],
+  "test_exit_code": 101
+}

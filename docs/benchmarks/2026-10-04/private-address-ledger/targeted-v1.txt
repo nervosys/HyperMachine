@@ -1,0 +1,11 @@
+   Compiling hv2-cluster v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-cluster)
+    Finished `test` profile [optimized + debuginfo] target(s) in 20.00s
+     Running unittests src/lib.rs (/var/tmp/hm-object-backup/target/debug/deps/hv2_cluster-39b572a236a06967)
+
+running 3 tests
+test private_addresses::tests::rejoin_and_source_replacement_never_retarget_old_addresses ... ok
+test private_addresses::tests::concurrent_allocations_are_idempotent_and_restore_preserves_bindings ... ok
+test private_addresses::tests::snapshot_validation_and_capacity_fail_closed ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 107 filtered out; finished in 0.04s
+

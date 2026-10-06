@@ -1,0 +1,62 @@
+--- accepted/crates/hv2-sandboxd/src/snapshots.rs
++++ candidate/crates/hv2-sandboxd/src/snapshots.rs
+@@ -2,11 +2,10 @@
+ //! `POST /sandboxes/{id}/snapshots`, `GET /snapshots` and
+ //! `DELETE /templates/{id}`.
+ //!
+-//! A snapshot is a layered checkpoint -- only the pages a sandbox changed
+-//! since its template -- plus the template it is layered over. A sandbox
+-//! created from one is restored as a fork is: the template mapped, the
+-//! snapshot's pages copied in. So a snapshot costs what the sandbox
+-//! changed, not its RAM, and creating from one costs a restore.
++//! Experimental named snapshots capture a full sparse memory image once.
++//! Children map that prepared image copy-on-write instead of applying a layer.
++//! The originating template still supplies resource sizes and guest devices.
++//! Capture/storage cost and shared-store deletion races require verification.
+ //!
+ //! With a snapshot store, snapshots live in it and every node sharing it
+ //! offers them: the template under them is content-addressed there, so a
+@@ -17,6 +16,14 @@
+     Duration, IntoResponse, Json, Path, Query, Response, Serialize, State, StatusCode,
+ };
+ use serde_json::json;
++
++/// The header and its uniquely named full-image sidecar, when present.
++fn remove_snapshot_files(file: &std::path::Path) {
++    let _ = std::fs::remove_file(file);
++    let mut image = file.as_os_str().to_os_string();
++    image.push(".mem");
++    let _ = std::fs::remove_file(std::path::PathBuf::from(image));
++}
+ 
+ /// A snapshot offered as a template.
+ pub(crate) struct Snapshot {
+@@ -121,8 +128,8 @@
+             );
+         }
+         let started = std::time::Instant::now();
+-        if let Err(e) = vm.checkpoint_to(&file).await {
+-            let _ = std::fs::remove_file(&file);
++        if let Err(e) = vm.snapshot_to(&file).await {
++            remove_snapshot_files(&file);
+             return api_error(
+                 StatusCode::INTERNAL_SERVER_ERROR,
+                 format!("checkpointing {sandbox_id}: {e}"),
+@@ -178,7 +185,7 @@
+             created_ms: snapshot.created_ms,
+         };
+         if let Err(e) = publish(dir, name, &record) {
+-            let _ = std::fs::remove_file(&snapshot.file);
++            remove_snapshot_files(&snapshot.file);
+             return Err(e);
+         }
+     }
+@@ -205,6 +212,8 @@
+ /// in a store goes with its last reference.
+ fn forget_file(state: &AppState, snapshot: &Snapshot) {
+     if state.store.is_some() {
++        // Live children and persisted layers may still name the raw image.
++        // Reclaim unreferenced named-image bases only under the offline lock.
+         let _ = std::fs::remove_file(&snapshot.file);
+     }
+ }

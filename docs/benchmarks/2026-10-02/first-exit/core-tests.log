@@ -1,0 +1,102 @@
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-first-exit/source/crates/hv2-core)
+error[E0433]: cannot find type `VCpuExit` in this scope
+    --> crates/hv2-core/src/vm.rs:3249:21
+     |
+3249 |                     VCpuExit::Hlt => "hlt",
+     |                     ^^^^^^^^ use of undeclared type `VCpuExit`
+     |
+help: consider importing this enum
+     |
+   6 + use crate::vcpu::VCpuExit;
+     |
+
+error[E0433]: cannot find type `VCpuExit` in this scope
+    --> crates/hv2-core/src/vm.rs:3250:21
+     |
+3250 |                     VCpuExit::IoOut { .. } => "io_out",
+     |                     ^^^^^^^^ use of undeclared type `VCpuExit`
+     |
+help: consider importing this enum
+     |
+   6 + use crate::vcpu::VCpuExit;
+     |
+
+error[E0433]: cannot find type `VCpuExit` in this scope
+    --> crates/hv2-core/src/vm.rs:3251:21
+     |
+3251 |                     VCpuExit::IoIn { .. } => "io_in",
+     |                     ^^^^^^^^ use of undeclared type `VCpuExit`
+     |
+help: consider importing this enum
+     |
+   6 + use crate::vcpu::VCpuExit;
+     |
+
+error[E0433]: cannot find type `VCpuExit` in this scope
+    --> crates/hv2-core/src/vm.rs:3252:21
+     |
+3252 |                     VCpuExit::MmioRead { .. } => "mmio_read",
+     |                     ^^^^^^^^ use of undeclared type `VCpuExit`
+     |
+help: consider importing this enum
+     |
+   6 + use crate::vcpu::VCpuExit;
+     |
+
+error[E0433]: cannot find type `VCpuExit` in this scope
+    --> crates/hv2-core/src/vm.rs:3253:21
+     |
+3253 |                     VCpuExit::MmioWrite { .. } => "mmio_write",
+     |                     ^^^^^^^^ use of undeclared type `VCpuExit`
+     |
+help: consider importing this enum
+     |
+   6 + use crate::vcpu::VCpuExit;
+     |
+
+error[E0433]: cannot find type `VCpuExit` in this scope
+    --> crates/hv2-core/src/vm.rs:3254:21
+     |
+3254 |                     VCpuExit::Interrupt { .. } => "interrupt",
+     |                     ^^^^^^^^ use of undeclared type `VCpuExit`
+     |
+help: consider importing this enum
+     |
+   6 + use crate::vcpu::VCpuExit;
+     |
+
+error[E0433]: cannot find type `VCpuExit` in this scope
+    --> crates/hv2-core/src/vm.rs:3255:21
+     |
+3255 |                     VCpuExit::Exception { .. } => "exception",
+     |                     ^^^^^^^^ use of undeclared type `VCpuExit`
+     |
+help: consider importing this enum
+     |
+   6 + use crate::vcpu::VCpuExit;
+     |
+
+error[E0433]: cannot find type `VCpuExit` in this scope
+    --> crates/hv2-core/src/vm.rs:3256:21
+     |
+3256 |                     VCpuExit::Shutdown => "shutdown",
+     |                     ^^^^^^^^ use of undeclared type `VCpuExit`
+     |
+help: consider importing this enum
+     |
+   6 + use crate::vcpu::VCpuExit;
+     |
+
+error[E0433]: cannot find type `VCpuExit` in this scope
+    --> crates/hv2-core/src/vm.rs:3257:21
+     |
+3257 |                     VCpuExit::Unknown => "unknown",
+     |                     ^^^^^^^^ use of undeclared type `VCpuExit`
+     |
+help: consider importing this enum
+     |
+   6 + use crate::vcpu::VCpuExit;
+     |
+
+For more information about this error, try `rustc --explain E0433`.
+error: could not compile `hv2-core` (lib test) due to 9 previous errors

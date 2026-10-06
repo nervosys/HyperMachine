@@ -1,0 +1,8 @@
+{
+  "sha256": {
+    "README.md": "d05fee14f84b203f628035c006f3cf92a5542608cf74d6f9edd2117443109bf6",
+    "test-volume-upload-client.py": "ac7f5c0784160cd7e8fdc61c5a33483515ff73a1b005af26e910ad4839213d43",
+    "tests.log": "69afd483fc90f3792dda062055bd5043408d128c75b5e05dab766d3f27a2d32b",
+    "upload-volume-file.py": "a24ef30fd979763a7ea2fbc61f00f669a6d66eaa91ceb41d8f200a68d661d322"
+  }
+}

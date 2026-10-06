@@ -1,0 +1,32 @@
+{
+  "files": {
+    "tcp-perf-harness.py": "db50b971ee218f19a35b732d7e229496ed1a12b9e7b39df76dba85bf93cfa1a2",
+    "tcp-perf-harness-before-client-nodelay.py": "89a363903cefc6113f4e818f00f9ee2adc19183f1f8e358d88db474dd3fdda2c",
+    "tcp-perf-bench-local-engines.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "tcp-perf-bench-firecracker-local.py": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6",
+    "tcp-perf-smoke-1.json": "8882efc3120e5d7929c3146cf9256b28b9a0b9ddd7b0f8f4990e416f19520fbc",
+    "tcp-perf-smoke-2.json": "b03526546a866742bc26d97add47d6a86d410ae271ddd0d0c244d512574f1add",
+    "tcp-perf-matched-1.json": "253ebfb917fba8251e58a1f59834359da1b1d586f8ace8dc5c3b1f6b248d7c6b",
+    "tcp-perf-matched-2.json": "e7cf23a093d7427027edcc4d9514a86d1ff69d1e124ade0d78740ad27e0039be",
+    "tcp-perf-candidate-1.json": "0ec0c5f42e084d34ae292ade724a65ffac3025ce041ddc00b88a62ae39bb40f0",
+    "tcp-perf-baseline-build.json": "b3213238a6a943c5d33961189c8d5f48521ca5843da461a37a1b5c8f7c67603a",
+    "tcp-perf-baseline-Cargo.lock": "4c9d2ed68cf63118d05119ed1f237d34124a24f94af32bc120cfd50bec1a78e4",
+    "tcp-perf-baseline-crates_hv2-core_src_devices_virtio_vsock.rs": "f41a40065a43d644b9e7ba19fc8d82a9cea297647ab5d46109a652a431137903",
+    "tcp-perf-baseline-crates_hv2-agent_src_guest_agent.rs": "ff88341827b762759fe4c71cd06fb41e77bf7e3aae2862ad14991997eb0392b8",
+    "tcp-perf-baseline-crates_hv2-sandboxd_src_main.rs": "dd601bccd7c9655b698dd72cbf862a3681f7a583a7354cb59b549ce37eeaa7f2",
+    "tcp-perf-baseline-crates_hv2-sandboxd_src_forwards.rs": "95107a99971ad29c8e151c7ca2c56af6b1a20cf1039bd2943f4d9d5f7eba4c62",
+    "tcp-perf-baseline-crates_hv2-api_src_tcp_tunnel.rs": "cc30dd62d9c66c3bbb43dfb09a3e05c6abcc89ef28fdaadaa15516235103cf23",
+    "tcp-perf-candidate-build.json": "208c585b73ae40c0ec8013b6bd89b2fc21e75579a4b3721d9f9cb6f1dda6c72d",
+    "tcp-perf-candidate-Cargo.lock": "4c9d2ed68cf63118d05119ed1f237d34124a24f94af32bc120cfd50bec1a78e4",
+    "tcp-perf-candidate-crates_hv2-core_src_devices_virtio_vsock.rs": "f41a40065a43d644b9e7ba19fc8d82a9cea297647ab5d46109a652a431137903",
+    "tcp-perf-candidate-crates_hv2-agent_src_guest_agent.rs": "ff88341827b762759fe4c71cd06fb41e77bf7e3aae2862ad14991997eb0392b8",
+    "tcp-perf-candidate-crates_hv2-sandboxd_src_main.rs": "dd601bccd7c9655b698dd72cbf862a3681f7a583a7354cb59b549ce37eeaa7f2",
+    "tcp-perf-candidate-crates_hv2-sandboxd_src_forwards.rs": "81222027e83e473653874cca863f5a57aa6bc6d1afcb07bf9c0de9f5206a1d2f",
+    "tcp-perf-candidate-crates_hv2-api_src_tcp_tunnel.rs": "cc30dd62d9c66c3bbb43dfb09a3e05c6abcc89ef28fdaadaa15516235103cf23",
+    "tcp-perf-archive-coordinator.py": "60d6bea6dd73331ba33814bd11e4e076fbd253af2b887d22a08e879a83874b7e",
+    "tcp-perf-baseline-build-coordinator.py": "4c91185c0f45bc99b551a3bddd6f71782dfb0e1549cb9bda516955168a6cf921",
+    "tcp-perf-candidate-build-coordinator.py": "655252ae5c768fe60c7f3f727db56afeb0fb331b2de8775cf4a06681b7c86451",
+    "tcp-perf-host-load-observation.json": "81762d22594f3d48df34e4a991fb0ab7432fdbd290667bb60adfa36fb60b9f35"
+  },
+  "purpose": "matched native ready-guest TCP transactions; no managed-platform or universal win claim"
+}

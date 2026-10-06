@@ -1,0 +1,19 @@
+{
+  "base_source": "/var/tmp/hm-access-audit/source",
+  "base_commit": "6c3b180",
+  "source_overlays": {
+    "crates/hv2-cluster/src/audit.rs": "1f537f5beedc9ef173b79f74378009778ffbdd5239cdc89314ba0e3bd9fa7ddd",
+    "crates/hv2-core/src/security/audit_chain.rs": "0028df00bcb96256231a4fce1a3b223000ac03d4697ee18dd7ed184bb918f6eb"
+  },
+  "provisional_boot_changes_excluded": true,
+  "clean_boot_sha256": {
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+    "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+  },
+  "candidate_sha256": "8b558cccbbe96147ad7f8f794386173fb011b3f43b29270e50831e3ef2d8ffbb",
+  "parent_sha256": "57d00f26056f1de328f849e37bdb6726372ef5efc39d243420a1722fda931fda",
+  "rustc": "rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)",
+  "runtime_change_adopted": true,
+  "artifact_hashes_rechecked_after_all_runs": true
+}

@@ -1,0 +1,203 @@
+    Checking once_cell v1.21.4
+    Checking regex-syntax v0.8.11
+   Compiling serde_core v1.0.229
+   Compiling serde v1.0.229
+   Compiling crossbeam-utils v0.8.22
+   Compiling serde_json v1.0.151
+   Compiling crossbeam-epoch v0.9.20
+    Checking memchr v2.8.3
+    Checking smallvec v1.15.2
+    Checking hybrid-array v0.4.14
+   Compiling num-traits v0.2.19
+   Compiling crossbeam-deque v0.8.7
+    Checking either v1.17.0
+   Compiling rayon-core v1.13.0
+    Checking plotters-backend v0.3.7
+    Checking ciborium-io v0.2.2
+    Checking clap_builder v4.6.7
+    Checking wait-timeout v0.2.1
+    Checking zerocopy v0.8.56
+    Checking thiserror v2.0.21
+    Checking bit-vec v0.8.0
+    Checking quick-error v1.2.3
+    Checking cast v0.3.0
+    Checking sponge-cursor v0.1.0
+    Checking same-file v1.0.6
+    Checking rand v0.9.5
+    Checking rand_xorshift v0.4.0
+    Checking is-terminal v0.4.17
+    Checking unarray v0.1.4
+    Checking oorandom v11.1.5
+    Checking anes v0.1.6
+    Checking hv2-agent-proto v1.1.0 (/var/tmp/hm-borrowed-boot/source/crates/hv2-agent-proto)
+    Checking walkdir v2.5.0
+    Checking tracing-core v0.1.36
+    Checking tempfile v3.27.0
+    Checking itertools v0.10.5
+    Checking parking_lot_core v0.9.12
+    Checking plotters-svg v0.3.7
+    Checking bit-set v0.8.0
+    Checking parking_lot v0.12.5
+    Checking rusty-fork v0.3.1
+    Checking tracing v0.1.44
+    Checking tracing-log v0.2.0
+    Checking tokio v1.53.1
+    Checking plotters v0.3.7
+    Checking crypto-common v0.2.2
+    Checking block-buffer v0.12.1
+    Checking module-lattice v0.2.3
+    Checking chrono v0.4.45
+    Checking rayon v1.12.0
+    Checking criterion-plot v0.5.0
+    Checking digest v0.11.3
+    Checking kem v0.3.0
+    Checking clap v4.6.7
+    Checking signature v3.0.0
+    Checking sha3 v0.11.0
+    Checking hmac v0.13.0
+    Checking sha2 v0.11.0
+    Checking shake v0.1.0
+    Checking ml-dsa v0.1.1
+    Checking regex-automata v0.4.18
+    Checking ml-kem v0.3.2
+    Checking toml_datetime v1.1.1+spec-1.1.0
+    Checking serde_spanned v1.1.1
+    Checking toml v1.1.6+spec-1.1.0
+    Checking bincode v1.3.3
+    Checking tracing-serde v0.2.0
+    Checking hv2-sandbox v1.1.0 (/var/tmp/hm-borrowed-boot/source/crates/hv2-sandbox)
+    Checking tinytemplate v1.2.1
+    Checking regex v1.13.1
+    Checking matchers v0.2.0
+    Checking tracing-subscriber v0.3.23
+    Checking half v2.7.1
+    Checking ppv-lite86 v0.2.21
+    Checking slh-dsa v0.2.0-rc.5
+    Checking ciborium-ll v0.2.2
+    Checking rand_chacha v0.9.0
+    Checking ciborium v0.2.2
+    Checking proptest v1.11.0
+    Checking criterion v0.5.1
+    Checking hv2-core v1.1.0 (/var/tmp/hm-borrowed-boot/source/crates/hv2-core)
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/hello.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:34:17
+   |
+34 |     let hello = include_bytes!("../../../examples/guest_code/hello.bin");
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/timer_test.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:37:17
+   |
+37 |     let timer = include_bytes!("../../../examples/guest_code/timer_test.bin");
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/keyboard_test.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:40:20
+   |
+40 |     let keyboard = include_bytes!("../../../examples/guest_code/keyboard_test.bin");
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/rtc_test.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:43:15
+   |
+43 |     let rtc = include_bytes!("../../../examples/guest_code/rtc_test.bin");
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/boot_sequence.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:46:16
+   |
+46 |     let boot = include_bytes!("../../../examples/guest_code/boot_sequence.bin");
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/vga_demo.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:49:15
+   |
+49 |     let vga = include_bytes!("../../../examples/guest_code/vga_demo.bin");
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/device_combo.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:52:17
+   |
+52 |     let combo = include_bytes!("../../../examples/guest_code/device_combo.bin");
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/hello.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:62:13
+   |
+62 |             include_bytes!("../../../examples/guest_code/hello.bin"),
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/timer_test.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:66:13
+   |
+66 |             include_bytes!("../../../examples/guest_code/timer_test.bin"),
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/keyboard_test.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:70:13
+   |
+70 |             include_bytes!("../../../examples/guest_code/keyboard_test.bin"),
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/rtc_test.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:74:13
+   |
+74 |             include_bytes!("../../../examples/guest_code/rtc_test.bin"),
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/boot_sequence.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:78:13
+   |
+78 |             include_bytes!("../../../examples/guest_code/boot_sequence.bin"),
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/vga_demo.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:82:13
+   |
+82 |             include_bytes!("../../../examples/guest_code/vga_demo.bin"),
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/device_combo.bin`: No such file or directory (os error 2)
+  --> crates/hv2-core/tests/guest_code_integration.rs:86:13
+   |
+86 |             include_bytes!("../../../examples/guest_code/device_combo.bin"),
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/stage1.bin`: No such file or directory (os error 2)
+   --> crates/hv2-core/tests/guest_code_integration.rs:137:18
+    |
+137 |     let stage1 = include_bytes!("../../../examples/guest_code/stage1.bin");
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/stage2.bin`: No such file or directory (os error 2)
+   --> crates/hv2-core/tests/guest_code_integration.rs:153:18
+    |
+153 |     let stage2 = include_bytes!("../../../examples/guest_code/stage2.bin");
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/stage2_pmode.bin`: No such file or directory (os error 2)
+   --> crates/hv2-core/tests/guest_code_integration.rs:202:24
+    |
+202 |     let stage2_pmode = include_bytes!("../../../examples/guest_code/stage2_pmode.bin");
+    |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/stage2_pmode.bin`: No such file or directory (os error 2)
+   --> crates/hv2-core/tests/guest_code_integration.rs:227:24
+    |
+227 |     let stage2_pmode = include_bytes!("../../../examples/guest_code/stage2_pmode.bin");
+    |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/interrupt_demo_extended.bin`: No such file or directory (os error 2)
+   --> crates/hv2-core/tests/guest_code_integration.rs:282:18
+    |
+282 |     let stage2 = include_bytes!("../../../examples/guest_code/interrupt_demo_extended.bin");
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: couldn't read `crates/hv2-core/tests/../../../examples/guest_code/mmio_test_extended.bin`: No such file or directory (os error 2)
+   --> crates/hv2-core/tests/guest_code_integration.rs:332:18
+    |
+332 |     let stage2 = include_bytes!("../../../examples/guest_code/mmio_test_extended.bin");
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: could not compile `hv2-core` (test "guest_code_integration") due to 20 previous errors
+warning: build failed, waiting for other jobs to finish...

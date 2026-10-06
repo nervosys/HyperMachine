@@ -1,0 +1,1985 @@
+{
+  "paused_state_mode": "shared-store",
+  "inputs_sha256": {
+    "/var/tmp/hm-private-udp-comparison-release-node-v1": "0250dab6fd392c871aa65e041be5b604c690da43a4c296a81e267471b2d9ccc9",
+    "/var/tmp/hm-private-receiving-control-v1": "23a0a1c13714bf8b3cbec8aa0b20d547194db3ca4db95631095f970f9daffad4",
+    "/var/tmp/hm-discovery-cli-v1": "e399a43bd30cdb62450c2fbdafb81c712b8859a951626f3b973faee3fc281dc5",
+    "/var/tmp/hm-competitive/bzImage-known-uart-irq": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "/var/tmp/hm-private-udp-pause-guest-v1.cpio.gz": "c7dae4197f4939ec344de2245d94fed38f98c36e8564ecf2a61d51caab634883",
+    "/var/tmp/hm-owner-adoption-gateway-v3": "8a6d2af7afca806d974697e55db8ca7be792808ea4ff352f370f93cb4bba42ad",
+    "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py": "8092ae98a8092dfa99a4446d6d1dd2799b5d7371472eeb383afc5839fed44869"
+  },
+  "checks": [
+    "Node mTLS refuses a peer without a client certificate",
+    "CLI refuses untrusted control certificate and trusted wrong hostname",
+    "Valid mTLS node peers cannot create with forged owner context and missing or wrong cluster credentials",
+    "Wrong control-plane API key refused",
+    "Empty binary and maximum-size IPv4 datagrams verified through real KVM",
+    "Oversized frame closes its real guest session without preventing a fresh valid session",
+    "2 CLI peers preserve empty binary and maximum-size datagrams through real control plane Redis node and KVM",
+    "Private source and target KVM guests run on distinct owned daemon nodes",
+    "Source KVM guest private DNS and exact binary TCP work with Internet disabled",
+    "Source KVM guest transfers exact one MiB through private TCP",
+    "Private guest DNS refuses another owner and ordinary Internet DNS remains disabled",
+    "Target rejoin refuses stale guest address and recovers through a fresh private DNS binding",
+    "Long-lived source KVM guest TCP closes after target membership removal and refuses stale-address reconnect",
+    "Long-lived source KVM guest TCP closes after source membership removal and refuses reconnect",
+    "Source membership rejoin refuses old numeric binding and restores exact traffic through fresh DNS",
+    "Established source guest UDP socket refuses replies after target membership removal",
+    "Target UDP rejoin retains old-address refusal and restores maximum-sized guest datagrams",
+    "Established source guest UDP socket refuses replies after source membership removal",
+    "Source UDP rejoin retains old-address refusal and restores maximum-sized guest datagrams",
+    "Established source guest UDP socket refuses replies after target pause; paused numeric and DNS access refuse",
+    "Target resume restores private DNS and exact maximum-sized guest UDP delivery",
+    "Established source guest UDP fails closed during verified Redis GET refusal; numeric and DNS access refuse",
+    "Restored route-store lookups recover private DNS and exact maximum-sized guest UDP delivery",
+    "Established source guest UDP socket refuses replies after target deletion; deleted numeric/DNS access refuse and record is absent",
+    "Deleting a dedicated private UDP target preserves exact maximum-sized delivery to another target",
+    "Source KVM guest private UDP preserves empty, binary and maximum-size IPv4 datagrams through production Ethernet/mTLS routing",
+    "Other-owner KVM guest cannot use the source private UDP address binding",
+    "Target membership rejoin refuses stale guest UDP binding and fresh DNS restores exact datagrams",
+    "Private receiving UDP preserves empty, binary and maximum-sized guest datagrams",
+    "Private receiving UDP rejects oversized framing, wrong protocol and unauthorized contexts",
+    "Matched private versus standard UDP fresh-TLS setup and exact framed echo comparison preserves every scored sample",
+    "Private receiving UDP closes after source generation change and refuses stale claims",
+    "Source KVM guest private DNS refuses peers after leaving their network tag",
+    "Pausing an actively sending UDP source removes its identified target-side guest-agent relay socket",
+    "Source KVM guest pause/resume rebuilds its private gateway and preserves generation-safe address publication",
+    "Resuming the UDP source restores private DNS and exact maximum-sized guest UDP on a new flow",
+    "Deleting an actively sending UDP source removes its identified target-side guest-agent relay socket and source record",
+    "Private receiving TCP verifies exact KVM target bytes, owner/tag/generation isolation, live revocation, source pause/resume/delete and store outage closure",
+    "Public port first reservation listing and removal refuse wrong observer inventory unassigned legacy principals and ownerless VMs",
+    "Native gateway real KVM TCP preserves 1 MiB and 2 UDP peers preserve empty binary and maximum datagrams on one public port",
+    "Authenticated policy creator overrides forged client context; two real KVM forks inherit owner without inheriting the source native allocation",
+    "Native real guest protocol updates retain public port and close old TCP",
+    "Owner API listing bounded pool invalid port and actual key rotation preserve VM ownership and allocation",
+    "Owner API removal closes live native sessions and reexposure publishes actual TCP UDP on reserved port",
+    "Pause closes existing UDP session",
+    "Real guest pause closes native sessions and preserves exact public reservation",
+    "Resumed guest accepts a new UDP session",
+    "Actual KVM pause and resume preserve trusted owner identity",
+    "Real guest resume restores native TCP and UDP on same reserved port",
+    "Delete closes UDP session and clears guest inventory",
+    "Real guest deletion removes native allocation and closes native sessions; gateway stops gracefully"
+  ],
+  "daemon_reaped": true,
+  "guests_remaining": 0,
+  "control_and_redis_reaped": true,
+  "cli_reaped": true,
+  "native_gateway_reaped": true,
+  "native_gateway_real_kvm": true,
+  "owner_public_port_api_real_kvm": true,
+  "owner_public_port_cli_real_kvm": false,
+  "native_udp_capacity": null,
+  "cross_node_adoption": null,
+  "native_port_migration": null,
+  "private_receiving_tcp": {
+    "origin": "owned host mTLS client with running KVM source identity; source guest gateway not involved",
+    "checks": [
+      {
+        "check": "wrong-cluster-token",
+        "status": 401
+      },
+      {
+        "check": "wrong-source-node",
+        "status": 403
+      },
+      {
+        "check": "duplicate-context",
+        "status": 400
+      },
+      {
+        "check": "wrong-path-port",
+        "status": 400
+      },
+      {
+        "check": "cross-owner",
+        "status": 403
+      },
+      {
+        "check": "exact-target-guest-tcp",
+        "payload_bytes": [
+          1048576,
+          23
+        ]
+      },
+      {
+        "check": "stale-source-generation",
+        "status": 403
+      },
+      {
+        "check": "cross-network-new-stream",
+        "status": 403
+      },
+      {
+        "check": "removed-target-membership",
+        "status": 403
+      },
+      {
+        "check": "stale-target-generation",
+        "status": 403
+      },
+      {
+        "check": "paused-source",
+        "status": 403
+      },
+      {
+        "check": "deleted-source",
+        "status": 403
+      }
+    ],
+    "live_stream_closures": [
+      {
+        "check": "source-rejoin-revokes-live-stream",
+        "elapsed_ms": 930.880893000051
+      },
+      {
+        "check": "source-rejoin-revokes-private-udp",
+        "elapsed_ms": 0.1418960000023617
+      },
+      {
+        "check": "cross-network-revokes-live-stream",
+        "elapsed_ms": 990.3019709999512
+      },
+      {
+        "check": "target-removal-revokes-live-stream",
+        "elapsed_ms": 996.421372000043
+      },
+      {
+        "check": "source-pause-closes-target-stream",
+        "elapsed_ms": 861.9698300000209
+      },
+      {
+        "check": "lookup-outage-closes-live-stream",
+        "elapsed_ms": 859.3956370000342
+      },
+      {
+        "check": "source-deletion-closes-target-stream",
+        "elapsed_ms": 822.6799729999925
+      }
+    ],
+    "same_node": false,
+    "initial_source_node": "owned-private-secondary",
+    "destination_node": "owned-udp-node",
+    "source_gateway_verified": false,
+    "guest_dns_verified": false,
+    "payload_target_real_kvm": true
+  },
+  "private_receiving_udp": {
+    "origin": "owned host mTLS client to target KVM UDP server; source guest UDP gateway not involved",
+    "payload_bytes": [
+      0,
+      13,
+      65507
+    ],
+    "oversized_frame_closed": true,
+    "refusals": [
+      {
+        "check": "wrong-upgrade",
+        "status": 400
+      },
+      {
+        "check": "wrong-cluster-token",
+        "status": 401
+      },
+      {
+        "check": "wrong-source-node",
+        "status": 403
+      },
+      {
+        "check": "duplicate-context",
+        "status": 400
+      },
+      {
+        "check": "cross-owner",
+        "status": 403
+      },
+      {
+        "check": "stale-source-generation",
+        "status": 403
+      }
+    ],
+    "source_gateway_verified": false,
+    "same_node": false,
+    "source_rejoin_stream_closed": true
+  },
+  "private_guest_udp": {
+    "origin": "actual source KVM guest IPv4 UDP through Ethernet gateway, committed source router, Rust mTLS connector and target KVM UDP server",
+    "source_gateway_verified": true,
+    "source_node": "owned-private-secondary",
+    "destination_node": "owned-udp-node",
+    "same_node": false,
+    "internet_disabled": true,
+    "payload_bytes": [
+      0,
+      13,
+      1280,
+      65507
+    ],
+    "owner_numeric_address_refused": true,
+    "stale_target_binding_refused": true,
+    "fresh_dns_rejoin_recovery_verified": true,
+    "target_membership_active_udp_revocation": {
+      "revoked": true,
+      "same_socket": true,
+      "replies_before": 1,
+      "grace_replies": 9,
+      "post_grace_refusals": 3
+    },
+    "source_membership_active_udp_revocation": {
+      "revoked": true,
+      "same_socket": true,
+      "replies_before": 1,
+      "grace_replies": 8,
+      "post_grace_refusals": 3
+    },
+    "source_rejoin_stale_binding_refused": true,
+    "source_rejoin_fresh_binding_recovery_verified": true,
+    "revocation_grace_seconds": 3,
+    "post_grace_attempts": 3,
+    "target_pause_active_udp_revocation": {
+      "revoked": true,
+      "same_socket": true,
+      "replies_before": 1,
+      "grace_replies": 0,
+      "post_grace_refusals": 3
+    },
+    "target_pause_numeric_refused": true,
+    "target_pause_dns_refused": true,
+    "target_resume_max_payload_recovery_verified": true,
+    "target_resume_address_preserved": true,
+    "store_lookup_outage_active_udp_revocation": {
+      "revoked": true,
+      "same_socket": true,
+      "replies_before": 1,
+      "grace_replies": 9,
+      "post_grace_refusals": 3
+    },
+    "store_lookup_outage_numeric_refused": true,
+    "store_lookup_outage_dns_refused": true,
+    "store_lookup_outage_verified": true,
+    "store_recovery_max_payload_verified": true,
+    "outage_control": "owned operator mTLS direct source-node exec independent of route store",
+    "target_delete_active_udp_revocation": {
+      "revoked": true,
+      "same_socket": true,
+      "replies_before": 1,
+      "grace_replies": 0,
+      "post_grace_refusals": 3
+    },
+    "target_delete_numeric_refused": true,
+    "target_delete_dns_refused": true,
+    "target_delete_record_absent": true,
+    "target_delete_other_target_max_payload_preserved": true,
+    "deleted_target_node": "owned-udp-node",
+    "source_pause_active_target_socket_closed": true,
+    "source_pause_observed_target_sockets": 1,
+    "source_pause_record_verified": true,
+    "source_pause_target_socket_ids": [
+      [
+        "0100007F:C7AA",
+        "773"
+      ]
+    ],
+    "source_pause_target_sockets_after": [],
+    "source_pause_probe_to_observation_seconds": 0.12074646099995334,
+    "source_resume_max_payload_verified": true,
+    "source_delete_active_target_socket_closed": true,
+    "source_delete_observed_target_sockets": 1,
+    "source_delete_record_absent": true,
+    "source_delete_target_socket_ids": [
+      [
+        "0100007F:C5CC",
+        "818"
+      ]
+    ],
+    "source_delete_target_sockets_after": [],
+    "source_delete_probe_to_observation_seconds": 0.15254563800004917
+  },
+  "private_guest_gateway": {
+    "origin": "owned source KVM guest Ethernet gateway through Rust source router and mTLS connector into target KVM guest",
+    "source_gateway_verified": true,
+    "guest_dns_verified": true,
+    "internet_disabled": true,
+    "same_node": false,
+    "source_node": "owned-private-secondary",
+    "destination_node": "owned-udp-node",
+    "payload_bytes": [
+      19,
+      1048576,
+      19
+    ],
+    "owner_dns_isolation_verified": true,
+    "ordinary_dns_refused": true,
+    "stale_address_refused": true,
+    "target_rejoin_recovery_verified": true,
+    "long_lived_guest_revocation_verified": true,
+    "revoked_guest_address_reconnect_refused": true,
+    "guest_revocation_elapsed_ms": 994.0561239999965,
+    "source_membership_stream_revocation_verified": true,
+    "source_membership_revocation_elapsed_ms": 993.9462080000112,
+    "source_rejoin_stale_binding_refused": true,
+    "source_rejoin_fresh_binding_recovery_verified": true,
+    "cross_network_dns_refused": true,
+    "source_guest_resume_verified": true,
+    "resume_source_node": "owned-private-secondary"
+  },
+  "private_transport_benchmark": null,
+  "private_udp_transport_benchmark": {
+    "scope": "owned operator mTLS host to same target KVM guest; private versus standard node UDP upgrade; source guest gateway not timed",
+    "host_build_profile": "release",
+    "samples_per_path_payload": 32,
+    "warmups_per_path_payload": 2,
+    "payload_bytes": [
+      64,
+      65507
+    ],
+    "order": "alternating paired first path",
+    "concurrency": 1,
+    "measurement": "fresh TLS plus upgrade setup and one exact framed UDP echo; no sustained throughput or guest-origin latency claim",
+    "rows": [
+      {
+        "pair": -2,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": true,
+        "success": true,
+        "setup_ms": 3.875031,
+        "echo_ms": 0.988515,
+        "total_ms": 4.863546
+      },
+      {
+        "pair": -2,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": true,
+        "success": true,
+        "setup_ms": 2.327286,
+        "echo_ms": 0.936206,
+        "total_ms": 3.263492
+      },
+      {
+        "pair": -1,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": true,
+        "success": true,
+        "setup_ms": 2.625112,
+        "echo_ms": 0.709685,
+        "total_ms": 3.334797
+      },
+      {
+        "pair": -1,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": true,
+        "success": true,
+        "setup_ms": 2.748457,
+        "echo_ms": 0.620344,
+        "total_ms": 3.368801
+      },
+      {
+        "pair": 0,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.428185,
+        "echo_ms": 0.630282,
+        "total_ms": 3.058467
+      },
+      {
+        "pair": 0,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.920764,
+        "echo_ms": 0.586079,
+        "total_ms": 2.506843
+      },
+      {
+        "pair": 1,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.906898,
+        "echo_ms": 0.489999,
+        "total_ms": 2.396897
+      },
+      {
+        "pair": 1,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.501434,
+        "echo_ms": 0.492043,
+        "total_ms": 2.993477
+      },
+      {
+        "pair": 2,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.430459,
+        "echo_ms": 0.549611,
+        "total_ms": 2.98007
+      },
+      {
+        "pair": 2,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.086164,
+        "echo_ms": 0.546095,
+        "total_ms": 2.632259
+      },
+      {
+        "pair": 3,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.034578,
+        "echo_ms": 2.953801,
+        "total_ms": 4.988379
+      },
+      {
+        "pair": 3,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.182033,
+        "echo_ms": 0.59695,
+        "total_ms": 2.778983
+      },
+      {
+        "pair": 4,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.529933,
+        "echo_ms": 0.52594,
+        "total_ms": 3.055873
+      },
+      {
+        "pair": 4,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.956922,
+        "echo_ms": 0.518503,
+        "total_ms": 2.475425
+      },
+      {
+        "pair": 5,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.876491,
+        "echo_ms": 0.57566,
+        "total_ms": 2.452151
+      },
+      {
+        "pair": 5,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.492706,
+        "echo_ms": 0.53892,
+        "total_ms": 3.031626
+      },
+      {
+        "pair": 6,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.208243,
+        "echo_ms": 0.507271,
+        "total_ms": 2.715514
+      },
+      {
+        "pair": 6,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.983582,
+        "echo_ms": 0.474821,
+        "total_ms": 2.458403
+      },
+      {
+        "pair": 7,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.241986,
+        "echo_ms": 0.485711,
+        "total_ms": 2.727697
+      },
+      {
+        "pair": 7,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.480684,
+        "echo_ms": 0.548087,
+        "total_ms": 3.028771
+      },
+      {
+        "pair": 8,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.239553,
+        "echo_ms": 0.556654,
+        "total_ms": 2.796207
+      },
+      {
+        "pair": 8,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.839871,
+        "echo_ms": 0.434405,
+        "total_ms": 2.274276
+      },
+      {
+        "pair": 9,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.845703,
+        "echo_ms": 0.52759,
+        "total_ms": 2.373293
+      },
+      {
+        "pair": 9,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.187103,
+        "echo_ms": 0.61324,
+        "total_ms": 2.800343
+      },
+      {
+        "pair": 10,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.274248,
+        "echo_ms": 0.519203,
+        "total_ms": 2.793451
+      },
+      {
+        "pair": 10,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.023015,
+        "echo_ms": 0.527039,
+        "total_ms": 2.550054
+      },
+      {
+        "pair": 11,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.722057,
+        "echo_ms": 0.616937,
+        "total_ms": 3.338994
+      },
+      {
+        "pair": 11,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.333098,
+        "echo_ms": 0.542337,
+        "total_ms": 2.875435
+      },
+      {
+        "pair": 12,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.225757,
+        "echo_ms": 0.450535,
+        "total_ms": 2.676292
+      },
+      {
+        "pair": 12,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.159151,
+        "echo_ms": 0.521558,
+        "total_ms": 2.680709
+      },
+      {
+        "pair": 13,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.075444,
+        "echo_ms": 0.497934,
+        "total_ms": 2.573378
+      },
+      {
+        "pair": 13,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.384264,
+        "echo_ms": 0.531767,
+        "total_ms": 2.916031
+      },
+      {
+        "pair": 14,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.306597,
+        "echo_ms": 0.551585,
+        "total_ms": 2.858182
+      },
+      {
+        "pair": 14,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.811079,
+        "echo_ms": 0.470753,
+        "total_ms": 2.281832
+      },
+      {
+        "pair": 15,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.114457,
+        "echo_ms": 2.953972,
+        "total_ms": 5.068429
+      },
+      {
+        "pair": 15,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.645633,
+        "echo_ms": 0.536797,
+        "total_ms": 3.18243
+      },
+      {
+        "pair": 16,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.28158,
+        "echo_ms": 0.653516,
+        "total_ms": 2.935096
+      },
+      {
+        "pair": 16,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.818612,
+        "echo_ms": 0.44273,
+        "total_ms": 2.261342
+      },
+      {
+        "pair": 17,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.299174,
+        "echo_ms": 0.496661,
+        "total_ms": 2.795835
+      },
+      {
+        "pair": 17,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.087466,
+        "echo_ms": 0.544311,
+        "total_ms": 2.631777
+      },
+      {
+        "pair": 18,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.205699,
+        "echo_ms": 0.541697,
+        "total_ms": 2.747396
+      },
+      {
+        "pair": 18,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.970086,
+        "echo_ms": 0.5598,
+        "total_ms": 2.529886
+      },
+      {
+        "pair": 19,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.605412,
+        "echo_ms": 0.612339,
+        "total_ms": 2.217751
+      },
+      {
+        "pair": 19,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.162396,
+        "echo_ms": 0.50125,
+        "total_ms": 2.663646
+      },
+      {
+        "pair": 20,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.242678,
+        "echo_ms": 0.588063,
+        "total_ms": 2.830741
+      },
+      {
+        "pair": 20,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.010868,
+        "echo_ms": 0.558221,
+        "total_ms": 2.569089
+      },
+      {
+        "pair": 21,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.829482,
+        "echo_ms": 0.496602,
+        "total_ms": 2.326084
+      },
+      {
+        "pair": 21,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.512534,
+        "echo_ms": 0.526407,
+        "total_ms": 3.038941
+      },
+      {
+        "pair": 22,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.313722,
+        "echo_ms": 0.500468,
+        "total_ms": 2.81419
+      },
+      {
+        "pair": 22,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.69494,
+        "echo_ms": 0.506911,
+        "total_ms": 2.201851
+      },
+      {
+        "pair": 23,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.406535,
+        "echo_ms": 0.501751,
+        "total_ms": 2.908286
+      },
+      {
+        "pair": 23,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.160764,
+        "echo_ms": 0.534422,
+        "total_ms": 2.695186
+      },
+      {
+        "pair": 24,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.290828,
+        "echo_ms": 0.595297,
+        "total_ms": 2.886125
+      },
+      {
+        "pair": 24,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.189187,
+        "echo_ms": 0.551414,
+        "total_ms": 2.740601
+      },
+      {
+        "pair": 25,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.08954,
+        "echo_ms": 0.53314,
+        "total_ms": 2.62268
+      },
+      {
+        "pair": 25,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.212501,
+        "echo_ms": 0.458039,
+        "total_ms": 2.67054
+      },
+      {
+        "pair": 26,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.253569,
+        "echo_ms": 0.570025,
+        "total_ms": 2.823594
+      },
+      {
+        "pair": 26,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.971092,
+        "echo_ms": 0.547376,
+        "total_ms": 2.518468
+      },
+      {
+        "pair": 27,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.946362,
+        "echo_ms": 0.531767,
+        "total_ms": 2.478129
+      },
+      {
+        "pair": 27,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.110109,
+        "echo_ms": 0.506436,
+        "total_ms": 2.616545
+      },
+      {
+        "pair": 28,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.303846,
+        "echo_ms": 0.54344,
+        "total_ms": 2.847286
+      },
+      {
+        "pair": 28,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.979213,
+        "echo_ms": 0.491953,
+        "total_ms": 2.471166
+      },
+      {
+        "pair": 29,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.847025,
+        "echo_ms": 0.482856,
+        "total_ms": 2.329881
+      },
+      {
+        "pair": 29,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.091555,
+        "echo_ms": 0.541826,
+        "total_ms": 2.633381
+      },
+      {
+        "pair": 30,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.326956,
+        "echo_ms": 0.560621,
+        "total_ms": 2.887577
+      },
+      {
+        "pair": 30,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.316186,
+        "echo_ms": 0.553267,
+        "total_ms": 2.869453
+      },
+      {
+        "pair": 31,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.090603,
+        "echo_ms": 0.436939,
+        "total_ms": 2.527542
+      },
+      {
+        "pair": 31,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 64,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.147971,
+        "echo_ms": 0.586851,
+        "total_ms": 2.734822
+      },
+      {
+        "pair": -2,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": true,
+        "success": true,
+        "setup_ms": 2.220736,
+        "echo_ms": 1.474476,
+        "total_ms": 3.695212
+      },
+      {
+        "pair": -2,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": true,
+        "success": true,
+        "setup_ms": 2.287892,
+        "echo_ms": 0.876574,
+        "total_ms": 3.164466
+      },
+      {
+        "pair": -1,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": true,
+        "success": true,
+        "setup_ms": 1.979704,
+        "echo_ms": 1.10834,
+        "total_ms": 3.088044
+      },
+      {
+        "pair": -1,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": true,
+        "success": true,
+        "setup_ms": 2.071066,
+        "echo_ms": 1.257388,
+        "total_ms": 3.328454
+      },
+      {
+        "pair": 0,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.184157,
+        "echo_ms": 1.132785,
+        "total_ms": 3.316942
+      },
+      {
+        "pair": 0,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.912538,
+        "echo_ms": 0.779622,
+        "total_ms": 2.69216
+      },
+      {
+        "pair": 1,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.939299,
+        "echo_ms": 0.929614,
+        "total_ms": 2.868913
+      },
+      {
+        "pair": 1,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.357743,
+        "echo_ms": 0.941116,
+        "total_ms": 3.298859
+      },
+      {
+        "pair": 2,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.151157,
+        "echo_ms": 1.283408,
+        "total_ms": 3.434565
+      },
+      {
+        "pair": 2,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.101252,
+        "echo_ms": 1.087709,
+        "total_ms": 3.188961
+      },
+      {
+        "pair": 3,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.929445,
+        "echo_ms": 1.076484,
+        "total_ms": 3.005929
+      },
+      {
+        "pair": 3,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.329721,
+        "echo_ms": 0.987913,
+        "total_ms": 3.317634
+      },
+      {
+        "pair": 4,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.215643,
+        "echo_ms": 0.831584,
+        "total_ms": 3.047227
+      },
+      {
+        "pair": 4,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.976619,
+        "echo_ms": 0.806743,
+        "total_ms": 2.783362
+      },
+      {
+        "pair": 5,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.957073,
+        "echo_ms": 0.832803,
+        "total_ms": 2.789876
+      },
+      {
+        "pair": 5,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.11115,
+        "echo_ms": 0.762466,
+        "total_ms": 2.873616
+      },
+      {
+        "pair": 6,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.170035,
+        "echo_ms": 0.772238,
+        "total_ms": 2.942273
+      },
+      {
+        "pair": 6,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.83915,
+        "echo_ms": 0.71922,
+        "total_ms": 2.55837
+      },
+      {
+        "pair": 7,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.944493,
+        "echo_ms": 1.115628,
+        "total_ms": 3.060121
+      },
+      {
+        "pair": 7,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.328037,
+        "echo_ms": 0.762516,
+        "total_ms": 3.090553
+      },
+      {
+        "pair": 8,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.146632,
+        "echo_ms": 1.104972,
+        "total_ms": 3.251604
+      },
+      {
+        "pair": 8,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.862144,
+        "echo_ms": 0.876845,
+        "total_ms": 2.738989
+      },
+      {
+        "pair": 9,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.780571,
+        "echo_ms": 0.787937,
+        "total_ms": 2.568508
+      },
+      {
+        "pair": 9,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.231687,
+        "echo_ms": 0.73883,
+        "total_ms": 2.970517
+      },
+      {
+        "pair": 10,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.272189,
+        "echo_ms": 0.861862,
+        "total_ms": 3.134051
+      },
+      {
+        "pair": 10,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.938561,
+        "echo_ms": 0.672923,
+        "total_ms": 2.611484
+      },
+      {
+        "pair": 11,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.84435,
+        "echo_ms": 0.685677,
+        "total_ms": 2.530027
+      },
+      {
+        "pair": 11,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.21212,
+        "echo_ms": 0.633348,
+        "total_ms": 2.845468
+      },
+      {
+        "pair": 12,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.003739,
+        "echo_ms": 0.630623,
+        "total_ms": 2.634362
+      },
+      {
+        "pair": 12,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.835054,
+        "echo_ms": 0.711885,
+        "total_ms": 2.546939
+      },
+      {
+        "pair": 13,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.773147,
+        "echo_ms": 0.702307,
+        "total_ms": 2.475454
+      },
+      {
+        "pair": 13,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.415191,
+        "echo_ms": 0.687901,
+        "total_ms": 3.103092
+      },
+      {
+        "pair": 14,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.109707,
+        "echo_ms": 1.08728,
+        "total_ms": 3.196987
+      },
+      {
+        "pair": 14,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.903341,
+        "echo_ms": 0.711084,
+        "total_ms": 2.614425
+      },
+      {
+        "pair": 15,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.799566,
+        "echo_ms": 0.671019,
+        "total_ms": 2.470585
+      },
+      {
+        "pair": 15,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.991567,
+        "echo_ms": 0.813616,
+        "total_ms": 2.805183
+      },
+      {
+        "pair": 16,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.222149,
+        "echo_ms": 0.720821,
+        "total_ms": 2.94297
+      },
+      {
+        "pair": 16,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.769922,
+        "echo_ms": 0.66682,
+        "total_ms": 2.436742
+      },
+      {
+        "pair": 17,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.809245,
+        "echo_ms": 0.674885,
+        "total_ms": 2.48413
+      },
+      {
+        "pair": 17,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.018157,
+        "echo_ms": 0.727976,
+        "total_ms": 2.746133
+      },
+      {
+        "pair": 18,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.237007,
+        "echo_ms": 0.701025,
+        "total_ms": 2.938032
+      },
+      {
+        "pair": 18,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.724997,
+        "echo_ms": 1.000526,
+        "total_ms": 2.725523
+      },
+      {
+        "pair": 19,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.707926,
+        "echo_ms": 0.725149,
+        "total_ms": 2.433075
+      },
+      {
+        "pair": 19,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.103557,
+        "echo_ms": 0.700634,
+        "total_ms": 2.804191
+      },
+      {
+        "pair": 20,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.28623,
+        "echo_ms": 0.776125,
+        "total_ms": 3.062355
+      },
+      {
+        "pair": 20,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.803855,
+        "echo_ms": 0.71393,
+        "total_ms": 2.517785
+      },
+      {
+        "pair": 21,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.655426,
+        "echo_ms": 0.629521,
+        "total_ms": 2.284947
+      },
+      {
+        "pair": 21,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.344669,
+        "echo_ms": 0.756489,
+        "total_ms": 3.101158
+      },
+      {
+        "pair": 22,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.349918,
+        "echo_ms": 0.779422,
+        "total_ms": 3.12934
+      },
+      {
+        "pair": 22,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.817691,
+        "echo_ms": 0.726032,
+        "total_ms": 2.543723
+      },
+      {
+        "pair": 23,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.89757,
+        "echo_ms": 0.667161,
+        "total_ms": 2.564731
+      },
+      {
+        "pair": 23,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.244852,
+        "echo_ms": 0.824607,
+        "total_ms": 3.069459
+      },
+      {
+        "pair": 24,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.211359,
+        "echo_ms": 0.630733,
+        "total_ms": 2.842092
+      },
+      {
+        "pair": 24,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.754101,
+        "echo_ms": 0.703139,
+        "total_ms": 2.45724
+      },
+      {
+        "pair": 25,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.707553,
+        "echo_ms": 0.688621,
+        "total_ms": 2.396174
+      },
+      {
+        "pair": 25,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.15301,
+        "echo_ms": 0.790393,
+        "total_ms": 2.943403
+      },
+      {
+        "pair": 26,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.168008,
+        "echo_ms": 0.823951,
+        "total_ms": 2.991959
+      },
+      {
+        "pair": 26,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.763682,
+        "echo_ms": 0.644179,
+        "total_ms": 2.407861
+      },
+      {
+        "pair": 27,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.757748,
+        "echo_ms": 0.686888,
+        "total_ms": 2.444636
+      },
+      {
+        "pair": 27,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.028086,
+        "echo_ms": 0.765756,
+        "total_ms": 2.793842
+      },
+      {
+        "pair": 28,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.037423,
+        "echo_ms": 0.647445,
+        "total_ms": 2.684868
+      },
+      {
+        "pair": 28,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.452331,
+        "echo_ms": 0.99178,
+        "total_ms": 3.444111
+      },
+      {
+        "pair": 29,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.854068,
+        "echo_ms": 0.598432,
+        "total_ms": 2.4525
+      },
+      {
+        "pair": 29,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.097966,
+        "echo_ms": 0.739317,
+        "total_ms": 2.837283
+      },
+      {
+        "pair": 30,
+        "order": 0,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.4199,
+        "echo_ms": 0.628148,
+        "total_ms": 3.048048
+      },
+      {
+        "pair": 30,
+        "order": 1,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.02492,
+        "echo_ms": 0.636213,
+        "total_ms": 2.661133
+      },
+      {
+        "pair": 31,
+        "order": 0,
+        "path": "standard",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 1.875439,
+        "echo_ms": 0.702698,
+        "total_ms": 2.578137
+      },
+      {
+        "pair": 31,
+        "order": 1,
+        "path": "private",
+        "payload_bytes": 65507,
+        "warmup": false,
+        "success": true,
+        "setup_ms": 2.02531,
+        "echo_ms": 0.781946,
+        "total_ms": 2.807256
+      }
+    ],
+    "summary": [
+      {
+        "path": "private",
+        "payload_bytes": 64,
+        "planned": 32,
+        "successful": 32,
+        "failed": 0,
+        "setup_ms_p50": 2.277914,
+        "setup_ms_p95": 2.529933,
+        "echo_ms_p50": 0.5420815,
+        "echo_ms_p95": 0.630282,
+        "total_ms_p50": 2.8271675,
+        "total_ms_p95": 3.058467
+      },
+      {
+        "path": "standard",
+        "payload_bytes": 64,
+        "planned": 32,
+        "successful": 32,
+        "failed": 0,
+        "setup_ms_p50": 1.9813975,
+        "setup_ms_p95": 2.406535,
+        "echo_ms_p50": 0.5242985,
+        "echo_ms_p95": 2.953801,
+        "total_ms_p50": 2.523005,
+        "total_ms_p95": 4.988379
+      },
+      {
+        "path": "private",
+        "payload_bytes": 65507,
+        "planned": 32,
+        "successful": 32,
+        "failed": 0,
+        "setup_ms_p50": 2.197758,
+        "setup_ms_p95": 2.415191,
+        "echo_ms_p50": 0.7689969999999999,
+        "echo_ms_p95": 1.132785,
+        "total_ms_p50": 2.9812380000000003,
+        "total_ms_p95": 3.317634
+      },
+      {
+        "path": "standard",
+        "payload_bytes": 65507,
+        "planned": 32,
+        "successful": 32,
+        "failed": 0,
+        "setup_ms_p50": 1.84175,
+        "setup_ms_p95": 2.101252,
+        "echo_ms_p50": 0.7114845000000001,
+        "echo_ms_p95": 1.087709,
+        "total_ms_p50": 2.5615505,
+        "total_ms_p95": 3.188961
+      }
+    ],
+    "paired_differences": [
+      {
+        "payload_bytes": 64,
+        "complete_pairs": 32,
+        "setup_ms_private_minus_standard_p50": 0.26685500000000006,
+        "echo_ms_private_minus_standard_p50": 0.026227,
+        "total_ms_private_minus_standard_p50": 0.302287
+      },
+      {
+        "payload_bytes": 65507,
+        "complete_pairs": 32,
+        "setup_ms_private_minus_standard_p50": 0.357526,
+        "echo_ms_private_minus_standard_p50": 0.05324049999999997,
+        "total_ms_private_minus_standard_p50": 0.38481750000000003
+      }
+    ],
+    "all_scored_success": true
+  },
+  "native_resources": [],
+  "secondary_node_reaped": true,
+  "trusted_owner_context": [
+    {
+      "phase": "created-despite-client-forgery",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "fork-inherits-source-owner",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "fork-inherits-source-owner",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "key-rotated",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "paused",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "resumed",
+      "owner_id": "owned-principal-a"
+    }
+  ],
+  "guest_owner_from_store_at_creation": "owned-principal-a",
+  "native_cli_comparison": [],
+  "host_build_profile_declared": "release",
+  "guest_resources_from_inventory": {
+    "cpuCount": 1,
+    "memoryMB": 1024
+  },
+  "host_environment": {
+    "kernel": "6.18.33.2-microsoft-standard-WSL2",
+    "machine": "x86_64",
+    "logical_cpus": 24,
+    "affinity_cpus": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23
+    ],
+    "requested_affinity_cpus": null,
+    "python": "3.13.5"
+  },
+  "native_cli_comparison_scope": "Unrestricted current CPU affinity. Internal paths; both processes remain live in every ABBA block; native TCP idle; one outstanding datagram per peer; no timed retries; operator-declared build profile; not competitor evidence.",
+  "guest_udp_ipv6": false,
+  "local_udp_ipv6": false,
+  "control_api_tls": true,
+  "node_mtls": true,
+  "latency_measurements": [],
+  "scope": "Owned shipped CLI/control-plane/Redis/daemon/KVM UDP; optional verified API TLS/node mTLS; Redis local plaintext."
+}

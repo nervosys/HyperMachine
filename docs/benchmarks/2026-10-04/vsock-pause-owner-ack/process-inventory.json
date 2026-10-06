@@ -1,0 +1,6 @@
+[
+  {
+    "pid": 180,
+    "command": "/usr/bin/redis-server 127.0.0.1:6379                                            "
+  }
+]

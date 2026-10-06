@@ -1,0 +1,14 @@
+{
+  "sha256": {
+    "README.md": "10c7dd281ee98bb14b592d9deef77fa1e1b51f24f4da05c5e870ec58b45a552d",
+    "checker.py": "0bd9fc26075de61cd4e0ddbb81cadf0583db7de3f9f0042bdc81e670a3f7cd73",
+    "daemon-build.txt": "0828786b1c37e40c7c4f14155b00735a37576f6654dd5b73f358a33c6b888349",
+    "daemon-check.txt": "cab9c205d825a1df6bea787473ef50415a0c676f6704a89801f9166ffe0b855f",
+    "main.rs": "7a1037a2862e87befdcc111d91dec056ed1f35a13430ecedbaecbfd8e1021d25",
+    "mitm.rs": "9a9b2ef2ba0a5dc27e2e0763eb354d05cd43da63178fbd195d1bc5e15a04faf9",
+    "network-tests.txt": "e5651d10a3a03b3ec97bc33f98a0a0fc3dcf0e55bbb19ba1ec27f05ecbd789e0",
+    "prior-build-context.json": "e24e774e4da480afc98861b017b30e37a6a57e646e8e6b9e8e428b973f6f7e17",
+    "result.json": "6655508a2b42ee4339ed5ccc6f78a085d7a990bd27f666c5c2a5e96398ef826c",
+    "secret_substitution.rs": "9a8bed5b115379c8cb7bb7b5aface6f33ef2ce098af1b55a45203f357ad9fd0a"
+  }
+}

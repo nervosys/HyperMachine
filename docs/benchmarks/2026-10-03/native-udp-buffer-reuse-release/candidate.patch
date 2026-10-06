@@ -1,0 +1,34 @@
+--- baseline/native_udp.rs
++++ candidate/native_udp.rs
+@@ -98,8 +98,9 @@
+         }
+     };
+     let inbound = async {
++        let mut bytes = Vec::new();
+         loop {
+-            let payload = timeout(limits.idle_timeout + limits.io_timeout, async {
++            timeout(limits.idle_timeout + limits.io_timeout, async {
+                 let size = reader.read_u16().await? as usize;
+                 if size > MAX_UDP_PAYLOAD {
+                     return Err(io::Error::new(
+@@ -107,16 +108,16 @@
+                         "oversized UDP frame",
+                     ));
+                 }
+-                let mut bytes = vec![0; size];
++                bytes.resize(size, 0);
+                 reader.read_exact(&mut bytes).await?;
+-                Ok::<_, io::Error>(bytes)
++                Ok::<_, io::Error>(())
+             })
+             .await
+             .map_err(timed_out)??;
+-            let sent = timeout(limits.io_timeout, socket.send_to(&payload, peer))
++            let sent = timeout(limits.io_timeout, socket.send_to(&bytes, peer))
+                 .await
+                 .map_err(timed_out)??;
+-            if sent != payload.len() {
++            if sent != bytes.len() {
+                 return Err(io::Error::new(io::ErrorKind::WriteZero, "partial UDP send"));
+             }
+         }

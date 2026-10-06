@@ -1,0 +1,79 @@
+{
+  "success": true,
+  "performance_comparison": false,
+  "transport": "official MCP client -> verified HTTPS fixture proxy -> MCP loopback -> verified control-plane TLS -> node mTLS -> KVM",
+  "artifact_sha256": {
+    "daemon": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+    "control-plane": "c16ce8e72fae0ef73f98abaee2656fd466711f995ce6ba918c9dbef6de8cd34d",
+    "cli": "90026f782d51761dbe7ff3d19fa0f3f727fd5a1b4b7ddab2afdc2e00e80e09eb",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d520964ff11dff3bc7090af9ee988eedd3c5c5ffb23a5a3708250e3248a2cb17",
+    "coordinator": "b7c78ed2c252c49b4575545632dfa0bea971feacf7fffcdc4ac053894f66da63",
+    "client": "20b5341133cf6be4696263d7b72ae57a1836f2e698fc4989e25b73c3be125474",
+    "cancellation": "9996b14de8527e51c8ade1c1f6e4345b86472307b8b046b837a63a0f474cf831"
+  },
+  "cleanup_errors": [],
+  "processes_stopped": [
+    {
+      "name": "mcp",
+      "exit_code": 0
+    },
+    {
+      "name": "control",
+      "exit_code": 0
+    },
+    {
+      "name": "node",
+      "exit_code": 0
+    },
+    {
+      "name": "redis",
+      "exit_code": 0
+    }
+  ],
+  "checks": [
+    "https_authentication_refused",
+    "https_invalid_origin_forbidden_before_authentication",
+    "https_origin_refused",
+    "official_https_client_real_kvm_lifecycle",
+    "control_plane_inventory_empty"
+  ],
+  "client": {
+    "schema_version": 1,
+    "client": "official-mcp-python",
+    "client_version": "1.23.3",
+    "transport": "verified-https-json",
+    "harness_sha256": "20b5341133cf6be4696263d7b72ae57a1836f2e698fc4989e25b73c3be125474",
+    "binary_sha256": "90026f782d51761dbe7ff3d19fa0f3f727fd5a1b4b7ddab2afdc2e00e80e09eb",
+    "environment": "owned WSL KVM; verified MCP/API TLS and node mTLS",
+    "operations": [
+      "sandbox_create",
+      "sandbox_exec",
+      "sandbox_inspect",
+      "sandbox_list",
+      "checkpoint_save",
+      "checkpoint_list",
+      "sandbox_exec",
+      "checkpoint_restore",
+      "sandbox_exec",
+      "checkpoint_delete",
+      "sandbox_pause",
+      "sandbox_resume",
+      "sandbox_exec",
+      "sandbox_fork",
+      "sandbox_exec",
+      "sandbox_exec",
+      "sandbox_exec",
+      "sandbox_exec",
+      "sandbox_inspect",
+      "sandbox_delete",
+      "sandbox_delete"
+    ],
+    "errors": [],
+    "cancellation": null,
+    "cancellation_harness_sha256": "9996b14de8527e51c8ade1c1f6e4345b86472307b8b046b837a63a0f474cf831",
+    "remaining_known_sandboxes": [],
+    "success": true
+  },
+  "artifacts_unchanged": true
+}

@@ -1,0 +1,3758 @@
+{
+  "diagnostic_only": true,
+  "runtime_change_adopted": false,
+  "performance_win_established": false,
+  "artifact_sha256": {
+    "driver": "147d8ab48953cb3c99cf61944fa430349147a0b7601a2f1b914749294383f843",
+    "coordinator": "c41c5e00184193a74a7da771e5e45289ce5fecd513bfa719bc40ca4541cb834a",
+    "engines": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "firecracker_harness": "0bcdc13351d54d4c9658bf034aa97f7d86d96d99375a2df04e4c94eaf8d3b610",
+    "candidate_context": "2692ce3419af2e1bb45b637b0063d96e7fca43c6960c36df8dfdca6b2e31f16c",
+    "candidate": "5b9c35ca020cb4f47672edcdde454886125d2c730112ffea9f420d0e8e512d38"
+  },
+  "restore_slots": 16,
+  "fault_cycles": [
+    {
+      "pair": 0,
+      "attempted": 32,
+      "samples": [
+        {
+          "index": 0,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 177.84939000193845
+        },
+        {
+          "index": 1,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 364.36131699883845
+        },
+        {
+          "index": 2,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 96.89181000067038
+        },
+        {
+          "index": 3,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 177.96735299998545
+        },
+        {
+          "index": 4,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 203.63480700325454
+        },
+        {
+          "index": 5,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 95.75726699767984
+        },
+        {
+          "index": 6,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 75.19807800053968
+        },
+        {
+          "index": 7,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 234.15126200052327
+        },
+        {
+          "index": 8,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 96.60041000097408
+        },
+        {
+          "index": 9,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 96.55122899857815
+        },
+        {
+          "index": 10,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 240.11335599789163
+        },
+        {
+          "index": 11,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 238.78600599709898
+        },
+        {
+          "index": 12,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 324.54745400173124
+        },
+        {
+          "index": 13,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 164.85355700206128
+        },
+        {
+          "index": 14,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 126.59439699928043
+        },
+        {
+          "index": 15,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 323.8571479996608
+        },
+        {
+          "index": 16,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 94.44861999872955
+        },
+        {
+          "index": 17,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 165.04943999825628
+        },
+        {
+          "index": 18,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 304.4292169979599
+        },
+        {
+          "index": 19,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 241.4163270004792
+        },
+        {
+          "index": 20,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 94.1588320019946
+        },
+        {
+          "index": 21,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 238.6338930009515
+        },
+        {
+          "index": 22,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 237.73841000001994
+        },
+        {
+          "index": 23,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 161.84744700149167
+        },
+        {
+          "index": 24,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 344.31900400159066
+        },
+        {
+          "index": 25,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 305.74693299786304
+        },
+        {
+          "index": 26,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 310.0533479992009
+        },
+        {
+          "index": 27,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 228.01519299900974
+        },
+        {
+          "index": 28,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 145.25081600004341
+        },
+        {
+          "index": 29,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 158.62236599787138
+        },
+        {
+          "index": 30,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 225.16062300201156
+        },
+        {
+          "index": 31,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 110.60685500342515
+        }
+      ],
+      "source_sha256": "50593bb88d81ce0d665fc3fa15422f5f3bd3fe59e03bf7ac5b9ba514215db7a4",
+      "success": true,
+      "source_restored": true,
+      "remaining_sandboxes": 0,
+      "recovery_success": true
+    },
+    {
+      "pair": 1,
+      "attempted": 32,
+      "samples": [
+        {
+          "index": 0,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 315.7949289998214
+        },
+        {
+          "index": 1,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 242.60342699926696
+        },
+        {
+          "index": 2,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 242.49271100052283
+        },
+        {
+          "index": 3,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 84.06335900144768
+        },
+        {
+          "index": 4,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 161.95858600258362
+        },
+        {
+          "index": 5,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 76.85186799790245
+        },
+        {
+          "index": 6,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 125.24280900106532
+        },
+        {
+          "index": 7,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 161.82416299852775
+        },
+        {
+          "index": 8,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 83.57762900050147
+        },
+        {
+          "index": 9,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 232.98767500091344
+        },
+        {
+          "index": 10,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 161.23815500031924
+        },
+        {
+          "index": 11,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 83.43472599881352
+        },
+        {
+          "index": 12,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 82.56786399942939
+        },
+        {
+          "index": 13,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 48.493148999114055
+        },
+        {
+          "index": 14,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 240.77825700078392
+        },
+        {
+          "index": 15,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 161.28370800288394
+        },
+        {
+          "index": 16,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 312.85693099925993
+        },
+        {
+          "index": 17,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 82.55317300063325
+        },
+        {
+          "index": 18,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 312.47166600223863
+        },
+        {
+          "index": 19,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 303.1864510012383
+        },
+        {
+          "index": 20,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 239.61133299962967
+        },
+        {
+          "index": 21,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 241.0438549995888
+        },
+        {
+          "index": 22,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 240.99244899844052
+        },
+        {
+          "index": 23,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 312.88909100112505
+        },
+        {
+          "index": 24,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 159.19580000263522
+        },
+        {
+          "index": 25,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 159.2872500004887
+        },
+        {
+          "index": 26,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 312.0591119986784
+        },
+        {
+          "index": 27,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 260.42952600255376
+        },
+        {
+          "index": 28,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 201.94483900195337
+        },
+        {
+          "index": 29,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 159.8122590003186
+        },
+        {
+          "index": 30,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 311.38003500018385
+        },
+        {
+          "index": 31,
+          "expected_rejection": true,
+          "error": "HTTP 500: {\"code\":500,\"message\":\"launching: VM error: Configuration error: opening /var/tmp/hm-prepared-8i43q18f/hm/snapshots/snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap: No such file or directory (os error 2)\"}",
+          "elapsed_ms": 82.83151700015878
+        }
+      ],
+      "source_sha256": "50593bb88d81ce0d665fc3fa15422f5f3bd3fe59e03bf7ac5b9ba514215db7a4",
+      "success": true,
+      "source_restored": true,
+      "remaining_sandboxes": 0,
+      "recovery_success": true
+    }
+  ],
+  "success": true,
+  "failure_kind": "owned named snapshot file temporarily withheld after preparation",
+  "limitations": [
+    "Failure/recovery diagnostic, not performance ranking",
+    "Exercises launch errors after admission; queued-request cancellation and fleet behavior remain untested"
+  ],
+  "prepared_report": {
+    "success": true,
+    "purpose": "prepared snapshot startup, no managed endpoint or universal performance claim",
+    "artifact_sha256": {
+      "hypermachine": "5b9c35ca020cb4f47672edcdde454886125d2c730112ffea9f420d0e8e512d38",
+      "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+      "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+      "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+      "coordinator": "c41c5e00184193a74a7da771e5e45289ce5fecd513bfa719bc40ca4541cb834a",
+      "engines": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+      "firecracker_harness": "0bcdc13351d54d4c9658bf034aa97f7d86d96d99375a2df04e4c94eaf8d3b610"
+    },
+    "driver_cpu_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "cpu_count": 1,
+    "memory_mb": 1024,
+    "concurrency": 32,
+    "pairs": 2,
+    "guest_readiness_timeout_s": 15,
+    "preparation": {
+      "hypermachine": {
+        "duration_ms": 112.62631700083148,
+        "offering": {
+          "createdAt": 1790986596645,
+          "names": [
+            "warm-benchmark:default"
+          ],
+          "sandboxID": "sbx-0b88d3beaca1470b9cfa",
+          "snapshotID": "warm-benchmark:default",
+          "templateID": "base"
+        },
+        "base_template": {
+          "aliases": [
+            "base"
+          ],
+          "buildID": "base",
+          "buildStatus": "ready",
+          "cpuCount": 1,
+          "envdVersion": "0.6.3",
+          "memoryMB": 1024,
+          "public": false,
+          "snapshot": true,
+          "templateID": "base"
+        },
+        "source_files": {
+          ".backup.lock": {
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "snapshots/warm-benchmark-cb3520960b104c8189c03e43c12b9e80.snap": {
+            "bytes": 1562667,
+            "sha256": "50593bb88d81ce0d665fc3fa15422f5f3bd3fe59e03bf7ac5b9ba514215db7a4"
+          },
+          "snapshots/warm-benchmark.json": {
+            "bytes": 142,
+            "sha256": "dc7dc71873474a1dad11ce6f3ddc981b66f41ff86f819dbb850a930d2be5bb0a"
+          },
+          "templates/94cbb63bd81baf1783adfe6c07e8d944/template.snap": {
+            "bytes": 51183,
+            "sha256": "c51f67d6a5c025a0b7cdebc5177937f4d18dd5fadd6170a42a287d1aac283da2"
+          },
+          "templates/94cbb63bd81baf1783adfe6c07e8d944/template.snap.mem": {
+            "bytes": 1073741824,
+            "sha256": "699c83fa32404ac3f9ee3fe83eb3bbaed7bd432291e95873d28ba4acfdeaea5a"
+          }
+        },
+        "source_unchanged": true
+      },
+      "firecracker": {
+        "duration_ms": 1647.9007919988362,
+        "state_sha256": "66c36bfc1eb8fbd66ee49c12ac0a965ac5f07e567026268db512aa92d1317b6b",
+        "memory_sha256": "7de7c0b4ba3799daa023c114b9a8811060ef2e849f82114dd198daf9b253064a",
+        "memory_bytes": 1073741824,
+        "snapshot_type": "Full",
+        "source_parent_stopped": true,
+        "source_unchanged": true
+      }
+    },
+    "runs": [
+      {
+        "engine": "hypermachine",
+        "pair": 0,
+        "samples": [
+          {
+            "index": 0,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.661214688,
+            "sandbox_id": "sbx-5bf858f1376e4aa08f53",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 332.07184899947606,
+            "latency_phases_ms": {
+              "create_and_notice": 175.5025279999245,
+              "exec": 156.56932099955156
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 1,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.66169583,
+            "sandbox_id": "sbx-7ed0f8a014174e989518",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 283.9332059993467,
+            "latency_phases_ms": {
+              "create_and_notice": 180.74121500103502,
+              "exec": 103.19199099831167
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 2,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.662183797,
+            "sandbox_id": "sbx-b8c0794793ad498a9d3c",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 286.0772729982273,
+            "latency_phases_ms": {
+              "create_and_notice": 125.25027999799931,
+              "exec": 160.82699300022796
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 3,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.662718623,
+            "sandbox_id": "sbx-94b3cc1cfc764cd0b758",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 365.3540939994855,
+            "latency_phases_ms": {
+              "create_and_notice": 275.5803559994092,
+              "exec": 89.77373800007626
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 4,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.663190454,
+            "sandbox_id": "sbx-da9c384e866347888147",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 284.8316639974655,
+            "latency_phases_ms": {
+              "create_and_notice": 124.00864099981845,
+              "exec": 160.82302299764706
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 5,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.664223131,
+            "sandbox_id": "sbx-1034ed5a618344cfb7b0",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 236.80978099946515,
+            "latency_phases_ms": {
+              "create_and_notice": 120.81409500024165,
+              "exec": 115.9956859992235
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 6,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.663693164,
+            "sandbox_id": "sbx-b61945b2211e4f4cbe8d",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 320.7362240027578,
+            "latency_phases_ms": {
+              "create_and_notice": 71.4492440019967,
+              "exec": 249.2869800007611
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 7,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.664772548,
+            "sandbox_id": "sbx-6215a501e0c040eda86d",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 363.0334359986591,
+            "latency_phases_ms": {
+              "create_and_notice": 276.2111689989979,
+              "exec": 86.82226699966122
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 8,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.665263099,
+            "sandbox_id": "sbx-5c0e402d8db5439596a2",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 392.0177850013715,
+            "latency_phases_ms": {
+              "create_and_notice": 327.3393580020638,
+              "exec": 64.6784269993077
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 9,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.671132486,
+            "sandbox_id": "sbx-64f0c4c144ea429ea447",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 194.54333999965456,
+            "latency_phases_ms": {
+              "create_and_notice": 122.66893099877052,
+              "exec": 71.87440900088404
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 10,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.670193195,
+            "sandbox_id": "sbx-b849d7926456494ab23a",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 319.7123680001823,
+            "latency_phases_ms": {
+              "create_and_notice": 126.19209900003625,
+              "exec": 193.52026900014607
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 11,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.676619232,
+            "sandbox_id": "sbx-2afac2429dae47f8a91a",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 270.26076300171553,
+            "latency_phases_ms": {
+              "create_and_notice": 169.99504400155274,
+              "exec": 100.26571900016279
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 12,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.672465937,
+            "sandbox_id": "sbx-97bd1cc774764beb8ae5",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 354.8037619984825,
+            "latency_phases_ms": {
+              "create_and_notice": 287.2119769999699,
+              "exec": 67.5917849985126
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 13,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.671937497,
+            "sandbox_id": "sbx-f22f5c75a6e844e2828a",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 379.20014900009846,
+            "latency_phases_ms": {
+              "create_and_notice": 283.54859599858173,
+              "exec": 95.65155300151673
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 14,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.674665446,
+            "sandbox_id": "sbx-412db988c6b041128bd3",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 376.71518600109266,
+            "latency_phases_ms": {
+              "create_and_notice": 315.02343299871427,
+              "exec": 61.69175300237839
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 15,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.673526245,
+            "sandbox_id": "sbx-2f2073b4c9414a96ad7c",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 265.9074560033332,
+            "latency_phases_ms": {
+              "create_and_notice": 129.02324800234055,
+              "exec": 136.88420800099266
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 16,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.67298527,
+            "sandbox_id": "sbx-7165e10859204510967f",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 315.528347997315,
+            "latency_phases_ms": {
+              "create_and_notice": 207.60796499962453,
+              "exec": 107.92038299769047
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 17,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.674133098,
+            "sandbox_id": "sbx-d124657635474bb7bac6",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 355.71427299873903,
+            "latency_phases_ms": {
+              "create_and_notice": 265.9547939983895,
+              "exec": 89.75947900034953
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 18,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.675193961,
+            "sandbox_id": "sbx-5fb2518ea52d44b6a261",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 358.1343449986889,
+            "latency_phases_ms": {
+              "create_and_notice": 227.36443699977826,
+              "exec": 130.76990799891064
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 19,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.677782261,
+            "sandbox_id": "sbx-c8066f219ead4abfac70",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 365.2805180026917,
+            "latency_phases_ms": {
+              "create_and_notice": 266.2935820007988,
+              "exec": 98.9869360018929
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 20,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.675692958,
+            "sandbox_id": "sbx-df4db53f15ec45ba86f5",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 352.52284799935296,
+            "latency_phases_ms": {
+              "create_and_notice": 271.8884319983772,
+              "exec": 80.63441600097576
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 21,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.678458546,
+            "sandbox_id": "sbx-78b5fbf6404e40eb9023",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 307.9029759974219,
+            "latency_phases_ms": {
+              "create_and_notice": 219.48482500010869,
+              "exec": 88.4181509973132
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 22,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.679073982,
+            "sandbox_id": "sbx-09a80576870349e79151",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 357.0876080011658,
+            "latency_phases_ms": {
+              "create_and_notice": 261.30358800219255,
+              "exec": 95.78401999897324
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 23,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.680253576,
+            "sandbox_id": "sbx-f9abb34d11044554b78d",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 378.83484800113365,
+            "latency_phases_ms": {
+              "create_and_notice": 355.37515100077144,
+              "exec": 23.459697000362212
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 24,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.675900475,
+            "sandbox_id": "sbx-df89d5b2ebf747a6b336",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 349.73236700170673,
+            "latency_phases_ms": {
+              "create_and_notice": 268.8333980004245,
+              "exec": 80.89896900128224
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 25,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.678590464,
+            "sandbox_id": "sbx-68ff7ce5ffa84a7c9364",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 311.6688240006624,
+            "latency_phases_ms": {
+              "create_and_notice": 153.61494500029949,
+              "exec": 158.05387900036294
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 26,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.665724307,
+            "sandbox_id": "sbx-e7f892ce3ccc4c23aae3",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 274.1678819984372,
+            "latency_phases_ms": {
+              "create_and_notice": 119.85612900025444,
+              "exec": 154.31175299818278
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 27,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.679657804,
+            "sandbox_id": "sbx-a1b1c5f2cf824cbdbe1a",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 379.8264309989463,
+            "latency_phases_ms": {
+              "create_and_notice": 351.09553299844265,
+              "exec": 28.730898000503657
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 28,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.6823969,
+            "sandbox_id": "sbx-75ee0944cf064d78a24d",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 351.5828119998332,
+            "latency_phases_ms": {
+              "create_and_notice": 255.2984750000178,
+              "exec": 96.28433699981542
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 29,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.687520757,
+            "sandbox_id": "sbx-02264fa1b3ee4c788e23",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 304.311312000209,
+            "latency_phases_ms": {
+              "create_and_notice": 249.0492449978774,
+              "exec": 55.262067002331605
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 30,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.680811444,
+            "sandbox_id": "sbx-a3c4ae81e894411ebf5d",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 349.5185140018293,
+            "latency_phases_ms": {
+              "create_and_notice": 265.60031500048353,
+              "exec": 83.91819900134578
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 31,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19757.660663959,
+            "sandbox_id": "sbx-40d9485f8a2a4ea7b4d5",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 366.77205900195986,
+            "latency_phases_ms": {
+              "create_and_notice": 275.21716200135415,
+              "exec": 91.5548970006057
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          }
+        ],
+        "success": true,
+        "cleanup_errors": [],
+        "held_process_memory_kib": {
+          "Rss_kib": 1025012,
+          "Pss_kib": 154845,
+          "Private_Clean_kib": 8136,
+          "Private_Dirty_kib": 117380,
+          "Anonymous_kib": 117244
+        },
+        "empty_process_memory_baseline_kib": {
+          "Rss_kib": 46064,
+          "Pss_kib": 43794,
+          "Private_Clean_kib": 8136,
+          "Private_Dirty_kib": 35448,
+          "Anonymous_kib": 35448
+        },
+        "incremental_process_memory_kib": {
+          "Rss_kib": 978948,
+          "Pss_kib": 111051,
+          "Private_Clean_kib": 0,
+          "Private_Dirty_kib": 81932,
+          "Anonymous_kib": 81796
+        },
+        "memory_hold_seconds": 5,
+        "memory_read_ms": 15.539557000010973,
+        "remaining_sandboxes": 0,
+        "start_spread_ms": 26.856798001972493
+      },
+      {
+        "engine": "firecracker",
+        "pair": 0,
+        "samples": [
+          {
+            "index": 0,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.345668033,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "b64398dfc792d77df987bfd2948c64fb7ab0558d5849ba958937c937d5efbc19",
+              "unix_time_ns": 1790986609267893099,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.590885968
+            },
+            "ready_ms": 282.66513500057044,
+            "latency_phases_ms": {
+              "process_and_load": 141.4369150006678,
+              "connect_and_notice": 103.78101999958744,
+              "exec": 37.447200000315206
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 1,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.345796344,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "c871f7489d3e5f26b3f529f06b98fba49dab74b3d9aa0f3a1aa2498fe64c2fb4",
+              "unix_time_ns": 1790986609268111993,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.572444675
+            },
+            "ready_ms": 279.06459599762456,
+            "latency_phases_ms": {
+              "process_and_load": 162.78886899817735,
+              "connect_and_notice": 63.85946199952741,
+              "exec": 52.416264999919804
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 2,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.345731356,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "296ccddf222635068f1fe7653017baa5cfa7d71b5d12e114af050feebd4e0917",
+              "unix_time_ns": 1790986609228282786,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.547204904
+            },
+            "ready_ms": 261.1623390002933,
+            "latency_phases_ms": {
+              "process_and_load": 138.01104300000588,
+              "connect_and_notice": 63.46250500064343,
+              "exec": 59.68879099964397
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 3,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.345861551,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "fd4a55bd07953bae83843d6de5a94ba1f011126421580ed211cfe14f73fe3c39",
+              "unix_time_ns": 1790986609258789683,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.566538631
+            },
+            "ready_ms": 310.65099600164103,
+            "latency_phases_ms": {
+              "process_and_load": 169.65389300094103,
+              "connect_and_notice": 51.02318699937314,
+              "exec": 89.97391600132687
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 4,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.345921639,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "c6bd8c33cd2fd4e3057ff5bcab9eed6cbb8e40ee68dae4bccd81b546b3114d18",
+              "unix_time_ns": 1790986609338749316,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.63860546
+            },
+            "ready_ms": 308.96020799991675,
+            "latency_phases_ms": {
+              "process_and_load": 218.67383900098503,
+              "connect_and_notice": 74.00998199955211,
+              "exec": 16.27638699937961
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 5,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.345987663,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "a5e03f0fb47af00ecb18d12199230de6d93cecbeaca6461279a766142453fa38",
+              "unix_time_ns": 1790986609267438445,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.564152543
+            },
+            "ready_ms": 309.05861599967466,
+            "latency_phases_ms": {
+              "process_and_load": 142.75460700082476,
+              "connect_and_notice": 75.41027299885172,
+              "exec": 90.89373599999817
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 6,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.346062465,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "9575ac1b4c0b3fa34bb7da42c9bba3a128ac61e6cd5b218e4beea13bd717bf13",
+              "unix_time_ns": 1790986609268921416,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.586938985
+            },
+            "ready_ms": 322.796347001713,
+            "latency_phases_ms": {
+              "process_and_load": 164.21791500033578,
+              "connect_and_notice": 76.65860500128474,
+              "exec": 81.91982700009248
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 7,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.346137181,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "814ba9b341b905cfac378ff4f634014e183195d3d94c76d0037fdaec7b22ab62",
+              "unix_time_ns": 1790986609216143721,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.504132317
+            },
+            "ready_ms": 212.5593460004893,
+            "latency_phases_ms": {
+              "process_and_load": 136.14715400035493,
+              "connect_and_notice": 21.847981999599142,
+              "exec": 54.56421000053524
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 8,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.346203882,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "12930e087f55ad8e5840e97b998a6491329a2073c3c74cdc2197f28915029872",
+              "unix_time_ns": 1790986609269842508,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.578523885
+            },
+            "ready_ms": 316.3489030011988,
+            "latency_phases_ms": {
+              "process_and_load": 125.87230899953283,
+              "connect_and_notice": 106.44769400096266,
+              "exec": 84.02890000070329
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 9,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.346269149,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "30ff2812e5633c98cff40df43f1a943d8dd23fa44f3e1e16122ecf48b36785a3",
+              "unix_time_ns": 1790986609264888717,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.59560268
+            },
+            "ready_ms": 324.14175099984277,
+            "latency_phases_ms": {
+              "process_and_load": 154.6988100017188,
+              "connect_and_notice": 94.63472100105719,
+              "exec": 74.80821999706677
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 10,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.346332572,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "beb5697c88117a1d3575389394a7b768cc797561d40c7fd92cd58e0434873f00",
+              "unix_time_ns": 1790986609265017699,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.580792659
+            },
+            "ready_ms": 280.18521500052884,
+            "latency_phases_ms": {
+              "process_and_load": 134.36829499914893,
+              "connect_and_notice": 100.09179199914797,
+              "exec": 45.72512800223194
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 11,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.346398622,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "998de4a203ea8c1e9ddc4f9205f4687c1d7f1e89f52595c7b651712e85c295fc",
+              "unix_time_ns": 1790986609250210899,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.548829182
+            },
+            "ready_ms": 297.6829239996732,
+            "latency_phases_ms": {
+              "process_and_load": 153.99100799913867,
+              "connect_and_notice": 48.43955199976335,
+              "exec": 95.2523640007712
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 12,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.346472287,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "907d9e39e30d03971e9bf7b66d1ae52ea41652f3964c57c5c56a9b3bcfbd03d9",
+              "unix_time_ns": 1790986609334256194,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.6223567
+            },
+            "ready_ms": 328.7915469991276,
+            "latency_phases_ms": {
+              "process_and_load": 174.98385900034918,
+              "connect_and_notice": 100.90055399996345,
+              "exec": 52.90713399881497
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 13,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.346559828,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "b702a0a3027efaae835207a3cc3a3897ea54ff3ba8116ce0c617ecadd72f5527",
+              "unix_time_ns": 1790986609336936841,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.632253875
+            },
+            "ready_ms": 327.28301599854603,
+            "latency_phases_ms": {
+              "process_and_load": 214.04567399804364,
+              "connect_and_notice": 71.64837299933424,
+              "exec": 41.58896900116815
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 14,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.346671887,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "d5c3b055d72e4d51f5a14569f8247f460b6549023e56a158e74b9442c9fc18c6",
+              "unix_time_ns": 1790986609282865528,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.594951502
+            },
+            "ready_ms": 317.0380820010905,
+            "latency_phases_ms": {
+              "process_and_load": 150.12596999804373,
+              "connect_and_notice": 98.15364500173018,
+              "exec": 68.7584670013166
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 15,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.346752183,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "1ad20e39d857cfe678aaf329d3bc28020403783011f6324405e531f09caacae0",
+              "unix_time_ns": 1790986609298850452,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.594214169
+            },
+            "ready_ms": 300.745447002555,
+            "latency_phases_ms": {
+              "process_and_load": 174.31603400109452,
+              "connect_and_notice": 73.14595199932228,
+              "exec": 53.28346100213821
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 16,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.34691376,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "4434c363ee980462f156563871520d7fa2d33add1b4b801b229efcb431fc28f9",
+              "unix_time_ns": 1790986609252509718,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.553881897
+            },
+            "ready_ms": 290.0351790012792,
+            "latency_phases_ms": {
+              "process_and_load": 159.73678899899824,
+              "connect_and_notice": 47.23134800224216,
+              "exec": 83.06704200003878
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 17,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.346836158,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "16f00a38c1853da68efb86a09eeeef67fc77557d6c39d77b3c913967c84d7352",
+              "unix_time_ns": 1790986609256045690,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.590985813
+            },
+            "ready_ms": 295.61200099851703,
+            "latency_phases_ms": {
+              "process_and_load": 161.50523999749566,
+              "connect_and_notice": 82.64441500068642,
+              "exec": 51.462346000334946
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 18,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.346986202,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "d9260e596f09a8a2037813a5f0629e8693dfbe77235eb9afb5e0d1ae723a6c29",
+              "unix_time_ns": 1790986609253881131,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.564214302
+            },
+            "ready_ms": 291.8437680018542,
+            "latency_phases_ms": {
+              "process_and_load": 157.46719800154096,
+              "connect_and_notice": 59.760902000562055,
+              "exec": 74.61566799975117
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 19,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.347046861,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "2a23db739fa6ca8dee17de81151835e0d6eb491f42be518f695303c7cdb70cd5",
+              "unix_time_ns": 1790986609328028229,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.634630183
+            },
+            "ready_ms": 303.3058940018236,
+            "latency_phases_ms": {
+              "process_and_load": 217.3795759990753,
+              "connect_and_notice": 70.2037460032443,
+              "exec": 15.722571999503998
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 20,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.347114222,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "dac33592629994e78cb001385dd43b0ad92fdeecbe68d2e1ad32a611549fa4c4",
+              "unix_time_ns": 1790986609269137349,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.574399972
+            },
+            "ready_ms": 320.00831400000607,
+            "latency_phases_ms": {
+              "process_and_load": 161.07540899974992,
+              "connect_and_notice": 66.21034099953249,
+              "exec": 92.72256400072365
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 21,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.347191027,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "413233ded2fadfa1b4f425dd6934414cc6577ec689c5ffd6286240d1f5c3c83f",
+              "unix_time_ns": 1790986609247855892,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.550742384
+            },
+            "ready_ms": 287.3002640008053,
+            "latency_phases_ms": {
+              "process_and_load": 157.43751500122016,
+              "connect_and_notice": 46.113841999613214,
+              "exec": 83.74890699997195
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 22,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.347260218,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "21f1be3136a5e787a800e504197ad032f554c98e9b3e249d90fc23a169caeb92",
+              "unix_time_ns": 1790986609249449645,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.545328493
+            },
+            "ready_ms": 231.82293100035167,
+            "latency_phases_ms": {
+              "process_and_load": 165.16346599746612,
+              "connect_and_notice": 32.90480900250259,
+              "exec": 33.754656000382965
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 23,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.347324153,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "7146e739f963d833e2a0b06fe0afbfca088d249fc31ffd20c0c65e0c8c1a9852",
+              "unix_time_ns": 1790986609351488030,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.660093673
+            },
+            "ready_ms": 340.5812689998129,
+            "latency_phases_ms": {
+              "process_and_load": 233.37986199840088,
+              "connect_and_notice": 79.38965799985453,
+              "exec": 27.811749001557473
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 24,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.347385758,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "1cfab980e270ad4beb178c4c58f907c93ee6757e76c88aa17450d31421223d2c",
+              "unix_time_ns": 1790986609247940127,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.554277601
+            },
+            "ready_ms": 286.20125300221844,
+            "latency_phases_ms": {
+              "process_and_load": 142.13813199967262,
+              "connect_and_notice": 64.75371100168559,
+              "exec": 79.30941000086023
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 25,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.347452855,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "ecbfb9300d3820b5923557c2cfa329b0b6a464c68f27ac1c9f61e702b9890cc0",
+              "unix_time_ns": 1790986609247643537,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.537465748
+            },
+            "ready_ms": 269.04507300059777,
+            "latency_phases_ms": {
+              "process_and_load": 140.03616199988755,
+              "connect_and_notice": 49.976730999333085,
+              "exec": 79.03218000137713
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 26,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.347527822,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "3a7eb45347e98ce6539c4b39ea7e8b4b0082e3e709a15a42e7b415c3e0307073",
+              "unix_time_ns": 1790986609305925356,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.629811175
+            },
+            "ready_ms": 325.6384230007825,
+            "latency_phases_ms": {
+              "process_and_load": 168.64511699895957,
+              "connect_and_notice": 113.63823600186151,
+              "exec": 43.355069999961415
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 27,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.347587609,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "03c11a7435436f096997ce2def68d37a96980ab0953dddbfc14a53e804dc57ec",
+              "unix_time_ns": 1790986609244882335,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.534027443
+            },
+            "ready_ms": 276.5586319983413,
+            "latency_phases_ms": {
+              "process_and_load": 138.58475899905898,
+              "connect_and_notice": 47.85507499764208,
+              "exec": 90.11879800164024
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 28,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.347649439,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "1a46b6d486d0e1357530f521845bc65353695619a07477a6da485d13dd0eb936",
+              "unix_time_ns": 1790986609316035356,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.604409696
+            },
+            "ready_ms": 309.0950599980715,
+            "latency_phases_ms": {
+              "process_and_load": 148.96697299991501,
+              "connect_and_notice": 107.7932839980349,
+              "exec": 52.33480300012161
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 29,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.347730797,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "83cfc306488e194f735e8444afd9f211b994bfdfc21d6e05cc6fa37ebed9b318",
+              "unix_time_ns": 1790986609264193717,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.592206078
+            },
+            "ready_ms": 315.6178749995888,
+            "latency_phases_ms": {
+              "process_and_load": 173.04416700062575,
+              "connect_and_notice": 71.43111400000635,
+              "exec": 71.14259399895673
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 30,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.347807799,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "3092938825c1c97b3cb9903b40979d051fbd58fbe10fa103a150d61ddad76190",
+              "unix_time_ns": 1790986609300854975,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.603870861
+            },
+            "ready_ms": 294.4060219997482,
+            "latency_phases_ms": {
+              "process_and_load": 141.8967440004053,
+              "connect_and_notice": 114.16631799875177,
+              "exec": 38.34296000059112
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 31,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19764.345570801,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "ca01641f64d26725bfec4867a51ce509a612ccc02dbea64b68a78017e3cf030b",
+              "unix_time_ns": 1790986609242953470,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19764.553230564
+            },
+            "ready_ms": 280.4991640005028,
+            "latency_phases_ms": {
+              "process_and_load": 142.2273120006139,
+              "connect_and_notice": 65.43245099965134,
+              "exec": 72.83940100023756
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          }
+        ],
+        "success": true,
+        "cleanup_errors": [],
+        "held_process_memory_kib": {
+          "Rss_kib": 741712,
+          "Pss_kib": 102609,
+          "Private_Clean_kib": 12,
+          "Private_Dirty_kib": 81660,
+          "Anonymous_kib": 81532
+        },
+        "empty_process_memory_baseline_kib": {
+          "Rss_kib": 0,
+          "Pss_kib": 0,
+          "Private_Clean_kib": 0,
+          "Private_Dirty_kib": 0,
+          "Anonymous_kib": 0
+        },
+        "incremental_process_memory_kib": {
+          "Rss_kib": 741712,
+          "Pss_kib": 102609,
+          "Private_Clean_kib": 12,
+          "Private_Dirty_kib": 81660,
+          "Anonymous_kib": 81532
+        },
+        "memory_hold_seconds": 5,
+        "memory_read_ms": 33.725249999406515,
+        "start_spread_ms": 2.23699799971655
+      },
+      {
+        "engine": "firecracker",
+        "pair": 1,
+        "samples": [
+          {
+            "index": 0,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.646268076,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "e698eab2114bb30263d9b9a9be3f6236035523bfcdbecbe269f2f88fb788b4c5",
+              "unix_time_ns": 1790986616483466109,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.794121958
+            },
+            "ready_ms": 221.03218299889704,
+            "latency_phases_ms": {
+              "process_and_load": 81.97838199703256,
+              "connect_and_notice": 65.8755000004021,
+              "exec": 73.17830100146239
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 1,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.64634237,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "363222e465fc5882001eeeee3ae038cdca1fca47052920e20e2ed0e7f98b9ff0",
+              "unix_time_ns": 1790986616479248965,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.769033208
+            },
+            "ready_ms": 194.05087599807302,
+            "latency_phases_ms": {
+              "process_and_load": 74.42766799795208,
+              "connect_and_notice": 48.26316999970004,
+              "exec": 71.3600380004209
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 2,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.646407227,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "21bb16b566b26263f6c086a34458409bbfe02aa3e0d830c3eb104f4cf0a9ae52",
+              "unix_time_ns": 1790986616473719360,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.774917556
+            },
+            "ready_ms": 207.33729000130552,
+            "latency_phases_ms": {
+              "process_and_load": 81.71991800190881,
+              "connect_and_notice": 46.790410997346044,
+              "exec": 78.82696100205067
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 3,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.646469106,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "ee76c28ce2f6cb4b93072e465c1e7645ce2ff6453870acab08b80a94902cb4ee",
+              "unix_time_ns": 1790986616456898789,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.753422593
+            },
+            "ready_ms": 156.84163799960515,
+            "latency_phases_ms": {
+              "process_and_load": 69.78728600006434,
+              "connect_and_notice": 37.16620100021828,
+              "exec": 49.888150999322534
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 4,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.646529774,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "6fbbd16806e26430039f4f616ebae2d96fd1c5bb2a322b4e026975dd1175bd36",
+              "unix_time_ns": 1790986616468905195,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.798480071
+            },
+            "ready_ms": 192.77311499899952,
+            "latency_phases_ms": {
+              "process_and_load": 73.68808599858312,
+              "connect_and_notice": 78.26221100185649,
+              "exec": 40.82281799855991
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 5,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.646584513,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "1e2934e85cfbe15538ce46400328e12f1d17c475844cc6b369d746b43d5f7811",
+              "unix_time_ns": 1790986616492912250,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.817040298
+            },
+            "ready_ms": 198.86054699964006,
+            "latency_phases_ms": {
+              "process_and_load": 89.68049100076314,
+              "connect_and_notice": 80.7752939981583,
+              "exec": 28.40476200071862
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 6,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.646637686,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "7a6974ce313285d255fa5894dcb631cec769085651e56797ade3a144ef31a112",
+              "unix_time_ns": 1790986616466526355,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.774265562
+            },
+            "ready_ms": 196.975022998231,
+            "latency_phases_ms": {
+              "process_and_load": 64.01505100075155,
+              "connect_and_notice": 63.612824997107964,
+              "exec": 69.34714700037148
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 7,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.646765315,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "a19ccc5d51ea78e2a7a12bdd31fbc96cb10f643ec7fcf49ffa79738856f2c1ee",
+              "unix_time_ns": 1790986616466888823,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.753029987
+            },
+            "ready_ms": 141.24762800202006,
+            "latency_phases_ms": {
+              "process_and_load": 73.73512699996354,
+              "connect_and_notice": 32.529545002034865,
+              "exec": 34.98295600002166
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 8,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.646821964,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "10a314766153ecb8a69eb87cb4d566d6052839e9b4506ec6c234f8fd3fb6b7dc",
+              "unix_time_ns": 1790986616460385643,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.771164677
+            },
+            "ready_ms": 191.92056099927868,
+            "latency_phases_ms": {
+              "process_and_load": 69.33826100066653,
+              "connect_and_notice": 55.00445199868409,
+              "exec": 67.57784799992805
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 9,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.646995074,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "f933b825f6e93928929645de9cdc280e0ff1e454e835bd20e09a27e9ec1c1771",
+              "unix_time_ns": 1790986616488643762,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.785853203
+            },
+            "ready_ms": 214.624931999424,
+            "latency_phases_ms": {
+              "process_and_load": 79.50551800240646,
+              "connect_and_notice": 59.35261099875788,
+              "exec": 75.76680299825966
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 10,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.646876411,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "b77089f39e4292516f33817fe616e84c4d417bead1a2b00c01e89e59013db7f0",
+              "unix_time_ns": 1790986616492323601,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.792042059
+            },
+            "ready_ms": 214.24422999916715,
+            "latency_phases_ms": {
+              "process_and_load": 73.95783199899597,
+              "connect_and_notice": 71.2078160031524,
+              "exec": 69.07858199701877
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 11,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.646933022,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "e02feacb5ee5744e240a5d7fef1f5c802cae8c6204353a4f8a6dff7b4fbfef69",
+              "unix_time_ns": 1790986616431050602,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.724422095
+            },
+            "ready_ms": 128.33056900126394,
+            "latency_phases_ms": {
+              "process_and_load": 57.41037400002824,
+              "connect_and_notice": 20.07869900262449,
+              "exec": 50.84149599861121
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 12,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.647048366,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "a04b79a81e98748c0e1c887787500b01ab13b565a03d9711fe8b67f5a789f700",
+              "unix_time_ns": 1790986616457820011,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.752208724
+            },
+            "ready_ms": 146.5987649971794,
+            "latency_phases_ms": {
+              "process_and_load": 73.82075499845087,
+              "connect_and_notice": 31.339602999651106,
+              "exec": 41.438406999077415
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 13,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.64710078,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "b5b709a23fc1dfff977cb546108cfda293d93d61158d439775cf27bd5f3381a2",
+              "unix_time_ns": 1790986616518433705,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.808293851
+            },
+            "ready_ms": 201.7618970021431,
+            "latency_phases_ms": {
+              "process_and_load": 82.30931800062535,
+              "connect_and_notice": 78.88375300171901,
+              "exec": 40.56882599979872
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 14,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.647153198,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "7c7b998225728f399ce85669467371d2dd3d6bfa612ffb960e16ac897547776e",
+              "unix_time_ns": 1790986616469069362,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.761453128
+            },
+            "ready_ms": 178.72484500185237,
+            "latency_phases_ms": {
+              "process_and_load": 77.0569140004227,
+              "connect_and_notice": 37.24301600232138,
+              "exec": 64.4249149991083
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 15,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.647209282,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "d5d60e014d9e5f16b9f8b7d1051caf7e0f8783aa7e7c4180ed1cf64146cf1566",
+              "unix_time_ns": 1790986616484973311,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.78663598
+            },
+            "ready_ms": 210.0151279992133,
+            "latency_phases_ms": {
+              "process_and_load": 73.49514800080215,
+              "connect_and_notice": 65.93154999791295,
+              "exec": 70.58843000049819
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 16,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.64726478,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "d92a9c7c0d654ae471d8472d569c56e491b8d90f5baf4dc2080b40535aaf30fd",
+              "unix_time_ns": 1790986616477446133,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.789115208
+            },
+            "ready_ms": 210.3959300002316,
+            "latency_phases_ms": {
+              "process_and_load": 73.34331200036104,
+              "connect_and_notice": 68.50711600054638,
+              "exec": 68.54550199932419
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 17,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.648026041,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "9b538493ac4c4637cc5708cae559da25f64f3c4315175bd538a33e43f4126050",
+              "unix_time_ns": 1790986616459879825,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.747225686
+            },
+            "ready_ms": 140.80225900033838,
+            "latency_phases_ms": {
+              "process_and_load": 60.19490100152325,
+              "connect_and_notice": 39.00474399779341,
+              "exec": 41.60261400102172
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 18,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.647319081,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "050d2c53f6d14cc21dd2145abeceb70feeb8bac9d9aff23c0bd628dda02ec064",
+              "unix_time_ns": 1790986616494818910,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.783158521
+            },
+            "ready_ms": 205.3291390002414,
+            "latency_phases_ms": {
+              "process_and_load": 73.01988499966683,
+              "connect_and_notice": 62.819555001624394,
+              "exec": 69.48969899895019
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 19,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.647374183,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "ce3b48538e317f0bf0393b28b443db1f91cc100bc0238da43f12d62d8d6ab19f",
+              "unix_time_ns": 1790986616451587034,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.745312818
+            },
+            "ready_ms": 142.2922159981681,
+            "latency_phases_ms": {
+              "process_and_load": 60.25480399694061,
+              "connect_and_notice": 37.68383100032224,
+              "exec": 44.35358100090525
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 20,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.647429862,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "0dbebe37f28ccc27d2cfdd6d41134fe43f8b146e1d4e4597c3090d61a26126bf",
+              "unix_time_ns": 1790986616499715516,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.804895221
+            },
+            "ready_ms": 190.51056299940683,
+            "latency_phases_ms": {
+              "process_and_load": 77.14499099893146,
+              "connect_and_notice": 80.32036800068454,
+              "exec": 33.04520399979083
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 21,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.64748287,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "ec10edf0ce2be1b7cb532c00f7ed3c57dcfbe118026cb60b30f626fa86b6ddd9",
+              "unix_time_ns": 1790986616468973926,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.771068469
+            },
+            "ready_ms": 212.71779599919682,
+            "latency_phases_ms": {
+              "process_and_load": 64.80721299885772,
+              "connect_and_notice": 58.77838599917595,
+              "exec": 89.13219700116315
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 22,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.647536881,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "7148e31ffc191894e84f207040042bbbd2a2892a5b5ea8ac8d138594d484c8df",
+              "unix_time_ns": 1790986616509386862,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.803155721
+            },
+            "ready_ms": 214.3867360027798,
+            "latency_phases_ms": {
+              "process_and_load": 84.60437699977774,
+              "connect_and_notice": 71.01446300293901,
+              "exec": 58.76789600006305
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 23,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.647596217,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "e4a89988d7bd505c461c6e2b3ff094dccce0c9be3d76310914c5c8c0a4f298f5",
+              "unix_time_ns": 1790986616451023905,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.766322685
+            },
+            "ready_ms": 186.44028600101592,
+            "latency_phases_ms": {
+              "process_and_load": 60.20001599972602,
+              "connect_and_notice": 58.52645200138795,
+              "exec": 67.71381799990195
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 24,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.649183624,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "e99e6705476dcab0c0a971ccbb118910ae6364787aa3eed670ee83210e25bf72",
+              "unix_time_ns": 1790986616516456532,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.80200519
+            },
+            "ready_ms": 196.14039400039474,
+            "latency_phases_ms": {
+              "process_and_load": 49.965666999924,
+              "connect_and_notice": 102.85589900013292,
+              "exec": 43.31882800033782
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 25,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.647893116,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "50352ffa95ceeb5f97f3fa0c18b05ebcbf52f16da6984336fd3e89948e41f5da",
+              "unix_time_ns": 1790986616460903157,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.765170236
+            },
+            "ready_ms": 158.46964799857233,
+            "latency_phases_ms": {
+              "process_and_load": 48.383618999650935,
+              "connect_and_notice": 68.89350100027514,
+              "exec": 41.192527998646256
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 26,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.647666893,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "a9de17fbd353e727b6513cc77aca4b47058a3deba53482cbfe587f5ecbaca242",
+              "unix_time_ns": 1790986616464883705,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.747605973
+            },
+            "ready_ms": 151.6884159973415,
+            "latency_phases_ms": {
+              "process_and_load": 59.62671999805025,
+              "connect_and_notice": 40.31236000082572,
+              "exec": 51.74933599846554
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 27,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.647728515,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "c7673bb4b3fca0af288ed6217bfd94acf40f913faeaf5db1c35b276fd2f9ab46",
+              "unix_time_ns": 1790986616494977820,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.777009537
+            },
+            "ready_ms": 213.46210300180246,
+            "latency_phases_ms": {
+              "process_and_load": 51.643054001033306,
+              "connect_and_notice": 77.63796799918055,
+              "exec": 84.18108100158861
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 28,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.647784509,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "dac799c95d9b1b30a58bc0b7bf28722605f940085aca277db4c91cb863b76bf0",
+              "unix_time_ns": 1790986616482333514,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.802903845
+            },
+            "ready_ms": 184.64340399805224,
+            "latency_phases_ms": {
+              "process_and_load": 78.87220699922182,
+              "connect_and_notice": 76.24712899996666,
+              "exec": 29.524067998863757
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 29,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.647837838,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "46cf17568b1fbb2b8524e6db2c04c84f6507d94ddf2defba63dd149e23ed78ef",
+              "unix_time_ns": 1790986616500954883,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.791096103
+            },
+            "ready_ms": 212.08578599907923,
+            "latency_phases_ms": {
+              "process_and_load": 80.47862599778455,
+              "connect_and_notice": 62.779638999927556,
+              "exec": 68.82752100136713
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 30,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.648103847,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "f2a82f55fdf09a64ff7967a4552c707778fabe58ed13a9431bb4ac2c9fc2c63d",
+              "unix_time_ns": 1790986616462635733,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.76134675
+            },
+            "ready_ms": 183.99709799996344,
+            "latency_phases_ms": {
+              "process_and_load": 47.176833999401424,
+              "connect_and_notice": 66.06606900095358,
+              "exec": 70.75419499960844
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 31,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19771.64619387,
+            "restored_notice": {
+              "entropy_bytes": 64,
+              "entropy_sha256": "8fc4dca0228fb678642e0626ef08c3bf9c3d7c8d6d98b04c2df83efd0c8efd33",
+              "unix_time_ns": 1790986616476920556,
+              "attempts": 1,
+              "acknowledged": true,
+              "ready_monotonic": 19771.771723682
+            },
+            "ready_ms": 198.1824169997708,
+            "latency_phases_ms": {
+              "process_and_load": 50.852878997829976,
+              "connect_and_notice": 74.67693299986422,
+              "exec": 72.6526050020766
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          }
+        ],
+        "success": true,
+        "cleanup_errors": [],
+        "held_process_memory_kib": {
+          "Rss_kib": 738552,
+          "Pss_kib": 102097,
+          "Private_Clean_kib": 0,
+          "Private_Dirty_kib": 81156,
+          "Anonymous_kib": 81028
+        },
+        "empty_process_memory_baseline_kib": {
+          "Rss_kib": 0,
+          "Pss_kib": 0,
+          "Private_Clean_kib": 0,
+          "Private_Dirty_kib": 0,
+          "Anonymous_kib": 0
+        },
+        "incremental_process_memory_kib": {
+          "Rss_kib": 738552,
+          "Pss_kib": 102097,
+          "Private_Clean_kib": 0,
+          "Private_Dirty_kib": 81156,
+          "Anonymous_kib": 81028
+        },
+        "memory_hold_seconds": 5,
+        "memory_read_ms": 11.293027000647271,
+        "start_spread_ms": 2.9897539970988873
+      },
+      {
+        "engine": "hypermachine",
+        "pair": 1,
+        "samples": [
+          {
+            "index": 0,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.047827734,
+            "sandbox_id": "sbx-e4f42e6cadb74f9b8c79",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 207.21995900021284,
+            "latency_phases_ms": {
+              "create_and_notice": 97.70455100078834,
+              "exec": 109.5154079994245
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 1,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.047672095,
+            "sandbox_id": "sbx-c85f8fc0755a40a99d98",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 262.8680570014694,
+            "latency_phases_ms": {
+              "create_and_notice": 200.07001799967838,
+              "exec": 62.79803900179104
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 2,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.048186761,
+            "sandbox_id": "sbx-ff48b95522c74f90a91c",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 207.95301500038477,
+            "latency_phases_ms": {
+              "create_and_notice": 98.7874259990349,
+              "exec": 109.16558900134987
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 3,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.048380118,
+            "sandbox_id": "sbx-14dfd25e3d2548c397d7",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 261.38375799928326,
+            "latency_phases_ms": {
+              "create_and_notice": 198.11406699955114,
+              "exec": 63.26969099973212
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 4,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.048576562,
+            "sandbox_id": "sbx-bea04eb9c168499b9015",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 200.75935299973935,
+            "latency_phases_ms": {
+              "create_and_notice": 66.44578499981435,
+              "exec": 134.313567999925
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 5,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.048817602,
+            "sandbox_id": "sbx-d44606edd31c43dc8c2c",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 275.94206600042526,
+            "latency_phases_ms": {
+              "create_and_notice": 198.30383899898152,
+              "exec": 77.63822700144374
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 6,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.048962987,
+            "sandbox_id": "sbx-3ceb35787bd64bc49a65",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 265.77352300228085,
+            "latency_phases_ms": {
+              "create_and_notice": 228.1960500004061,
+              "exec": 37.57747300187475
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 7,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.049096131,
+            "sandbox_id": "sbx-a10ee3ac0c30449ea376",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 272.0805160024611,
+            "latency_phases_ms": {
+              "create_and_notice": 202.00331000160077,
+              "exec": 70.07720600086031
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 8,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.063572257,
+            "sandbox_id": "sbx-8df6e6d910e8403cae1e",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 193.50484000096912,
+            "latency_phases_ms": {
+              "create_and_notice": 84.98798800064833,
+              "exec": 108.5168520003208
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 9,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.049289302,
+            "sandbox_id": "sbx-61c2a3ebc70b45fca44b",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 251.547528001538,
+            "latency_phases_ms": {
+              "create_and_notice": 199.59327900141943,
+              "exec": 51.95424900011858
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 10,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.049424082,
+            "sandbox_id": "sbx-c2923279635b4304952e",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 266.17739599896595,
+            "latency_phases_ms": {
+              "create_and_notice": 207.88714199807146,
+              "exec": 58.29025400089449
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 11,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.069092714,
+            "sandbox_id": "sbx-f940d66ce1f143aab610",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 217.25730999969528,
+            "latency_phases_ms": {
+              "create_and_notice": 76.81626200064784,
+              "exec": 140.44104799904744
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 12,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.049607124,
+            "sandbox_id": "sbx-1d5608d7ae3a4a249792",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 212.67227199859917,
+            "latency_phases_ms": {
+              "create_and_notice": 96.90255500026979,
+              "exec": 115.76971699832939
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 13,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.061244034,
+            "sandbox_id": "sbx-f06cde6069f64afaa585",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 195.2430999990611,
+            "latency_phases_ms": {
+              "create_and_notice": 105.25103299733019,
+              "exec": 89.9920670017309
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 14,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.066044431,
+            "sandbox_id": "sbx-bcfba8ace3bd444a8431",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 255.29758899938315,
+            "latency_phases_ms": {
+              "create_and_notice": 180.0592619983945,
+              "exec": 75.23832700098865
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 15,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.049748967,
+            "sandbox_id": "sbx-ac0e14372f454d60b3c6",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 202.38131699807127,
+            "latency_phases_ms": {
+              "create_and_notice": 71.90434099902632,
+              "exec": 130.47697599904495
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 16,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.049927972,
+            "sandbox_id": "sbx-e30de88f6611400c87f0",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 167.52508900026442,
+            "latency_phases_ms": {
+              "create_and_notice": 67.64841800031718,
+              "exec": 99.87667099994724
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 17,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.050072194,
+            "sandbox_id": "sbx-54045a189e3a4bf698c1",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 209.9868469995272,
+            "latency_phases_ms": {
+              "create_and_notice": 98.24089799803915,
+              "exec": 111.74594900148804
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 18,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.060445523,
+            "sandbox_id": "sbx-a09a1ed454254db8a5ac",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 202.33383100276114,
+            "latency_phases_ms": {
+              "create_and_notice": 127.895609002735,
+              "exec": 74.43822200002614
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 19,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.050209831,
+            "sandbox_id": "sbx-40f6ab51ee944536973c",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 204.542894000042,
+            "latency_phases_ms": {
+              "create_and_notice": 146.52285800184472,
+              "exec": 58.02003599819727
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 20,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.050389633,
+            "sandbox_id": "sbx-6ebf3fde296e4fa5b9f9",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 247.5628729989694,
+            "latency_phases_ms": {
+              "create_and_notice": 196.29998299933504,
+              "exec": 51.26288999963435
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 21,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.067467269,
+            "sandbox_id": "sbx-d9dcdb53083143c8b7d9",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 241.60619000031147,
+            "latency_phases_ms": {
+              "create_and_notice": 184.5015990002139,
+              "exec": 57.10459100009757
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 22,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.060749909,
+            "sandbox_id": "sbx-c4fde31f7e154a84abd8",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 268.22531200014055,
+            "latency_phases_ms": {
+              "create_and_notice": 238.01490400001057,
+              "exec": 30.210408000129974
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 23,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.061737257,
+            "sandbox_id": "sbx-133e370cf05047808e50",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 236.7149249985232,
+            "latency_phases_ms": {
+              "create_and_notice": 144.64329600014025,
+              "exec": 92.07162899838295
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 24,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.075819994,
+            "sandbox_id": "sbx-f9a38f0c938d4b608098",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 208.74396100043668,
+            "latency_phases_ms": {
+              "create_and_notice": 112.13606200180948,
+              "exec": 96.6078989986272
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 25,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.060937854,
+            "sandbox_id": "sbx-bd35aee187694aeba91e",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 225.16039900074247,
+            "latency_phases_ms": {
+              "create_and_notice": 56.17837200043141,
+              "exec": 168.98202700031106
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 26,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.047475651,
+            "sandbox_id": "sbx-ccf84add78a94bdbbc3c",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 203.78148699819576,
+            "latency_phases_ms": {
+              "create_and_notice": 105.83743799725198,
+              "exec": 97.94404900094378
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 27,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.061997045,
+            "sandbox_id": "sbx-ae3bf922933f412cb40f",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 259.5621460022812,
+            "latency_phases_ms": {
+              "create_and_notice": 195.43714900282794,
+              "exec": 64.12499699945329
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 28,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.062251863,
+            "sandbox_id": "sbx-256c3d5c8f474031b31f",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 262.65773799968883,
+            "latency_phases_ms": {
+              "create_and_notice": 190.63411800016183,
+              "exec": 72.023619999527
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 29,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.06185608,
+            "sandbox_id": "sbx-c9fae34997bf4b6aa787",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 262.03465000071446,
+            "latency_phases_ms": {
+              "create_and_notice": 194.4429780014616,
+              "exec": 67.59167199925287
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 30,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.06107296,
+            "sandbox_id": "sbx-01fa924e16eb4e8f8200",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 199.59967999966466,
+            "latency_phases_ms": {
+              "create_and_notice": 56.673978997423546,
+              "exec": 142.9257010022411
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          },
+          {
+            "index": 31,
+            "success": true,
+            "cleanup_success": true,
+            "started_monotonic": 19779.062132509,
+            "sandbox_id": "sbx-96bcab812f6e4a78a338",
+            "restored_notice": {
+              "acknowledged_via_create": true,
+              "entropy_bytes": 64
+            },
+            "ready_ms": 240.03020099917194,
+            "latency_phases_ms": {
+              "create_and_notice": 192.48411200169357,
+              "exec": 47.546088997478364
+            },
+            "prepared_file": true,
+            "prepared_process_environment": true,
+            "independent_child_write": true,
+            "clock_rng_resynchronised": true
+          }
+        ],
+        "success": true,
+        "cleanup_errors": [],
+        "held_process_memory_kib": {
+          "Rss_kib": 1032008,
+          "Pss_kib": 156785,
+          "Private_Clean_kib": 8136,
+          "Private_Dirty_kib": 119312,
+          "Anonymous_kib": 119176
+        },
+        "empty_process_memory_baseline_kib": {
+          "Rss_kib": 55560,
+          "Pss_kib": 53345,
+          "Private_Clean_kib": 8136,
+          "Private_Dirty_kib": 44944,
+          "Anonymous_kib": 44944
+        },
+        "incremental_process_memory_kib": {
+          "Rss_kib": 976448,
+          "Pss_kib": 103440,
+          "Private_Clean_kib": 0,
+          "Private_Dirty_kib": 74368,
+          "Anonymous_kib": 74232
+        },
+        "memory_hold_seconds": 5,
+        "memory_read_ms": 12.58831900122459,
+        "remaining_sandboxes": 0,
+        "start_spread_ms": 28.34434299802524
+      }
+    ],
+    "cleanup_errors": [],
+    "limitations": [
+      "Shared WSL nested KVM and uncontrolled host background load",
+      "Persistent HyperMachine HTTP daemon versus fresh Firecracker process/Unix API",
+      "Prepared resident/cache-warm sources; no dropped-cache or storage durability comparison",
+      "PSS excludes kernel memory and unmapped page cache; not fleet density",
+      "Failed attempts retained; conditional latency and memory summaries",
+      "Engine-generated device kernel arguments differ"
+    ],
+    "diagnostic_only": true,
+    "readiness_diagnostics": {
+      "rust_log": "warn,hv2_agent::agent_vm=debug",
+      "max_log_bytes": 16777216,
+      "logging_may_affect_timing": true,
+      "log_bytes": 24296,
+      "log_truncated": false,
+      "node_log": "hv2-sandboxd: listening on 0.0.0.0:50959, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes are restored from template snapshots: base\n\nsandbox proxy on 0.0.0.0:38677 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:38677 process.Process/Start\n\u001b[2m2026-10-03T00:16:36.614298Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-0b88d3beaca1470b9cfa \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.113275 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m9.582189 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m7.839352000000001 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.427254Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-b61945b2211e4f4cbe8d \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m1.411725 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m8.768494 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m2.360895 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.470845Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-da9c384e866347888147 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.036521 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m15.87695 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m2.003855 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.470889Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-e7f892ce3ccc4c23aae3 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m5.189074 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m9.304114 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m1.9887970000000001 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.470910Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-1034ed5a618344cfb7b0 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m3.6873430000000003 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m8.676775 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m2.60574 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.471325Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-b8c0794793ad498a9d3c \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.187888 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m50.636535 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m2.345776 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.471702Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-64f0c4c144ea429ea447 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m1.4682460000000002 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m50.789837 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m3.504613 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.471794Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-b849d7926456494ab23a \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.43318700000000004 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m49.649093 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m3.229675 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.475631Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-2f2073b4c9414a96ad7c \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m3.983493 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m14.919564 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m3.118016 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.552252Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-68ff7ce5ffa84a7c9364 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m4.374057 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m83.90080900000001 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m7.096867 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.555155Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-5bf858f1376e4aa08f53 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.040097 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m34.907527 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m10.233898 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.562410Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-7ed0f8a014174e989518 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.189271 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m22.5321 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m17.364404999999998 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.563519Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-2afac2429dae47f8a91a \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m7.460023 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m18.754922 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m8.007545 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.600382Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-7165e10859204510967f \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m4.494535 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m96.886949 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m41.739551999999996 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.617871Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-78b5fbf6404e40eb9023 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.47887599999999997 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m28.83886 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m72.884587 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.618792Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-5fb2518ea52d44b6a261 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m3.898806 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m114.92744 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m43.531588000000006 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.632688Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-df89d5b2ebf747a6b336 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.881502 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m80.978774 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m87.528391 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.634030Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-97bd1cc774764beb8ae5 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m12.500396 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m35.656503 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m61.692692 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.636101Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-a3c4ae81e894411ebf5d \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.05135 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m27.760358 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m5.958836000000001 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.636226Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-40d9485f8a2a4ea7b4d5 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.66378 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m35.138169 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m78.122235 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.636484Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-f22f5c75a6e844e2828a \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.125186 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m43.86404 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m70.103778 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.636726Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-02264fa1b3ee4c788e23 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m2.19019 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m31.964781999999996 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m18.056419 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.642401Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-94b3cc1cfc764cd0b758 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m1.677371 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m92.29402300000001 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m85.114651 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.644204Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-75ee0944cf064d78a24d \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m4.103052 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m48.544572 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m8.974349 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.648942Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-09a80576870349e79151 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m6.097169 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m20.544822 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m77.03130800000001 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.648991Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-c8066f219ead4abfac70 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.08552699999999999 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m39.105585 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m87.336163 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.650737Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-6215a501e0c040eda86d \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m7.792984000000001 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m29.393755000000002 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m82.656638 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.650980Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-d124657635474bb7bac6 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.068796 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m112.923108 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m15.736848000000002 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.651093Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-df4db53f15ec45ba86f5 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.040902999999999995 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m27.208811 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m20.384652 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.695212Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-a1b1c5f2cf824cbdbe1a \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.039096 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m15.425516 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m6.253439 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.702238Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-412db988c6b041128bd3 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.030654 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m15.136545 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m2.700095 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.710254Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-5c0e402d8db5439596a2 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.012755 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m33.498216 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m5.468337 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:16:42.713865Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-f9abb34d11044554b78d \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.344304 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m21.325062999999997 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m12.199701000000001 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.832455Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-01fa924e16eb4e8f8200 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m4.3226130000000005 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m9.548852 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m1.247227 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.833315Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-bea04eb9c168499b9015 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m3.82435 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m16.87417 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m4.3592450000000005 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.834617Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-bd35aee187694aeba91e \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m5.747057 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m11.536984 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m3.295296 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.834840Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-e30de88f6611400c87f0 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.101448 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m34.825562999999995 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m1.568665 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.839754Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-ac0e14372f454d60b3c6 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m2.979991 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m11.476577 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m8.400248000000001 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.863115Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-f940d66ce1f143aab610 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m4.711424 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m15.863564 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m30.018635 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.863342Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-8df6e6d910e8403cae1e \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m2.701796 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m19.145719 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m32.07422699999999 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.863395Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-ff48b95522c74f90a91c \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m6.280318 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m14.953688 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m29.508407000000002 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.863536Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-ccf84add78a94bdbbc3c \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m2.644676 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m11.073208 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m28.245842 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.863740Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-e4f42e6cadb74f9b8c79 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m1.527153 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m27.707089 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m28.130705 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.863849Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-1d5608d7ae3a4a249792 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.156406 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m37.078212 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m28.929606 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.863935Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-54045a189e3a4bf698c1 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m2.6058399999999997 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m8.272879 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m30.682360999999997 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.885237Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-f06cde6069f64afaa585 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.397565 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m21.170734 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m57.323226999999996 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.902593Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-f9a38f0c938d4b608098 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.771671 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m27.618496999999998 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m23.819184 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.902649Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-a09a1ed454254db8a5ac \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m4.490737 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m19.261172 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m71.32589300000001 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.906483Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-40f6ab51ee944536973c \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m1.633963 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m24.526506 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m72.77676199999999 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.924972Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-133e370cf05047808e50 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m4.089949 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m11.569252 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m89.665065 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.925365Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-3ceb35787bd64bc49a65 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m2.6596900000000003 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m56.712846 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m11.613944 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.925463Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-bcfba8ace3bd444a8431 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.039909 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m26.778395 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m23.027489000000003 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.936585Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-d9dcdb53083143c8b7d9 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m3.674964 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m43.234183 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m34.073443000000005 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.945802Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-256c3d5c8f474031b31f \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m5.6021279999999996 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m14.576261 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m36.858284 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.945900Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-6ebf3fde296e4fa5b9f9 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m9.117449 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m17.147669 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m39.518675 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.947178Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-c2923279635b4304952e \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.515898 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m16.564034 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m1.2804010000000001 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.947312Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-d44606edd31c43dc8c2c \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m3.6780239999999997 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m69.47597499999999 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m17.231717 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.950895Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-a10ee3ac0c30449ea376 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m5.783532 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m58.330028999999996 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m3.270857 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.951029Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-14dfd25e3d2548c397d7 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m6.267448 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m21.255041 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m40.529194999999994 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.953331Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-c9fae34997bf4b6aa787 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m1.393641 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m78.72757700000001 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m22.262207999999998 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.955064Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-61c2a3ebc70b45fca44b \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m6.175283 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m15.201203 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m45.70953 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.958134Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-c85f8fc0755a40a99d98 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.037954999999999996 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m15.060246 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m12.231973 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.959633Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-ae3bf922933f412cb40f \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.045293999999999994 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m41.281241 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m10.675723999999999 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.973291Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-96bcab812f6e4a78a338 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m2.11889 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m71.873227 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m11.43826 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:04.012924Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-c4fde31f7e154a84abd8 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.012014 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m14.304489 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m3.081936 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n"
+    },
+    "guest_restore_contract": {
+      "clock_rng_resynchronised": true,
+      "entropy_bytes": 64,
+      "hypermachine": "acknowledged by successful create, source-bound after_restore",
+      "firecracker": "Restored RPC acknowledgement before exec; replaces readiness ping"
+    },
+    "latency_phase_measurement": "client_monotonic_no_added_rpc",
+    "preparation_phase": "complete",
+    "owned_firecracker_processes": [
+      {
+        "pid": 291,
+        "exit_code": -15
+      },
+      {
+        "pid": 583,
+        "exit_code": -15
+      },
+      {
+        "pid": 585,
+        "exit_code": -15
+      },
+      {
+        "pid": 587,
+        "exit_code": -15
+      },
+      {
+        "pid": 589,
+        "exit_code": -15
+      },
+      {
+        "pid": 590,
+        "exit_code": -15
+      },
+      {
+        "pid": 593,
+        "exit_code": -15
+      },
+      {
+        "pid": 595,
+        "exit_code": -15
+      },
+      {
+        "pid": 597,
+        "exit_code": -15
+      },
+      {
+        "pid": 598,
+        "exit_code": -15
+      },
+      {
+        "pid": 600,
+        "exit_code": -15
+      },
+      {
+        "pid": 602,
+        "exit_code": -15
+      },
+      {
+        "pid": 604,
+        "exit_code": -15
+      },
+      {
+        "pid": 606,
+        "exit_code": -15
+      },
+      {
+        "pid": 608,
+        "exit_code": -15
+      },
+      {
+        "pid": 611,
+        "exit_code": -15
+      },
+      {
+        "pid": 613,
+        "exit_code": -15
+      },
+      {
+        "pid": 614,
+        "exit_code": -15
+      },
+      {
+        "pid": 617,
+        "exit_code": -15
+      },
+      {
+        "pid": 619,
+        "exit_code": -15
+      },
+      {
+        "pid": 620,
+        "exit_code": -15
+      },
+      {
+        "pid": 623,
+        "exit_code": -15
+      },
+      {
+        "pid": 625,
+        "exit_code": -15
+      },
+      {
+        "pid": 627,
+        "exit_code": -15
+      },
+      {
+        "pid": 628,
+        "exit_code": -15
+      },
+      {
+        "pid": 630,
+        "exit_code": -15
+      },
+      {
+        "pid": 633,
+        "exit_code": -15
+      },
+      {
+        "pid": 635,
+        "exit_code": -15
+      },
+      {
+        "pid": 637,
+        "exit_code": -15
+      },
+      {
+        "pid": 639,
+        "exit_code": -15
+      },
+      {
+        "pid": 640,
+        "exit_code": -15
+      },
+      {
+        "pid": 643,
+        "exit_code": -15
+      },
+      {
+        "pid": 647,
+        "exit_code": -15
+      },
+      {
+        "pid": 744,
+        "exit_code": -15
+      },
+      {
+        "pid": 746,
+        "exit_code": -15
+      },
+      {
+        "pid": 747,
+        "exit_code": -15
+      },
+      {
+        "pid": 750,
+        "exit_code": -15
+      },
+      {
+        "pid": 754,
+        "exit_code": -15
+      },
+      {
+        "pid": 756,
+        "exit_code": -15
+      },
+      {
+        "pid": 757,
+        "exit_code": -15
+      },
+      {
+        "pid": 759,
+        "exit_code": -15
+      },
+      {
+        "pid": 762,
+        "exit_code": -15
+      },
+      {
+        "pid": 764,
+        "exit_code": -15
+      },
+      {
+        "pid": 766,
+        "exit_code": -15
+      },
+      {
+        "pid": 767,
+        "exit_code": -15
+      },
+      {
+        "pid": 769,
+        "exit_code": -15
+      },
+      {
+        "pid": 752,
+        "exit_code": -15
+      },
+      {
+        "pid": 771,
+        "exit_code": -15
+      },
+      {
+        "pid": 773,
+        "exit_code": -15
+      },
+      {
+        "pid": 775,
+        "exit_code": -15
+      },
+      {
+        "pid": 777,
+        "exit_code": -15
+      },
+      {
+        "pid": 779,
+        "exit_code": -15
+      },
+      {
+        "pid": 782,
+        "exit_code": -15
+      },
+      {
+        "pid": 783,
+        "exit_code": -15
+      },
+      {
+        "pid": 786,
+        "exit_code": -15
+      },
+      {
+        "pid": 787,
+        "exit_code": -15
+      },
+      {
+        "pid": 790,
+        "exit_code": -15
+      },
+      {
+        "pid": 791,
+        "exit_code": -15
+      },
+      {
+        "pid": 793,
+        "exit_code": -15
+      },
+      {
+        "pid": 796,
+        "exit_code": -15
+      },
+      {
+        "pid": 798,
+        "exit_code": -15
+      },
+      {
+        "pid": 799,
+        "exit_code": -15
+      },
+      {
+        "pid": 801,
+        "exit_code": -15
+      },
+      {
+        "pid": 804,
+        "exit_code": -15
+      },
+      {
+        "pid": 806,
+        "exit_code": -15
+      }
+    ],
+    "remaining_sandboxes_before_cleanup": 0,
+    "remaining_sandboxes": 0,
+    "owned_node_stopped": true,
+    "owned_node_exit_code": 0,
+    "node_log_tail": "msbx-e4f42e6cadb74f9b8c79 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m1.527153 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m27.707089 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m28.130705 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.863849Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-1d5608d7ae3a4a249792 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.156406 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m37.078212 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m28.929606 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.863935Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-54045a189e3a4bf698c1 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m2.6058399999999997 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m8.272879 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m30.682360999999997 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.885237Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-f06cde6069f64afaa585 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.397565 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m21.170734 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m57.323226999999996 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.902593Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-f9a38f0c938d4b608098 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.771671 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m27.618496999999998 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m23.819184 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.902649Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-a09a1ed454254db8a5ac \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m4.490737 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m19.261172 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m71.32589300000001 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.906483Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-40f6ab51ee944536973c \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m1.633963 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m24.526506 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m72.77676199999999 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.924972Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-133e370cf05047808e50 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m4.089949 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m11.569252 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m89.665065 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.925365Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-3ceb35787bd64bc49a65 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m2.6596900000000003 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m56.712846 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m11.613944 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.925463Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-bcfba8ace3bd444a8431 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.039909 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m26.778395 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m23.027489000000003 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.936585Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-d9dcdb53083143c8b7d9 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m3.674964 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m43.234183 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m34.073443000000005 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.945802Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-256c3d5c8f474031b31f \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m5.6021279999999996 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m14.576261 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m36.858284 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.945900Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-6ebf3fde296e4fa5b9f9 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m9.117449 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m17.147669 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m39.518675 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.947178Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-c2923279635b4304952e \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.515898 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m16.564034 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m1.2804010000000001 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.947312Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-d44606edd31c43dc8c2c \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m3.6780239999999997 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m69.47597499999999 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m17.231717 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.950895Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-a10ee3ac0c30449ea376 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m5.783532 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m58.330028999999996 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m3.270857 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.951029Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-14dfd25e3d2548c397d7 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m6.267448 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m21.255041 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m40.529194999999994 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.953331Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-c9fae34997bf4b6aa787 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m1.393641 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m78.72757700000001 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m22.262207999999998 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.955064Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-61c2a3ebc70b45fca44b \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m6.175283 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m15.201203 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m45.70953 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.958134Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-c85f8fc0755a40a99d98 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.037954999999999996 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m15.060246 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m12.231973 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.959633Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-ae3bf922933f412cb40f \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.045293999999999994 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m41.281241 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m10.675723999999999 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:03.973291Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-96bcab812f6e4a78a338 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m2.11889 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m71.873227 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m11.43826 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T00:17:04.012924Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-c4fde31f7e154a84abd8 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.012014 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m14.304489 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m3.081936 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n",
+    "artifacts_unchanged": true
+  },
+  "artifacts_unchanged": true
+}

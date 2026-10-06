@@ -1,0 +1,25 @@
+{
+  "source_sha256": {
+    "crates/hv2-cluster/src/control.rs": "9ba59f102943f169bec47f7bf4400030350723985ff0d44cdfd551ca394f2504",
+    "crates/hv2-cluster/src/web_access.rs": "65a7752cb433ef552912830135b94d5f23ddef16c1ddfd38c1daa7182793c7e9",
+    "crates/hv2-cluster/tests/control_plane.rs": "b26e34dfc254f1dc98314bfdc322aca4e483cfb371f7eafdf2b453bf9c2c9cc4",
+    "crates/hm-cli/src/sandbox_vm.rs": "08c812c018f1b8779dd8101de41c954e1f394d50fdd3a974a8dd2e556cee9f2a",
+    "crates/hv2-cluster/src/store.rs": "b80f15b4e1f12b1d6c9c74a6d3fb2491a554697b9ab717d428dffef94a463187",
+    "crates/hv2-cluster/src/web_sharing.rs": "ec95f7d2845a8f8030e116a1f335cf4ffcb05066789bf6beeecd0d1a01bed4f3",
+    "crates/hv2-cluster/src/lib.rs": "313fdcb985d6517acc3c0497e30a7abff68286e64f9a5f85cc25ab59ab109313",
+    "crates/hv2-cluster/Cargo.toml": "a1707a45bf879e0468b975b456a93ccebdcbc3e8f05dfccc3f85750717152e8c",
+    "crates/hm-cli/Cargo.toml": "7fe7a3fe30c4c0ebe771c947f29369e2ec24ef9ba7213b74646103c1aa2ba9d8",
+    "Cargo.lock": "81f02cd2ce8b7117f0c8279a03ad0c6d0758d20f5d8138048692ff20298e24da"
+  },
+  "isolated_tree": "/var/tmp/hm-egress-log-mA2CCL",
+  "target_dir": "/var/tmp/hm-object-backup/target",
+  "commands": [
+    "cargo test --locked -p hv2-cluster --lib -- --nocapture --test-threads=1",
+    "cargo test --locked -p hv2-cluster --test control_plane",
+    "cargo test --locked -p hm-cli --bin hm web_sharing -- --nocapture",
+    "cargo test --locked -p hm-cli --lib web_sharing -- --nocapture"
+  ],
+  "protected_guards": "Accepted isolated protected hashes checked before/after each command. Root protected implementations not read, staged or built.",
+  "catalog_scope": "Selected allowed sources and dependency metadata; not a full source closure.",
+  "fixtures": "Owned loopback Redis with disk persistence disabled; owned TLS proxy/backend fixtures. All spawned processes stopped."
+}

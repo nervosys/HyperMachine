@@ -1,0 +1,5 @@
+ff8964fd5cdfaa24f5dee5c23188d1568ac7987ea701add52ab4825aba77777d  hm-pcioff-baseline
+2db3892d4c82e6e36214592153c77096cae617ae9809a4e317fad03d5bc256ab  hm-pcioff-candidate
+99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5  hm-competitive/firecracker/firecracker-v1.17.0-x86_64
+afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd  hm-competitive/bzImage-known-uart-irq
+1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c  hm-competitive/guest-output-drain.cpio.gz

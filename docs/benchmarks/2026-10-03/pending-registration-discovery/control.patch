@@ -1,0 +1,59 @@
+--- baseline/crates/hv2-cluster/src/control.rs
++++ candidate/crates/hv2-cluster/src/control.rs
+@@ -247,6 +247,7 @@
+         .route("/sandboxes/{id}/ports/{port}/udp", get(udp_tunnel))
+         .route("/sandboxes/{id}/ports/{port}/udp6", get(udp_tunnel_ipv6))
+         .route("/cluster/nodes", get(cluster_nodes))
++        .route("/cluster/nodes/{node}/registrations/pending", get(pending_on_node))
+         .route("/cluster/nodes/{node}/sandboxes/{id}/registration/reconcile", post(reconcile_on_node))
+         .route("/templates", get(templates).post(build_templates))
+         .route("/cluster/events", get(cluster_events))
+@@ -1437,6 +1438,34 @@
+ 
+ // ── Operations ──────────────────────────────────────────────────────────────
+ 
++async fn pending_on_node(State(control): State<Arc<ControlPlane>>, Extension(admin): Extension<AdministratorContext>,
++    Path(node_id): Path<String>, Query(query): Query<BTreeMap<String,String>>) -> Response {
++    if !admin.0 { return api_error(StatusCode::FORBIDDEN,"administrator credential required"); }
++    let Some(token)=control.config.cluster_token.as_ref().filter(|token| !token.is_empty()) else {
++        return api_error(StatusCode::SERVICE_UNAVAILABLE,"authenticated cluster required");
++    };
++    if query.keys().any(|key|key!="after") || query.get("after").is_some_and(|id|crate::ports::validate_request(id,1,"cursor").is_err()) {
++        return api_error(StatusCode::BAD_REQUEST,"invalid registration cursor");
++    }
++    let node=match control.store.node(&node_id).await {
++        Ok(Some(node))=>node,Ok(None)=>return api_error(StatusCode::NOT_FOUND,"no registered node"),
++        Err(_)=>return api_error(StatusCode::SERVICE_UNAVAILABLE,"node inventory unavailable"),
++    };
++    let mut response=match control.http.get(format!("{}/registrations/pending",node.api)).query(&query).header(CLUSTER_TOKEN_HEADER,token).send().await {
++        Ok(response)=>response,Err(_)=>return api_error(StatusCode::BAD_GATEWAY,"node discovery unavailable"),
++    };
++    let status=StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
++    if !status.is_success() { return api_error(status,"node discovery refused"); }
++    let mut bytes=Vec::new();
++    loop { match response.chunk().await {
++        Ok(Some(chunk)) if chunk.len()<=16384usize.saturating_sub(bytes.len())=>bytes.extend_from_slice(&chunk),
++        Ok(Some(_))|Err(_)=>return api_error(StatusCode::BAD_GATEWAY,"invalid discovery response"),Ok(None)=>break,
++    }}
++    match serde_json::from_slice::<Value>(&bytes) {
++        Ok(value)=>Json(value).into_response(),Err(_)=>api_error(StatusCode::BAD_GATEWAY,"invalid discovery response"),
++    }
++}
++
+ /// Recovery targets a registered node explicitly: initial publication may have no record.
+ async fn reconcile_on_node(
+     State(control): State<Arc<ControlPlane>>, Extension(admin): Extension<AdministratorContext>,
+@@ -2220,6 +2249,13 @@
+                 create_timeout:Duration::from_secs(1),identity_issuer:None,
+             });
+             let response=reconcile_on_node(State(control),Extension(AdministratorContext(admin)),Path(("missing-node".into(),"sandbox-a".into()))).await;
++            assert_eq!(response.status(),expected);
++            let control=ControlPlane::new(Arc::new(crate::store::MemoryStore::new()),ControlConfig {
++                api_key:Some("admin".into()),api_keys:Vec::new(),access_audit:None,
++                cluster_token:token.map(str::to_owned),proxy_port:5981,
++                create_timeout:Duration::from_secs(1),identity_issuer:None,
++            });
++            let response=pending_on_node(State(control),Extension(AdministratorContext(admin)),Path("missing-node".into()),Query(BTreeMap::new())).await;
+             assert_eq!(response.status(),expected);
+         }
+     }

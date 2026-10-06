@@ -1,0 +1,129 @@
+--- baseline-main.rs
++++ guarded-main.rs
+@@ -4195,6 +4195,69 @@
+     }
+ }
+ 
++
++// Isolated experiment only. No deployed daemon or defaults use this worker.
++#[cfg(all(target_os = "linux", target_env = "gnu"))]
++struct HeapReclaimExperiment {
++    stop: Arc<std::sync::atomic::AtomicBool>,
++    thread: Option<std::thread::JoinHandle<()>>,
++}
++
++#[cfg(all(target_os = "linux", target_env = "gnu"))]
++impl HeapReclaimExperiment {
++    fn start(interval: Duration, slots: Arc<tokio::sync::Semaphore>, budget: u32) -> std::io::Result<Self> {
++        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
++        let stopped = Arc::clone(&stop);
++        let thread = std::thread::Builder::new()
++            .name("heap-reclaim-experiment".into())
++            .spawn(move || {
++                let mut busy_skips = 0u64;
++                let mut calls = 0u64;
++                let mut released = 0u64;
++                let mut total_ns = 0u128;
++                let mut maximum_ns = 0u128;
++                loop {
++                    std::thread::park_timeout(interval);
++                    if stopped.load(std::sync::atomic::Ordering::Acquire) {
++                        break;
++                    }
++                    let Ok(_idle_budget) = Arc::clone(&slots).try_acquire_many_owned(budget) else {
++                        busy_skips += 1;
++                        continue;
++                    };
++                    tracing::debug!(target: "hv2_sandboxd::heap_admission", "heap reclamation admitted");
++                    let started = std::time::Instant::now();
++                    // SAFETY: GNU malloc_trim takes only a padding value, acts
++                    // on free allocator chunks, and is thread-safe. This runs
++                    // on a normal dedicated thread, never a signal handler.
++                    let result = unsafe { libc::malloc_trim(0) };
++                    let duration_ns = started.elapsed().as_nanos();
++                    tracing::debug!(target: "hv2_sandboxd::heap_admission", "heap reclamation released");
++                    calls += 1;
++                    released += u64::from(result != 0);
++                    total_ns += duration_ns;
++                    maximum_ns = maximum_ns.max(duration_ns);
++                }
++                eprintln!("HV2_HEAP_RECLAIM_EXPERIMENT {{\"busy_skips\":{busy_skips},\"calls\":{calls},\"release_calls\":{released},\"total_ns\":{total_ns},\"maximum_ns\":{maximum_ns}}}");
++            })?;
++        Ok(Self { stop, thread: Some(thread) })
++    }
++}
++
++#[cfg(all(target_os = "linux", target_env = "gnu"))]
++impl Drop for HeapReclaimExperiment {
++    fn drop(&mut self) {
++        self.stop.store(true, std::sync::atomic::Ordering::Release);
++        if let Some(thread) = self.thread.take() {
++            thread.thread().unpark();
++            let _ = thread.join();
++        }
++    }
++}
++
++#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
++struct HeapReclaimExperiment;
++
+ #[tokio::main]
+ async fn main() -> std::process::ExitCode {
+     tracing_subscriber::fmt()
+@@ -4208,6 +4271,34 @@
+         Ok(opts) => opts,
+         Err(e) => {
+             eprintln!("hv2-sandboxd: {e}");
++            return std::process::ExitCode::FAILURE;
++        }
++    };
++    let heap_reclaim_interval: Option<Duration> = match std::env::var("HV2_EXPERIMENT_HEAP_RECLAIM_MS") {
++        Ok(value) => {
++            let interval_ms: u64 = match value.parse() {
++                Ok(value) if (100..=60000).contains(&value) => value,
++                _ => {
++                    eprintln!("heap experiment requires 100..60000 milliseconds");
++                    return std::process::ExitCode::FAILURE;
++                }
++            };
++            if opts.cold_start_concurrency.is_none() {
++                eprintln!("guarded heap experiment requires a cold-start budget");
++                return std::process::ExitCode::FAILURE;
++            }
++            #[cfg(not(all(target_os = "linux", target_env = "gnu")))]
++            {
++                let _ = interval_ms;
++                eprintln!("heap experiment requires Linux GNU libc");
++                return std::process::ExitCode::FAILURE;
++            }
++            #[cfg(all(target_os = "linux", target_env = "gnu"))]
++            Some(Duration::from_millis(interval_ms))
++        }
++        Err(std::env::VarError::NotPresent) => None,
++        Err(_) => {
++            eprintln!("heap experiment interval is not Unicode");
+             return std::process::ExitCode::FAILURE;
+         }
+     };
+@@ -4418,6 +4509,21 @@
+     let cold_boot_slots = opts
+         .cold_start_concurrency
+         .map(|limit| Arc::new(tokio::sync::Semaphore::new(limit)));
++    #[cfg(all(target_os = "linux", target_env = "gnu"))]
++    let _heap_reclaim_experiment = match (heap_reclaim_interval, &cold_boot_slots, opts.cold_start_concurrency) {
++        (Some(interval), Some(slots), Some(budget)) => {
++            match HeapReclaimExperiment::start(interval, Arc::clone(slots), budget as u32) {
++                Ok(worker) => Some(worker),
++                Err(error) => {
++                    eprintln!("heap experiment worker: {error}");
++                    return std::process::ExitCode::FAILURE;
++                }
++            }
++        }
++        _ => None,
++    };
++    #[cfg(not(all(target_os = "linux", target_env = "gnu")))]
++    let _ = heap_reclaim_interval;
+     let event_store: Arc<dyn hv2_cluster::store::ClusterStore> = match &node {
+         Some(node) => Arc::clone(node.store()),
+         None => Arc::new(hv2_cluster::store::MemoryStore::new()),

@@ -1,0 +1,20 @@
+{
+  "source_commit": "5e31dad3c2374002f7ec1a0d168bcbe21303ad9b",
+  "report_sha256": "6489675af8191d0c719ee3e6566b171e56f4f42672f7989cdfc7c164e7047cc5",
+  "source_sha256": {
+    "scheduled-calendar-coordinator.py": "13fc46385ba569883405a824f3092e6f0cf6d0ca9652d685e4c748173d6f8618",
+    "scheduled-worker-core-source.patch": "e6c015334bb04b1c96768c54bfb869ff3a9b2624b95210fc2bce9dc2ed0a1728"
+  },
+  "artifact_sha256": {
+    "daemon": "03043e33a6efe017bf0f9d2f0d7ee9caf4e0c09705abeaf849f21825128f799d",
+    "control-plane": "67059d67fc9dfc3a2d2fc55d958245dc5220bf48fb48bdb7475a8e6ede9a1029",
+    "cli": "2aa48f3f86cd0039bb38d8815636ce7c381aa1bbce0df09d17d46cce4d377848",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "7d36dd6384504ec60abf2e69f9d78941cfae8d96110d9e05f5d45ce87fdd1224",
+    "coordinator": "13fc46385ba569883405a824f3092e6f0cf6d0ca9652d685e4c748173d6f8618"
+  },
+  "timezone_dependency": "chrono-tz 0.10.4 locked at source commit; schedule creation pins its embedded database version",
+  "verified_cases": 16,
+  "registered_processes_stopped": 22,
+  "scope": "One functional WSL nested-KVM catch-up run for historical folded-time occurrences; no live DST clock transition or performance comparison. CLI includes provisional core edits; daemon and control plane use frozen accepted artifacts."
+}

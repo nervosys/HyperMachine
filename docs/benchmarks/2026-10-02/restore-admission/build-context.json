@@ -1,0 +1,16 @@
+{
+  "limit": 16,
+  "accepted_source_files": 550,
+  "only_changed_file": "crates/hv2-sandboxd/src/main.rs",
+  "candidate_main_sha256": "a353a2a96dd9b99ca764b17d3c839429fd40b0ffed7f2ef6652b84dbd583c411",
+  "runtime_change_adopted": false,
+  "performance_win_established": false,
+  "hypothesis": "Bound simultaneous prepared launch/readiness work; admission wait remains part of client readiness",
+  "candidate_sha256": "5b9c35ca020cb4f47672edcdde454886125d2c730112ffea9f420d0e8e512d38",
+  "baseline_sha256": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+  "build_exit_code": 0,
+  "build_command": "CARGO_TARGET_DIR=/var/tmp/hm-object-backup/target cargo build --release --locked -p hv2-sandboxd",
+  "compiler": "rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)",
+  "wrapper_failure": "Original completion wrapper lost status; direct cached cargo verification returned exit zero",
+  "production_runtime_changed": false
+}

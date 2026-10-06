@@ -1,0 +1,312 @@
+{
+  "diagnostic_only": true,
+  "passing_attempts": 400,
+  "matched_ids": 200,
+  "guest_samples": 20,
+  "raw_sha256": "33db1c8e5c444c1677b0eff147b6d3e2082359df3783f7eee3401d58bfa70fb8",
+  "analysis_sha256": "1754b20bf9f1f8a06ff4ed269247f1de471b79989c0fd5696732362cf78f46c5",
+  "samples": [
+    {
+      "sandbox_id": "sbx-f30cbf1c5f82419b8af2",
+      "handoff_ms": 1999.401,
+      "mounts_ms": 2008.1760000000002,
+      "agent_launch_ms": 2009.1709999999998,
+      "init_to_mounts_ms": 8.775000000000091,
+      "mounts_to_launch_ms": 0.9949999999996635,
+      "init_to_agent_launch_ms": 9.769999999999754,
+      "launch_to_listen_ms": 42.17300000000023,
+      "listen_to_accept_ms": 0.9819999999999709
+    },
+    {
+      "sandbox_id": "sbx-f73b003019f84aabaa75",
+      "handoff_ms": 2088.9410000000003,
+      "mounts_ms": 2160.8520000000003,
+      "agent_launch_ms": 2161.829,
+      "init_to_mounts_ms": 71.91100000000006,
+      "mounts_to_launch_ms": 0.9769999999998618,
+      "init_to_agent_launch_ms": 72.88799999999992,
+      "launch_to_listen_ms": 35.028999999999996,
+      "listen_to_accept_ms": 5.954999999999927
+    },
+    {
+      "sandbox_id": "sbx-01475fbddfd84d5bb47b",
+      "handoff_ms": 1745.047,
+      "mounts_ms": 1770.867,
+      "agent_launch_ms": 1771.9370000000001,
+      "init_to_mounts_ms": 25.819999999999936,
+      "mounts_to_launch_ms": 1.0700000000001637,
+      "init_to_agent_launch_ms": 26.8900000000001,
+      "launch_to_listen_ms": 42.07799999999975,
+      "listen_to_accept_ms": 25.18600000000015
+    },
+    {
+      "sandbox_id": "sbx-598a99a228f14c6c969a",
+      "handoff_ms": 1930.133,
+      "mounts_ms": 1978.212,
+      "agent_launch_ms": 1979.368,
+      "init_to_mounts_ms": 48.07899999999995,
+      "mounts_to_launch_ms": 1.155999999999949,
+      "init_to_agent_launch_ms": 49.2349999999999,
+      "launch_to_listen_ms": 36.29000000000019,
+      "listen_to_accept_ms": 27.55399999999986
+    },
+    {
+      "sandbox_id": "sbx-339854c8f41d4c228576",
+      "handoff_ms": 2164.822,
+      "mounts_ms": 2189.8179999999998,
+      "agent_launch_ms": 2190.84,
+      "init_to_mounts_ms": 24.99599999999964,
+      "mounts_to_launch_ms": 1.0220000000003893,
+      "init_to_agent_launch_ms": 26.01800000000003,
+      "launch_to_listen_ms": 25.730999999999767,
+      "listen_to_accept_ms": 1.0219999999999345
+    },
+    {
+      "sandbox_id": "sbx-bcff8e130f9a42009da4",
+      "handoff_ms": 1575.016,
+      "mounts_ms": 1589.982,
+      "agent_launch_ms": 1591.027,
+      "init_to_mounts_ms": 14.965999999999894,
+      "mounts_to_launch_ms": 1.0450000000000728,
+      "init_to_agent_launch_ms": 16.010999999999967,
+      "launch_to_listen_ms": 0.7730000000001382,
+      "listen_to_accept_ms": 24.53899999999976
+    },
+    {
+      "sandbox_id": "sbx-e02021d4cc254268b0c1",
+      "handoff_ms": 2225.261,
+      "mounts_ms": 2228.6609999999996,
+      "agent_launch_ms": 2297.701,
+      "init_to_mounts_ms": 3.399999999999636,
+      "mounts_to_launch_ms": 69.04000000000042,
+      "init_to_agent_launch_ms": 72.44000000000005,
+      "launch_to_listen_ms": 0.9739999999997053,
+      "listen_to_accept_ms": 35.1850000000004
+    },
+    {
+      "sandbox_id": "sbx-9522887791474458a55d",
+      "handoff_ms": 1521.585,
+      "mounts_ms": 1556.374,
+      "agent_launch_ms": 1557.42,
+      "init_to_mounts_ms": 34.78899999999999,
+      "mounts_to_launch_ms": 1.0460000000000491,
+      "init_to_agent_launch_ms": 35.835000000000036,
+      "launch_to_listen_ms": 0.6449999999999818,
+      "listen_to_accept_ms": 24.52300000000014
+    },
+    {
+      "sandbox_id": "sbx-772fba0519c64ccda378",
+      "handoff_ms": 1994.718,
+      "mounts_ms": 2012.4050000000002,
+      "agent_launch_ms": 2013.2949999999998,
+      "init_to_mounts_ms": 17.687000000000126,
+      "mounts_to_launch_ms": 0.8899999999996453,
+      "init_to_agent_launch_ms": 18.57699999999977,
+      "launch_to_listen_ms": 0.7570000000000618,
+      "listen_to_accept_ms": 34.031999999999925
+    },
+    {
+      "sandbox_id": "sbx-d742b986e41843209d63",
+      "handoff_ms": 1707.214,
+      "mounts_ms": 1728.079,
+      "agent_launch_ms": 1745.817,
+      "init_to_mounts_ms": 20.86500000000001,
+      "mounts_to_launch_ms": 17.738000000000056,
+      "init_to_agent_launch_ms": 38.603000000000065,
+      "launch_to_listen_ms": 1.8260000000000218,
+      "listen_to_accept_ms": 16.13499999999999
+    },
+    {
+      "sandbox_id": "sbx-94d2cfbcfc7445c6b054",
+      "handoff_ms": 3037.0460000000003,
+      "mounts_ms": 3074.974,
+      "agent_launch_ms": 3076.09,
+      "init_to_mounts_ms": 37.927999999999884,
+      "mounts_to_launch_ms": 1.1159999999999854,
+      "init_to_agent_launch_ms": 39.04399999999987,
+      "launch_to_listen_ms": 0.7789999999995416,
+      "listen_to_accept_ms": 34.64500000000044
+    },
+    {
+      "sandbox_id": "sbx-bbc52d51fc1c4f5f88a9",
+      "handoff_ms": 3068.824,
+      "mounts_ms": 3092.8230000000003,
+      "agent_launch_ms": 3093.971,
+      "init_to_mounts_ms": 23.99900000000025,
+      "mounts_to_launch_ms": 1.1479999999996835,
+      "init_to_agent_launch_ms": 25.146999999999935,
+      "launch_to_listen_ms": 0.7190000000000509,
+      "listen_to_accept_ms": 13.119000000000142
+    },
+    {
+      "sandbox_id": "sbx-e7352280c232422a84ac",
+      "handoff_ms": 1125.878,
+      "mounts_ms": 1129.292,
+      "agent_launch_ms": 1130.302,
+      "init_to_mounts_ms": 3.4139999999999873,
+      "mounts_to_launch_ms": 1.009999999999991,
+      "init_to_agent_launch_ms": 4.423999999999978,
+      "launch_to_listen_ms": 0.8080000000002201,
+      "listen_to_accept_ms": 3.5399999999997362
+    },
+    {
+      "sandbox_id": "sbx-4a1a9cc270ad402599cc",
+      "handoff_ms": 2747.4500000000003,
+      "mounts_ms": 2770.5510000000004,
+      "agent_launch_ms": 2771.628,
+      "init_to_mounts_ms": 23.101000000000113,
+      "mounts_to_launch_ms": 1.0769999999997708,
+      "init_to_agent_launch_ms": 24.177999999999884,
+      "launch_to_listen_ms": 25.152000000000044,
+      "listen_to_accept_ms": 13.43499999999949
+    },
+    {
+      "sandbox_id": "sbx-5e695a6c61de491d8019",
+      "handoff_ms": 1208.95,
+      "mounts_ms": 1218.656,
+      "agent_launch_ms": 1220.0279999999998,
+      "init_to_mounts_ms": 9.705999999999904,
+      "mounts_to_launch_ms": 1.3719999999998436,
+      "init_to_agent_launch_ms": 11.077999999999747,
+      "launch_to_listen_ms": 45.898000000000366,
+      "listen_to_accept_ms": 135.5519999999999
+    },
+    {
+      "sandbox_id": "sbx-1f556d18fb0d45faa4b5",
+      "handoff_ms": 2562.15,
+      "mounts_ms": 2570.582,
+      "agent_launch_ms": 2571.567,
+      "init_to_mounts_ms": 8.431999999999789,
+      "mounts_to_launch_ms": 0.9850000000001273,
+      "init_to_agent_launch_ms": 9.416999999999916,
+      "launch_to_listen_ms": 3.4220000000000255,
+      "listen_to_accept_ms": 12.429000000000087
+    },
+    {
+      "sandbox_id": "sbx-04361c83ba3a49ae9050",
+      "handoff_ms": 2680.819,
+      "mounts_ms": 2703.6099999999997,
+      "agent_launch_ms": 2708.815,
+      "init_to_mounts_ms": 22.790999999999713,
+      "mounts_to_launch_ms": 5.205000000000382,
+      "init_to_agent_launch_ms": 27.996000000000095,
+      "launch_to_listen_ms": 2.155999999999949,
+      "listen_to_accept_ms": 12.271999999999935
+    },
+    {
+      "sandbox_id": "sbx-3f2ccad694974b728947",
+      "handoff_ms": 1066.143,
+      "mounts_ms": 1069.3999999999999,
+      "agent_launch_ms": 1070.376,
+      "init_to_mounts_ms": 3.2569999999998345,
+      "mounts_to_launch_ms": 0.9760000000001128,
+      "init_to_agent_launch_ms": 4.232999999999947,
+      "launch_to_listen_ms": 0.7150000000001455,
+      "listen_to_accept_ms": 3.0269999999998163
+    },
+    {
+      "sandbox_id": "sbx-efdfd38a255c465d9d0b",
+      "handoff_ms": 3055.235,
+      "mounts_ms": 3058.971,
+      "agent_launch_ms": 3079.222,
+      "init_to_mounts_ms": 3.7359999999998763,
+      "mounts_to_launch_ms": 20.251000000000204,
+      "init_to_agent_launch_ms": 23.98700000000008,
+      "launch_to_listen_ms": 0.6639999999997599,
+      "listen_to_accept_ms": 24.083000000000084
+    },
+    {
+      "sandbox_id": "sbx-9b1341c39b8642eda666",
+      "handoff_ms": 1934.034,
+      "mounts_ms": 1967.057,
+      "agent_launch_ms": 1968.094,
+      "init_to_mounts_ms": 33.02299999999991,
+      "mounts_to_launch_ms": 1.0370000000000346,
+      "init_to_agent_launch_ms": 34.059999999999945,
+      "launch_to_listen_ms": 67.846,
+      "listen_to_accept_ms": 31.470000000000255
+    }
+  ],
+  "guest_ms": {
+    "handoff_ms": {
+      "n": 20,
+      "mean": 2071.9333500000002,
+      "median": 1997.0595,
+      "min": 1066.143,
+      "max": 3068.824
+    },
+    "mounts_ms": {
+      "n": 20,
+      "mean": 2093.9671,
+      "median": 2010.2905,
+      "min": 1069.3999999999999,
+      "max": 3092.8230000000003
+    },
+    "agent_launch_ms": {
+      "n": 20,
+      "mean": 2100.4249,
+      "median": 2011.2329999999997,
+      "min": 1070.376,
+      "max": 3093.971
+    },
+    "init_to_mounts_ms": {
+      "n": 20,
+      "mean": 22.03374999999993,
+      "median": 21.82799999999986,
+      "min": 3.2569999999998345,
+      "max": 71.91100000000006
+    },
+    "mounts_to_launch_ms": {
+      "n": 20,
+      "mean": 6.45780000000002,
+      "median": 1.0580000000001064,
+      "min": 0.8899999999996453,
+      "max": 69.04000000000042
+    },
+    "init_to_agent_launch_ms": {
+      "n": 20,
+      "mean": 28.49154999999995,
+      "median": 25.582499999999982,
+      "min": 4.232999999999947,
+      "max": 72.88799999999992
+    },
+    "launch_to_listen_ms": {
+      "n": 20,
+      "mean": 16.721749999999997,
+      "median": 1.9909999999999854,
+      "min": 0.6449999999999818,
+      "max": 67.846
+    },
+    "listen_to_accept_ms": {
+      "n": 20,
+      "mean": 23.93425,
+      "median": 20.109000000000037,
+      "min": 0.9819999999999709,
+      "max": 135.5519999999999
+    }
+  },
+  "cold_ms": {
+    "blocking_queue_ms": {
+      "n": 200,
+      "mean": 9.057837425,
+      "median": 5.709080500000001,
+      "min": 0.138722,
+      "max": 114.278139
+    },
+    "connect_ms": {
+      "n": 200,
+      "mean": 6052.854660445,
+      "median": 6073.8370415,
+      "min": 4023.546496,
+      "max": 7599.210292000001
+    },
+    "ping_ms": {
+      "n": 200,
+      "mean": 12.70769153,
+      "median": 6.778124999999999,
+      "min": 0.09241,
+      "max": 97.350195
+    }
+  },
+  "limitation": "Guest milestone deltas share a guest clock; host connection durations have a different time origin. Listener-to-first-accept is guest elapsed time and includes host scheduling/connection delivery; it does not isolate transport overhead. Post-readiness probes affect memory/cleanup. Shared nested host and two batch pairs limit conclusions."
+}

@@ -1,0 +1,16 @@
+{
+  "driver_sha256": "9a48fb3056074a054735287332bf11fb2a6f3ad1679c16f755d46e797849929e",
+  "release_context_sha256": "e446f8c898221095649ead44bec8a34971b5deab0d31c063cd5133f55bd492cb",
+  "log_filename_map": {
+    "control-restarted.log": "raw/control-restarted.log.txt",
+    "control-revoked-restarted.log": "raw/control-revoked-restarted.log.txt",
+    "control.log": "raw/control.log.txt",
+    "node.log": "raw/node.log.txt",
+    "redis-active-recovered.log": "raw/redis-active-recovered.log.txt",
+    "redis-revoked-recovered.log": "raw/redis-revoked-recovered.log.txt",
+    "redis.log": "raw/redis.log.txt"
+  },
+  "command_extra_flag": "--redis-outage",
+  "change_scope": "Driver only; accepted frozen production binaries unchanged. No rebuild or production change in this gate.",
+  "artifacts_scope": "Selected accepted source context, not full source closure."
+}

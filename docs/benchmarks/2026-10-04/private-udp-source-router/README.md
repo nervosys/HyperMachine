@@ -1,0 +1,11 @@
+# Committed-binding private UDP source router
+
+`PrivateSourceRouter::dial_udp` now dispatches through `PrivateNodeConnector::open_bound_udp`. TCP and UDP share committed-ledger lookup, fixed source activity lease, private IPv4 pool/nonzero port checks, fresh membership/owner/lifecycle/node authorization and the 20-second total router deadline. UDP does not refresh a stale address to new membership generations or fall back to ordinary networking. Datagram encoding/decoding remains the gateway session's responsibility.
+
+The full **120-test cluster suite passes** with owned Redis; one opt-in test is ignored. A new owned-mTLS fixture resolves `destination.team.hv2.internal` through the production router, obtains a persisted address binding and uses it for UDP dispatch. The server verifies the UDP endpoint, upgrade and trusted route context; early framed and binary bytes survive. Mocked source lease ownership is released on DNS completion and stream teardown. This composes router and connector instead of testing connector dispatch alone.
+
+The Memory and Redis source-router contracts now explicitly refuse UDP through the old address after destination generation changes, and refuse loopback/non-private IPv4, IPv6 and zero-port destinations. Existing concurrent address publication, owner/tag refusal, stale TCP address and missing node checks remain passing. Both route, address-ledger and source-router contract markers complete twice; Redis exits cleanly. Redis persistence is disabled, so no crash-durability claim follows.
+
+Source leases and destination TLS echo peers are owned test fixtures, not actual source KVM guest UDP traffic. Source Ethernet interception, gateway session framing, real router/connector-to-KVM UDP delivery, UDP-specific lifecycle/saturation schedules and private IPv6 remain unfinished or unverified. No competitor or performance claim is added.
+
+Run `python3 verify-results.py` to verify test groups, contract markers and process cleanup. `driver.py` preserves the isolated-tree owned Redis/cargo invocation. All 138 permitted root/isolate pairs and accepted isolated core hashes were rechecked. Protected root core files were neither read nor built. Only `private_router.rs` changes production behavior; `private_node.rs` changes its test fixture to exercise router composition. Both files are preserved here.

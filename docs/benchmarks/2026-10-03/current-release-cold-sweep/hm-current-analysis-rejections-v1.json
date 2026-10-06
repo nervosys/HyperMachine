@@ -1,0 +1,9 @@
+{
+  "missing_attempt": "rejected",
+  "duplicate_attempt": "rejected",
+  "wrong_affinity": "rejected",
+  "template_mode": "rejected",
+  "unreaped_daemon": "rejected",
+  "changed_artifacts": "rejected",
+  "nonfinite_latency": "rejected"
+}

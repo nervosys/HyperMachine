@@ -1,0 +1,69 @@
+{
+  "diagnostic_only": true,
+  "attempts": 128,
+  "cleanup_verified": true,
+  "performance_win_established": false,
+  "runtime_change_adopted": false,
+  "runs": [
+    {
+      "pair": 0,
+      "variant": "sham",
+      "before_pss_mib": 40.2587890625,
+      "after_pss_mib": 40.2587890625,
+      "empty_pss_reduction_mib": 0.0,
+      "heap_pss_reduction_mib": 0.0,
+      "held_hypermachine_pss_mib": 89.1494140625,
+      "operation_duration_ms": 4e-05
+    },
+    {
+      "pair": 0,
+      "variant": "trim",
+      "before_pss_mib": 40.1416015625,
+      "after_pss_mib": 11.4384765625,
+      "empty_pss_reduction_mib": 28.703125,
+      "heap_pss_reduction_mib": 28.390625,
+      "held_hypermachine_pss_mib": 62.3798828125,
+      "operation_duration_ms": 2.452275
+    },
+    {
+      "pair": 1,
+      "variant": "trim",
+      "before_pss_mib": 40.25390625,
+      "after_pss_mib": 11.5390625,
+      "empty_pss_reduction_mib": 28.71484375,
+      "heap_pss_reduction_mib": 28.39453125,
+      "held_hypermachine_pss_mib": 61.7373046875,
+      "operation_duration_ms": 2.077123
+    },
+    {
+      "pair": 1,
+      "variant": "sham",
+      "before_pss_mib": 39.9658203125,
+      "after_pss_mib": 39.998046875,
+      "empty_pss_reduction_mib": -0.0322265625,
+      "heap_pss_reduction_mib": 0.0,
+      "held_hypermachine_pss_mib": 89.69970703125,
+      "operation_duration_ms": 8e-05
+    }
+  ],
+  "pairs": [
+    {
+      "pair": 0,
+      "sham_adjusted_empty_reduction_mib": 28.703125,
+      "sham_adjusted_heap_reduction_mib": 28.390625,
+      "held_sham_minus_trim_mib": 26.76953125
+    },
+    {
+      "pair": 1,
+      "sham_adjusted_empty_reduction_mib": 28.7470703125,
+      "sham_adjusted_heap_reduction_mib": 28.39453125,
+      "held_sham_minus_trim_mib": 27.96240234375
+    }
+  ],
+  "limitations": [
+    "The same preload helper is used in sham and trim; neither is the uninstrumented production daemon",
+    "Fresh source preparation and host load vary between variants",
+    "One-time trim after named-source preparation does not test startup trim before serving",
+    "No scored latency, lifecycle stress or sustained allocation comparison; no runtime adoption"
+  ]
+}

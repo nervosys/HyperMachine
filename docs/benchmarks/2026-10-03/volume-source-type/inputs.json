@@ -1,0 +1,6 @@
+{
+  "cli_sha256": "268916e844221c8a2cdc8933ba8984fa1afdf0b473995bf667d751e04265517f",
+  "build_source": "/var/tmp/hm-egress-log-mA2CCL",
+  "cargo_target": "/var/tmp/hm-object-backup/target",
+  "scope": "Owned Linux/WSL protocol fixtures; no guest boot or competitor endpoint."
+}

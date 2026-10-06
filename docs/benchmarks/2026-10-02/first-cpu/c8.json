@@ -1,0 +1,1233 @@
+{
+  "schema_version": 1,
+  "lifecycle": "native-cold-create-to-command-bursts",
+  "concurrency": 8,
+  "pairs": 2,
+  "order": "alternating engine-batch AB/BA",
+  "environment": "shared-WSL-nested-KVM-eight-host-CPU-affinity-no-added-load",
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "artifact_sha256": {
+    "hypermachine": "5f65bc1c815deed83b92fd6bb0e00bae1a05c457d185271f51625195aa0c5ec4",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "harness": "59fae86ff5a8a8de390e15359e7da3e470edbab1c701e04de5efa788ae5fa459",
+    "shared_harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "firecracker_harness": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6"
+  },
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "daemon_allocator_arena_max": null,
+  "daemon_log_filter": "warn",
+  "driver_cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "guest_readiness_timeout_s": {
+    "hypermachine": 15,
+    "firecracker": 15
+  },
+  "firecracker_total_startup_timeout_s": 30,
+  "common_boot_args": "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd",
+  "batches": [
+    {
+      "engine": "hypermachine",
+      "pair": 0,
+      "concurrency": 8,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.6113830060930923,
+          "create_ms": 489.4788899982814,
+          "ready_ms": 495.11106799764093,
+          "exec_ms": 5.6321779993595555,
+          "batch_start_perf_seconds": 124853.74095958,
+          "sandbox_id": "sbx-ef435762d85540aead78",
+          "validated_offset_ms": 501.15338299656287
+        },
+        {
+          "index": 1,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.8745689992792904,
+          "create_ms": 470.5432659975486,
+          "ready_ms": 477.4408310040599,
+          "exec_ms": 6.897565006511286,
+          "batch_start_perf_seconds": 124853.74095958,
+          "sandbox_id": "sbx-f84fbad2a0084d26a538",
+          "validated_offset_ms": 482.4175230023684
+        },
+        {
+          "index": 2,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.40613200690131634,
+          "create_ms": 498.4641979972366,
+          "ready_ms": 504.0274769999087,
+          "exec_ms": 5.563279002672061,
+          "batch_start_perf_seconds": 124853.74095958,
+          "sandbox_id": "sbx-6bdd3989783c4c5d8fdf",
+          "validated_offset_ms": 508.44799900369253
+        },
+        {
+          "index": 3,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.3231339980848134,
+          "create_ms": 458.28926299873274,
+          "ready_ms": 467.28775699739344,
+          "exec_ms": 8.998493998660706,
+          "batch_start_perf_seconds": 124853.74095958,
+          "sandbox_id": "sbx-bca57c189207498e909c",
+          "validated_offset_ms": 475.18882699660026
+        },
+        {
+          "index": 4,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.5595650000032037,
+          "create_ms": 466.5335019963095,
+          "ready_ms": 472.6239559968235,
+          "exec_ms": 6.090454000514001,
+          "batch_start_perf_seconds": 124853.74095958,
+          "sandbox_id": "sbx-7a6d213ff8094e32aeb6",
+          "validated_offset_ms": 477.4222450068919
+        },
+        {
+          "index": 5,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.8737700011115521,
+          "create_ms": 487.9089049936738,
+          "ready_ms": 493.29849300556816,
+          "exec_ms": 5.389588011894375,
+          "batch_start_perf_seconds": 124853.74095958,
+          "sandbox_id": "sbx-64cea5d1bef64210b5e0",
+          "validated_offset_ms": 499.3164240004262
+        },
+        {
+          "index": 6,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.7214979996206239,
+          "create_ms": 460.85509700060356,
+          "ready_ms": 467.20255599939264,
+          "exec_ms": 6.3474589987890795,
+          "batch_start_perf_seconds": 124853.74095958,
+          "sandbox_id": "sbx-7eb0d2b9739940dfba57",
+          "validated_offset_ms": 473.0272680026246
+        },
+        {
+          "index": 7,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.19346999761182815,
+          "create_ms": 480.0773540046066,
+          "ready_ms": 485.61612601042725,
+          "exec_ms": 5.538772005820647,
+          "batch_start_perf_seconds": 124853.74095958,
+          "sandbox_id": "sbx-42c8e38ff86946aa9d33",
+          "validated_offset_ms": 490.10707900743
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 508.44799900369253,
+      "launch_spread_ms": 1.680300003499724,
+      "passing_attempts": 8,
+      "passing_attempts_per_second": 15.73415573603605,
+      "held_process_count": 1,
+      "held_process_memory_kib": {
+        "Rss_kib": 842492,
+        "Pss_kib": 840454,
+        "Private_Clean_kib": 7924,
+        "Private_Dirty_kib": 832316,
+        "Anonymous_kib": 832252
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 842500,
+        "Pss_kib": 840466,
+        "Private_Clean_kib": 7924,
+        "Private_Dirty_kib": 832324,
+        "Anonymous_kib": 832260
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 9032,
+        "Pss_kib": 6998,
+        "Private_Clean_kib": 5816,
+        "Private_Dirty_kib": 964,
+        "Anonymous_kib": 964
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 833468,
+        "Pss_kib": 833468,
+        "Private_Clean_kib": 2108,
+        "Private_Dirty_kib": 831360,
+        "Anonymous_kib": 831296
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.000136643007863,
+      "idle_memory_read_duration_ms": 11.567264999030158,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5012.174638002762,
+        "max": 5047.59536900383
+      },
+      "total_wall_ms_including_cleanup": 5676.630216999911,
+      "success": true,
+      "empty_node_memory_after_cleanup_kib": {
+        "Rss_kib": 161520,
+        "Pss_kib": 159427,
+        "Private_Clean_kib": 8052,
+        "Private_Dirty_kib": 151152,
+        "Anonymous_kib": 151152
+      }
+    },
+    {
+      "engine": "firecracker",
+      "pair": 0,
+      "concurrency": 8,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.284701997879893,
+          "api_setup_ms": 64.985960998456,
+          "agent_connect_ms": 352.4934659944847,
+          "ready_ms": 418.6402990017086,
+          "exec_ms": 1.1608720087679103,
+          "validated_offset_ms": 424.20443099399563
+        },
+        {
+          "index": 1,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.9099139899481088,
+          "api_setup_ms": 76.21460800874047,
+          "agent_connect_ms": 347.4280840018764,
+          "ready_ms": 424.8636910051573,
+          "exec_ms": 1.2209989945404232,
+          "validated_offset_ms": 427.090457000304
+        },
+        {
+          "index": 2,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.90360399230849,
+          "api_setup_ms": 62.539521997678094,
+          "agent_connect_ms": 357.3741200088989,
+          "ready_ms": 420.6789559975732,
+          "exec_ms": 0.7653139909962192,
+          "validated_offset_ms": 423.9070469920989
+        },
+        {
+          "index": 3,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.3875319893704727,
+          "api_setup_ms": 63.324955001007766,
+          "agent_connect_ms": 363.3151429967256,
+          "ready_ms": 427.4335960071767,
+          "exec_ms": 0.7934980094432831,
+          "validated_offset_ms": 430.2120629872661
+        },
+        {
+          "index": 4,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.4111329878214747,
+          "api_setup_ms": 55.47275200660806,
+          "agent_connect_ms": 385.18868599203415,
+          "ready_ms": 443.37544101290405,
+          "exec_ms": 2.7140030142618343,
+          "validated_offset_ms": 447.0807329926174
+        },
+        {
+          "index": 5,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.889779993798584,
+          "api_setup_ms": 63.185139995766804,
+          "agent_connect_ms": 350.91953800292686,
+          "ready_ms": 414.9418260058155,
+          "exec_ms": 0.8371480071218684,
+          "validated_offset_ms": 422.34857399307657
+        },
+        {
+          "index": 6,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.189790987060405,
+          "api_setup_ms": 69.32134400994983,
+          "agent_connect_ms": 354.3998039967846,
+          "ready_ms": 425.17248301010113,
+          "exec_ms": 1.4513350033666939,
+          "validated_offset_ms": 430.7583779882407
+        },
+        {
+          "index": 7,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.4915409992681816,
+          "api_setup_ms": 56.34127798839472,
+          "agent_connect_ms": 384.03843400010373,
+          "ready_ms": 441.44080199475866,
+          "exec_ms": 1.0610900062602013,
+          "validated_offset_ms": 443.25661899347324
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 447.0807329926174,
+      "launch_spread_ms": 5.398238994530402,
+      "passing_attempts": 8,
+      "passing_attempts_per_second": 17.893859899643903,
+      "held_process_count": 8,
+      "held_process_memory_kib": {
+        "Rss_kib": 703924,
+        "Pss_kib": 687298,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 684896,
+        "Anonymous_kib": 684832
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 703924,
+        "Pss_kib": 687298,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 684896,
+        "Anonymous_kib": 684832
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 0,
+        "Pss_kib": 0,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 0,
+        "Anonymous_kib": 0
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 703924,
+        "Pss_kib": 687298,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 684896,
+        "Anonymous_kib": 684832
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.000137436989462,
+      "idle_memory_read_duration_ms": 9.898832999169827,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5010.065156995552,
+        "max": 5034.7973159950925
+      },
+      "total_wall_ms_including_cleanup": 5593.069332986488,
+      "success": true
+    },
+    {
+      "engine": "firecracker",
+      "pair": 1,
+      "concurrency": 8,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.832634003018029,
+          "api_setup_ms": 24.82013100234326,
+          "agent_connect_ms": 377.41799298964906,
+          "ready_ms": 403.47991000453476,
+          "exec_ms": 1.241786012542434,
+          "validated_offset_ms": 404.8076030012453
+        },
+        {
+          "index": 1,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.1687929945765063,
+          "api_setup_ms": 38.92071300651878,
+          "agent_connect_ms": 371.235026002978,
+          "ready_ms": 410.94549901026767,
+          "exec_ms": 0.7897600007709116,
+          "validated_offset_ms": 412.5374470022507
+        },
+        {
+          "index": 2,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.4707450027344748,
+          "api_setup_ms": 38.736578993848525,
+          "agent_connect_ms": 372.5728680001339,
+          "ready_ms": 412.17872699780855,
+          "exec_ms": 0.8692800038261339,
+          "validated_offset_ms": 413.97623499506153
+        },
+        {
+          "index": 3,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.84164299571421,
+          "api_setup_ms": 42.538402005448006,
+          "agent_connect_ms": 396.4739609946264,
+          "ready_ms": 440.07571900147013,
+          "exec_ms": 1.0633560013957322,
+          "validated_offset_ms": 442.2362650075229
+        },
+        {
+          "index": 4,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.3940050014061853,
+          "api_setup_ms": 37.15008799917996,
+          "agent_connect_ms": 399.78032300132327,
+          "ready_ms": 438.0955590022495,
+          "exec_ms": 1.1651480017462745,
+          "validated_offset_ms": 440.8987269998761
+        },
+        {
+          "index": 5,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.3919330016942695,
+          "api_setup_ms": 37.05576500215102,
+          "agent_connect_ms": 369.70124900108203,
+          "ready_ms": 407.796123996377,
+          "exec_ms": 1.0391099931439385,
+          "validated_offset_ms": 411.5862690086942
+        },
+        {
+          "index": 6,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.3246650020591915,
+          "api_setup_ms": 40.03292799461633,
+          "agent_connect_ms": 360.7476070028497,
+          "ready_ms": 402.06170799501706,
+          "exec_ms": 1.2811729975510389,
+          "validated_offset_ms": 408.0782660021214
+        },
+        {
+          "index": 7,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.8570560067892075,
+          "api_setup_ms": 42.11749800015241,
+          "agent_connect_ms": 349.76555198954884,
+          "ready_ms": 393.73613099451177,
+          "exec_ms": 1.8530810048105195,
+          "validated_offset_ms": 399.9789649969898
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 442.2362650075229,
+      "launch_spread_ms": 5.024422003771178,
+      "passing_attempts": 8,
+      "passing_attempts_per_second": 18.089877816474214,
+      "held_process_count": 8,
+      "held_process_memory_kib": {
+        "Rss_kib": 703808,
+        "Pss_kib": 687242,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 684840,
+        "Anonymous_kib": 684776
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 703808,
+        "Pss_kib": 687242,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 684840,
+        "Anonymous_kib": 684776
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 0,
+        "Pss_kib": 0,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 0,
+        "Anonymous_kib": 0
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 703808,
+        "Pss_kib": 687242,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 684840,
+        "Anonymous_kib": 684776
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.000171627005329,
+      "idle_memory_read_duration_ms": 9.568623994709924,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5010.3911659971345,
+        "max": 5052.648466007668
+      },
+      "total_wall_ms_including_cleanup": 5590.550117995008,
+      "success": true
+    },
+    {
+      "engine": "hypermachine",
+      "pair": 1,
+      "concurrency": 8,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.19218100351281464,
+          "create_ms": 443.8080830004765,
+          "ready_ms": 449.3806419923203,
+          "exec_ms": 5.5725589918438345,
+          "batch_start_perf_seconds": 124880.620089752,
+          "sandbox_id": "sbx-0e9758b813974ead998f",
+          "validated_offset_ms": 453.14058699295856
+        },
+        {
+          "index": 1,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.9027799969771877,
+          "create_ms": 453.9575539965881,
+          "ready_ms": 464.4976999989012,
+          "exec_ms": 10.540146002313122,
+          "batch_start_perf_seconds": 124880.620089752,
+          "sandbox_id": "sbx-11c8006269fb41a6baea",
+          "validated_offset_ms": 469.76952999830246
+        },
+        {
+          "index": 2,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.22990599973127246,
+          "create_ms": 456.43646900134627,
+          "ready_ms": 462.1344909974141,
+          "exec_ms": 5.698021996067837,
+          "batch_start_perf_seconds": 124880.620089752,
+          "sandbox_id": "sbx-ad1f905705c74475ba05",
+          "validated_offset_ms": 466.56029199948534
+        },
+        {
+          "index": 3,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.4414309951243922,
+          "create_ms": 469.6979319996899,
+          "ready_ms": 474.56315500312485,
+          "exec_ms": 4.865223003434949,
+          "batch_start_perf_seconds": 124880.620089752,
+          "sandbox_id": "sbx-99d2b895b3a9468b89be",
+          "validated_offset_ms": 478.4210170037113
+        },
+        {
+          "index": 4,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.5960459966445342,
+          "create_ms": 459.25235000322573,
+          "ready_ms": 464.935752999736,
+          "exec_ms": 5.683402996510267,
+          "batch_start_perf_seconds": 124880.620089752,
+          "sandbox_id": "sbx-126b95148f7640e390ad",
+          "validated_offset_ms": 469.5396759925643
+        },
+        {
+          "index": 5,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.9401080023963004,
+          "create_ms": 450.68714499939233,
+          "ready_ms": 455.57287299016025,
+          "exec_ms": 4.8857279907679185,
+          "batch_start_perf_seconds": 124880.620089752,
+          "sandbox_id": "sbx-9e16a59cd8a24099b9ca",
+          "validated_offset_ms": 460.82618000218645
+        },
+        {
+          "index": 6,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.9900879997294396,
+          "create_ms": 480.9359289938584,
+          "ready_ms": 485.65962800057605,
+          "exec_ms": 4.723699006717652,
+          "batch_start_perf_seconds": 124880.620089752,
+          "sandbox_id": "sbx-5f24147f6cf44c43ab4a",
+          "validated_offset_ms": 491.16648599738255
+        },
+        {
+          "index": 7,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.8667289948789403,
+          "create_ms": 464.32352300325874,
+          "ready_ms": 470.23414200521074,
+          "exec_ms": 5.910619001952,
+          "batch_start_perf_seconds": 124880.620089752,
+          "sandbox_id": "sbx-dd1b241de3554aa9ba20",
+          "validated_offset_ms": 474.46270599903073
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 491.16648599738255,
+      "launch_spread_ms": 1.797906996216625,
+      "passing_attempts": 8,
+      "passing_attempts_per_second": 16.287756245735856,
+      "held_process_count": 1,
+      "held_process_memory_kib": {
+        "Rss_kib": 764240,
+        "Pss_kib": 762143,
+        "Private_Clean_kib": 8052,
+        "Private_Dirty_kib": 753872,
+        "Anonymous_kib": 753808
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 764252,
+        "Pss_kib": 762159,
+        "Private_Clean_kib": 8052,
+        "Private_Dirty_kib": 753884,
+        "Anonymous_kib": 753820
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 161444,
+        "Pss_kib": 159351,
+        "Private_Clean_kib": 8052,
+        "Private_Dirty_kib": 151076,
+        "Anonymous_kib": 151076
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 602808,
+        "Pss_kib": 602808,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 602808,
+        "Anonymous_kib": 602744
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.000152028995217,
+      "idle_memory_read_duration_ms": 9.826631998294033,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5011.052657995606,
+        "max": 5049.07855700003
+      },
+      "total_wall_ms_including_cleanup": 5633.61265900312,
+      "success": true,
+      "empty_node_memory_after_cleanup_kib": {
+        "Rss_kib": 83164,
+        "Pss_kib": 81071,
+        "Private_Clean_kib": 8052,
+        "Private_Dirty_kib": 72796,
+        "Anonymous_kib": 72796
+      }
+    }
+  ],
+  "setup_error": null,
+  "cleanup_errors": [],
+  "success": true,
+  "limitations": [
+    "Shared nested-KVM host; no dedicated hardware",
+    "Persistent HyperMachine HTTP daemon versus fresh Firecracker processes and Unix APIs",
+    "Barrier-released arrivals have measured scheduling spread; not sustained arrivals",
+    "All guests held until last validation; earlier guests have longer idle time",
+    "Aggregate process PSS includes guest/VMM memory but excludes kernel allocations; no long idle/density test",
+    "Cold native engines only; no managed SDK, snapshot or fleet comparison",
+    "Fixed idle hold starts after all readiness checks; individual guest idle ages and sequential read duration are recorded; PSS excludes kernel memory and does not prove density"
+  ],
+  "memory_idle_seconds": 5.0,
+  "memory_method": "HM held daemon minus same-batch empty daemon PSS; FC summed fresh VMM PSS minus zero-process baseline",
+  "hypermachine_template_preflight": {
+    "aliases": [
+      "base"
+    ],
+    "buildID": "base",
+    "buildStatus": "ready",
+    "cpuCount": 1,
+    "envdVersion": "0.6.3",
+    "memoryMB": 1024,
+    "public": false,
+    "snapshot": false,
+    "templateID": "base"
+  },
+  "node_memory_baseline_kib": {
+    "Rss_kib": 8968,
+    "Pss_kib": 6934,
+    "Private_Clean_kib": 5752,
+    "Private_Dirty_kib": 964,
+    "Anonymous_kib": 964
+  },
+  "remaining_sandbox_count": 0,
+  "node_log_tail": "cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-0e9758b813974ead998f \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m191.30887199999998 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(188400033) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(191297509)\n\u001b[2m2026-10-02T13:14:49.684708Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-9e16a59cd8a24099b9ca \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m183.10465000000002 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(181848462) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(183099550)\n\u001b[2m2026-10-02T13:14:49.686120Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-126b95148f7640e390ad \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m192.03763500000002 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(189588449) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(192029480)\n\u001b[2m2026-10-02T13:14:49.690996Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-ad1f905705c74475ba05 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m188.363941 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(187423561) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(188359442)\n\u001b[2m2026-10-02T13:14:49.691380Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-dd1b241de3554aa9ba20 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m190.10305499999998 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(188700812) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(190098497)\n\u001b[2m2026-10-02T13:14:49.692348Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-11c8006269fb41a6baea \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m189.27606 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(184577399) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(189272793)\n\u001b[2m2026-10-02T13:14:49.706359Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-99d2b895b3a9468b89be \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m211.542128 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(181197033) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(211534003)\n\u001b[2m2026-10-02T13:14:49.722737Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-5f24147f6cf44c43ab4a \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m212.787961 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(184887612) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(212784044)\n\u001b[2m2026-10-02T13:14:49.869352Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-0e9758b813974ead998f \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m2.337154 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m383.18810399999995 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.13508199999999998 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:49.869487Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-0e9758b813974ead998f up in 437.599194ms: build 232.06\u00b5s, launch 51.563066ms, agent answering 385.750755ms,          network and envd 53.574\u00b5s\n\u001b[2m2026-10-02T13:14:49.871242Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-9e16a59cd8a24099b9ca \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.33804 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m370.050008 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.10480300000000001 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:49.873907Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-9e16a59cd8a24099b9ca up in 430.263184ms: build 784.16\u00b5s, launch 56.31965ms, agent answering 373.127072ms,          network and envd 32.523\u00b5s\n\u001b[2m2026-10-02T13:14:49.880479Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-11c8006269fb41a6baea \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.308323 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m377.614713 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.225142 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:49.880574Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-11c8006269fb41a6baea up in 449.041232ms: build 2.460587ms, launch 68.333796ms, agent answering 378.207222ms,          network and envd 39.858\u00b5s\n\u001b[2m2026-10-02T13:14:49.881864Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-ad1f905705c74475ba05 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.528124 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m378.891153 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.40942399999999995 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:49.881927Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-ad1f905705c74475ba05 up in 450.392455ms: build 271.075\u00b5s, launch 70.227363ms, agent answering 379.871734ms,          network and envd 22.363\u00b5s\n\u001b[2m2026-10-02T13:14:49.885435Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-126b95148f7640e390ad \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.303168 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m392.80710899999997 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.35082599999999997 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:49.885533Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-126b95148f7640e390ad up in 453.95771ms: build 372.793\u00b5s, launch 60.020119ms, agent answering 393.53977ms,          network and envd 25.138\u00b5s\n\u001b[2m2026-10-02T13:14:49.889802Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-dd1b241de3554aa9ba20 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.283161 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m389.049558 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.145597 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:49.889879Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-dd1b241de3554aa9ba20 up in 446.356734ms: build 304.971\u00b5s, launch 56.492832ms, agent answering 389.536428ms,          network and envd 22.664\u00b5s\n\u001b[2m2026-10-02T13:14:49.895653Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-99d2b895b3a9468b89be \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.503025 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m400.637432 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.214917 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:49.895763Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-99d2b895b3a9468b89be up in 452.01788ms: build 354.116\u00b5s, launch 50.193142ms, agent answering 401.447377ms,          network and envd 23.665\u00b5s\n\u001b[2m2026-10-02T13:14:49.908464Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-5f24147f6cf44c43ab4a \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.352759 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m401.01352299999996 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m2.975947 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:49.908567Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-5f24147f6cf44c43ab4a up in 464.84062ms: build 2.755109ms, launch 57.63873ms, agent answering 404.42553ms,          network and envd 21.432\u00b5s\n",
+  "artifacts_unchanged": true,
+  "ready_ms": {
+    "hypermachine": {
+      "n": 16,
+      "min": 449.3806419923203,
+      "max": 504.0274769999087,
+      "mean": 474.3491654999161,
+      "p50": 470.23414200521074,
+      "p95": 504.0274769999087,
+      "p99": 504.0274769999087
+    },
+    "firecracker": {
+      "n": 16,
+      "min": 393.73613099451177,
+      "max": 443.37544101290405,
+      "mean": 420.3072794398395,
+      "p50": 418.6402990017086,
+      "p95": 443.37544101290405,
+      "p99": 443.37544101290405
+    }
+  },
+  "diagnostic_only": true,
+  "hypermachine_log_filter": "hv2_sandboxd=debug,hv2_agent::cold_readiness=debug,hv2_core::cold_dispatch=debug",
+  "diagnostic_sha256": "4d6232d5659ef3e38a44a9fd00b71aa1158d1ad2520b4bf899bfaf368df3c2f3",
+  "guest_boot_collected": false,
+  "guest_observations": [],
+  "guest_probe_scope": "Every tenth arrival index, after all guests validate while held; memory readings follow these extra commands",
+  "startup_stages_ms": {
+    "sbx-bca57c189207498e909c": {
+      "total_ms": 452.218592,
+      "build_ms": 3.736651,
+      "launch_ms": 60.954984,
+      "agent_ms": 387.470417,
+      "network_envd_ms": 0.05671
+    },
+    "sbx-7eb0d2b9739940dfba57": {
+      "total_ms": 444.059526,
+      "build_ms": 4.109977,
+      "launch_ms": 35.304246,
+      "agent_ms": 404.589044,
+      "network_envd_ms": 0.05682
+    },
+    "sbx-7a6d213ff8094e32aeb6": {
+      "total_ms": 457.787662,
+      "build_ms": 2.122888,
+      "launch_ms": 62.855055,
+      "agent_ms": 392.761817,
+      "network_envd_ms": 0.048343000000000004
+    },
+    "sbx-f84fbad2a0084d26a538": {
+      "total_ms": 464.739057,
+      "build_ms": 2.443142,
+      "launch_ms": 62.808131,
+      "agent_ms": 399.461383,
+      "network_envd_ms": 0.026601
+    },
+    "sbx-42c8e38ff86946aa9d33": {
+      "total_ms": 474.408347,
+      "build_ms": 0.5020020000000001,
+      "launch_ms": 62.550711,
+      "agent_ms": 411.334483,
+      "network_envd_ms": 0.021342
+    },
+    "sbx-64cea5d1bef64210b5e0": {
+      "total_ms": 431.413477,
+      "build_ms": 3.867985,
+      "launch_ms": 61.493117,
+      "agent_ms": 366.030683,
+      "network_envd_ms": 0.021882000000000002
+    },
+    "sbx-ef435762d85540aead78": {
+      "total_ms": 473.839546,
+      "build_ms": 5.206509,
+      "launch_ms": 50.793684,
+      "agent_ms": 417.819394,
+      "network_envd_ms": 0.020059
+    },
+    "sbx-6bdd3989783c4c5d8fdf": {
+      "total_ms": 441.373879,
+      "build_ms": 0.7317980000000001,
+      "launch_ms": 65.074706,
+      "agent_ms": 375.530373,
+      "network_envd_ms": 0.037202
+    },
+    "sbx-0e9758b813974ead998f": {
+      "total_ms": 437.599194,
+      "build_ms": 0.23206000000000002,
+      "launch_ms": 51.563066,
+      "agent_ms": 385.750755,
+      "network_envd_ms": 0.053574
+    },
+    "sbx-9e16a59cd8a24099b9ca": {
+      "total_ms": 430.263184,
+      "build_ms": 0.78416,
+      "launch_ms": 56.31965,
+      "agent_ms": 373.127072,
+      "network_envd_ms": 0.032523
+    },
+    "sbx-11c8006269fb41a6baea": {
+      "total_ms": 449.041232,
+      "build_ms": 2.460587,
+      "launch_ms": 68.333796,
+      "agent_ms": 378.207222,
+      "network_envd_ms": 0.039858
+    },
+    "sbx-ad1f905705c74475ba05": {
+      "total_ms": 450.392455,
+      "build_ms": 0.271075,
+      "launch_ms": 70.227363,
+      "agent_ms": 379.871734,
+      "network_envd_ms": 0.022363
+    },
+    "sbx-126b95148f7640e390ad": {
+      "total_ms": 453.95771,
+      "build_ms": 0.37279300000000004,
+      "launch_ms": 60.020119,
+      "agent_ms": 393.53977,
+      "network_envd_ms": 0.025138
+    },
+    "sbx-dd1b241de3554aa9ba20": {
+      "total_ms": 446.356734,
+      "build_ms": 0.304971,
+      "launch_ms": 56.492832,
+      "agent_ms": 389.536428,
+      "network_envd_ms": 0.022664000000000004
+    },
+    "sbx-99d2b895b3a9468b89be": {
+      "total_ms": 452.01788,
+      "build_ms": 0.354116,
+      "launch_ms": 50.193142,
+      "agent_ms": 401.447377,
+      "network_envd_ms": 0.023665
+    },
+    "sbx-5f24147f6cf44c43ab4a": {
+      "total_ms": 464.84062,
+      "build_ms": 2.755109,
+      "launch_ms": 57.63873,
+      "agent_ms": 404.42553,
+      "network_envd_ms": 0.021432
+    }
+  },
+  "cold_readiness_log": "hv2-sandboxd: listening on 0.0.0.0:37507, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:45375 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:45375 process.Process/Start\n\u001b[2m2026-10-02T13:14:22.553833Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 2.385\u00b5s\n\u001b[2m2026-10-02T13:14:22.554575Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 781ns\n\u001b[2m2026-10-02T13:14:22.554580Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 320ns\n\u001b[2m2026-10-02T13:14:22.555147Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 300ns\n\u001b[2m2026-10-02T13:14:22.555638Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 772ns\n\u001b[2m2026-10-02T13:14:22.556356Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 311ns\n\u001b[2m2026-10-02T13:14:22.604979Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-7eb0d2b9739940dfba57 \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.31906799999999996\n\u001b[2m2026-10-02T13:14:22.605260Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 1.273\u00b5s\n\u001b[2m2026-10-02T13:14:22.605326Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-7eb0d2b9739940dfba57 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.007584 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m0.222848\n\u001b[2m2026-10-02T13:14:22.605406Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-7eb0d2b9739940dfba57 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m0.08320100000000001\n\u001b[2m2026-10-02T13:14:22.606269Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 2.805\u00b5s\n\u001b[2m2026-10-02T13:14:22.619655Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-42c8e38ff86946aa9d33 \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m2.706624\n\u001b[2m2026-10-02T13:14:22.620210Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-7a6d213ff8094e32aeb6 \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.645309\n\u001b[2m2026-10-02T13:14:22.621591Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-bca57c189207498e909c \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m1.745523\n\u001b[2m2026-10-02T13:14:22.621893Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-f84fbad2a0084d26a538 \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m2.053239\n\u001b[2m2026-10-02T13:14:22.622023Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-7a6d213ff8094e32aeb6 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.000792 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m1.799482\n\u001b[2m2026-10-02T13:14:22.622063Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-7a6d213ff8094e32aeb6 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m0.041350000000000005\n\u001b[2m2026-10-02T13:14:22.622225Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-ef435762d85540aead78 \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.946955\n\u001b[2m2026-10-02T13:14:22.622641Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-bca57c189207498e909c \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.0006010000000000001 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m1.037174\n\u001b[2m2026-10-02T13:14:22.622671Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-bca57c189207498e909c \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m0.031\n\u001b[2m2026-10-02T13:14:22.622710Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-f84fbad2a0084d26a538 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.000691 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m0.807159\n\u001b[2m2026-10-02T13:14:22.622735Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-f84fbad2a0084d26a538 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m0.0258\n\u001b[2m2026-10-02T13:14:22.622804Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-42c8e38ff86946aa9d33 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.002936 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m3.108929\n\u001b[2m2026-10-02T13:14:22.622834Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-42c8e38ff86946aa9d33 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m0.031671000000000005\n\u001b[2m2026-10-02T13:14:22.625247Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-ef435762d85540aead78 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.0008320000000000001 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m3.011396\n\u001b[2m2026-10-02T13:14:22.659489Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-ef435762d85540aead78 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m34.236456\n\u001b[2m2026-10-02T13:14:22.671673Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-6bdd3989783c4c5d8fdf \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.574834\n\u001b[2m2026-10-02T13:14:22.671754Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-64cea5d1bef64210b5e0 \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.09848000000000001\n\u001b[2m2026-10-02T13:14:22.672269Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-6bdd3989783c4c5d8fdf \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.003056 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m0.55735\n\u001b[2m2026-10-02T13:14:22.672568Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-6bdd3989783c4c5d8fdf \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m0.300012\n\u001b[2m2026-10-02T13:14:22.672921Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-64cea5d1bef64210b5e0 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.001954 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m1.1507399999999999\n\u001b[2m2026-10-02T13:14:22.672950Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-64cea5d1bef64210b5e0 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m0.030439\n\u001b[2m2026-10-02T13:14:22.807526Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-bca57c189207498e909c \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m184.838534 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(182002681) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(184825408)\n\u001b[2m2026-10-02T13:14:22.815099Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-7eb0d2b9739940dfba57 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m209.67923299999998 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(197030497) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(209669724)\n\u001b[2m2026-10-02T13:14:22.821330Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-f84fbad2a0084d26a538 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m198.59074900000002 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(195778361) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(198587081)\n\u001b[2m2026-10-02T13:14:22.821627Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-7a6d213ff8094e32aeb6 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m199.562661 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(195990899) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(199547923)\n\u001b[2m2026-10-02T13:14:22.823373Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-42c8e38ff86946aa9d33 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m200.536407 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(197959524) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(200532991)\n\u001b[2m2026-10-02T13:14:22.846975Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-ef435762d85540aead78 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m187.48770100000002 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(185748710) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(187442604)\n\u001b[2m2026-10-02T13:14:22.860715Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-64cea5d1bef64210b5e0 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m187.75932 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(187720714) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(187754491)\n\u001b[2m2026-10-02T13:14:22.866079Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-6bdd3989783c4c5d8fdf \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m193.50127 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(192333911) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(193487003)\n\u001b[2m2026-10-02T13:14:23.005027Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-bca57c189207498e909c \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m2.3610749999999996 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m382.607329 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.166082 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:23.007376Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-bca57c189207498e909c up in 452.218592ms: build 3.736651ms, launch 60.954984ms, agent answering 387.470417ms,          network and envd 56.71\u00b5s\n\u001b[2m2026-10-02T13:14:23.009173Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-7eb0d2b9739940dfba57 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.339314 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m404.02054100000004 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.135593 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:23.009314Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-7eb0d2b9739940dfba57 up in 444.059526ms: build 4.109977ms, launch 35.304246ms, agent answering 404.589044ms,          network and envd 56.82\u00b5s\n\u001b[2m2026-10-02T13:14:23.012270Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-7a6d213ff8094e32aeb6 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m2.31209 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m388.58329000000003 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m1.803124 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:23.012378Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-7a6d213ff8094e32aeb6 up in 457.787662ms: build 2.122888ms, launch 62.855055ms, agent answering 392.761817ms,          network and envd 48.343\u00b5s\n\u001b[2m2026-10-02T13:14:23.018028Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-f84fbad2a0084d26a538 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m2.412499 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m391.707502 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m4.062799 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:23.019331Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-f84fbad2a0084d26a538 up in 464.739057ms: build 2.443142ms, launch 62.808131ms, agent answering 399.461383ms,          network and envd 26.601\u00b5s\n\u001b[2m2026-10-02T13:14:23.028214Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-42c8e38ff86946aa9d33 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m4.942997999999999 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m405.953147 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.362458 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:23.028307Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-42c8e38ff86946aa9d33 up in 474.408347ms: build 502.002\u00b5s, launch 62.550711ms, agent answering 411.334483ms,          network and envd 21.342\u00b5s\n\u001b[2m2026-10-02T13:14:23.037601Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-64cea5d1bef64210b5e0 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.781188 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m364.677871 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.481259 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:23.037711Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-64cea5d1bef64210b5e0 up in 431.413477ms: build 3.867985ms, launch 61.493117ms, agent answering 366.030683ms,          network and envd 21.882\u00b5s\n\u001b[2m2026-10-02T13:14:23.039033Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-ef435762d85540aead78 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m1.211822 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m416.07227 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.467251 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:23.039119Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-ef435762d85540aead78 up in 473.839546ms: build 5.206509ms, launch 50.793684ms, agent answering 417.819394ms,          network and envd 20.059\u00b5s\n\u001b[2m2026-10-02T13:14:23.046552Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-6bdd3989783c4c5d8fdf \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m1.129739 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m372.462177 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m1.855155 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:23.046670Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-6bdd3989783c4c5d8fdf up in 441.373879ms: build 731.798\u00b5s, launch 65.074706ms, agent answering 375.530373ms,          network and envd 37.202\u00b5s\n\u001b[2m2026-10-02T13:14:49.431465Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 922ns\n\u001b[2m2026-10-02T13:14:49.431521Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 331ns\n\u001b[2m2026-10-02T13:14:49.431465Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 1.663\u00b5s\n\u001b[2m2026-10-02T13:14:49.431869Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 261ns\n\u001b[2m2026-10-02T13:14:49.438105Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 2.705\u00b5s\n\u001b[2m2026-10-02T13:14:49.438105Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 2.004\u00b5s\n\u001b[2m2026-10-02T13:14:49.438137Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 481ns\n\u001b[2m2026-10-02T13:14:49.438152Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 461ns\n\u001b[2m2026-10-02T13:14:49.483800Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-0e9758b813974ead998f \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.11895\n\u001b[2m2026-10-02T13:14:49.484196Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-0e9758b813974ead998f \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.008336 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m0.27162600000000003\n\u001b[2m2026-10-02T13:14:49.484287Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-0e9758b813974ead998f \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m0.094363\n\u001b[2m2026-10-02T13:14:49.492059Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-126b95148f7640e390ad \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.09522399999999999\n\u001b[2m2026-10-02T13:14:49.493987Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-126b95148f7640e390ad \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.005370000000000001 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m1.842805\n\u001b[2m2026-10-02T13:14:49.494073Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-126b95148f7640e390ad \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m0.093251\n\u001b[2m2026-10-02T13:14:49.494441Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-99d2b895b3a9468b89be \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.156603\n\u001b[2m2026-10-02T13:14:49.494743Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-99d2b895b3a9468b89be \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.004419 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m0.25587\n\u001b[2m2026-10-02T13:14:49.494815Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-99d2b895b3a9468b89be \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m0.075827\n\u001b[2m2026-10-02T13:14:49.500389Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-dd1b241de3554aa9ba20 \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.07376300000000001\n\u001b[2m2026-10-02T13:14:49.501048Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-9e16a59cd8a24099b9ca \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.304058\n\u001b[2m2026-10-02T13:14:49.501234Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-dd1b241de3554aa9ba20 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.006902999999999999 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m0.7888809999999999\n\u001b[2m2026-10-02T13:14:49.501276Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-dd1b241de3554aa9ba20 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m0.043284\n\u001b[2m2026-10-02T13:14:49.501556Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-9e16a59cd8a24099b9ca \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.0019240000000000001 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m0.4882969999999999\n\u001b[2m2026-10-02T13:14:49.501588Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-9e16a59cd8a24099b9ca \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m0.033836\n\u001b[2m2026-10-02T13:14:49.502230Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-ad1f905705c74475ba05 \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.198726\n\u001b[2m2026-10-02T13:14:49.502538Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-11c8006269fb41a6baea \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.21273799999999998\n\u001b[2m2026-10-02T13:14:49.502601Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-ad1f905705c74475ba05 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.002114 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m0.324929\n\u001b[2m2026-10-02T13:14:49.502627Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-ad1f905705c74475ba05 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m0.027132\n\u001b[2m2026-10-02T13:14:49.503047Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-11c8006269fb41a6baea \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.000792 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m0.49894999999999995\n\u001b[2m2026-10-02T13:14:49.503071Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-11c8006269fb41a6baea \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m0.025499\n\u001b[2m2026-10-02T13:14:49.504457Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-5f24147f6cf44c43ab4a \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.337981\n\u001b[2m2026-10-02T13:14:49.509914Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-5f24147f6cf44c43ab4a \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.001733 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m5.43396\n\u001b[2m2026-10-02T13:14:49.509946Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-5f24147f6cf44c43ab4a \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m0.032934\n\u001b[2m2026-10-02T13:14:49.675620Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-0e9758b813974ead998f \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m191.30887199999998 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(188400033) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(191297509)\n\u001b[2m2026-10-02T13:14:49.684708Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-9e16a59cd8a24099b9ca \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m183.10465000000002 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(181848462) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(183099550)\n\u001b[2m2026-10-02T13:14:49.686120Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-126b95148f7640e390ad \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m192.03763500000002 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(189588449) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(192029480)\n\u001b[2m2026-10-02T13:14:49.690996Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-ad1f905705c74475ba05 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m188.363941 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(187423561) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(188359442)\n\u001b[2m2026-10-02T13:14:49.691380Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-dd1b241de3554aa9ba20 \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m190.10305499999998 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(188700812) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(190098497)\n\u001b[2m2026-10-02T13:14:49.692348Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-11c8006269fb41a6baea \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m189.27606 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(184577399) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(189272793)\n\u001b[2m2026-10-02T13:14:49.706359Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-99d2b895b3a9468b89be \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m211.542128 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(181197033) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(211534003)\n\u001b[2m2026-10-02T13:14:49.722737Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-5f24147f6cf44c43ab4a \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m212.787961 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(184887612) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(212784044)\n\u001b[2m2026-10-02T13:14:49.869352Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-0e9758b813974ead998f \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m2.337154 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m383.18810399999995 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.13508199999999998 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:49.869487Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-0e9758b813974ead998f up in 437.599194ms: build 232.06\u00b5s, launch 51.563066ms, agent answering 385.750755ms,          network and envd 53.574\u00b5s\n\u001b[2m2026-10-02T13:14:49.871242Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-9e16a59cd8a24099b9ca \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.33804 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m370.050008 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.10480300000000001 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:49.873907Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-9e16a59cd8a24099b9ca up in 430.263184ms: build 784.16\u00b5s, launch 56.31965ms, agent answering 373.127072ms,          network and envd 32.523\u00b5s\n\u001b[2m2026-10-02T13:14:49.880479Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-11c8006269fb41a6baea \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.308323 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m377.614713 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.225142 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:49.880574Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-11c8006269fb41a6baea up in 449.041232ms: build 2.460587ms, launch 68.333796ms, agent answering 378.207222ms,          network and envd 39.858\u00b5s\n\u001b[2m2026-10-02T13:14:49.881864Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-ad1f905705c74475ba05 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.528124 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m378.891153 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.40942399999999995 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:49.881927Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-ad1f905705c74475ba05 up in 450.392455ms: build 271.075\u00b5s, launch 70.227363ms, agent answering 379.871734ms,          network and envd 22.363\u00b5s\n\u001b[2m2026-10-02T13:14:49.885435Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-126b95148f7640e390ad \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.303168 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m392.80710899999997 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.35082599999999997 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:49.885533Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-126b95148f7640e390ad up in 453.95771ms: build 372.793\u00b5s, launch 60.020119ms, agent answering 393.53977ms,          network and envd 25.138\u00b5s\n\u001b[2m2026-10-02T13:14:49.889802Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-dd1b241de3554aa9ba20 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.283161 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m389.049558 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.145597 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:49.889879Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-dd1b241de3554aa9ba20 up in 446.356734ms: build 304.971\u00b5s, launch 56.492832ms, agent answering 389.536428ms,          network and envd 22.664\u00b5s\n\u001b[2m2026-10-02T13:14:49.895653Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-99d2b895b3a9468b89be \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.503025 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m400.637432 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.214917 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:49.895763Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-99d2b895b3a9468b89be up in 452.01788ms: build 354.116\u00b5s, launch 50.193142ms, agent answering 401.447377ms,          network and envd 23.665\u00b5s\n\u001b[2m2026-10-02T13:14:49.908464Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-5f24147f6cf44c43ab4a \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.352759 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m401.01352299999996 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m2.975947 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:49.908567Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-5f24147f6cf44c43ab4a up in 464.84062ms: build 2.755109ms, launch 57.63873ms, agent answering 404.42553ms,          network and envd 21.432\u00b5s\n",
+  "cold_readiness_stages_ms": {
+    "sbx-bca57c189207498e909c": {
+      "phase": "ping",
+      "succeeded": true,
+      "blocking_queue_ms": 2.3610749999999996,
+      "connect_ms": 382.607329,
+      "ping_ms": 0.166082
+    },
+    "sbx-7eb0d2b9739940dfba57": {
+      "phase": "ping",
+      "succeeded": true,
+      "blocking_queue_ms": 0.339314,
+      "connect_ms": 404.02054100000004,
+      "ping_ms": 0.135593
+    },
+    "sbx-7a6d213ff8094e32aeb6": {
+      "phase": "ping",
+      "succeeded": true,
+      "blocking_queue_ms": 2.31209,
+      "connect_ms": 388.58329000000003,
+      "ping_ms": 1.803124
+    },
+    "sbx-f84fbad2a0084d26a538": {
+      "phase": "ping",
+      "succeeded": true,
+      "blocking_queue_ms": 2.412499,
+      "connect_ms": 391.707502,
+      "ping_ms": 4.062799
+    },
+    "sbx-42c8e38ff86946aa9d33": {
+      "phase": "ping",
+      "succeeded": true,
+      "blocking_queue_ms": 4.942997999999999,
+      "connect_ms": 405.953147,
+      "ping_ms": 0.362458
+    },
+    "sbx-64cea5d1bef64210b5e0": {
+      "phase": "ping",
+      "succeeded": true,
+      "blocking_queue_ms": 0.781188,
+      "connect_ms": 364.677871,
+      "ping_ms": 0.481259
+    },
+    "sbx-ef435762d85540aead78": {
+      "phase": "ping",
+      "succeeded": true,
+      "blocking_queue_ms": 1.211822,
+      "connect_ms": 416.07227,
+      "ping_ms": 0.467251
+    },
+    "sbx-6bdd3989783c4c5d8fdf": {
+      "phase": "ping",
+      "succeeded": true,
+      "blocking_queue_ms": 1.129739,
+      "connect_ms": 372.462177,
+      "ping_ms": 1.855155
+    },
+    "sbx-0e9758b813974ead998f": {
+      "phase": "ping",
+      "succeeded": true,
+      "blocking_queue_ms": 2.337154,
+      "connect_ms": 383.18810399999995,
+      "ping_ms": 0.13508199999999998
+    },
+    "sbx-9e16a59cd8a24099b9ca": {
+      "phase": "ping",
+      "succeeded": true,
+      "blocking_queue_ms": 0.33804,
+      "connect_ms": 370.050008,
+      "ping_ms": 0.10480300000000001
+    },
+    "sbx-11c8006269fb41a6baea": {
+      "phase": "ping",
+      "succeeded": true,
+      "blocking_queue_ms": 0.308323,
+      "connect_ms": 377.614713,
+      "ping_ms": 0.225142
+    },
+    "sbx-ad1f905705c74475ba05": {
+      "phase": "ping",
+      "succeeded": true,
+      "blocking_queue_ms": 0.528124,
+      "connect_ms": 378.891153,
+      "ping_ms": 0.40942399999999995
+    },
+    "sbx-126b95148f7640e390ad": {
+      "phase": "ping",
+      "succeeded": true,
+      "blocking_queue_ms": 0.303168,
+      "connect_ms": 392.80710899999997,
+      "ping_ms": 0.35082599999999997
+    },
+    "sbx-dd1b241de3554aa9ba20": {
+      "phase": "ping",
+      "succeeded": true,
+      "blocking_queue_ms": 0.283161,
+      "connect_ms": 389.049558,
+      "ping_ms": 0.145597
+    },
+    "sbx-99d2b895b3a9468b89be": {
+      "phase": "ping",
+      "succeeded": true,
+      "blocking_queue_ms": 0.503025,
+      "connect_ms": 400.637432,
+      "ping_ms": 0.214917
+    },
+    "sbx-5f24147f6cf44c43ab4a": {
+      "phase": "ping",
+      "succeeded": true,
+      "blocking_queue_ms": 0.352759,
+      "connect_ms": 401.01352299999996,
+      "ping_ms": 2.975947
+    }
+  },
+  "dispatch_stages_ms": {
+    "sbx-7eb0d2b9739940dfba57": {
+      "dispatch_queue_ms": 0.31906799999999996,
+      "wrapper_queue_ms": 0.007584,
+      "thread_start_ms": 0.222848,
+      "owner_setup_ms": 0.08320100000000001,
+      "first_backend_ms": 209.67923299999998
+    },
+    "sbx-42c8e38ff86946aa9d33": {
+      "dispatch_queue_ms": 2.706624,
+      "wrapper_queue_ms": 0.002936,
+      "thread_start_ms": 3.108929,
+      "owner_setup_ms": 0.031671000000000005,
+      "first_backend_ms": 200.536407
+    },
+    "sbx-7a6d213ff8094e32aeb6": {
+      "dispatch_queue_ms": 0.645309,
+      "wrapper_queue_ms": 0.000792,
+      "thread_start_ms": 1.799482,
+      "owner_setup_ms": 0.041350000000000005,
+      "first_backend_ms": 199.562661
+    },
+    "sbx-bca57c189207498e909c": {
+      "dispatch_queue_ms": 1.745523,
+      "wrapper_queue_ms": 0.0006010000000000001,
+      "thread_start_ms": 1.037174,
+      "owner_setup_ms": 0.031,
+      "first_backend_ms": 184.838534
+    },
+    "sbx-f84fbad2a0084d26a538": {
+      "dispatch_queue_ms": 2.053239,
+      "wrapper_queue_ms": 0.000691,
+      "thread_start_ms": 0.807159,
+      "owner_setup_ms": 0.0258,
+      "first_backend_ms": 198.59074900000002
+    },
+    "sbx-ef435762d85540aead78": {
+      "dispatch_queue_ms": 0.946955,
+      "wrapper_queue_ms": 0.0008320000000000001,
+      "thread_start_ms": 3.011396,
+      "owner_setup_ms": 34.236456,
+      "first_backend_ms": 187.48770100000002
+    },
+    "sbx-6bdd3989783c4c5d8fdf": {
+      "dispatch_queue_ms": 0.574834,
+      "wrapper_queue_ms": 0.003056,
+      "thread_start_ms": 0.55735,
+      "owner_setup_ms": 0.300012,
+      "first_backend_ms": 193.50127
+    },
+    "sbx-64cea5d1bef64210b5e0": {
+      "dispatch_queue_ms": 0.09848000000000001,
+      "wrapper_queue_ms": 0.001954,
+      "thread_start_ms": 1.1507399999999999,
+      "owner_setup_ms": 0.030439,
+      "first_backend_ms": 187.75932
+    },
+    "sbx-0e9758b813974ead998f": {
+      "dispatch_queue_ms": 0.11895,
+      "wrapper_queue_ms": 0.008336,
+      "thread_start_ms": 0.27162600000000003,
+      "owner_setup_ms": 0.094363,
+      "first_backend_ms": 191.30887199999998
+    },
+    "sbx-126b95148f7640e390ad": {
+      "dispatch_queue_ms": 0.09522399999999999,
+      "wrapper_queue_ms": 0.005370000000000001,
+      "thread_start_ms": 1.842805,
+      "owner_setup_ms": 0.093251,
+      "first_backend_ms": 192.03763500000002
+    },
+    "sbx-99d2b895b3a9468b89be": {
+      "dispatch_queue_ms": 0.156603,
+      "wrapper_queue_ms": 0.004419,
+      "thread_start_ms": 0.25587,
+      "owner_setup_ms": 0.075827,
+      "first_backend_ms": 211.542128
+    },
+    "sbx-dd1b241de3554aa9ba20": {
+      "dispatch_queue_ms": 0.07376300000000001,
+      "wrapper_queue_ms": 0.006902999999999999,
+      "thread_start_ms": 0.7888809999999999,
+      "owner_setup_ms": 0.043284,
+      "first_backend_ms": 190.10305499999998
+    },
+    "sbx-9e16a59cd8a24099b9ca": {
+      "dispatch_queue_ms": 0.304058,
+      "wrapper_queue_ms": 0.0019240000000000001,
+      "thread_start_ms": 0.4882969999999999,
+      "owner_setup_ms": 0.033836,
+      "first_backend_ms": 183.10465000000002
+    },
+    "sbx-ad1f905705c74475ba05": {
+      "dispatch_queue_ms": 0.198726,
+      "wrapper_queue_ms": 0.002114,
+      "thread_start_ms": 0.324929,
+      "owner_setup_ms": 0.027132,
+      "first_backend_ms": 188.363941
+    },
+    "sbx-11c8006269fb41a6baea": {
+      "dispatch_queue_ms": 0.21273799999999998,
+      "wrapper_queue_ms": 0.000792,
+      "thread_start_ms": 0.49894999999999995,
+      "owner_setup_ms": 0.025499,
+      "first_backend_ms": 189.27606
+    },
+    "sbx-5f24147f6cf44c43ab4a": {
+      "dispatch_queue_ms": 0.337981,
+      "wrapper_queue_ms": 0.001733,
+      "thread_start_ms": 5.43396,
+      "owner_setup_ms": 0.032934,
+      "first_backend_ms": 212.787961
+    }
+  },
+  "first_exit_kinds": {
+    "sbx-bca57c189207498e909c": {
+      "kind": "io_out",
+      "io_port": 3320
+    },
+    "sbx-7eb0d2b9739940dfba57": {
+      "kind": "io_out",
+      "io_port": 3320
+    },
+    "sbx-f84fbad2a0084d26a538": {
+      "kind": "io_out",
+      "io_port": 3320
+    },
+    "sbx-7a6d213ff8094e32aeb6": {
+      "kind": "io_out",
+      "io_port": 3320
+    },
+    "sbx-42c8e38ff86946aa9d33": {
+      "kind": "io_out",
+      "io_port": 3320
+    },
+    "sbx-ef435762d85540aead78": {
+      "kind": "io_out",
+      "io_port": 3320
+    },
+    "sbx-64cea5d1bef64210b5e0": {
+      "kind": "io_out",
+      "io_port": 3320
+    },
+    "sbx-6bdd3989783c4c5d8fdf": {
+      "kind": "io_out",
+      "io_port": 3320
+    },
+    "sbx-0e9758b813974ead998f": {
+      "kind": "io_out",
+      "io_port": 3320
+    },
+    "sbx-9e16a59cd8a24099b9ca": {
+      "kind": "io_out",
+      "io_port": 3320
+    },
+    "sbx-126b95148f7640e390ad": {
+      "kind": "io_out",
+      "io_port": 3320
+    },
+    "sbx-ad1f905705c74475ba05": {
+      "kind": "io_out",
+      "io_port": 3320
+    },
+    "sbx-dd1b241de3554aa9ba20": {
+      "kind": "io_out",
+      "io_port": 3320
+    },
+    "sbx-11c8006269fb41a6baea": {
+      "kind": "io_out",
+      "io_port": 3320
+    },
+    "sbx-99d2b895b3a9468b89be": {
+      "kind": "io_out",
+      "io_port": 3320
+    },
+    "sbx-5f24147f6cf44c43ab4a": {
+      "kind": "io_out",
+      "io_port": 3320
+    }
+  },
+  "first_backend_cpu": {
+    "sbx-bca57c189207498e909c": {
+      "first_backend_cpu_ns": 182002681,
+      "first_backend_cpu_wall_ns": 184825408
+    },
+    "sbx-7eb0d2b9739940dfba57": {
+      "first_backend_cpu_ns": 197030497,
+      "first_backend_cpu_wall_ns": 209669724
+    },
+    "sbx-f84fbad2a0084d26a538": {
+      "first_backend_cpu_ns": 195778361,
+      "first_backend_cpu_wall_ns": 198587081
+    },
+    "sbx-7a6d213ff8094e32aeb6": {
+      "first_backend_cpu_ns": 195990899,
+      "first_backend_cpu_wall_ns": 199547923
+    },
+    "sbx-42c8e38ff86946aa9d33": {
+      "first_backend_cpu_ns": 197959524,
+      "first_backend_cpu_wall_ns": 200532991
+    },
+    "sbx-ef435762d85540aead78": {
+      "first_backend_cpu_ns": 185748710,
+      "first_backend_cpu_wall_ns": 187442604
+    },
+    "sbx-64cea5d1bef64210b5e0": {
+      "first_backend_cpu_ns": 187720714,
+      "first_backend_cpu_wall_ns": 187754491
+    },
+    "sbx-6bdd3989783c4c5d8fdf": {
+      "first_backend_cpu_ns": 192333911,
+      "first_backend_cpu_wall_ns": 193487003
+    },
+    "sbx-0e9758b813974ead998f": {
+      "first_backend_cpu_ns": 188400033,
+      "first_backend_cpu_wall_ns": 191297509
+    },
+    "sbx-9e16a59cd8a24099b9ca": {
+      "first_backend_cpu_ns": 181848462,
+      "first_backend_cpu_wall_ns": 183099550
+    },
+    "sbx-126b95148f7640e390ad": {
+      "first_backend_cpu_ns": 189588449,
+      "first_backend_cpu_wall_ns": 192029480
+    },
+    "sbx-ad1f905705c74475ba05": {
+      "first_backend_cpu_ns": 187423561,
+      "first_backend_cpu_wall_ns": 188359442
+    },
+    "sbx-dd1b241de3554aa9ba20": {
+      "first_backend_cpu_ns": 188700812,
+      "first_backend_cpu_wall_ns": 190098497
+    },
+    "sbx-11c8006269fb41a6baea": {
+      "first_backend_cpu_ns": 184577399,
+      "first_backend_cpu_wall_ns": 189272793
+    },
+    "sbx-99d2b895b3a9468b89be": {
+      "first_backend_cpu_ns": 181197033,
+      "first_backend_cpu_wall_ns": 211534003
+    },
+    "sbx-5f24147f6cf44c43ab4a": {
+      "first_backend_cpu_ns": 184887612,
+      "first_backend_cpu_wall_ns": 212784044
+    }
+  },
+  "stage_ids_match_passed_requests": true,
+  "cold_ids_match_passed_requests": true,
+  "dispatch_ids_match_passed_requests": true,
+  "first_exit_ids_match_passed_requests": true,
+  "first_cpu_ids_match_passed_requests": true
+}

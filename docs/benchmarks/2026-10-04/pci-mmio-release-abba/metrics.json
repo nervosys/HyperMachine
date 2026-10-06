@@ -1,0 +1,40 @@
+{
+  "mmio": {
+    "samples": 32,
+    "latencies": {
+      "create_ms": {
+        "p50": 22.499877,
+        "p95": 31.402687
+      },
+      "command_ms": {
+        "p50": 10.671447,
+        "p95": 18.876459
+      },
+      "total_ms": {
+        "p50": 33.588049,
+        "p95": 42.673536
+      }
+    },
+    "cpu_ms_per_operation": 36.875,
+    "held_pss_kib_p50": 75337
+  },
+  "pci": {
+    "samples": 32,
+    "latencies": {
+      "create_ms": {
+        "p50": 19.869066,
+        "p95": 24.314439
+      },
+      "command_ms": {
+        "p50": 10.243819,
+        "p95": 16.013045
+      },
+      "total_ms": {
+        "p50": 29.728199,
+        "p95": 41.708201
+      }
+    },
+    "cpu_ms_per_operation": 31.5625,
+    "held_pss_kib_p50": 76685
+  }
+}

@@ -1,0 +1,205 @@
+{
+  "groups": [
+    {
+      "concurrency": 1,
+      "engine": "hypermachine",
+      "batches": 100,
+      "attempts": 100,
+      "passed": 100,
+      "failed": 0,
+      "failure_rate": 0.0,
+      "readiness_ms": {
+        "n": 100,
+        "min": 370.3806360008457,
+        "max": 509.645078000176,
+        "mean": 402.61286322005617,
+        "p50": 398.1002390009962,
+        "p95": 440.8555069985596,
+        "p99": 457.8873789996578
+      },
+      "median_ready_attempts_per_second": 2.483310542120651,
+      "median_launch_spread_ms": 0.0,
+      "median_held_process_pss_mib": 183.0341796875,
+      "memory_measurement_batches": 100,
+      "node_initial_pss_mib": 6.8525390625
+    },
+    {
+      "concurrency": 1,
+      "engine": "firecracker",
+      "batches": 100,
+      "attempts": 100,
+      "passed": 100,
+      "failed": 0,
+      "failure_rate": 0.0,
+      "readiness_ms": {
+        "n": 100,
+        "min": 344.21919099986553,
+        "max": 428.1137319994741,
+        "mean": 373.6977676100287,
+        "p50": 371.1471260012331,
+        "p95": 400.6818090001616,
+        "p99": 415.57929900045565
+      },
+      "median_ready_attempts_per_second": 2.6740475972576254,
+      "median_launch_spread_ms": 0.0,
+      "median_held_process_pss_mib": 85.8984375,
+      "memory_measurement_batches": 100,
+      "node_initial_pss_mib": null
+    },
+    {
+      "concurrency": 8,
+      "engine": "hypermachine",
+      "batches": 25,
+      "attempts": 200,
+      "passed": 200,
+      "failed": 0,
+      "failure_rate": 0.0,
+      "readiness_ms": {
+        "n": 200,
+        "min": 444.53479799994966,
+        "max": 719.3534750003892,
+        "mean": 537.8696828900775,
+        "p50": 514.6128840005986,
+        "p95": 663.1775780006137,
+        "p99": 690.0315190014226
+      },
+      "median_ready_attempts_per_second": 12.221745944169594,
+      "median_launch_spread_ms": 1.2635610000870656,
+      "median_held_process_pss_mib": 918.5517578125,
+      "memory_measurement_batches": 25,
+      "node_initial_pss_mib": 7.0029296875
+    },
+    {
+      "concurrency": 8,
+      "engine": "firecracker",
+      "batches": 25,
+      "attempts": 200,
+      "passed": 200,
+      "failed": 0,
+      "failure_rate": 0.0,
+      "readiness_ms": {
+        "n": 200,
+        "min": 388.8713039996219,
+        "max": 610.9516590004205,
+        "mean": 457.97397039005773,
+        "p50": 427.5280429992563,
+        "p95": 573.475477998727,
+        "p99": 606.4398269991216
+      },
+      "median_ready_attempts_per_second": 13.95888267681844,
+      "median_launch_spread_ms": 5.752515999120078,
+      "median_held_process_pss_mib": 670.9775390625,
+      "memory_measurement_batches": 25,
+      "node_initial_pss_mib": null
+    },
+    {
+      "concurrency": 50,
+      "engine": "hypermachine",
+      "batches": 10,
+      "attempts": 500,
+      "passed": 500,
+      "failed": 0,
+      "failure_rate": 0.0,
+      "readiness_ms": {
+        "n": 500,
+        "min": 1384.8048119998566,
+        "max": 4914.073083000403,
+        "mean": 3183.3260291980114,
+        "p50": 3219.5098280008096,
+        "p95": 4591.532839000138,
+        "p99": 4892.712138000206
+      },
+      "median_ready_attempts_per_second": 14.862704743052175,
+      "median_launch_spread_ms": 39.58659850013646,
+      "median_held_process_pss_mib": 4315.470703125,
+      "memory_measurement_batches": 10,
+      "node_initial_pss_mib": 7.0009765625
+    },
+    {
+      "concurrency": 50,
+      "engine": "firecracker",
+      "batches": 10,
+      "attempts": 500,
+      "passed": 500,
+      "failed": 0,
+      "failure_rate": 0.0,
+      "readiness_ms": {
+        "n": 500,
+        "min": 724.4312330003595,
+        "max": 2800.2921730003436,
+        "mean": 2493.719309242002,
+        "p50": 2560.559741999896,
+        "p95": 2746.567955999126,
+        "p99": 2778.062071000022
+      },
+      "median_ready_attempts_per_second": 18.231777320559925,
+      "median_launch_spread_ms": 51.26554449907417,
+      "median_held_process_pss_mib": 4180.95068359375,
+      "memory_measurement_batches": 10,
+      "node_initial_pss_mib": null
+    },
+    {
+      "concurrency": 100,
+      "engine": "hypermachine",
+      "batches": 10,
+      "attempts": 1000,
+      "passed": 1000,
+      "failed": 0,
+      "failure_rate": 0.0,
+      "readiness_ms": {
+        "n": 1000,
+        "min": 3154.5210860003863,
+        "max": 10890.475063999475,
+        "mean": 6402.645691671012,
+        "p50": 6466.881800999545,
+        "p95": 10046.072293998805,
+        "p99": 10709.992083000543
+      },
+      "median_ready_attempts_per_second": 14.671452902830879,
+      "median_launch_spread_ms": 102.82599349920929,
+      "median_held_process_pss_mib": 8568.4990234375,
+      "memory_measurement_batches": 10,
+      "node_initial_pss_mib": 6.9912109375
+    },
+    {
+      "concurrency": 100,
+      "engine": "firecracker",
+      "batches": 10,
+      "attempts": 1000,
+      "passed": 1000,
+      "failed": 0,
+      "failure_rate": 0.0,
+      "readiness_ms": {
+        "n": 1000,
+        "min": 2575.461554000867,
+        "max": 7224.072420000084,
+        "mean": 5548.563851214989,
+        "p50": 5450.957827999446,
+        "p95": 7019.59012900079,
+        "p99": 7175.850513000114
+      },
+      "median_ready_attempts_per_second": 17.550671993985326,
+      "median_launch_spread_ms": 107.80785999941145,
+      "median_held_process_pss_mib": 8360.36328125,
+      "memory_measurement_batches": 10,
+      "node_initial_pss_mib": null
+    }
+  ],
+  "provenance_verified": true,
+  "analysis_sha256": "9d99877c9a9db9c0470cb61da321e7953c9e415782870a35aea42f161fe6eb9a",
+  "raw_sha256": {
+    "local-engines-bursts-c1-100.json": "3a7aeb28b04a020b06c5197d833cfed459896f2297fd839935f4200ca619d6ac",
+    "local-engines-bursts-c8-25.json": "fccc99bca37a1fdbe3ad0b94456715dd5c577f534864614f2be2565b046ba028",
+    "local-engines-bursts-c50-10.json": "1ad600e6940466baf5e585199b16dd42935bebbada5a42b03eaf1f44d03eb523",
+    "local-engines-bursts-c100-10.json": "d6acf973b0916128d433608fc41cd3046fd9ea5d42912067b7ac5b0094bfbfb6"
+  },
+  "artifact_sha256": {
+    "hypermachine": "8ea52a369067d99f281b96bc513c59216304ac8e7eea0462d746f854e9d7aa5d",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "harness": "efbddbf1380dbcbdc06398fddd446bcd59f9f4f582384535377514d12ea307bf",
+    "shared_harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "firecracker_harness": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6"
+  }
+}

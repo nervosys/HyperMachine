@@ -1,0 +1,129 @@
+{
+  "paused_state_mode": "shared-store",
+  "inputs_sha256": {
+    "/var/tmp/hm-unnamed-fault-node-v1": "2f6995e5fd56269cd331571c42e8d241fd9b202fc2638b9a8ffc2a101dda89fc",
+    "/var/tmp/hm-recovery-control-v1": "8923199746c8cf96cbd08d884a7b1d831a99d3cd4a1bc9a3d4934fd7fe655aec",
+    "/var/tmp/hm-recovery-cli-v1": "3884553326a49f440f75f876c7598ec395d527e836b40f93fb4fe2bf4cf2444e",
+    "/var/tmp/hm-competitive/bzImage-known-uart-irq": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "/var/tmp/hm-tcp-capacity-guest-v1.cpio.gz": "a00cd88d52f5f0788b2113e26bf3bc45c66569b6dee21400aaaf5c9b12d29b7d",
+    "/var/tmp/hm-owner-adoption-gateway-v3": "8a6d2af7afca806d974697e55db8ca7be792808ea4ff352f370f93cb4bba42ad",
+    "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/check-udp-cluster-kvm.py": "e3efb2f07b0a3b54d877f2a3c16f5db162d296ebdaba5a3faccb414a07eedccc"
+  },
+  "checks": [
+    "Node mTLS refuses a peer without a client certificate",
+    "CLI refuses untrusted control certificate and trusted wrong hostname",
+    "Valid mTLS node peers cannot create with forged owner context and missing or wrong cluster credentials",
+    "Initial unnamed Redis refusal preserves one KVM guest and CLI explicit-node recovery works with missing SET record or committed XADD record, exact execution and deletion",
+    "Shipped CLI V2 creation records the configured creator before public port management",
+    "Wrong control-plane API key refused",
+    "Empty binary and maximum-size IPv4 datagrams verified through real KVM",
+    "Oversized frame closes its real guest session without preventing a fresh valid session",
+    "2 CLI peers preserve empty binary and maximum-size datagrams through real control plane Redis node and KVM",
+    "Public port first reservation listing and removal refuse wrong observer inventory unassigned legacy principals and ownerless VMs",
+    "Native gateway real KVM TCP preserves 1 MiB and 2 UDP peers preserve empty binary and maximum datagrams on one public port",
+    "Authenticated policy creator overrides forged client context; two real KVM forks inherit owner without inheriting the source native allocation",
+    "Native real guest protocol updates retain public port and close old TCP",
+    "Owner API listing bounded pool invalid port and actual key rotation preserve VM ownership and allocation",
+    "Owner API removal closes live native sessions and reexposure publishes actual TCP UDP on reserved port",
+    "Shipped CLI exposes lists removes defaults to TCP updates to both and enforces owner and rotated credential refusals through real KVM",
+    "Pause closes existing UDP session",
+    "Real guest pause closes native sessions and preserves exact public reservation",
+    "Shipped CLI recovers through explicit registered node and administrator API; observer inventory sandbox scopes unknown node and cleared-marker replay refuse",
+    "Real Redis XADD refusal preserves resumed KVM guest, blocks pause and unauthorized reconciliation, and authenticated recovery publishes running owner record",
+    "Resumed guest accepts a new UDP session",
+    "Actual KVM pause and resume preserve trusted owner identity",
+    "Real guest resume restores native TCP and UDP on same reserved port",
+    "Delete closes UDP session and clears guest inventory",
+    "Real guest deletion removes native allocation and closes native sessions; gateway stops gracefully"
+  ],
+  "daemon_reaped": true,
+  "guests_remaining": 0,
+  "control_and_redis_reaped": true,
+  "cli_reaped": true,
+  "native_gateway_reaped": true,
+  "native_gateway_real_kvm": true,
+  "owner_public_port_api_real_kvm": true,
+  "owner_public_port_cli_real_kvm": true,
+  "native_udp_capacity": null,
+  "cross_node_adoption": null,
+  "native_port_migration": null,
+  "native_resources": [],
+  "secondary_node_reaped": true,
+  "trusted_owner_context": [
+    {
+      "phase": "created-despite-client-forgery",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "cli-created",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "fork-inherits-source-owner",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "fork-inherits-source-owner",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "key-rotated",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "paused",
+      "owner_id": "owned-principal-a"
+    },
+    {
+      "phase": "resumed",
+      "owner_id": "owned-principal-a"
+    }
+  ],
+  "guest_owner_from_store_at_creation": "owned-principal-a",
+  "native_cli_comparison": [],
+  "host_build_profile_declared": "development",
+  "guest_resources_from_inventory": {
+    "cpuCount": 1,
+    "memoryMB": 1024
+  },
+  "host_environment": {
+    "kernel": "6.18.33.2-microsoft-standard-WSL2",
+    "machine": "x86_64",
+    "logical_cpus": 24,
+    "affinity_cpus": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23
+    ],
+    "requested_affinity_cpus": null,
+    "python": "3.13.5"
+  },
+  "native_cli_comparison_scope": "Unrestricted current CPU affinity. Internal paths; both processes remain live in every ABBA block; native TCP idle; one outstanding datagram per peer; no timed retries; operator-declared build profile; not competitor evidence.",
+  "guest_udp_ipv6": false,
+  "local_udp_ipv6": false,
+  "control_api_tls": true,
+  "node_mtls": true,
+  "latency_measurements": [],
+  "scope": "Owned shipped CLI/control-plane/Redis/daemon/KVM UDP; optional verified API TLS/node mTLS; Redis local plaintext."
+}

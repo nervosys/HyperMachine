@@ -1,0 +1,233 @@
+{
+  "client_arch": "x86_64",
+  "client_debug_assertions": true,
+  "client_os": "windows",
+  "client_version": "1.1.0",
+  "completed_lifecycles_per_second": 22.504607537085626,
+  "concurrency": 8,
+  "create_ms": {
+    "max": 242.3373,
+    "mean": 174.943995,
+    "min": 127.48200000000001,
+    "n": 20,
+    "p50": 158.54190000000003,
+    "p95": 239.4136,
+    "p99": 242.3373
+  },
+  "elapsed_seconds": 0.8887069,
+  "environment": "AMD Ryzen 9 9900X, 24 logical CPUs; WSL2 Debian Linux 6.18.33.2, nested Hyper-V/KVM; 45.9 GiB guest host RAM; base BusyBox/static-agent guest 1 vCPU 1024 MiB; kernel sha256 0e1962a290ad92bff749d3b736001c2f22782fcbcaf716ecff0db6543631adc2; initrd sha256 2f4f9b4dbc0b026e99ae1e299e3f221d9ac7b2c53f42ad1f963816426d9bc294; daemon release based on 2dbf31f, client Windows debug with working-tree metadata fixes; other host workloads active; templates prewarmed, no warmups discarded; no guest networking; diagnostic repeat with strict template policy dbd0bd3 and file-transfer working tree; server template metadata verified; hv2_sandboxd debug stage timing enabled, core warn; host workload availability changed since initial cohorts; real authenticated control API and Redis 8.0.2 fixture; node-advertised template metadata; control template/checkpoint working tree based on 1f98d79; freshly booted WSL2, no other busy Linux processes observed at precheck; this is a diagnostic cohort",
+  "exec_ms": {
+    "max": 106.17110000000001,
+    "mean": 59.350210000000004,
+    "min": 24.5791,
+    "n": 20,
+    "p50": 53.8699,
+    "p95": 90.1222,
+    "p99": 106.17110000000001
+  },
+  "failed_samples": 0,
+  "finished_at": "2026-09-30T17:40:21.423488500+00:00",
+  "max_p99_ready_ms": null,
+  "readiness": "creation followed by /bin/sh producing a checked unique marker",
+  "ready_ms": {
+    "max": 325.5508,
+    "mean": 234.29858000000004,
+    "min": 181.2643,
+    "n": 20,
+    "p50": 223.1473,
+    "p95": 305.19800000000004,
+    "p99": 325.5508
+  },
+  "requested_samples": 20,
+  "require_snapshot": true,
+  "samples": [
+    {
+      "create_ms": 239.4136,
+      "exec_ms": 86.13250000000001,
+      "index": 0,
+      "ready_ms": 325.5508,
+      "sandbox_id": "sbx-e73159b292454dbeb26c",
+      "success": true
+    },
+    {
+      "create_ms": 158.54190000000003,
+      "exec_ms": 42.748000000000005,
+      "index": 1,
+      "ready_ms": 201.29330000000002,
+      "sandbox_id": "sbx-316325b6006f4a3b91ed",
+      "success": true
+    },
+    {
+      "create_ms": 213.1672,
+      "exec_ms": 57.3744,
+      "index": 2,
+      "ready_ms": 270.55010000000004,
+      "sandbox_id": "sbx-bbeaf86a343f45a7bf8f",
+      "success": true
+    },
+    {
+      "create_ms": 215.4865,
+      "exec_ms": 89.71,
+      "index": 3,
+      "ready_ms": 305.19800000000004,
+      "sandbox_id": "sbx-82888b9f9f704fa19570",
+      "success": true
+    },
+    {
+      "create_ms": 160.4488,
+      "exec_ms": 53.8699,
+      "index": 4,
+      "ready_ms": 214.32219999999998,
+      "sandbox_id": "sbx-d59aa38a8059447191c9",
+      "success": true
+    },
+    {
+      "create_ms": 147.87130000000002,
+      "exec_ms": 106.17110000000001,
+      "index": 5,
+      "ready_ms": 254.0498,
+      "sandbox_id": "sbx-8cfa82617bff4416ae63",
+      "success": true
+    },
+    {
+      "create_ms": 148.43300000000002,
+      "exec_ms": 90.1222,
+      "index": 6,
+      "ready_ms": 238.5576,
+      "sandbox_id": "sbx-df335d4fa92841e1a00a",
+      "success": true
+    },
+    {
+      "create_ms": 215.0487,
+      "exec_ms": 57.092999999999996,
+      "index": 7,
+      "ready_ms": 272.144,
+      "sandbox_id": "sbx-d4feb0b45948429dbcaa",
+      "success": true
+    },
+    {
+      "create_ms": 148.8403,
+      "exec_ms": 70.65870000000001,
+      "index": 8,
+      "ready_ms": 219.507,
+      "sandbox_id": "sbx-0d8b072ae73e4b33a0b7",
+      "success": true
+    },
+    {
+      "create_ms": 142.5049,
+      "exec_ms": 45.910199999999996,
+      "index": 9,
+      "ready_ms": 188.42020000000002,
+      "sandbox_id": "sbx-7fc839b3bf054aab9479",
+      "success": true
+    },
+    {
+      "create_ms": 143.0539,
+      "exec_ms": 46.701899999999995,
+      "index": 10,
+      "ready_ms": 189.7583,
+      "sandbox_id": "sbx-85ed37f294074b1c8887",
+      "success": true
+    },
+    {
+      "create_ms": 143.18110000000001,
+      "exec_ms": 46.0157,
+      "index": 11,
+      "ready_ms": 189.1993,
+      "sandbox_id": "sbx-701a6679c719469d8f19",
+      "success": true
+    },
+    {
+      "create_ms": 131.87550000000002,
+      "exec_ms": 63.5145,
+      "index": 12,
+      "ready_ms": 195.3949,
+      "sandbox_id": "sbx-26c98b90125e423d91d5",
+      "success": true
+    },
+    {
+      "create_ms": 149.9395,
+      "exec_ms": 46.0869,
+      "index": 13,
+      "ready_ms": 196.0315,
+      "sandbox_id": "sbx-ae12b4f85b7b428cb3fa",
+      "success": true
+    },
+    {
+      "create_ms": 127.48200000000001,
+      "exec_ms": 53.7768,
+      "index": 14,
+      "ready_ms": 181.2643,
+      "sandbox_id": "sbx-c6f0a14c736f47e5b66a",
+      "success": true
+    },
+    {
+      "create_ms": 195.0867,
+      "exec_ms": 75.56,
+      "index": 15,
+      "ready_ms": 270.6491,
+      "sandbox_id": "sbx-11fe3423a1a84834ac80",
+      "success": true
+    },
+    {
+      "create_ms": 242.3373,
+      "exec_ms": 33.995999999999995,
+      "index": 16,
+      "ready_ms": 276.33930000000004,
+      "sandbox_id": "sbx-f623d46c08d642c6a881",
+      "success": true
+    },
+    {
+      "create_ms": 166.83239999999998,
+      "exec_ms": 56.309900000000006,
+      "index": 17,
+      "ready_ms": 223.1473,
+      "sandbox_id": "sbx-e494992e15b645a6b441",
+      "success": true
+    },
+    {
+      "create_ms": 207.4738,
+      "exec_ms": 40.6734,
+      "index": 18,
+      "ready_ms": 248.1495,
+      "sandbox_id": "sbx-1f4114a5cff548bc9723",
+      "success": true
+    },
+    {
+      "create_ms": 201.8615,
+      "exec_ms": 24.5791,
+      "index": 19,
+      "ready_ms": 226.4451,
+      "sandbox_id": "sbx-f3ee873f39514561add9",
+      "success": true
+    }
+  ],
+  "schema_version": 1,
+  "successful_samples": 20,
+  "template": "base",
+  "template_metadata": {
+    "aliases": [
+      "base"
+    ],
+    "buildID": "base",
+    "buildStatus": "ready",
+    "cpuCount": 1,
+    "memoryMB": 1024,
+    "nodeIDs": [
+      "competitive-node"
+    ],
+    "nodes": [
+      {
+        "cpuCount": 1,
+        "memoryMB": 1024,
+        "nodeID": "competitive-node",
+        "snapshot": true
+      }
+    ],
+    "public": false,
+    "snapshot": true,
+    "templateID": "base"
+  },
+  "template_metadata_error": null,
+  "threshold_passed": null
+}

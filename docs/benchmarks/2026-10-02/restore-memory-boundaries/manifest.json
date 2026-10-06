@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "diagnostic_only": true,
+  "files": {
+    "README.md": "db9fd982e03bb9e3159d0a859d93c9a7ede41a955cf7e696639bb113842e3521",
+    "activated-analysis.json": "28d75e53340845a44d647bdfaf1b21e88ce5850e6380d6ef33cabd8830c76dc2",
+    "activated-check-linux.log": "7637f32f8e49cacb5b774a0879cb060c18a0eba486f75f51e124d0ae2ffda954",
+    "activated-report.json": "16c6d05926eb4d22708c51e95daee2c3b9b6826e2af5a70c6fcb5490fac5384d",
+    "activated-run.log": "056ec0345ff3d8d042d20fd6ff5b7429b3adda3a22f9964327bca0bdc2d58ff2",
+    "binary.sha256": "2b058631b00325bf2c1fb64d0fe37b2df1ab6a67bc76e6b00a8eb57c9ff60c82",
+    "boundaries.patch": "1141738dc4de9797567471f41de8d290463e2c572a2ab41215b51f4937b3d0f0",
+    "build-context.json": "27d5727afde876c3a8455d9af0b0f10c6ea8ef1d8e294ce03e65dc7d2f743831",
+    "build.log": "62aa7d0cbb1a588861b4ffaf0387394d02ddae6ae1e13dcb9684d15edb3d7ff1",
+    "check-linux.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "clippy-linux.log": "48aebf04139ccc1d02507cbfd44a524679b383eb0cc304ccbd3871691c9238a0",
+    "diagnostic-source/crates/hv2-agent/src/agent_vm.rs": "46b7fbe8040adde2d8015a22354b7038ecd9b4ce1d11bb1b0bc2d4d49b93776b",
+    "diagnostic-source/crates/hv2-core/src/vm.rs": "167111c02bb1d964516f719c840bb62bf5820f347ae64cfa1a83ba3c646732e5",
+    "report.json": "6dc5d36dd7076817abed36be7fe126ed9fb8afbfbf6e2ef89467906160c2bc22",
+    "run.log": "056ec0345ff3d8d042d20fd6ff5b7429b3adda3a22f9964327bca0bdc2d58ff2",
+    "source-context.json": "fd911460cc5beae6570fb5e6313e8b3dc7867716239e1e67ffd9cae209c7cfec",
+    "tools/analyze-prepared-engines.py": "b2a9934f2a22aa250aa5340c83cc800753d56354de6784e64b545ed3e8a2116b",
+    "tools/analyze-restore-memory-boundaries.py": "b7b1b283983dcb70db11b1c27022152f395e5d4c3eaaf54288f988ef8e3a3be8",
+    "tools/bench-firecracker-local.py": "0bcdc13351d54d4c9658bf034aa97f7d86d96d99375a2df04e4c94eaf8d3b610",
+    "tools/bench-local-engines.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "tools/bench-prepared-engines.py": "b4259781bd3b448a5eb28a54a2a3686c06f677c4b2581331e611f5a486700935",
+    "tools/bench-restore-memory-boundaries.py": "3bcd101168bba2d5b0325969b0068bdbd89631648aa14d3d4017c915360bb422",
+    "tools/check-restore-memory-boundaries.py": "e55d94b9e560b9842fffd451ebb524880422d2251bad1f32e46f5322678f7e69",
+    "tools/experiment-restore-memory-boundaries.py": "5685cfc6f3dbf0b8e4a1b6a8614c949750279dceb12b9478385f793575f8a058"
+  }
+}

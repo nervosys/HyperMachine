@@ -1,0 +1,15 @@
+   Compiling hv2-cluster v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-cluster)
+    Finished `test` profile [optimized + debuginfo] target(s) in 18.40s
+     Running unittests src/lib.rs (/var/tmp/hm-object-backup/target/debug/deps/hv2_cluster-39b572a236a06967)
+
+running 7 tests
+test private_node::tests::leased_stream_refuses_revoked_source_and_releases_activity ... ok
+test private_node::tests::node_urls_are_https_origins_without_target_or_credentials ... ok
+test private_node::tests::target_requires_current_source_incarnation_lease_and_safe_destination_origin ... ok
+test private_node::tests::mutual_tls_private_upgrade_preserves_context_early_and_binary_bytes ... ok
+test private_node::tests::private_transport_refuses_bad_cert_anonymous_peer_bad_token_and_wrong_upgrade ... ok
+test private_node::tests::changes_during_private_upgrade_refuse_stale_claims_and_release_lease ... ok
+test private_node::tests::stalled_private_upgrade_times_out_and_releases_source_lease ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 100 filtered out; finished in 15.00s
+

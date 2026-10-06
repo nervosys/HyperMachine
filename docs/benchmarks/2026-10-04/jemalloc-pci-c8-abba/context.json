@@ -1,0 +1,50 @@
+{
+  "inputs_sha256": {
+    "hypermachine": "5d136c14b7ac36bd23af194ea82e844573a3ca18bfa7640e8e3d5e669db80f23",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "order": [
+    false,
+    true,
+    true,
+    false
+  ],
+  "argv_base": [
+    "python3",
+    "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/bench-local-engines-concurrent.py",
+    "--environment",
+    "owned WSL KVM PCI C8 glibc/jemalloc/jemalloc/glibc; background purge and one-second decay candidate; matched fixed inputs",
+    "--daemon-guest-transport",
+    "pci",
+    "--concurrency",
+    "8",
+    "--pairs",
+    "4",
+    "--memory-idle-seconds",
+    "5",
+    "--hypermachine",
+    "/var/tmp/hm-pci-fastboot-release-node-v1",
+    "--firecracker",
+    "/var/tmp/hm-competitive/firecracker/firecracker-v1.17.0-x86_64",
+    "--kernel",
+    "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+    "--initrd",
+    "/var/tmp/hm-competitive/guest-output-drain.cpio.gz"
+  ],
+  "jemalloc_library_path": "/var/tmp/hm-jemalloc-pci-c8-abba-v1-xq5abqq9/libjemalloc.so.2",
+  "jemalloc_library_sha256": "51952ffe97354b56197c9b765582023d435cfbe1930b0c03b778bdb5faa1fff5",
+  "jemalloc_package": "libjemalloc2:amd64 5.3.0-3",
+  "jemalloc_conf": "abort_conf:true,background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:1000"
+}

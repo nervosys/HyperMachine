@@ -1,0 +1,9 @@
+{
+  "sha256": {
+    "build.log": "88cc5a36ea5c40c99a142082eeb9fc65c87a92d25a89e3935ccf56eea4255ae4",
+    "cli.json": "c736d3003a4ddf06a30751cf54273f42d4e5924ed07473299c958aa9a0d09c08",
+    "main.rs": "d651189c50ee48b8362d8e779796543736a7a2cde15de77adeea3d1bb25d1029",
+    "README.md": "490232c3b3a92bf8695fe60d77aa0703d9a3bd2bcf2cec238265b1f9d16fa325",
+    "tests.log": "88d4094fcc6c06b23f5e8ca42aa99aa8ce503ce1b0ac6685fbb6b038d1757ef0"
+  }
+}

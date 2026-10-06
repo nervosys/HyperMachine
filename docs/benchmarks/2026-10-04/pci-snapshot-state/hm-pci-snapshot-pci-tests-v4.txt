@@ -1,0 +1,111 @@
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-core)
+error[E0308]: mismatched types
+    --> crates/hv2-core/src/pci/config.rs:1060:26
+     |
+1060 |         source.write_u16(registers::COMMAND, 7);
+     |                --------- ^^^^^^^^^^^^^^^^^^ expected `u16`, found `u8`
+     |                |
+     |                arguments to this method are incorrect
+     |
+note: method defined here
+    --> crates/hv2-core/src/pci/config.rs:510:12
+     |
+ 510 |     pub fn write_u16(&mut self, offset: u16, value: u16) {
+     |            ^^^^^^^^^            -----------
+help: you can convert a `u8` to a `u16`
+     |
+1060 |         source.write_u16(registers::COMMAND.into(), 7);
+     |                                            +++++++
+
+error[E0308]: mismatched types
+    --> crates/hv2-core/src/pci/config.rs:1062:26
+     |
+1062 |         source.write_u32(registers::BAR0, 0xd0010000);
+     |                --------- ^^^^^^^^^^^^^^^ expected `u16`, found `u8`
+     |                |
+     |                arguments to this method are incorrect
+     |
+note: method defined here
+    --> crates/hv2-core/src/pci/config.rs:523:12
+     |
+ 523 |     pub fn write_u32(&mut self, offset: u16, value: u32) {
+     |            ^^^^^^^^^            -----------
+help: you can convert a `u8` to a `u16`
+     |
+1062 |         source.write_u32(registers::BAR0.into(), 0xd0010000);
+     |                                         +++++++
+
+error[E0308]: mismatched types
+    --> crates/hv2-core/src/pci/config.rs:1063:26
+     |
+1063 |         source.write_u32(registers::BAR0, u32::MAX);
+     |                --------- ^^^^^^^^^^^^^^^ expected `u16`, found `u8`
+     |                |
+     |                arguments to this method are incorrect
+     |
+note: method defined here
+    --> crates/hv2-core/src/pci/config.rs:523:12
+     |
+ 523 |     pub fn write_u32(&mut self, offset: u16, value: u32) {
+     |            ^^^^^^^^^            -----------
+help: you can convert a `u8` to a `u16`
+     |
+1063 |         source.write_u32(registers::BAR0.into(), u32::MAX);
+     |                                         +++++++
+
+error[E0308]: mismatched types
+    --> crates/hv2-core/src/pci/config.rs:1070:36
+     |
+1070 |         assert_eq!(target.read_u16(registers::COMMAND), 7);
+     |                           -------- ^^^^^^^^^^^^^^^^^^ expected `u16`, found `u8`
+     |                           |
+     |                           arguments to this method are incorrect
+     |
+note: method defined here
+    --> crates/hv2-core/src/pci/config.rs:458:12
+     |
+ 458 |     pub fn read_u16(&self, offset: u16) -> u16 {
+     |            ^^^^^^^^        -----------
+help: you can convert a `u8` to a `u16`
+     |
+1070 |         assert_eq!(target.read_u16(registers::COMMAND.into()), 7);
+     |                                                      +++++++
+
+error[E0308]: mismatched types
+    --> crates/hv2-core/src/pci/config.rs:1072:29
+     |
+1072 |             target.read_u32(registers::BAR0),
+     |                    -------- ^^^^^^^^^^^^^^^ expected `u16`, found `u8`
+     |                    |
+     |                    arguments to this method are incorrect
+     |
+note: method defined here
+    --> crates/hv2-core/src/pci/config.rs:469:12
+     |
+ 469 |     pub fn read_u32(&self, offset: u16) -> u32 {
+     |            ^^^^^^^^        -----------
+help: you can convert a `u8` to a `u16`
+     |
+1072 |             target.read_u32(registers::BAR0.into()),
+     |                                            +++++++
+
+error[E0308]: mismatched types
+    --> crates/hv2-core/src/pci/config.rs:1073:29
+     |
+1073 |             source.read_u32(registers::BAR0)
+     |                    -------- ^^^^^^^^^^^^^^^ expected `u16`, found `u8`
+     |                    |
+     |                    arguments to this method are incorrect
+     |
+note: method defined here
+    --> crates/hv2-core/src/pci/config.rs:469:12
+     |
+ 469 |     pub fn read_u32(&self, offset: u16) -> u32 {
+     |            ^^^^^^^^        -----------
+help: you can convert a `u8` to a `u16`
+     |
+1073 |             source.read_u32(registers::BAR0.into())
+     |                                            +++++++
+
+For more information about this error, try `rustc --explain E0308`.
+error: could not compile `hv2-core` (lib test) due to 6 previous errors

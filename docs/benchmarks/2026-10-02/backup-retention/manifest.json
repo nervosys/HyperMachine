@@ -1,0 +1,14 @@
+{
+  "tests_per_platform": 14,
+  "owned_emulator_checks": 6,
+  "managed_storage_verified": false,
+  "sha256": {
+    "check-backup-retention.py": "f833da5e12a08853f804fca420e22c5625aebd18bf87c122aacb15cf02e8c1a0",
+    "emulator-report.json": "c41ad284062e66aa3a816f2286465b487dba5765c2aa294a7a39d722e3ad29f3",
+    "README.md": "fd7de7ae9fa03f8459d794dbe287e8ace832d2c10a19284f0492ba600b59e474",
+    "retain-object-backups.py": "5dc3efa5ddfd9914ef5bb7b6cbe930a89bd39e13bf3d210339fb1af1028b9be2",
+    "test-retain-object-backups.py": "8048048eeed288112cba619358f6928b8d95e73d9af1d7bb6edec6ba02fabeb1",
+    "tests-linux.log": "04fb4299519536b8f72224da6ed4dfe08d5d30f7b5b465eaaf1a9282d5f4854c",
+    "tests-windows.log": "d43426b95ce8061108366e878fa4fcae31c6422eab0ba31154e2dddd7f539b83"
+  }
+}

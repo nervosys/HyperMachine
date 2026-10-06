@@ -1,0 +1,53 @@
+diff --git a/crates/hv2-sandboxd/src/main.rs b/crates/hv2-sandboxd/src/main.rs
+index ca4b552..19ac12c 100644
+--- a/crates/hv2-sandboxd/src/main.rs
++++ b/crates/hv2-sandboxd/src/main.rs
+@@ -903,8 +903,19 @@ async fn set_timeout(
+     Path(sandbox_id): Path<String>,
+     Json(req): Json<TimeoutRequest>,
+ ) -> Response {
++    let lock = transition_lock(&state, &sandbox_id);
++    let _held = lock.lock().await;
+     let record = {
+         let mut sandboxes = state.sandboxes.lock();
++        if sandboxes
++            .get(&sandbox_id)
++            .is_some_and(|live| live.pending_registration.is_some())
++        {
++            return api_error(
++                StatusCode::CONFLICT,
++                "reconcile registration before changing timeout",
++            );
++        }
+         sandboxes.get_mut(&sandbox_id).map(|live| {
+             live.record.end_at_ms = now_ms() + req.timeout.min(MAX_TIMEOUT_SECS) * 1000;
+             live.record.clone()
+@@ -2239,6 +2250,12 @@ async fn pause_sandbox(
+         let mut sandboxes = state.sandboxes.lock();
+         match sandboxes.get(sandbox_id) {
+             None => return Err((StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}"))),
++            Some(live) if live.pending_registration.is_some() => {
++                return Err((
++                    StatusCode::CONFLICT,
++                    "reconcile registration before pausing".into(),
++                ));
++            }
+             // Chosen as idle, and a request arrived since: it is not idle,
+             // and making room is not worth cutting that request off. Asked
+             // for by name, a pause goes ahead regardless, as E2B's does.
+@@ -2558,6 +2575,15 @@ async fn fork_route(
+         let _held = lock.lock().await;
+         let source = {
+             let sandboxes = state.sandboxes.lock();
++            if sandboxes
++                .get(&sandbox_id)
++                .is_some_and(|live| live.pending_registration.is_some())
++            {
++                return api_error(
++                    StatusCode::CONFLICT,
++                    "reconcile registration before forking",
++                );
++            }
+             sandboxes.get(&sandbox_id).map(|live| {
+                 (
+                     Arc::clone(&live.vm),

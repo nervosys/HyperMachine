@@ -1,0 +1,57 @@
+{
+  "success": true,
+  "purpose": "owned functional verification; no performance comparison",
+  "artifact_sha256": {
+    "daemon": "06536b7df41e510d1cd868b9b5f83b49115b84cf93b1c57184b13c0185c1c0ce",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "no_agent_initrd": "ba6454e28b54c21459399120c4c666fd8756c9ef2e3dd70e02b20a15fce3ff54",
+    "coordinator": "0bcd02a1bb2ccb787508ba9e8e1b255dec92d8327e4dd366523ef5857d089b88"
+  },
+  "checks": [
+    "invalid limit 0",
+    "invalid limit 1025",
+    "invalid limit -1",
+    "invalid limit bad",
+    "bounded",
+    "failure-release"
+  ],
+  "cleanup_errors": [],
+  "processes_stopped": [
+    {
+      "phase": "bounded",
+      "exit_code": 0
+    },
+    {
+      "phase": "failure-release",
+      "exit_code": 0
+    }
+  ],
+  "heap_reclaim_interval_ms": 250,
+  "bounded": {
+    "acquired": 8,
+    "released": 8,
+    "maximum_observed": 2
+  },
+  "bounded-reclaim": {
+    "calls": 4,
+    "busy_skips": 10,
+    "overlaps": 0
+  },
+  "restore_bypass_verified": true,
+  "owned_cold_image_replacement": {
+    "before": "ba6454e28b54c21459399120c4c666fd8756c9ef2e3dd70e02b20a15fce3ff54",
+    "after": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "failure-release": {
+    "acquired": 2,
+    "released": 2,
+    "maximum_observed": 1
+  },
+  "failure-release-reclaim": {
+    "calls": 3,
+    "busy_skips": 64,
+    "overlaps": 0
+  },
+  "artifacts_unchanged": true
+}

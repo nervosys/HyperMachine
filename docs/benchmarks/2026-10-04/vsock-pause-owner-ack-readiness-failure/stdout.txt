@@ -1,0 +1,23 @@
+Traceback (most recent call last):
+  File "/var/tmp/hm-pause-owner-ack-observe-checker-v2.py", line 2199, in <module>
+    main()
+    ~~~~^^
+  File "/var/tmp/hm-pause-owner-ack-observe-checker-v2.py", line 2078, in main
+    api('POST', f'/sandboxes/{sandbox}/resume', {})
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/var/tmp/hm-pause-owner-ack-observe-checker-v2.py", line 193, in api
+    with opener.open(request, timeout=90) as response:
+         ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/urllib/request.py", line 495, in open
+    response = meth(req, response)
+  File "/usr/lib/python3.13/urllib/request.py", line 604, in http_response
+    response = self.parent.error(
+        'http', request, response, code, msg, hdrs)
+  File "/usr/lib/python3.13/urllib/request.py", line 533, in error
+    return self._call_chain(*args)
+           ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/usr/lib/python3.13/urllib/request.py", line 466, in _call_chain
+    result = func(*args)
+  File "/usr/lib/python3.13/urllib/request.py", line 613, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 503: Service Unavailable

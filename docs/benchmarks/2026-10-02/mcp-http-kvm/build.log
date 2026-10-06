@@ -1,0 +1,52 @@
+   Compiling bitflags v2.13.2
+   Compiling digest v0.11.3
+   Compiling once_cell v1.21.4
+   Compiling utf8parse v0.2.2
+   Compiling rustls v0.23.45
+   Compiling tower v0.5.3
+   Compiling chrono v0.4.45
+   Compiling anstyle v1.0.14
+   Compiling siphasher v1.0.3
+   Compiling colorchoice v1.0.5
+   Compiling anstyle-query v1.1.5
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling hyper-util v0.1.21
+   Compiling chrono-tz v0.10.4
+   Compiling clap_lex v1.1.0
+   Compiling strsim v0.11.1
+   Compiling rustix v1.1.4
+   Compiling clap_derive v4.6.7
+   Compiling option-ext v0.2.0
+   Compiling linux-raw-sys v0.12.1
+   Compiling tokio-stream v0.1.19
+   Compiling fastrand v2.5.0
+   Compiling colored v2.2.0
+   Compiling dirs-sys v0.4.1
+   Compiling anstyle-parse v1.0.0
+   Compiling const-random-macro v0.1.16
+   Compiling hmac v0.13.0
+   Compiling sha3 v0.11.0
+   Compiling sha2 v0.11.0
+   Compiling phf_shared v0.12.1
+   Compiling tower-http v0.7.1
+   Compiling dirs v5.0.1
+   Compiling anstream v1.0.0
+   Compiling phf v0.12.1
+   Compiling clap_builder v4.6.7
+   Compiling tower-http v0.6.11
+   Compiling const-random v0.1.18
+   Compiling slh-dsa v0.2.0-rc.5
+   Compiling ahash v0.8.12
+   Compiling rhai v1.26.1
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-mcp-http/source/crates/hv2-core)
+   Compiling axum v0.8.9
+   Compiling tempfile v3.27.0
+   Compiling clap v4.6.7
+   Compiling clap_complete v4.6.11
+   Compiling tokio-rustls v0.26.5
+   Compiling hyper-rustls v0.27.9
+   Compiling reqwest v0.12.28
+   Compiling hv2-jobs v1.1.0 (/var/tmp/hm-mcp-http/source/crates/hv2-jobs)
+   Compiling hv2-agent v1.1.0 (/var/tmp/hm-mcp-http/source/crates/hv2-agent)
+   Compiling hm-cli v1.1.0 (/var/tmp/hm-mcp-http/source/crates/hm-cli)
+    Finished `release` profile [optimized] target(s) in 2m 18s

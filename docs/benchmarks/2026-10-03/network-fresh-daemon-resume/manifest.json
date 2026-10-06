@@ -1,0 +1,8 @@
+{
+  "README.md": "0483c3e266541d0aaf89dc82349abf486f35e583d1b59b7aef66be839f451dc0",
+  "check-secret-substitution-kvm.py": "93cd975093cbb06f2f87d6b638c85299f979971b19b8371e6b70421c1f11911d",
+  "daemon-build.log": "1ca36c2b97aa59b5cdc19074d996c03962459c3ffe6e7871fd2b21cc726b478a",
+  "daemon-main.rs": "6826e0cbaf782de4a39ac92ac951ca1badbfb761b3261a090aa3df821b9850e3",
+  "report.json": "14fcfaf765ab02f616939ad2fc64274d7064def29edb890aea0b04699d396a2b",
+  "source-context.json": "e958a6d0b2ab5dcddec04981e6ae1a294f6d93eab052c4684a5b42dcd4a2d276"
+}

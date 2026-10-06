@@ -1,0 +1,26 @@
+{
+  "control_plane_context": "../tls-bundle/build-context.json",
+  "accepted_core_context": "../../2026-10-02/borrowed-boot/accepted-source-context.json",
+  "input_sha256": {
+    "pebble": "4e35cad137f20f62a8e71fd104b98417daa592e901bb01ab4227074ee1990e3c",
+    "challenge_server": "00ec0f9680d5eecb23cb4073868a547db635775a52ba14e0392ed15c8004f1ed",
+    "certbot": "47a7758f3418a83e97f533fbeddcd40e0746ded2a628ca3965905cdfe8914561",
+    "control_plane": "958d30f3ab8dc3e83c0455179b8868ceb5fb3a57a5a2d6f472c4b846155fbe1e",
+    "deploy_hook": "d3b278ac22e3c5d6d2cc3155232a020440e70b271e86e8060ea9516301882c82",
+    "kvm_verifier": "476dfb6a4c93f2faea326a1b0d0aea5d5b377f6ce111abd399b834fb0a23d157",
+    "daemon": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "driver_sha256": "2076ac91de2552fe1ace6ac388088a268accd2d14ee6dd58f78a0d1d10c0b033",
+  "environment": {
+    "python": "3.13.5",
+    "openssl": "3.5.7",
+    "kernel": "6.18.33.2-microsoft-standard-WSL2"
+  },
+  "pebble_release": "https://github.com/letsencrypt/pebble/releases/tag/v2.10.1",
+  "certbot_version": "certbot 5.8.0",
+  "functional_only": true,
+  "scope": "owned CA issuance and verified operator deployment through actual KVM traffic; no public CA or benchmark comparison",
+  "rust_source_changed": false
+}

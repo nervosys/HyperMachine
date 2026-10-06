@@ -1,0 +1,22 @@
+{
+  "rejected": [
+    "missing_run",
+    "resources",
+    "state",
+    "time",
+    "hold",
+    "memory",
+    "order",
+    "count",
+    "source",
+    "full",
+    "changed",
+    "cleanup",
+    "no_clock_rng",
+    "wrong_entropy_size",
+    "missing_ack",
+    "bad_clock",
+    "reused_entropy"
+  ],
+  "count": 17
+}

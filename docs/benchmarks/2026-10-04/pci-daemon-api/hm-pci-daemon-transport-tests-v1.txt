@@ -1,0 +1,17 @@
+   Compiling hv2-sandboxd v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-sandboxd)
+error[E0308]: `match` arms have incompatible types
+    --> crates/hv2-sandboxd/src/main.rs:4146:32
+     |
+4144 | /     match opts.guest_transport {
+4145 | |         GuestTransport::Mmio => vm.attach_guest_channel(cid).await,
+     | |                                 ---------------------------------- this is found to be of type `Result<(), AgentError>`
+4146 | |         GuestTransport::Pci => vm.vm().attach_vsock_pci(cid).await.map(|_| ()),
+     | |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Result<(), AgentError>`, found `Result<(), Error>`
+4147 | |     }.map_err(|e| format!("attaching the guest channel: {e}"))?;
+     | |_____- `match` arms have incompatible types
+     |
+     = note: expected enum `Result<_, AgentError>`
+                found enum `Result<_, hv2_core::Error>`
+
+For more information about this error, try `rustc --explain E0308`.
+error: could not compile `hv2-sandboxd` (bin "hv2-sandboxd" test) due to 1 previous error

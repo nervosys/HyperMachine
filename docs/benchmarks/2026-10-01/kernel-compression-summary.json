@@ -1,0 +1,246 @@
+{
+  "total_attempts": 4800,
+  "passing_attempts": 4790,
+  "failures": [
+    {
+      "block": 5,
+      "profile": "gzip",
+      "index": 2,
+      "pair": 0,
+      "engine": "hypermachine",
+      "success": false,
+      "cleanup_success": false,
+      "start_offset_ms": 1.92064200018649,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (8 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3054 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21092889092823, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21092889092883; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x497c000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "validated_offset_ms": 15709.371175998967
+    },
+    {
+      "block": 5,
+      "profile": "gzip",
+      "index": 12,
+      "pair": 0,
+      "engine": "hypermachine",
+      "success": false,
+      "cleanup_success": false,
+      "start_offset_ms": 2.717555002163863,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (3 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3033 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21092926735260, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21092926735320; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "validated_offset_ms": 15777.599790999375
+    },
+    {
+      "block": 5,
+      "profile": "gzip",
+      "index": 24,
+      "pair": 0,
+      "engine": "hypermachine",
+      "success": false,
+      "cleanup_success": false,
+      "start_offset_ms": 3.602012002374977,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (3 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3033 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093064961958, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093064962009; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "validated_offset_ms": 15905.748227000004
+    },
+    {
+      "block": 5,
+      "profile": "gzip",
+      "index": 36,
+      "pair": 0,
+      "engine": "hypermachine",
+      "success": false,
+      "cleanup_success": false,
+      "start_offset_ms": 4.45668600150384,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (5 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3040 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093264855493, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093264855553; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "validated_offset_ms": 16089.849009000318
+    },
+    {
+      "block": 5,
+      "profile": "gzip",
+      "index": 45,
+      "pair": 0,
+      "engine": "hypermachine",
+      "success": false,
+      "cleanup_success": false,
+      "start_offset_ms": 5.079131002275972,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (2 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3026 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21092837424495, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21092837424555; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "validated_offset_ms": 15689.852387000428
+    },
+    {
+      "block": 5,
+      "profile": "gzip",
+      "index": 48,
+      "pair": 0,
+      "engine": "hypermachine",
+      "success": false,
+      "cleanup_success": false,
+      "start_offset_ms": 29.97557699927711,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (5 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3043 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093088830490, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093088830540; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "validated_offset_ms": 15981.772647999605
+    },
+    {
+      "block": 5,
+      "profile": "gzip",
+      "index": 50,
+      "pair": 0,
+      "engine": "hypermachine",
+      "success": false,
+      "cleanup_success": false,
+      "start_offset_ms": 5.404686002293602,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 444 exits (439 I/O) in 0.5 s, 3023 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21092964347459, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21092964347519; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "validated_offset_ms": 15813.627553001425
+    },
+    {
+      "block": 5,
+      "profile": "gzip",
+      "index": 55,
+      "pair": 0,
+      "engine": "hypermachine",
+      "success": false,
+      "cleanup_success": false,
+      "start_offset_ms": 24.837520999426488,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (7 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; its console ended: === HV2 READY === | BusyBox v1.37.0 (Debian 1:1.37.0-6+b9) built-in shell (ash) | Enter 'help' for a list of built-in commands. | sh: can't access tty; job control turned off | / # \\u001b[6nhv2-guest-agentd 1.1.0 listening on vsock port 1024; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 3050 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093035925665, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093035925725; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x497c000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "validated_offset_ms": 15885.607234002237
+    },
+    {
+      "block": 5,
+      "profile": "gzip",
+      "index": 59,
+      "pair": 0,
+      "engine": "hypermachine",
+      "success": false,
+      "cleanup_success": false,
+      "start_offset_ms": 15.732326999568613,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (3 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3031 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21092915098565, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21092915098615; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x497c000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "validated_offset_ms": 15745.615514002566
+    },
+    {
+      "block": 5,
+      "profile": "gzip",
+      "index": 60,
+      "pair": 0,
+      "engine": "hypermachine",
+      "success": false,
+      "cleanup_success": false,
+      "start_offset_ms": 16.30820100035635,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (4 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 403 exits (403 I/O) in 0.5 s, 3036 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093318166626, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093318166676; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "validated_offset_ms": 16166.223333999369
+    }
+  ],
+  "blocks": 6,
+  "success_counts": {
+    "gzip": {
+      "hypermachine": {
+        "attempts": 1200,
+        "passed": 1190,
+        "failed": 10
+      },
+      "firecracker": {
+        "attempts": 1200,
+        "passed": 1200,
+        "failed": 0
+      }
+    },
+    "lz4": {
+      "hypermachine": {
+        "attempts": 1200,
+        "passed": 1200,
+        "failed": 0
+      },
+      "firecracker": {
+        "attempts": 1200,
+        "passed": 1200,
+        "failed": 0
+      }
+    }
+  },
+  "ready_ms": {
+    "gzip": {
+      "hypermachine": {
+        "n": 1190,
+        "mean": 7898.285086766436,
+        "p50": 6801.4739169993845,
+        "p99": 15626.919972000906
+      },
+      "firecracker": {
+        "n": 1200,
+        "mean": 5942.114913634138,
+        "p50": 5594.623599001352,
+        "p99": 11149.609555999632
+      }
+    },
+    "lz4": {
+      "hypermachine": {
+        "n": 1200,
+        "mean": 7239.69821943926,
+        "p50": 6523.373028998321,
+        "p99": 11610.62774200036
+      },
+      "firecracker": {
+        "n": 1200,
+        "mean": 4664.4115737275115,
+        "p50": 4746.36485299925,
+        "p99": 5063.311183999758
+      }
+    }
+  },
+  "paired_block_mean_delta_lz4_minus_gzip_ms": {
+    "hypermachine": {
+      "complete_blocks_only": true,
+      "values": [
+        {
+          "block": 0,
+          "delta_ms": -1089.1270680298476
+        },
+        {
+          "block": 1,
+          "delta_ms": -1146.1896996098403
+        },
+        {
+          "block": 2,
+          "delta_ms": 31.053405625007144
+        },
+        {
+          "block": 3,
+          "delta_ms": 1601.3514535449212
+        },
+        {
+          "block": 4,
+          "delta_ms": 450.38369206000425
+        }
+      ],
+      "median": 31.053405625007144,
+      "lz4_faster_blocks": 2
+    },
+    "firecracker": {
+      "complete_blocks_only": true,
+      "values": [
+        {
+          "block": 0,
+          "delta_ms": -1838.5787972649268
+        },
+        {
+          "block": 1,
+          "delta_ms": -785.2516212148112
+        },
+        {
+          "block": 2,
+          "delta_ms": -1095.864381530173
+        },
+        {
+          "block": 3,
+          "delta_ms": -2570.5229867499474
+        },
+        {
+          "block": 4,
+          "delta_ms": -805.8977363500162
+        },
+        {
+          "block": 5,
+          "delta_ms": -570.1045163298841
+        }
+      ],
+      "median": -950.8810589400946,
+      "lz4_faster_blocks": 6
+    }
+  },
+  "manifest_sha256": "77b484ca390f01d49738ea5dd60370dcb2bdbf938e5c3896cb930a74bd43a829",
+  "analysis_sha256": "3e8358a073cfab6507ef53d83541d37cb1e30e7b79ab39a2a16708f6d6b52d0c",
+  "limitation": "Latency quantiles include successful attempts only. Paired latency deltas exclude incomplete-success engine blocks, whose failures remain reported. Six paired kernel blocks on shared nested hardware; within-batch guests are correlated. Native cold readiness includes image loading and guest command validation; it does not establish fleet, managed-platform or universal performance."
+}

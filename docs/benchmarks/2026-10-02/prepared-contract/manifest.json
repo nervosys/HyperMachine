@@ -1,0 +1,58 @@
+{
+  "inputs": {
+    "hypermachine": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "cohorts": [
+    {
+      "report": "smoke-report.json",
+      "analysis": "smoke-analysis.json",
+      "pairs": 2,
+      "concurrency": 1
+    },
+    {
+      "report": "c8-report.json",
+      "analysis": "c8-analysis.json",
+      "pairs": 20,
+      "concurrency": 8
+    },
+    {
+      "report": "c100-report.json",
+      "analysis": "c100-analysis.json",
+      "pairs": 4,
+      "concurrency": 100
+    }
+  ],
+  "accepted_source_bindings": {
+    "accepted-main.rs": "crates/hv2-sandboxd/src/main.rs",
+    "accepted-agent-vm.rs": "crates/hv2-agent/src/agent_vm.rs",
+    "accepted-guest-agent.rs": "crates/hv2-agent/src/guest_agent.rs"
+  },
+  "sha256": {
+    "README.md": "68b106439a1abb9f047096e64e2edb403d3884225985da21765adec271309020",
+    "accepted-agent-vm.rs": "8fa6d7427c7c5c5cbc32ca0440c28ffb26a041efd84a9faa865cb8ec64f25baf",
+    "accepted-guest-agent.rs": "ff88341827b762759fe4c71cd06fb41e77bf7e3aae2862ad14991997eb0392b8",
+    "accepted-main.rs": "5b8d92902845f748bcfd497cdaa349a7509b4ed27fd6dd867935c8f27e59fb52",
+    "analyze-prepared-engines.py": "17bdd4f764a9cf2866b420bc04450144b093dea072386c42466f07a8a16a26cc",
+    "bench-firecracker-local.py": "0bcdc13351d54d4c9658bf034aa97f7d86d96d99375a2df04e4c94eaf8d3b610",
+    "bench-local-engines.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "bench-prepared-engines.py": "f89faaf96d4902e4c56d3d997da5d438370cb6590fcff7781e0ac11e86b99cc4",
+    "build-context.json": "1f58ce32de276164c11736c6b2c661b590795766d2a525bcb51d72406b1f6e9d",
+    "c100-analysis.json": "9f6cc75e9737e3a9bd8553f85677a35abb8f1b6554a610438a9fd11ca8fd130f",
+    "c100-report.json": "e28c53763d38a9256c32dc9c61890d87e4a28db3d8261d0db0c242cbbd596a12",
+    "c8-analysis.json": "d30e100162e329c0d807b38fde6e68554cec087cf328a3040a30cf34ecb69804",
+    "c8-report.json": "0a273e3a167c7a2d5db32b4cea1880a4f3820b69bc6fc1ae20d359f42659795e",
+    "check-prepared-analysis.py": "0354266e2966f183f65184976104d834986c43a769e30019602fd7c917e75420",
+    "negative-linux.log": "657defa4504b2d8ed1273cc40dc137e795a17a4a53be1839d54ddc16d15560c5",
+    "negative-windows.log": "15d990c89d18d4635abbb6fd16f650a9be3a13bb1cf1cfbb3b092bafcda4bd87",
+    "smoke-analysis.json": "7339bb892ed43ef1e709a2e17f509e7d6293ef01cdad90ab2347b45678267ca8",
+    "smoke-report.json": "a4e621456e38cbbfb401b7cf0258bc21abc2bdf9b84b5217218930cae34911b3",
+    "source-context.json": "9b78d838863ec40175c09f53d08b04979dac9370c6c308bc22ec41f3b70b7cc8",
+    "test-firecracker-readiness-contract.py": "68e28839852350655a592dd6a5fcbbe4c5cee95c0f40b96f80be98a51a014a5a",
+    "transport-linux.log": "e73c3805f810fdcf3d0167ced7085c48306c9482a952ffb710551d230cdb3e51",
+    "transport-windows.log": "c18c01fac4b0755f46af0f47f3f909f2ef9a6fae57f67897c1946afc84cce4e2",
+    "verify-prepared-contract.py": "eb57a3a8cda58824f5cf98c790165c9474995f7d7224cb31a57676477fd15f3c"
+  }
+}

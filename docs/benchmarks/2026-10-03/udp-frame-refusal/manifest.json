@@ -1,0 +1,8 @@
+{
+  "sha256": {
+    "README.md": "ad907b0e54be7e1ecfd4e89f558fe99e4878fb46af4f3eff63255b3c8dbd52a6",
+    "check-udp-cluster-kvm.py": "b860d5a7b93b003e53ca156cbb690714850b9dfcc39b801fb57eb9dfc0f072d7",
+    "report.json": "8074c6944c514aa574e05e7b5d8cb5573da3a50730b7f8f72b409bae9b44c01e",
+    "services.log": "ea1bc7e601e06b2843a54bd084d67f5e546398ec29a91235dd06372b5a2a908e"
+  }
+}

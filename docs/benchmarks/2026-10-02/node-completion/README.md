@@ -1,0 +1,17 @@
+# Real daemon atomic named completion
+
+The integrated daemon and control plane passed all 22 real KVM/TLS checks against an owned Redis server. Named cluster creation now validates a pending operation before allocating a guest and atomically inserts the VM record plus binding before publishing the creation event. Direct node requests lacking context returned 409, malformed context returned 400, an unowned operation returned 409 and incorrect cluster authentication returned 401. Inventory was unchanged after those requests. Both control-plane create routes continued to refuse duplicate names.
+
+A trusted fixture operation created another real guest directly at the node. The client received status 201 but deliberately discarded the creation descriptor without reading it. CLI inspection recovered the VM ID solely from reserved ownership, and SSH by that name reached the recovered guest. The operation token was absent from guest environment output. Duplicate creation was refused, and deletion removed the binding. The fixture's pending reservation was inserted directly into its private Redis namespace as test setup; this is not a public reservation/recovery API.
+
+This verifies recovery without a creation descriptor. It does not simulate a control-plane connection loss before response headers, a crash during boot, or a registration store fault. Full control-plane transport-timeout recovery and post-boot refusal/error cleanup fault tests remain unverified here. Public pending-operation reconciliation, in-flight operation identity, fleet rollout/migration and client creation idempotency remain incomplete.
+
+The same run passed binary SSH, client/host-key rejection, TCP half-close behavior, idle/pause/resume, parent-name ownership through a fork and deletion/reuse. Cleanup left zero sandboxes, with no cleanup errors, and stopped all 22 registered processes. This is local WSL nested KVM functional evidence with 1 vCPU / 1024 MiB guests, with no performance or competitor ranking claim.
+
+Both binaries were built from committed sources at `b8987a1` plus `daemon-integration.patch`, using the source overlays and committed boot hashes in `build-context.json`. The provisional borrowed-boot changes were excluded. The CLI, kernel and guest image match the previous fork-name evidence. The exact coordinator, raw report, logs, daemon overlays and boot inputs are retained and hashed in `manifest.json`.
+
+Daemon tests passed: 34 on Windows and 38 on Linux. Windows strict Clippy passed. Linux lint checking passed with the existing `clippy::too_many_arguments` exception for lifecycle signatures. The release build completed before artifact capture.
+
+Upgrade the control plane before enabling this daemon on cluster nodes: named cluster requests now require trusted reservation context and configured cluster authentication. Standalone metadata names retain their advisory protocol. Registration takes the guest transition lock so expiration cannot tear it down during completion. A known registration refusal removes only the fresh local guest and never releases shared ownership; an unknown store outcome preserves the guest and returns 503. Those failure branches still require dedicated real-VM fault verification.
+
+Run `python docs/benchmarks/2026-10-02/node-completion/verify.py` to verify archive hashes, clean boot provenance, the 22 cases and the explicit transport-loss verification limit.

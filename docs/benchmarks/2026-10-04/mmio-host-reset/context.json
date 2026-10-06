@@ -1,0 +1,9 @@
+{
+  "candidate_source_sha256": "3b237080493a67cfacf7541d440db9a95b49adf5c2e99d406ea45f2c09e16dc3",
+  "isolated_protected_inputs_sha256": {
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+    "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+  },
+  "debug_guest_probe_sha256": "9e23d38f6f9e021ba28c982ccc019f03fbbcb6ef224c704ce3d6a17e8fcecc39"
+}

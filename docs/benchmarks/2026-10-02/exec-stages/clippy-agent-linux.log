@@ -1,0 +1,14 @@
+   Compiling getrandom v0.3.4
+    Checking tracing-core v0.1.36
+    Checking tokio v1.53.1
+    Checking slh-dsa v0.2.0-rc.5
+    Checking chrono v0.4.45
+    Checking hv2-guest-agent v1.1.0 (/var/tmp/hm-exec-stages/source/crates/hv2-guest-agent)
+    Checking tracing v0.1.44
+    Checking hv2-sandbox v1.1.0 (/var/tmp/hm-exec-stages/source/crates/hv2-sandbox)
+    Checking hv2-context v1.1.0 (/var/tmp/hm-exec-stages/source/crates/hv2-context)
+    Checking ahash v0.8.12
+    Checking rhai v1.26.1
+    Checking hv2-core v1.1.0 (/var/tmp/hm-exec-stages/source/crates/hv2-core)
+    Checking hv2-agent v1.1.0 (/var/tmp/hm-exec-stages/source/crates/hv2-agent)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 11s

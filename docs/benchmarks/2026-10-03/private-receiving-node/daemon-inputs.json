@@ -1,0 +1,28 @@
+{
+  "daemon_path": "/var/tmp/hm-private-receiving-node-v2",
+  "daemon_sha256": "44e740b28b6c12a68eeb41832063c4c31f43d6ad937331cdbb878914ee6bc521",
+  "commands": [
+    [
+      "cargo",
+      "test",
+      "--locked",
+      "-p",
+      "hv2-sandboxd",
+      "--bin",
+      "hv2-sandboxd"
+    ],
+    [
+      "cargo",
+      "build",
+      "--locked",
+      "-p",
+      "hv2-sandboxd",
+      "--bin",
+      "hv2-sandboxd"
+    ]
+  ],
+  "daemon_passed": 61,
+  "daemon_failed": 0,
+  "daemon_ignored": 2,
+  "kvm_private_route_verified": false
+}

@@ -1,0 +1,59 @@
+{
+  "functional_only": true,
+  "public_ca_contacted": false,
+  "hypermachine_deployment_verified": true,
+  "checks": [
+    "HTTP-01 issuance and issuer/hostname verification",
+    "First-group publication hard-exit recovers journal and TLS without CA reissuance",
+    "Explicit new hostname group publishes even with the same initial leaf; default preserved",
+    "Actual control plane serves the issued ACME certificate",
+    "Forced renewal produces a different valid certificate",
+    "Certbot deploy hook activates the renewed leaf on actual control-plane TLS",
+    "Retrying an active immutable generation verifies TLS without rewriting or duplicating it",
+    "Untrusted certificate activation rolls back manifest and verified TLS leaf",
+    "Mismatched private key is refused before manifest publication",
+    "Wrong process executable is refused without signal or mutation",
+    "Wrong manifest is refused by checking the live process arguments",
+    "Concurrent deployment lock refuses overlapping publication",
+    "Already-expired active certificate recovers through verified ACME deployment",
+    "Unavailable HTTP-01 server refuses renewal and retains certificate",
+    "Wrong retirement receipt refuses removal and preserves manifest, live leaf and journal absence",
+    "Wrong recovery receipt preserves published manifest, pending journal, previous live leaf and immutable files",
+    "Retirement publication hard-exit retains previous leaf and recovers its journal on retry",
+    "Exact named-group retirement verifies pinned default, retains immutable files, retries idempotently and reprovisions"
+  ],
+  "first_group_crash_recovery": {
+    "exit_code": 86,
+    "wrapper_sha256": "53dff6670d47a937e955e5715c17d3640c3cbd1f171d55793ddcb2165e06d0d8",
+    "fault_wrapper_source": "import importlib.util,os\nspec=importlib.util.spec_from_file_location('owned_hook','/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/deploy-tls-certificate.py')\nmodule=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)\noriginal=module.atomic_write\ndef interrupted(path,data,mode):\n original(path,data,mode)\n if str(path)=='/tmp/hm-acme-9tu7dvpn/bundle.json': os._exit(86)\nmodule.atomic_write=interrupted\nmodule.main()\n",
+    "recovered_without_reissuance": true
+  },
+  "new_hostname_group_verified": true,
+  "expired_active_leaf_sha256": "e2aacc4a746635b0eb0f21b7532154f7ae1904f9eb38fc0db3ed8d86546da288",
+  "initial_proxy_leaf_sha256": "b4a2d7a4acbfa3eb877d5fa0845af8da42bc1bd8008820d00d3255b8088f5c81",
+  "renewed_proxy_leaf_sha256": "f135dc70c37027cd728175ea395d2f090972dd1457d9654b64377137cdeac5dc",
+  "control_plane_alive_after_deployment": true,
+  "guest_kvm_traffic_verified": false,
+  "retirement_verified": true,
+  "retirement_publication_crash_verified": {
+    "exit_code": 86,
+    "wrapper_sha256": "e910532bec4aa1037a94f7d62c8f204f15b5095f3d279fe7ef47a0573269664a",
+    "fault_wrapper_source": "import importlib.util,os\nspec=importlib.util.spec_from_file_location('owned_retirement','/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/deploy-tls-certificate.py')\nmodule=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)\noriginal=module.atomic_write\ndef interrupted(path,data,mode):\n original(path,data,mode)\n if str(path)=='/tmp/hm-acme-9tu7dvpn/bundle.json': os._exit(86)\nmodule.atomic_write=interrupted\nmodule.main()\n"
+  },
+  "initial_certificate_sha256": "964f8c8192ae01441c2ff107ca34dab8d36aaeb5ba9bdb0d464c21f7a3a8e077",
+  "renewed_certificate_sha256": "efb38b560a6a2b0e92956d90700f922bc9f7b98e3391399f61b39ba13cd08692",
+  "issuance_http01_successful_requests": 3,
+  "renewal_http01_successful_requests": 3,
+  "certbot_version": "certbot 5.8.0",
+  "pebble_version": "Pebble version: v2.10.1 (b1e1ca4f3c30abb64111adaca4544bc5374cc306)",
+  "processes_reaped": true,
+  "http_thread_stopped": true,
+  "input_sha256": {
+    "pebble": "4e35cad137f20f62a8e71fd104b98417daa592e901bb01ab4227074ee1990e3c",
+    "challenge_server": "00ec0f9680d5eecb23cb4073868a547db635775a52ba14e0392ed15c8004f1ed",
+    "certbot": "47a7758f3418a83e97f533fbeddcd40e0746ded2a628ca3965905cdfe8914561",
+    "control_plane": "958d30f3ab8dc3e83c0455179b8868ceb5fb3a57a5a2d6f472c4b846155fbe1e",
+    "deploy_hook": "e4265ff40567a831abf387a5fad10e200ac6c32d7966c274953b7609c53c284c"
+  },
+  "driver_sha256": "5c250b132c6d7f8377658dbc7931f18b8cb3a8919141f56ab6f30de326fe6063"
+}

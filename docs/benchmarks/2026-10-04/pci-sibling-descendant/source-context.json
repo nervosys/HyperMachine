@@ -1,0 +1,18 @@
+{
+  "permitted_sources_sha256": {
+    "crates/hv2-core/src/devices/virtio_pci.rs": "e3d464a51bafa7ca72155cee32010eba6de5019bb8afc0b96c431a1f94dc846e",
+    "crates/hv2-core/src/snapshot/device.rs": "9fb38f31e477739bdaadc77324b5881bdd9e9b533757329d05958138f5e986a6",
+    "crates/hv2-core/src/snapshot/file.rs": "9f939af5a3cf09a803a22af331683f7b3cae695f12973cecca6ee27202a8566b",
+    "crates/hv2-core/src/pci/config.rs": "cc17b1fe02c980d5557449e82af3252573b841582926565207d6fa16d51bd04e",
+    "crates/hv2-core/src/pci/mod.rs": "e618c69c388c4f2cf9f00124ef486488f3f0a147660076594938ca95a0e84412",
+    "crates/hv2-core/src/vm.rs": "bdf72ebc509a40a1cb128dc8804973853cc5df8e113fbfd4891f1fddbe5ee935",
+    "crates/hv2-agent/examples/pci_snapshot_probe.rs": "3b87fd59ad4c7681a54f564e343bb193ddbbf464b6751a79c93e7fb1a3225bcb",
+    "crates/hv2-agent/examples/linux_snapshot_restore.rs": "5931a0aa2e8495abbf2c02683c4e5f79d4c85040c3eec17ff23e011e7c0e9c97"
+  },
+  "production_source_matches_previous_acceptance": true,
+  "runtime_inputs_sha256": {
+    "/var/tmp/hm-pci-fork-probe-v1": "d116f57c0132f907c4ef6307a4a234ee43dace07698cb0d04512d7b011e46047",
+    "/var/tmp/hm-competitive/bzImage-known-uart-irq": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "/var/tmp/hm-private-capacity-buffered-guest-v1.cpio.gz": "28c839a0969728c2c579fa9fdc7274714266ce4308f48a2ee1090d6c34537294"
+  }
+}

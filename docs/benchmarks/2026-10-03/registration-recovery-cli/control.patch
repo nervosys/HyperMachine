@@ -1,0 +1,80 @@
+--- baseline/crates/hv2-cluster/src/control.rs
++++ candidate/crates/hv2-cluster/src/control.rs
+@@ -247,6 +247,7 @@
+         .route("/sandboxes/{id}/ports/{port}/udp", get(udp_tunnel))
+         .route("/sandboxes/{id}/ports/{port}/udp6", get(udp_tunnel_ipv6))
+         .route("/cluster/nodes", get(cluster_nodes))
++        .route("/cluster/nodes/{node}/sandboxes/{id}/registration/reconcile", post(reconcile_on_node))
+         .route("/templates", get(templates).post(build_templates))
+         .route("/cluster/events", get(cluster_events))
+         .route_layer(axum::middleware::from_fn_with_state(
+@@ -1436,6 +1437,49 @@
+ 
+ // ── Operations ──────────────────────────────────────────────────────────────
+ 
++/// Recovery targets a registered node explicitly: initial publication may have no record.
++async fn reconcile_on_node(
++    State(control): State<Arc<ControlPlane>>, Extension(admin): Extension<AdministratorContext>,
++    Path((node_id, id)): Path<(String, String)>,
++) -> Response {
++    if !admin.0 { return api_error(StatusCode::FORBIDDEN, "administrator credential required"); }
++    let Some(token) = control.config.cluster_token.as_ref().filter(|token| !token.is_empty()) else {
++        return api_error(StatusCode::SERVICE_UNAVAILABLE, "authenticated cluster required");
++    };
++    if crate::ports::validate_request(&id, 1, "reconciliation").is_err() {
++        return api_error(StatusCode::BAD_REQUEST, "invalid sandbox ID");
++    }
++    let node = match control.store.node(&node_id).await {
++        Ok(Some(node)) => node,
++        Ok(None) => return api_error(StatusCode::NOT_FOUND, "no registered node"),
++        Err(_) => return api_error(StatusCode::SERVICE_UNAVAILABLE, "node inventory unavailable"),
++    };
++    let mut response = match control.http.post(format!("{}/sandboxes/{id}/registration/reconcile", node.api))
++        .header(CLUSTER_TOKEN_HEADER, token).json(&serde_json::json!({})).send().await {
++        Ok(response) => response,
++        Err(_) => return api_error(StatusCode::BAD_GATEWAY, "node reconciliation unavailable"),
++    };
++    let status = StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
++    if !status.is_success() { return api_error(status, "node reconciliation refused or remains uncertain"); }
++    let mut bytes = Vec::new();
++    loop {
++        match response.chunk().await {
++            Ok(Some(chunk)) if bytes.len() + chunk.len() <= 16384 => bytes.extend_from_slice(&chunk),
++            Ok(Some(_)) | Err(_) => return api_error(StatusCode::BAD_GATEWAY, "invalid reconciliation response"),
++            Ok(None) => break,
++        }
++    }
++    let mut descriptor: Value = match serde_json::from_slice(&bytes) {
++        Ok(value) => value,
++        Err(_) => return api_error(StatusCode::BAD_GATEWAY, "invalid reconciliation descriptor"),
++    };
++    if descriptor.get("sandboxID").and_then(Value::as_str) != Some(id.as_str()) {
++        return api_error(StatusCode::BAD_GATEWAY, "reconciliation descriptor identity differs");
++    }
++    rewrite_descriptor(&control, &mut descriptor, &node.id);
++    (status, Json(descriptor)).into_response()
++}
++
+ async fn cluster_nodes(State(control): State<Arc<ControlPlane>>) -> Response {
+     match control.store.nodes().await {
+         Ok(nodes) => Json(nodes).into_response(),
+@@ -2167,6 +2211,19 @@
+ #[cfg(test)]
+ mod access_audit_tests {
+     use super::*;
++    #[tokio::test]
++    async fn reconciliation_requires_administrator_cluster_auth_and_registered_node() {
++        for (admin, token, expected) in [(false,Some("cluster"),StatusCode::FORBIDDEN),(true,None,StatusCode::SERVICE_UNAVAILABLE),(true,Some("cluster"),StatusCode::NOT_FOUND)] {
++            let control=ControlPlane::new(Arc::new(crate::store::MemoryStore::new()),ControlConfig {
++                api_key:Some("admin".into()),api_keys:Vec::new(),access_audit:None,
++                cluster_token:token.map(str::to_owned),proxy_port:5981,
++                create_timeout:Duration::from_secs(1),identity_issuer:None,
++            });
++            let response=reconcile_on_node(State(control),Extension(AdministratorContext(admin)),Path(("missing-node".into(),"sandbox-a".into()))).await;
++            assert_eq!(response.status(),expected);
++        }
++    }
++
+     use hv2_core::security::audit_chain::{AuditChain, AuditSink};
+     use std::io;
+     use std::sync::atomic::{AtomicUsize, Ordering};

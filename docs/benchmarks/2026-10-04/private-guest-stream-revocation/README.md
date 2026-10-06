@@ -1,0 +1,9 @@
+# Long-lived private source guest stream revocation
+
+The final owned two-daemon KVM fixture passes **29 checks** with zero guests remaining and every process reaped. The Internet-disabled source guest starts a background TCP client to the target private name and receives the exact `live-probe` echo before revocation. A writer keeps stdin open for 30 seconds and the client inactivity timeout is 15 seconds, both outside the five-second closure gate.
+
+After the target membership is removed, the source guest's client exits or reaches zombie state (socket resources closed), observed after **960.53 ms**. A connection through the previous numeric address is refused; rejoining the target tag and resolving afresh restores exact binary traffic. This exercises the actual source Ethernet gateway, Rust router/mTLS connector and receiving guest transport. It extends the earlier host-origin stream closure proof to a real guest-origin connection.
+
+The same run repeats one-MiB private traffic, owner/tag DNS isolation, stale-address recovery and actual source pause/resume on the secondary daemon. Both daemon nodes share one owned WSL host. Runtime input hashes and the unchanged 138 permitted root/isolate source pairs plus accepted isolated core hashes are verified. Protected root core source was neither read nor built. Production code/binary is unchanged from the preceding cluster/daemon suites and cross-node proof.
+
+This is one functional observation, not a P50/P99 sample, SLA or competitor performance result. Only target membership removal is the new long-lived guest stream case. Source membership/owner changes, local lease revocation during active guest traffic, both half-close directions, saturation/cancellation cleanup, independent physical hosts, pending-registration faults, Redis crash recovery, private UDP and complete lifecycle parity remain unfinished or unverified.

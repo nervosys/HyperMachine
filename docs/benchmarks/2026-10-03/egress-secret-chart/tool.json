@@ -1,0 +1,7 @@
+{
+  "helm_version": "v4.3.0+gbec5b06",
+  "binary_sha256": "57ce7fc4ea77b28ee6fa91ae071abcade74d3f524e80c9decff5877a5ac8eda4",
+  "release_source": "https://github.com/helm/helm/releases/tag/v4.3.0",
+  "archive_url": "https://get.helm.sh/helm-v4.3.0-linux-amd64.tar.gz",
+  "verified_archive_sha256": "86584a54def73570558f66f5111cc53dfed56689637ae32c1201205d494f54fb"
+}

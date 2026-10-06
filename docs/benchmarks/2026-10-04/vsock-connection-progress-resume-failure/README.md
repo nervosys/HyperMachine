@@ -1,0 +1,5 @@
+# Candidate repeat resume timeout
+
+The third cohort of the planned baseline-candidate-candidate-baseline comparison terminated with a 30-second read timeout in the final main-target resume API. All concurrent data blocks and fresh UDP benchmark rows were retained, but no final report was published; this cohort cannot be treated as a complete lifecycle/cleanup pass. The first baseline and first candidate cohorts completed 55 checks each. Logs show pause/snapshot/stop, restore/start and only seven vCPU exits before fixture shutdown after the timeout. The cause is not established. Candidate performance remains provisional and the full ABBA claim is unproven.
+
+Raw checker/driver, data artifacts, daemon/stdout logs, source context and process inventory are retained. No tracked owned fixture processes remain in the post-terminal inventory; it does not independently prove guest count. Do not classify this as a fixture-only failure or suppress it in performance claims without further evidence. Protected root core files were not read or modified.

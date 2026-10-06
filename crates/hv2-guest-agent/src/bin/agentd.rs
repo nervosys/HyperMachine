@@ -84,10 +84,27 @@ mod linux {
         *ON.get_or_init(|| std::env::var_os("HV2_AGENT_TRACE").is_some())
     }
 
+    /// Best-effort boot milestones on the same kernel clock as init's markers.
+    /// Disabled by default and never allowed to prevent agent readiness.
+    fn boot_trace(stage: &str) {
+        static ON: OnceLock<bool> = OnceLock::new();
+        if !*ON.get_or_init(|| std::env::var_os("HV2_BOOT_TRACE").is_some()) {
+            return;
+        }
+        if let Ok(mut log) = std::fs::OpenOptions::new().write(true).open("/dev/kmsg") {
+            // kmsg treats each write as a separate record; formatting directly
+            // into the file can split the prefix and stage across records.
+            let record = format!("<6>HV2_BOOT {stage}\n");
+            let _ = log.write_all(record.as_bytes());
+        }
+    }
+
     pub fn run() -> std::io::Result<()> {
         let listener = bind()?;
+        boot_trace("agent_listening");
         eprintln!("hv2-guest-agentd {AGENT_VERSION} listening on vsock port {GUEST_AGENT_PORT}");
 
+        let mut first_accept = true;
         loop {
             let fd = unsafe { libc::accept(listener, std::ptr::null_mut(), std::ptr::null_mut()) };
             if fd < 0 {
@@ -96,6 +113,10 @@ mod linux {
                     continue;
                 }
                 return Err(err);
+            }
+            if first_accept {
+                boot_trace("agent_first_accept");
+                first_accept = false;
             }
             // Say so on accept, when tracing. Silence here is ambiguous in
             // exactly the way that costs the most time: a host that gets no
@@ -150,7 +171,10 @@ mod linux {
             return Err(err);
         }
 
-        if unsafe { libc::listen(fd, 4) } < 0 {
+        // Host requests and forwarded streams can arrive as a burst. Keep a
+        // bounded pending queue so they can wait while the accept loop creates
+        // each connection's worker, instead of overflowing a four-slot queue.
+        if unsafe { libc::listen(fd, 128) } < 0 {
             let err = std::io::Error::last_os_error();
             unsafe { libc::close(fd) };
             return Err(err);
@@ -210,6 +234,40 @@ mod linux {
                     write_all_fd(fd, &bytes)?;
                     let Ok(tcp) = target else { return Ok(()) };
                     splice(fd, tcp, &buf);
+                    return Ok(());
+                }
+                if let Operation::ForwardUdp { port } | Operation::ForwardUdp6 { port } = request.op
+                {
+                    let host = if matches!(request.op, Operation::ForwardUdp6 { .. }) {
+                        "::1"
+                    } else {
+                        "127.0.0.1"
+                    };
+                    let target = if port == 0 {
+                        Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            "UDP port must be nonzero",
+                        ))
+                    } else {
+                        std::net::UdpSocket::bind((host, 0)).and_then(|socket| {
+                            socket.connect((host, port))?;
+                            Ok(socket)
+                        })
+                    };
+                    let response = Response {
+                        id: request.id,
+                        version: PROTOCOL_VERSION,
+                        result: match &target {
+                            Ok(_) => OpResult::Acknowledged,
+                            Err(error) => OpResult::Failed {
+                                message: format!("UDP socket setup failed: {error}"),
+                            },
+                        },
+                    };
+                    write_all_fd(fd, &encode(&response).map_err(std::io::Error::other)?)?;
+                    if let Ok(socket) = target {
+                        relay_udp(fd, socket, &buf)?;
+                    }
                     return Ok(());
                 }
                 // A volume mount takes the connection itself: answered here,
@@ -297,6 +355,95 @@ mod linux {
         s
     }
 
+    #[cfg(test)]
+    #[test]
+    fn udp_relay_preserves_empty_binary_and_early_frames_and_stops_on_eof() {
+        use hv2_guest_agent::datagram::{read_frame, write_frame};
+        use std::os::fd::AsRawFd;
+        let peer = std::net::UdpSocket::bind(("127.0.0.1", 0)).unwrap();
+        peer.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        let socket = std::net::UdpSocket::bind(("127.0.0.1", 0)).unwrap();
+        socket.connect(peer.local_addr().unwrap()).unwrap();
+        let (mut client, server) = std::os::unix::net::UnixStream::pair().unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut early = Vec::new();
+        write_frame(&mut early, &[0, 255]).unwrap();
+        let relay = std::thread::spawn(move || relay_udp(server.as_raw_fd(), socket, &early));
+        for payload in [vec![0, 255], Vec::new(), vec![13, 10, 0, 255]] {
+            if payload != [0, 255] {
+                write_frame(&mut client, &payload).unwrap();
+            }
+            let mut bytes = [0; 16];
+            let (size, sender) = peer.recv_from(&mut bytes).unwrap();
+            assert_eq!(&bytes[..size], payload);
+            peer.send_to(&payload, sender).unwrap();
+            assert_eq!(read_frame(&mut client).unwrap(), Some(payload));
+        }
+        client.shutdown(std::net::Shutdown::Both).unwrap();
+        relay.join().unwrap().unwrap();
+    }
+
+    fn relay_udp(
+        fd: libc::c_int,
+        socket: std::net::UdpSocket,
+        early: &[u8],
+    ) -> std::io::Result<()> {
+        use hv2_guest_agent::datagram::{read_frame, write_frame, MAX_PAYLOAD};
+        use std::os::fd::FromRawFd;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let duplicate = unsafe { libc::dup(fd) };
+        if duplicate < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        let mut transport = unsafe { std::os::unix::net::UnixStream::from_raw_fd(duplicate) };
+        transport.set_read_timeout(Some(Duration::from_secs(30)))?;
+        transport.set_write_timeout(Some(Duration::from_secs(5)))?;
+        socket.set_read_timeout(Some(Duration::from_millis(100)))?;
+        socket.set_write_timeout(Some(Duration::from_secs(5)))?;
+        let from_host = transport.try_clone()?;
+        let shutdown = transport.try_clone()?;
+        let sender = socket.try_clone()?;
+        let stopped = Arc::new(AtomicBool::new(false));
+        let stop_reader = stopped.clone();
+        let early = early.to_vec();
+        let upstream = std::thread::spawn(move || {
+            let mut reader = std::io::Cursor::new(early).chain(from_host);
+            let result = (|| -> std::io::Result<()> {
+                while let Some(payload) = read_frame(&mut reader)? {
+                    if sender.send(&payload)? != payload.len() {
+                        return Err(std::io::ErrorKind::WriteZero.into());
+                    }
+                }
+                Ok(())
+            })();
+            stop_reader.store(true, Ordering::Release);
+            let _ = shutdown.shutdown(std::net::Shutdown::Both);
+            result
+        });
+        let mut payload = vec![0; MAX_PAYLOAD + 1];
+        let result = (|| -> std::io::Result<()> {
+            while !stopped.load(Ordering::Acquire) {
+                match socket.recv(&mut payload) {
+                    Ok(size) => write_frame(&mut transport, &payload[..size])?,
+                    Err(error)
+                        if matches!(
+                            error.kind(),
+                            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                        ) => {}
+                    Err(error) => return Err(error),
+                }
+            }
+            Ok(())
+        })();
+        let _ = transport.shutdown(std::net::Shutdown::Both);
+        let reader_result = upstream
+            .join()
+            .map_err(|_| std::io::Error::other("UDP relay reader failed"))?;
+        result.and(reader_result)
+    }
+
     /// Copy bytes both ways between the host's connection `fd` and `tcp`
     /// until either side closes; `early` is what the host sent past the
     /// forward request, which belongs to the stream.
@@ -320,14 +467,52 @@ mod linux {
             return;
         }
         let upstream = std::thread::spawn(move || {
-            let _ = std::io::copy(&mut from_host, &mut tcp_writer);
-            let _ = tcp_writer.shutdown(std::net::Shutdown::Write);
+            if std::io::copy(&mut from_host, &mut tcp_writer).is_err() {
+                let _ = tcp_writer.shutdown(std::net::Shutdown::Both);
+                unsafe { libc::shutdown(fd, libc::SHUT_RDWR) };
+            } else {
+                let _ = tcp_writer.shutdown(std::net::Shutdown::Write);
+            }
         });
-        let _ = std::io::copy(&mut tcp_reader, &mut to_host);
-        // The program closed its side: so does the host's, and the copy
-        // upstream ends when the host sees it.
-        unsafe { libc::shutdown(fd, libc::SHUT_RDWR) };
+        if std::io::copy(&mut tcp_reader, &mut to_host).is_err() {
+            let _ = tcp_reader.shutdown(std::net::Shutdown::Both);
+            unsafe { libc::shutdown(fd, libc::SHUT_RDWR) };
+        } else {
+            // EOF only closes this direction; the program may still read.
+            unsafe { libc::shutdown(fd, libc::SHUT_WR) };
+        }
         let _ = upstream.join();
+        unsafe { libc::shutdown(fd, libc::SHUT_RDWR) };
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn forwarded_server_eof_still_allows_the_client_request() {
+        use std::io::{Read, Write};
+        use std::os::fd::AsRawFd;
+        use std::os::unix::net::UnixStream;
+        let (mut client, relay) = UnixStream::pair().unwrap();
+        client
+            .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+            .unwrap();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let tcp = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (mut server, _) = listener.accept().unwrap();
+        server
+            .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+            .unwrap();
+        let worker = std::thread::spawn(move || splice(relay.as_raw_fd(), tcp, &[]));
+        server.write_all(b"ready").unwrap();
+        server.shutdown(std::net::Shutdown::Write).unwrap();
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).unwrap();
+        assert_eq!(response, b"ready");
+        client.write_all(b"request after EOF").unwrap();
+        client.shutdown(std::net::Shutdown::Write).unwrap();
+        let mut request = Vec::new();
+        server.read_to_end(&mut request).unwrap();
+        assert_eq!(request, b"request after EOF");
+        worker.join().unwrap();
     }
 
     /// `path`, a directory with nothing mounted on it: made if missing, and
@@ -471,7 +656,9 @@ mod linux {
             } => read_file(&path, offset, length),
             Operation::Stats => OpResult::Stats(stats()),
             // Served in `serve`, which owns the connection it takes.
-            Operation::Forward { .. } => OpResult::Failed {
+            Operation::Forward { .. }
+            | Operation::ForwardUdp { .. }
+            | Operation::ForwardUdp6 { .. } => OpResult::Failed {
                 message: "a forward must be the connection's own request".into(),
             },
             // Served in `serve`, which owns the connection it takes.
@@ -722,7 +909,10 @@ mod linux {
     }
 
     /// Drain a pipe into a buffer until it closes.
-    fn drain<R: Read + Send + 'static>(mut source: R, into: Arc<Mutex<Vec<u8>>>) {
+    fn drain<R: Read + Send + 'static>(
+        mut source: R,
+        into: Arc<Mutex<Vec<u8>>>,
+    ) -> std::thread::JoinHandle<()> {
         std::thread::spawn(move || {
             let mut chunk = [0u8; 8192];
             loop {
@@ -746,7 +936,7 @@ mod linux {
                     }
                 }
             }
-        });
+        })
     }
 
     /// Take everything buffered so far, leaving the buffer empty.
@@ -950,6 +1140,7 @@ mod linux {
         let pid = child.id();
         let stdout = Arc::new(Mutex::new(Vec::new()));
         let stderr = Arc::new(Mutex::new(Vec::new()));
+        let mut readers = Vec::new();
 
         // The parent's copy of the slave is dropped here. It has to be: the
         // master reads end-of-file only when *every* slave handle is closed,
@@ -962,7 +1153,7 @@ mod linux {
                     Ok(reader) => {
                         // stderr stays empty for a pty: a terminal has one
                         // stream, and inventing a split would mean guessing.
-                        drain(reader, Arc::clone(&stdout));
+                        readers.push(drain(reader, Arc::clone(&stdout)));
                         (Some(master), None)
                     }
                     Err(e) => {
@@ -974,10 +1165,10 @@ mod linux {
             }
             None => {
                 if let Some(pipe) = child.stdout.take() {
-                    drain(pipe, Arc::clone(&stdout));
+                    readers.push(drain(pipe, Arc::clone(&stdout)));
                 }
                 if let Some(pipe) = child.stderr.take() {
-                    drain(pipe, Arc::clone(&stderr));
+                    readers.push(drain(pipe, Arc::clone(&stderr)));
                 }
                 // Taken before `child` moves into the waiter below, or there
                 // would be no way to write to the program after starting it --
@@ -993,6 +1184,11 @@ mod linux {
         let done = Arc::clone(&finished);
         std::thread::spawn(move || {
             let status = child.wait();
+            // Publish exit only after both streams have reached EOF. Otherwise
+            // a fast host poll can discard bytes still held by a reader.
+            for reader in readers {
+                let _ = reader.join();
+            }
             let mut slot = match done.lock() {
                 Ok(slot) => slot,
                 Err(poisoned) => poisoned.into_inner(),
@@ -1033,12 +1229,14 @@ mod linux {
             };
         };
 
-        let stdout = take(&proc.stdout);
-        let stderr = take(&proc.stderr);
         let finished = match proc.finished.lock() {
             Ok(slot) => *slot,
             Err(poisoned) => *poisoned.into_inner(),
         };
+        // Observe completion before draining: completion guarantees all final
+        // bytes are buffered, and a later completion waits for another poll.
+        let stdout = take(&proc.stdout);
+        let stderr = take(&proc.stderr);
 
         let pty = proc.pty.is_some();
         match finished {
@@ -1276,6 +1474,56 @@ mod linux {
             stderr,
             truncated: out_cut || err_cut,
             timed_out,
+        }
+    }
+
+    #[cfg(test)]
+    mod process_output_tests {
+        use super::*;
+
+        #[test]
+        fn rapid_polls_preserve_final_stdout_and_stderr() {
+            for _ in 0..100 {
+                let OpResult::Started { pid } = start(
+                    "/bin/sh",
+                    &["-c".into(), "printf final-out; printf final-err >&2".into()],
+                    None,
+                    &BTreeMap::new(),
+                    None,
+                    None,
+                ) else {
+                    panic!("could not start test process")
+                };
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+                let mut out = String::new();
+                let mut err = String::new();
+                loop {
+                    let OpResult::Output {
+                        stdout,
+                        stderr,
+                        running,
+                        exit_code,
+                        ..
+                    } = poll(pid)
+                    else {
+                        panic!("could not poll test process")
+                    };
+                    out.push_str(&stdout);
+                    err.push_str(&stderr);
+                    if !running {
+                        assert_eq!(exit_code, Some(0));
+                        break;
+                    }
+                    assert!(
+                        std::time::Instant::now() < deadline,
+                        "process did not finish"
+                    );
+                    std::thread::yield_now();
+                }
+                procs().lock().unwrap().remove(&pid);
+                assert_eq!(out, "final-out");
+                assert_eq!(err, "final-err");
+            }
         }
     }
 }

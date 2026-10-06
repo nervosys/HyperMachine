@@ -1,0 +1,53 @@
+{
+  "functional_only": true,
+  "success": true,
+  "checks": [
+    {
+      "case": "missing-file",
+      "exit_code": 1,
+      "expected_error_observed": true,
+      "secret_not_printed": true
+    },
+    {
+      "case": "invalid-json",
+      "exit_code": 1,
+      "expected_error_observed": true,
+      "secret_not_printed": true
+    },
+    {
+      "case": "oversized-policy",
+      "exit_code": 1,
+      "expected_error_observed": true,
+      "secret_not_printed": true
+    },
+    {
+      "case": "short-key",
+      "exit_code": 1,
+      "expected_error_observed": true,
+      "secret_not_printed": true
+    },
+    {
+      "case": "plaintext-resolver",
+      "exit_code": 1,
+      "expected_error_observed": true,
+      "secret_not_printed": true
+    },
+    {
+      "case": "namespace-mismatch",
+      "exit_code": 1,
+      "expected_error_observed": true,
+      "secret_not_printed": true
+    },
+    {
+      "case": "missing-resolver-ca",
+      "exit_code": 1,
+      "expected_error_observed": true,
+      "secret_not_printed": true
+    }
+  ],
+  "artifact_sha256": {
+    "control_plane": "de2a920bfd0bd114b6e1f71f3f1c27b7316f10a52f50c3fbe46a552796f579d4",
+    "checker": "24971dfd529eeefcf467b2dca2d67030a7765de55158d3aae61e301c730f0ab4"
+  },
+  "artifacts_unchanged": true
+}

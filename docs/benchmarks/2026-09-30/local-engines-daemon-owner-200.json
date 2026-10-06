@@ -1,0 +1,6077 @@
+{
+  "schema_version": 1,
+  "lifecycle": "native-cold-create-to-command",
+  "concurrency": 1,
+  "hypermachine_log_filter": "warn",
+  "diagnostic_tracing": false,
+  "pairs": 200,
+  "order": "alternating AB/BA",
+  "environment": "shared-WSL-nested-KVM-daemon-owner-state-diagnostic",
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "artifact_sha256": {
+    "hyperMachine": "73b4458c5745e9d07929a9638b45aee42253286626ac46171549ba237979e700",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "0e1962a290ad92bff749d3b736001c2f22782fcbcaf716ecff0db6543631adc2",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "harness": "95ac59d475e46d434d299624dc4271aa1e026021ec0e88b4ac6241000722ebe9",
+    "firecracker_harness": "6bdeb9c0d34f41984e69a91ed7180a3a297213b6681d5b65250969e6a71656f1"
+  },
+  "artifacts_unchanged": true,
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "common_boot_args": "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd",
+  "hypermachine_template_preflight": [
+    {
+      "aliases": [
+        "base"
+      ],
+      "buildID": "base",
+      "buildStatus": "ready",
+      "cpuCount": 1,
+      "envdVersion": "0.6.3",
+      "memoryMB": 1024,
+      "public": false,
+      "snapshot": false,
+      "templateID": "base"
+    }
+  ],
+  "setup_error": null,
+  "cleanup_error": null,
+  "samples": [
+    {
+      "index": 0,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 769.345482999995,
+      "node_memory_ready": {
+        "Rss_kib": 111144,
+        "Pss_kib": 109212,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 108896,
+        "Anonymous_kib": 101240
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 26268,
+        "Pss_kib": 24220,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 23892,
+        "Anonymous_kib": 16180
+      },
+      "engine": "hypermachine",
+      "pair": 0
+    },
+    {
+      "index": 0,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 397.5557439999875,
+      "engine": "firecracker",
+      "pair": 0
+    },
+    {
+      "index": 1,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 401.41855400003124,
+      "engine": "firecracker",
+      "pair": 1
+    },
+    {
+      "index": 1,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 714.1757069999812,
+      "node_memory_ready": {
+        "Rss_kib": 125884,
+        "Pss_kib": 123836,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 123508,
+        "Anonymous_kib": 115788
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 40780,
+        "Pss_kib": 38732,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 38404,
+        "Anonymous_kib": 30692
+      },
+      "engine": "hypermachine",
+      "pair": 1
+    },
+    {
+      "index": 2,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 703.036112999996,
+      "node_memory_ready": {
+        "Rss_kib": 155152,
+        "Pss_kib": 153104,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 152776,
+        "Anonymous_kib": 145056
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 70048,
+        "Pss_kib": 68000,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 67672,
+        "Anonymous_kib": 59960
+      },
+      "engine": "hypermachine",
+      "pair": 2
+    },
+    {
+      "index": 2,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 393.346355999995,
+      "engine": "firecracker",
+      "pair": 2
+    },
+    {
+      "index": 3,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 396.19935400003214,
+      "engine": "firecracker",
+      "pair": 3
+    },
+    {
+      "index": 3,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 687.4574290000055,
+      "node_memory_ready": {
+        "Rss_kib": 156916,
+        "Pss_kib": 154868,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 154540,
+        "Anonymous_kib": 146820
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 71860,
+        "Pss_kib": 69812,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 69484,
+        "Anonymous_kib": 61772
+      },
+      "engine": "hypermachine",
+      "pair": 3
+    },
+    {
+      "index": 4,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 703.4412979999729,
+      "node_memory_ready": {
+        "Rss_kib": 158772,
+        "Pss_kib": 156724,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 156396,
+        "Anonymous_kib": 148676
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 73676,
+        "Pss_kib": 71628,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 71300,
+        "Anonymous_kib": 63588
+      },
+      "engine": "hypermachine",
+      "pair": 4
+    },
+    {
+      "index": 4,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 392.94166199999836,
+      "engine": "firecracker",
+      "pair": 4
+    },
+    {
+      "index": 5,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 384.99649999999974,
+      "engine": "firecracker",
+      "pair": 5
+    },
+    {
+      "index": 5,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 688.7102750000054,
+      "node_memory_ready": {
+        "Rss_kib": 158836,
+        "Pss_kib": 156788,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 156460,
+        "Anonymous_kib": 148740
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 73700,
+        "Pss_kib": 71652,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 71324,
+        "Anonymous_kib": 63612
+      },
+      "engine": "hypermachine",
+      "pair": 5
+    },
+    {
+      "index": 6,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 717.7396229999999,
+      "node_memory_ready": {
+        "Rss_kib": 187964,
+        "Pss_kib": 185916,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 185588,
+        "Anonymous_kib": 177868
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 102932,
+        "Pss_kib": 100884,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 100556,
+        "Anonymous_kib": 92844
+      },
+      "engine": "hypermachine",
+      "pair": 6
+    },
+    {
+      "index": 6,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 404.3893580000031,
+      "engine": "firecracker",
+      "pair": 6
+    },
+    {
+      "index": 7,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 401.64348500002234,
+      "engine": "firecracker",
+      "pair": 7
+    },
+    {
+      "index": 7,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 704.9917289999712,
+      "node_memory_ready": {
+        "Rss_kib": 187964,
+        "Pss_kib": 185916,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 185588,
+        "Anonymous_kib": 177868
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 102932,
+        "Pss_kib": 100884,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 100556,
+        "Anonymous_kib": 92844
+      },
+      "engine": "hypermachine",
+      "pair": 7
+    },
+    {
+      "index": 8,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 692.0902300000193,
+      "node_memory_ready": {
+        "Rss_kib": 189868,
+        "Pss_kib": 187820,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 187492,
+        "Anonymous_kib": 179772
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104748,
+        "Pss_kib": 102700,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 102372,
+        "Anonymous_kib": 94660
+      },
+      "engine": "hypermachine",
+      "pair": 8
+    },
+    {
+      "index": 8,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 403.6188450000395,
+      "engine": "firecracker",
+      "pair": 8
+    },
+    {
+      "index": 9,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 429.0016140000148,
+      "engine": "firecracker",
+      "pair": 9
+    },
+    {
+      "index": 9,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 712.8383379999832,
+      "node_memory_ready": {
+        "Rss_kib": 189836,
+        "Pss_kib": 187788,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 187460,
+        "Anonymous_kib": 179740
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104748,
+        "Pss_kib": 102700,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 102372,
+        "Anonymous_kib": 94660
+      },
+      "engine": "hypermachine",
+      "pair": 9
+    },
+    {
+      "index": 10,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 685.1460849999853,
+      "node_memory_ready": {
+        "Rss_kib": 189824,
+        "Pss_kib": 187776,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 187448,
+        "Anonymous_kib": 179728
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104756,
+        "Pss_kib": 102708,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 102380,
+        "Anonymous_kib": 94668
+      },
+      "engine": "hypermachine",
+      "pair": 10
+    },
+    {
+      "index": 10,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 422.97995600000604,
+      "engine": "firecracker",
+      "pair": 10
+    },
+    {
+      "index": 11,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 514.5903979999957,
+      "engine": "firecracker",
+      "pair": 11
+    },
+    {
+      "index": 11,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 743.7552679999726,
+      "node_memory_ready": {
+        "Rss_kib": 189812,
+        "Pss_kib": 187764,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 187436,
+        "Anonymous_kib": 179716
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104760,
+        "Pss_kib": 102712,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 102384,
+        "Anonymous_kib": 94672
+      },
+      "engine": "hypermachine",
+      "pair": 11
+    },
+    {
+      "index": 12,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 695.7787110000027,
+      "node_memory_ready": {
+        "Rss_kib": 189768,
+        "Pss_kib": 187720,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 187392,
+        "Anonymous_kib": 179672
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104760,
+        "Pss_kib": 102712,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 102384,
+        "Anonymous_kib": 94672
+      },
+      "engine": "hypermachine",
+      "pair": 12
+    },
+    {
+      "index": 12,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 397.19100499996784,
+      "engine": "firecracker",
+      "pair": 12
+    },
+    {
+      "index": 13,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 397.5489430000039,
+      "engine": "firecracker",
+      "pair": 13
+    },
+    {
+      "index": 13,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 681.8994529999713,
+      "node_memory_ready": {
+        "Rss_kib": 189860,
+        "Pss_kib": 187812,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 187484,
+        "Anonymous_kib": 179764
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104760,
+        "Pss_kib": 102712,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 102384,
+        "Anonymous_kib": 94672
+      },
+      "engine": "hypermachine",
+      "pair": 13
+    },
+    {
+      "index": 14,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 678.2987240000011,
+      "node_memory_ready": {
+        "Rss_kib": 189840,
+        "Pss_kib": 187792,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 187464,
+        "Anonymous_kib": 179744
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104760,
+        "Pss_kib": 102712,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 102384,
+        "Anonymous_kib": 94672
+      },
+      "engine": "hypermachine",
+      "pair": 14
+    },
+    {
+      "index": 14,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 383.83907700000464,
+      "engine": "firecracker",
+      "pair": 14
+    },
+    {
+      "index": 15,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 414.5266689999971,
+      "engine": "firecracker",
+      "pair": 15
+    },
+    {
+      "index": 15,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 709.0662319999979,
+      "node_memory_ready": {
+        "Rss_kib": 189856,
+        "Pss_kib": 187808,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 187480,
+        "Anonymous_kib": 179760
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104760,
+        "Pss_kib": 102712,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 102384,
+        "Anonymous_kib": 94672
+      },
+      "engine": "hypermachine",
+      "pair": 15
+    },
+    {
+      "index": 16,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 699.2232339999873,
+      "node_memory_ready": {
+        "Rss_kib": 189868,
+        "Pss_kib": 187820,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 187492,
+        "Anonymous_kib": 179772
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104760,
+        "Pss_kib": 102712,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 102384,
+        "Anonymous_kib": 94672
+      },
+      "engine": "hypermachine",
+      "pair": 16
+    },
+    {
+      "index": 16,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 408.7607860000162,
+      "engine": "firecracker",
+      "pair": 16
+    },
+    {
+      "index": 17,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 411.0409680000089,
+      "engine": "firecracker",
+      "pair": 17
+    },
+    {
+      "index": 17,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 679.6986379999908,
+      "node_memory_ready": {
+        "Rss_kib": 189772,
+        "Pss_kib": 187724,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 187396,
+        "Anonymous_kib": 179676
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104760,
+        "Pss_kib": 102712,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 102384,
+        "Anonymous_kib": 94672
+      },
+      "engine": "hypermachine",
+      "pair": 17
+    },
+    {
+      "index": 18,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 682.5679619999505,
+      "node_memory_ready": {
+        "Rss_kib": 189740,
+        "Pss_kib": 187692,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 187364,
+        "Anonymous_kib": 179644
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104760,
+        "Pss_kib": 102712,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 102384,
+        "Anonymous_kib": 94672
+      },
+      "engine": "hypermachine",
+      "pair": 18
+    },
+    {
+      "index": 18,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 405.9906359999559,
+      "engine": "firecracker",
+      "pair": 18
+    },
+    {
+      "index": 19,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 409.6081700000127,
+      "engine": "firecracker",
+      "pair": 19
+    },
+    {
+      "index": 19,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 676.7822399999659,
+      "node_memory_ready": {
+        "Rss_kib": 189788,
+        "Pss_kib": 187740,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 187412,
+        "Anonymous_kib": 179692
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104760,
+        "Pss_kib": 102712,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 102384,
+        "Anonymous_kib": 94672
+      },
+      "engine": "hypermachine",
+      "pair": 19
+    },
+    {
+      "index": 20,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 707.5720939999997,
+      "node_memory_ready": {
+        "Rss_kib": 189888,
+        "Pss_kib": 187840,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 187512,
+        "Anonymous_kib": 179792
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104760,
+        "Pss_kib": 102712,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 102384,
+        "Anonymous_kib": 94672
+      },
+      "engine": "hypermachine",
+      "pair": 20
+    },
+    {
+      "index": 20,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 382.9761069999904,
+      "engine": "firecracker",
+      "pair": 20
+    },
+    {
+      "index": 21,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 394.2656219999776,
+      "engine": "firecracker",
+      "pair": 21
+    },
+    {
+      "index": 21,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 681.0398540000051,
+      "node_memory_ready": {
+        "Rss_kib": 189844,
+        "Pss_kib": 187796,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 187468,
+        "Anonymous_kib": 179748
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104760,
+        "Pss_kib": 102712,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 102384,
+        "Anonymous_kib": 94672
+      },
+      "engine": "hypermachine",
+      "pair": 21
+    },
+    {
+      "index": 22,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 709.0752689999817,
+      "node_memory_ready": {
+        "Rss_kib": 189832,
+        "Pss_kib": 187784,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 187456,
+        "Anonymous_kib": 179736
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104760,
+        "Pss_kib": 102712,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 102384,
+        "Anonymous_kib": 94672
+      },
+      "engine": "hypermachine",
+      "pair": 22
+    },
+    {
+      "index": 22,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 384.71245800002407,
+      "engine": "firecracker",
+      "pair": 22
+    },
+    {
+      "index": 23,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 392.58509199999025,
+      "engine": "firecracker",
+      "pair": 23
+    },
+    {
+      "index": 23,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 677.1624869999755,
+      "node_memory_ready": {
+        "Rss_kib": 189780,
+        "Pss_kib": 187732,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 187404,
+        "Anonymous_kib": 179684
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104776,
+        "Pss_kib": 102728,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 102400,
+        "Anonymous_kib": 94688
+      },
+      "engine": "hypermachine",
+      "pair": 23
+    },
+    {
+      "index": 24,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 689.6568420000335,
+      "node_memory_ready": {
+        "Rss_kib": 189824,
+        "Pss_kib": 187776,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 187448,
+        "Anonymous_kib": 179728
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104776,
+        "Pss_kib": 102728,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 102400,
+        "Anonymous_kib": 94688
+      },
+      "engine": "hypermachine",
+      "pair": 24
+    },
+    {
+      "index": 24,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 394.32784699999957,
+      "engine": "firecracker",
+      "pair": 24
+    },
+    {
+      "index": 25,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 414.74349600002824,
+      "engine": "firecracker",
+      "pair": 25
+    },
+    {
+      "index": 25,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 680.8673900000031,
+      "node_memory_ready": {
+        "Rss_kib": 189740,
+        "Pss_kib": 187692,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 187364,
+        "Anonymous_kib": 179644
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104776,
+        "Pss_kib": 102728,
+        "Private_Clean_kib": 120,
+        "Private_Dirty_kib": 102400,
+        "Anonymous_kib": 94688
+      },
+      "engine": "hypermachine",
+      "pair": 25
+    },
+    {
+      "index": 26,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 713.0445800000302,
+      "node_memory_ready": {
+        "Rss_kib": 189836,
+        "Pss_kib": 187788,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179748,
+        "Anonymous_kib": 179740
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104780,
+        "Pss_kib": 102732,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94692,
+        "Anonymous_kib": 94692
+      },
+      "engine": "hypermachine",
+      "pair": 26
+    },
+    {
+      "index": 26,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 383.19863099997065,
+      "engine": "firecracker",
+      "pair": 26
+    },
+    {
+      "index": 27,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 424.2481279999879,
+      "engine": "firecracker",
+      "pair": 27
+    },
+    {
+      "index": 27,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 665.7661039999994,
+      "node_memory_ready": {
+        "Rss_kib": 189832,
+        "Pss_kib": 187784,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179744,
+        "Anonymous_kib": 179736
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104780,
+        "Pss_kib": 102732,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94692,
+        "Anonymous_kib": 94692
+      },
+      "engine": "hypermachine",
+      "pair": 27
+    },
+    {
+      "index": 28,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 676.3189949999742,
+      "node_memory_ready": {
+        "Rss_kib": 189844,
+        "Pss_kib": 187796,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179756,
+        "Anonymous_kib": 179748
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104780,
+        "Pss_kib": 102732,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94692,
+        "Anonymous_kib": 94692
+      },
+      "engine": "hypermachine",
+      "pair": 28
+    },
+    {
+      "index": 28,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 387.9101750000018,
+      "engine": "firecracker",
+      "pair": 28
+    },
+    {
+      "index": 29,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 404.89608699999735,
+      "engine": "firecracker",
+      "pair": 29
+    },
+    {
+      "index": 29,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 691.6863249999778,
+      "node_memory_ready": {
+        "Rss_kib": 189812,
+        "Pss_kib": 187764,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179724,
+        "Anonymous_kib": 179716
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104780,
+        "Pss_kib": 102732,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94692,
+        "Anonymous_kib": 94692
+      },
+      "engine": "hypermachine",
+      "pair": 29
+    },
+    {
+      "index": 30,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 711.6552649999903,
+      "node_memory_ready": {
+        "Rss_kib": 189824,
+        "Pss_kib": 187776,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179736,
+        "Anonymous_kib": 179728
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104780,
+        "Pss_kib": 102732,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94692,
+        "Anonymous_kib": 94692
+      },
+      "engine": "hypermachine",
+      "pair": 30
+    },
+    {
+      "index": 30,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 400.0861080000391,
+      "engine": "firecracker",
+      "pair": 30
+    },
+    {
+      "index": 31,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 404.776366999954,
+      "engine": "firecracker",
+      "pair": 31
+    },
+    {
+      "index": 31,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 700.5350709999902,
+      "node_memory_ready": {
+        "Rss_kib": 189864,
+        "Pss_kib": 187816,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179776,
+        "Anonymous_kib": 179768
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104780,
+        "Pss_kib": 102732,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94692,
+        "Anonymous_kib": 94692
+      },
+      "engine": "hypermachine",
+      "pair": 31
+    },
+    {
+      "index": 32,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 690.4922709999823,
+      "node_memory_ready": {
+        "Rss_kib": 189820,
+        "Pss_kib": 187772,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179732,
+        "Anonymous_kib": 179724
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 32
+    },
+    {
+      "index": 32,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 387.7355669999929,
+      "engine": "firecracker",
+      "pair": 32
+    },
+    {
+      "index": 33,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 393.04426199998943,
+      "engine": "firecracker",
+      "pair": 33
+    },
+    {
+      "index": 33,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 680.3237139999965,
+      "node_memory_ready": {
+        "Rss_kib": 189876,
+        "Pss_kib": 187828,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179788,
+        "Anonymous_kib": 179780
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 33
+    },
+    {
+      "index": 34,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 681.3762220000399,
+      "node_memory_ready": {
+        "Rss_kib": 189884,
+        "Pss_kib": 187836,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179796,
+        "Anonymous_kib": 179788
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 34
+    },
+    {
+      "index": 34,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 387.06235100005415,
+      "engine": "firecracker",
+      "pair": 34
+    },
+    {
+      "index": 35,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 415.17111600001044,
+      "engine": "firecracker",
+      "pair": 35
+    },
+    {
+      "index": 35,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 706.6568800000255,
+      "node_memory_ready": {
+        "Rss_kib": 189864,
+        "Pss_kib": 187816,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179776,
+        "Anonymous_kib": 179768
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 35
+    },
+    {
+      "index": 36,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 670.3799329999924,
+      "node_memory_ready": {
+        "Rss_kib": 189808,
+        "Pss_kib": 187760,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179720,
+        "Anonymous_kib": 179712
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 36
+    },
+    {
+      "index": 36,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 407.34389600004306,
+      "engine": "firecracker",
+      "pair": 36
+    },
+    {
+      "index": 37,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 425.584090999962,
+      "engine": "firecracker",
+      "pair": 37
+    },
+    {
+      "index": 37,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 685.1554189999547,
+      "node_memory_ready": {
+        "Rss_kib": 189760,
+        "Pss_kib": 187712,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179672,
+        "Anonymous_kib": 179664
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 37
+    },
+    {
+      "index": 38,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 690.4236659999583,
+      "node_memory_ready": {
+        "Rss_kib": 189784,
+        "Pss_kib": 187736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179696,
+        "Anonymous_kib": 179688
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 38
+    },
+    {
+      "index": 38,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 400.92243800000915,
+      "engine": "firecracker",
+      "pair": 38
+    },
+    {
+      "index": 39,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 393.66325900004995,
+      "engine": "firecracker",
+      "pair": 39
+    },
+    {
+      "index": 39,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 705.8166159999928,
+      "node_memory_ready": {
+        "Rss_kib": 189808,
+        "Pss_kib": 187760,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179720,
+        "Anonymous_kib": 179712
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 39
+    },
+    {
+      "index": 40,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 698.5651809999922,
+      "node_memory_ready": {
+        "Rss_kib": 189872,
+        "Pss_kib": 187824,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179784,
+        "Anonymous_kib": 179776
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 40
+    },
+    {
+      "index": 40,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 400.3022269999974,
+      "engine": "firecracker",
+      "pair": 40
+    },
+    {
+      "index": 41,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 395.0594169999704,
+      "engine": "firecracker",
+      "pair": 41
+    },
+    {
+      "index": 41,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 705.4562179999948,
+      "node_memory_ready": {
+        "Rss_kib": 189796,
+        "Pss_kib": 187748,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179708,
+        "Anonymous_kib": 179700
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 41
+    },
+    {
+      "index": 42,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 697.986788000037,
+      "node_memory_ready": {
+        "Rss_kib": 189840,
+        "Pss_kib": 187792,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179752,
+        "Anonymous_kib": 179744
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 42
+    },
+    {
+      "index": 42,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 409.5750950000365,
+      "engine": "firecracker",
+      "pair": 42
+    },
+    {
+      "index": 43,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 411.6133019999779,
+      "engine": "firecracker",
+      "pair": 43
+    },
+    {
+      "index": 43,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 750.6470219999528,
+      "node_memory_ready": {
+        "Rss_kib": 189904,
+        "Pss_kib": 187856,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179816,
+        "Anonymous_kib": 179808
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 43
+    },
+    {
+      "index": 44,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 709.157241000014,
+      "node_memory_ready": {
+        "Rss_kib": 189856,
+        "Pss_kib": 187808,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179768,
+        "Anonymous_kib": 179760
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 44
+    },
+    {
+      "index": 44,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 386.1248069999874,
+      "engine": "firecracker",
+      "pair": 44
+    },
+    {
+      "index": 45,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 389.1746059999832,
+      "engine": "firecracker",
+      "pair": 45
+    },
+    {
+      "index": 45,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 693.5449279999943,
+      "node_memory_ready": {
+        "Rss_kib": 189884,
+        "Pss_kib": 187836,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179796,
+        "Anonymous_kib": 179788
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 45
+    },
+    {
+      "index": 46,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 694.2310190000285,
+      "node_memory_ready": {
+        "Rss_kib": 189880,
+        "Pss_kib": 187832,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179792,
+        "Anonymous_kib": 179784
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 46
+    },
+    {
+      "index": 46,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 412.6119279999898,
+      "engine": "firecracker",
+      "pair": 46
+    },
+    {
+      "index": 47,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 404.50831700002254,
+      "engine": "firecracker",
+      "pair": 47
+    },
+    {
+      "index": 47,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 685.5575050000198,
+      "node_memory_ready": {
+        "Rss_kib": 189856,
+        "Pss_kib": 187808,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179768,
+        "Anonymous_kib": 179760
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 47
+    },
+    {
+      "index": 48,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 697.6890830000002,
+      "node_memory_ready": {
+        "Rss_kib": 189864,
+        "Pss_kib": 187816,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179776,
+        "Anonymous_kib": 179768
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 48
+    },
+    {
+      "index": 48,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 392.09985600001573,
+      "engine": "firecracker",
+      "pair": 48
+    },
+    {
+      "index": 49,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 405.7003400000099,
+      "engine": "firecracker",
+      "pair": 49
+    },
+    {
+      "index": 49,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 707.331259,
+      "node_memory_ready": {
+        "Rss_kib": 189912,
+        "Pss_kib": 187864,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179824,
+        "Anonymous_kib": 179816
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 49
+    },
+    {
+      "index": 50,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 705.9262330000138,
+      "node_memory_ready": {
+        "Rss_kib": 189860,
+        "Pss_kib": 187812,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179772,
+        "Anonymous_kib": 179764
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 50
+    },
+    {
+      "index": 50,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 407.9181370000242,
+      "engine": "firecracker",
+      "pair": 50
+    },
+    {
+      "index": 51,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 401.08719299996665,
+      "engine": "firecracker",
+      "pair": 51
+    },
+    {
+      "index": 51,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 683.7925730000052,
+      "node_memory_ready": {
+        "Rss_kib": 189840,
+        "Pss_kib": 187792,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179752,
+        "Anonymous_kib": 179744
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 51
+    },
+    {
+      "index": 52,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 670.5060219999837,
+      "node_memory_ready": {
+        "Rss_kib": 189964,
+        "Pss_kib": 187916,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179876,
+        "Anonymous_kib": 179868
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 52
+    },
+    {
+      "index": 52,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 411.42177699998683,
+      "engine": "firecracker",
+      "pair": 52
+    },
+    {
+      "index": 53,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 412.34888500002853,
+      "engine": "firecracker",
+      "pair": 53
+    },
+    {
+      "index": 53,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 687.9128380000452,
+      "node_memory_ready": {
+        "Rss_kib": 189752,
+        "Pss_kib": 187704,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179664,
+        "Anonymous_kib": 179656
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 53
+    },
+    {
+      "index": 54,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 759.6805219999965,
+      "node_memory_ready": {
+        "Rss_kib": 189868,
+        "Pss_kib": 187820,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179780,
+        "Anonymous_kib": 179772
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 54
+    },
+    {
+      "index": 54,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 412.89606399999457,
+      "engine": "firecracker",
+      "pair": 54
+    },
+    {
+      "index": 55,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 413.0772519999937,
+      "engine": "firecracker",
+      "pair": 55
+    },
+    {
+      "index": 55,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 697.9401490000328,
+      "node_memory_ready": {
+        "Rss_kib": 189868,
+        "Pss_kib": 187820,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179780,
+        "Anonymous_kib": 179772
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 55
+    },
+    {
+      "index": 56,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 680.4242409999688,
+      "node_memory_ready": {
+        "Rss_kib": 189892,
+        "Pss_kib": 187844,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179804,
+        "Anonymous_kib": 179796
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 56
+    },
+    {
+      "index": 56,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 391.62492299999485,
+      "engine": "firecracker",
+      "pair": 56
+    },
+    {
+      "index": 57,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 397.04795900001955,
+      "engine": "firecracker",
+      "pair": 57
+    },
+    {
+      "index": 57,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 734.0310120000026,
+      "node_memory_ready": {
+        "Rss_kib": 189864,
+        "Pss_kib": 187816,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179776,
+        "Anonymous_kib": 179768
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 57
+    },
+    {
+      "index": 58,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 682.7446259999874,
+      "node_memory_ready": {
+        "Rss_kib": 189796,
+        "Pss_kib": 187748,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179708,
+        "Anonymous_kib": 179700
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 58
+    },
+    {
+      "index": 58,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 399.1517340000428,
+      "engine": "firecracker",
+      "pair": 58
+    },
+    {
+      "index": 59,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 393.1510790000061,
+      "engine": "firecracker",
+      "pair": 59
+    },
+    {
+      "index": 59,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 684.2862949999926,
+      "node_memory_ready": {
+        "Rss_kib": 189900,
+        "Pss_kib": 187852,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179812,
+        "Anonymous_kib": 179804
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 59
+    },
+    {
+      "index": 60,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 704.5902909999882,
+      "node_memory_ready": {
+        "Rss_kib": 189860,
+        "Pss_kib": 187812,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179772,
+        "Anonymous_kib": 179764
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 60
+    },
+    {
+      "index": 60,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 398.48936999999296,
+      "engine": "firecracker",
+      "pair": 60
+    },
+    {
+      "index": 61,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 392.41344800001343,
+      "engine": "firecracker",
+      "pair": 61
+    },
+    {
+      "index": 61,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 687.316624999994,
+      "node_memory_ready": {
+        "Rss_kib": 189852,
+        "Pss_kib": 187804,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179764,
+        "Anonymous_kib": 179756
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 61
+    },
+    {
+      "index": 62,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 697.2901440000214,
+      "node_memory_ready": {
+        "Rss_kib": 189800,
+        "Pss_kib": 187752,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179712,
+        "Anonymous_kib": 179704
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 62
+    },
+    {
+      "index": 62,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 380.8888300000035,
+      "engine": "firecracker",
+      "pair": 62
+    },
+    {
+      "index": 63,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 385.16862699998455,
+      "engine": "firecracker",
+      "pair": 63
+    },
+    {
+      "index": 63,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 673.2957489999762,
+      "node_memory_ready": {
+        "Rss_kib": 189904,
+        "Pss_kib": 187856,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179816,
+        "Anonymous_kib": 179808
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 63
+    },
+    {
+      "index": 64,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 705.8979349999959,
+      "node_memory_ready": {
+        "Rss_kib": 189828,
+        "Pss_kib": 187780,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179740,
+        "Anonymous_kib": 179732
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 64
+    },
+    {
+      "index": 64,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 406.94782599996415,
+      "engine": "firecracker",
+      "pair": 64
+    },
+    {
+      "index": 65,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 391.47966199999473,
+      "engine": "firecracker",
+      "pair": 65
+    },
+    {
+      "index": 65,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 722.3675970000158,
+      "node_memory_ready": {
+        "Rss_kib": 189860,
+        "Pss_kib": 187812,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179772,
+        "Anonymous_kib": 179764
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 65
+    },
+    {
+      "index": 66,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 683.7623029999804,
+      "node_memory_ready": {
+        "Rss_kib": 189796,
+        "Pss_kib": 187748,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179708,
+        "Anonymous_kib": 179700
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 66
+    },
+    {
+      "index": 66,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 395.3172810000183,
+      "engine": "firecracker",
+      "pair": 66
+    },
+    {
+      "index": 67,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 375.62006799998926,
+      "engine": "firecracker",
+      "pair": 67
+    },
+    {
+      "index": 67,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 687.9042890000164,
+      "node_memory_ready": {
+        "Rss_kib": 189856,
+        "Pss_kib": 187808,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179768,
+        "Anonymous_kib": 179760
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 67
+    },
+    {
+      "index": 68,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 681.920821999995,
+      "node_memory_ready": {
+        "Rss_kib": 189852,
+        "Pss_kib": 187804,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179764,
+        "Anonymous_kib": 179756
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 68
+    },
+    {
+      "index": 68,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 382.64969099998325,
+      "engine": "firecracker",
+      "pair": 68
+    },
+    {
+      "index": 69,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 386.48815599998443,
+      "engine": "firecracker",
+      "pair": 69
+    },
+    {
+      "index": 69,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 662.4890570000161,
+      "node_memory_ready": {
+        "Rss_kib": 189772,
+        "Pss_kib": 187724,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179684,
+        "Anonymous_kib": 179676
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 69
+    },
+    {
+      "index": 70,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 682.1044809999535,
+      "node_memory_ready": {
+        "Rss_kib": 189892,
+        "Pss_kib": 187844,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179804,
+        "Anonymous_kib": 179796
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 70
+    },
+    {
+      "index": 70,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 406.9191180000189,
+      "engine": "firecracker",
+      "pair": 70
+    },
+    {
+      "index": 71,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 401.1178829999835,
+      "engine": "firecracker",
+      "pair": 71
+    },
+    {
+      "index": 71,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 687.8228190000186,
+      "node_memory_ready": {
+        "Rss_kib": 189852,
+        "Pss_kib": 187804,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 179764,
+        "Anonymous_kib": 179756
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104784,
+        "Pss_kib": 102736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 94696,
+        "Anonymous_kib": 94696
+      },
+      "engine": "hypermachine",
+      "pair": 71
+    },
+    {
+      "index": 72,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 710.0521969999818,
+      "node_memory_ready": {
+        "Rss_kib": 198836,
+        "Pss_kib": 196788,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188748,
+        "Anonymous_kib": 188740
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 72
+    },
+    {
+      "index": 72,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 397.58746799998335,
+      "engine": "firecracker",
+      "pair": 72
+    },
+    {
+      "index": 73,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 398.5006880000128,
+      "engine": "firecracker",
+      "pair": 73
+    },
+    {
+      "index": 73,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 703.8999480000143,
+      "node_memory_ready": {
+        "Rss_kib": 198916,
+        "Pss_kib": 196868,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188828,
+        "Anonymous_kib": 188820
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 73
+    },
+    {
+      "index": 74,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 705.7274519999623,
+      "node_memory_ready": {
+        "Rss_kib": 198832,
+        "Pss_kib": 196784,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188744,
+        "Anonymous_kib": 188736
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 74
+    },
+    {
+      "index": 74,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 401.0781050000105,
+      "engine": "firecracker",
+      "pair": 74
+    },
+    {
+      "index": 75,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 428.62665000001243,
+      "engine": "firecracker",
+      "pair": 75
+    },
+    {
+      "index": 75,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 671.1521139999945,
+      "node_memory_ready": {
+        "Rss_kib": 198828,
+        "Pss_kib": 196780,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188740,
+        "Anonymous_kib": 188732
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 75
+    },
+    {
+      "index": 76,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 748.761251000019,
+      "node_memory_ready": {
+        "Rss_kib": 198804,
+        "Pss_kib": 196756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188716,
+        "Anonymous_kib": 188708
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 76
+    },
+    {
+      "index": 76,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 407.6184070000295,
+      "engine": "firecracker",
+      "pair": 76
+    },
+    {
+      "index": 77,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 424.6034770000051,
+      "engine": "firecracker",
+      "pair": 77
+    },
+    {
+      "index": 77,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 696.955977000016,
+      "node_memory_ready": {
+        "Rss_kib": 198820,
+        "Pss_kib": 196772,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188732,
+        "Anonymous_kib": 188724
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 77
+    },
+    {
+      "index": 78,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 711.622368999997,
+      "node_memory_ready": {
+        "Rss_kib": 198792,
+        "Pss_kib": 196744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188704,
+        "Anonymous_kib": 188696
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 78
+    },
+    {
+      "index": 78,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 417.70307100000537,
+      "engine": "firecracker",
+      "pair": 78
+    },
+    {
+      "index": 79,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 428.0318309999984,
+      "engine": "firecracker",
+      "pair": 79
+    },
+    {
+      "index": 79,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 719.657476000009,
+      "node_memory_ready": {
+        "Rss_kib": 198852,
+        "Pss_kib": 196804,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188764,
+        "Anonymous_kib": 188756
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 79
+    },
+    {
+      "index": 80,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 708.5422440000002,
+      "node_memory_ready": {
+        "Rss_kib": 198984,
+        "Pss_kib": 196936,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188896,
+        "Anonymous_kib": 188888
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 80
+    },
+    {
+      "index": 80,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 418.5466679999763,
+      "engine": "firecracker",
+      "pair": 80
+    },
+    {
+      "index": 81,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 422.79339499998514,
+      "engine": "firecracker",
+      "pair": 81
+    },
+    {
+      "index": 81,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 711.1480930000198,
+      "node_memory_ready": {
+        "Rss_kib": 198840,
+        "Pss_kib": 196792,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188752,
+        "Anonymous_kib": 188744
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 81
+    },
+    {
+      "index": 82,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 691.7467800000168,
+      "node_memory_ready": {
+        "Rss_kib": 198824,
+        "Pss_kib": 196776,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188736,
+        "Anonymous_kib": 188728
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 82
+    },
+    {
+      "index": 82,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 423.8064730000133,
+      "engine": "firecracker",
+      "pair": 82
+    },
+    {
+      "index": 83,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 416.80610800000295,
+      "engine": "firecracker",
+      "pair": 83
+    },
+    {
+      "index": 83,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 697.3912469999846,
+      "node_memory_ready": {
+        "Rss_kib": 198896,
+        "Pss_kib": 196848,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188808,
+        "Anonymous_kib": 188800
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 83
+    },
+    {
+      "index": 84,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 687.1044380000058,
+      "node_memory_ready": {
+        "Rss_kib": 198904,
+        "Pss_kib": 196856,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188816,
+        "Anonymous_kib": 188808
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 84
+    },
+    {
+      "index": 84,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 409.5549740000024,
+      "engine": "firecracker",
+      "pair": 84
+    },
+    {
+      "index": 85,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 405.1884269999846,
+      "engine": "firecracker",
+      "pair": 85
+    },
+    {
+      "index": 85,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 718.3956690000173,
+      "node_memory_ready": {
+        "Rss_kib": 198928,
+        "Pss_kib": 196880,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188840,
+        "Anonymous_kib": 188832
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 85
+    },
+    {
+      "index": 86,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 689.0934620000166,
+      "node_memory_ready": {
+        "Rss_kib": 198908,
+        "Pss_kib": 196860,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188820,
+        "Anonymous_kib": 188812
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 86
+    },
+    {
+      "index": 86,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 389.4686230000275,
+      "engine": "firecracker",
+      "pair": 86
+    },
+    {
+      "index": 87,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 395.94300800001747,
+      "engine": "firecracker",
+      "pair": 87
+    },
+    {
+      "index": 87,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 763.4751150000056,
+      "node_memory_ready": {
+        "Rss_kib": 198864,
+        "Pss_kib": 196816,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188776,
+        "Anonymous_kib": 188768
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 87
+    },
+    {
+      "index": 88,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 698.7533719999988,
+      "node_memory_ready": {
+        "Rss_kib": 198836,
+        "Pss_kib": 196788,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188748,
+        "Anonymous_kib": 188740
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 88
+    },
+    {
+      "index": 88,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 393.9313019999986,
+      "engine": "firecracker",
+      "pair": 88
+    },
+    {
+      "index": 89,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 403.3864780000158,
+      "engine": "firecracker",
+      "pair": 89
+    },
+    {
+      "index": 89,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 688.4684309999898,
+      "node_memory_ready": {
+        "Rss_kib": 198900,
+        "Pss_kib": 196852,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188812,
+        "Anonymous_kib": 188804
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 89
+    },
+    {
+      "index": 90,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 685.8636819999901,
+      "node_memory_ready": {
+        "Rss_kib": 198840,
+        "Pss_kib": 196792,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188752,
+        "Anonymous_kib": 188744
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 90
+    },
+    {
+      "index": 90,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 393.8065140000049,
+      "engine": "firecracker",
+      "pair": 90
+    },
+    {
+      "index": 91,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 395.72684099999833,
+      "engine": "firecracker",
+      "pair": 91
+    },
+    {
+      "index": 91,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 707.4165000000221,
+      "node_memory_ready": {
+        "Rss_kib": 198836,
+        "Pss_kib": 196788,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188748,
+        "Anonymous_kib": 188740
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 91
+    },
+    {
+      "index": 92,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 694.2768380000075,
+      "node_memory_ready": {
+        "Rss_kib": 198916,
+        "Pss_kib": 196868,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188828,
+        "Anonymous_kib": 188820
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 92
+    },
+    {
+      "index": 92,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 406.4734520000002,
+      "engine": "firecracker",
+      "pair": 92
+    },
+    {
+      "index": 93,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 389.2636989999687,
+      "engine": "firecracker",
+      "pair": 93
+    },
+    {
+      "index": 93,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 681.3849039999695,
+      "node_memory_ready": {
+        "Rss_kib": 198880,
+        "Pss_kib": 196832,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188792,
+        "Anonymous_kib": 188784
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 93
+    },
+    {
+      "index": 94,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 687.544642999967,
+      "node_memory_ready": {
+        "Rss_kib": 198844,
+        "Pss_kib": 196796,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188756,
+        "Anonymous_kib": 188748
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 94
+    },
+    {
+      "index": 94,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 410.1321299999654,
+      "engine": "firecracker",
+      "pair": 94
+    },
+    {
+      "index": 95,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 423.3520980000094,
+      "engine": "firecracker",
+      "pair": 95
+    },
+    {
+      "index": 95,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 723.7945829999717,
+      "node_memory_ready": {
+        "Rss_kib": 198820,
+        "Pss_kib": 196772,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188732,
+        "Anonymous_kib": 188724
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 95
+    },
+    {
+      "index": 96,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 681.4010140000164,
+      "node_memory_ready": {
+        "Rss_kib": 198896,
+        "Pss_kib": 196848,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188808,
+        "Anonymous_kib": 188800
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 96
+    },
+    {
+      "index": 96,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 392.0679469999868,
+      "engine": "firecracker",
+      "pair": 96
+    },
+    {
+      "index": 97,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 396.91852500004643,
+      "engine": "firecracker",
+      "pair": 97
+    },
+    {
+      "index": 97,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 697.5250490000349,
+      "node_memory_ready": {
+        "Rss_kib": 198864,
+        "Pss_kib": 196816,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188776,
+        "Anonymous_kib": 188768
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 97
+    },
+    {
+      "index": 98,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 703.9461500000357,
+      "node_memory_ready": {
+        "Rss_kib": 198896,
+        "Pss_kib": 196848,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188808,
+        "Anonymous_kib": 188800
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 98
+    },
+    {
+      "index": 98,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 381.157198999972,
+      "engine": "firecracker",
+      "pair": 98
+    },
+    {
+      "index": 99,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 397.24228199997924,
+      "engine": "firecracker",
+      "pair": 99
+    },
+    {
+      "index": 99,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 673.3127150000087,
+      "node_memory_ready": {
+        "Rss_kib": 198908,
+        "Pss_kib": 196860,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188820,
+        "Anonymous_kib": 188812
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 99
+    },
+    {
+      "index": 100,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 664.4692370000485,
+      "node_memory_ready": {
+        "Rss_kib": 198860,
+        "Pss_kib": 196812,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188772,
+        "Anonymous_kib": 188764
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 100
+    },
+    {
+      "index": 100,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 389.6400340000241,
+      "engine": "firecracker",
+      "pair": 100
+    },
+    {
+      "index": 101,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 391.81215199999997,
+      "engine": "firecracker",
+      "pair": 101
+    },
+    {
+      "index": 101,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 667.198112000051,
+      "node_memory_ready": {
+        "Rss_kib": 198936,
+        "Pss_kib": 196888,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188848,
+        "Anonymous_kib": 188840
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 101
+    },
+    {
+      "index": 102,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 703.5611179999819,
+      "node_memory_ready": {
+        "Rss_kib": 198880,
+        "Pss_kib": 196832,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188792,
+        "Anonymous_kib": 188784
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 102
+    },
+    {
+      "index": 102,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 403.4536679999974,
+      "engine": "firecracker",
+      "pair": 102
+    },
+    {
+      "index": 103,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 384.4584049999753,
+      "engine": "firecracker",
+      "pair": 103
+    },
+    {
+      "index": 103,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 691.8459130000087,
+      "node_memory_ready": {
+        "Rss_kib": 198908,
+        "Pss_kib": 196860,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188820,
+        "Anonymous_kib": 188812
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 103
+    },
+    {
+      "index": 104,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 674.7923929999615,
+      "node_memory_ready": {
+        "Rss_kib": 198824,
+        "Pss_kib": 196776,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188736,
+        "Anonymous_kib": 188728
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 104
+    },
+    {
+      "index": 104,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 381.987520999985,
+      "engine": "firecracker",
+      "pair": 104
+    },
+    {
+      "index": 105,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 414.15051699999594,
+      "engine": "firecracker",
+      "pair": 105
+    },
+    {
+      "index": 105,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 678.664872000013,
+      "node_memory_ready": {
+        "Rss_kib": 198844,
+        "Pss_kib": 196796,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188756,
+        "Anonymous_kib": 188748
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 105
+    },
+    {
+      "index": 106,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 681.8288239999788,
+      "node_memory_ready": {
+        "Rss_kib": 198868,
+        "Pss_kib": 196820,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188780,
+        "Anonymous_kib": 188772
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 106
+    },
+    {
+      "index": 106,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 406.05764100001807,
+      "engine": "firecracker",
+      "pair": 106
+    },
+    {
+      "index": 107,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 390.452200000027,
+      "engine": "firecracker",
+      "pair": 107
+    },
+    {
+      "index": 107,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 667.254679999985,
+      "node_memory_ready": {
+        "Rss_kib": 198864,
+        "Pss_kib": 196816,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188776,
+        "Anonymous_kib": 188768
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 107
+    },
+    {
+      "index": 108,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 714.2341779999697,
+      "node_memory_ready": {
+        "Rss_kib": 198904,
+        "Pss_kib": 196856,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188816,
+        "Anonymous_kib": 188808
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 108
+    },
+    {
+      "index": 108,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 471.5271730000268,
+      "engine": "firecracker",
+      "pair": 108
+    },
+    {
+      "index": 109,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 424.4191739999792,
+      "engine": "firecracker",
+      "pair": 109
+    },
+    {
+      "index": 109,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 727.5912769999877,
+      "node_memory_ready": {
+        "Rss_kib": 198900,
+        "Pss_kib": 196852,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188812,
+        "Anonymous_kib": 188804
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 109
+    },
+    {
+      "index": 110,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 697.9052069999625,
+      "node_memory_ready": {
+        "Rss_kib": 198844,
+        "Pss_kib": 196796,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188756,
+        "Anonymous_kib": 188748
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 110
+    },
+    {
+      "index": 110,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 432.2334940000019,
+      "engine": "firecracker",
+      "pair": 110
+    },
+    {
+      "index": 111,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 397.3864889999845,
+      "engine": "firecracker",
+      "pair": 111
+    },
+    {
+      "index": 111,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 706.4014160000056,
+      "node_memory_ready": {
+        "Rss_kib": 198816,
+        "Pss_kib": 196768,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188728,
+        "Anonymous_kib": 188720
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 111
+    },
+    {
+      "index": 112,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 678.5594620000097,
+      "node_memory_ready": {
+        "Rss_kib": 198872,
+        "Pss_kib": 196824,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188784,
+        "Anonymous_kib": 188776
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 112
+    },
+    {
+      "index": 112,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 398.52622099999735,
+      "engine": "firecracker",
+      "pair": 112
+    },
+    {
+      "index": 113,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 381.63235800004713,
+      "engine": "firecracker",
+      "pair": 113
+    },
+    {
+      "index": 113,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 679.2340490000015,
+      "node_memory_ready": {
+        "Rss_kib": 198796,
+        "Pss_kib": 196748,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188708,
+        "Anonymous_kib": 188700
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 113
+    },
+    {
+      "index": 114,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 678.8397420000365,
+      "node_memory_ready": {
+        "Rss_kib": 198812,
+        "Pss_kib": 196764,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188724,
+        "Anonymous_kib": 188716
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 114
+    },
+    {
+      "index": 114,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 408.0686249999985,
+      "engine": "firecracker",
+      "pair": 114
+    },
+    {
+      "index": 115,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 429.3669250000107,
+      "engine": "firecracker",
+      "pair": 115
+    },
+    {
+      "index": 115,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 678.4537130000103,
+      "node_memory_ready": {
+        "Rss_kib": 198824,
+        "Pss_kib": 196766,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188736,
+        "Anonymous_kib": 188728
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111746,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 115
+    },
+    {
+      "index": 116,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 684.2497140000319,
+      "node_memory_ready": {
+        "Rss_kib": 198888,
+        "Pss_kib": 196830,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188800,
+        "Anonymous_kib": 188792
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111746,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 116
+    },
+    {
+      "index": 116,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 410.62386100003323,
+      "engine": "firecracker",
+      "pair": 116
+    },
+    {
+      "index": 117,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 439.5262470000034,
+      "engine": "firecracker",
+      "pair": 117
+    },
+    {
+      "index": 117,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 687.4202849999733,
+      "node_memory_ready": {
+        "Rss_kib": 198848,
+        "Pss_kib": 196790,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188760,
+        "Anonymous_kib": 188752
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111746,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 117
+    },
+    {
+      "index": 118,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 699.1167969999879,
+      "node_memory_ready": {
+        "Rss_kib": 198808,
+        "Pss_kib": 196750,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188720,
+        "Anonymous_kib": 188712
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111746,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 118
+    },
+    {
+      "index": 118,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 395.21581200000355,
+      "engine": "firecracker",
+      "pair": 118
+    },
+    {
+      "index": 119,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 406.4113809999981,
+      "engine": "firecracker",
+      "pair": 119
+    },
+    {
+      "index": 119,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 698.084160999997,
+      "node_memory_ready": {
+        "Rss_kib": 198864,
+        "Pss_kib": 196806,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188776,
+        "Anonymous_kib": 188768
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111746,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 119
+    },
+    {
+      "index": 120,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 712.7347759999907,
+      "node_memory_ready": {
+        "Rss_kib": 198844,
+        "Pss_kib": 196786,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188756,
+        "Anonymous_kib": 188748
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111746,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 120
+    },
+    {
+      "index": 120,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 415.756330000022,
+      "engine": "firecracker",
+      "pair": 120
+    },
+    {
+      "index": 121,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 413.9908409999862,
+      "engine": "firecracker",
+      "pair": 121
+    },
+    {
+      "index": 121,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 686.2846010000112,
+      "node_memory_ready": {
+        "Rss_kib": 198904,
+        "Pss_kib": 196846,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188816,
+        "Anonymous_kib": 188808
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111746,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 121
+    },
+    {
+      "index": 122,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 692.511517000014,
+      "node_memory_ready": {
+        "Rss_kib": 198788,
+        "Pss_kib": 196728,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188700,
+        "Anonymous_kib": 188692
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 122
+    },
+    {
+      "index": 122,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 424.0510459999882,
+      "engine": "firecracker",
+      "pair": 122
+    },
+    {
+      "index": 123,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 414.4113520000019,
+      "engine": "firecracker",
+      "pair": 123
+    },
+    {
+      "index": 123,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 707.1736199999918,
+      "node_memory_ready": {
+        "Rss_kib": 198892,
+        "Pss_kib": 196832,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188804,
+        "Anonymous_kib": 188796
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 123
+    },
+    {
+      "index": 124,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 696.6865549999852,
+      "node_memory_ready": {
+        "Rss_kib": 198856,
+        "Pss_kib": 196796,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188768,
+        "Anonymous_kib": 188760
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 124
+    },
+    {
+      "index": 124,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 402.71499899995433,
+      "engine": "firecracker",
+      "pair": 124
+    },
+    {
+      "index": 125,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 423.6596100000156,
+      "engine": "firecracker",
+      "pair": 125
+    },
+    {
+      "index": 125,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 679.492904999961,
+      "node_memory_ready": {
+        "Rss_kib": 198824,
+        "Pss_kib": 196764,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188736,
+        "Anonymous_kib": 188728
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 125
+    },
+    {
+      "index": 126,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 712.2970210000403,
+      "node_memory_ready": {
+        "Rss_kib": 198864,
+        "Pss_kib": 196804,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188776,
+        "Anonymous_kib": 188768
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 126
+    },
+    {
+      "index": 126,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 400.79094599997234,
+      "engine": "firecracker",
+      "pair": 126
+    },
+    {
+      "index": 127,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 387.97342300000537,
+      "engine": "firecracker",
+      "pair": 127
+    },
+    {
+      "index": 127,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 701.8003920000524,
+      "node_memory_ready": {
+        "Rss_kib": 198916,
+        "Pss_kib": 196856,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188828,
+        "Anonymous_kib": 188820
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 127
+    },
+    {
+      "index": 128,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 705.805268000006,
+      "node_memory_ready": {
+        "Rss_kib": 198928,
+        "Pss_kib": 196868,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188840,
+        "Anonymous_kib": 188832
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 128
+    },
+    {
+      "index": 128,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 441.61514000001034,
+      "engine": "firecracker",
+      "pair": 128
+    },
+    {
+      "index": 129,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 454.16335999999546,
+      "engine": "firecracker",
+      "pair": 129
+    },
+    {
+      "index": 129,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 696.5088869999931,
+      "node_memory_ready": {
+        "Rss_kib": 198872,
+        "Pss_kib": 196812,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188784,
+        "Anonymous_kib": 188776
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 129
+    },
+    {
+      "index": 130,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 708.7280189999774,
+      "node_memory_ready": {
+        "Rss_kib": 198860,
+        "Pss_kib": 196800,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188772,
+        "Anonymous_kib": 188764
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 130
+    },
+    {
+      "index": 130,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 408.8188290000403,
+      "engine": "firecracker",
+      "pair": 130
+    },
+    {
+      "index": 131,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 402.0443799999498,
+      "engine": "firecracker",
+      "pair": 131
+    },
+    {
+      "index": 131,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 695.5673299999603,
+      "node_memory_ready": {
+        "Rss_kib": 198924,
+        "Pss_kib": 196864,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188836,
+        "Anonymous_kib": 188828
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 131
+    },
+    {
+      "index": 132,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 690.3992769999832,
+      "node_memory_ready": {
+        "Rss_kib": 198888,
+        "Pss_kib": 196828,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188800,
+        "Anonymous_kib": 188792
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 132
+    },
+    {
+      "index": 132,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 394.59122099998467,
+      "engine": "firecracker",
+      "pair": 132
+    },
+    {
+      "index": 133,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 400.313868000012,
+      "engine": "firecracker",
+      "pair": 133
+    },
+    {
+      "index": 133,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 694.9340890000144,
+      "node_memory_ready": {
+        "Rss_kib": 198912,
+        "Pss_kib": 196852,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188824,
+        "Anonymous_kib": 188816
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 133
+    },
+    {
+      "index": 134,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 686.6696019999949,
+      "node_memory_ready": {
+        "Rss_kib": 198852,
+        "Pss_kib": 196792,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188764,
+        "Anonymous_kib": 188756
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 134
+    },
+    {
+      "index": 134,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 391.6247070000054,
+      "engine": "firecracker",
+      "pair": 134
+    },
+    {
+      "index": 135,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 429.0884559999881,
+      "engine": "firecracker",
+      "pair": 135
+    },
+    {
+      "index": 135,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 717.5138660000471,
+      "node_memory_ready": {
+        "Rss_kib": 198920,
+        "Pss_kib": 196860,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188832,
+        "Anonymous_kib": 188824
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 135
+    },
+    {
+      "index": 136,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 684.3435929999941,
+      "node_memory_ready": {
+        "Rss_kib": 198944,
+        "Pss_kib": 196884,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188856,
+        "Anonymous_kib": 188848
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 136
+    },
+    {
+      "index": 136,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 403.1447109999817,
+      "engine": "firecracker",
+      "pair": 136
+    },
+    {
+      "index": 137,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 406.9337809999638,
+      "engine": "firecracker",
+      "pair": 137
+    },
+    {
+      "index": 137,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 691.8936050000184,
+      "node_memory_ready": {
+        "Rss_kib": 198868,
+        "Pss_kib": 196808,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188780,
+        "Anonymous_kib": 188772
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 137
+    },
+    {
+      "index": 138,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 676.7232970000236,
+      "node_memory_ready": {
+        "Rss_kib": 198960,
+        "Pss_kib": 196900,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188872,
+        "Anonymous_kib": 188864
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 138
+    },
+    {
+      "index": 138,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 416.9683819999932,
+      "engine": "firecracker",
+      "pair": 138
+    },
+    {
+      "index": 139,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 409.01349600000003,
+      "engine": "firecracker",
+      "pair": 139
+    },
+    {
+      "index": 139,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 704.8940170000151,
+      "node_memory_ready": {
+        "Rss_kib": 198932,
+        "Pss_kib": 196872,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188844,
+        "Anonymous_kib": 188836
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 139
+    },
+    {
+      "index": 140,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 690.0183820000052,
+      "node_memory_ready": {
+        "Rss_kib": 198908,
+        "Pss_kib": 196848,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188820,
+        "Anonymous_kib": 188812
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 140
+    },
+    {
+      "index": 140,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 402.462952999997,
+      "engine": "firecracker",
+      "pair": 140
+    },
+    {
+      "index": 141,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 404.61042000004,
+      "engine": "firecracker",
+      "pair": 141
+    },
+    {
+      "index": 141,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 688.0804059999832,
+      "node_memory_ready": {
+        "Rss_kib": 198844,
+        "Pss_kib": 196784,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188756,
+        "Anonymous_kib": 188748
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 141
+    },
+    {
+      "index": 142,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 689.5040079999717,
+      "node_memory_ready": {
+        "Rss_kib": 198836,
+        "Pss_kib": 196776,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188748,
+        "Anonymous_kib": 188740
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 142
+    },
+    {
+      "index": 142,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 454.6541999999931,
+      "engine": "firecracker",
+      "pair": 142
+    },
+    {
+      "index": 143,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 419.532294000021,
+      "engine": "firecracker",
+      "pair": 143
+    },
+    {
+      "index": 143,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 702.0165150000253,
+      "node_memory_ready": {
+        "Rss_kib": 198852,
+        "Pss_kib": 196792,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188764,
+        "Anonymous_kib": 188756
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 143
+    },
+    {
+      "index": 144,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 697.7380680000351,
+      "node_memory_ready": {
+        "Rss_kib": 198872,
+        "Pss_kib": 196812,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188784,
+        "Anonymous_kib": 188776
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 144
+    },
+    {
+      "index": 144,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 402.9706339999848,
+      "engine": "firecracker",
+      "pair": 144
+    },
+    {
+      "index": 145,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 409.04781099999354,
+      "engine": "firecracker",
+      "pair": 145
+    },
+    {
+      "index": 145,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 679.219082999964,
+      "node_memory_ready": {
+        "Rss_kib": 198820,
+        "Pss_kib": 196760,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188732,
+        "Anonymous_kib": 188724
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 145
+    },
+    {
+      "index": 146,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 678.0401530000404,
+      "node_memory_ready": {
+        "Rss_kib": 198864,
+        "Pss_kib": 196804,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188776,
+        "Anonymous_kib": 188768
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 146
+    },
+    {
+      "index": 146,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 375.6876029999603,
+      "engine": "firecracker",
+      "pair": 146
+    },
+    {
+      "index": 147,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 405.5414900000187,
+      "engine": "firecracker",
+      "pair": 147
+    },
+    {
+      "index": 147,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 654.5586369999796,
+      "node_memory_ready": {
+        "Rss_kib": 198824,
+        "Pss_kib": 196764,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188736,
+        "Anonymous_kib": 188728
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 147
+    },
+    {
+      "index": 148,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 712.543294999989,
+      "node_memory_ready": {
+        "Rss_kib": 198888,
+        "Pss_kib": 196828,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188800,
+        "Anonymous_kib": 188792
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 148
+    },
+    {
+      "index": 148,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 389.3946860000028,
+      "engine": "firecracker",
+      "pair": 148
+    },
+    {
+      "index": 149,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 404.2642090000186,
+      "engine": "firecracker",
+      "pair": 149
+    },
+    {
+      "index": 149,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 680.5318589999843,
+      "node_memory_ready": {
+        "Rss_kib": 198856,
+        "Pss_kib": 196796,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188768,
+        "Anonymous_kib": 188760
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 149
+    },
+    {
+      "index": 150,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 681.3875329999632,
+      "node_memory_ready": {
+        "Rss_kib": 198908,
+        "Pss_kib": 196848,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188820,
+        "Anonymous_kib": 188812
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 150
+    },
+    {
+      "index": 150,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 398.48031499997205,
+      "engine": "firecracker",
+      "pair": 150
+    },
+    {
+      "index": 151,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 385.6223790000399,
+      "engine": "firecracker",
+      "pair": 151
+    },
+    {
+      "index": 151,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 691.1471209999718,
+      "node_memory_ready": {
+        "Rss_kib": 198920,
+        "Pss_kib": 196860,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188832,
+        "Anonymous_kib": 188824
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 151
+    },
+    {
+      "index": 152,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 686.9282309999676,
+      "node_memory_ready": {
+        "Rss_kib": 198840,
+        "Pss_kib": 196780,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188752,
+        "Anonymous_kib": 188744
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 152
+    },
+    {
+      "index": 152,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 415.6583149999733,
+      "engine": "firecracker",
+      "pair": 152
+    },
+    {
+      "index": 153,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 402.1508359999757,
+      "engine": "firecracker",
+      "pair": 153
+    },
+    {
+      "index": 153,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 732.89785999998,
+      "node_memory_ready": {
+        "Rss_kib": 198844,
+        "Pss_kib": 196784,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188756,
+        "Anonymous_kib": 188748
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 153
+    },
+    {
+      "index": 154,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 750.0344179999843,
+      "node_memory_ready": {
+        "Rss_kib": 198908,
+        "Pss_kib": 196848,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188820,
+        "Anonymous_kib": 188812
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 154
+    },
+    {
+      "index": 154,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 413.44444999998586,
+      "engine": "firecracker",
+      "pair": 154
+    },
+    {
+      "index": 155,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 413.66930399999546,
+      "engine": "firecracker",
+      "pair": 155
+    },
+    {
+      "index": 155,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 683.3922430000143,
+      "node_memory_ready": {
+        "Rss_kib": 198836,
+        "Pss_kib": 196776,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188748,
+        "Anonymous_kib": 188740
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 155
+    },
+    {
+      "index": 156,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 708.6254540000141,
+      "node_memory_ready": {
+        "Rss_kib": 198916,
+        "Pss_kib": 196856,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188828,
+        "Anonymous_kib": 188820
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 156
+    },
+    {
+      "index": 156,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 393.92958999997063,
+      "engine": "firecracker",
+      "pair": 156
+    },
+    {
+      "index": 157,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 404.590785000039,
+      "engine": "firecracker",
+      "pair": 157
+    },
+    {
+      "index": 157,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 668.6156019999885,
+      "node_memory_ready": {
+        "Rss_kib": 198868,
+        "Pss_kib": 196808,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188780,
+        "Anonymous_kib": 188772
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 157
+    },
+    {
+      "index": 158,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 697.4972309999998,
+      "node_memory_ready": {
+        "Rss_kib": 198852,
+        "Pss_kib": 196792,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188764,
+        "Anonymous_kib": 188756
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 158
+    },
+    {
+      "index": 158,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 411.00150500000154,
+      "engine": "firecracker",
+      "pair": 158
+    },
+    {
+      "index": 159,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 407.9106550000233,
+      "engine": "firecracker",
+      "pair": 159
+    },
+    {
+      "index": 159,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 689.2222490000108,
+      "node_memory_ready": {
+        "Rss_kib": 198928,
+        "Pss_kib": 196868,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188840,
+        "Anonymous_kib": 188832
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 159
+    },
+    {
+      "index": 160,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 711.8867070000192,
+      "node_memory_ready": {
+        "Rss_kib": 198884,
+        "Pss_kib": 196824,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188796,
+        "Anonymous_kib": 188788
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 160
+    },
+    {
+      "index": 160,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 412.8676680000467,
+      "engine": "firecracker",
+      "pair": 160
+    },
+    {
+      "index": 161,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 402.421927999967,
+      "engine": "firecracker",
+      "pair": 161
+    },
+    {
+      "index": 161,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 686.1818360000029,
+      "node_memory_ready": {
+        "Rss_kib": 198884,
+        "Pss_kib": 196824,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188796,
+        "Anonymous_kib": 188788
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 161
+    },
+    {
+      "index": 162,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 676.3001859999918,
+      "node_memory_ready": {
+        "Rss_kib": 198852,
+        "Pss_kib": 196792,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188764,
+        "Anonymous_kib": 188756
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 162
+    },
+    {
+      "index": 162,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 400.0651469999639,
+      "engine": "firecracker",
+      "pair": 162
+    },
+    {
+      "index": 163,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 404.1476610000245,
+      "engine": "firecracker",
+      "pair": 163
+    },
+    {
+      "index": 163,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 682.5963260000094,
+      "node_memory_ready": {
+        "Rss_kib": 198920,
+        "Pss_kib": 196860,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188832,
+        "Anonymous_kib": 188824
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 163
+    },
+    {
+      "index": 164,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 675.7090340000218,
+      "node_memory_ready": {
+        "Rss_kib": 198884,
+        "Pss_kib": 196824,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188796,
+        "Anonymous_kib": 188788
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 164
+    },
+    {
+      "index": 164,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 421.98078500001657,
+      "engine": "firecracker",
+      "pair": 164
+    },
+    {
+      "index": 165,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 415.74537999997574,
+      "engine": "firecracker",
+      "pair": 165
+    },
+    {
+      "index": 165,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 717.6671100000362,
+      "node_memory_ready": {
+        "Rss_kib": 198888,
+        "Pss_kib": 196828,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188800,
+        "Anonymous_kib": 188792
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 165
+    },
+    {
+      "index": 166,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 704.9651700000368,
+      "node_memory_ready": {
+        "Rss_kib": 198912,
+        "Pss_kib": 196852,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188824,
+        "Anonymous_kib": 188816
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 166
+    },
+    {
+      "index": 166,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 403.27668499998026,
+      "engine": "firecracker",
+      "pair": 166
+    },
+    {
+      "index": 167,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 422.73054999998294,
+      "engine": "firecracker",
+      "pair": 167
+    },
+    {
+      "index": 167,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 677.387264999993,
+      "node_memory_ready": {
+        "Rss_kib": 198916,
+        "Pss_kib": 196856,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188828,
+        "Anonymous_kib": 188820
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 167
+    },
+    {
+      "index": 168,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 722.0065849999742,
+      "node_memory_ready": {
+        "Rss_kib": 198924,
+        "Pss_kib": 196864,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188836,
+        "Anonymous_kib": 188828
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 168
+    },
+    {
+      "index": 168,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 413.89816299999893,
+      "engine": "firecracker",
+      "pair": 168
+    },
+    {
+      "index": 169,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 396.9655910000256,
+      "engine": "firecracker",
+      "pair": 169
+    },
+    {
+      "index": 169,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 671.8823670000234,
+      "node_memory_ready": {
+        "Rss_kib": 198912,
+        "Pss_kib": 196852,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188824,
+        "Anonymous_kib": 188816
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 169
+    },
+    {
+      "index": 170,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 692.4702379999985,
+      "node_memory_ready": {
+        "Rss_kib": 198896,
+        "Pss_kib": 196836,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188808,
+        "Anonymous_kib": 188800
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 170
+    },
+    {
+      "index": 170,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 408.360537999954,
+      "engine": "firecracker",
+      "pair": 170
+    },
+    {
+      "index": 171,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 404.04379500000687,
+      "engine": "firecracker",
+      "pair": 171
+    },
+    {
+      "index": 171,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 685.1608370000122,
+      "node_memory_ready": {
+        "Rss_kib": 198916,
+        "Pss_kib": 196856,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188828,
+        "Anonymous_kib": 188820
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 171
+    },
+    {
+      "index": 172,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 725.3860949999762,
+      "node_memory_ready": {
+        "Rss_kib": 198868,
+        "Pss_kib": 196808,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188780,
+        "Anonymous_kib": 188772
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 172
+    },
+    {
+      "index": 172,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 386.62623999999823,
+      "engine": "firecracker",
+      "pair": 172
+    },
+    {
+      "index": 173,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 401.61211200000935,
+      "engine": "firecracker",
+      "pair": 173
+    },
+    {
+      "index": 173,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 707.9242300000033,
+      "node_memory_ready": {
+        "Rss_kib": 198860,
+        "Pss_kib": 196800,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188772,
+        "Anonymous_kib": 188764
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 173
+    },
+    {
+      "index": 174,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 686.2490989999515,
+      "node_memory_ready": {
+        "Rss_kib": 198820,
+        "Pss_kib": 196760,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188732,
+        "Anonymous_kib": 188724
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 174
+    },
+    {
+      "index": 174,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 402.33023300004334,
+      "engine": "firecracker",
+      "pair": 174
+    },
+    {
+      "index": 175,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 418.33969599997545,
+      "engine": "firecracker",
+      "pair": 175
+    },
+    {
+      "index": 175,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 696.7007860000649,
+      "node_memory_ready": {
+        "Rss_kib": 198864,
+        "Pss_kib": 196804,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188776,
+        "Anonymous_kib": 188768
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 175
+    },
+    {
+      "index": 176,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 762.9972269999143,
+      "node_memory_ready": {
+        "Rss_kib": 198888,
+        "Pss_kib": 196828,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188800,
+        "Anonymous_kib": 188792
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 176
+    },
+    {
+      "index": 176,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 415.09144500003003,
+      "engine": "firecracker",
+      "pair": 176
+    },
+    {
+      "index": 177,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 402.8041100000337,
+      "engine": "firecracker",
+      "pair": 177
+    },
+    {
+      "index": 177,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 691.7111679999834,
+      "node_memory_ready": {
+        "Rss_kib": 198912,
+        "Pss_kib": 196852,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188824,
+        "Anonymous_kib": 188816
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 177
+    },
+    {
+      "index": 178,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 691.2178900000754,
+      "node_memory_ready": {
+        "Rss_kib": 198832,
+        "Pss_kib": 196772,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188744,
+        "Anonymous_kib": 188736
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 178
+    },
+    {
+      "index": 178,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 417.67112599995926,
+      "engine": "firecracker",
+      "pair": 178
+    },
+    {
+      "index": 179,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 386.3313650000464,
+      "engine": "firecracker",
+      "pair": 179
+    },
+    {
+      "index": 179,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 693.5868379999874,
+      "node_memory_ready": {
+        "Rss_kib": 198892,
+        "Pss_kib": 196832,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188804,
+        "Anonymous_kib": 188796
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 179
+    },
+    {
+      "index": 180,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 691.2017920000153,
+      "node_memory_ready": {
+        "Rss_kib": 198944,
+        "Pss_kib": 196884,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188856,
+        "Anonymous_kib": 188848
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 180
+    },
+    {
+      "index": 180,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 409.579792000045,
+      "engine": "firecracker",
+      "pair": 180
+    },
+    {
+      "index": 181,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 389.58944600005907,
+      "engine": "firecracker",
+      "pair": 181
+    },
+    {
+      "index": 181,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 685.8147649999182,
+      "node_memory_ready": {
+        "Rss_kib": 198744,
+        "Pss_kib": 196684,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188656,
+        "Anonymous_kib": 188648
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 181
+    },
+    {
+      "index": 182,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 688.6779179999394,
+      "node_memory_ready": {
+        "Rss_kib": 198836,
+        "Pss_kib": 196776,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188748,
+        "Anonymous_kib": 188740
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 182
+    },
+    {
+      "index": 182,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 394.14614299994355,
+      "engine": "firecracker",
+      "pair": 182
+    },
+    {
+      "index": 183,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 401.63180599995485,
+      "engine": "firecracker",
+      "pair": 183
+    },
+    {
+      "index": 183,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 711.9224429999349,
+      "node_memory_ready": {
+        "Rss_kib": 198868,
+        "Pss_kib": 196808,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188780,
+        "Anonymous_kib": 188772
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 183
+    },
+    {
+      "index": 184,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 672.8212479999911,
+      "node_memory_ready": {
+        "Rss_kib": 198844,
+        "Pss_kib": 196784,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188756,
+        "Anonymous_kib": 188748
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 184
+    },
+    {
+      "index": 184,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 395.20781900000657,
+      "engine": "firecracker",
+      "pair": 184
+    },
+    {
+      "index": 185,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 427.8608270000177,
+      "engine": "firecracker",
+      "pair": 185
+    },
+    {
+      "index": 185,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 714.1649730000381,
+      "node_memory_ready": {
+        "Rss_kib": 198916,
+        "Pss_kib": 196856,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188828,
+        "Anonymous_kib": 188820
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 185
+    },
+    {
+      "index": 186,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 701.9637399999965,
+      "node_memory_ready": {
+        "Rss_kib": 198852,
+        "Pss_kib": 196792,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188764,
+        "Anonymous_kib": 188756
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 186
+    },
+    {
+      "index": 186,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 418.71401700007027,
+      "engine": "firecracker",
+      "pair": 186
+    },
+    {
+      "index": 187,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 403.88232700001936,
+      "engine": "firecracker",
+      "pair": 187
+    },
+    {
+      "index": 187,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 697.2192389999918,
+      "node_memory_ready": {
+        "Rss_kib": 198840,
+        "Pss_kib": 196780,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188752,
+        "Anonymous_kib": 188744
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 187
+    },
+    {
+      "index": 188,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 673.2273859998941,
+      "node_memory_ready": {
+        "Rss_kib": 198816,
+        "Pss_kib": 196756,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188728,
+        "Anonymous_kib": 188720
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 188
+    },
+    {
+      "index": 188,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 414.81707900004494,
+      "engine": "firecracker",
+      "pair": 188
+    },
+    {
+      "index": 189,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 420.8993269999155,
+      "engine": "firecracker",
+      "pair": 189
+    },
+    {
+      "index": 189,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 676.4625020000494,
+      "node_memory_ready": {
+        "Rss_kib": 198792,
+        "Pss_kib": 196732,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188704,
+        "Anonymous_kib": 188696
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 189
+    },
+    {
+      "index": 190,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 664.6191830000134,
+      "node_memory_ready": {
+        "Rss_kib": 198796,
+        "Pss_kib": 196736,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188708,
+        "Anonymous_kib": 188700
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 190
+    },
+    {
+      "index": 190,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 409.26751500001046,
+      "engine": "firecracker",
+      "pair": 190
+    },
+    {
+      "index": 191,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 407.2058450000213,
+      "engine": "firecracker",
+      "pair": 191
+    },
+    {
+      "index": 191,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 690.9976059999963,
+      "node_memory_ready": {
+        "Rss_kib": 198820,
+        "Pss_kib": 196760,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188732,
+        "Anonymous_kib": 188724
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 191
+    },
+    {
+      "index": 192,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 690.4961579999735,
+      "node_memory_ready": {
+        "Rss_kib": 198832,
+        "Pss_kib": 196772,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188744,
+        "Anonymous_kib": 188736
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 192
+    },
+    {
+      "index": 192,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 424.47676599999795,
+      "engine": "firecracker",
+      "pair": 192
+    },
+    {
+      "index": 193,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 417.9273900000453,
+      "engine": "firecracker",
+      "pair": 193
+    },
+    {
+      "index": 193,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 697.5561539999262,
+      "node_memory_ready": {
+        "Rss_kib": 198872,
+        "Pss_kib": 196812,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188784,
+        "Anonymous_kib": 188776
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 193
+    },
+    {
+      "index": 194,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 715.2178879999838,
+      "node_memory_ready": {
+        "Rss_kib": 198776,
+        "Pss_kib": 196716,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188688,
+        "Anonymous_kib": 188680
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 194
+    },
+    {
+      "index": 194,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 415.7729759999711,
+      "engine": "firecracker",
+      "pair": 194
+    },
+    {
+      "index": 195,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 398.308113999974,
+      "engine": "firecracker",
+      "pair": 195
+    },
+    {
+      "index": 195,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 720.5841090000149,
+      "node_memory_ready": {
+        "Rss_kib": 198840,
+        "Pss_kib": 196780,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188752,
+        "Anonymous_kib": 188744
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 195
+    },
+    {
+      "index": 196,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 716.333437000003,
+      "node_memory_ready": {
+        "Rss_kib": 198920,
+        "Pss_kib": 196860,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188832,
+        "Anonymous_kib": 188824
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 196
+    },
+    {
+      "index": 196,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 412.96719199999643,
+      "engine": "firecracker",
+      "pair": 196
+    },
+    {
+      "index": 197,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 436.0433630000671,
+      "engine": "firecracker",
+      "pair": 197
+    },
+    {
+      "index": 197,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 718.9832929999511,
+      "node_memory_ready": {
+        "Rss_kib": 198876,
+        "Pss_kib": 196816,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188788,
+        "Anonymous_kib": 188780
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 197
+    },
+    {
+      "index": 198,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 738.7666889999309,
+      "node_memory_ready": {
+        "Rss_kib": 198812,
+        "Pss_kib": 196752,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188724,
+        "Anonymous_kib": 188716
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 198
+    },
+    {
+      "index": 198,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 403.17623299995375,
+      "engine": "firecracker",
+      "pair": 198
+    },
+    {
+      "index": 199,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 407.0550659999981,
+      "engine": "firecracker",
+      "pair": 199
+    },
+    {
+      "index": 199,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 714.4107860000304,
+      "node_memory_ready": {
+        "Rss_kib": 198856,
+        "Pss_kib": 196796,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 188768,
+        "Anonymous_kib": 188760
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 113804,
+        "Pss_kib": 111744,
+        "Private_Clean_kib": 7832,
+        "Private_Dirty_kib": 103716,
+        "Anonymous_kib": 103716
+      },
+      "engine": "hypermachine",
+      "pair": 199
+    }
+  ],
+  "node_memory_baseline": {
+    "Rss_kib": 9328,
+    "Pss_kib": 7401,
+    "Private_Clean_kib": 120,
+    "Private_Dirty_kib": 7080,
+    "Anonymous_kib": 1240
+  },
+  "node_log_tail": null,
+  "ready_ms": {
+    "hypermachine": {
+      "n": 200,
+      "min": 654.5586369999796,
+      "max": 769.345482999995,
+      "mean": 696.5486419349968,
+      "p50": 692.4702379999985,
+      "p95": 732.89785999998,
+      "p99": 762.9972269999143
+    },
+    "firecracker": {
+      "n": 200,
+      "min": 375.62006799998926,
+      "max": 514.5903979999957,
+      "mean": 405.64417173500146,
+      "p50": 403.88232700001936,
+      "p95": 429.0016140000148,
+      "p99": 454.6541999999931
+    }
+  },
+  "limitations": [
+    "Shared nested-KVM host; no CPU pinning or dedicated hardware",
+    "Different native control paths: persistent HyperMachine HTTP node versus Firecracker process and Unix API",
+    "Cold lifecycle only; no snapshot/SDK/platform comparison",
+    "Engine-generated device kernel arguments differ"
+  ],
+  "success": true
+}

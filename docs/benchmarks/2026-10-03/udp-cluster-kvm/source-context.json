@@ -1,0 +1,26 @@
+{
+  "crates/hv2-cluster/src/control.rs": {
+    "isolated_sha256": "a36bed43b3fd3af6561192716918e1dfcaa9910c237e4fa412c8c921adc404bd",
+    "root_sha256": "a36bed43b3fd3af6561192716918e1dfcaa9910c237e4fa412c8c921adc404bd"
+  },
+  "crates/hv2-cluster/src/bin/hv2-control-plane.rs": {
+    "isolated_sha256": "10d30c3bb970efc6a485fc9c5e5c9121afe0eb8515533372c28f3510170dc23f",
+    "root_sha256": "10d30c3bb970efc6a485fc9c5e5c9121afe0eb8515533372c28f3510170dc23f"
+  },
+  "crates/hv2-api/src/lib.rs": {
+    "isolated_sha256": "36fce324bc9257166ae4b233aa5e4aa036b97a3efdd82018185e3edba2fa3763",
+    "root_sha256": "36fce324bc9257166ae4b233aa5e4aa036b97a3efdd82018185e3edba2fa3763"
+  },
+  "crates/hv2-api/src/udp_tunnel.rs": {
+    "isolated_sha256": "03a8a2d7fd6d42ed845aa09c3046c051051901b55cc7c694bb696ebc21e064ff",
+    "root_sha256": "03a8a2d7fd6d42ed845aa09c3046c051051901b55cc7c694bb696ebc21e064ff"
+  },
+  "crates/hm-cli/src/sandbox_vm.rs": {
+    "isolated_sha256": "c54c39cf48dacd659a0607b309851b0d6c410f60a656aa4177f4815beddb5709",
+    "root_sha256": "c54c39cf48dacd659a0607b309851b0d6c410f60a656aa4177f4815beddb5709"
+  },
+  "crates/hm-cli/src/sandbox_vm_udp.rs": {
+    "isolated_sha256": "b3faa561cc69e8c3724b969a98f9c35981e09520535d30dd088917b1a8cbe208",
+    "root_sha256": "b3faa561cc69e8c3724b969a98f9c35981e09520535d30dd088917b1a8cbe208"
+  }
+}

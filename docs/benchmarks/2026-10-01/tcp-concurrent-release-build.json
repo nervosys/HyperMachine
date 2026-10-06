@@ -1,0 +1,26 @@
+{
+  "source_commit": "264d69a33c155c353599603b966dc942e3f0af3b",
+  "source_sha256": {
+    "Cargo.lock": "4c9d2ed68cf63118d05119ed1f237d34124a24f94af32bc120cfd50bec1a78e4",
+    "crates/hv2-core/src/devices/virtio_vsock.rs": "f41a40065a43d644b9e7ba19fc8d82a9cea297647ab5d46109a652a431137903",
+    "crates/hv2-agent/src/guest_agent.rs": "ff88341827b762759fe4c71cd06fb41e77bf7e3aae2862ad14991997eb0392b8",
+    "crates/hv2-sandboxd/src/main.rs": "59632d4077ab6b259a398c0ac6c65bb8ceba7a6193b433753dda5608f892b69c",
+    "crates/hv2-sandboxd/src/forwards.rs": "0dec2475a1f072b0561ce7f181311575e3496ca5b108ad859f0899bc6fd5665b",
+    "crates/hv2-api/src/tcp_tunnel.rs": "cc30dd62d9c66c3bbb43dfb09a3e05c6abcc89ef28fdaadaa15516235103cf23"
+  },
+  "command": [
+    "cargo",
+    "build",
+    "--locked",
+    "--release",
+    "-p",
+    "hv2-sandboxd"
+  ],
+  "rustc": "rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)",
+  "success": true,
+  "exit_code": 0,
+  "output_utf8": "   Compiling hv2-sandboxd v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-sandboxd)\n    Finished `release` profile [optimized] target(s) in 5m 03s\n",
+  "output_sha256": "34aef770e00982d2f48ffea3897c5af6068113d80e6a70b0883d5337ca22731f",
+  "binary_sha256": "0153fa987518941c2f53b03e0e393c00f1d5fa3ce644e57ed7c5cde72e6caaf3",
+  "canonical_scored_binary_restored": true
+}

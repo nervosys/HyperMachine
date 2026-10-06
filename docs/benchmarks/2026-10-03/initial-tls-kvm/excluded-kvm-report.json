@@ -1,0 +1,80 @@
+{
+  "functional_only": true,
+  "success": false,
+  "checks": [
+    "missing, absent and expired DNS proofs are refused without binding a real guest",
+    "trusted owned HTTPS resolver proves sandbox-bound TXT before routing",
+    "certificate-verified HTTPS alias reaches guest web server through both proxies",
+    "fresh-account initial issuance provisions a named TLS group during real guest traffic",
+    "new TLS handshakes use the renewed certificate while the old guest stream completes",
+    "mismatched certificate/key reload preserves the active TLS identity and guest route",
+    "unconfigured SNI handshake is refused without a default certificate"
+  ],
+  "dns_ownership_enabled": true,
+  "tls_bundle_enabled": true,
+  "acme_renewal_enabled": true,
+  "renewal_worker_enabled": true,
+  "artifact_sha256": {
+    "control_plane": "958d30f3ab8dc3e83c0455179b8868ceb5fb3a57a5a2d6f472c4b846155fbe1e",
+    "daemon": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "verifier": "90cccdebb1fe848e85b5314c1faf33323d59f76bb69877c88d3442c9ff7c696c",
+    "deploy_hook": "09e9f6b7543cbe810b18c5db26306f2dee72cb733efd2d9bc3fd5f64bfe2189d",
+    "certificate_ca": "4b369c84fce388645a382457adbe86250d39244e9ec46a8118d06bdf8dbfcb97",
+    "renew_command_file": "80ca0c87173c3cf961d6fa6073be656b8eaefeb419144a244a552879096af0a7",
+    "renewal_worker": "635d85f3af30f9926ec5583e221f315e1643cbd1015df45db0f5c7f58ff82442",
+    "acme_ca": "eaae28f81c6b7a658c6306fcecd78f44084860a7be582ff186fe1452ebc23d3d"
+  },
+  "cleanup_errors": [],
+  "template": {
+    "aliases": [
+      "base"
+    ],
+    "buildID": "base",
+    "buildStatus": "ready",
+    "cpuCount": 1,
+    "memoryMB": 1024,
+    "nodeIDs": [
+      "domain-node"
+    ],
+    "nodes": [
+      {
+        "cpuCount": 1,
+        "memoryMB": 1024,
+        "nodeID": "domain-node",
+        "snapshot": true
+      }
+    ],
+    "public": false,
+    "snapshot": true,
+    "templateID": "base"
+  },
+  "renewal_worker": {
+    "id": "guest-app",
+    "status": "verified",
+    "success": true,
+    "renewal_exit": 0,
+    "active_leaf_sha256": "9d463c02424d62144b3676d2d1512b0f02eb7dff8a9510ce246e915cc57f06c7",
+    "activation_verified": true,
+    "unchanged": false,
+    "recovered_pending_deployment": false
+  },
+  "initial_issuance_kvm_verified": true,
+  "certificate_deployment": {
+    "certbot_deploy_hook": false,
+    "renewal_worker": true,
+    "activation_verified": true,
+    "previous_leaf_sha256": "4b2730c9ba0736b2e1124b29b0ae04887f35e0bda691b47c63fbb25a98a0561f",
+    "active_leaf_sha256": "9d463c02424d62144b3676d2d1512b0f02eb7dff8a9510ce246e915cc57f06c7"
+  },
+  "error": "default certificate was not activated",
+  "owned_processes_reaped": true,
+  "owned_dns_server_stopped": true,
+  "log_tails": {
+    "node-1.log": "hv2-sandboxd: listening on 0.0.0.0:48715, capacity 4, cluster node domain-node\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes are restored from template snapshots: base\n\nsandbox proxy on 0.0.0.0:50613 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:50613 process.Process/Start\n",
+    "redis-0.log": "424:C 03 Oct 2026 04:39:15.511 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.\n424:C 03 Oct 2026 04:39:15.511 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo\n424:C 03 Oct 2026 04:39:15.511 * Redis version=8.0.2, bits=64, commit=00000000, modified=0, pid=424, just started\n424:C 03 Oct 2026 04:39:15.511 * Configuration loaded\n424:M 03 Oct 2026 04:39:15.512 * monotonic clock: POSIX clock_gettime\n424:M 03 Oct 2026 04:39:15.512 * Running mode=standalone, port=41021.\n424:M 03 Oct 2026 04:39:15.513 * Server initialized\n424:M 03 Oct 2026 04:39:15.513 * Ready to accept connections tcp\n424:signal-handler (1791027569) Received SIGTERM scheduling shutdown...\n424:M 03 Oct 2026 04:39:29.261 * User requested shutdown...\n424:M 03 Oct 2026 04:39:29.261 # Redis is now ready to exit, bye bye...\n",
+    "control-2.log": "\u001b[2m2026-10-03T11:39:16.371200Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_control_plane\u001b[0m\u001b[2m:\u001b[0m no --mtls-*: nodes are reached in plaintext, the cluster token and envd traffic with them\nhv2-control-plane: E2B API on 0.0.0.0:55379, envd proxy on 0.0.0.0:55831, store redis://127.0.0.1:41021\n\u001b[2m2026-10-03T11:39:19.112985Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_control_plane\u001b[0m\u001b[2m:\u001b[0m TLS certificate bundle reload rejected; active certificates retained \u001b[3merror\u001b[0m\u001b[2m=\u001b[0minvalid TLS certificate/key pair\n"
+  },
+  "artifacts_unchanged": true
+}

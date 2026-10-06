@@ -1,0 +1,32 @@
+{
+  "binary_sha256": {
+    "baseline": "dc315d313fe2f156ab7aaa593e02c4e0d04ffa024cfb5c69c85d2780a270676e",
+    "candidate": "5d136c14b7ac36bd23af194ea82e844573a3ca18bfa7640e8e3d5e669db80f23"
+  },
+  "affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "kernel_release": "6.18.33.2-microsoft-standard-WSL2",
+  "hz": 100,
+  "order": [
+    "baseline",
+    "candidate",
+    "candidate",
+    "baseline"
+  ],
+  "samples_per_cohort": 16,
+  "warmups_per_cohort": 2,
+  "operation": "cold-create-with-exact-command",
+  "template_mode": "disabled",
+  "input_sha256": {
+    "/var/tmp/hm-competitive/bzImage-known-uart-irq": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "/var/tmp/hm-private-capacity-buffered-guest-v1.cpio.gz": "28c839a0969728c2c579fa9fdc7274714266ce4308f48a2ee1090d6c34537294"
+  }
+}

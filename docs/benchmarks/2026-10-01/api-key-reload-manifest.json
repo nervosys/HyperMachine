@@ -1,0 +1,12 @@
+{
+  "source_commit": "0c90d0334d2dc1a68034df545cd1c9c306991002",
+  "binary_profile": "debug (functional verification only)",
+  "binary_sha256": "ac7e4af6c53bfca35695688f14aac52ffef7fafadd2e2c06a07c1031505d1cdf",
+  "report_sha256": "7f905b804ef8f5467ab1bfb539053967be154934a7064807aa8c29df3e0bcc54",
+  "source_sha256": {
+    "api-key-reload-coordinator.py": "66d764d822805caf16d742ed8d724d76c442ecfad0606c13135c7faea4379af2",
+    "scheduled-worker-core-source.patch": "e6c015334bb04b1c96768c54bfb869ff3a9b2624b95210fc2bce9dc2ed0a1728"
+  },
+  "checks": 16,
+  "scope": "Single owned Unix process on WSL Debian, memory cluster store, plain loopback HTTP; no VM, TLS, replica coordination or performance claim. Build includes unchanged provisional core patch."
+}

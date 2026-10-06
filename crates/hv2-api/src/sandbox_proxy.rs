@@ -163,8 +163,39 @@ mod grpc_status {
 /// because the cluster's answer is a network round trip away.
 #[async_trait::async_trait]
 pub trait SandboxRoutes: Send + Sync + 'static {
+    /// Authenticate or sanitize a request before opening a route or waking a VM.
+    fn authorize_request(
+        &self,
+        _sandbox: &str,
+        _port: u16,
+        _headers: &mut hyper::HeaderMap,
+    ) -> Result<(), ProxyAccessDenied> {
+        Ok(())
+    }
+
+    /// Complete admission before backend lookup or guest wakeup. Implementations
+    /// may await durable access checks here; denial keeps the route unopened.
+    /// The default preserves existing synchronous authorization policies.
+    async fn admit_request(
+        &self,
+        sandbox: &str,
+        port: u16,
+        headers: &mut hyper::HeaderMap,
+    ) -> Result<(), ProxyAccessDenied> {
+        self.authorize_request(sandbox, port, headers)
+    }
+
+    /// Apply route-owned policy to guest HTTP application response headers.
+    fn prepare_response(&self, _sandbox: &str, _port: u16, _headers: &mut hyper::HeaderMap) {}
     /// The address serving `port` for `sandbox`, if that sandbox exists.
     async fn resolve(&self, sandbox: &str, port: u16) -> Option<SocketAddr>;
+
+    /// Resolve an operator-bound hostname to a sandbox and guest port.
+    /// The authority may include the public proxy's port.
+    async fn resolve_hostname(&self, authority: &str) -> Option<(u16, String)> {
+        let _ = authority;
+        None
+    }
 
     /// [`Self::resolve`] for a request about to be sent, with a guard the
     /// proxy holds until that request's exchange is over -- response body
@@ -198,6 +229,13 @@ pub trait SandboxRoutes: Send + Sync + 'static {
     )> {
         None
     }
+}
+
+/// A route owner refused authentication before backend activity.
+#[derive(Debug)]
+pub struct ProxyAccessDenied {
+    /// Optional HTTP authentication challenge for browser clients.
+    pub challenge: Option<&'static str>,
 }
 
 /// What the proxy relays over: a TCP stream, or TLS on one.
@@ -471,7 +509,7 @@ pub async fn serve_tls(
 
 /// Route one request and stream it through.
 async fn proxy(
-    req: Request<Incoming>,
+    mut req: Request<Incoming>,
     routes: Arc<dyn SandboxRoutes>,
 ) -> Result<Response<ProxyBody>, hyper::Error> {
     // `:authority` on an h2 request; `Host` if a client sent one instead.
@@ -492,7 +530,7 @@ async fn proxy(
     // sandbox it wants, while a hostname has to be parsed and may just be
     // whatever name the proxy was reached by -- `localhost:49983` in the
     // SDK's own default mode, which names no sandbox at all.
-    let route = route_of_headers(req.headers())
+    let mut route = route_of_headers(req.headers())
         .map(|(port, sandbox)| (port, sandbox.to_owned()))
         .or_else(|| {
             authority
@@ -501,16 +539,42 @@ async fn proxy(
                 .map(|(port, sandbox)| (port, sandbox.to_owned()))
         });
 
+    if route.is_none() {
+        if let Some(authority) = authority.as_deref() {
+            route = routes.resolve_hostname(authority).await;
+        }
+    }
+
     let Some((port, sandbox)) = route else {
         return Ok(refuse(
             grpc,
             StatusCode::BAD_REQUEST,
             grpc_status::INVALID_ARGUMENT,
             "nothing to route on: no e2b-sandbox-id header, and the authority \
-             is not {port}-{sandboxID}.{domain}",
+             is neither {port}-{sandboxID}.{domain} nor a bound custom domain",
         ));
     };
     let sandbox = sandbox.as_str();
+
+    if let Err(denied) = routes.admit_request(sandbox, port, req.headers_mut()).await {
+        let mut response = refuse(
+            grpc,
+            StatusCode::UNAUTHORIZED,
+            16,
+            "sandbox URL authentication required",
+        );
+        if let Some(challenge) = denied.challenge {
+            response.headers_mut().insert(
+                hyper::header::WWW_AUTHENTICATE,
+                hyper::header::HeaderValue::from_static(challenge),
+            );
+        }
+        response.headers_mut().insert(
+            hyper::header::CACHE_CONTROL,
+            hyper::header::HeaderValue::from_static("no-store"),
+        );
+        return Ok(response);
+    }
 
     let Some((mut target, mut in_flight)) = routes.open(sandbox, port).await else {
         return Ok(refuse(
@@ -587,7 +651,9 @@ async fn proxy(
     // whatever the sandbox serves there, which is HTTP/1.1 far more often,
     // and WebSockets need its upgrades.
     if port != ENVD_PORT {
-        return Ok(relay_http1(req, stream, target, sandbox, port, in_flight).await);
+        let mut response = relay_http1(req, stream, target, sandbox, port, in_flight).await;
+        routes.prepare_response(sandbox, port, response.headers_mut());
+        return Ok(response);
     }
     let (mut sender, connection) =
         match hyper::client::conn::http2::handshake(TokioExecutor::new(), TokioIo::new(stream))
@@ -616,6 +682,17 @@ async fn proxy(
     // Rewrite the authority to the backend's own, and keep everything else --
     // path, method, and the headers gRPC carries its metadata in.
     let (mut parts, body) = req.into_parts();
+    // Retain the public hostname for virtual-host applications even when
+    // HTTP/2's authority is rewritten for the next proxy hop.
+    if !parts.headers.contains_key(hyper::header::HOST) {
+        if let Some(value) = parts
+            .uri
+            .authority()
+            .and_then(|authority| hyper::header::HeaderValue::from_str(authority.as_str()).ok())
+        {
+            parts.headers.insert(hyper::header::HOST, value);
+        }
+    }
     // The route goes with the request as headers, because rewriting the
     // authority erases a route that was read from it: a proxy in front of
     // another proxy -- a cluster's control plane in front of a node -- would
@@ -793,6 +870,95 @@ async fn relay_http1(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn asynchronous_admission_finishes_before_any_backend_open() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::time::Duration;
+        struct DelayedDeny {
+            entered: Arc<tokio::sync::Notify>,
+            release: Arc<tokio::sync::Notify>,
+            resolves: Arc<AtomicUsize>,
+        }
+        #[async_trait::async_trait]
+        impl SandboxRoutes for DelayedDeny {
+            async fn admit_request(
+                &self,
+                sandbox: &str,
+                port: u16,
+                _headers: &mut hyper::HeaderMap,
+            ) -> Result<(), ProxyAccessDenied> {
+                assert_eq!(sandbox, "sbx_owned");
+                assert_eq!(port, 9000);
+                self.entered.notify_one();
+                self.release.notified().await;
+                Err(ProxyAccessDenied {
+                    challenge: Some("Basic realm=\"owned\""),
+                })
+            }
+            async fn resolve(&self, _sandbox: &str, _port: u16) -> Option<SocketAddr> {
+                self.resolves.fetch_add(1, Ordering::SeqCst);
+                None
+            }
+        }
+        for grpc in [false, true] {
+            let entered = Arc::new(tokio::sync::Notify::new());
+            let release = Arc::new(tokio::sync::Notify::new());
+            let resolves = Arc::new(AtomicUsize::new(0));
+            let routes: Arc<dyn SandboxRoutes> = Arc::new(DelayedDeny {
+                entered: Arc::clone(&entered),
+                release: Arc::clone(&release),
+                resolves: Arc::clone(&resolves),
+            });
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                let (stream, peer) = listener.accept().await.unwrap();
+                serve_one(stream, routes, peer).await;
+            });
+            let request = tokio::spawn(async move {
+                let mut request = reqwest::Client::new()
+                    .get(format!("http://{address}/"))
+                    .header("host", "9000-sbx_owned.test");
+                if grpc {
+                    request = request.header("content-type", "application/grpc");
+                }
+                request.send().await.unwrap()
+            });
+            tokio::time::timeout(Duration::from_secs(2), entered.notified())
+                .await
+                .unwrap();
+            assert_eq!(
+                resolves.load(Ordering::SeqCst),
+                0,
+                "pending admission must not open a route"
+            );
+            assert!(
+                !request.is_finished(),
+                "pending admission must not answer early"
+            );
+            release.notify_one();
+            let response = tokio::time::timeout(Duration::from_secs(2), request)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(response.status().as_u16(), if grpc { 200 } else { 401 });
+            if grpc {
+                assert_eq!(response.headers()["grpc-status"], "16");
+            }
+            assert_eq!(
+                response.headers()["www-authenticate"],
+                "Basic realm=\"owned\""
+            );
+            assert_eq!(
+                resolves.load(Ordering::SeqCst),
+                0,
+                "denied admission must not open a route"
+            );
+            server.abort();
+            let _ = server.await;
+        }
+    }
 
     #[test]
     fn an_e2b_style_host_names_a_port_and_a_sandbox() {

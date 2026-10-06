@@ -1,0 +1,83 @@
+{
+  "diagnostic_only": true,
+  "performance_win_established": false,
+  "runtime_change_adopted": false,
+  "runs": [
+    {
+      "report": "report.json",
+      "highest_address": [
+        {
+          "region_bytes": 14795027,
+          "used_bytes_released": 14794912,
+          "free_bytes_increase": 14794912,
+          "arena_bytes_change": 0,
+          "mapped_bytes_change": 0
+        }
+      ],
+      "image_copies": [
+        {
+          "image": "initrd",
+          "payload_bytes": 1858675,
+          "used_bytes_increase": 1858688
+        },
+        {
+          "image": "kernel",
+          "payload_bytes": 12932096,
+          "used_bytes_increase": 12932112
+        },
+        {
+          "image": "initrd",
+          "payload_bytes": 1858675,
+          "used_bytes_increase": 1858688
+        },
+        {
+          "image": "kernel",
+          "payload_bytes": 12932096,
+          "used_bytes_increase": 12932112
+        }
+      ],
+      "guest_checks_passed": true,
+      "owned_node_exit_code": 0
+    },
+    {
+      "report": "repeat.json",
+      "highest_address": [
+        {
+          "region_bytes": 14795027,
+          "used_bytes_released": 14794912,
+          "free_bytes_increase": 14794912,
+          "arena_bytes_change": 0,
+          "mapped_bytes_change": 0
+        }
+      ],
+      "image_copies": [
+        {
+          "image": "initrd",
+          "payload_bytes": 1858675,
+          "used_bytes_increase": 1858688
+        },
+        {
+          "image": "kernel",
+          "payload_bytes": 12932096,
+          "used_bytes_increase": 12932112
+        },
+        {
+          "image": "initrd",
+          "payload_bytes": 1858675,
+          "used_bytes_increase": 1858688
+        },
+        {
+          "image": "kernel",
+          "payload_bytes": 12932096,
+          "used_bytes_increase": 12932112
+        }
+      ],
+      "guest_checks_passed": true,
+      "owned_node_exit_code": 0
+    }
+  ],
+  "limitations": [
+    "allocator transitions do not establish retained PSS ownership",
+    "concurrent process allocations and diagnostic logging can confound deltas"
+  ]
+}

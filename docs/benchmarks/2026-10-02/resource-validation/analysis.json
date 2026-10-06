@@ -1,0 +1,52 @@
+{
+  "engines": {
+    "hypermachine": {
+      "planned": 16,
+      "attempted": 16,
+      "passed": 16,
+      "failed": 0,
+      "successful_p50_ms": 63.68449400000031,
+      "successful_p95_ms": 82.54181000000216,
+      "successful_p99_ms": 82.54181000000216,
+      "median_held_pss_mib": 90.072265625,
+      "median_incremental_pss_mib": 47.95751953125
+    },
+    "firecracker": {
+      "planned": 16,
+      "attempted": 16,
+      "passed": 16,
+      "failed": 0,
+      "successful_p50_ms": 71.00696299999498,
+      "successful_p95_ms": 90.67559100000011,
+      "successful_p99_ms": 90.67559100000011,
+      "median_held_pss_mib": 40.0927734375,
+      "median_incremental_pss_mib": 40.0927734375
+    }
+  },
+  "pairs": [
+    {
+      "pair": 0,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": -10.95229362500217,
+      "hypermachine_p99_reduction_ms": -11.355480000005969,
+      "hypermachine_held_pss_reduction_mib": -50.2412109375
+    },
+    {
+      "pair": 1,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 18.59106687500222,
+      "hypermachine_p99_reduction_ms": 26.991096999999797,
+      "hypermachine_held_pss_reduction_mib": -49.7177734375
+    }
+  ],
+  "artifacts_unchanged": true,
+  "prepared_sources_unchanged": true,
+  "cohort_success": true,
+  "latencies_conditional_on_success": true,
+  "memory_conditional_on_complete_successful_batches": true,
+  "runtime_change_adopted": false,
+  "managed_competitor_win_established": false,
+  "cleanup_verified": true,
+  "hypermachine_faster_complete_pairs": 1,
+  "matched_guest_restore_contract": true
+}

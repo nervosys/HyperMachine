@@ -1,0 +1,203 @@
+{
+  "client_arch": "x86_64",
+  "client_debug_assertions": true,
+  "client_os": "windows",
+  "client_version": "1.1.0",
+  "completed_lifecycles_per_second": 13.409852634435952,
+  "concurrency": 1,
+  "create_ms": {
+    "max": 41.1469,
+    "mean": 23.82944,
+    "min": 17.6978,
+    "n": 20,
+    "p50": 22.967100000000002,
+    "p95": 32.9897,
+    "p99": 41.1469
+  },
+  "elapsed_seconds": 1.4914407,
+  "environment": "AMD Ryzen 9 9900X, 24 logical CPUs; WSL2 Debian Linux 6.18.33.2, nested Hyper-V/KVM; 45.9 GiB guest host RAM; base BusyBox/static-agent guest 1 vCPU 1024 MiB; kernel sha256 0e1962a290ad92bff749d3b736001c2f22782fcbcaf716ecff0db6543631adc2; initrd sha256 2f4f9b4dbc0b026e99ae1e299e3f221d9ac7b2c53f42ad1f963816426d9bc294; daemon release based on 2dbf31f, client Windows debug with working-tree metadata fixes; other host workloads active; templates prewarmed, no warmups discarded; no guest networking; diagnostic repeat with strict template policy dbd0bd3 and file-transfer working tree; server template metadata verified; hv2_sandboxd debug stage timing enabled, core warn; host workload availability changed since initial cohorts",
+  "exec_ms": {
+    "max": 21.7741,
+    "mean": 11.915595,
+    "min": 8.3704,
+    "n": 20,
+    "p50": 11.139899999999999,
+    "p95": 17.340999999999998,
+    "p99": 21.7741
+  },
+  "failed_samples": 0,
+  "finished_at": "2026-09-30T16:51:27.936208800+00:00",
+  "max_p99_ready_ms": null,
+  "readiness": "creation followed by /bin/sh producing a checked unique marker",
+  "ready_ms": {
+    "max": 54.0287,
+    "mean": 35.747675,
+    "min": 27.075599999999998,
+    "n": 20,
+    "p50": 33.17959999999999,
+    "p95": 49.768,
+    "p99": 54.0287
+  },
+  "requested_samples": 20,
+  "require_snapshot": true,
+  "samples": [
+    {
+      "create_ms": 23.569300000000002,
+      "exec_ms": 8.3704,
+      "index": 0,
+      "ready_ms": 31.9414,
+      "success": true
+    },
+    {
+      "create_ms": 23.1663,
+      "exec_ms": 12.0895,
+      "index": 1,
+      "ready_ms": 35.257799999999996,
+      "success": true
+    },
+    {
+      "create_ms": 17.6978,
+      "exec_ms": 10.055200000000001,
+      "index": 2,
+      "ready_ms": 27.7559,
+      "success": true
+    },
+    {
+      "create_ms": 19.8105,
+      "exec_ms": 9.1535,
+      "index": 3,
+      "ready_ms": 28.9658,
+      "success": true
+    },
+    {
+      "create_ms": 21.8582,
+      "exec_ms": 12.5532,
+      "index": 4,
+      "ready_ms": 34.4136,
+      "success": true
+    },
+    {
+      "create_ms": 18.0621,
+      "exec_ms": 11.232199999999999,
+      "index": 5,
+      "ready_ms": 29.2975,
+      "success": true
+    },
+    {
+      "create_ms": 22.967100000000002,
+      "exec_ms": 9.1266,
+      "index": 6,
+      "ready_ms": 32.0952,
+      "success": true
+    },
+    {
+      "create_ms": 24.813399999999998,
+      "exec_ms": 17.340999999999998,
+      "index": 7,
+      "ready_ms": 42.158,
+      "success": true
+    },
+    {
+      "create_ms": 18.3783,
+      "exec_ms": 8.6948,
+      "index": 8,
+      "ready_ms": 27.075599999999998,
+      "success": true
+    },
+    {
+      "create_ms": 19.843300000000003,
+      "exec_ms": 9.1069,
+      "index": 9,
+      "ready_ms": 28.9524,
+      "success": true
+    },
+    {
+      "create_ms": 41.1469,
+      "exec_ms": 12.8792,
+      "index": 10,
+      "ready_ms": 54.0287,
+      "success": true
+    },
+    {
+      "create_ms": 20.1337,
+      "exec_ms": 21.7741,
+      "index": 11,
+      "ready_ms": 41.9101,
+      "success": true
+    },
+    {
+      "create_ms": 32.9897,
+      "exec_ms": 16.7758,
+      "index": 12,
+      "ready_ms": 49.768,
+      "success": true
+    },
+    {
+      "create_ms": 30.777700000000003,
+      "exec_ms": 14.5746,
+      "index": 13,
+      "ready_ms": 45.3557,
+      "success": true
+    },
+    {
+      "create_ms": 28.5607,
+      "exec_ms": 12.717300000000002,
+      "index": 14,
+      "ready_ms": 41.2853,
+      "success": true
+    },
+    {
+      "create_ms": 18.386300000000002,
+      "exec_ms": 11.4976,
+      "index": 15,
+      "ready_ms": 29.886599999999998,
+      "success": true
+    },
+    {
+      "create_ms": 24.0784,
+      "exec_ms": 9.0995,
+      "index": 16,
+      "ready_ms": 33.17959999999999,
+      "success": true
+    },
+    {
+      "create_ms": 25.3319,
+      "exec_ms": 11.0423,
+      "index": 17,
+      "ready_ms": 36.3768,
+      "success": true
+    },
+    {
+      "create_ms": 20.3145,
+      "exec_ms": 9.0883,
+      "index": 18,
+      "ready_ms": 29.4049,
+      "success": true
+    },
+    {
+      "create_ms": 24.7027,
+      "exec_ms": 11.139899999999999,
+      "index": 19,
+      "ready_ms": 35.8446,
+      "success": true
+    }
+  ],
+  "schema_version": 1,
+  "successful_samples": 20,
+  "template": "base",
+  "template_metadata": {
+    "aliases": [
+      "base"
+    ],
+    "buildID": "base",
+    "buildStatus": "ready",
+    "cpuCount": 1,
+    "envdVersion": "0.6.3",
+    "memoryMB": 1024,
+    "public": false,
+    "snapshot": true,
+    "templateID": "base"
+  },
+  "template_metadata_error": null,
+  "threshold_passed": null
+}

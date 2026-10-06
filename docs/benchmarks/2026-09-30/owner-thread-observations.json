@@ -1,0 +1,447 @@
+{
+  "pid": 39474,
+  "observations": [
+    {
+      "utc": "2026-10-01T03:37:58.342703+00:00",
+      "tid": 44554,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 192,
+      "stime": 22,
+      "start_ticks": 385533,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:37:59.343322+00:00",
+      "tid": 44554,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 220,
+      "stime": 24,
+      "start_ticks": 385533,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:00.343871+00:00",
+      "tid": 44554,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 246,
+      "stime": 26,
+      "start_ticks": 385533,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:01.344808+00:00",
+      "tid": 44554,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 271,
+      "stime": 29,
+      "start_ticks": 385533,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:02.345537+00:00",
+      "tid": 44554,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 295,
+      "stime": 31,
+      "start_ticks": 385533,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:03.346551+00:00",
+      "tid": 44554,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 318,
+      "stime": 36,
+      "start_ticks": 385533,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:04.347489+00:00",
+      "tid": 44554,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 340,
+      "stime": 42,
+      "start_ticks": 385533,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:05.348395+00:00",
+      "tid": 44554,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 358,
+      "stime": 48,
+      "start_ticks": 385533,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:06.349348+00:00",
+      "tid": 44554,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 381,
+      "stime": 56,
+      "start_ticks": 385533,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:15.371766+00:00",
+      "tid": 45543,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 4,
+      "stime": 1,
+      "start_ticks": 387899,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:16.372886+00:00",
+      "tid": 45543,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 24,
+      "stime": 16,
+      "start_ticks": 387899,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:17.375782+00:00",
+      "tid": 45543,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 46,
+      "stime": 27,
+      "start_ticks": 387899,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:18.382150+00:00",
+      "tid": 45543,
+      "name": "vcpu-0",
+      "state": "S",
+      "utime": 60,
+      "stime": 37,
+      "start_ticks": 387899,
+      "wchan": "kvm_vcpu_block"
+    },
+    {
+      "utc": "2026-10-01T03:38:19.386971+00:00",
+      "tid": 45765,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 8,
+      "stime": 9,
+      "start_ticks": 388272,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:20.388139+00:00",
+      "tid": 45765,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 33,
+      "stime": 24,
+      "start_ticks": 388272,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:21.388727+00:00",
+      "tid": 45765,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 59,
+      "stime": 33,
+      "start_ticks": 388272,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:22.390200+00:00",
+      "tid": 45765,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 100,
+      "stime": 35,
+      "start_ticks": 388272,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:23.388313+00:00",
+      "tid": 45765,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 144,
+      "stime": 39,
+      "start_ticks": 388272,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:24.389112+00:00",
+      "tid": 45765,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 185,
+      "stime": 42,
+      "start_ticks": 388272,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:25.389903+00:00",
+      "tid": 45765,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 218,
+      "stime": 50,
+      "start_ticks": 388272,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:26.390617+00:00",
+      "tid": 45765,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 244,
+      "stime": 59,
+      "start_ticks": 388272,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:27.391396+00:00",
+      "tid": 45765,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 284,
+      "stime": 63,
+      "start_ticks": 388272,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:28.392121+00:00",
+      "tid": 45765,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 332,
+      "stime": 65,
+      "start_ticks": 388272,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:29.396255+00:00",
+      "tid": 45765,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 377,
+      "stime": 68,
+      "start_ticks": 388272,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:30.396940+00:00",
+      "tid": 45765,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 419,
+      "stime": 71,
+      "start_ticks": 388272,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:31.397995+00:00",
+      "tid": 45765,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 462,
+      "stime": 76,
+      "start_ticks": 388272,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:32.400313+00:00",
+      "tid": 45765,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 497,
+      "stime": 84,
+      "start_ticks": 388272,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:33.404149+00:00",
+      "tid": 45765,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 539,
+      "stime": 89,
+      "start_ticks": 388272,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:34.404970+00:00",
+      "tid": 45765,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 583,
+      "stime": 91,
+      "start_ticks": 388272,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:38.407233+00:00",
+      "tid": 46412,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 27,
+      "stime": 10,
+      "start_ticks": 390129,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:39.407925+00:00",
+      "tid": 46416,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 6,
+      "stime": 2,
+      "start_ticks": 390301,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:40.408862+00:00",
+      "tid": 46416,
+      "name": "vcpu-0",
+      "state": "S",
+      "utime": 36,
+      "stime": 12,
+      "start_ticks": 390301,
+      "wchan": "kvm_vcpu_block"
+    },
+    {
+      "utc": "2026-10-01T03:38:46.413584+00:00",
+      "tid": 46447,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 8,
+      "stime": 3,
+      "start_ticks": 390993,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:47.414769+00:00",
+      "tid": 46447,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 41,
+      "stime": 13,
+      "start_ticks": 390993,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:48.415760+00:00",
+      "tid": 46468,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 3,
+      "stime": 0,
+      "start_ticks": 391212,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:49.416910+00:00",
+      "tid": 46468,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 36,
+      "stime": 11,
+      "start_ticks": 391212,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:50.417786+00:00",
+      "tid": 46468,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 72,
+      "stime": 18,
+      "start_ticks": 391212,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:51.418851+00:00",
+      "tid": 46468,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 107,
+      "stime": 24,
+      "start_ticks": 391212,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:52.419576+00:00",
+      "tid": 46468,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 143,
+      "stime": 30,
+      "start_ticks": 391212,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:53.417794+00:00",
+      "tid": 46468,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 175,
+      "stime": 38,
+      "start_ticks": 391212,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:54.418561+00:00",
+      "tid": 46468,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 211,
+      "stime": 43,
+      "start_ticks": 391212,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:55.419265+00:00",
+      "tid": 46468,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 247,
+      "stime": 48,
+      "start_ticks": 391212,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:56.420337+00:00",
+      "tid": 46468,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 288,
+      "stime": 50,
+      "start_ticks": 391212,
+      "wchan": "0"
+    },
+    {
+      "utc": "2026-10-01T03:38:57.421243+00:00",
+      "tid": 46468,
+      "name": "vcpu-0",
+      "state": "R",
+      "utime": 326,
+      "stime": 54,
+      "start_ticks": 391212,
+      "wchan": "0"
+    }
+  ],
+  "source_sha256": "7151b05e8a2c975109471109c85f9cb9435ce14c2dd27154f2d1f02207999cbf",
+  "limitation": "Read-only shared-host observations; match thread lifetime and timestamps to failed boots before interpreting"
+}

@@ -1,0 +1,97 @@
+{
+  "attempts": 560,
+  "rows": [
+    {
+      "rate": 5,
+      "engine": "hypermachine",
+      "attempts": 80,
+      "passed": 80,
+      "scheduled_command_ready_ms": {
+        "p50": 371.8477150032413,
+        "p99": 475.8102680061711
+      },
+      "scheduled_validation_ms": {
+        "p50": 376.2831130050472,
+        "p99": 480.1408430066658
+      },
+      "client_queue_ms": {
+        "p50": 0.08348999836016446,
+        "p99": 0.3589210027712397
+      },
+      "completed_lifecycles_per_second": [
+        4.868492643670893,
+        4.85971162764132
+      ],
+      "raw_sha256": "a0313df4f36e8dd6bdef0ce9eb223a55e953e1b76ce09c6dc107cd4b4bd0003e"
+    },
+    {
+      "rate": 5,
+      "engine": "firecracker",
+      "attempts": 80,
+      "passed": 80,
+      "scheduled_command_ready_ms": {
+        "p50": 342.7967110008467,
+        "p99": 438.56239200249547
+      },
+      "scheduled_validation_ms": {
+        "p50": 343.2730469983653,
+        "p99": 439.0880130013102
+      },
+      "client_queue_ms": {
+        "p50": 0.11866199929499999,
+        "p99": 0.36639800237026066
+      },
+      "completed_lifecycles_per_second": [
+        4.876793074068886,
+        4.873977456768539
+      ],
+      "raw_sha256": "a0313df4f36e8dd6bdef0ce9eb223a55e953e1b76ce09c6dc107cd4b4bd0003e"
+    },
+    {
+      "rate": 25,
+      "engine": "hypermachine",
+      "attempts": 200,
+      "passed": 200,
+      "scheduled_command_ready_ms": {
+        "p50": 1512.8279940001084,
+        "p99": 2683.91546400293
+      },
+      "scheduled_validation_ms": {
+        "p50": 1516.918024001061,
+        "p99": 2688.3625210021273
+      },
+      "client_queue_ms": {
+        "p50": 1072.5797490013065,
+        "p99": 2276.6226370004006
+      },
+      "completed_lifecycles_per_second": [
+        14.663934211059773,
+        14.94988388397462
+      ],
+      "raw_sha256": "69a0e41bc3ab9e8c45d233014cd782cfab5378afa2213d9341cfbb3321bcc4a3"
+    },
+    {
+      "rate": 25,
+      "engine": "firecracker",
+      "attempts": 200,
+      "passed": 200,
+      "scheduled_command_ready_ms": {
+        "p50": 1156.7217589964275,
+        "p99": 2034.4746719967225
+      },
+      "scheduled_validation_ms": {
+        "p50": 1158.3090999975684,
+        "p99": 2034.901900999248
+      },
+      "client_queue_ms": {
+        "p50": 775.149915003567,
+        "p99": 1670.0559239980066
+      },
+      "completed_lifecycles_per_second": [
+        16.546975651635215,
+        16.395446960956463
+      ],
+      "raw_sha256": "69a0e41bc3ab9e8c45d233014cd782cfab5378afa2213d9341cfbb3321bcc4a3"
+    }
+  ]
+}

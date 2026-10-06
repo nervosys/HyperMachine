@@ -9,7 +9,7 @@
 //! # What this actually is
 //!
 //! E2B's real architecture splits into two protocols: a control-plane REST
-//! API (`api.e2b.app`, `POST /sandboxes` etc. — `spec/openapi.yml` in
+//! API (`api.e2b.app`, `POST /sandboxes` etc. â€” `spec/openapi.yml` in
 //! `e2b-dev/E2B`) for lifecycle, and a separate in-guest daemon ("envd")
 //! the SDK talks to *directly* for code execution, using its own
 //! Connect-RPC/REST protocol. This implements the control-plane shape for
@@ -95,7 +95,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::{Path, Query, Request, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
@@ -111,11 +111,13 @@ use hv2_cluster::metrics::{Counter, Exposition, Histogram};
 use hv2_cluster::model::{
     metadata_matches, now_ms, parse_metadata_query, ClusterEvent, SandboxRecord,
 };
+use hv2_cluster::names::{NameReservation, SandboxName, NAME_OPERATION_HEADER};
 use hv2_cluster::node::{NodeAgent, NodeConfig};
 use hv2_net::gateway::socks::Socks5Proxy;
 use hv2_net::gateway::{mitm::Authority, Gateway, GatewayConfig, GatewayHandle};
 use hv2_net::network_policy::{Cidr, Headers, NetworkPolicy, Verdict};
 
+mod boot_diagnostics;
 mod builds;
 mod checkpoints;
 mod cloud_login;
@@ -124,6 +126,7 @@ mod forwards;
 mod identity;
 mod idle;
 mod initramfs;
+mod private_source;
 // Volumes are served with openat2 and O_PATH, which only Linux has; see
 // volumes_unsupported.rs for what other hosts answer.
 #[cfg(target_os = "linux")]
@@ -177,6 +180,23 @@ const ENVD_PORT: u16 = 49983;
 /// caller asking for `gzip=True` sends.
 const ENVD_VERSION: &str = "0.6.3";
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum GuestTransport {
+    #[default]
+    Mmio,
+    Pci,
+}
+
+impl GuestTransport {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "mmio" => Ok(Self::Mmio),
+            "pci" => Ok(Self::Pci),
+            other => Err(format!("--guest-transport is mmio or pci, not {other}")),
+        }
+    }
+}
+
 #[derive(Clone)]
 struct Options {
     port: u16,
@@ -191,8 +211,14 @@ struct Options {
     memory_mb: u64,
     cpu_cores: u32,
     ready_timeout: Duration,
+    cold_start_concurrency: Option<usize>,
+    guest_transport: GuestTransport,
     /// Give each sandbox a NIC behind a gateway. Off by default.
     network: bool,
+    /// Private operator policy; exact sandbox IDs, never guest-supplied secrets.
+    egress_secrets_file: Option<String>,
+    /// Additional operator trust roots for intercepted upstream TLS.
+    egress_upstream_ca: Option<String>,
     /// What a sandbox that configures no network policy gets.
     egress_default: Verdict,
     /// Accept an `egressProxy` on a private or internal address.
@@ -216,8 +242,11 @@ struct Options {
     /// Required on every API call when set.
     cluster_token: Option<String>,
     node_ttl: Duration,
+    registration_reconcile_interval: Option<Duration>,
     /// Boot every sandbox instead of restoring it from a template.
     no_template: bool,
+    /// Refuse startup if any configured snapshot template cannot be prepared.
+    require_template: bool,
     /// A directory shared by every node, mounted at the same path on each:
     /// templates, the egress CA and paused sandboxes, so a sandbox paused on
     /// one node resumes on any.
@@ -280,7 +309,11 @@ fn parse_options() -> Result<Options, String> {
         memory_mb: 1024,
         cpu_cores: 1,
         ready_timeout: Duration::from_secs(15),
+        cold_start_concurrency: None,
+        guest_transport: GuestTransport::default(),
         network: false,
+        egress_secrets_file: None,
+        egress_upstream_ca: None,
         egress_default: Verdict::Deny,
         allow_private_egress_proxy: false,
         tenant_reserved: Vec::new(),
@@ -294,7 +327,9 @@ fn parse_options() -> Result<Options, String> {
             .ok()
             .filter(|t| !t.is_empty()),
         node_ttl: Duration::from_secs(9),
+        registration_reconcile_interval: None,
         no_template: false,
+        require_template: false,
         prefault: false,
         no_net_offload: false,
         templates: Vec::new(),
@@ -329,12 +364,23 @@ fn parse_options() -> Result<Options, String> {
             "--tls-cert" => opts.tls_cert = Some(value(&mut i)?),
             "--tls-key" => opts.tls_key = Some(value(&mut i)?),
             "--memory-gb" => {
-                opts.memory_mb = value(&mut i)?.parse::<u64>().map_err(|e| format!("{e}"))? * 1024;
+                opts.memory_mb = parse_guest_memory(&value(&mut i)?, 1024)?;
             }
-            "--memory-mb" => opts.memory_mb = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
-            "--cpu-cores" => opts.cpu_cores = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
+            "--memory-mb" => opts.memory_mb = parse_guest_memory(&value(&mut i)?, 1)?,
+            "--cpu-cores" => {
+                opts.cpu_cores = value(&mut i)?
+                    .parse()
+                    .map_err(|_| "--cpu-cores requires a positive u32 integer".to_string())?;
+                if opts.cpu_cores == 0 {
+                    return Err("--cpu-cores requires a positive u32 integer".to_string());
+                }
+            }
+            "--guest-transport" => opts.guest_transport = GuestTransport::parse(&value(&mut i)?)?,
             "--network" => opts.network = true,
+            "--egress-secrets-file" => opts.egress_secrets_file = Some(value(&mut i)?),
+            "--egress-upstream-ca" => opts.egress_upstream_ca = Some(value(&mut i)?),
             "--no-template" => opts.no_template = true,
+            "--require-template" => opts.require_template = true,
             "--prefault" => opts.prefault = true,
             "--no-net-offload" => opts.no_net_offload = true,
             "--guest-kit" => opts.guest_kit = Some(value(&mut i)?.into()),
@@ -363,6 +409,15 @@ fn parse_options() -> Result<Options, String> {
             "--identity-issuer" => opts.identity_issuer = Some(value(&mut i)?),
             "--trust-domain" => opts.trust_domain = value(&mut i)?,
             "--identity-key" => opts.identity_key = Some(value(&mut i)?.into()),
+            "--cold-start-concurrency" => {
+                let limit: usize = value(&mut i)?
+                    .parse()
+                    .map_err(|_| "--cold-start-concurrency requires 1..1024")?;
+                if !(1..=1024).contains(&limit) {
+                    return Err("--cold-start-concurrency requires 1..1024".into());
+                }
+                opts.cold_start_concurrency = Some(limit);
+            }
             "--capacity" => opts.capacity = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--cluster-store" => opts.cluster_store = Some(value(&mut i)?),
             "--cluster-namespace" => opts.cluster_namespace = value(&mut i)?,
@@ -372,6 +427,10 @@ fn parse_options() -> Result<Options, String> {
                 opts.advertise_proxy = Some(value(&mut i)?);
             }
             "--cluster-token" => opts.cluster_token = Some(value(&mut i)?),
+            "--registration-reconcile-interval" => {
+                opts.registration_reconcile_interval =
+                    Some(parse_registration_reconcile_interval(&value(&mut i)?)?);
+            }
             "--node-ttl" => {
                 opts.node_ttl =
                     Duration::from_secs(value(&mut i)?.parse().map_err(|e| format!("{e}"))?);
@@ -402,12 +461,12 @@ fn parse_options() -> Result<Options, String> {
             "--help" | "-h" => {
                 println!(
                     "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N | --memory-mb N] [--cpu-cores N] \
-                     [--capacity N] [--no-template] [--prefault] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] [--idle-pause-after SECS] \
+                     [--capacity N] [--guest-transport mmio|pci] [--cold-start-concurrency N] [--no-template | --require-template] [--prefault] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] [--idle-pause-after SECS] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy] \
                      [--tenant-reserved-cidr CIDR]...] \
                      [--tls-cert F --tls-key F] \
                      [--cluster-store redis://H:P --advertise-api URL --advertise-proxy H:P \
-                     [--node-id ID] [--cluster-namespace NS] [--cluster-token T] [--node-ttl SECS]]\n\
+                     [--node-id ID] [--cluster-namespace NS] [--cluster-token T] [--node-ttl SECS] [--registration-reconcile-interval SECS]]\n\
                      HV2_KERNEL and HV2_INITRD name the guest; HV2_CLUSTER_TOKEN may carry the token."
                 );
                 std::process::exit(0);
@@ -416,7 +475,125 @@ fn parse_options() -> Result<Options, String> {
         }
         i += 1;
     }
+    if opts.no_template && opts.require_template {
+        return Err("--require-template conflicts with --no-template".to_string());
+    }
+    if opts.registration_reconcile_interval.is_some()
+        && (opts.cluster_store.is_none() || opts.cluster_token.as_deref().unwrap_or("").is_empty())
+    {
+        return Err("--registration-reconcile-interval requires --cluster-store and a nonempty cluster token".into());
+    }
     Ok(opts)
+}
+
+fn parse_registration_reconcile_interval(value: &str) -> Result<Duration, String> {
+    let seconds: u64 = value
+        .parse()
+        .map_err(|_| "--registration-reconcile-interval requires 1..3600 seconds".to_string())?;
+    if !(1..=3600).contains(&seconds) {
+        return Err("--registration-reconcile-interval requires 1..3600 seconds".into());
+    }
+    Ok(Duration::from_secs(seconds))
+}
+
+fn parse_guest_memory(value: &str, multiplier: u64) -> Result<u64, String> {
+    value
+        .parse::<u64>()
+        .ok()
+        .filter(|amount| *amount > 0)
+        .and_then(|amount| amount.checked_mul(multiplier))
+        .ok_or_else(|| {
+            "guest memory requires a positive integer with a representable MiB size".to_string()
+        })
+}
+
+#[cfg(test)]
+mod guest_transport_tests {
+    use super::{guest_cmdline, GuestTransport};
+    #[test]
+    fn selection_is_explicit_and_invalid_values_are_refused() {
+        assert_eq!(GuestTransport::default(), GuestTransport::Mmio);
+        assert_eq!(GuestTransport::parse("mmio").unwrap(), GuestTransport::Mmio);
+        assert_eq!(GuestTransport::parse("pci").unwrap(), GuestTransport::Pci);
+        for value in ["", "PCI", "automatic", "none"] {
+            assert!(GuestTransport::parse(value).is_err());
+        }
+    }
+    #[test]
+    fn equal_boot_arguments_cannot_share_cross_transport_templates() {
+        let historical = format!(
+            "{}\0{}\0{}\0{}\0{}",
+            guest_cmdline(false, GuestTransport::Mmio),
+            1024,
+            1,
+            false,
+            ""
+        );
+        let mut mmio = historical.clone();
+        let mut pci = historical.clone();
+        super::append_template_transport(&mut mmio, GuestTransport::Mmio);
+        super::append_template_transport(&mut pci, GuestTransport::Pci);
+        assert_eq!(
+            mmio, historical,
+            "existing MMIO cache identity must remain stable"
+        );
+        assert_ne!(mmio, pci, "PCI snapshots cannot be used by MMIO guests");
+    }
+    #[test]
+    fn pci_boot_keeps_network_config_and_interrupt_discovery() {
+        let mmio = guest_cmdline(false, GuestTransport::Mmio);
+        let pci = guest_cmdline(false, GuestTransport::Pci);
+        assert!(mmio.contains(hv2_core::BootSource::MICROVM_FAST_BOOT_ARGS));
+        for option in [
+            "8250.nr_uarts=1",
+            "i8042.noaux",
+            "i8042.nomux",
+            "i8042.nopnp",
+            "i8042.dumbkbd",
+        ] {
+            assert!(
+                pci.split_whitespace().any(|arg| arg == option),
+                "missing {option}"
+            );
+        }
+        for option in ["pci=off", "noapic", "nolapic"] {
+            assert!(
+                !pci.split_whitespace().any(|arg| arg == option),
+                "PCI requires enumeration and interrupts: {option}"
+            );
+        }
+        assert!(guest_cmdline(true, GuestTransport::Pci)
+            .contains(&super::GatewayConfig::default().kernel_ip_arg()));
+    }
+    #[test]
+    fn mmio_guests_skip_pci_enumeration_and_pci_guests_keep_it() {
+        let has = |line: String, arg: &str| line.split_whitespace().any(|a| a == arg);
+        assert!(has(guest_cmdline(false, GuestTransport::Mmio), "pci=off"));
+        assert!(has(guest_cmdline(true, GuestTransport::Mmio), "pci=off"));
+        assert!(!has(guest_cmdline(false, GuestTransport::Pci), "pci=off"));
+        // The rest of the fast set is unchanged.
+        assert!(super::MMIO_BOOT_ARGS.starts_with(hv2_core::BootSource::MICROVM_FAST_BOOT_ARGS));
+    }
+}
+
+#[cfg(test)]
+mod guest_sizing_tests {
+    use super::parse_guest_memory;
+
+    #[test]
+    fn memory_conversion_rejects_zero_invalid_and_overflow() {
+        for value in ["0", "-1", "true", "1.5", "18446744073709551616"] {
+            assert!(parse_guest_memory(value, 1).is_err());
+            assert!(parse_guest_memory(value, 1024).is_err());
+        }
+        assert!(parse_guest_memory("18014398509481984", 1024).is_err());
+        assert_eq!(
+            parse_guest_memory("18014398509481983", 1024).unwrap(),
+            u64::MAX - 1023
+        );
+        assert_eq!(parse_guest_memory("2", 1024).unwrap(), 2048);
+        assert_eq!(parse_guest_memory("512", 1).unwrap(), 512);
+    }
 }
 
 /// One booted sandbox: the VM handle, and the handle needed to shut down
@@ -451,6 +628,15 @@ struct LiveSandbox {
     /// What listing, detail and the cluster store say about it -- including
     /// when it ends, which the expiry task enforces.
     record: SandboxRecord,
+    /// Original trusted owner, retained only while registration is uncertain.
+    /// This is local state and is never serialized into records or guests.
+    pending_registration: Option<PendingRegistration>,
+}
+
+#[derive(Clone)]
+enum PendingRegistration {
+    Named(NameReservation),
+    Unnamed { event: String },
 }
 
 struct LiveNetwork {
@@ -464,6 +650,8 @@ struct AppState {
     /// Signs the leaves the gateway presents when a rule injects headers.
     /// One per server process; its certificate is installed in each guest.
     authority: Option<Arc<Authority>>,
+    secret_scopes: Option<Arc<hv2_net::secret_substitution::ScopedStores>>,
+    upstream_roots: Vec<tokio_rustls::rustls::pki_types::CertificateDer<'static>>,
     sandboxes: Mutex<HashMap<String, LiveSandbox>>,
     next_cid: Mutex<u64>,
     /// What the proxy resolves a sandbox hostname to. Shared with the proxy
@@ -477,6 +665,8 @@ struct AppState {
     /// request parked for a slot is not overtaken, again and again, by
     /// creates that arrived after it.
     slots: Arc<tokio::sync::Semaphore>,
+    /// Optional cold-boot budget, held through agent readiness. Restores bypass it.
+    cold_boot_slots: Option<Arc<tokio::sync::Semaphore>>,
     /// This node's membership of a cluster, if it has one.
     node: Option<NodeAgent>,
     /// Sends lifecycle events to webhooks; over the cluster store, or this
@@ -551,8 +741,8 @@ impl AppState {
 /// pauses or ends gives its back without being told to.
 type Slot = tokio::sync::OwnedSemaphorePermit;
 
-// ── E2B wire shapes -- field names taken directly from e2b-dev/E2B's
-// spec/openapi.yml (`NewSandbox`, `Sandbox` schemas), not invented. ──
+// â”€â”€ E2B wire shapes -- field names taken directly from e2b-dev/E2B's
+// spec/openapi.yml (`NewSandbox`, `Sandbox` schemas), not invented. â”€â”€
 
 #[derive(Debug, Deserialize)]
 struct NewSandbox {
@@ -682,6 +872,13 @@ async fn egress_proxy_from(
     opts: &Options,
     network: Option<&SandboxNetworkConfig>,
 ) -> Result<Option<Socks5Proxy>, String> {
+    resolve_egress_proxy(opts.allow_private_egress_proxy, network).await
+}
+
+async fn resolve_egress_proxy(
+    allow_private: bool,
+    network: Option<&SandboxNetworkConfig>,
+) -> Result<Option<Socks5Proxy>, String> {
     let Some(config) = network.and_then(|n| n.egress_proxy.as_ref()) else {
         return Ok(None);
     };
@@ -697,9 +894,7 @@ async fn egress_proxy_from(
     if addresses.is_empty() {
         return Err(format!("egress proxy {} does not resolve", proxy.address));
     }
-    if !opts.allow_private_egress_proxy
-        && addresses.iter().any(|a| NetworkPolicy::is_reserved(a.ip()))
-    {
+    if !allow_private && addresses.iter().any(|a| NetworkPolicy::is_reserved(a.ip())) {
         return Err(format!(
             "egress proxy {} resolves into a private or internal range \
              (start the server with --allow-private-egress-proxy if that is intended)",
@@ -852,8 +1047,20 @@ async fn connect_sandbox(
         }
     }
     let extend_to = requested.map(|secs| now_ms() + secs.min(MAX_TIMEOUT_SECS) * 1000);
+    let lock = transition_lock(&state, &sandbox_id);
+    let _held = lock.lock().await;
     let found = {
         let mut sandboxes = state.sandboxes.lock();
+        if extend_to.is_some()
+            && sandboxes
+                .get(&sandbox_id)
+                .is_some_and(|live| live.pending_registration.is_some())
+        {
+            return api_error(
+                StatusCode::CONFLICT,
+                "reconcile registration before changing timeout",
+            );
+        }
         sandboxes.get_mut(&sandbox_id).map(|live| {
             let mut changed = None;
             if let Some(end) = extend_to {
@@ -891,8 +1098,19 @@ async fn set_timeout(
     Path(sandbox_id): Path<String>,
     Json(req): Json<TimeoutRequest>,
 ) -> Response {
+    let lock = transition_lock(&state, &sandbox_id);
+    let _held = lock.lock().await;
     let record = {
         let mut sandboxes = state.sandboxes.lock();
+        if sandboxes
+            .get(&sandbox_id)
+            .is_some_and(|live| live.pending_registration.is_some())
+        {
+            return api_error(
+                StatusCode::CONFLICT,
+                "reconcile registration before changing timeout",
+            );
+        }
         sandboxes.get_mut(&sandbox_id).map(|live| {
             live.record.end_at_ms = now_ms() + req.timeout.min(MAX_TIMEOUT_SECS) * 1000;
             live.record.clone()
@@ -1014,18 +1232,31 @@ struct ExecResponse {
 }
 
 /// `POST /sandboxes`: E2B's v1 route, whose default lifetime is 15 seconds.
-async fn create_v1(State(state): State<Arc<AppState>>, Json(req): Json<NewSandbox>) -> Response {
-    counted_create(state, req, 15).await
+async fn create_v1(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<NewSandbox>,
+) -> Response {
+    counted_create(state, req, 15, headers).await
 }
 
 /// `POST /v2/sandboxes`: what current SDKs call, default lifetime 300 s.
-async fn create_v2(State(state): State<Arc<AppState>>, Json(req): Json<NewSandbox>) -> Response {
-    counted_create(state, req, 300).await
+async fn create_v2(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<NewSandbox>,
+) -> Response {
+    counted_create(state, req, 300, headers).await
 }
 
-async fn counted_create(state: Arc<AppState>, req: NewSandbox, default_timeout: u64) -> Response {
+async fn counted_create(
+    state: Arc<AppState>,
+    req: NewSandbox,
+    default_timeout: u64,
+    headers: HeaderMap,
+) -> Response {
     let started = std::time::Instant::now();
-    let response = create_sandbox(Arc::clone(&state), req, default_timeout).await;
+    let response = create_sandbox(Arc::clone(&state), req, default_timeout, headers).await;
     let m = &state.metrics;
     match response.status() {
         StatusCode::CREATED => {
@@ -1203,7 +1434,8 @@ fn idle_victim(state: &AppState) -> Option<String> {
         .lock()
         .iter()
         .filter(|(_, live)| {
-            live.lifecycle.auto_resume
+            live.pending_registration.is_none()
+                && live.lifecycle.auto_resume
                 && !live.activity.busy()
                 && live.activity.last_active_ms() <= cutoff
         })
@@ -1214,15 +1446,82 @@ fn idle_victim(state: &AppState) -> Option<String> {
 /// A sandbox's VM up and wired: what create, resume and fork all end with.
 struct Running {
     vm: Arc<AgentVM>,
+    startup_cleanup: StartupVmCleanup,
     network: Option<LiveNetwork>,
     process_shutdown: tokio::sync::oneshot::Sender<()>,
     process_addr: std::net::SocketAddr,
 }
 
+/// Own an unregistered guest until the local registry takes responsibility.
+/// Cancellation drops this guard, including while waiting for the transition lock.
+struct StartupVmCleanup {
+    vm: Option<Arc<AgentVM>>,
+    network_abort: Option<tokio::task::AbortHandle>,
+}
+
+impl StartupVmCleanup {
+    fn new(vm: Arc<AgentVM>) -> Self {
+        Self {
+            vm: Some(vm),
+            network_abort: None,
+        }
+    }
+    fn disarm(&mut self) {
+        self.vm = None;
+        self.network_abort = None;
+    }
+    async fn stop(&mut self) {
+        if let Some(bridge) = self.network_abort.take() {
+            bridge.abort();
+        }
+        if let Some(vm) = &self.vm {
+            if vm.stop().await.is_ok() {
+                self.disarm();
+            }
+        }
+    }
+}
+
+impl Drop for StartupVmCleanup {
+    fn drop(&mut self) {
+        if let Some(bridge) = self.network_abort.take() {
+            bridge.abort();
+        }
+        let Some(vm) = self.vm.take() else {
+            return;
+        };
+        match tokio::runtime::Handle::try_current() {
+            Ok(runtime) => {
+                runtime.spawn(async move {
+                    if let Err(error) = vm.stop().await {
+                        tracing::warn!(%error, "stopping canceled unregistered guest failed");
+                    }
+                });
+            }
+            Err(error) => {
+                tracing::warn!(%error, "unregistered guest cleanup requires a live runtime");
+            }
+        }
+    }
+}
+
+/// One cold-boot permit. Failures and cancellation release it through Drop.
+struct ColdBootAdmission {
+    _permit: tokio::sync::OwnedSemaphorePermit,
+    sandbox_id: String,
+}
+
+impl Drop for ColdBootAdmission {
+    fn drop(&mut self) {
+        tracing::debug!(target: "hv2_sandboxd::cold_admission", vm = %self.sandbox_id,
+            "cold boot admission released");
+    }
+}
+
 /// Bring up a sandbox's VM: from `snapshot` when given, else from the
 /// template, else by booting; then its network and its envd listener.
 async fn bring_up(
-    state: &AppState,
+    state: &Arc<AppState>,
     sandbox_id: &str,
     template_id: &str,
     snapshot: Option<&std::path::Path>,
@@ -1250,6 +1549,27 @@ async fn bring_up(
     };
 
     let t0 = std::time::Instant::now();
+    let cold_boot_permit = if snapshot.is_none() {
+        match &state.cold_boot_slots {
+            Some(slots) => {
+                let permit = Arc::clone(slots).acquire_owned().await.map_err(|_| {
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "cold boot admission unavailable".to_string(),
+                    )
+                })?;
+                tracing::debug!(target: "hv2_sandboxd::cold_admission", vm = sandbox_id,
+                    queue_ms = t0.elapsed().as_secs_f64() * 1000.0, "cold boot admitted");
+                Some(ColdBootAdmission {
+                    _permit: permit,
+                    sandbox_id: sandbox_id.to_owned(),
+                })
+            }
+            None => None,
+        }
+    } else {
+        None
+    };
     let initrd = state
         .initrds
         .read()
@@ -1276,6 +1596,8 @@ async fn bring_up(
     )
     .await
     .map_err(internal)?;
+    let vm = Arc::new(vm);
+    let mut startup_cleanup = StartupVmCleanup::new(Arc::clone(&vm));
     let built = t0.elapsed();
     let launched = match snapshot {
         Some(snapshot) => {
@@ -1288,7 +1610,7 @@ async fn bring_up(
         None => vm.launch().await,
     };
     if let Err(e) = launched {
-        let _ = vm.stop().await;
+        startup_cleanup.stop().await;
         return Err(internal(format!("launching: {e}")));
     }
     let launched_at = t0.elapsed();
@@ -1309,28 +1631,31 @@ async fn bring_up(
     if let Err(e) = ready {
         let tail = guest_report(&vm).await;
         tracing::warn!("{sandbox_id}: guest never became ready: {e}; {tail}");
-        let _ = vm.stop().await;
+        startup_cleanup.stop().await;
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             format!("guest never became ready: {e}; {tail}"),
         ));
     }
+    drop(cold_boot_permit);
     let answered = t0.elapsed();
-
-    let vm = Arc::new(vm);
 
     let network = match (network, nic) {
         (Some(spec), Some(device)) => {
             match start_network(state, sandbox_id, &vm, device, spec, snapshot.is_none()).await {
                 Ok(network) => Some(network),
                 Err(e) => {
-                    let _ = vm.stop().await;
+                    startup_cleanup.stop().await;
                     return Err(internal(e));
                 }
             }
         }
         _ => None,
     };
+
+    startup_cleanup.network_abort = network
+        .as_ref()
+        .map(|network| network.bridge.abort_handle());
 
     // Its volumes, mounted before anyone can run a command that expects
     // them. After a restore, a mount the snapshot held is detached and
@@ -1340,7 +1665,7 @@ async fn bring_up(
             if let Some(network) = network {
                 network.bridge.abort();
             }
-            let _ = vm.stop().await;
+            startup_cleanup.stop().await;
             return Err(internal(e));
         }
     }
@@ -1352,7 +1677,7 @@ async fn bring_up(
         if let Some(network) = network {
             network.bridge.abort();
         }
-        let _ = vm.stop().await;
+        startup_cleanup.stop().await;
         return Err(internal(e));
     }
 
@@ -1367,7 +1692,7 @@ async fn bring_up(
     let listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
         Ok(listener) => listener,
         Err(e) => {
-            let _ = vm.stop().await;
+            startup_cleanup.stop().await;
             return Err(internal(format!(
                 "binding the sandbox's envd listener: {e}"
             )));
@@ -1376,7 +1701,7 @@ async fn bring_up(
     let process_addr = match listener.local_addr() {
         Ok(addr) => addr,
         Err(e) => {
-            let _ = vm.stop().await;
+            startup_cleanup.stop().await;
             return Err(internal(e.to_string()));
         }
     };
@@ -1407,6 +1732,7 @@ async fn bring_up(
     );
     Ok(Running {
         vm,
+        startup_cleanup,
         network,
         process_shutdown,
         process_addr,
@@ -1435,17 +1761,24 @@ fn new_sandbox_id() -> String {
     format!("sbx-{}", &uuid::Uuid::new_v4().simple().to_string()[..20])
 }
 
+#[derive(Default)]
+struct RegistrationContext<'a> {
+    event: Option<&'a str>,
+    name_operation: Option<&'a NameReservation>,
+}
+
 /// Make a running sandbox reachable and known: routed, listed, recorded.
 async fn register(
     state: &AppState,
     slot: Slot,
-    running: Running,
+    mut running: Running,
     descriptor: SandboxResponse,
     record: SandboxRecord,
     lifecycle: Lifecycle,
     network_request: Option<NetworkRequest>,
-    event: Option<&str>,
-) {
+    context: RegistrationContext<'_>,
+) -> Result<(), (StatusCode, String)> {
+    let event = context.event;
     let sandbox_id = record.sandbox_id.clone();
     telemetry::log(
         state,
@@ -1476,6 +1809,21 @@ async fn register(
         .insert(&sandbox_id, ENVD_PORT, running.process_addr);
     let count = {
         let mut sandboxes = state.sandboxes.lock();
+        // Reload also attaches stores under this registry lock. Refresh after
+        // asynchronous bring-up, so a reload that missed this unpublished
+        // gateway cannot leave it holding a removed or absent scope.
+        if let (Some(scopes), Some(network)) = (&state.secret_scopes, &running.network) {
+            network
+                .gateway
+                .set_secret_store(scopes.get(&sandbox_id))
+                .map_err(|_| {
+                    state.routes.remove_sandbox(&sandbox_id);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "configuring sandbox secret scope failed".to_string(),
+                    )
+                })?;
+        }
         sandboxes.insert(
             sandbox_id.clone(),
             LiveSandbox {
@@ -1486,16 +1834,309 @@ async fn register(
                 descriptor,
                 network: running.network,
                 record: record.clone(),
+                pending_registration: context
+                    .name_operation
+                    .cloned()
+                    .map(PendingRegistration::Named)
+                    .or_else(|| {
+                        state.node.as_ref().map(|_| PendingRegistration::Unnamed {
+                            event: event.unwrap_or("sandbox-created").to_string(),
+                        })
+                    }),
                 lifecycle,
                 network_request,
                 activity: Activity::new(),
             },
         );
+        running.startup_cleanup.disarm();
         u32::try_from(sandboxes.len()).unwrap_or(u32::MAX)
     };
     // Recorded before answering, so a control plane that routes the next
     // call by the store finds it.
-    record_event(state, &record, event.unwrap_or("sandbox-created"), count).await;
+    if let Some(operation) = context.name_operation {
+        let Some(node) = &state.node else {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "named registration needs a cluster node".into(),
+            ));
+        };
+        match node.created_named(&record, count, operation).await {
+            Ok(Some(event)) => {
+                if let Some(live) = state.sandboxes.lock().get_mut(&sandbox_id) {
+                    live.pending_registration = None;
+                }
+                state.events.deliver(&event);
+            }
+            Ok(None) => {
+                // Registration was refused before any shared writes. Remove
+                // only this local guest; never delete another owner's record
+                // or release uncertain pending ownership.
+                let live = state.sandboxes.lock().remove(&sandbox_id);
+                state.routes.remove_sandbox(&sandbox_id);
+                telemetry::forget(state, &sandbox_id);
+                state.transitions.lock().remove(&sandbox_id);
+                if let Some(live) = live {
+                    let _ = live.process_shutdown.send(());
+                    if let Some(network) = live.network {
+                        network.bridge.abort();
+                    }
+                    if let Err(error) = live.vm.stop().await {
+                        tracing::warn!(%sandbox_id,%error,"stopping refused named guest failed");
+                    }
+                }
+                if let Err(error) = node.announce(state.running()).await {
+                    tracing::warn!(%error,"announcing named registration refusal failed");
+                }
+                return Err((
+                    StatusCode::CONFLICT,
+                    "named sandbox registration refused".into(),
+                ));
+            }
+            Err(error) => {
+                // The atomic write may have committed before a later failure.
+                // Preserve the guest so a completed binding remains usable.
+                tracing::warn!(%sandbox_id,%error,"named registration outcome requires reconciliation");
+                return Err((
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "named registration outcome requires reconciliation".into(),
+                ));
+            }
+        }
+    } else if let Some(node) = &state.node {
+        let kind = event.unwrap_or("sandbox-created");
+        let published = if kind == "sandbox-created" {
+            node.created(&record, count).await
+        } else {
+            node.transitioned(&record, kind, count).await
+        };
+        match published {
+            Ok(event) => {
+                if let Some(live) = state.sandboxes.lock().get_mut(&sandbox_id) {
+                    live.pending_registration = None;
+                }
+                state.events.deliver(&event);
+            }
+            Err(error) => {
+                tracing::warn!(%sandbox_id,%error,"registration outcome requires reconciliation");
+                return Err((
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "registration outcome requires reconciliation".into(),
+                ));
+            }
+        }
+    } else {
+        record_event(state, &record, event.unwrap_or("sandbox-created"), count).await;
+    }
+    Ok(())
+}
+
+fn authorize_registration_reconciliation(
+    headers: &HeaderMap,
+    clustered: bool,
+    token: Option<&str>,
+) -> Result<(), (StatusCode, &'static str)> {
+    use subtle::ConstantTimeEq;
+    if !clustered {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "registration reconciliation needs a cluster node",
+        ));
+    }
+    let token = token.ok_or((
+        StatusCode::SERVICE_UNAVAILABLE,
+        "registration reconciliation needs cluster authentication",
+    ))?;
+    let sent = headers
+        .get(CLUSTER_TOKEN_HEADER)
+        .map(axum::http::HeaderValue::as_bytes)
+        .unwrap_or_default();
+    if !bool::from(sent.ct_eq(token.as_bytes())) {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "registration reconciliation requires cluster authorization",
+        ));
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PendingQuery {
+    after: Option<String>,
+}
+
+async fn pending_registrations(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(query): Query<PendingQuery>,
+) -> Response {
+    if let Err((status, message)) = authorize_registration_reconciliation(
+        &headers,
+        state.node.is_some(),
+        state.opts.cluster_token.as_deref(),
+    ) {
+        return api_error(status, message);
+    }
+    if query.after.as_ref().is_some_and(|id| !valid_sandbox_id(id)) {
+        return api_error(StatusCode::BAD_REQUEST, "invalid registration cursor");
+    }
+    let rows: Vec<_> = state
+        .sandboxes
+        .lock()
+        .iter()
+        .filter_map(|(id, live)| {
+            live.pending_registration.as_ref().map(|pending| {
+                (
+                    id.clone(),
+                    match pending {
+                        PendingRegistration::Named(_) => "named",
+                        PendingRegistration::Unnamed { .. } => "unnamed",
+                    },
+                )
+            })
+        })
+        .collect();
+    Json(pending_registration_page(rows, query.after.as_deref())).into_response()
+}
+
+fn pending_registration_page(
+    mut rows: Vec<(String, &'static str)>,
+    after: Option<&str>,
+) -> serde_json::Value {
+    rows.retain(|(id, _)| after.is_none_or(|after| id.as_str() > after));
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+    let more = rows.len() > 32;
+    rows.truncate(32);
+    let next = if more {
+        rows.last().map(|row| row.0.clone())
+    } else {
+        None
+    };
+    let rows: Vec<_> = rows
+        .into_iter()
+        .map(|(id, kind)| json!({"sandboxID":id,"kind":kind}))
+        .collect();
+    json!({"registrations":rows,"nextCursor":next})
+}
+
+/// Recover the same preserved guest with locally retained trusted ownership.
+/// Per-request authorization is checked here and by the node route middleware.
+async fn reconcile_registration(
+    State(state): State<Arc<AppState>>,
+    Path(sandbox_id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if let Err((status, message)) = authorize_registration_reconciliation(
+        &headers,
+        state.node.is_some(),
+        state.opts.cluster_token.as_deref(),
+    ) {
+        return api_error(status, message);
+    }
+    reconcile_local_registration(state, sandbox_id).await
+}
+
+async fn reconcile_local_registration(state: Arc<AppState>, sandbox_id: String) -> Response {
+    let Some(node) = &state.node else {
+        return api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "registration reconciliation needs a cluster node",
+        );
+    };
+    let lock = transition_lock(&state, &sandbox_id);
+    let _held = lock.lock().await;
+    let (operation, record, descriptor) = {
+        let sandboxes = state.sandboxes.lock();
+        let Some(live) = sandboxes.get(&sandbox_id) else {
+            return api_error(StatusCode::NOT_FOUND, "no local running sandbox");
+        };
+        let Some(operation) = &live.pending_registration else {
+            return api_error(StatusCode::CONFLICT, "no uncertain local registration");
+        };
+        (
+            operation.clone(),
+            live.record.clone(),
+            live.descriptor.clone(),
+        )
+    };
+    let published = match operation {
+        PendingRegistration::Named(operation) => {
+            node.created_named(&record, state.running(), &operation)
+                .await
+        }
+        PendingRegistration::Unnamed { event } => {
+            if event == "sandbox-created" {
+                node.created(&record, state.running()).await.map(Some)
+            } else {
+                node.transitioned(&record, &event, state.running())
+                    .await
+                    .map(Some)
+            }
+        }
+    };
+    match published {
+        Ok(Some(event)) => {
+            if let Some(live) = state.sandboxes.lock().get_mut(&sandbox_id) {
+                live.pending_registration = None;
+            }
+            state.events.deliver(&event);
+            Json(descriptor).into_response()
+        }
+        Ok(None) => api_error(
+            StatusCode::CONFLICT,
+            "registration reconciliation ownership refused",
+        ),
+        Err(error) => {
+            tracing::warn!(%sandbox_id,%error,"registration reconciliation remains uncertain");
+            api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "registration outcome still requires reconciliation",
+            )
+        }
+    }
+}
+
+/// Rotate selection even when a persistent failure survives every pass.
+fn registration_reconcile_batch(mut ids: Vec<String>, after: Option<&str>) -> Vec<String> {
+    ids.sort();
+    if let Some(after) = after {
+        let start = ids.partition_point(|id| id.as_str() <= after);
+        ids.rotate_left(start);
+    }
+    ids.truncate(32);
+    ids
+}
+
+async fn reconcile_pending_registrations(state: std::sync::Weak<AppState>, interval: Duration) {
+    let mut ticker = tokio::time::interval(interval);
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut cursor: Option<String> = None;
+    loop {
+        ticker.tick().await;
+        let Some(state) = state.upgrade() else {
+            return;
+        };
+        let ids = state
+            .sandboxes
+            .lock()
+            .iter()
+            .filter(|(_, live)| live.pending_registration.is_some())
+            .map(|(id, _)| id.clone())
+            .collect();
+        let batch = registration_reconcile_batch(ids, cursor.as_deref());
+        for id in batch {
+            cursor = Some(id.clone());
+            if tokio::time::timeout(
+                Duration::from_secs(5),
+                reconcile_local_registration(Arc::clone(&state), id.clone()),
+            )
+            .await
+            .is_err()
+            {
+                tracing::warn!(sandbox_id = %id, "automatic registration reconciliation timed out");
+            }
+        }
+    }
 }
 
 /// Record a sandbox's lifecycle event -- in the cluster store, with its
@@ -1557,7 +2198,125 @@ async fn ended(
     state.events.deliver(&event);
 }
 
-async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: u64) -> Response {
+fn named_creation_operation(
+    headers: &HeaderMap,
+    metadata: &BTreeMap<String, String>,
+    clustered: bool,
+    authenticated_cluster: bool,
+) -> Result<Option<NameReservation>, (StatusCode, &'static str)> {
+    let header = headers.get(NAME_OPERATION_HEADER);
+    let Some(name) = metadata.get("hm.name") else {
+        return if header.is_some() {
+            Err((
+                StatusCode::BAD_REQUEST,
+                "name operation requires named metadata",
+            ))
+        } else {
+            Ok(None)
+        };
+    };
+    let name =
+        SandboxName::parse(name).map_err(|_| (StatusCode::BAD_REQUEST, "invalid sandbox name"))?;
+    if !clustered {
+        return if header.is_some() {
+            Err((
+                StatusCode::BAD_REQUEST,
+                "name operation requires a cluster node",
+            ))
+        } else {
+            Ok(None)
+        };
+    }
+    let header = header.ok_or((
+        StatusCode::CONFLICT,
+        "named cluster creation requires reserved operation context",
+    ))?;
+    if !authenticated_cluster {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "named cluster creation requires cluster authentication",
+        ));
+    }
+    let token = header
+        .to_str()
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid name operation context"))?;
+    NameReservation::from_operation(name, token)
+        .map(Some)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid name operation context"))
+}
+
+fn creator_owner(
+    headers: &HeaderMap,
+    clustered: bool,
+    authenticated_cluster: bool,
+) -> Result<Option<hv2_cluster::ownership::OwnerId>, (StatusCode, &'static str)> {
+    use hv2_cluster::ownership::{OwnerId, OWNER_HEADER};
+    let mut values = headers.get_all(OWNER_HEADER).iter();
+    let Some(value) = values.next() else {
+        return Ok(None);
+    };
+    if !clustered || !authenticated_cluster {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "owner attribution requires an authenticated cluster node",
+        ));
+    }
+    if values.next().is_some() {
+        return Err((StatusCode::BAD_REQUEST, "duplicate owner context"));
+    }
+    let value = value
+        .to_str()
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid owner context"))?;
+    OwnerId::parse(value)
+        .map(Some)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid owner context"))
+}
+
+async fn create_sandbox(
+    state: Arc<AppState>,
+    req: NewSandbox,
+    default_timeout: u64,
+    headers: HeaderMap,
+) -> Response {
+    let operation = match named_creation_operation(
+        &headers,
+        &req.metadata,
+        state.node.is_some(),
+        state.opts.cluster_token.is_some(),
+    ) {
+        Ok(operation) => operation,
+        Err((status, error)) => return api_error(status, error),
+    };
+    let owner_id = match creator_owner(
+        &headers,
+        state.node.is_some(),
+        state
+            .opts
+            .cluster_token
+            .as_ref()
+            .is_some_and(|token| !token.is_empty()),
+    ) {
+        Ok(owner) => owner,
+        Err((status, error)) => return api_error(status, error),
+    };
+    drop(headers);
+    if let (Some(node), Some(operation)) = (&state.node, &operation) {
+        match node.name_operation_pending(operation).await {
+            Ok(true) => {}
+            Ok(false) => {
+                return api_error(
+                    StatusCode::CONFLICT,
+                    "name operation is not pending for this owner",
+                );
+            }
+            Err(_) => {
+                return api_error(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "name operation store unavailable",
+                );
+            }
+        }
+    }
     // A template this node does not have is the caller's mistake, answered
     // before a slot is taken -- as E2B answers an unknown template.
     // A snapshot is created from as a fork is: its template restored, its
@@ -1690,6 +2449,7 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
     };
     let sizes = sizes_of(&state, &template_id);
     let record = SandboxRecord {
+        owner_id,
         sandbox_id: sandbox_id.clone(),
         node_id: state
             .node
@@ -1707,7 +2467,9 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         portable: false,
         volume_mounts: mounts,
     };
-    register(
+    let registration_lock = transition_lock(&state, &sandbox_id);
+    let _held = registration_lock.lock().await;
+    if let Err((status, error)) = register(
         &state,
         slot,
         running,
@@ -1715,9 +2477,15 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         record,
         lifecycle,
         network_request,
-        None,
+        RegistrationContext {
+            name_operation: operation.as_ref(),
+            ..RegistrationContext::default()
+        },
     )
-    .await;
+    .await
+    {
+        return api_error(status, error);
+    }
 
     (StatusCode::CREATED, Json(descriptor)).into_response()
 }
@@ -1845,9 +2613,34 @@ struct PausedMeta {
 /// headers included, so they are written owner-only.
 struct SnapshotStore {
     dir: std::path::PathBuf,
+    // Held for the node lifetime: an offline backup takes the exclusive lock.
+    _backup_lock: std::fs::File,
 }
 
 impl SnapshotStore {
+    fn open(dir: &std::path::Path) -> Result<Self, String> {
+        std::fs::create_dir_all(dir).map_err(|e| format!("creating snapshot store: {e}"))?;
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true).write(true).create(true).truncate(false);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
+        }
+        let lock = options
+            .open(dir.join(".backup.lock"))
+            .map_err(|e| format!("opening snapshot store backup lock: {e}"))?;
+        lock.try_lock_shared()
+            .map_err(|_| "snapshot store is locked for offline backup or recovery".to_string())?;
+        let store = Self {
+            dir: dir.to_path_buf(),
+            _backup_lock: lock,
+        };
+        std::fs::create_dir_all(store.paused_dir())
+            .map_err(|e| format!("creating paused snapshot directory: {e}"))?;
+        Ok(store)
+    }
+
     fn paused_dir(&self) -> std::path::PathBuf {
         self.dir.join("paused")
     }
@@ -1977,6 +2770,12 @@ async fn pause_sandbox(
         let mut sandboxes = state.sandboxes.lock();
         match sandboxes.get(sandbox_id) {
             None => return Err((StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}"))),
+            Some(live) if live.pending_registration.is_some() => {
+                return Err((
+                    StatusCode::CONFLICT,
+                    "reconcile registration before pausing".into(),
+                ));
+            }
             // Chosen as idle, and a request arrived since: it is not idle,
             // and making room is not worth cutting that request off. Asked
             // for by name, a pause goes ahead regardless, as E2B's does.
@@ -1984,7 +2783,7 @@ async fn pause_sandbox(
                 return Err((
                     StatusCode::CONFLICT,
                     format!("sandbox {sandbox_id} has a request in flight"),
-                ))
+                ));
             }
             Some(_) => {}
         }
@@ -2006,7 +2805,17 @@ async fn pause_sandbox(
         state
             .routes
             .insert(sandbox_id, ENVD_PORT, live.process_addr);
-        state.sandboxes.lock().insert(sandbox_id.to_string(), live);
+        let mut sandboxes = state.sandboxes.lock();
+        if let (Some(scopes), Some(network)) = (&state.secret_scopes, &live.network) {
+            if network
+                .gateway
+                .set_secret_store(scopes.get(sandbox_id))
+                .is_err()
+            {
+                tracing::warn!("secret policy gateway attachment failed after pause refusal");
+            }
+        }
+        sandboxes.insert(sandbox_id.to_string(), live);
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("pausing {sandbox_id}: {e}"),
@@ -2092,7 +2901,7 @@ async fn resume_sandbox(
     // of a sandbox it paused may be stale, if another node has resumed it
     // since. Claimed first, then taken from the note or the description.
     let mut claim = None;
-    let paused = match &state.store {
+    let mut paused = match &state.store {
         Some(store) => {
             let Some((claimed, meta)) = store.claim(sandbox_id, &state.node_id) else {
                 state.paused.lock().remove(sandbox_id);
@@ -2125,17 +2934,79 @@ async fn resume_sandbox(
             state.paused.lock().insert(sandbox_id.to_string(), paused);
         }
     };
+    if let Some(node) = &state.node {
+        let lookup_claim = match (&state.store, &claim) {
+            (Some(store), Some(path)) => Some(SnapshotClaim {
+                store,
+                id: sandbox_id,
+                path: path.clone(),
+                released: false,
+            }),
+            _ => None,
+        };
+        let (returned_paused, ownership) = protected_paused_lookup(
+            paused,
+            |paused| {
+                if state.store.is_none() {
+                    state.paused.lock().insert(sandbox_id.to_string(), paused);
+                }
+            },
+            protected_snapshot_lookup(lookup_claim, node.store().sandbox(sandbox_id)),
+        )
+        .await;
+        paused = returned_paused;
+        match ownership {
+            Ok(Some(record)) => paused.record.owner_id = record.owner_id,
+            Ok(None) => {
+                give_back(paused);
+                return Err((
+                    StatusCode::NOT_FOUND,
+                    "resume ownership record missing".into(),
+                ));
+            }
+            Err(_) => {
+                give_back(paused);
+                return Err((
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "resume ownership unavailable".into(),
+                ));
+            }
+        }
+    }
     // Decided here when this node did not pause it: the description holds
     // the request, and this node decides it as it would a create's.
     let network = match (&paused.network, &paused.network_request) {
         (Some(spec), _) => Some(spec.clone()),
-        (None, Some(request)) if state.opts.network => match request.decide(&state.opts).await {
-            Ok(spec) => Some(spec),
-            Err(e) => {
-                give_back(paused);
-                return Err((StatusCode::INTERNAL_SERVER_ERROR, e));
+        (None, Some(request)) if state.opts.network => {
+            let request = request.clone();
+            let lookup_claim = match (&state.store, &claim) {
+                (Some(store), Some(path)) => Some(SnapshotClaim {
+                    store,
+                    id: sandbox_id,
+                    path: path.clone(),
+                    released: false,
+                }),
+                _ => None,
+            };
+            let (returned_paused, decision) = protected_paused_lookup(
+                paused,
+                |paused| {
+                    if state.store.is_none() {
+                        state.paused.lock().insert(sandbox_id.to_string(), paused);
+                    }
+                },
+                protected_snapshot_lookup(lookup_claim, request.decide(&state.opts)),
+            )
+            .await;
+            paused = returned_paused;
+            match decision {
+                Ok(spec) => Some(spec),
+                Err(e) => {
+                    give_back(paused);
+                    return Err((StatusCode::INTERNAL_SERVER_ERROR, e));
+                }
             }
-        },
+        }
         (None, Some(_)) => {
             give_back(paused);
             return Err((
@@ -2190,9 +3061,12 @@ async fn resume_sandbox(
         record,
         paused.lifecycle,
         paused.network_request,
-        Some("sandbox-resumed"),
+        RegistrationContext {
+            event: Some("sandbox-resumed"),
+            ..RegistrationContext::default()
+        },
     )
-    .await;
+    .await?;
     state.metrics.resumes.inc();
     state.metrics.resume_latency.observe(started.elapsed());
     Ok(Some(descriptor))
@@ -2204,6 +3078,210 @@ struct PauseRequest {
 }
 
 /// `POST /sandboxes/{id}/pause`.
+/// Return shared paused metadata when a protected store operation is cancelled.
+struct SnapshotClaim<'a> {
+    store: &'a SnapshotStore,
+    id: &'a str,
+    path: std::path::PathBuf,
+    released: bool,
+}
+impl SnapshotClaim<'_> {
+    fn release(&mut self) -> std::io::Result<()> {
+        std::fs::rename(&self.path, self.store.meta(self.id))?;
+        self.released = true;
+        Ok(())
+    }
+}
+impl Drop for SnapshotClaim<'_> {
+    fn drop(&mut self) {
+        if !self.released {
+            self.store.release(self.id, &self.path);
+        }
+    }
+}
+
+struct LookupRollback<P, F: FnMut(P)> {
+    value: Option<P>,
+    restore: F,
+}
+impl<P, F: FnMut(P)> Drop for LookupRollback<P, F> {
+    fn drop(&mut self) {
+        if let Some(value) = self.value.take() {
+            (self.restore)(value);
+        }
+    }
+}
+async fn protected_paused_lookup<P, T>(
+    paused: P,
+    restore: impl FnMut(P),
+    lookup: impl std::future::Future<Output = T>,
+) -> (P, T) {
+    let mut rollback = LookupRollback {
+        value: Some(paused),
+        restore,
+    };
+    let result = lookup.await;
+    (
+        rollback
+            .value
+            .take()
+            .expect("paused state retained during lookup"),
+        result,
+    )
+}
+
+// Protect pre-startup ownership/network decisions, before VM startup side effects.
+// Completed lookups leave the claim with the caller's existing success/error path.
+async fn protected_snapshot_lookup<T>(
+    mut claim: Option<SnapshotClaim<'_>>,
+    lookup: impl std::future::Future<Output = T>,
+) -> T {
+    let result = lookup.await;
+    if let Some(claim) = claim.as_mut() {
+        claim.released = true;
+    }
+    result
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct AdoptOwnerRequest {
+    principal_id: hv2_cluster::ownership::OwnerId,
+}
+
+async fn adopt_owner_route(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<AdoptOwnerRequest>,
+) -> Response {
+    use hv2_cluster::ownership::OwnerAdoption;
+    if !valid_sandbox_id(&id) {
+        return api_error(StatusCode::BAD_REQUEST, "invalid sandbox ID");
+    }
+    let Some(node) = &state.node else {
+        return api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "clustered owner adoption required",
+        );
+    };
+    if state
+        .opts
+        .cluster_token
+        .as_ref()
+        .is_none_or(|token| token.is_empty())
+    {
+        return api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "authenticated cluster required",
+        );
+    }
+    let lock = transition_lock(&state, &id);
+    let _held = lock.lock().await;
+    let running = {
+        let live = state.sandboxes.lock();
+        if live
+            .get(&id)
+            .is_some_and(|live| live.pending_registration.is_some())
+        {
+            return api_error(
+                StatusCode::CONFLICT,
+                "reconcile registration before adoption",
+            );
+        }
+        live.contains_key(&id)
+    };
+    let mut claim = if !running {
+        match &state.store {
+            Some(store) => match store.claim(&id, &state.node_id) {
+                Some((path, meta)) => Some((
+                    SnapshotClaim {
+                        store,
+                        id: &id,
+                        path,
+                        released: false,
+                    },
+                    meta,
+                )),
+                None => {
+                    return api_error(
+                        StatusCode::CONFLICT,
+                        "paused sandbox must be available for adoption",
+                    )
+                }
+            },
+            None => {
+                if !state.paused.lock().contains_key(&id) {
+                    return api_error(StatusCode::NOT_FOUND, "sandbox not present on node");
+                }
+                None
+            }
+        }
+    } else {
+        None
+    };
+    let outcome = node
+        .store()
+        .adopt_sandbox_owner(&id, &body.principal_id)
+        .await;
+    let success = matches!(
+        outcome,
+        Ok(OwnerAdoption::Adopted | OwnerAdoption::AlreadyOwned)
+    );
+    let mut metadata_error = false;
+    if success {
+        if let Some(live) = state.sandboxes.lock().get_mut(&id) {
+            live.record.owner_id = Some(body.principal_id.clone());
+        }
+        if let Some(paused) = state.paused.lock().get_mut(&id) {
+            paused.record.owner_id = Some(body.principal_id.clone());
+        }
+        if let Some((claim, meta)) = &mut claim {
+            let claimed = &claim.path;
+            meta.record.owner_id = Some(body.principal_id.clone());
+            let temporary =
+                claimed.with_extension(format!("{}.tmp", uuid::Uuid::new_v4().simple()));
+            let written = serde_json::to_vec(meta)
+                .map_err(|_| ())
+                .and_then(|bytes| write_private(&temporary, &bytes).map_err(|_| ()))
+                .and_then(|()| std::fs::rename(&temporary, claimed).map_err(|_| ()));
+            if written.is_err() {
+                metadata_error = true;
+                let _ = std::fs::remove_file(&temporary);
+            }
+        }
+    }
+    if let Some((claim, _)) = &mut claim {
+        if claim.release().is_err() {
+            metadata_error = true;
+        }
+    }
+    if metadata_error {
+        return api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "ownership committed; paused metadata update failed; retry same adoption",
+        );
+    }
+    match outcome {
+        Ok(OwnerAdoption::Adopted | OwnerAdoption::AlreadyOwned) => {
+            StatusCode::NO_CONTENT.into_response()
+        }
+        Ok(OwnerAdoption::OwnerConflict) => {
+            api_error(StatusCode::CONFLICT, "existing owner cannot be transferred")
+        }
+        Ok(OwnerAdoption::PortsPresent) => api_error(
+            StatusCode::CONFLICT,
+            "remove legacy public-port reservations before adoption",
+        ),
+        Ok(OwnerAdoption::SandboxMissing) => {
+            api_error(StatusCode::NOT_FOUND, "sandbox record missing")
+        }
+        Err(_) => api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "owner adoption store unavailable; outcome may be committed; retry same adoption",
+        ),
+    }
+}
+
 async fn pause_route(
     State(state): State<Arc<AppState>>,
     Path(sandbox_id): Path<String>,
@@ -2288,11 +3366,20 @@ async fn fork_route(
         "{sandbox_id}-fork-{}.snap",
         uuid::Uuid::new_v4().simple()
     ));
-    let (template_id, metadata, network, source_request, volume_mounts) = {
+    let (template_id, metadata, network, source_request, volume_mounts, owner_id) = {
         let lock = transition_lock(&state, &sandbox_id);
         let _held = lock.lock().await;
         let source = {
             let sandboxes = state.sandboxes.lock();
+            if sandboxes
+                .get(&sandbox_id)
+                .is_some_and(|live| live.pending_registration.is_some())
+            {
+                return api_error(
+                    StatusCode::CONFLICT,
+                    "reconcile registration before forking",
+                );
+            }
             sandboxes.get(&sandbox_id).map(|live| {
                 (
                     Arc::clone(&live.vm),
@@ -2309,10 +3396,12 @@ async fn fork_route(
                     }),
                     live.network_request.clone(),
                     live.record.volume_mounts.clone(),
+                    live.record.owner_id.clone(),
                 )
             })
         };
-        let Some((vm, template_id, metadata, network, source_request, volume_mounts)) = source
+        let Some((vm, template_id, metadata, network, source_request, volume_mounts, owner_id)) =
+            source
         else {
             return if state.paused.lock().contains_key(&sandbox_id) {
                 api_error(
@@ -2322,6 +3411,20 @@ async fn fork_route(
             } else {
                 api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}"))
             };
+        };
+        let owner_id = if let Some(node) = &state.node {
+            match node.store().sandbox(&sandbox_id).await {
+                Ok(Some(record)) => record.owner_id,
+                Ok(None) => return api_error(StatusCode::NOT_FOUND, "fork source record missing"),
+                Err(_) => {
+                    return api_error(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "fork source ownership unavailable",
+                    )
+                }
+            }
+        } else {
+            owner_id
         };
         let started = std::time::Instant::now();
         if let Err(e) = vm.checkpoint_to(&checkpoint).await {
@@ -2338,8 +3441,15 @@ async fn fork_route(
             network,
             source_request,
             volume_mounts,
+            owner_id,
         )
     };
+
+    // A name identifies its original sandbox. Copying it would make legacy
+    // lookup ambiguous and conflict with the parent's reserved ownership.
+    // Keep other caller metadata on the child, without inheriting its name.
+    let mut metadata = metadata;
+    metadata.remove("hm.name");
 
     // Concurrently: each fork is independent, and they are what a caller
     // fanning work out to N agents is waiting on.
@@ -2352,6 +3462,7 @@ async fn fork_route(
             let network = network.clone();
             let network_request = source_request.clone();
             let volume_mounts = volume_mounts.clone();
+            let owner_id = owner_id.clone();
             async move {
                 let slot = reserve(&state, create_park(&state))
                     .await
@@ -2382,6 +3493,7 @@ async fn fork_route(
                 };
                 let sizes = sizes_of(&state, &template_id);
                 let record = SandboxRecord {
+                    owner_id,
                     sandbox_id: fork_id,
                     node_id: state
                         .node
@@ -2411,9 +3523,9 @@ async fn fork_route(
                     record,
                     lifecycle,
                     network_request,
-                    None,
+                    RegistrationContext::default(),
                 )
-                .await;
+                .await?;
                 Ok::<_, (StatusCode, String)>(descriptor)
             }
         })
@@ -2601,7 +3713,7 @@ impl Drop for ActivityGuard {
 
 /// Put a gateway behind a sandbox's NIC, and point the guest at it.
 async fn start_network(
-    state: &AppState,
+    state: &Arc<AppState>,
     sandbox_id: &str,
     vm: &Arc<AgentVM>,
     device: Arc<parking_lot::Mutex<hv2_core::devices::virtio_net_mmio::VirtioNetMmio>>,
@@ -2609,13 +3721,27 @@ async fn start_network(
     configure_guest: bool,
 ) -> Result<LiveNetwork, String> {
     let mut builder = Gateway::builder(spec.policy).config(GatewayConfig::default());
+    if let Some(private) = private_source::for_gateway(state, sandbox_id, vm)
+        .map_err(|_| "configuring private gateway failed".to_string())?
+    {
+        builder = builder.private_network(private);
+    }
+
     if let Some(authority) = &state.authority {
         builder = builder.intercept_with(Arc::clone(authority));
+    }
+    for root in &state.upstream_roots {
+        builder = builder.upstream_root(root.clone());
     }
     let gateway = builder
         .build()
         .map_err(|e| format!("starting the gateway: {e}"))?;
     let handle = gateway.handle();
+    if let Some(scopes) = &state.secret_scopes {
+        handle
+            .set_secret_store(scopes.get(sandbox_id))
+            .map_err(|_| "configuring sandbox secret scope failed".to_string())?;
+    }
     handle.set_egress_proxy(spec.proxy);
     // Workload tokens, minted here per request for the names this sandbox
     // registered: the guest's request carries a placeholder, and the token
@@ -2730,6 +3856,14 @@ impl Drop for Template {
 /// What a template is a function of, as a name: every input that changes
 /// the guest it holds. Nodes that agree on it can share one template, and
 /// only then can a snapshot layered over it resume on either.
+// Preserve historical MMIO keys; PCI must stay distinct even when both
+// transports use the same guest command line.
+fn append_template_transport(config: &mut String, transport: GuestTransport) {
+    if transport == GuestTransport::Pci {
+        config.push_str("\0guest-transport=pci");
+    }
+}
+
 fn template_key(opts: &Options, authority: Option<&Authority>) -> Result<String, String> {
     use sha2::Digest;
     let mut hash = sha2::Sha256::new();
@@ -2738,14 +3872,15 @@ fn template_key(opts: &Options, authority: Option<&Authority>) -> Result<String,
         hash.update((bytes.len() as u64).to_le_bytes());
         hash.update(&bytes);
     }
-    let config = format!(
+    let mut config = format!(
         "{}\0{}\0{}\0{}\0{}",
-        guest_cmdline(opts.network),
+        guest_cmdline(opts.network, opts.guest_transport),
         opts.memory_mb,
         opts.cpu_cores,
         opts.network,
         authority.map_or("", Authority::ca_pem)
     );
+    append_template_transport(&mut config, opts.guest_transport);
     hash.update(config.as_bytes());
     Ok(hash
         .finalize()
@@ -3129,9 +4264,37 @@ async fn offer(state: &AppState, name: &str, initramfs: &str, sizes: Sizes) -> R
 /// snapshots, which a create names the same way.
 fn advertise_templates(state: &AppState) {
     if let Some(node) = &state.node {
-        let mut names: Vec<String> = state.initrds.read().keys().cloned().collect();
-        names.extend(state.snapshots.read().keys().cloned());
-        node.set_templates(names);
+        let names: Vec<String> = state.initrds.read().keys().cloned().collect();
+        let mut metadata: BTreeMap<_, _> = names
+            .into_iter()
+            .map(|name| {
+                let sizes = sizes_of(state, &name);
+                let info = hv2_cluster::model::TemplateInfo {
+                    snapshot: state.templates.read().contains_key(&name),
+                    cpu_count: sizes.cpus,
+                    memory_mb: sizes.memory_mb,
+                };
+                (name, info)
+            })
+            .collect();
+        let snapshots: Vec<_> = state
+            .snapshots
+            .read()
+            .iter()
+            .map(|(name, snapshot)| (name.clone(), snapshot.base.clone()))
+            .collect();
+        for (name, base) in snapshots {
+            let sizes = sizes_of(state, &base);
+            metadata.insert(
+                name,
+                hv2_cluster::model::TemplateInfo {
+                    snapshot: state.templates.read().contains_key(&base),
+                    cpu_count: sizes.cpus,
+                    memory_mb: sizes.memory_mb,
+                },
+            );
+        }
+        node.set_template_metadata(metadata);
     }
 }
 
@@ -3255,10 +4418,27 @@ fn shared_authority(store: &SnapshotStore) -> Result<Authority, String> {
 /// kernel's errors and panics reach the console, which a guest that never
 /// answers is reported with; nothing below that, which a booting guest
 /// would write a character at a time, an exit each.
-fn guest_cmdline(network: bool) -> String {
+/// An MMIO guest's probe arguments: the fast microVM set, and no PCI.
+const MMIO_BOOT_ARGS: &str = concat!(
+    "8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd",
+    " pci=off"
+);
+
+fn guest_cmdline(network: bool, transport: GuestTransport) -> String {
     format!(
         "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 {}{}",
-        hv2_core::BootSource::MICROVM_FAST_BOOT_ARGS,
+        match transport {
+            // No PCI device exists on an MMIO guest, so the kernel is told not
+            // to look: probing bus 0 (and 254, 255) costs about 1,800
+            // config-space port exits per boot, each a round trip to this
+            // process, where Firecracker's guests make none (it boots its
+            // PCI-less guests with pci=off too).
+            GuestTransport::Mmio => MMIO_BOOT_ARGS,
+            // Keep PCI and APIC available for enumeration and level INTx.
+            // This headless machine has one UART and no auxiliary input device.
+            GuestTransport::Pci =>
+                "8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd",
+        },
         // The guest configures its NIC from this before init runs.
         if network {
             format!(" {}", GatewayConfig::default().kernel_ip_arg())
@@ -3286,13 +4466,27 @@ async fn new_vm(
         .cpu_cores(opts.cpu_cores)
         .memory_mb(opts.memory_mb)
         .capabilities(capabilities)
-        .boot_linux(&opts.kernel, Some(initrd), guest_cmdline(mac.is_some()))
+        .boot_linux(
+            &opts.kernel,
+            Some(initrd),
+            guest_cmdline(mac.is_some(), opts.guest_transport),
+        )
         .build()
         .await
         .map_err(|e| format!("building the VM: {e}"))?;
-    vm.attach_guest_channel(cid)
-        .await
-        .map_err(|e| format!("attaching the guest channel: {e}"))?;
+    match opts.guest_transport {
+        GuestTransport::Mmio => vm
+            .attach_guest_channel(cid)
+            .await
+            .map_err(|e| e.to_string()),
+        GuestTransport::Pci => vm
+            .vm()
+            .attach_vsock_pci(cid)
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
+    }
+    .map_err(|e| format!("attaching the guest channel: {e}"))?;
     // Attached before launch: virtio-mmio has no hotplug, and the kernel
     // learns where to probe from the command line `attach_net` extends.
     let nic = match mac {
@@ -3383,7 +4577,27 @@ async fn guest_report(vm: &AgentVM) -> String {
             )
         })
         .collect();
-    format!("{console}; VM {:?}; {}", vm.state(), vcpus.join(", "))
+    // VM-level GET_IRQCHIP/GET_PIT2 sample the kernel controllers before a
+    // diagnostic kick can wake the guest. No vCPU register ioctl is issued
+    // here, and these independent reads are not a restoration snapshot.
+    let interrupts = match machine.backend().save_machine().await {
+        Ok(Some(state)) => boot_diagnostics::machine_sample(&state),
+        Ok(None) => "pre-kick machine sample unavailable".into(),
+        Err(error) => format!("pre-kick machine diagnostic unavailable: {error}"),
+    };
+    let architecture = match machine.diagnostic_vcpu_samples().await {
+        Ok(states) => states
+            .into_iter()
+            .map(|state| boot_diagnostics::owner_diagnostic(&state))
+            .collect::<Vec<_>>()
+            .join(", "),
+        Err(error) => format!("owner diagnostic unavailable: {error}"),
+    };
+    format!(
+        "{console}; VM {:?}; {}; {interrupts}; {architecture}",
+        vm.state(),
+        vcpus.join(", ")
+    )
 }
 
 /// Boot the template once, configure it as every sandbox needs, and write it
@@ -3813,14 +5027,13 @@ async fn main() -> std::process::ExitCode {
 
     let store = match &opts.snapshot_store {
         None => None,
-        Some(dir) => {
-            let store = SnapshotStore { dir: dir.clone() };
-            if let Err(e) = std::fs::create_dir_all(store.paused_dir()) {
-                eprintln!("hv2-sandboxd: {}: {e}", store.paused_dir().display());
+        Some(dir) => match SnapshotStore::open(dir) {
+            Ok(store) => Some(store),
+            Err(e) => {
+                eprintln!("hv2-sandboxd: {e}");
                 return std::process::ExitCode::FAILURE;
             }
-            Some(store)
-        }
+        },
     };
     let authority = if opts.network {
         let made = match &store {
@@ -3836,6 +5049,55 @@ async fn main() -> std::process::ExitCode {
         }
     } else {
         None
+    };
+    let upstream_roots = match &opts.egress_upstream_ca {
+        None => Vec::new(),
+        Some(path) => {
+            if !opts.network {
+                eprintln!("hv2-sandboxd: --egress-upstream-ca requires --network");
+                return std::process::ExitCode::FAILURE;
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                let _ = path;
+                eprintln!("hv2-sandboxd: private upstream root loading requires Linux");
+                return std::process::ExitCode::FAILURE;
+            }
+            #[cfg(target_os = "linux")]
+            match hv2_net::gateway::mitm::upstream_roots_from_private_file(std::path::Path::new(
+                path,
+            )) {
+                Ok(roots) => roots,
+                Err(_) => {
+                    eprintln!("hv2-sandboxd: private upstream root validation failed");
+                    return std::process::ExitCode::FAILURE;
+                }
+            }
+        }
+    };
+    let secret_scopes = match &opts.egress_secrets_file {
+        None => None,
+        Some(path) => {
+            if !opts.network {
+                eprintln!("hv2-sandboxd: --egress-secrets-file requires --network");
+                return std::process::ExitCode::FAILURE;
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                let _ = path;
+                eprintln!("hv2-sandboxd: private secret policy loading requires Linux");
+                return std::process::ExitCode::FAILURE;
+            }
+            #[cfg(target_os = "linux")]
+            match hv2_net::secret_substitution::ScopedStores::from_file(std::path::Path::new(path))
+            {
+                Ok(scopes) => Some(Arc::new(scopes)),
+                Err(_) => {
+                    eprintln!("hv2-sandboxd: private secret policy validation failed");
+                    return std::process::ExitCode::FAILURE;
+                }
+            }
+        }
     };
     // Workload identity, for sandboxes with a network: a key given, shared
     // through the snapshot store so every node signs alike, or made here.
@@ -3877,8 +5139,8 @@ async fn main() -> std::process::ExitCode {
 
     // The template, before anything listens: a node that advertised itself
     // and then spent a second booting would be scheduled onto meanwhile.
-    // Failing to build one is not fatal -- sandboxes boot instead, slower,
-    // and the log says why.
+    // Normally a failed build falls back to cold boot. Operators requiring
+    // snapshot latency can refuse that fallback before listening or joining.
     let mut initrds = BTreeMap::new();
     initrds.insert("base".to_string(), opts.initrd.clone());
     for (name, path) in &opts.templates {
@@ -3902,6 +5164,10 @@ async fn main() -> std::process::ExitCode {
             match built {
                 Ok(template) => {
                     templates.insert(name.clone(), Arc::new(template));
+                }
+                Err(e) if opts.require_template => {
+                    eprintln!("hv2-sandboxd: required template {name} failed: {e}");
+                    return std::process::ExitCode::FAILURE;
                 }
                 Err(e) => tracing::warn!(
                     "no snapshot for template {name} ({e}); its sandboxes will boot instead"
@@ -3969,6 +5235,21 @@ async fn main() -> std::process::ExitCode {
                     templates: initrds.keys().cloned().collect(),
                 },
             );
+            agent.set_template_metadata(
+                initrds
+                    .keys()
+                    .map(|name| {
+                        (
+                            name.clone(),
+                            hv2_cluster::model::TemplateInfo {
+                                snapshot: templates.contains_key(name),
+                                cpu_count: opts.cpu_cores,
+                                memory_mb: opts.memory_mb,
+                            },
+                        )
+                    })
+                    .collect(),
+            );
             if let Err(e) = agent.join().await {
                 eprintln!("hv2-sandboxd: joining the cluster: {e}");
                 return std::process::ExitCode::FAILURE;
@@ -3991,6 +5272,9 @@ async fn main() -> std::process::ExitCode {
 
     let routes = Arc::new(PortMap::new());
     let opts_capacity = opts.capacity as usize;
+    let cold_boot_slots = opts
+        .cold_start_concurrency
+        .map(|limit| Arc::new(tokio::sync::Semaphore::new(limit)));
     let event_store: Arc<dyn hv2_cluster::store::ClusterStore> = match &node {
         Some(node) => Arc::clone(node.store()),
         None => Arc::new(hv2_cluster::store::MemoryStore::new()),
@@ -4001,11 +5285,14 @@ async fn main() -> std::process::ExitCode {
         events,
         checkpoints: parking_lot::Mutex::new(HashMap::new()),
         authority,
+        secret_scopes,
+        upstream_roots,
         opts,
         sandboxes: Mutex::new(HashMap::new()),
         next_cid: Mutex::new(0),
         routes: Arc::clone(&routes),
         slots: Arc::new(tokio::sync::Semaphore::new(opts_capacity)),
+        cold_boot_slots,
         templates: parking_lot::RwLock::new(templates),
         initrds: parking_lot::RwLock::new(initrds),
         builds: Mutex::new(BTreeMap::new()),
@@ -4033,6 +5320,45 @@ async fn main() -> std::process::ExitCode {
     if let Some(node) = node.clone() {
         let beating = Arc::clone(&state);
         tokio::spawn(node.heartbeat(move || beating.running()));
+    }
+    #[cfg(target_os = "linux")]
+    if let Some(scopes) = state.secret_scopes.clone() {
+        let mut reload = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())
+        {
+            Ok(signal) => signal,
+            Err(_) => {
+                eprintln!("hv2-sandboxd: registering secret policy reload failed");
+                return std::process::ExitCode::FAILURE;
+            }
+        };
+        let selected = Arc::clone(&state);
+        tokio::spawn(async move {
+            while reload.recv().await.is_some() {
+                let path = selected
+                    .opts
+                    .egress_secrets_file
+                    .as_ref()
+                    .expect("configured policy");
+                if scopes.rotate_file(std::path::Path::new(path)).is_err() {
+                    tracing::warn!("secret policy reload refused; active scopes retained");
+                    continue;
+                }
+                for (id, sandbox) in selected.sandboxes.lock().iter() {
+                    if let Some(network) = &sandbox.network {
+                        if network.gateway.set_secret_store(scopes.get(id)).is_err() {
+                            tracing::warn!("secret policy gateway attachment failed");
+                        }
+                    }
+                }
+                tracing::info!("secret policy reload completed");
+            }
+        });
+    }
+    if let Some(interval) = state.opts.registration_reconcile_interval {
+        tokio::spawn(reconcile_pending_registrations(
+            Arc::downgrade(&state),
+            interval,
+        ));
     }
     tokio::spawn(expire(Arc::clone(&state)));
     tokio::spawn(adopt_built(Arc::clone(&state)));
@@ -4138,16 +5464,22 @@ async fn main() -> std::process::ExitCode {
 
     let app = Router::new()
         .route("/sandboxes", post(create_v1).get(list_sandboxes))
+        .route("/registrations/pending", get(pending_registrations))
         // What current SDKs (2.51+) call: `NewSandboxV2`, the same fields
         // used here, secure-only -- which every sandbox here already is.
         .route("/v2/sandboxes", post(create_v2).get(list_sandboxes))
         .route("/sandboxes/{sandboxID}/connect", post(connect_sandbox))
         .route("/v2/sandboxes/{sandboxID}/connect", post(connect_sandbox))
         .route("/sandboxes/{sandboxID}/timeout", post(set_timeout))
+        .route(
+            "/sandboxes/{sandboxID}/registration/reconcile",
+            post(reconcile_registration),
+        )
         .route("/templates", get(list_templates).post(build_template_route))
         .route("/sandboxes/{sandboxID}/pause", post(pause_route))
         .route("/sandboxes/{sandboxID}/resume", post(resume_route))
         .route("/sandboxes/{sandboxID}/fork", post(fork_route))
+        .route("/sandboxes/{sandboxID}/owner", post(adopt_owner_route))
         .route("/sandboxes/{sandboxID}/snapshots", post(snapshots::create))
         .route(
             "/sandboxes/{sandboxID}/checkpoints",
@@ -4162,9 +5494,15 @@ async fn main() -> std::process::ExitCode {
             post(checkpoints::restore),
         )
         .route("/snapshots", get(snapshots::list))
-        .route("/templates/{templateID}", axum::routing::delete(snapshots::delete))
+        .route(
+            "/templates/{templateID}",
+            axum::routing::delete(snapshots::delete),
+        )
         .route("/v3/templates", post(builds::request))
-        .route("/templates/{templateID}/files/{hash}", get(builds::file_link))
+        .route(
+            "/templates/{templateID}/files/{hash}",
+            get(builds::file_link),
+        )
         .route(
             "/v2/templates/{templateID}/builds/{buildID}",
             post(builds::start),
@@ -4176,8 +5514,22 @@ async fn main() -> std::process::ExitCode {
         .route("/templates/aliases/{alias}", get(builds::alias))
         .merge(hv2_cluster::events::router(event_store))
         .route("/volumes", get(volumes::list).post(volumes::create))
-        .route("/volumes/{volumeID}", get(volumes::get).delete(volumes::delete))
+        .route(
+            "/volumes/{volumeID}",
+            get(volumes::get).delete(volumes::delete),
+        )
         .route("/sandboxes/{sandboxID}/exec", post(exec))
+        .route("/sandboxes/{sandboxID}/private-ports/{port}/tcp",get(forwards::private_tcp_tunnel))
+        .route("/sandboxes/{sandboxID}/private-ports/{port}/udp",get(forwards::private_udp_tunnel))
+        .route(
+            "/sandboxes/{sandboxID}/ports/{port}/tcp",
+            get(forwards::tcp_tunnel),
+        )
+        .route(
+            "/sandboxes/{sandboxID}/ports/{port}/udp",
+            get(forwards::udp_tunnel),
+        )
+        .route("/sandboxes/{sandboxID}/ports/{port}/udp6", get(forwards::udp_tunnel_ipv6))
         .route("/sandboxes/metrics", get(telemetry::latest))
         .route("/sandboxes/{sandboxID}/metrics", get(telemetry::metrics))
         .route("/sandboxes/{sandboxID}/logs", get(telemetry::logs_v1))
@@ -4198,10 +5550,7 @@ async fn main() -> std::process::ExitCode {
         .route("/metrics", get(node_metrics))
         // No API key: the SDK sends none with an upload. The URL's token,
         // from the authenticated `GET` of the same path, stands in.
-        .route(
-            "/templates/{templateID}/files/{hash}",
-            put(builds::upload),
-        )
+        .route("/templates/{templateID}/files/{hash}", put(builds::upload))
         // E2B's volume content API: each volume's own bearer token, which
         // the SDK's `Volume` sends in place of the API key.
         .route(
@@ -4284,10 +5633,13 @@ async fn main() -> std::process::ExitCode {
     // cluster at once instead of lingering until its TTL runs out -- which is
     // what makes scaling a cluster down a non-event.
     let served = match mtls {
-        None => axum::serve(listener, app)
-            .with_graceful_shutdown(shutdown_signal())
-            .await
-            .map_err(|e| e.to_string()),
+        None => axum::serve(
+            axum::serve::ListenerExt::tap_io(listener, hv2_api::tls::configure_api_socket),
+            app,
+        )
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .map_err(|e| e.to_string()),
         Some(config) => hv2_api::tls::serve_tls(
             listener,
             app,
@@ -4345,6 +5697,71 @@ async fn main() -> std::process::ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn creator_context_requires_authenticated_cluster_and_one_valid_header() {
+        use hv2_cluster::ownership::OWNER_HEADER;
+        let mut headers = HeaderMap::new();
+        assert!(creator_owner(&headers, false, false).unwrap().is_none());
+        headers.insert(OWNER_HEADER, "principal-a".parse().unwrap());
+        for (clustered, authenticated) in [(false, false), (false, true), (true, false)] {
+            assert_eq!(
+                creator_owner(&headers, clustered, authenticated)
+                    .unwrap_err()
+                    .0,
+                StatusCode::SERVICE_UNAVAILABLE
+            );
+        }
+        assert_eq!(
+            creator_owner(&headers, true, true)
+                .unwrap()
+                .unwrap()
+                .as_str(),
+            "principal-a"
+        );
+        headers.append(OWNER_HEADER, "principal-b".parse().unwrap());
+        assert_eq!(
+            creator_owner(&headers, true, true).unwrap_err().0,
+            StatusCode::BAD_REQUEST
+        );
+        headers.insert(OWNER_HEADER, "bad/owner".parse().unwrap());
+        assert_eq!(
+            creator_owner(&headers, true, true).unwrap_err().0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[test]
+    fn registration_reconciliation_requires_each_requests_cluster_credential() {
+        let mut headers = HeaderMap::new();
+        assert_eq!(
+            authorize_registration_reconciliation(&headers, false, Some("owned-token"))
+                .unwrap_err()
+                .0,
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+        assert_eq!(
+            authorize_registration_reconciliation(&headers, true, None)
+                .unwrap_err()
+                .0,
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+        assert_eq!(
+            authorize_registration_reconciliation(&headers, true, Some("owned-token"))
+                .unwrap_err()
+                .0,
+            StatusCode::UNAUTHORIZED
+        );
+        headers.insert(CLUSTER_TOKEN_HEADER, "wrong-token".parse().unwrap());
+        assert_eq!(
+            authorize_registration_reconciliation(&headers, true, Some("owned-token"))
+                .unwrap_err()
+                .0,
+            StatusCode::UNAUTHORIZED
+        );
+        headers.insert(CLUSTER_TOKEN_HEADER, "owned-token".parse().unwrap());
+        assert!(authorize_registration_reconciliation(&headers, true, Some("owned-token")).is_ok());
+    }
     use hv2_net::network_policy::AddressVerdict;
 
     fn allowing_everything() -> SandboxNetworkConfig {
@@ -4378,5 +5795,428 @@ mod tests {
             policy.decide_address(store),
             AddressVerdict::Allow("allowOut address")
         );
+    }
+    #[test]
+    fn named_cluster_creation_requires_valid_authenticated_operation_context() {
+        let metadata = BTreeMap::from([("hm.name".into(), "guest".into())]);
+        let mut headers = HeaderMap::new();
+        assert_eq!(
+            named_creation_operation(&headers, &metadata, true, true)
+                .unwrap_err()
+                .0,
+            StatusCode::CONFLICT
+        );
+        headers.insert(
+            NAME_OPERATION_HEADER,
+            "invalid-private-token".parse().unwrap(),
+        );
+        let error = named_creation_operation(&headers, &metadata, true, true).unwrap_err();
+        assert_eq!(error.0, StatusCode::BAD_REQUEST);
+        assert!(!error.1.contains("invalid-private-token"));
+        let owner = NameReservation::pending(SandboxName::parse("guest").unwrap());
+        headers.insert(
+            NAME_OPERATION_HEADER,
+            owner.operation_token().parse().unwrap(),
+        );
+        assert_eq!(
+            named_creation_operation(&headers, &metadata, true, false)
+                .unwrap_err()
+                .0,
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+        let operation = named_creation_operation(&headers, &metadata, true, true)
+            .unwrap()
+            .unwrap();
+        assert!(owner.matches_pending_operation(&operation));
+        assert_eq!(
+            named_creation_operation(&headers, &BTreeMap::new(), true, true)
+                .unwrap_err()
+                .0,
+            StatusCode::BAD_REQUEST
+        );
+        let invalid = BTreeMap::from([("hm.name".into(), "bad name".into())]);
+        assert_eq!(
+            named_creation_operation(&headers, &invalid, true, true)
+                .unwrap_err()
+                .0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[test]
+    fn standalone_metadata_names_and_unnamed_cluster_requests_keep_their_protocol() {
+        let metadata = BTreeMap::from([("hm.name".into(), "guest".into())]);
+        let mut headers = HeaderMap::new();
+        assert!(named_creation_operation(&headers, &metadata, false, false)
+            .unwrap()
+            .is_none());
+        assert!(
+            named_creation_operation(&headers, &BTreeMap::new(), true, false)
+                .unwrap()
+                .is_none()
+        );
+        headers.insert(NAME_OPERATION_HEADER, "untrusted".parse().unwrap());
+        assert_eq!(
+            named_creation_operation(&headers, &metadata, false, false)
+                .unwrap_err()
+                .0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+}
+
+#[cfg(test)]
+mod backup_lock_tests {
+    use super::SnapshotStore;
+
+    #[test]
+    fn nodes_share_store_lock_and_exclude_offline_backup_until_all_stop() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = SnapshotStore::open(dir.path()).unwrap();
+        let b = SnapshotStore::open(dir.path()).unwrap();
+        let exclusive = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(dir.path().join(".backup.lock"))
+            .unwrap();
+        assert!(exclusive.try_lock().is_err());
+        drop(a);
+        assert!(exclusive.try_lock().is_err());
+        drop(b);
+        exclusive.try_lock().unwrap();
+        assert!(SnapshotStore::open(dir.path()).is_err());
+        exclusive.unlock().unwrap();
+        assert!(SnapshotStore::open(dir.path()).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn store_lock_refuses_symlink_without_modifying_target() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("target");
+        std::fs::write(&target, b"preserve").unwrap();
+        std::os::unix::fs::symlink(&target, dir.path().join(".backup.lock")).unwrap();
+        assert!(SnapshotStore::open(dir.path()).is_err());
+        assert_eq!(std::fs::read(target).unwrap(), b"preserve");
+    }
+}
+
+#[cfg(test)]
+mod adoption_claim_tests {
+    use super::*;
+    #[test]
+    fn pending_pages_preserve_all_ids_and_exclude_capability_fields() {
+        let rows: Vec<_> = (0..65)
+            .rev()
+            .map(|i| (format!("sbx-{i:03}"), "unnamed"))
+            .collect();
+        let mut cursor = None;
+        let mut ids = Vec::new();
+        let mut lengths = Vec::new();
+        loop {
+            let page = pending_registration_page(rows.clone(), cursor.as_deref());
+            let values = page["registrations"].as_array().unwrap();
+            lengths.push(values.len());
+            for row in values {
+                assert_eq!(row.as_object().unwrap().len(), 2);
+                ids.push(row["sandboxID"].as_str().unwrap().to_owned());
+            }
+            cursor = page["nextCursor"].as_str().map(str::to_owned);
+            if cursor.is_none() {
+                break;
+            }
+        }
+        assert_eq!(lengths, vec![32, 32, 1]);
+        assert_eq!(
+            ids,
+            (0..65).map(|i| format!("sbx-{i:03}")).collect::<Vec<_>>()
+        );
+    }
+
+    #[tokio::test]
+    async fn real_proxy_resolution_refusal_preserves_paused_value() {
+        let network = SandboxNetworkConfig {
+            egress_proxy: Some(SandboxEgressProxyConfig {
+                address: "localhost:1080".into(),
+                username: None,
+                password: None,
+            }),
+            ..SandboxNetworkConfig::default()
+        };
+        let (paused, result) = protected_paused_lookup(
+            vec![0, 255, 42],
+            |_| panic!("completed refusal must use caller cleanup"),
+            resolve_egress_proxy(false, Some(&network)),
+        )
+        .await;
+        assert_eq!(paused, vec![0, 255, 42]);
+        assert!(result.err().unwrap().contains("private or internal range"));
+    }
+    #[tokio::test]
+    async fn real_proxy_resolution_operator_override_preserves_paused_value() {
+        let network = SandboxNetworkConfig {
+            egress_proxy: Some(SandboxEgressProxyConfig {
+                address: "localhost:1080".into(),
+                username: None,
+                password: None,
+            }),
+            ..SandboxNetworkConfig::default()
+        };
+        let (paused, result) = protected_paused_lookup(
+            vec![0, 255, 42],
+            |_| panic!("completed lookup must not roll back"),
+            resolve_egress_proxy(true, Some(&network)),
+        )
+        .await;
+        assert_eq!(paused, vec![0, 255, 42]);
+        assert!(result.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn cancelled_lookup_restores_owned_paused_value() {
+        let restored = Arc::new(Mutex::new(None));
+        let output = restored.clone();
+        let ready = Arc::new(tokio::sync::Notify::new());
+        let signal = ready.clone();
+        let task = tokio::spawn(async move {
+            protected_paused_lookup(
+                vec![0, 255, 42],
+                move |value| {
+                    *output.lock() = Some(value);
+                },
+                async {
+                    signal.notify_one();
+                    std::future::pending::<()>().await;
+                },
+            )
+            .await
+        });
+        ready.notified().await;
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        assert_eq!(*restored.lock(), Some(vec![0, 255, 42]));
+    }
+    #[tokio::test]
+    async fn completed_lookup_returns_paused_value_without_rollback() {
+        let (value, result) = protected_paused_lookup(
+            vec![0, 255, 42],
+            |_| panic!("completion must not roll back"),
+            async { Err::<(), _>("unavailable") },
+        )
+        .await;
+        assert_eq!(value, vec![0, 255, 42]);
+        assert_eq!(result, Err("unavailable"));
+    }
+
+    #[tokio::test]
+    async fn completed_lookup_keeps_claim_for_caller_cleanup() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = SnapshotStore::open(directory.path()).unwrap();
+        let path = store.paused_dir().join("sbx-lookup.json.claimed-node");
+        std::fs::write(&path, b"preserved-description").unwrap();
+        let claim = SnapshotClaim {
+            store: &store,
+            id: "sbx-lookup",
+            path: path.clone(),
+            released: false,
+        };
+        let result =
+            protected_snapshot_lookup(Some(claim), async { Err::<(), _>("lookup failed") }).await;
+        assert_eq!(result, Err("lookup failed"));
+        assert!(!store.meta("sbx-lookup").exists());
+        assert_eq!(std::fs::read(&path).unwrap(), b"preserved-description");
+        store.release("sbx-lookup", &path);
+        assert_eq!(
+            std::fs::read(store.meta("sbx-lookup")).unwrap(),
+            b"preserved-description"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancelled_protected_lookup_returns_paused_description() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = Arc::new(SnapshotStore::open(directory.path()).unwrap());
+        let path = store.paused_dir().join("sbx-adoption.json.claimed-node");
+        std::fs::write(&path, b"preserved-description").unwrap();
+        let ready = Arc::new(tokio::sync::Notify::new());
+        let task_store = store.clone();
+        let task_ready = ready.clone();
+        let task = tokio::spawn(async move {
+            let claim = SnapshotClaim {
+                store: &task_store,
+                id: "sbx-adoption",
+                path,
+                released: false,
+            };
+            protected_snapshot_lookup(Some(claim), async {
+                task_ready.notify_one();
+                std::future::pending::<()>().await;
+            })
+            .await;
+        });
+        ready.notified().await;
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        assert_eq!(
+            std::fs::read(store.meta("sbx-adoption")).unwrap(),
+            b"preserved-description"
+        );
+    }
+}
+
+#[cfg(test)]
+mod registration_worker_tests {
+    use super::*;
+
+    #[test]
+    fn intervals_are_bounded() {
+        for invalid in ["0", "3601", "-1", "abc", "18446744073709551616"] {
+            assert!(parse_registration_reconcile_interval(invalid).is_err());
+        }
+        assert_eq!(
+            parse_registration_reconcile_interval("1").unwrap(),
+            Duration::from_secs(1)
+        );
+        assert_eq!(
+            parse_registration_reconcile_interval("3600").unwrap(),
+            Duration::from_secs(3600)
+        );
+    }
+
+    #[test]
+    fn persistent_failures_do_not_starve_later_registrations() {
+        let ids: Vec<_> = (0..65).rev().map(|i| format!("sandbox-{i:03}")).collect();
+        let first = registration_reconcile_batch(ids.clone(), None);
+        let second = registration_reconcile_batch(ids.clone(), first.last().map(String::as_str));
+        let third = registration_reconcile_batch(ids, second.last().map(String::as_str));
+        assert_eq!(first.len(), 32);
+        assert_eq!(second.len(), 32);
+        assert_eq!(third[0], "sandbox-064");
+        assert_eq!(third[1], "sandbox-000");
+        let seen: std::collections::HashSet<_> =
+            first.into_iter().chain(second).chain(third).collect();
+        assert_eq!(seen.len(), 65);
+        assert!(registration_reconcile_batch(Vec::new(), Some("gone")).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod startup_cleanup_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn cancellation_aborts_unregistered_network_task() {
+        let (entered, waiting) = tokio::sync::oneshot::channel();
+        let task = tokio::spawn(async move {
+            entered.send(()).unwrap();
+            std::future::pending::<()>().await;
+        });
+        waiting.await.unwrap();
+        let cleanup = StartupVmCleanup {
+            vm: None,
+            network_abort: Some(task.abort_handle()),
+        };
+        drop(cleanup);
+        assert!(task.await.unwrap_err().is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn handoff_retains_registered_network_task() {
+        let task = tokio::spawn(std::future::pending::<()>());
+        let mut cleanup = StartupVmCleanup {
+            vm: None,
+            network_abort: Some(task.abort_handle()),
+        };
+        cleanup.disarm();
+        drop(cleanup);
+        tokio::task::yield_now().await;
+        assert!(!task.is_finished());
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+    }
+
+    async fn guest(name: &str) -> Arc<AgentVM> {
+        let kernel =
+            std::env::var("HM_STARTUP_CLEANUP_KERNEL").expect("owned test kernel required");
+        let initrd = std::env::var("HM_STARTUP_CLEANUP_INITRD").expect("owned test image required");
+        let mut capabilities = CapabilitySet::default();
+        capabilities.add(Capability::GuestExec);
+        let vm = AgentVM::builder()
+            .name(name.to_string())
+            .cpu_cores(1)
+            .memory_mb(1024)
+            .capabilities(capabilities)
+            .boot_linux(
+                &kernel,
+                Some(&initrd),
+                guest_cmdline(false, GuestTransport::Mmio),
+            )
+            .build()
+            .await
+            .expect("build owned KVM guest");
+        vm.attach_guest_channel(42).await.unwrap();
+        use hv2_core::{Device, SerialDevice};
+        let mut console = SerialDevice::new("COM1".to_string(), 0x3F8);
+        console.init().await.unwrap();
+        vm.vm()
+            .devices()
+            .register_device("COM1", Arc::new(tokio::sync::RwLock::new(console)))
+            .await
+            .unwrap();
+        vm.vm()
+            .devices()
+            .register_io_port_range("COM1".to_string(), 0x3F8, 0x3FF)
+            .await
+            .unwrap();
+        vm.launch().await.unwrap();
+        Arc::new(vm)
+    }
+
+    #[tokio::test]
+    #[ignore = "requires explicit owned Linux/KVM kernel and image"]
+    async fn startup_cleanup_kvm_cancellation_stops_unregistered_guests() {
+        for ready in [false, true] {
+            let vm = guest(if ready {
+                "cleanup-ready"
+            } else {
+                "cleanup-launching"
+            })
+            .await;
+            if ready {
+                vm.ping_guest(Duration::from_secs(15)).await.unwrap();
+            }
+            let cleanup = StartupVmCleanup::new(Arc::clone(&vm));
+            let (entered, waiting) = tokio::sync::oneshot::channel();
+            let task = tokio::spawn(async move {
+                let _cleanup = cleanup;
+                entered.send(()).unwrap();
+                std::future::pending::<()>().await;
+            });
+            waiting.await.unwrap();
+            task.abort();
+            assert!(task.await.unwrap_err().is_cancelled());
+            tokio::time::timeout(Duration::from_secs(5), async {
+                while vm.state() != hv2_core::VMState::Stopped {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .expect("canceled guest stopped");
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "requires explicit owned Linux/KVM kernel and image"]
+    async fn startup_cleanup_kvm_handoff_keeps_registered_guest_running() {
+        let vm = guest("cleanup-handoff").await;
+        vm.ping_guest(Duration::from_secs(15)).await.unwrap();
+        let mut cleanup = StartupVmCleanup::new(Arc::clone(&vm));
+        cleanup.disarm();
+        drop(cleanup);
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert_eq!(vm.state(), hv2_core::VMState::Running);
+        vm.ping_guest(Duration::from_secs(5)).await.unwrap();
+        vm.stop().await.unwrap();
+        assert_eq!(vm.state(), hv2_core::VMState::Stopped);
     }
 }

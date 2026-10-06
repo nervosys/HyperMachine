@@ -1,0 +1,15 @@
+   Compiling serde_json v1.0.151
+    Checking hv2-sandbox v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-sandbox)
+    Checking axum v0.8.9
+    Checking hv2-context v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-context)
+    Checking hv2-core v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-core)
+    Checking hv2-guest-agent v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-guest-agent)
+    Checking reqwest v0.12.28
+    Checking tracing-subscriber v0.3.23
+    Checking tonic v0.14.6
+    Checking tonic-prost v0.14.6
+    Checking hv2-agent v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-agent)
+    Checking hv2-runtime v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-runtime)
+    Checking hv2-api v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-api)
+    Checking hv2-cluster v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-cluster)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 35.68s

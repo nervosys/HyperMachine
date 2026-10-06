@@ -40,7 +40,7 @@ serde_json = { workspace = true }
 serde = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 dirs = "5.0"
-reqwest = { workspace = true, features = ["rustls-tls"] }
+reqwest = { workspace = true, features = ["rustls-tls", "stream"] }
 
 # MCP HTTP server
 axum = { workspace = true }
@@ -48,9 +48,16 @@ tower-http = { version = "0.7", features = ["cors"] }
 
 # Shell completions
 clap_complete = "4.5"
+tempfile = "3.10"
+base64 = "0.22"
+uuid = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
-tempfile = "3.10"
+hyper = { workspace = true }
+hyper-util = { workspace = true }
 
 [lints]
 workspace = true

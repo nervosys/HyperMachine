@@ -1,0 +1,313 @@
+//! A stateless control plane for a cluster of `hv2-sandboxd` nodes.
+//!
+//! ```text
+//! hv2-control-plane --store redis://127.0.0.1:6379 --port 5980 --proxy-port 5981 \
+//!     --api-key "$E2B_API_KEY" --cluster-token "$HV2_CLUSTER_TOKEN"
+//! ```
+//!
+//! Run as many as you like against one store. Point the E2B SDK at any of
+//! them: `E2B_API_URL=http://host:5980 E2B_SANDBOX_URL=http://host:5981`.
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use hv2_cluster::control::{self, ClusterRoutes, ControlConfig, ControlPlane};
+use hv2_cluster::store;
+
+struct Options {
+    store: String,
+    namespace: String,
+    port: u16,
+    proxy_port: u16,
+    api_key: Option<String>,
+    api_keys_file: Option<String>,
+    cluster_token: Option<String>,
+    reap_interval: Duration,
+    tls_cert: Option<String>,
+    tls_key: Option<String>,
+    api_tls_cert: Option<String>,
+    api_tls_key: Option<String>,
+    /// Mutual TLS to nodes: the CA, this instance's client certificate and
+    /// key, and the name nodes' certificates carry.
+    mtls_ca: Option<String>,
+    mtls_cert: Option<String>,
+    mtls_key: Option<String>,
+    mtls_node_name: String,
+    identity_issuer: Option<String>,
+}
+
+fn parse() -> Result<Options, String> {
+    let mut opts = Options {
+        store: "memory:".to_string(),
+        namespace: "default".to_string(),
+        port: 5980,
+        proxy_port: 5981,
+        // From the environment by default, so a key need not sit in `ps`.
+        api_key: std::env::var("HV2_API_KEY").ok().filter(|k| !k.is_empty()),
+        api_keys_file: None,
+        cluster_token: std::env::var("HV2_CLUSTER_TOKEN")
+            .ok()
+            .filter(|k| !k.is_empty()),
+        reap_interval: Duration::from_secs(5),
+        tls_cert: None,
+        tls_key: None,
+        api_tls_cert: None,
+        api_tls_key: None,
+        mtls_ca: None,
+        mtls_cert: None,
+        mtls_key: None,
+        mtls_node_name: hv2_cluster::mtls::DEFAULT_NODE_NAME.to_string(),
+        identity_issuer: None,
+    };
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut i = 0;
+    while i < args.len() {
+        let flag = args[i].as_str();
+        let mut value = || {
+            i += 1;
+            args.get(i)
+                .cloned()
+                .ok_or_else(|| format!("{flag} needs a value"))
+        };
+        match flag {
+            "--store" => opts.store = value()?,
+            "--namespace" => opts.namespace = value()?,
+            "--port" => opts.port = value()?.parse().map_err(|e| format!("--port: {e}"))?,
+            "--proxy-port" => {
+                opts.proxy_port = value()?.parse().map_err(|e| format!("--proxy-port: {e}"))?;
+            }
+            "--api-key" => opts.api_key = Some(value()?),
+            "--api-keys-file" => opts.api_keys_file = Some(value()?),
+            "--cluster-token" => opts.cluster_token = Some(value()?),
+            "--reap-interval" => {
+                opts.reap_interval = Duration::from_secs(
+                    value()?
+                        .parse()
+                        .map_err(|e| format!("--reap-interval: {e}"))?,
+                );
+            }
+            "--tls-cert" => opts.tls_cert = Some(value()?),
+            "--tls-key" => opts.tls_key = Some(value()?),
+            "--api-tls-cert" => opts.api_tls_cert = Some(value()?),
+            "--api-tls-key" => opts.api_tls_key = Some(value()?),
+            "--mtls-ca" => opts.mtls_ca = Some(value()?),
+            "--mtls-cert" => opts.mtls_cert = Some(value()?),
+            "--mtls-key" => opts.mtls_key = Some(value()?),
+            "--mtls-node-name" => opts.mtls_node_name = value()?,
+            "--identity-issuer" => opts.identity_issuer = Some(value()?),
+            "--help" | "-h" => {
+                println!(
+                    "usage: hv2-control-plane [--store memory:|redis://host:port] [--namespace N] \
+                     [--port N] [--proxy-port N] [--api-key K] [--cluster-token T] \
+                     [--api-keys-file F] [--reap-interval SECS] [--tls-cert F --tls-key F] \
+                     [--api-tls-cert F --api-tls-key F] \
+                     [--mtls-ca F --mtls-cert F --mtls-key F [--mtls-node-name N]] \
+                     [--identity-issuer URL]\n\
+                     HV2_API_KEY and HV2_CLUSTER_TOKEN are read from the environment too."
+                );
+                std::process::exit(0);
+            }
+            other => return Err(format!("unrecognised argument {other}")),
+        }
+        i += 1;
+    }
+    Ok(opts)
+}
+
+#[tokio::main]
+async fn main() -> std::process::ExitCode {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .init();
+
+    let opts = match parse() {
+        Ok(opts) => opts,
+        Err(e) => {
+            eprintln!("hv2-control-plane: {e}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    let api_keys = match opts
+        .api_keys_file
+        .as_ref()
+        .map(|path| {
+            std::fs::read_to_string(path)
+                .map_err(|error| format!("read API key policy: {error}"))
+                .and_then(|json| hv2_cluster::keys::ApiKeyPolicy::from_json(&json))
+        })
+        .transpose()
+    {
+        Ok(keys) => keys.unwrap_or_default(),
+        Err(error) => {
+            eprintln!("hv2-control-plane: {error}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    if let Err(error) =
+        hv2_cluster::keys::ApiKeyPolicy::validate_legacy_admin(&api_keys, opts.api_key.as_deref())
+    {
+        eprintln!("hv2-control-plane: {error}");
+        return std::process::ExitCode::FAILURE;
+    }
+    let store = match store::open(&opts.store, &opts.namespace).await {
+        Ok(store) => store,
+        Err(e) => {
+            eprintln!("hv2-control-plane: {e}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    if opts.api_key.is_none() && api_keys.is_empty() {
+        tracing::warn!("no --api-key: anyone who can reach this port can create sandboxes");
+    }
+
+    // Mutual TLS to nodes, all three files or none: half a configuration
+    // is a mistake, and falling back to plaintext is the wrong way to say so.
+    let mtls = match (&opts.mtls_ca, &opts.mtls_cert, &opts.mtls_key) {
+        (None, None, None) => None,
+        (Some(ca), Some(cert), Some(key)) => match hv2_cluster::mtls::Mtls::load(
+            std::path::Path::new(ca),
+            std::path::Path::new(cert),
+            std::path::Path::new(key),
+            &opts.mtls_node_name,
+        ) {
+            Ok(mtls) => Some(mtls),
+            Err(e) => {
+                eprintln!("hv2-control-plane: mTLS: {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+        },
+        _ => {
+            eprintln!("hv2-control-plane: --mtls-ca, --mtls-cert and --mtls-key go together");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    if mtls.is_none() {
+        tracing::warn!(
+            "no --mtls-*: nodes are reached in plaintext, the cluster token and envd \
+             traffic with them"
+        );
+    }
+
+    // Envd traffic, routed to whichever node holds the sandbox.
+    let routes = ClusterRoutes::new(Arc::clone(&store), Duration::from_secs(2));
+    let routes = match &mtls {
+        None => Arc::new(routes),
+        Some(mtls) => match routes.with_mtls(mtls) {
+            Ok(routes) => Arc::new(routes),
+            Err(e) => {
+                eprintln!("hv2-control-plane: mTLS: {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+        },
+    };
+    let proxy_addr = std::net::SocketAddr::from(([0, 0, 0, 0], opts.proxy_port));
+    let tls = match (&opts.tls_cert, &opts.tls_key) {
+        (Some(cert), Some(key)) => match hv2_api::sandbox_proxy::tls_config(
+            std::path::Path::new(cert),
+            std::path::Path::new(key),
+        ) {
+            Ok(config) => Some(config),
+            Err(e) => {
+                eprintln!("hv2-control-plane: TLS: {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+        },
+        (None, None) => None,
+        _ => {
+            eprintln!("hv2-control-plane: --tls-cert and --tls-key go together");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    let (_proxy_shutdown, proxy_rx) = tokio::sync::oneshot::channel();
+    tokio::spawn(async move {
+        let result = match tls {
+            Some(config) => {
+                hv2_api::sandbox_proxy::serve_tls(proxy_addr, routes, config, proxy_rx).await
+            }
+            None => hv2_api::sandbox_proxy::serve(proxy_addr, routes, proxy_rx).await,
+        };
+        if let Err(e) = result {
+            tracing::error!("envd proxy on {proxy_addr} stopped: {e}");
+        }
+    });
+
+    let config = ControlConfig {
+        api_key: opts.api_key,
+        api_keys,
+        cluster_token: opts.cluster_token,
+        proxy_port: opts.proxy_port,
+        create_timeout: Duration::from_secs(60),
+        identity_issuer: opts.identity_issuer,
+    };
+    let control = match &mtls {
+        None => ControlPlane::new(store, config),
+        Some(mtls) => match mtls
+            .http_client()
+            .and_then(|http| Ok((http, mtls.tcp_http_client()?)))
+        {
+            Ok((http, tcp_http)) => ControlPlane::with_clients(store, config, http, tcp_http),
+            Err(e) => {
+                eprintln!("hv2-control-plane: mTLS: {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+        },
+    };
+    tokio::spawn(control::reaper(Arc::clone(&control), opts.reap_interval));
+    let addr = format!("0.0.0.0:{}", opts.port);
+    let listener = match tokio::net::TcpListener::bind(&addr).await {
+        Ok(listener) => listener,
+        Err(e) => {
+            eprintln!("hv2-control-plane: could not bind {addr}: {e}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    println!(
+        "hv2-control-plane: E2B API on {addr}, envd proxy on {proxy_addr}, store {}",
+        store::redacted(&opts.store)
+    );
+    let api_tls = match (&opts.api_tls_cert, &opts.api_tls_key) {
+        (None, None) => None,
+        (Some(cert), Some(key)) => {
+            match hv2_api::tls::build_rustls_config(&hv2_api::tls::TlsConfig {
+                cert_path: cert.clone(),
+                key_path: key.clone(),
+            }) {
+                Ok(config) => Some(config),
+                Err(error) => {
+                    eprintln!("hv2-control-plane: API TLS: {error}");
+                    return std::process::ExitCode::FAILURE;
+                }
+            }
+        }
+        _ => {
+            eprintln!("hv2-control-plane: --api-tls-cert and --api-tls-key go together");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    let result = match api_tls {
+        None => axum::serve(
+            axum::serve::ListenerExt::tap_io(listener, hv2_api::tls::configure_api_socket),
+            control::router(control),
+        )
+        .await
+        .map_err(|e| e.to_string()),
+        Some(config) => hv2_api::tls::serve_tls(
+            listener,
+            control::router(control),
+            tokio_rustls::TlsAcceptor::from(config),
+            async {
+                let _ = tokio::signal::ctrl_c().await;
+            },
+        )
+        .await
+        .map_err(|e| e.to_string()),
+    };
+    if let Err(e) = result {
+        eprintln!("hv2-control-plane: {e}");
+        return std::process::ExitCode::FAILURE;
+    }
+    std::process::ExitCode::SUCCESS
+}

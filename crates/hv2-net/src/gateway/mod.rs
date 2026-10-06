@@ -51,7 +51,8 @@
 //!
 //! # What it does not do
 //!
-//! - **UDP other than DNS**, and **ICMP**: dropped. A guest `ping` gets no
+//! - **Ordinary UDP other than DNS**, and **ICMP**: dropped. Private IPv4
+//!   UDP uses the operator hook and bounded framed sessions. A guest `ping` gets no
 //!   answer, rather than a fabricated one from the gateway.
 //! - **IPv6**: the guest is configured with IPv4 only.
 //! - **Inbound**: nothing from outside can open a connection to a guest
@@ -59,6 +60,7 @@
 
 pub mod dns;
 pub mod mitm;
+pub mod private_udp;
 pub mod sniff;
 pub mod socks;
 
@@ -77,7 +79,7 @@ use smoltcp::phy::{Device, DeviceCapabilities, Medium};
 use smoltcp::socket::{tcp, udp};
 use smoltcp::wire::{
     EthernetAddress, EthernetFrame, EthernetProtocol, HardwareAddress, IpAddress, IpCidr,
-    IpProtocol, Ipv4Packet, TcpPacket,
+    IpProtocol, Ipv4Packet, TcpPacket, UdpPacket,
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::sync::mpsc;
@@ -172,6 +174,24 @@ pub trait Dialer: Send + Sync {
     async fn dial(&self, destination: SocketAddr) -> io::Result<Box<dyn Upstream>>;
 }
 
+/// Operator-provided private routing for one fixed guest source. Classifiers
+/// must claim the entire reserved namespace/address pool, including unknown
+/// names and unallocated addresses, and stay stable for the gateway lifetime.
+/// Resolution and dialing must authorize current membership independently.
+/// Private refusals never fall back to Internet DNS, SOCKS or header injection.
+#[async_trait::async_trait]
+pub trait PrivateNetwork: Send + Sync {
+    fn owns_name(&self, name: &str) -> bool;
+    fn owns_address(&self, address: IpAddr) -> bool;
+    async fn resolve(&self, name: &str) -> io::Result<Vec<IpAddr>>;
+    async fn dial(&self, destination: SocketAddr) -> io::Result<Box<dyn Upstream>>;
+    /// Generation-bound framed UDP transport; unsupported hooks refuse rather
+    /// than falling back to an ordinary host UDP socket.
+    async fn dial_udp(&self, _destination: SocketAddr) -> io::Result<Box<dyn Upstream>> {
+        Err(io::ErrorKind::Unsupported.into())
+    }
+}
+
 /// Plain TCP from the host.
 pub struct SystemDialer;
 
@@ -218,10 +238,12 @@ struct Shared {
     policy: RwLock<NetworkPolicy>,
     resolver: Arc<dyn Resolver>,
     dialer: Arc<dyn Dialer>,
+    private_network: Option<Arc<dyn PrivateNetwork>>,
     intercept: Option<Intercept>,
     egress_proxy: RwLock<Option<socks::Socks5Proxy>>,
     /// Workload tokens for placeholders in injected headers.
     tokens: RwLock<Option<mitm::TokenSource>>,
+    secrets: RwLock<Option<Arc<crate::secret_substitution::Store>>>,
     resolved: Mutex<HashMap<IpAddr, BTreeSet<String>>>,
     log: Mutex<VecDeque<Decision>>,
     stats: Mutex<GatewayStats>,
@@ -334,6 +356,23 @@ impl GatewayHandle {
         *self.0.tokens.write() = tokens;
     }
 
+    /// Configure operator-owned host-bound secrets. TLS interception must
+    /// already be enabled. Bindings never grant network access, and plaintext
+    /// connections never substitute them. Rotate through the retained store;
+    /// replacing this handle applies to newly intercepted connections.
+    pub fn set_secret_store(
+        &self,
+        secrets: Option<Arc<crate::secret_substitution::Store>>,
+    ) -> io::Result<()> {
+        if secrets.is_some() && self.0.intercept.is_none() {
+            return Err(io::Error::other(
+                "host-bound secrets require TLS interception",
+            ));
+        }
+        *self.0.secrets.write() = secrets;
+        Ok(())
+    }
+
     /// The most recent decisions, oldest first.
     #[must_use]
     pub fn decisions(&self) -> Vec<Decision> {
@@ -366,6 +405,7 @@ pub struct GatewayBuilder {
     policy: NetworkPolicy,
     resolver: Arc<dyn Resolver>,
     dialer: Arc<dyn Dialer>,
+    private_network: Option<Arc<dyn PrivateNetwork>>,
     authority: Option<Arc<mitm::Authority>>,
     extra_roots: Vec<rustls::pki_types::CertificateDer<'static>>,
 }
@@ -379,6 +419,12 @@ impl GatewayBuilder {
     #[must_use]
     pub fn resolver(mut self, resolver: Arc<dyn Resolver>) -> Self {
         self.resolver = resolver;
+        self
+    }
+    /// Install trusted private routing independently of Internet egress policy.
+    #[must_use]
+    pub fn private_network(mut self, private: Arc<dyn PrivateNetwork>) -> Self {
+        self.private_network = Some(private);
         self
     }
     #[must_use]
@@ -421,9 +467,11 @@ impl GatewayBuilder {
             policy: RwLock::new(self.policy),
             resolver: self.resolver,
             dialer: self.dialer,
+            private_network: self.private_network,
             intercept,
             egress_proxy: RwLock::new(None),
             tokens: RwLock::new(None),
+            secrets: RwLock::new(None),
             resolved: Mutex::new(HashMap::new()),
             log: Mutex::new(VecDeque::new()),
             stats: Mutex::new(GatewayStats::default()),
@@ -466,6 +514,7 @@ impl Gateway {
             policy,
             resolver: Arc::new(SystemResolver),
             dialer: Arc::new(SystemDialer),
+            private_network: None,
             authority: None,
             extra_roots: Vec::new(),
         }
@@ -588,6 +637,7 @@ struct Conn {
 /// How a connection is to be handled, decided at its SYN.
 #[derive(Debug, Clone)]
 enum Plan {
+    Private,
     /// Dial first; the address is allowed. `via_names` is set when that is
     /// only because this gateway's DNS answered an allowed name with it.
     DialFirst {
@@ -610,6 +660,21 @@ const TASK_CHUNK: usize = 16 * 1024;
 /// A listening socket whose SYN never took. Only a malformed frame gets here.
 const LISTEN_TIMEOUT: Duration = Duration::from_secs(5);
 
+struct PrivateUdpSession {
+    to_peer: mpsc::Sender<Vec<u8>>,
+    from_peer: mpsc::Receiver<Vec<u8>>,
+    pending: Option<Vec<u8>>,
+    task: tokio::task::JoinHandle<()>,
+}
+impl Drop for PrivateUdpSession {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+struct PrivateUdpSocket {
+    handle: SocketHandle,
+    last_used: std::time::Instant,
+}
 struct Stack {
     shared: Arc<Shared>,
     start: std::time::Instant,
@@ -620,6 +685,8 @@ struct Stack {
     conns: HashMap<u64, Conn>,
     keys: HashMap<(SocketAddr, SocketAddr), u64>,
     next_id: AtomicU64,
+    udp_sockets: HashMap<SocketAddr, PrivateUdpSocket>,
+    udp_sessions: HashMap<(SocketAddr, SocketAddr), PrivateUdpSession>,
 }
 
 impl Stack {
@@ -641,6 +708,8 @@ impl Stack {
         // here, so every address it connects to is one this stack must answer
         // for. `any_ip` requires a route through one of our own addresses.
         iface.set_any_ip(true);
+        // Two fixed receive buffers; incomplete fragment sets expire promptly.
+        iface.set_reassembly_timeout(smoltcp::time::Duration::from_secs(5));
         let _ = iface.routes_mut().add_default_ipv4_route(config.gateway);
 
         let mut sockets = SocketSet::new(Vec::new());
@@ -662,6 +731,8 @@ impl Stack {
             conns: HashMap::new(),
             keys: HashMap::new(),
             next_id: AtomicU64::new(1),
+            udp_sockets: HashMap::new(),
+            udp_sessions: HashMap::new(),
         }
     }
 
@@ -687,6 +758,7 @@ impl Stack {
             let now = self.now();
             self.iface.poll(now, &mut self.device, &mut self.sockets);
             self.service_dns(&events_tx);
+            self.service_private_udp();
             let blocked = self.service_connections();
             self.iface.poll(now, &mut self.device, &mut self.sockets);
 
@@ -709,7 +781,7 @@ impl Stack {
                 });
             // A connection whose task is not reading has nothing to wake us
             // when it starts again; look back soon.
-            if blocked {
+            if blocked || !self.udp_sockets.is_empty() {
                 wait = wait.min(Duration::from_millis(2));
             }
             tokio::select! {
@@ -729,7 +801,177 @@ impl Stack {
         if let Some((source, destination)) = syn_of(&frame) {
             self.on_syn(source, destination, events);
         }
+        if let Some(destination) = udp_destination_of(&frame) {
+            self.on_private_udp(destination);
+        }
         self.device.rx.push_back(frame);
+    }
+
+    fn on_private_udp(&mut self, destination: SocketAddr) {
+        if self.udp_sockets.contains_key(&destination) {
+            return;
+        }
+        if destination.port() == 0
+            || self.conns.len() + self.udp_sockets.len() >= self.shared.config.max_connections
+            || !self
+                .shared
+                .private_network
+                .as_ref()
+                .is_some_and(|p| p.owns_address(destination.ip()))
+        {
+            return;
+        }
+        let IpAddr::V4(ip) = destination.ip() else {
+            return;
+        };
+        let mut socket = udp::Socket::new(
+            udp::PacketBuffer::new(
+                vec![udp::PacketMetadata::EMPTY; private_udp::QUEUE_DEPTH],
+                vec![0; private_udp::MAX_PAYLOAD * private_udp::QUEUE_DEPTH],
+            ),
+            udp::PacketBuffer::new(
+                vec![udp::PacketMetadata::EMPTY; private_udp::QUEUE_DEPTH],
+                vec![0; private_udp::MAX_PAYLOAD * private_udp::QUEUE_DEPTH],
+            ),
+        );
+        if socket
+            .bind((IpAddress::Ipv4(ip), destination.port()))
+            .is_err()
+        {
+            return;
+        }
+        let handle = self.sockets.add(socket);
+        self.udp_sockets.insert(
+            destination,
+            PrivateUdpSocket {
+                handle,
+                last_used: std::time::Instant::now(),
+            },
+        );
+    }
+
+    fn service_private_udp(&mut self) {
+        let destinations: Vec<_> = self.udp_sockets.keys().copied().collect();
+        for destination in destinations {
+            let handle = self.udp_sockets[&destination].handle;
+            for _ in 0..private_udp::QUEUE_DEPTH {
+                let received = self
+                    .sockets
+                    .get_mut::<udp::Socket>(handle)
+                    .recv()
+                    .map(|(data, meta)| (data.to_vec(), meta.endpoint));
+                let Ok((payload, endpoint)) = received else {
+                    break;
+                };
+                let IpAddress::Ipv4(source_ip) = endpoint.addr;
+                let source = SocketAddr::new(IpAddr::V4(source_ip), endpoint.port);
+                let key = (source, destination);
+                if !self.udp_sessions.contains_key(&key) {
+                    if self.conns.len() + self.udp_sessions.len()
+                        >= self.shared.config.max_connections
+                    {
+                        continue;
+                    }
+                    let Some(private) = self.shared.private_network.clone() else {
+                        continue;
+                    };
+                    let (to_peer, input) = mpsc::channel(private_udp::QUEUE_DEPTH);
+                    let (output, from_peer) = mpsc::channel(private_udp::QUEUE_DEPTH);
+                    let shared = self.shared.clone();
+                    let task = tokio::spawn(async move {
+                        let stream = match tokio::time::timeout(
+                            shared.config.connect_timeout,
+                            private.dial_udp(destination),
+                        )
+                        .await
+                        {
+                            Ok(Ok(stream)) => stream,
+                            _ => {
+                                shared.record(
+                                    "udp",
+                                    destination,
+                                    None,
+                                    Verdict::Deny,
+                                    "private network refused",
+                                );
+                                return;
+                            }
+                        };
+                        shared.record("udp", destination, None, Verdict::Allow, "private network");
+                        let _ = private_udp::relay(
+                            stream,
+                            input,
+                            output,
+                            Duration::from_secs(30),
+                            Duration::from_secs(600),
+                        )
+                        .await;
+                    });
+                    self.udp_sessions.insert(
+                        key,
+                        PrivateUdpSession {
+                            to_peer,
+                            from_peer,
+                            pending: None,
+                            task,
+                        },
+                    );
+                }
+                // UDP pressure drops whole packets, never partial frame bytes.
+                let _ = self.udp_sessions[&key].to_peer.try_send(payload);
+                self.udp_sockets.get_mut(&destination).unwrap().last_used =
+                    std::time::Instant::now();
+            }
+        }
+        let keys: Vec<_> = self.udp_sessions.keys().copied().collect();
+        for key @ (source, destination) in keys {
+            let session = self.udp_sessions.get_mut(&key).unwrap();
+            let handle = self.udp_sockets[&destination].handle;
+            for _ in 0..private_udp::QUEUE_DEPTH {
+                let payload = match session
+                    .pending
+                    .take()
+                    .or_else(|| session.from_peer.try_recv().ok())
+                {
+                    Some(payload) => payload,
+                    None => break,
+                };
+                let IpAddr::V4(ip) = source.ip() else {
+                    break;
+                };
+                if self
+                    .sockets
+                    .get_mut::<udp::Socket>(handle)
+                    .send_slice(&payload, (IpAddress::Ipv4(ip), source.port()))
+                    .is_err()
+                {
+                    session.pending = Some(payload);
+                    break;
+                }
+                self.udp_sockets.get_mut(&destination).unwrap().last_used =
+                    std::time::Instant::now();
+            }
+            if session.task.is_finished()
+                && session.pending.is_none()
+                && session.from_peer.is_empty()
+            {
+                self.udp_sessions.remove(&key);
+            }
+        }
+        let unused: Vec<_> = self
+            .udp_sockets
+            .iter()
+            .filter_map(|(destination, socket)| {
+                (!self.udp_sessions.keys().any(|(_, to)| to == destination)
+                    && socket.last_used.elapsed() > Duration::from_secs(5)
+                    && self.sockets.get::<udp::Socket>(socket.handle).send_queue() == 0)
+                    .then_some(*destination)
+            })
+            .collect();
+        for destination in unused {
+            let socket = self.udp_sockets.remove(&destination).unwrap();
+            self.sockets.remove(socket.handle);
+        }
     }
 
     fn on_syn(
@@ -747,8 +989,15 @@ impl Stack {
 
         let plan = if address == IpAddr::V4(config.gateway) || address == IpAddr::V4(config.dns) {
             Err("the gateway runs no TCP services")
-        } else if self.conns.len() >= config.max_connections {
+        } else if self.conns.len() + self.udp_sessions.len() >= config.max_connections {
             Err("too many open connections")
+        } else if self
+            .shared
+            .private_network
+            .as_ref()
+            .is_some_and(|p| p.owns_address(address))
+        {
+            Ok(Plan::Private)
         } else {
             let policy = self.shared.policy.read();
             match policy.decide_address(address) {
@@ -807,7 +1056,7 @@ impl Stack {
         // while downloads -- which the guest acknowledges -- ran at 130.
         socket.set_ack_delay(None);
         socket.set_timeout(Some(smoltcp::time::Duration::from_secs(120)));
-        socket.pause_synack(matches!(plan, Plan::DialFirst { .. }));
+        socket.pause_synack(matches!(plan, Plan::DialFirst { .. } | Plan::Private));
         let handle = self.sockets.add(socket);
 
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
@@ -976,6 +1225,27 @@ impl Stack {
     }
 }
 
+/// Only complete IPv4 UDP headers create private destination sockets. The stack
+/// validates checksums before delivering their payload; other UDP stays dropped.
+fn udp_destination_of(frame: &[u8]) -> Option<SocketAddr> {
+    let eth = EthernetFrame::new_checked(frame).ok()?;
+    if eth.ethertype() != EthernetProtocol::Ipv4 {
+        return None;
+    }
+    let ip = Ipv4Packet::new_checked(eth.payload()).ok()?;
+    if ip.next_header() != IpProtocol::Udp || ip.frag_offset() != 0 {
+        return None;
+    }
+    // The first fragment contains the UDP header but not its declared whole
+    // payload. Create only the bounded destination socket; the interface must
+    // reassemble and validate the complete packet before session admission.
+    if ip.payload().len() < 8 {
+        return None;
+    }
+    let udp = UdpPacket::new_unchecked(ip.payload());
+    Some(SocketAddr::new(IpAddr::V4(ip.dst_addr()), udp.dst_port()))
+}
+
 /// The source and destination of a TCP SYN, if `frame` is one.
 fn syn_of(frame: &[u8]) -> Option<(SocketAddr, SocketAddr)> {
     let eth = EthernetFrame::new_checked(frame).ok()?;
@@ -1000,6 +1270,35 @@ async fn resolve_query(shared: &Shared, query: &dns::Query, dns_addr: SocketAddr
     let name = query.name.clone();
     if query.qtype != dns::TYPE_A && query.qtype != dns::TYPE_AAAA {
         return dns::answer(query, dns::Rcode::NotImp, &[], 0);
+    }
+    if let Some(private) = shared
+        .private_network
+        .as_ref()
+        .filter(|p| p.owns_name(&name))
+    {
+        let result =
+            tokio::time::timeout(shared.config.connect_timeout, private.resolve(&name)).await;
+        let (code, addresses) = match result {
+            Ok(Ok(addresses))
+                if !addresses.is_empty() && addresses.iter().all(|a| private.owns_address(*a)) =>
+            {
+                (dns::Rcode::NoError, addresses)
+            }
+            _ => (dns::Rcode::Refused, Vec::new()),
+        };
+        shared.record(
+            "dns",
+            dns_addr,
+            Some(name),
+            if addresses.is_empty() {
+                Verdict::Deny
+            } else {
+                Verdict::Allow
+            },
+            "private network lookup",
+        );
+        // Never remember private names as ordinary Internet policy exceptions.
+        return dns::answer(query, code, &addresses, 0);
     }
     let may = shared.policy.read().may_resolve(&name);
     if !may {
@@ -1103,7 +1402,7 @@ impl AsyncWrite for GuestStream {
         match self.tx.poll_reserve(cx) {
             Poll::Ready(Ok(())) => {}
             Poll::Ready(Err(())) => {
-                return Poll::Ready(Err(io::Error::from(io::ErrorKind::BrokenPipe)))
+                return Poll::Ready(Err(io::Error::from(io::ErrorKind::BrokenPipe)));
             }
             Poll::Pending => return Poll::Pending,
         }
@@ -1303,6 +1602,31 @@ async fn connection(
         let _ = events.send(Event::Abort(id));
     };
     let (upstream, prefix, sniffed, name, reason) = match plan {
+        Plan::Private => {
+            let Some(private) = shared.private_network.as_ref() else {
+                refuse(None, "private network unavailable".into());
+                return;
+            };
+            let upstream =
+                match tokio::time::timeout(config.connect_timeout, private.dial(destination)).await
+                {
+                    Ok(Ok(stream)) => stream,
+                    _ => {
+                        refuse(None, "private network refused".into());
+                        return;
+                    }
+                };
+            let _ = events.send(Event::Accept(id));
+            // Opaque bytes: never sniff private traffic or substitute secrets.
+            (
+                upstream,
+                Vec::new(),
+                Sniffed::Incomplete,
+                None,
+                "private network".into(),
+            )
+        }
+
         Plan::DialFirst { reason, via_names } => {
             let known = via_names.as_ref().and_then(|n| n.first()).cloned();
             let upstream = match dial(&shared, destination, known.as_deref()).await {
@@ -1315,7 +1639,9 @@ async fn connection(
             let _ = events.send(Event::Accept(id));
 
             // Only look inside when the answer could change something.
-            let look = via_names.is_some() || shared.policy.read().has_transforms();
+            let look = via_names.is_some()
+                || shared.policy.read().has_transforms()
+                || shared.secrets.read().is_some();
             let (prefix, sniffed) = if look {
                 read_name(&mut guest, config.sniff_wait).await
             } else {
@@ -1381,7 +1707,13 @@ async fn connection(
     // Header injection, for a TLS connection to a name with a rule.
     if let (Sniffed::Tls(Some(sni)), Some(_)) = (&sniffed, &name) {
         let headers = shared.policy.read().transform_for(sni).cloned();
-        if let Some(headers) = headers {
+        let secrets = shared
+            .secrets
+            .read()
+            .clone()
+            .filter(|store| store.has_host(sni));
+        if headers.is_some() || secrets.is_some() {
+            let headers = headers.unwrap_or_default();
             let Some(intercept) = shared.intercept.clone() else {
                 refuse(
                     Some(sni.clone()),
@@ -1401,17 +1733,31 @@ async fn connection(
                 inner: guest,
             };
             let tokens = shared.tokens.read().clone();
-            if let Err(e) = mitm::intercept(
-                guest,
-                upstream,
-                sni,
-                &headers,
-                tokens,
-                intercept.server,
-                intercept.client,
-            )
-            .await
-            {
+            let result = if let Some(secrets) = secrets {
+                mitm::intercept_with_secrets(
+                    guest,
+                    upstream,
+                    sni,
+                    &headers,
+                    tokens,
+                    intercept.server,
+                    intercept.client,
+                    secrets,
+                )
+                .await
+            } else {
+                mitm::intercept(
+                    guest,
+                    upstream,
+                    sni,
+                    &headers,
+                    tokens,
+                    intercept.server,
+                    intercept.client,
+                )
+                .await
+            };
+            if let Err(e) = result {
                 tracing::debug!("gateway: intercepted connection to {sni} ended: {e}");
             }
             let _ = events.send(Event::WriteClosed(id));

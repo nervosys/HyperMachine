@@ -1,0 +1,200 @@
+{
+  "diagnostic_only": true,
+  "performance_win_established": false,
+  "runtime_change_adopted": false,
+  "cleanup_verified": true,
+  "attempts": 8,
+  "counter_profile": "anonymous_private_clean",
+  "hypermachine_boundary_guests": 4,
+  "auxiliary_events_excluded": 4,
+  "guests": [
+    {
+      "vm": "sbx-e57c597727e846f79942",
+      "boundaries": [
+        {
+          "phase": "before_run",
+          "size_kib": 1048576,
+          "rss_kib": 1408,
+          "pss_kib": 1408,
+          "private_dirty_kib": 1408,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1408,
+          "private_clean_kib": 0,
+          "read_us": 960
+        },
+        {
+          "phase": "after_notice",
+          "size_kib": 1048576,
+          "rss_kib": 21888,
+          "pss_kib": 21888,
+          "private_dirty_kib": 21600,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1436,
+          "private_clean_kib": 288,
+          "read_us": 1354
+        },
+        {
+          "phase": "after_exec",
+          "size_kib": 1048576,
+          "rss_kib": 28232,
+          "pss_kib": 28232,
+          "private_dirty_kib": 27820,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1872,
+          "private_clean_kib": 412,
+          "read_us": 1441
+        }
+      ],
+      "private_dirty_after_notice_minus_before_run_kib": 20192,
+      "private_dirty_after_exec_minus_after_notice_kib": 6220,
+      "anonymous_after_notice_minus_before_run_kib": 28,
+      "anonymous_after_exec_minus_after_notice_kib": 436
+    },
+    {
+      "vm": "sbx-2da91218f8394c04ae5f",
+      "boundaries": [
+        {
+          "phase": "before_run",
+          "size_kib": 1048576,
+          "rss_kib": 1408,
+          "pss_kib": 1408,
+          "private_dirty_kib": 1408,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1408,
+          "private_clean_kib": 0,
+          "read_us": 1120
+        },
+        {
+          "phase": "after_notice",
+          "size_kib": 1048576,
+          "rss_kib": 21848,
+          "pss_kib": 21848,
+          "private_dirty_kib": 21580,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1436,
+          "private_clean_kib": 268,
+          "read_us": 2248
+        },
+        {
+          "phase": "after_exec",
+          "size_kib": 1048576,
+          "rss_kib": 27284,
+          "pss_kib": 27284,
+          "private_dirty_kib": 26872,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1944,
+          "private_clean_kib": 412,
+          "read_us": 1494
+        }
+      ],
+      "private_dirty_after_notice_minus_before_run_kib": 20172,
+      "private_dirty_after_exec_minus_after_notice_kib": 5292,
+      "anonymous_after_notice_minus_before_run_kib": 28,
+      "anonymous_after_exec_minus_after_notice_kib": 508
+    },
+    {
+      "vm": "sbx-dbfd68d2963e47828e2d",
+      "boundaries": [
+        {
+          "phase": "before_run",
+          "size_kib": 1048576,
+          "rss_kib": 1408,
+          "pss_kib": 1408,
+          "private_dirty_kib": 1408,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1408,
+          "private_clean_kib": 0,
+          "read_us": 2093
+        },
+        {
+          "phase": "after_notice",
+          "size_kib": 1048576,
+          "rss_kib": 21848,
+          "pss_kib": 21848,
+          "private_dirty_kib": 21580,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1436,
+          "private_clean_kib": 268,
+          "read_us": 1134
+        },
+        {
+          "phase": "after_exec",
+          "size_kib": 1048576,
+          "rss_kib": 27288,
+          "pss_kib": 27288,
+          "private_dirty_kib": 26876,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1952,
+          "private_clean_kib": 412,
+          "read_us": 1298
+        }
+      ],
+      "private_dirty_after_notice_minus_before_run_kib": 20172,
+      "private_dirty_after_exec_minus_after_notice_kib": 5296,
+      "anonymous_after_notice_minus_before_run_kib": 28,
+      "anonymous_after_exec_minus_after_notice_kib": 516
+    },
+    {
+      "vm": "sbx-54f5bc9e3b484cd48e37",
+      "boundaries": [
+        {
+          "phase": "before_run",
+          "size_kib": 1048576,
+          "rss_kib": 1408,
+          "pss_kib": 1408,
+          "private_dirty_kib": 1408,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1408,
+          "private_clean_kib": 0,
+          "read_us": 1144
+        },
+        {
+          "phase": "after_notice",
+          "size_kib": 1048576,
+          "rss_kib": 21848,
+          "pss_kib": 21848,
+          "private_dirty_kib": 1436,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1436,
+          "private_clean_kib": 20412,
+          "read_us": 1504
+        },
+        {
+          "phase": "after_exec",
+          "size_kib": 1048576,
+          "rss_kib": 27212,
+          "pss_kib": 27212,
+          "private_dirty_kib": 1880,
+          "shared_clean_kib": 0,
+          "shared_dirty_kib": 0,
+          "anonymous_kib": 1880,
+          "private_clean_kib": 25332,
+          "read_us": 1281
+        }
+      ],
+      "private_dirty_after_notice_minus_before_run_kib": 28,
+      "private_dirty_after_exec_minus_after_notice_kib": 444,
+      "anonymous_after_notice_minus_before_run_kib": 28,
+      "anonymous_after_exec_minus_after_notice_kib": 444
+    }
+  ],
+  "limitations": [
+    "Guest/device activity continues during the after-notice and after-exec observations",
+    "Counters describe residency, not every write or its code origin",
+    "Private dirty can include uniquely mapped dirty file-cache pages; Anonymous distinguishes anonymous residency but not the code that wrote it",
+    "Before-run mapping may contain preexisting private state from required restoration",
+    "Procfs reads and debug logs perturb timing; excluded from rankings",
+    "No equivalent Firecracker boundary observations in this study"
+  ]
+}

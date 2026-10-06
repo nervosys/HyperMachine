@@ -1,0 +1,12 @@
+{
+  "accepted_context_sha256": "af3b8c0ed43d10604bb613b7168fec881984dcd7530ccec87e777f5c92275e40",
+  "base_commit": "63d638135e8868241f04fbcb8f260197fe351685",
+  "source_sha256": {
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/vm.rs": "9e6bb11843f5640ca775c5306b09bf335828de260228a7e00e8df89cabcad6d5",
+    "crates/hv2-core/src/devices/serial.rs": "0e3475490ae566ec727fd27928044227abdb0fc3f176fc478447549b82badb85",
+    "crates/hv2-sandboxd/src/main.rs": "5b8d92902845f748bcfd497cdaa349a7509b4ed27fd6dd867935c8f27e59fb52"
+  },
+  "audit_only": true,
+  "production_runtime_changed": false
+}

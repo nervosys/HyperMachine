@@ -1,0 +1,7 @@
+{
+  "ready": true,
+  "marker_created_with_echo_still_active": true,
+  "exit_code": 5,
+  "false_revocation_report": false,
+  "client_reaped": true
+}

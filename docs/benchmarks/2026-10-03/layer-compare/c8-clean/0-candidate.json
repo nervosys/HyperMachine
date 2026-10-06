@@ -1,0 +1,1135 @@
+{
+  "success": true,
+  "purpose": "prepared snapshot startup, no managed endpoint or universal performance claim",
+  "artifact_sha256": {
+    "hypermachine": "ba1eed2d5bbbd5a18bbfe5268d99280e635bd26ad6b9bf9b850e03fb0202e4e9",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "coordinator": "b076ca1aefd11fec49b23575deb0b23b55b2c784238f86766c43897383a4bfc0",
+    "engines": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "firecracker_harness": "0bcdc13351d54d4c9658bf034aa97f7d86d96d99375a2df04e4c94eaf8d3b610"
+  },
+  "driver_cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "concurrency": 8,
+  "pairs": 2,
+  "guest_readiness_timeout_s": 15,
+  "preparation": {
+    "hypermachine": {
+      "duration_ms": 92.16376399990622,
+      "named_capture_ms": 8.535868000080882,
+      "offering": {
+        "createdAt": 1791012887135,
+        "names": [
+          "warm-benchmark:default"
+        ],
+        "sandboxID": "sbx-077a78d1188945cdb752",
+        "snapshotID": "warm-benchmark:default",
+        "templateID": "base"
+      },
+      "base_template": {
+        "aliases": [
+          "base"
+        ],
+        "buildID": "base",
+        "buildStatus": "ready",
+        "cpuCount": 1,
+        "envdVersion": "0.6.3",
+        "memoryMB": 1024,
+        "public": false,
+        "snapshot": true,
+        "templateID": "base"
+      },
+      "source_files": {
+        ".backup.lock": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "snapshots/warm-benchmark-c506e9b388384fc092b6423277360d83.snap": {
+          "bytes": 1644313,
+          "sha256": "6090de7164caf4d40d44a1b90627e5b0b856254853084f4062969853f2a76a55"
+        },
+        "snapshots/warm-benchmark.json": {
+          "bytes": 142,
+          "sha256": "82870a26c5d02123bf204999a35998ac820e151b47eb09cb126c004631e3fb25"
+        },
+        "templates/94cbb63bd81baf1783adfe6c07e8d944/template.snap": {
+          "bytes": 51210,
+          "sha256": "ccbd17b8340de539d269485ed594f27b4e486f286bfa6cf31250d83c21a2ff62"
+        },
+        "templates/94cbb63bd81baf1783adfe6c07e8d944/template.snap.mem": {
+          "bytes": 1073741824,
+          "sha256": "85989182e882ec5358d24456e4bec1e7679882db48809e2fe761567a7860c1c9"
+        }
+      },
+      "source_unchanged": true
+    },
+    "firecracker": {
+      "duration_ms": 1653.4403000000566,
+      "state_sha256": "547241c66bc48400c62c8b94493a3a7179c368812234ec0e8c033c9500e93f52",
+      "memory_sha256": "fbb33bad591f7ba2ca482df058e6c3f861431588785650b9f14da2d1491fa5c4",
+      "memory_bytes": 1073741824,
+      "snapshot_type": "Full",
+      "source_parent_stopped": true,
+      "source_unchanged": true
+    }
+  },
+  "runs": [
+    {
+      "engine": "hypermachine",
+      "pair": 0,
+      "samples": [
+        {
+          "index": 0,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 997.204755994,
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 94.06163400001333,
+          "latency_phases_ms": {
+            "create_and_notice": 65.42553399992812,
+            "exec": 28.636100000085207
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 1,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 997.206003801,
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 94.49605200006772,
+          "latency_phases_ms": {
+            "create_and_notice": 65.13908700003412,
+            "exec": 29.356965000033597
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 2,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 997.209967473,
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 104.15427500004171,
+          "latency_phases_ms": {
+            "create_and_notice": 86.58197499994458,
+            "exec": 17.57230000009713
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 3,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 997.218037951,
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 86.83192399996642,
+          "latency_phases_ms": {
+            "create_and_notice": 61.408176999975694,
+            "exec": 25.423746999990726
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 4,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 997.215342796,
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 102.59517700001197,
+          "latency_phases_ms": {
+            "create_and_notice": 83.70644300009644,
+            "exec": 18.88873399991553
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 5,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 997.208538085,
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 92.111908999982,
+          "latency_phases_ms": {
+            "create_and_notice": 62.06731800000398,
+            "exec": 30.044590999978027
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 6,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 997.212701511,
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 92.83583199999157,
+          "latency_phases_ms": {
+            "create_and_notice": 68.21240400006445,
+            "exec": 24.623427999927117
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 7,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 997.201743704,
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 96.71366099996703,
+          "latency_phases_ms": {
+            "create_and_notice": 69.75941299992883,
+            "exec": 26.954248000038206
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        }
+      ],
+      "success": true,
+      "cleanup_errors": [],
+      "resource_validation_phase": "after_all_timed_attempts",
+      "held_process_memory_kib": {
+        "Rss_kib": 315544,
+        "Pss_kib": 94947,
+        "Private_Clean_kib": 8088,
+        "Private_Dirty_kib": 54360,
+        "Anonymous_kib": 54316
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 43232,
+        "Pss_kib": 41019,
+        "Private_Clean_kib": 8088,
+        "Private_Dirty_kib": 32692,
+        "Anonymous_kib": 32692
+      },
+      "incremental_process_memory_kib": {
+        "Rss_kib": 272312,
+        "Pss_kib": 53928,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 21668,
+        "Anonymous_kib": 21624
+      },
+      "memory_hold_seconds": 5,
+      "memory_read_ms": 4.064147000008234,
+      "remaining_sandboxes": 0,
+      "start_spread_ms": 16.294247000018913
+    },
+    {
+      "engine": "firecracker",
+      "pair": 0,
+      "samples": [
+        {
+          "index": 0,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1002.796829626,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "05d2e7fe8e2462a64981475c317547850b232f39a12a83c420cba4828f3c0902",
+            "unix_time_ns": 1791012897221438121,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 1002.874744393
+          },
+          "ready_ms": 91.88208000000486,
+          "latency_phases_ms": {
+            "process_and_load": 43.98402200001783,
+            "connect_and_notice": 33.93074500002058,
+            "exec": 13.967312999966452
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 1,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1002.796897476,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "e053b3f2fc440060f6e70f6bae194c4a55d13446e32680d5d71f005bf4840646",
+            "unix_time_ns": 1791012897224125367,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 1002.876637722
+          },
+          "ready_ms": 93.38806400000976,
+          "latency_phases_ms": {
+            "process_and_load": 45.526896999945166,
+            "connect_and_notice": 34.213349000083326,
+            "exec": 13.647817999981271
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 2,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1002.796980082,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "ca8008fb5e9ccadbbcd4cd8d2f5280577d63263b8211ed41f437f390948c7c6b",
+            "unix_time_ns": 1791012897217496591,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 1002.865112795
+          },
+          "ready_ms": 85.66781199999696,
+          "latency_phases_ms": {
+            "process_and_load": 41.605476999961866,
+            "connect_and_notice": 26.527235999992627,
+            "exec": 17.535099000042464
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 3,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1002.797357278,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "b5cdbd52cf1bd685fa73cc0121718f12670e108ca30941cc04fb0a0a33c28433",
+            "unix_time_ns": 1791012897209698335,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 1002.858006587
+          },
+          "ready_ms": 76.24972599990087,
+          "latency_phases_ms": {
+            "process_and_load": 29.023316999996496,
+            "connect_and_notice": 31.625991999931102,
+            "exec": 15.600416999973277
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 4,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1002.79714756,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "d178753ca7da837e220429b461b6b85b0ad06e190902c010a57806151ffbd978",
+            "unix_time_ns": 1791012897209161366,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 1002.85700522
+          },
+          "ready_ms": 81.07771699997102,
+          "latency_phases_ms": {
+            "process_and_load": 28.49786900003437,
+            "connect_and_notice": 31.35979099999986,
+            "exec": 21.220056999936787
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 5,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1002.797096664,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "ecf160864c6dbc724f78ef77ef81ebccbd6844fbb81027d33f83462a80b4aeb4",
+            "unix_time_ns": 1791012897208846347,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 1002.858498541
+          },
+          "ready_ms": 76.07897100001537,
+          "latency_phases_ms": {
+            "process_and_load": 28.3759359999749,
+            "connect_and_notice": 33.02594100000533,
+            "exec": 14.67709400003514
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 6,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1002.797209117,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "404b9454a30f6b326f8243039db58e71bc1b585fb0984b4b4be936e386ba9c6a",
+            "unix_time_ns": 1791012897225238028,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 1002.877809523
+          },
+          "ready_ms": 93.31671000006736,
+          "latency_phases_ms": {
+            "process_and_load": 43.797408000045834,
+            "connect_and_notice": 36.802997999984655,
+            "exec": 12.716304000036871
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 7,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1002.796773059,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "351640f453d13d92a309ab39063d4aafbec4e8aad6e3c1f71f8f949dc1e9e8e2",
+            "unix_time_ns": 1791012897217884347,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 1002.860641846
+          },
+          "ready_ms": 80.31794900000477,
+          "latency_phases_ms": {
+            "process_and_load": 33.21297100001175,
+            "connect_and_notice": 30.655816000034974,
+            "exec": 16.44916199995805
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        }
+      ],
+      "success": true,
+      "cleanup_errors": [],
+      "resource_validation_phase": "after_all_timed_attempts",
+      "held_process_memory_kib": {
+        "Rss_kib": 184700,
+        "Pss_kib": 41910,
+        "Private_Clean_kib": 68,
+        "Private_Dirty_kib": 21236,
+        "Anonymous_kib": 21172
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 0,
+        "Pss_kib": 0,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 0,
+        "Anonymous_kib": 0
+      },
+      "incremental_process_memory_kib": {
+        "Rss_kib": 184700,
+        "Pss_kib": 41910,
+        "Private_Clean_kib": 68,
+        "Private_Dirty_kib": 21236,
+        "Anonymous_kib": 21172
+      },
+      "memory_hold_seconds": 5,
+      "memory_read_ms": 13.305452000054174,
+      "start_spread_ms": 0.5842190000748815
+    },
+    {
+      "engine": "firecracker",
+      "pair": 1,
+      "samples": [
+        {
+          "index": 0,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1008.300152922,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "c07af1371160142558c1f539c321238631232e7cd240a6f8f08d57d4f24dae2f",
+            "unix_time_ns": 1791012902707545750,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 1008.354583345
+          },
+          "ready_ms": 70.60058899992327,
+          "latency_phases_ms": {
+            "process_and_load": 27.452218999997058,
+            "connect_and_notice": 26.97820399998818,
+            "exec": 16.170165999938035
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 1,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1008.300256278,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "6c62b6fd845b2881837ef04709a188eb5b4779492133e714ec1d90beecd062f1",
+            "unix_time_ns": 1791012902709860209,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 1008.360363925
+          },
+          "ready_ms": 82.34268900002917,
+          "latency_phases_ms": {
+            "process_and_load": 26.437804000011056,
+            "connect_and_notice": 33.66984299998421,
+            "exec": 22.2350420000339
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 2,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1008.30031599,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "2f9ab59494cf61c17dbe8768c865fe3cf7d6519ec12eb647b682c31745769408",
+            "unix_time_ns": 1791012902697433590,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 1008.347869307
+          },
+          "ready_ms": 59.48371300007693,
+          "latency_phases_ms": {
+            "process_and_load": 18.072562000043035,
+            "connect_and_notice": 29.480755000008685,
+            "exec": 11.930396000025212
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 3,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1008.300431089,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "88a13980168c83850a43742abccd4bb78cd3500f395ac26bce0007aff96a7d0a",
+            "unix_time_ns": 1791012902705693684,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 1008.353002043
+          },
+          "ready_ms": 68.15539199999421,
+          "latency_phases_ms": {
+            "process_and_load": 25.603694999972504,
+            "connect_and_notice": 26.96725900000274,
+            "exec": 15.584438000018963
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 4,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1008.300370706,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "b13fb4c301854273759f3dd3e830508d3bc65959361f6113f6cb087221510d5b",
+            "unix_time_ns": 1791012902720125685,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 1008.381524843
+          },
+          "ready_ms": 95.72449100005542,
+          "latency_phases_ms": {
+            "process_and_load": 26.817026999992777,
+            "connect_and_notice": 54.33711000000585,
+            "exec": 14.570354000056795
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 5,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1008.300494381,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "cd84d3cd7b539d169fd20d79cf725696cc437b0a75896f4b66d8dc73a3eb17d7",
+            "unix_time_ns": 1791012902737290526,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 1008.383164691
+          },
+          "ready_ms": 97.16256100000464,
+          "latency_phases_ms": {
+            "process_and_load": 25.259789999950044,
+            "connect_and_notice": 57.41052000007585,
+            "exec": 14.49225099997875
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 6,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1008.300548832,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "413a236fc45e7ce7ff5df4d38f05537b43f5f03310780fe02d539aacf4db7d47",
+            "unix_time_ns": 1791012902709423209,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 1008.359999022
+          },
+          "ready_ms": 78.04237100003775,
+          "latency_phases_ms": {
+            "process_and_load": 27.776596999956382,
+            "connect_and_notice": 31.67359300005046,
+            "exec": 18.592181000030905
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 7,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1008.300095544,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "d07d4b553d750a6227263ed71f29738d7d32dfefffc2fc6cc42fa515a3c30ef0",
+            "unix_time_ns": 1791012902713208532,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 1008.366962758
+          },
+          "ready_ms": 86.51081200002864,
+          "latency_phases_ms": {
+            "process_and_load": 26.213977999987037,
+            "connect_and_notice": 40.65323600002557,
+            "exec": 19.643598000016027
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        }
+      ],
+      "success": true,
+      "cleanup_errors": [],
+      "resource_validation_phase": "after_all_timed_attempts",
+      "held_process_memory_kib": {
+        "Rss_kib": 185268,
+        "Pss_kib": 41937,
+        "Private_Clean_kib": 12,
+        "Private_Dirty_kib": 21260,
+        "Anonymous_kib": 21196
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 0,
+        "Pss_kib": 0,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 0,
+        "Anonymous_kib": 0
+      },
+      "incremental_process_memory_kib": {
+        "Rss_kib": 185268,
+        "Pss_kib": 41937,
+        "Private_Clean_kib": 12,
+        "Private_Dirty_kib": 21260,
+        "Anonymous_kib": 21196
+      },
+      "memory_hold_seconds": 5,
+      "memory_read_ms": 3.8627090000318276,
+      "start_spread_ms": 0.45328800001698255
+    },
+    {
+      "engine": "hypermachine",
+      "pair": 1,
+      "samples": [
+        {
+          "index": 0,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1013.864235318,
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 71.15388899990194,
+          "latency_phases_ms": {
+            "create_and_notice": 38.54415499995412,
+            "exec": 32.60973399994782
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 1,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1013.86442653,
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 60.971624000103475,
+          "latency_phases_ms": {
+            "create_and_notice": 37.47695200001999,
+            "exec": 23.494672000083483
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 2,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1013.86456625,
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 65.59415299989269,
+          "latency_phases_ms": {
+            "create_and_notice": 39.60953499995412,
+            "exec": 25.984617999938564
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 3,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1013.864725649,
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 63.90004100001079,
+          "latency_phases_ms": {
+            "create_and_notice": 39.11964899998566,
+            "exec": 24.78039200002513
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 4,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1013.86488985,
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 66.64138099995398,
+          "latency_phases_ms": {
+            "create_and_notice": 39.67672199996741,
+            "exec": 26.96465899998657
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 5,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1013.865030938,
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 63.482870000029834,
+          "latency_phases_ms": {
+            "create_and_notice": 39.32064100001753,
+            "exec": 24.162229000012303
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 6,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1013.86525037,
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 64.13000299994565,
+          "latency_phases_ms": {
+            "create_and_notice": 37.74658199995429,
+            "exec": 26.38342099999136
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        },
+        {
+          "index": 7,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 1013.863827434,
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 67.83962500003327,
+          "latency_phases_ms": {
+            "create_and_notice": 39.736478999998326,
+            "exec": 28.10314600003494
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        }
+      ],
+      "success": true,
+      "cleanup_errors": [],
+      "resource_validation_phase": "after_all_timed_attempts",
+      "held_process_memory_kib": {
+        "Rss_kib": 318760,
+        "Pss_kib": 95695,
+        "Private_Clean_kib": 8092,
+        "Private_Dirty_kib": 55116,
+        "Anonymous_kib": 55076
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 46972,
+        "Pss_kib": 44767,
+        "Private_Clean_kib": 8088,
+        "Private_Dirty_kib": 36432,
+        "Anonymous_kib": 36432
+      },
+      "incremental_process_memory_kib": {
+        "Rss_kib": 271788,
+        "Pss_kib": 50928,
+        "Private_Clean_kib": 4,
+        "Private_Dirty_kib": 18684,
+        "Anonymous_kib": 18644
+      },
+      "memory_hold_seconds": 5,
+      "memory_read_ms": 5.207537000046614,
+      "remaining_sandboxes": 0,
+      "start_spread_ms": 1.4229360000399538
+    }
+  ],
+  "cleanup_errors": [],
+  "limitations": [
+    "Shared WSL nested KVM and uncontrolled host background load",
+    "Persistent HyperMachine HTTP daemon versus fresh Firecracker process/Unix API",
+    "Prepared resident/cache-warm sources; no dropped-cache or storage durability comparison",
+    "PSS excludes kernel memory and unmapped page cache; not fleet density",
+    "Failed attempts retained; conditional latency and memory summaries",
+    "Engine-generated device kernel arguments differ"
+  ],
+  "diagnostic_only": false,
+  "guest_restore_contract": {
+    "clock_rng_resynchronised": true,
+    "entropy_bytes": 64,
+    "hypermachine": "acknowledged by successful create, source-bound after_restore",
+    "firecracker": "Restored RPC acknowledgement before exec; replaces readiness ping"
+  },
+  "latency_phase_measurement": "client_monotonic_no_added_rpc",
+  "resource_validation_phase": "after_all_timed_attempts",
+  "preparation_phase": "complete",
+  "owned_firecracker_processes": [
+    {
+      "pid": 513,
+      "exit_code": -15
+    },
+    {
+      "pid": 583,
+      "exit_code": -15
+    },
+    {
+      "pid": 585,
+      "exit_code": -15
+    },
+    {
+      "pid": 587,
+      "exit_code": -15
+    },
+    {
+      "pid": 589,
+      "exit_code": -15
+    },
+    {
+      "pid": 591,
+      "exit_code": -15
+    },
+    {
+      "pid": 593,
+      "exit_code": -15
+    },
+    {
+      "pid": 594,
+      "exit_code": -15
+    },
+    {
+      "pid": 595,
+      "exit_code": -15
+    },
+    {
+      "pid": 625,
+      "exit_code": -15
+    },
+    {
+      "pid": 626,
+      "exit_code": -15
+    },
+    {
+      "pid": 629,
+      "exit_code": -15
+    },
+    {
+      "pid": 630,
+      "exit_code": -15
+    },
+    {
+      "pid": 632,
+      "exit_code": -15
+    },
+    {
+      "pid": 634,
+      "exit_code": -15
+    },
+    {
+      "pid": 637,
+      "exit_code": -15
+    },
+    {
+      "pid": 639,
+      "exit_code": -15
+    }
+  ],
+  "remaining_sandboxes_before_cleanup": 0,
+  "remaining_sandboxes": 0,
+  "owned_node_stopped": true,
+  "owned_node_exit_code": 0,
+  "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:44903, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes are restored from template snapshots: base\n\nsandbox proxy on 0.0.0.0:37973 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:37973 process.Process/Start\n",
+  "artifacts_unchanged": true
+}

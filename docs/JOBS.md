@@ -37,6 +37,15 @@ The store is `--store DIR`, then `$HM_JOBS_DIR`, then `~/.hypermachine/jobs`.
 
 **Fields:**
 - **`command`** runs directly, not through a shell.
+- **`not_before_ms`** optionally sets the earliest start as an unsigned Unix epoch
+  timestamp in milliseconds, through both `hm jobs submit` and the REST API.
+  Omit it for immediate eligibility. The timestamp is stored with the job and
+  survives worker/client restarts; future jobs remain queued without using an
+  attempt or blocking eligible jobs. Workers use their host wall clock and poll
+  once per second by default, so this is an earliest start, not a deadline.
+  Cancellation works before the start time. Synchronize clocks across worker
+  hosts. This schedules a single host process; recurring schedules and VM jobs
+  are not implemented.
 - **`env`** is added over a minimal base (`PATH`, `HOME`, `TEMP` and, on Windows,
   `SystemRoot`). Nothing else crosses from the worker's own environment.
 - **`HM_JOB_ID`** is always set, so a program can record which job produced its output.
@@ -110,7 +119,361 @@ With `--token` (or `HM_JOBS_TOKEN`), every request must carry
 `Authorization: Bearer <token>`, compared in constant time. `serve` refuses to listen anywhere
 but loopback without a token.
 
-## What is verified
+## VM scheduling implementation requirements
+
+Interval publication is available through the CLI:
+
+```text
+hm jobs --store DIR schedule create NAME interval.json
+hm jobs --store DIR schedule list --limit 100
+hm jobs --store DIR schedule status NAME
+hm jobs --store DIR schedule publish NAME --limit 100
+hm jobs --store DIR schedule watch NAME --limit 100 --poll-ms 1000
+hm jobs --store DIR schedule cancel NAME
+hm jobs --store DIR schedule occurrences NAME --after-ms 1234567890000 --limit 100
+```
+
+An interval spec contains `first_ms`, `every_ms`, optional `missed_policy`
+(`catch_up` or `coalesce`), and `job` containing a job spec. `create` also accepts
+`-` for stdin. These commands print JSON. `publish` defaults to the current wall
+clock; `--now-ms` supplies an explicit Unix millisecond horizon for replay or
+testing. Limits must be 1-1024. Names are immutable: duplicate creation fails.
+Publication stores occurrence records and does not enqueue or execute jobs.
+The existing `hm jobs worker` does not consume these records.
+
+An optional `vm` target is preserved in the schedule and each occurrence:
+
+```json
+{
+  "first_ms": 1790812800000,
+  "every_ms": 60000,
+  "vm": {"sandbox_id": "guest-1", "connection_profile": "local", "timeout_secs": 30},
+  "job": {"command": ["python", "/workspace/task.py"], "workdir": "/workspace"}
+}
+```
+
+The profile is an operator-managed name, not an endpoint URL or credential.
+Accepting the schedule spec does not establish that the profile or sandbox exists.
+Explicit dispatch and an automatic VM worker are available as described below;
+guest reconciliation remains incomplete. Sandbox IDs permit
+1-128 ASCII letters, digits, hyphens or underscores; profiles use the schedule
+name format. Timeouts must be 1-86400 seconds. Guest working directories must be
+absolute UTF-8 paths beginning with `/`, interpreted independently of the host
+OS. VM targets reject host sandbox settings and host graceful-stop files rather
+than ignoring them. Existing schedules without `vm` retain their schema behavior.
+
+Operator profiles can be checked with
+`hm jobs schedule profile-check profiles.json local`. A profile file contains:
+
+```json
+{"profiles":{"local":{"endpoint":"https://node.example","api_key_env":"HV2_API_KEY","ca":"node-ca.pem","request_timeout_secs":120}}}
+```
+
+`api_key_env` and `ca` are optional; configured key variables must be set and
+nonempty. The key value stays in the process environment and authenticated client,
+outside schedule records. CA paths resolve relative to the profile file.
+The timeout defaults to 120 seconds and must be 1-86401. Unknown fields are
+rejected. Validation uses the existing VM client's TLS, certificate, endpoint
+and header rules; success prints only the profile name and configuration status.
+It constructs a client without making a network request, so it verifies neither
+connectivity nor guest execution. A dispatcher must still ensure its request
+deadline exceeds the selected guest timeout.
+
+`schedule watch` publishes due occurrences repeatedly using the host wall clock,
+with one bounded batch per tick and compact JSON output per successful tick.
+It reloads progress on each tick, retries competing-writer conflicts, and
+preserves progress across invocations. `--ticks N` stops after N positive ticks;
+otherwise Ctrl+C stops the loop after any accepted publication operation finishes.
+Polling must be 1-60000 milliseconds. Output is a publication receipt, not a job
+result. The loop still does not execute commands or schedule VM work.
+
+`schedule cancel` permanently stops future committed publication for that name.
+Cancellation competes atomically with a batch commit; a batch that wins first
+stays in history. Already committed records remain readable. Repeated
+cancellation succeeds, status includes `cancelled`, and `watch` exits on observing
+cancellation. This does not cancel guest work. Names cannot be reactivated or
+reused. Interrupted publishers may leave uncommitted records, which committed
+occurrence reads exclude. Under sustained competing commits, cancellation can
+return a conflict after 32 attempts and must be retried.
+
+The same publication operations are served by `hm jobs serve`, with its existing
+bearer-token requirement applied to every schedule route:
+
+| Request | Result |
+|---|---|
+| `POST /api/v1/schedules/{id}` with an interval spec | `201 {"id": ...}`; duplicate IDs return `409` |
+| `GET /api/v1/schedules?after=NAME&limit=100` | Schedule names in lexical order after an exclusive name cursor |
+| `GET /api/v1/schedules/{id}` | Schedule and `publication_through_ms` |
+| `POST /api/v1/schedules/{id}/publish` with `{"limit":100}` | One bounded batch of occurrence records; optional `now_ms` overrides the wall clock |
+| `GET /api/v1/schedules/{id}/occurrences?after_ms=...&limit=100` | A page of committed records after an exclusive cursor |
+| `POST /api/v1/schedules/{id}/cancel` | `200 {"id": ..., "cancelled": true}`; preserves history |
+
+Publication and page limits must be 1-1024. Unknown publish fields are refused.
+Listing includes cancelled schedules, excludes interrupted publication temporary
+files, and scans the schedule directory while retaining at most one page of names
+in memory. The CLI takes the same exclusive cursor as `schedule list --after NAME`.
+Pages are not a frozen snapshot during concurrent creation; refresh from the
+beginning to discover names inserted before a previous cursor.
+`GET /api/v1/schedules/{id}/receipts/{scheduled_ms}` returns the same durable
+claim and optional completion as `schedule receipt`. It requires the jobs
+service bearer token when configured. A claim without completion returns 200
+with `completion: null`; a missing claim returns 404. Results retain bounded
+stdout/stderr and truncation flags, survive store reopening, and remain readable
+after schedule cancellation. GET does not execute jobs or establish that an unresolved guest command has
+stopped. `POST` to the same receipt path records an operator-verified completion
+using the `record-result` JSON schema and the configured bearer token. It checks
+the existing claim token, result bounds and immutable replay rules in a blocking
+task. Success is 200 with `completion_recorded: true`; a missing claim is 404,
+a wrong claim token or changed result is 409, and invalid result bounds are 400.
+As with CLI recovery, the operator must independently verify the original
+execution has finished. This API trusts that assertion and may unblock the next
+occurrence; it neither executes nor retries guest work. Automatic guest
+reconciliation is still absent.
+
+Schedule filesystem operations run in blocking tasks. These routes provide no
+job execution or schedule update yet. Automatic publication
+currently runs through `schedule watch`.
+
+Full VM scheduling remains incomplete. Inspection on 2026-10-01 found that
+`hv2-jobs/src/worker.rs::run_job` launches a local `ProcessSandbox`; its
+cancellation and lease-loss watcher controls that local process. Launching
+`hm sandbox vm exec` from this worker would not transfer those guarantees to
+the guest. The daemon's `/exec` response contains output, exit status and a
+timeout flag, but no process handle for later reconciliation.
+
+The existing `hv2-api/src/envd_process.rs` service offers guest process start,
+connection, PID/tag selection and SIGTERM/SIGKILL. Its running-process registry
+is host memory and removes processes after exit. A scheduler must therefore
+add durable reconciliation and completion records rather than treating this
+registry as persistent job state.
+
+The `hv2-jobs::dispatch` library now provides durable claims and immutable guest
+completion receipts. `claim_vm_occurrence` accepts only committed occurrences
+with VM targets and grants one exclusive claim. `vm_dispatch_state` recovers the
+claim and optional result; `complete_vm_occurrence` checks its claim token and
+records one result, allowing identical receipt replay. The explicit CLI dispatcher
+and automatic VM worker use these APIs.
+
+`next_vm_occurrence` selects the oldest unclaimed committed occurrence. Claims
+must follow that order: an unclaimed or unresolved predecessor prevents claiming
+later work, while a durable completion permits the next occurrence after restart.
+Competing claims still have one winner. This ordering is per schedule; separate
+schedules targeting one VM are not mutually excluded. It does not establish that
+background descendants or external side effects have stopped after a command exits.
+
+```text
+hm jobs --store DIR schedule dispatch NAME SCHEDULED_MS --profiles profiles.json --worker operator
+```
+
+For automatic publication and dispatch:
+
+```text
+hm jobs --store DIR schedule worker NAME --profiles profiles.json --worker operator --limit 100 --poll-ms 1000
+```
+
+The worker requires a VM target and validates the profile deadline before
+publishing. Each tick publishes up to `--limit` due occurrences and dispatches
+at most one oldest eligible occurrence, recording its completion before moving
+on. `--ticks N` bounds the number of ticks, including idle ticks; otherwise the
+loop continues until interruption, schedule cancellation or an error. Ctrl+C
+waits for an in-flight operation to finish; it does not cancel the guest command.
+Cancellation stops the worker when observed between ticks and preserves history.
+An unresolved claim or competing-writer conflict stops the worker; restart does
+not re-execute an uncertain occurrence. Polling permits 1-60000 milliseconds and
+publication limits permit 1-1024 records. Catch-up publication can outpace
+execution and grow the backlog. [A warm-cache history diagnostic](benchmarks/2026-10-01/dispatch-history.md)
+measures growing selection cost; a [local comparison](benchmarks/2026-10-01/dispatch-history-selection.md)
+checks the reduction from avoiding repeated schedule reads.
+[A pending-backlog comparison](benchmarks/2026-10-01/dispatch-backlog.md) checks
+a one-record initial page and its completed-history tradeoff; end-to-end long-history worker performance
+remains unverified.
+
+Windows and Linux protocol fixtures verify completion, continuation after
+restart and refusal to dispatch again after an uncertain response. [A separate KVM/TLS run](benchmarks/2026-10-01/scheduled-worker.md) also verifies
+automatic paused-guest dispatch and continuation after restart. [A rebuilt-CLI KVM check](benchmarks/2026-10-01/scheduled-worker-cancel.md)
+verifies the selection optimizations and that a worker started after cancellation
+leaves pending committed work unclaimed. A Linux protocol
+regression also holds an accepted execution response across SIGINT, verifies
+that the worker waits, then checks its persisted completion and absence of a
+later claim. This interruption check does not verify guest-side cancellation. The explicit
+dispatch archive below uses an earlier frozen CLI.
+
+This explicitly dispatches one committed VM occurrence. It checks profile
+configuration and requires the HTTP deadline to exceed the guest timeout before
+claiming, then connects (resuming a paused VM through the existing API), extending
+the sandbox lifetime to guest timeout plus 60 seconds, and sends `/exec` once.
+Arguments, environment assignments and the working directory are shell-quoted;
+`HM_JOB_ID` is set to the schedule name and scheduled time. Results are JSON with
+guest stdout/stderr, exit code and timeout status. A completed API operation exits
+successfully even for a nonzero guest exit; inspect the recorded guest result.
+
+The claim is created before network dispatch. API failures or malformed responses
+leave it unresolved and a second dispatch is rejected. Server error bodies and
+connection descriptor tokens are not returned. Completion status is durable;
+Receipts retain up to 65536 bytes of UTF-8 stdout and stderr per stream, with
+explicit truncation flags and character-safe boundaries. Read them using
+`hm jobs --store DIR schedule receipt NAME SCHEDULED_MS`. Legacy receipts report
+missing output as null. Persisted completions are validated on recovery as well
+as publication: invalid exit codes or oversized stored output produce a
+corruption error and block selection and claiming of later work. This detects
+invalid records; it does not authenticate store contents against a writer with
+filesystem access. Explicit dispatch also limits accumulated connect response
+bytes to 65536 and execution response bytes to 1048576, checking declared length
+and received chunks. Oversized responses leave ownership unresolved and cannot
+be automatically retried. These limits are not a total process-memory bound or
+a server-side output limit; large-output execution needs a streaming executor.
+No automatic retry, guest process reconciliation, guest cancellation or streaming
+logs are implemented. The protocol fixture checks request fidelity and
+uncertain-result behavior. [A real KVM/TLS run](benchmarks/2026-10-01/scheduled-dispatch.md)
+also verified paused-guest resume, literal environment values, exit code 7,
+durable stdout recovery, duplicate refusal and preserved history after cancellation.
+The Linux shell regression runs a literal executable containing `=` from a
+directory containing spaces, with quotes and command-substitution text in its
+environment and argument. It verifies unchanged literal values, `HM_JOB_ID` and
+exit code 7. The command uses an explicit `/bin/sh` under `env` so an executable
+containing `=` cannot be consumed as another environment assignment. This is a
+host shell test; it does not establish real guest or KVM behavior.
+
+An operator can record an independently verified completion without executing
+or retrying the guest command:
+
+```text
+hm jobs --store DIR schedule record-result NAME SCHEDULED_MS verified-result.json
+```
+
+The JSON uses the completion receipt schema, including the exact `claim_token`
+from `schedule receipt`, `exit_code` (0-255 or null), `timed_out`, optional
+`stdout`/`stderr`, and optional truncation flags. For example:
+
+```json
+{"claim_token":"TOKEN_FROM_EXISTING_CLAIM","exit_code":7,"timed_out":false,"stdout":"verified output","stderr":""}
+```
+
+The operator must establish that the original execution has finished and verify
+its result independently before recording it. This command trusts that supplied
+evidence; it does not inspect guest state or prove side effects have stopped.
+It requires an existing claim, validates its token and output bounds, and writes
+an immutable completion. Identical replay is accepted; a different result is
+refused. Recording completion allows the next ordered occurrence to be claimed,
+so an incorrect assertion can allow overlapping guest work. There is no claim
+reset or retry command. Receipts persist `origin`: `api_response` for results observed by the dispatcher,
+`operator_recorded` for CLI or HTTP recovery, and `unknown` for legacy receipts.
+Recovery handlers set this field themselves and override any supplied origin.
+Origin is part of the immutable result, so operator recovery cannot relabel an
+existing API receipt. It describes the recording path, not proof of execution
+or side effects; keep the independent evidence in operator records. Cross-process CLI tests check
+wrong-token refusal, persistence, identical replay, conflicting-result refusal,
+invalid status refusal and prevention of completion without a claim.
+
+A claim without a receipt is unresolved, including after worker loss. It may
+represent a running guest command, an unrecorded completion, or a dispatch that
+never reached the guest. Claims do not expire or automatically permit a second
+start. A future dispatcher must reconcile guest state before deciding what to do;
+lease-based retries, guest process handles, streaming logs and automatic recovery
+remain unimplemented. Operator-recorded completion is the limited interface above. Claim ownership alone does not enforce exactly-once guest
+execution or external side effects. Schedule cancellation preserves previously
+committed occurrences and does not revoke their dispatch claims.
+
+The `hv2-jobs::schedule` module now provides immutable interval schedules and
+stable occurrence records keyed by schedule ID and scheduled Unix milliseconds.
+`Store::create_interval_schedule`, `interval_schedule` and
+`record_interval_occurrence` are library APIs; the CLI supports explicit bounded
+publication and an automatic publication loop. Explicit VM dispatch consumes one
+committed record; the automatic VM worker publishes and dispatches in bounded ticks.
+Interval arithmetic stays anchored to the first
+timestamp and checks overflow. An occurrence stores the job configuration with
+its earliest start set to that occurrence's time.
+
+The persisted `missed_policy` is `catch_up` by default for existing records, or
+`coalesce`. `IntervalSchedule::due_occurrences(after_ms, now_ms, limit)` plans
+at most 1-1024 occurrences after an exclusive processed-through watermark.
+Catch-up selects the oldest due occurrences first; coalescing selects only the
+latest due occurrence and deliberately skips older ones. Future occurrences
+are excluded. The caller must persist the work represented by its watermark before
+advancing its watermark. Planning alone does not persist progress or dispatch
+work, and repeated planning can return the same occurrences for reconciliation.
+
+`Store::interval_progress` recovers a separate occurrence-publication watermark.
+`advance_interval_progress(id, expected, through_ms)` commits progress only when
+all selected records exist and match the immutable schedule. Catch-up commits
+cannot skip required records and are limited to 1024 occurrences; coalescing
+requires its latest selected record. An immutable chain of exclusive commits
+prevents competing writers from replacing a winner. Stale writers receive a
+conflict and must reload progress. Reads currently traverse the entire chain;
+compaction and long-running schedule scalability remain unverified. This
+watermark acknowledges record publication, not guest dispatch or completion.
+
+`Store::materialize_interval(id, now_ms, limit)` combines planning, immutable
+record publication and progress commit for one bounded batch. It reuses records
+left by an interrupted publication. A concurrent progress conflict requires
+reloading and retrying; records from a failed batch must not be treated as
+dispatched jobs. A successful commit followed by process loss also requires a
+future dispatcher to recover from persistent records, rather than relying on
+the returned in-memory batch. This operation does not enqueue or execute jobs.
+
+`Store::committed_interval_occurrences(id, cursor, limit)` reads a bounded page
+from the committed chain, using an exclusive scheduled-time cursor. It excludes
+uncommitted records and older records skipped by a committed coalescing step,
+and validates returned records against the schedule. A dispatcher can recover
+these records after losing an in-memory batch. This read neither claims work
+nor acknowledges dispatch; a durable dispatcher and execution receipts are
+still required. Page reads also traverse the chain from its beginning.
+
+Publication writes and syncs a temporary file before creating an exclusive hard
+link to its final name. Competing publishers cannot replace the winner or expose
+partial JSON. A crash before publication can leave an unreferenced temporary
+file. Filesystems without hard-link support return an error; there is no weaker
+fallback. On Unix, publication syncs the store directory after creating the
+record subdirectory, then syncs the record directory after linking the final
+name, before acknowledging success. Replaying an existing name also syncs that
+directory before accepting a matching record. Sync errors are returned even
+when the final name may already exist; retry the immutable operation to reconcile
+it. Temporary-file removal is best effort and may leave ignored files after a
+crash. These calls establish an ordering protocol, not a verified power-loss
+guarantee: use a pre-existing persistent store root on a filesystem that honors
+file and directory sync. Durability of newly created root ancestors, Windows
+directory entries, network filesystems and physical power-loss recovery remains
+unverified. Schedule updates, timezone-rule migration, dispatch reconciliation
+and guest-job cancellation remain incomplete. Local calendar publication timings
+and VM execution verification are linked below.
+
+The implementation must cover these requirements together:
+
+| Area | Required behavior and verification |
+|---|---|
+| VM execution | Bind each job to a sandbox ID and authenticated operator-configured connection profile; resume a paused VM and verify guest execution. Keep connection secrets outside submitted specs and job logs. Reject host-only limits on VM jobs rather than silently ignoring them. |
+| Recurrence | Persist interval and cron schedules, timezone and next occurrence. Define missed-occurrence and overlap policy explicitly. Test clock boundaries, daylight-saving transitions, restart and competing scheduler processes. |
+| Occurrence identity | Give each scheduled occurrence a stable ID derived from schedule ID and scheduled time. Publish it atomically so racing schedulers and restart recovery cannot enqueue duplicates. Cancellation prevents future occurrences without erasing past results. |
+| Guest reconciliation | Persist the occurrence/attempt identity before dispatch. Recover an interrupted start without blindly launching a second guest command. Retain terminal result and bounded logs across guest completion and daemon restart. A PID alone cannot prove identity after PID reuse. |
+| Leases and cancellation | Fence obsolete attempts before permitting a replacement. Confirm termination of the guest process tree on cancellation or timeout. A dropped HTTP connection or killed local client does not establish guest termination. Test worker loss during dispatch, execution and result recording. |
+| Retry semantics | Expose at-least-once behavior and stable occurrence identity to jobs. Retry an uncertain execution only under the declared policy; do not promise exactly-once external side effects. Preserve attempt history and distinguish dispatch failure, guest failure and unknown outcome. |
+| Interfaces and evidence | Ship submit/list/status/logs/cancel and schedule create/list/update/delete through CLI and authenticated API. Verify recurring jobs on real KVM through the control plane, paused-VM wake, restart recovery, competing workers, no overlap under the selected policy, and complete cleanup. |
+
+The scheduling feature remains **Partial** in `PLATFORM_PARITY.md` until this
+behavior is implemented and checked. Existing delayed host jobs do not satisfy
+these acceptance criteria.
+
+## Existing host-job verification
+
+`cargo test -p hm-cli --test jobs_schedule` passes on Windows and Linux.
+It invokes the shipped binary in separate processes to verify schedule creation,
+duplicate rejection, bounded publication, persisted status, occurrence pages,
+invalid-limit/path rejection, and an empty runnable job queue.
+The automatic-publication test verifies two bounded ticks and a second
+invocation continuing from persistent progress on both Windows and Linux.
+The suite has five passing CLI tests on Windows and six on Linux. A live
+publisher test cancels the schedule from a second process, waits for a successful
+exit within five seconds, and checks committed records afterward. Linux also
+tests SIGINT delivered to the running publisher, a successful bounded exit and
+preserved records. These tests wait for a published batch before shutdown; they
+do not force interruption at every filesystem instruction. Windows console
+Ctrl+C delivery remains untested.
+The profile test resolves a disposable key in the child process, verifies the
+key is absent from stdout/stderr, and rejects an unset required variable. A
+profile unit test checks shared endpoint rules and timeout/key validation.
+The dispatch fixture verifies authenticated connect/exec calls, quoted guest
+configuration, durable exit status, duplicate rejection, and unresolved ownership
+after an execution API failure. It is a protocol fixture, not a guest execution test.
 
 **`tools/e2e-jobs.sh`** passes 18 of 18 checks on Windows (Git Bash) and on Linux as an
 unprivileged user:
@@ -122,10 +485,111 @@ unprivileged user:
 - The REST mirror submits, lists, cancels, streams logs, and refuses requests without its
   token.
 
-**`hv2-jobs`** has 22 unit tests, including:
+**`hv2-jobs`** has 39 unit tests, passing on Windows and Linux, including:
+- interval boundary/overflow checks and competing schedule/occurrence publishers,
+  with immutable records preserved after reopening the store;
+- bounded missed-occurrence batches, coalescing, restart planning with an
+  exclusive watermark, backward clock movement and timestamp exhaustion;
+- progress commits gated on complete occurrence records, restart recovery and
+  one winning commit among eight concurrent writers;
+- interrupted batch publication reconciled after reopening, followed by
+  bounded continuation without republishing prior occurrence times;
+- committed occurrence pages recovered after reopening, including exclusion
+  of uncommitted records and records skipped under coalescing;
+- schedule API authentication on every route, duplicate conflicts, bounded
+  publication and pages, invalid input rejection and no runnable-job creation;
+- durable schedule cancellation, preserved history, cancellation/publication
+  races, and authenticated rejection of publication after cancellation;
+- schedule discovery pagination, temporary-file exclusion and cancelled-name
+  retention, plus authenticated API and CLI list operations;
+- VM target persistence across publication/reopening and rejection of host-only
+  controls, invalid profiles, relative guest paths and invalid timeouts;
+- one dispatch claim among eight competing workers, committed-record gating,
+  unresolved ownership after reopening, and immutable claim-bound completion;
+- UTF-8 output limits and legacy receipt compatibility; the CLI fixture also
+  recovers persisted stdout through a separate receipt command;
 - the claim race and the cancel/claim race, run 15 times each on Windows without a failure;
 - lease loss and a slow worker losing its lease;
 - labels, and spec validation;
 - graceful stops, both honoured and ignored;
 - a worker pool draining a queue;
 - IDs that try to reach outside the store.
+
+### Calendar scheduling implementation status
+
+`hv2_jobs::cron::CronExpression` now parses a bounded numeric five-field
+expression: minute (0-59), hour (0-23), day of month (1-31), month (1-12),
+and day of week (0-6, Sunday 0). The field order and numeric ranges follow the
+[POSIX crontab format](https://pubs.opengroup.org/onlinepubs/9699919799/utilities/crontab.html).
+The parser accepts `*`, values, comma lists, ascending inclusive ranges and
+positive steps on wildcards or ranges. Steps are an explicit extension here;
+a stepped day-of-month wildcard starts at 1, and a stepped range starts at its
+lower bound. Expression length is limited to 256 bytes.
+
+Names, aliases such as `@daily`, seconds/year fields, weekday 7, `?`, reversed
+ranges, empty list items, zero steps and steps on bare numbers are rejected.
+Tests cover exact selector sets, field boundaries and malformed input. The library also provides `at_or_after_utc`, selecting the first matching whole
+UTC minute at or after nonnegative Unix milliseconds. It rounds partial minutes
+up, uses checked timestamp conversion, and scans at most one Gregorian 400-year
+cycle plus its boundary day. Impossible calendar selections return no occurrence;
+unsupported calendar timestamps produce an error. Calendar arithmetic uses
+[Chrono](https://docs.rs/chrono/latest/chrono/struct.NaiveDate.html).
+
+Month, hour and minute must match. When both day fields are restricted, either
+day of month or day of week matches; when either contains a wildcard, both day
+selectors must match, including wildcard steps. This follows the documented
+[BSD cron day matching convention](https://man.openbsd.org/crontab.5). Tests cover
+month/year rollover, Sunday zero, restricted-day OR matching, stepped wildcard
+matching, leap-year century rules, partial-minute rounding, impossible dates
+and timestamp limits. `at_or_after_in_timezone` also supports named IANA zones using the locked
+[chrono-tz database](https://docs.rs/chrono-tz/latest/chrono_tz/). Nonexistent
+local minutes are skipped; both repeated local minutes are eligible, ordered
+by their UTC timestamps. Selection considers all matching candidates rather
+than returning the first civil clock value, so repeated-hour occurrences do
+not jump ahead of earlier UTC work. A two-day guard handles date-crossing
+offset changes, and search has a 400-year civil horizon with supported input
+UTC years 1970-9999 and an upper civil year of 9999. Tests include Los Angeles
+DST gaps/folds, Lord Howe half-hour folds, Apia's skipped day and historical
+Monrovia second-based offsets. Rules are those embedded in the locked build;
+durable scheduling pins and validates the timezone database version before
+reconstructing history. Persisted cron schedules and bounded publication are
+available through the CLI and authenticated API.
+Tests verify calendar catch-up, coalescing, interrupted publication, restart,
+cancellation and competing publishers, while preserving interval persistence.
+[A KVM/TLS catch-up run](benchmarks/2026-10-01/scheduled-calendar.md) verifies
+automatic guest execution of both historical fold occurrences across restart.
+A [local planner comparison](benchmarks/2026-10-01/calendar-planning.md) measures
+dense/sparse calendar cost and the UTC optimization. Live wall-clock DST
+scheduling and end-to-end calendar performance remain unverified.
+
+A calendar schedule uses the existing `schedule create` command and schedule API:
+
+```json
+{"first_ms":1793520000000,"cron":{"expression":"30 1 * * *","timezone":"America/Los_Angeles"},"missed_policy":"catch_up","job":{"command":["true"]}}
+```
+
+`first_ms` is an inclusive UTC lower bound. Omit `every_ms` (it defaults to zero)
+for cron; combining a positive interval and a calendar expression is refused.
+The same optional VM target, occurrence keys, cancellation, claims and receipts
+apply. Catch-up selects oldest UTC occurrences in bounded batches; coalescing
+selects only the latest eligible UTC occurrence, including the second occurrence
+of a folded local time. A backward clock does not republish processed work.
+Creation persists `cron.tzdb_version` from this build. Loading refuses a missing
+version or a version different from the build, preventing silent reinterpretation
+of history after timezone rules change. Version migration is not implemented.
+Existing API/type method names retain `interval` for compatibility; their shared
+publication path now accepts calendar recurrence too.
+
+Calendar catch-up now enumerates non-UTC civil days once per bounded batch. [Matched planner timings and exact UTC timestamp comparison](benchmarks/2026-10-01/calendar-batch.md) cover dense catch-up, folds and sparse calendars; these are local planner measurements, excluding storage and VM execution.
+
+[Real KVM bounded calendar batch verification](benchmarks/2026-10-01/calendar-batch-kvm.md) passed publication, folded-time worker restart, replay refusal and cancellation with the optimized CLI. This is functional evidence, with no calendar throughput score.
+
+[Durable calendar publication measurements](benchmarks/2026-10-01/calendar-publication.md) include occurrence file syncs and progress commits. Reusing the immutable schedule removes repeated per-record timezone searches while preserving individual timestamp validation and existing-record equality checks.
+
+The publication optimization also passed [real KVM worker validation](benchmarks/2026-10-01/calendar-publication-kvm.md): bounded historical catch-up, ordered fold dispatch after restart, replay refusal and cancellation, with complete fixture cleanup. This establishes functional behavior, not a guest execution throughput score.
+
+The [directory-sync cost diagnostic](benchmarks/2026-10-01/calendar-sync.md) records matched local publication timings after adding Unix directory flushes. It verifies exact timestamp equality and reopened committed history, without claiming physical power-loss recovery.
+
+[Real KVM verification with Unix directory syncs](benchmarks/2026-10-01/calendar-sync-kvm.md) passed bounded catch-up, worker restart, replay refusal and cancellation. This functional run does not establish physical power-loss recovery.
+
+The shared publication helper also has per-call directory-sync fault tests for schedules, occurrences, progress, claims and completions. Injected failures before the final link leave no record; failures after linking return an error with complete immutable bytes present. Replays still attempt the directory flush, propagate its errors, and preserve the original record. These are deterministic error-path tests, not physical power-loss or kernel fault-injection evidence.

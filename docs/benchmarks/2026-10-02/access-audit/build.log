@@ -1,0 +1,14 @@
+   Compiling serde_json v1.0.151
+   Compiling hv2-context v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-context)
+   Compiling hv2-guest-agent v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-guest-agent)
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-core)
+   Compiling axum v0.8.9
+   Compiling reqwest v0.12.28
+   Compiling tracing-subscriber v0.3.23
+   Compiling tonic v0.14.6
+   Compiling tonic-prost v0.14.6
+   Compiling hv2-agent v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-agent)
+   Compiling hv2-runtime v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-runtime)
+   Compiling hv2-api v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-api)
+   Compiling hv2-cluster v1.1.0 (/var/tmp/hm-access-audit/source/crates/hv2-cluster)
+    Finished `release` profile [optimized] target(s) in 2m 14s

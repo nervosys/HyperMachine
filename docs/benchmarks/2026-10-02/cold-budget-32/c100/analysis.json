@@ -1,0 +1,99 @@
+{
+  "variants": {
+    "baseline": {
+      "planned": 400,
+      "attempted": 400,
+      "passed": 400,
+      "failed": 0,
+      "successful_p50_ms": 9202.787096000066,
+      "successful_p99_ms": 29501.3690199994,
+      "failed_runs": 0,
+      "median_held_pss_mib": 8541.9150390625,
+      "median_incremental_pss_mib": 8534.814453125
+    },
+    "candidate": {
+      "planned": 400,
+      "attempted": 400,
+      "passed": 381,
+      "failed": 19,
+      "successful_p50_ms": 7171.979437999653,
+      "successful_p99_ms": 23862.911472000633,
+      "failed_runs": 1,
+      "median_held_pss_mib": 8630.5546875,
+      "median_incremental_pss_mib": 8623.5
+    }
+  },
+  "pairs": [
+    {
+      "pair": 0,
+      "complete_successful_pair": false,
+      "candidate_mean_reduction_ms": null,
+      "candidate_p50_reduction_ms": null,
+      "candidate_p99_reduction_ms": null
+    },
+    {
+      "pair": 1,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": -3032.8339183100525,
+      "candidate_p50_reduction_ms": -2332.5919899998553,
+      "candidate_p99_reduction_ms": 138.1423700004234
+    },
+    {
+      "pair": 2,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": 1517.2434528499707,
+      "candidate_p50_reduction_ms": 173.90573299962853,
+      "candidate_p99_reduction_ms": 1212.1875240000008
+    },
+    {
+      "pair": 3,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": 1465.2181901799668,
+      "candidate_p50_reduction_ms": 3805.8552880002026,
+      "candidate_p99_reduction_ms": 1955.8850610001173
+    }
+  ],
+  "complete_successful_pairs": 3,
+  "candidate_faster_pairs": 2,
+  "median_paired_mean_reduction_ms": 1465.2181901799668,
+  "cleanup_verified": true,
+  "artifacts_unchanged": true,
+  "cohort_success": false,
+  "latencies_conditional_on_success": true,
+  "runtime_change_adopted": false,
+  "competitor_win_established": false,
+  "candidate_limit": 32,
+  "same_binary": true,
+  "queue_included_in_ready_ms": true,
+  "experimental_candidate": true,
+  "note": "Incomplete pairs remain in failure totals; their mean latency difference is unavailable",
+  "baseline_limit": 16,
+  "memory_idle_seconds": 5.0,
+  "memory_pairs": [
+    {
+      "pair": 0,
+      "complete_successful_pair": false,
+      "candidate_held_pss_reduction_mib": null,
+      "candidate_incremental_pss_reduction_mib": null
+    },
+    {
+      "pair": 1,
+      "complete_successful_pair": true,
+      "candidate_held_pss_reduction_mib": -86.39453125,
+      "candidate_incremental_pss_reduction_mib": -86.39453125
+    },
+    {
+      "pair": 2,
+      "complete_successful_pair": true,
+      "candidate_held_pss_reduction_mib": -91.123046875,
+      "candidate_incremental_pss_reduction_mib": -91.22265625
+    },
+    {
+      "pair": 3,
+      "complete_successful_pair": true,
+      "candidate_held_pss_reduction_mib": -52.330078125,
+      "candidate_incremental_pss_reduction_mib": -52.26171875
+    }
+  ],
+  "memory_conditional_on_complete_successful_runs": true
+}

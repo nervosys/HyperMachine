@@ -1,0 +1,25 @@
+{
+  "binary_sha256": "dc315d313fe2f156ab7aaa593e02c4e0d04ffa024cfb5c69c85d2780a270676e",
+  "affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "kernel_release": "6.18.33.2-microsoft-standard-WSL2",
+  "hz": 100,
+  "order": [
+    "mmio",
+    "pci",
+    "pci",
+    "mmio"
+  ],
+  "samples_per_cohort": 16,
+  "warmups_per_cohort": 2,
+  "operation": "cold-create-with-exact-command",
+  "template_mode": "disabled"
+}

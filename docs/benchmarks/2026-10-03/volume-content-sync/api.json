@@ -1,0 +1,27 @@
+{
+  "input_sha256": {
+    "daemon": "0453e19b16c9163dd043f86983c239b78db743e9e6fe92db5a4ad0a5a919587e",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "nodes": 2,
+  "concurrent_requests": 16,
+  "created": 1,
+  "conflicts": 15,
+  "checks": [
+    "One concurrent creator wins",
+    "Winner token matches published metadata",
+    "Duplicate preserves metadata and data",
+    "All nodes observe the same winning token",
+    "Winning daemon restart preserves token and data",
+    "One volume listed and cleaned up on all nodes",
+    "Nested binary upload and replacement visible on all nodes after restart",
+    "Wrong volume bearer token refuses overwrite"
+  ],
+  "processes_reaped": true,
+  "guests_created": 0,
+  "limits": [
+    "Independent daemons share one local filesystem; network filesystem not exercised",
+    "No power-loss durability, performance or competitor comparison"
+  ]
+}

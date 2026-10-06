@@ -1,0 +1,110 @@
+{
+  "success": true,
+  "scope": "local process-level Unix signal reload; no VM or performance comparison",
+  "binary_sha256": "ce0a25b692422dc096ea9fc09ba584790cf0f3d9508660356ba8af14ca9f5928",
+  "coordinator_sha256": "d4cfdd80010aac039c09e742270a0807b054bc684a5c0eae58c971863cdc9d06",
+  "checks": [
+    {
+      "name": "initial key",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "old key revoked",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "new key active",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "scope preserved",
+      "status": 403,
+      "expected": 403
+    },
+    {
+      "name": "malformed preserves active key",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "malformed preserves revocation",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "empty preserves active key",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "empty preserves revocation",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "admin collision preserves active key",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "admin collision preserves revocation",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "oversized preserves active key",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "oversized preserves revocation",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "invalid UTF-8 preserves active key",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "invalid UTF-8 preserves revocation",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "missing file preserves active key",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "admin unchanged",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "expired replacement revokes scoped access",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "expired set keeps authentication required",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "valid update after rejection",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "restoration revokes previous key",
+      "status": 401,
+      "expected": 401
+    }
+  ],
+  "owned_process_stopped": true,
+  "exit_code": -15
+}

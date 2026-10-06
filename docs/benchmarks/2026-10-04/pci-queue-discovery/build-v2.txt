@@ -1,0 +1,3 @@
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-core)
+   Compiling hv2-agent v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-agent)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.93s

@@ -1,0 +1,11 @@
+{
+  "scope": "single final planned baseline audit after third candidate cohort failure",
+  "cohort": 4,
+  "kind": "baseline",
+  "checks": 55,
+  "regression_operations": 128,
+  "matched_datagrams": 12800,
+  "complete_abba": false,
+  "all_tracked_processes_reaped": true,
+  "guests_remaining": 0
+}

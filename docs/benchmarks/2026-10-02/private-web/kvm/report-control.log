@@ -1,0 +1,7 @@
+hv2-control-plane: E2B API on 0.0.0.0:33831, envd proxy on 0.0.0.0:47183, store redis://127.0.0.1:45989
+hv2-control-plane: web access policies reloaded
+hv2-control-plane: API key policies reloaded
+hv2-control-plane: web access reload rejected: web access policy needs 1-256 users
+hv2-control-plane: API key policies reloaded
+hv2-control-plane: API key policies reloaded
+hv2-control-plane: web access policies reloaded

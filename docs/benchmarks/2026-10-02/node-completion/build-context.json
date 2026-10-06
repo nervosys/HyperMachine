@@ -1,0 +1,18 @@
+{
+  "base_commit": "b8987a171f2108e56ebf70ed2608daf56454b927",
+  "source_archive_sha256": "d2820abe0cf7e3157af08916c21f2ca40774a3c750c275165b668a75974fd461",
+  "overlay_sha256": {
+    "crates/hv2-sandboxd/src/main.rs": "bde453e636ea25b4762a9b18eddc21e9b538cf9962f2e0054a04576378f0106a",
+    "crates/hv2-sandboxd/src/checkpoints.rs": "b7774e4eee428bb15d0c1b2c07822b15a5fa29f3e0399779a72d7e46340713aa"
+  },
+  "committed_core_sha256": {
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+    "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+  },
+  "provisional_boot_changes_excluded": true,
+  "linux_clippy_baseline_exception": "clippy::too_many_arguments (existing bring_up/register signatures)",
+  "windows_daemon_tests_passed": 34,
+  "linux_daemon_tests_passed": 38,
+  "release_build_exit_code": 0
+}

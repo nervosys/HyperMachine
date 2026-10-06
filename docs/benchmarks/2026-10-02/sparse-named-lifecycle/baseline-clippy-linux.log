@@ -1,0 +1,32 @@
+    Checking hv2-sandboxd v1.1.0 (/var/tmp/hm-object-backup/source/crates/hv2-sandboxd)
+error: this function has too many arguments (8/7)
+    --> crates/hv2-sandboxd/src/main.rs:1298:1
+     |
+1298 | / async fn bring_up(
+1299 | |     state: &AppState,
+1300 | |     sandbox_id: &str,
+1301 | |     template_id: &str,
+...    |
+1306 | |     access_token: &str,
+1307 | | ) -> Result<Running, (StatusCode, String)> {
+     | |__________________________________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#too_many_arguments
+     = note: `-D clippy::too-many-arguments` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::too_many_arguments)]`
+
+error: this function has too many arguments (8/7)
+    --> crates/hv2-sandboxd/src/main.rs:1541:1
+     |
+1541 | / async fn register(
+1542 | |     state: &AppState,
+1543 | |     slot: Slot,
+1544 | |     running: Running,
+...    |
+1549 | |     context: RegistrationContext<'_>,
+1550 | | ) -> Result<(), (StatusCode, String)> {
+     | |_____________________________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#too_many_arguments
+
+error: could not compile `hv2-sandboxd` (bin "hv2-sandboxd") due to 2 previous errors

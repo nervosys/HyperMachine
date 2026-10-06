@@ -1,0 +1,6 @@
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-audit-batch/source/crates/hv2-core)
+   Compiling hv2-agent v1.1.0 (/var/tmp/hm-audit-batch/source/crates/hv2-agent)
+   Compiling hv2-runtime v1.1.0 (/var/tmp/hm-audit-batch/source/crates/hv2-runtime)
+   Compiling hv2-api v1.1.0 (/var/tmp/hm-audit-batch/source/crates/hv2-api)
+   Compiling hv2-cluster v1.1.0 (/var/tmp/hm-audit-batch/source/crates/hv2-cluster)
+    Finished `release` profile [optimized] target(s) in 2m 19s

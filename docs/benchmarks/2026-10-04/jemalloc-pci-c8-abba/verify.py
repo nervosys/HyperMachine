@@ -1,0 +1,7 @@
+from pathlib import Path
+import json,hashlib,importlib.util
+root=Path(__file__).resolve().parent
+for name,digest in json.loads((root/'manifest.json').read_text()).items():assert hashlib.sha256((root/name).read_bytes()).hexdigest()==digest,name
+spec=importlib.util.spec_from_file_location('compare',root/'compare.py');m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+assert m.analyze()==json.loads((root/'summary.json').read_text())
+print('Verified PCI C8 allocator ABBA: 256 exact attempts, library hash/mapping, isolated settings, quantiles, memory, idle holds and cleanup.')

@@ -1,0 +1,275 @@
+{
+  "diagnostic_only": true,
+  "runtime_change_adopted": false,
+  "performance_win_established": false,
+  "cleanup_verified": true,
+  "cohort_success": true,
+  "matched_successful_hypermachine_attempts": 400,
+  "unmatched_failed_attempts": [],
+  "uncorrelated_trace_ids": [
+    "sbx-2dd0010974c242408bf6"
+  ],
+  "slow_threshold_ms": 1000,
+  "slow_attempts": 400,
+  "all_stages": {
+    "blocking_queue": {
+      "mean_ms": 45.0174797225,
+      "p50_ms": 22.279107,
+      "p95_ms": 158.16027699999998,
+      "p99_ms": 288.625003
+    },
+    "connect": {
+      "mean_ms": 850.9730302,
+      "p50_ms": 743.35168,
+      "p95_ms": 2065.545578,
+      "p99_ms": 2441.000965
+    },
+    "restored": {
+      "mean_ms": 440.7749849525,
+      "p50_ms": 313.003241,
+      "p95_ms": 1395.664963,
+      "p99_ms": 2135.0246519999996
+    },
+    "server_readiness": {
+      "mean_ms": 1336.765494875,
+      "p50_ms": 1389.03516,
+      "p95_ms": 2734.9755769999997,
+      "p99_ms": 3024.4725999999996
+    },
+    "other_create": {
+      "mean_ms": 1456.6290871400984,
+      "p50_ms": 1203.5990980006432,
+      "p95_ms": 3377.331734996661,
+      "p99_ms": 3687.147448001201
+    },
+    "exec": {
+      "mean_ms": 1289.3477219825127,
+      "p50_ms": 1220.5550500002573,
+      "p95_ms": 2652.8360140000586,
+      "p99_ms": 3667.662857002142
+    },
+    "ready": {
+      "mean_ms": 4082.742303997611,
+      "p50_ms": 4279.664008001419,
+      "p95_ms": 5681.197781999799,
+      "p99_ms": 5811.668672999076
+    }
+  },
+  "slow_stages": {
+    "blocking_queue": {
+      "mean_ms": 45.0174797225,
+      "p50_ms": 22.279107,
+      "p95_ms": 158.16027699999998,
+      "p99_ms": 288.625003
+    },
+    "connect": {
+      "mean_ms": 850.9730302,
+      "p50_ms": 743.35168,
+      "p95_ms": 2065.545578,
+      "p99_ms": 2441.000965
+    },
+    "restored": {
+      "mean_ms": 440.7749849525,
+      "p50_ms": 313.003241,
+      "p95_ms": 1395.664963,
+      "p99_ms": 2135.0246519999996
+    },
+    "server_readiness": {
+      "mean_ms": 1336.765494875,
+      "p50_ms": 1389.03516,
+      "p95_ms": 2734.9755769999997,
+      "p99_ms": 3024.4725999999996
+    },
+    "other_create": {
+      "mean_ms": 1456.6290871400984,
+      "p50_ms": 1203.5990980006432,
+      "p95_ms": 3377.331734996661,
+      "p99_ms": 3687.147448001201
+    },
+    "exec": {
+      "mean_ms": 1289.3477219825127,
+      "p50_ms": 1220.5550500002573,
+      "p95_ms": 2652.8360140000586,
+      "p99_ms": 3667.662857002142
+    },
+    "ready": {
+      "mean_ms": 4082.742303997611,
+      "p50_ms": 4279.664008001419,
+      "p95_ms": 5681.197781999799,
+      "p99_ms": 5811.668672999076
+    }
+  },
+  "all_time_fractions": {
+    "blocking_queue": 0.011026284876814587,
+    "connect": 0.20843172721598693,
+    "restored": 0.10796052068260978,
+    "other_create": 0.35677713132025063,
+    "exec": 0.3158043359043381
+  },
+  "slow_time_fractions": {
+    "blocking_queue": 0.011026284876814587,
+    "connect": 0.20843172721598693,
+    "restored": 0.10796052068260978,
+    "other_create": 0.35677713132025063,
+    "exec": 0.3158043359043381
+  },
+  "ten_slowest": [
+    {
+      "pair": 3,
+      "index": 12,
+      "sandbox_id": "sbx-00494df9e358499e834a",
+      "ready_ms": 5855.811211997207,
+      "create_and_notice_ms": 5199.759455997992,
+      "exec_ms": 656.051755999215,
+      "server_stages_ms": {
+        "blocking_queue": 46.602668,
+        "connect": 1449.5038140000001,
+        "restored": 264.071783
+      },
+      "server_readiness_ms": 1760.1782650000002,
+      "other_create_ms": 3439.581190997991
+    },
+    {
+      "pair": 3,
+      "index": 94,
+      "sandbox_id": "sbx-b14034fc942d461a945c",
+      "ready_ms": 5825.218011999823,
+      "create_and_notice_ms": 4485.062987001584,
+      "exec_ms": 1340.1550249982392,
+      "server_stages_ms": {
+        "blocking_queue": 44.135242,
+        "connect": 1297.857211,
+        "restored": 184.458802
+      },
+      "server_readiness_ms": 1526.451255,
+      "other_create_ms": 2958.6117320015837
+    },
+    {
+      "pair": 3,
+      "index": 74,
+      "sandbox_id": "sbx-7e1f4969d2154c4fb689",
+      "ready_ms": 5822.974615999556,
+      "create_and_notice_ms": 5209.27060699978,
+      "exec_ms": 613.7040089997754,
+      "server_stages_ms": {
+        "blocking_queue": 48.993790000000004,
+        "connect": 1065.493073,
+        "restored": 501.0396
+      },
+      "server_readiness_ms": 1615.5264630000001,
+      "other_create_ms": 3593.74414399978
+    },
+    {
+      "pair": 3,
+      "index": 21,
+      "sandbox_id": "sbx-89b74b2ba9f24885a594",
+      "ready_ms": 5817.10251199911,
+      "create_and_notice_ms": 5287.47651500089,
+      "exec_ms": 529.6259969982202,
+      "server_stages_ms": {
+        "blocking_queue": 135.174262,
+        "connect": 1240.626121,
+        "restored": 326.041992
+      },
+      "server_readiness_ms": 1701.842375,
+      "other_create_ms": 3585.6341400008896
+    },
+    {
+      "pair": 3,
+      "index": 87,
+      "sandbox_id": "sbx-5be3b22c0f4749b5841b",
+      "ready_ms": 5811.668672999076,
+      "create_and_notice_ms": 4293.506347999937,
+      "exec_ms": 1518.162324999139,
+      "server_stages_ms": {
+        "blocking_queue": 104.338303,
+        "connect": 843.026223,
+        "restored": 126.151305
+      },
+      "server_readiness_ms": 1073.515831,
+      "other_create_ms": 3219.9905169999374
+    },
+    {
+      "pair": 3,
+      "index": 55,
+      "sandbox_id": "sbx-5dfaa6f06e0c42b0b6de",
+      "ready_ms": 5807.488746999297,
+      "create_and_notice_ms": 4492.16121399877,
+      "exec_ms": 1315.3275330005272,
+      "server_stages_ms": {
+        "blocking_queue": 158.258866,
+        "connect": 1901.482189,
+        "restored": 566.973022
+      },
+      "server_readiness_ms": 2626.714077,
+      "other_create_ms": 1865.44713699877
+    },
+    {
+      "pair": 3,
+      "index": 0,
+      "sandbox_id": "sbx-0adb6b16bcfa41caa9b3",
+      "ready_ms": 5796.1486230015,
+      "create_and_notice_ms": 1707.049464002921,
+      "exec_ms": 4089.099158998579,
+      "server_stages_ms": {
+        "blocking_queue": 94.388162,
+        "connect": 189.703317,
+        "restored": 646.387919
+      },
+      "server_readiness_ms": 930.479398,
+      "other_create_ms": 776.5700660029211
+    },
+    {
+      "pair": 3,
+      "index": 57,
+      "sandbox_id": "sbx-7aeb0610918540f39581",
+      "ready_ms": 5783.999773000687,
+      "create_and_notice_ms": 5414.3997480023245,
+      "exec_ms": 369.60002499836264,
+      "server_stages_ms": {
+        "blocking_queue": 0.7140799999999999,
+        "connect": 1484.9765180000002,
+        "restored": 1021.6849109999999
+      },
+      "server_readiness_ms": 2507.375509,
+      "other_create_ms": 2907.0242390023245
+    },
+    {
+      "pair": 3,
+      "index": 67,
+      "sandbox_id": "sbx-a86c725b071144be806c",
+      "ready_ms": 5778.214317000675,
+      "create_and_notice_ms": 4512.757065000187,
+      "exec_ms": 1265.4572520004876,
+      "server_stages_ms": {
+        "blocking_queue": 7.496333,
+        "connect": 1948.1004950000001,
+        "restored": 174.930472
+      },
+      "server_readiness_ms": 2130.5273,
+      "other_create_ms": 2382.229765000187
+    },
+    {
+      "pair": 3,
+      "index": 4,
+      "sandbox_id": "sbx-e12b745537424466acb0",
+      "ready_ms": 5775.110597998719,
+      "create_and_notice_ms": 5399.391148999712,
+      "exec_ms": 375.719448999007,
+      "server_stages_ms": {
+        "blocking_queue": 57.053571,
+        "connect": 342.639451,
+        "restored": 380.859427
+      },
+      "server_readiness_ms": 780.552449,
+      "other_create_ms": 4618.838699999712
+    }
+  ],
+  "limitations": [
+    "Selective logging can perturb timings; this is not a ranking cohort",
+    "Server queue, connection and Restored RPC durations are existing accepted-daemon observations",
+    "Other create time includes HTTP, provisioning, restore and response work; its internal cause is not identified",
+    "Successful creates are correlated by source-bound VM name equal to sandbox ID; failed creates may return no ID",
+    "Individual stage percentiles are not additive; slow samples remain in overall summaries"
+  ]
+}

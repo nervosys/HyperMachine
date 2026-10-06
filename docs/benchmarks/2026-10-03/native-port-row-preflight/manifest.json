@@ -1,0 +1,9 @@
+{
+  "sha256": {
+    "README.md": "1ff5d4ae589bec821073d3acad4d30fe96b8bbf9f3375f9b7f3a63627a20ba98",
+    "library-tests.log": "bf1407ca666fb1f544c7079fa38e7e6836ece8fc050db392ee26141a6fdc17e5",
+    "owned-redis-tests.log": "4e81d790bba80bbacda350d09a6baad86bab8c9c224632bdad12ba3b598cfb39",
+    "source-context.json": "07f34f4484f4484e3d112f5c55ee92ec43f3758591f79cbcdbfce5572e706c14",
+    "store.rs": "694e2b259f7646e89eb6e793efcb053852f24b0fae41eb948678a847661cacd0"
+  }
+}

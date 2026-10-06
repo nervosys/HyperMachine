@@ -1,0 +1,251 @@
+[2m2026-10-04T16:37:20.398759Z[0m [32m INFO[0m [2mhv2_api::sandbox_proxy[0m[2m:[0m sandbox proxy listening on 0.0.0.0:60421
+hv2-sandboxd: listening on 0.0.0.0:47097, capacity 2
+  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)
+  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)
+  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls
+  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener
+  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules
+  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy
+  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies
+  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log
+sandboxes get no network interface (--network to change that)
+sandboxes boot from the kernel (no template snapshot)
+
+sandbox proxy on 0.0.0.0:60421 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>
+  grpcurl -plaintext -authority 49983-$SBX.local -H "X-Access-Token: $TOKEN" -import-path crates/hv2-api/proto -proto process.proto \
+      -d '{"process":{"cmd":"/bin/sh","args":["-c","echo hi"]}}' \
+      localhost:60421 process.Process/Start
+[2m2026-10-04T16:37:20.492281Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:37:20.493624Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-b284cd1a53f844a49a1d': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-10-04T16:37:20.493695Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:37:20.736720Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-b284cd1a53f844a49a1d' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:37:20.770005Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T16:37:20.770097Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-b284cd1a53f844a49a1d': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T16:37:20.771231Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-b284cd1a53f844a49a1d' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:37:20.771859Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-b284cd1a53f844a49a1d' with 1 vCPUs
+[2m2026-10-04T16:37:20.771886Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:37:20.799786Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:37:22.062120Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3089)
+[2m2026-10-04T16:37:22.062266Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-b284cd1a53f844a49a1d'
+[2m2026-10-04T16:37:22.062284Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-b284cd1a53f844a49a1d' stopped
+[2m2026-10-04T16:37:22.146222Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:37:22.146920Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-ab174e1ef8ac4674bf9a': vsock device attached at 0xd0000000 (guest CID 101, IRQ 5)
+[2m2026-10-04T16:37:22.146941Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:37:22.193875Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-ab174e1ef8ac4674bf9a' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:37:22.213939Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T16:37:22.214018Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-ab174e1ef8ac4674bf9a': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T16:37:22.214028Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-ab174e1ef8ac4674bf9a' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:37:22.214358Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-ab174e1ef8ac4674bf9a' with 1 vCPUs
+[2m2026-10-04T16:37:22.214380Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:37:22.214657Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:37:23.738552Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3156)
+[2m2026-10-04T16:37:23.738712Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-ab174e1ef8ac4674bf9a'
+[2m2026-10-04T16:37:23.738730Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-ab174e1ef8ac4674bf9a' stopped
+[2m2026-10-04T16:37:23.793872Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:37:23.794503Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-ce419d860f7942938ff5': vsock device attached at 0xd0000000 (guest CID 102, IRQ 5)
+[2m2026-10-04T16:37:23.794520Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:37:23.864658Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-ce419d860f7942938ff5' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:37:23.888500Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T16:37:23.888583Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-ce419d860f7942938ff5': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T16:37:23.888594Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-ce419d860f7942938ff5' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:37:23.888955Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-ce419d860f7942938ff5' with 1 vCPUs
+[2m2026-10-04T16:37:23.888965Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:37:23.889230Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:37:27.756091Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3084)
+[2m2026-10-04T16:37:27.756222Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-ce419d860f7942938ff5'
+[2m2026-10-04T16:37:27.756237Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-ce419d860f7942938ff5' stopped
+[2m2026-10-04T16:37:27.828877Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:37:27.829460Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-a4b34927ed9c4fadb232': vsock device attached at 0xd0000000 (guest CID 103, IRQ 5)
+[2m2026-10-04T16:37:27.829490Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:37:27.840353Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-a4b34927ed9c4fadb232' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:37:27.853306Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T16:37:27.853362Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-a4b34927ed9c4fadb232': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T16:37:27.853372Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-a4b34927ed9c4fadb232' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:37:27.853632Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-a4b34927ed9c4fadb232' with 1 vCPUs
+[2m2026-10-04T16:37:27.853668Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:37:27.853893Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:37:28.413963Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3079)
+[2m2026-10-04T16:37:28.414246Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-a4b34927ed9c4fadb232'
+[2m2026-10-04T16:37:28.414265Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-a4b34927ed9c4fadb232' stopped
+[2m2026-10-04T16:37:28.478781Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:37:28.479461Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-e5d0d9472a764e86a0aa': vsock device attached at 0xd0000000 (guest CID 104, IRQ 5)
+[2m2026-10-04T16:37:28.479485Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:37:28.494759Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-e5d0d9472a764e86a0aa' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:37:28.512199Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T16:37:28.512259Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-e5d0d9472a764e86a0aa': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T16:37:28.512270Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-e5d0d9472a764e86a0aa' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:37:28.512653Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-e5d0d9472a764e86a0aa' with 1 vCPUs
+[2m2026-10-04T16:37:28.512706Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:37:28.513040Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:37:29.263634Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3079)
+[2m2026-10-04T16:37:29.263806Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-e5d0d9472a764e86a0aa'
+[2m2026-10-04T16:37:29.263837Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-e5d0d9472a764e86a0aa' stopped
+[2m2026-10-04T16:37:29.308201Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:37:29.308993Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-d070f51731c14eafadcb': vsock device attached at 0xd0000000 (guest CID 105, IRQ 5)
+[2m2026-10-04T16:37:29.309110Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:37:29.329548Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-d070f51731c14eafadcb' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:37:29.361450Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T16:37:29.361587Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-d070f51731c14eafadcb': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T16:37:29.361604Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-d070f51731c14eafadcb' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:37:29.362076Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-d070f51731c14eafadcb' with 1 vCPUs
+[2m2026-10-04T16:37:29.362098Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:37:29.362412Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:37:30.193079Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3101)
+[2m2026-10-04T16:37:30.193281Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-d070f51731c14eafadcb'
+[2m2026-10-04T16:37:30.193327Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-d070f51731c14eafadcb' stopped
+[2m2026-10-04T16:37:30.233860Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:37:30.234497Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-da60f4c3a01d4406af6c': vsock device attached at 0xd0000000 (guest CID 106, IRQ 5)
+[2m2026-10-04T16:37:30.234519Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:37:30.254927Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-da60f4c3a01d4406af6c' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:37:30.281048Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T16:37:30.281109Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-da60f4c3a01d4406af6c': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T16:37:30.281121Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-da60f4c3a01d4406af6c' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:37:30.281370Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-da60f4c3a01d4406af6c' with 1 vCPUs
+[2m2026-10-04T16:37:30.281383Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:37:30.281621Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:37:31.603106Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3113)
+[2m2026-10-04T16:37:31.603278Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-da60f4c3a01d4406af6c'
+[2m2026-10-04T16:37:31.603305Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-da60f4c3a01d4406af6c' stopped
+[2m2026-10-04T16:37:32.239858Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:37:32.240797Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-15b55f801d934651b993': vsock device attached at 0xd0000000 (guest CID 107, IRQ 5)
+[2m2026-10-04T16:37:32.240845Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:37:32.679788Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-15b55f801d934651b993' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:37:32.727464Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T16:37:32.727587Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-15b55f801d934651b993': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T16:37:32.727606Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-15b55f801d934651b993' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:37:32.728096Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-15b55f801d934651b993' with 1 vCPUs
+[2m2026-10-04T16:37:32.728127Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:37:32.728522Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:37:33.823554Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3090)
+[2m2026-10-04T16:37:33.823729Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-15b55f801d934651b993'
+[2m2026-10-04T16:37:33.823755Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-15b55f801d934651b993' stopped
+[2m2026-10-04T16:37:33.977755Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:37:33.978401Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-eb157bddc2bc435b9801': vsock device attached at 0xd0000000 (guest CID 108, IRQ 5)
+[2m2026-10-04T16:37:33.978438Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:37:34.085511Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-eb157bddc2bc435b9801' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:37:34.118718Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T16:37:34.118903Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-eb157bddc2bc435b9801': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T16:37:34.118920Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-eb157bddc2bc435b9801' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:37:34.119271Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-eb157bddc2bc435b9801' with 1 vCPUs
+[2m2026-10-04T16:37:34.119294Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:37:34.119582Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:37:35.306907Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3081)
+[2m2026-10-04T16:37:35.307061Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-eb157bddc2bc435b9801'
+[2m2026-10-04T16:37:35.307088Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-eb157bddc2bc435b9801' stopped
+[2m2026-10-04T16:37:35.382105Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:37:35.382670Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-ecc5b242d0394000935c': vsock device attached at 0xd0000000 (guest CID 109, IRQ 5)
+[2m2026-10-04T16:37:35.382685Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:37:35.404279Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-ecc5b242d0394000935c' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:37:35.434127Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T16:37:35.434199Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-ecc5b242d0394000935c': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T16:37:35.434215Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-ecc5b242d0394000935c' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:37:35.434559Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-ecc5b242d0394000935c' with 1 vCPUs
+[2m2026-10-04T16:37:35.434568Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:37:35.434807Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:37:36.298587Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3069)
+[2m2026-10-04T16:37:36.298740Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-ecc5b242d0394000935c'
+[2m2026-10-04T16:37:36.298767Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-ecc5b242d0394000935c' stopped
+[2m2026-10-04T16:37:36.349860Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:37:36.350361Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-d53c25828915491ba354': vsock device attached at 0xd0000000 (guest CID 110, IRQ 5)
+[2m2026-10-04T16:37:36.350377Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:37:36.369699Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-d53c25828915491ba354' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:37:36.389694Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T16:37:36.389788Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-d53c25828915491ba354': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T16:37:36.389798Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-d53c25828915491ba354' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:37:36.390084Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-d53c25828915491ba354' with 1 vCPUs
+[2m2026-10-04T16:37:36.390091Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:37:36.390337Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:37:38.099539Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3086)
+[2m2026-10-04T16:37:38.099659Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-d53c25828915491ba354'
+[2m2026-10-04T16:37:38.099677Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-d53c25828915491ba354' stopped
+[2m2026-10-04T16:37:38.246453Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:37:38.246977Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-6d7b5a865cfc4a2d891d': vsock device attached at 0xd0000000 (guest CID 111, IRQ 5)
+[2m2026-10-04T16:37:38.246995Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:37:38.262622Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-6d7b5a865cfc4a2d891d' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:37:38.307073Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T16:37:38.307142Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-6d7b5a865cfc4a2d891d': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T16:37:38.307157Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-6d7b5a865cfc4a2d891d' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:37:38.307445Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-6d7b5a865cfc4a2d891d' with 1 vCPUs
+[2m2026-10-04T16:37:38.307459Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:37:38.307714Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:37:39.853915Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3080)
+[2m2026-10-04T16:37:39.854076Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-6d7b5a865cfc4a2d891d'
+[2m2026-10-04T16:37:39.854101Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-6d7b5a865cfc4a2d891d' stopped
+[2m2026-10-04T16:37:39.930631Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:37:39.931284Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-df37c9cae1a149648e03': vsock device attached at 0xd0000000 (guest CID 112, IRQ 5)
+[2m2026-10-04T16:37:39.931319Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:37:39.953413Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-df37c9cae1a149648e03' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:37:40.197924Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T16:37:40.198013Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-df37c9cae1a149648e03': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T16:37:40.198035Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-df37c9cae1a149648e03' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:37:40.198559Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-df37c9cae1a149648e03' with 1 vCPUs
+[2m2026-10-04T16:37:40.198583Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:37:40.198868Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:37:42.064969Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3092)
+[2m2026-10-04T16:37:42.065125Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-df37c9cae1a149648e03'
+[2m2026-10-04T16:37:42.065148Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-df37c9cae1a149648e03' stopped
+[2m2026-10-04T16:37:42.141759Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:37:42.142314Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-66616e81ec444bafabf2': vsock device attached at 0xd0000000 (guest CID 113, IRQ 5)
+[2m2026-10-04T16:37:42.142341Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:37:42.185932Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-66616e81ec444bafabf2' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:37:42.215967Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T16:37:42.216024Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-66616e81ec444bafabf2': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T16:37:42.216034Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-66616e81ec444bafabf2' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:37:42.216284Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-66616e81ec444bafabf2' with 1 vCPUs
+[2m2026-10-04T16:37:42.216292Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:37:42.216518Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:37:43.845939Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3078)
+[2m2026-10-04T16:37:43.846093Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-66616e81ec444bafabf2'
+[2m2026-10-04T16:37:43.846126Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-66616e81ec444bafabf2' stopped
+[2m2026-10-04T16:37:43.918421Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:37:43.919088Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-4bb2876182e8458fbd71': vsock device attached at 0xd0000000 (guest CID 114, IRQ 5)
+[2m2026-10-04T16:37:43.919122Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:37:43.953092Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-4bb2876182e8458fbd71' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:37:43.985115Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T16:37:43.985195Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-4bb2876182e8458fbd71': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T16:37:43.985206Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-4bb2876182e8458fbd71' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:37:43.985525Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-4bb2876182e8458fbd71' with 1 vCPUs
+[2m2026-10-04T16:37:43.985553Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:37:43.985820Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:37:45.725897Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3087)
+[2m2026-10-04T16:37:45.726105Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-4bb2876182e8458fbd71'
+[2m2026-10-04T16:37:45.726121Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-4bb2876182e8458fbd71' stopped
+[2m2026-10-04T16:37:45.850891Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:37:45.851740Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-3d1496b848e244898444': vsock device attached at 0xd0000000 (guest CID 115, IRQ 5)
+[2m2026-10-04T16:37:45.851774Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:37:46.044855Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-3d1496b848e244898444' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:37:46.098977Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T16:37:46.099047Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-3d1496b848e244898444': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T16:37:46.099059Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-3d1496b848e244898444' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:37:46.099442Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-3d1496b848e244898444' with 1 vCPUs
+[2m2026-10-04T16:37:46.099462Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:37:46.099718Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:37:47.635589Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3088)
+[2m2026-10-04T16:37:47.635762Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-3d1496b848e244898444'
+[2m2026-10-04T16:37:47.635778Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-3d1496b848e244898444' stopped
+[2m2026-10-04T16:37:47.718190Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:37:47.718844Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-edfda5499c464763b414': vsock device attached at 0xd0000000 (guest CID 116, IRQ 5)
+[2m2026-10-04T16:37:47.718873Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:37:47.886873Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-edfda5499c464763b414' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:37:47.908832Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T16:37:47.908913Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-edfda5499c464763b414': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T16:37:47.908926Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-edfda5499c464763b414' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:37:47.909223Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-edfda5499c464763b414' with 1 vCPUs
+[2m2026-10-04T16:37:47.909240Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:37:47.909518Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:37:49.123392Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3008)
+[2m2026-10-04T16:37:49.123579Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-edfda5499c464763b414'
+[2m2026-10-04T16:37:49.123593Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-edfda5499c464763b414' stopped
+[2m2026-10-04T16:37:49.186417Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-10-04T16:37:49.187014Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-acd6841df9a744078496': vsock device attached at 0xd0000000 (guest CID 117, IRQ 5)
+[2m2026-10-04T16:37:49.187035Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-10-04T16:37:49.215199Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-acd6841df9a744078496' on the Kvm backend (1 vCPUs, 1024 MiB)
+[2m2026-10-04T16:37:49.249276Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-10-04T16:37:49.249374Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-acd6841df9a744078496': loaded linux boot image (15830261 bytes), entry 0x100000
+[2m2026-10-04T16:37:49.249388Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-acd6841df9a744078496' with 1 vCPUs and 1 GB memory (parallel=true)
+[2m2026-10-04T16:37:49.249767Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-acd6841df9a744078496' with 1 vCPUs
+[2m2026-10-04T16:37:49.249789Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-10-04T16:37:49.250074Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-10-04T16:37:50.241056Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3079)
+[2m2026-10-04T16:37:50.241125Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-acd6841df9a744078496'
+[2m2026-10-04T16:37:50.241149Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-acd6841df9a744078496' stopped

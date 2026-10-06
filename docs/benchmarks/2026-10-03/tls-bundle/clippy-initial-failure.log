@@ -1,0 +1,13 @@
+   Compiling hv2-api v1.1.0 (/var/tmp/hm-tls-bundle/source/crates/hv2-api)
+    Checking hv2-cluster v1.1.0 (/var/tmp/hm-tls-bundle/source/crates/hv2-cluster)
+error: consider adding a `;` to the last statement for consistent formatting
+   --> crates/hv2-cluster/src/bin/hv2-control-plane.rs:315:25
+    |
+315 | ...     tracing::warn!(%error,"TLS certificate bundle reload rejected; active certificates retained")
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: add a `;` here: `tracing::warn!(%error,"TLS certificate bundle reload rejected; active certificates retained");`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#semicolon_if_nothing_returned
+    = note: `-D clippy::semicolon-if-nothing-returned` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::semicolon_if_nothing_returned)]`
+
+error: could not compile `hv2-cluster` (bin "hv2-control-plane") due to 1 previous error

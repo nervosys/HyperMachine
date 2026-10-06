@@ -4,9 +4,21 @@ Sandbox nodes are the ones labelled {{ toYaml .Values.node.nodeSelector | trim }
 Until at least one is, the node DaemonSet schedules nowhere and creates fail
 with "no node has room (0 alive)".
 
-The API key:
+{{- if .Values.auth.legacyAdminEnabled }}
+The legacy admin API key:
   kubectl get secret {{ include "hv2.secretName" . }} -n {{ .Release.Namespace }} \
     -o jsonpath='{.data.api-key}' | base64 -d
+{{- else }}
+Policy-only authentication is enabled. Use an original, unexpired credential
+whose SHA-256 digest is in Secret {{ .Values.auth.apiKeysSecret }}; the policy
+file contains digests, not usable client credentials.
+{{- end }}
+{{- if .Values.auth.apiKeysSecret }}
+
+After updating the policy Secret, restart every control-plane replica:
+  kubectl rollout restart deployment/{{ include "hv2.name" . }}-control-plane -n {{ .Release.Namespace }}
+  kubectl rollout status deployment/{{ include "hv2.name" . }}-control-plane -n {{ .Release.Namespace }}
+{{- end }}
 
 Point the E2B SDK at the control plane:
   kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "hv2.name" . }} 5980:{{ .Values.controlPlane.service.apiPort }} 5981:{{ .Values.controlPlane.service.proxyPort }}

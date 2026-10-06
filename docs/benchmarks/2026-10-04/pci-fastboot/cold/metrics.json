@@ -1,0 +1,40 @@
+{
+  "baseline": {
+    "samples": 32,
+    "latencies": {
+      "create_ms": {
+        "p50": 654.579638,
+        "p95": 765.209086
+      },
+      "command_ms": {
+        "p50": 2.180824,
+        "p95": 4.707366
+      },
+      "total_ms": {
+        "p50": 656.713199,
+        "p95": 768.37779
+      }
+    },
+    "cpu_ms_per_operation": 417.5,
+    "held_pss_kib_p50": 199135
+  },
+  "candidate": {
+    "samples": 32,
+    "latencies": {
+      "create_ms": {
+        "p50": 378.104427,
+        "p95": 428.371733
+      },
+      "command_ms": {
+        "p50": 2.199538,
+        "p95": 4.106234
+      },
+      "total_ms": {
+        "p50": 380.244425,
+        "p95": 431.239093
+      }
+    },
+    "cpu_ms_per_operation": 390.3125,
+    "held_pss_kib_p50": 201469
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "initial": {
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "failure_report": "45e37407ebf2e3ec902e26378e715b5d567eebfecf914b62de88a5864e56abea",
+    "coordinator": "f931fbb97bc2e577601d2a72d9449b482ae5f33a8055a1c09a93a8ff51174f13",
+    "harness": "0bcdc13351d54d4c9658bf034aa97f7d86d96d99375a2df04e4c94eaf8d3b610"
+  },
+  "repeat": {
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "failure_report": "1bd7aa7ab80e8e1e3a84b65e421a298168c8fd5c8d3545ec8edd9d1a4317cb92",
+    "coordinator": "f931fbb97bc2e577601d2a72d9449b482ae5f33a8055a1c09a93a8ff51174f13",
+    "harness": "0bcdc13351d54d4c9658bf034aa97f7d86d96d99375a2df04e4c94eaf8d3b610"
+  }
+}

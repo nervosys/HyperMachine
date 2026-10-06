@@ -1,0 +1,16 @@
+{
+  "permitted_source": "crates/hv2-api/src/sandbox_proxy.rs",
+  "before_sha256": "996fde17115bb40b215721a7c942efc496b8823275ced79246336b0e1c2ae1c1",
+  "candidate_sha256": "363fb17758d9fc984af4724984fca31765ab34d7cadcd472f081f2b347d9bf78",
+  "isolated_protected_sha256": {
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+    "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+  },
+  "commands": [
+    "cargo test --locked -p hv2-api --lib",
+    "cargo test --locked -p hv2-cluster --test control_plane"
+  ],
+  "target_dir": "/var/tmp/hm-object-backup/target",
+  "scope": "isolated API-only source change; unit and owned HTTP integration fixtures, no KVM or performance validation"
+}

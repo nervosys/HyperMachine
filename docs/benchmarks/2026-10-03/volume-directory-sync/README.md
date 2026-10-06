@@ -1,0 +1,7 @@
+# Volume directory flush ordering
+
+Successful directory creation now flushes the created or updated directory and every containing directory deepest-first through the volume data root. This includes parents created by force=true. Failures return an API error; already-created namespace entries are preserved rather than rolled back. Existing file uploads use the same helper without changing their selected directory set or duplicating the atomic publication parent's flush.
+
+All 46 daemon tests and both real control-router/shared-daemon integration tests pass. The latter includes nested mkdir/repeat/conflict checks, file preservation, binary upload/download, node termination, peer access, restart and owned cleanup. Build and tests used the accepted isolated source checkout; the root helper documentation comment was corrected after compilation (no executable difference). The exact compiled source is archived as tested-volumes.rs.
+
+Reproduce with `cargo test --offline --locked -p hv2-sandboxd`, rebuild the daemon, then run the volume_routing integration test with the four HM_VOLUME_TEST_* input paths and --include-ignored. These tests exercise successful local filesystem fsync operations but do not inject mkdir sync failure or power loss. Guest writes, deletion durability, network storage and concurrent namespace mutation remain outside the evidence. This is a local persistence improvement, not proof of managed-storage parity or a performance win.

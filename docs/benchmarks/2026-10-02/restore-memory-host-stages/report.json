@@ -1,0 +1,626 @@
+{
+  "success": true,
+  "purpose": "prepared snapshot startup, no managed endpoint or universal performance claim",
+  "artifact_sha256": {
+    "hypermachine": "47460763d7e92cb7ff436aa9de331e0155cb79f9feb9a44e8281f7a9b87ca5f5",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "coordinator": "b4259781bd3b448a5eb28a54a2a3686c06f677c4b2581331e611f5a486700935",
+    "engines": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "firecracker_harness": "0bcdc13351d54d4c9658bf034aa97f7d86d96d99375a2df04e4c94eaf8d3b610",
+    "boundary_driver": "4b080fc8f24224d055901e2e4e7aae5aa956fcf0bc1f5f8f9217f4f65e6b5a23"
+  },
+  "driver_cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "concurrency": 1,
+  "pairs": 4,
+  "guest_readiness_timeout_s": 15,
+  "preparation": {
+    "hypermachine": {
+      "duration_ms": 112.00882099996079,
+      "offering": {
+        "createdAt": 1791009516434,
+        "names": [
+          "warm-benchmark:default"
+        ],
+        "sandboxID": "sbx-d54130dfff4d4b0982f6",
+        "snapshotID": "warm-benchmark:default",
+        "templateID": "base"
+      },
+      "base_template": {
+        "aliases": [
+          "base"
+        ],
+        "buildID": "base",
+        "buildStatus": "ready",
+        "cpuCount": 1,
+        "envdVersion": "0.6.3",
+        "memoryMB": 1024,
+        "public": false,
+        "snapshot": true,
+        "templateID": "base"
+      },
+      "source_files": {
+        ".backup.lock": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "snapshots/warm-benchmark-561c5195e3424f12ae291c706a4e6239.snap": {
+          "bytes": 1497153,
+          "sha256": "795c81d56594eee9845cddbb3f9814c324267bc47ee092cc03bca00e210af813"
+        },
+        "snapshots/warm-benchmark.json": {
+          "bytes": 142,
+          "sha256": "71f42f541414c232894f69a39731871a256e4b50698da1434d455918d98cdd02"
+        },
+        "templates/94cbb63bd81baf1783adfe6c07e8d944/template.snap": {
+          "bytes": 50690,
+          "sha256": "da2cbefa9024e15a840e420a3b65f8a0541faea804800d2ca6e7f1ef5df75a69"
+        },
+        "templates/94cbb63bd81baf1783adfe6c07e8d944/template.snap.mem": {
+          "bytes": 1073741824,
+          "sha256": "4d130ea0e55fc8a0c9e237ae43733823aeb413f18a6cf496ecac2d339bfe1f23"
+        }
+      },
+      "source_unchanged": true
+    },
+    "firecracker": {
+      "duration_ms": 1792.4631849999741,
+      "state_sha256": "0be30c135622c3da81a3179a2c834b80d05f4e36e3c2efa16619601963ec99ff",
+      "memory_sha256": "a14c88c6311f1b8378d191e1aa575d7ff5186df13eccd62d35bf369083ce5481",
+      "memory_bytes": 1073741824,
+      "snapshot_type": "Full",
+      "source_parent_stopped": true,
+      "source_unchanged": true
+    }
+  },
+  "runs": [
+    {
+      "engine": "hypermachine",
+      "pair": 0,
+      "samples": [
+        {
+          "index": 0,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 374.830892289,
+          "sandbox_id": "sbx-0a1208c35ff648ab8dad",
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 39.400059000001875,
+          "latency_phases_ms": {
+            "create_and_notice": 21.375129999967157,
+            "exec": 18.024929000034717
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        }
+      ],
+      "success": true,
+      "cleanup_errors": [],
+      "resource_validation_phase": "after_all_timed_attempts",
+      "held_process_memory_kib": {
+        "Rss_kib": 74436,
+        "Pss_kib": 72348,
+        "Private_Clean_kib": 8836,
+        "Private_Dirty_kib": 63264,
+        "Anonymous_kib": 35676
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 43664,
+        "Pss_kib": 41527,
+        "Private_Clean_kib": 8304,
+        "Private_Dirty_kib": 33024,
+        "Anonymous_kib": 33024
+      },
+      "incremental_process_memory_kib": {
+        "Rss_kib": 30772,
+        "Pss_kib": 30821,
+        "Private_Clean_kib": 532,
+        "Private_Dirty_kib": 30240,
+        "Anonymous_kib": 2652
+      },
+      "memory_hold_seconds": 5,
+      "memory_read_ms": 1.2056500000312553,
+      "remaining_sandboxes": 0,
+      "start_spread_ms": 0.0
+    },
+    {
+      "engine": "firecracker",
+      "pair": 0,
+      "samples": [
+        {
+          "index": 0,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 379.912555758,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "bbd13511089e16c60295ebcb849ab4a3c5fb0839d9069aa4f19adfa16e620428",
+            "unix_time_ns": 1791009527577504699,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 379.93843897
+          },
+          "ready_ms": 39.23432099998081,
+          "latency_phases_ms": {
+            "process_and_load": 9.228709000012714,
+            "connect_and_notice": 16.654502999983833,
+            "exec": 13.351108999984262
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        }
+      ],
+      "success": true,
+      "cleanup_errors": [],
+      "resource_validation_phase": "after_all_timed_attempts",
+      "held_process_memory_kib": {
+        "Rss_kib": 23092,
+        "Pss_kib": 23084,
+        "Private_Clean_kib": 20368,
+        "Private_Dirty_kib": 2712,
+        "Anonymous_kib": 2704
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 0,
+        "Pss_kib": 0,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 0,
+        "Anonymous_kib": 0
+      },
+      "incremental_process_memory_kib": {
+        "Rss_kib": 23092,
+        "Pss_kib": 23084,
+        "Private_Clean_kib": 20368,
+        "Private_Dirty_kib": 2712,
+        "Anonymous_kib": 2704
+      },
+      "memory_hold_seconds": 5,
+      "memory_read_ms": 1.0028350000084174,
+      "start_spread_ms": 0.0
+    },
+    {
+      "engine": "firecracker",
+      "pair": 1,
+      "samples": [
+        {
+          "index": 0,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 385.020698542,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "bc815556042ee17d92ad95b776ee181d8ddc5211da7f81c09612eac6292eec06",
+            "unix_time_ns": 1791009532689492817,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 385.052697982
+          },
+          "ready_ms": 52.840805000016644,
+          "latency_phases_ms": {
+            "process_and_load": 14.113763000011659,
+            "connect_and_notice": 17.885676999981115,
+            "exec": 20.84136500002387
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        }
+      ],
+      "success": true,
+      "cleanup_errors": [],
+      "resource_validation_phase": "after_all_timed_attempts",
+      "held_process_memory_kib": {
+        "Rss_kib": 23076,
+        "Pss_kib": 23068,
+        "Private_Clean_kib": 20384,
+        "Private_Dirty_kib": 2680,
+        "Anonymous_kib": 2672
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 0,
+        "Pss_kib": 0,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 0,
+        "Anonymous_kib": 0
+      },
+      "incremental_process_memory_kib": {
+        "Rss_kib": 23076,
+        "Pss_kib": 23068,
+        "Private_Clean_kib": 20384,
+        "Private_Dirty_kib": 2680,
+        "Anonymous_kib": 2672
+      },
+      "memory_hold_seconds": 5,
+      "memory_read_ms": 0.6843190000154209,
+      "start_spread_ms": 0.0
+    },
+    {
+      "engine": "hypermachine",
+      "pair": 1,
+      "samples": [
+        {
+          "index": 0,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 390.144704515,
+          "sandbox_id": "sbx-b592c5b1efc443a58f74",
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 40.90019799997435,
+          "latency_phases_ms": {
+            "create_and_notice": 22.780564000015602,
+            "exec": 18.11963399995875
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        }
+      ],
+      "success": true,
+      "cleanup_errors": [],
+      "resource_validation_phase": "after_all_timed_attempts",
+      "held_process_memory_kib": {
+        "Rss_kib": 75044,
+        "Pss_kib": 72956,
+        "Private_Clean_kib": 8836,
+        "Private_Dirty_kib": 63872,
+        "Anonymous_kib": 36284
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 44204,
+        "Pss_kib": 42112,
+        "Private_Clean_kib": 8304,
+        "Private_Dirty_kib": 33564,
+        "Anonymous_kib": 33564
+      },
+      "incremental_process_memory_kib": {
+        "Rss_kib": 30840,
+        "Pss_kib": 30844,
+        "Private_Clean_kib": 532,
+        "Private_Dirty_kib": 30308,
+        "Anonymous_kib": 2720
+      },
+      "memory_hold_seconds": 5,
+      "memory_read_ms": 2.372093000019504,
+      "remaining_sandboxes": 0,
+      "start_spread_ms": 0.0
+    },
+    {
+      "engine": "hypermachine",
+      "pair": 2,
+      "samples": [
+        {
+          "index": 0,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 395.24292309,
+          "sandbox_id": "sbx-4dd1086e6b7f47af814d",
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 36.15698400000156,
+          "latency_phases_ms": {
+            "create_and_notice": 19.90047700002151,
+            "exec": 16.256506999980047
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        }
+      ],
+      "success": true,
+      "cleanup_errors": [],
+      "resource_validation_phase": "after_all_timed_attempts",
+      "held_process_memory_kib": {
+        "Rss_kib": 76076,
+        "Pss_kib": 73988,
+        "Private_Clean_kib": 8836,
+        "Private_Dirty_kib": 64904,
+        "Anonymous_kib": 36296
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 44844,
+        "Pss_kib": 42752,
+        "Private_Clean_kib": 8304,
+        "Private_Dirty_kib": 34204,
+        "Anonymous_kib": 34204
+      },
+      "incremental_process_memory_kib": {
+        "Rss_kib": 31232,
+        "Pss_kib": 31236,
+        "Private_Clean_kib": 532,
+        "Private_Dirty_kib": 30700,
+        "Anonymous_kib": 2092
+      },
+      "memory_hold_seconds": 5,
+      "memory_read_ms": 1.9750600000065788,
+      "remaining_sandboxes": 0,
+      "start_spread_ms": 0.0
+    },
+    {
+      "engine": "firecracker",
+      "pair": 2,
+      "samples": [
+        {
+          "index": 0,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 400.32529254,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "c7c7f52c727d875297e0467f4213245f6ad9e58f249b7aad5c54b33f9d1ff808",
+            "unix_time_ns": 1791009547994604263,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 400.358723177
+          },
+          "ready_ms": 48.89888799999653,
+          "latency_phases_ms": {
+            "process_and_load": 14.819389999956911,
+            "connect_and_notice": 18.611247000023923,
+            "exec": 15.468251000015698
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        }
+      ],
+      "success": true,
+      "cleanup_errors": [],
+      "resource_validation_phase": "after_all_timed_attempts",
+      "held_process_memory_kib": {
+        "Rss_kib": 23072,
+        "Pss_kib": 23064,
+        "Private_Clean_kib": 20368,
+        "Private_Dirty_kib": 2692,
+        "Anonymous_kib": 2684
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 0,
+        "Pss_kib": 0,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 0,
+        "Anonymous_kib": 0
+      },
+      "incremental_process_memory_kib": {
+        "Rss_kib": 23072,
+        "Pss_kib": 23064,
+        "Private_Clean_kib": 20368,
+        "Private_Dirty_kib": 2692,
+        "Anonymous_kib": 2684
+      },
+      "memory_hold_seconds": 5,
+      "memory_read_ms": 1.0782570000174019,
+      "start_spread_ms": 0.0
+    },
+    {
+      "engine": "firecracker",
+      "pair": 3,
+      "samples": [
+        {
+          "index": 0,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 405.444464502,
+          "restored_notice": {
+            "entropy_bytes": 64,
+            "entropy_sha256": "3beac508078fdfc9f88d23869130c9514c055e485c5ecd6d41b601e11fa4a2af",
+            "unix_time_ns": 1791009553115258801,
+            "attempts": 1,
+            "acknowledged": true,
+            "ready_monotonic": 405.477205632
+          },
+          "ready_ms": 48.496775999979036,
+          "latency_phases_ms": {
+            "process_and_load": 17.158010999992257,
+            "connect_and_notice": 15.583118999984436,
+            "exec": 15.755646000002343
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        }
+      ],
+      "success": true,
+      "cleanup_errors": [],
+      "resource_validation_phase": "after_all_timed_attempts",
+      "held_process_memory_kib": {
+        "Rss_kib": 23068,
+        "Pss_kib": 23060,
+        "Private_Clean_kib": 20384,
+        "Private_Dirty_kib": 2672,
+        "Anonymous_kib": 2664
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 0,
+        "Pss_kib": 0,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 0,
+        "Anonymous_kib": 0
+      },
+      "incremental_process_memory_kib": {
+        "Rss_kib": 23068,
+        "Pss_kib": 23060,
+        "Private_Clean_kib": 20384,
+        "Private_Dirty_kib": 2672,
+        "Anonymous_kib": 2664
+      },
+      "memory_hold_seconds": 5,
+      "memory_read_ms": 0.6582000000321386,
+      "start_spread_ms": 0.0
+    },
+    {
+      "engine": "hypermachine",
+      "pair": 3,
+      "samples": [
+        {
+          "index": 0,
+          "success": true,
+          "cleanup_success": true,
+          "started_monotonic": 410.563830371,
+          "sandbox_id": "sbx-80725b8658124dd6ab42",
+          "restored_notice": {
+            "acknowledged_via_create": true,
+            "entropy_bytes": 64
+          },
+          "ready_ms": 42.90838200000735,
+          "latency_phases_ms": {
+            "create_and_notice": 23.680709000018396,
+            "exec": 19.227672999988954
+          },
+          "prepared_file": true,
+          "prepared_process_environment": true,
+          "independent_child_write": true,
+          "clock_rng_resynchronised": true,
+          "verified_resources": {
+            "cpu_count": 1,
+            "memory_mb": 1024
+          }
+        }
+      ],
+      "success": true,
+      "cleanup_errors": [],
+      "resource_validation_phase": "after_all_timed_attempts",
+      "held_process_memory_kib": {
+        "Rss_kib": 76332,
+        "Pss_kib": 74244,
+        "Private_Clean_kib": 37436,
+        "Private_Dirty_kib": 36560,
+        "Anonymous_kib": 36556
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 44856,
+        "Pss_kib": 42764,
+        "Private_Clean_kib": 8304,
+        "Private_Dirty_kib": 34216,
+        "Anonymous_kib": 34216
+      },
+      "incremental_process_memory_kib": {
+        "Rss_kib": 31476,
+        "Pss_kib": 31480,
+        "Private_Clean_kib": 29132,
+        "Private_Dirty_kib": 2344,
+        "Anonymous_kib": 2340
+      },
+      "memory_hold_seconds": 5,
+      "memory_read_ms": 1.5039560000218444,
+      "remaining_sandboxes": 0,
+      "start_spread_ms": 0.0
+    }
+  ],
+  "cleanup_errors": [],
+  "limitations": [
+    "Shared WSL nested KVM and uncontrolled host background load",
+    "Persistent HyperMachine HTTP daemon versus fresh Firecracker process/Unix API",
+    "Prepared resident/cache-warm sources; no dropped-cache or storage durability comparison",
+    "PSS excludes kernel memory and unmapped page cache; not fleet density",
+    "Failed attempts retained; conditional latency and memory summaries",
+    "Engine-generated device kernel arguments differ"
+  ],
+  "diagnostic_only": true,
+  "readiness_diagnostics": {
+    "rust_log": "warn,hv2_agent::agent_vm=debug",
+    "max_log_bytes": 16777216,
+    "logging_may_affect_timing": true,
+    "log_bytes": 20930,
+    "log_truncated": false,
+    "node_log": "\u001b[2m2026-10-03T06:38:35.884814Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0mtemplate \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_exec\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m85064 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m85064 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m85064 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m85064 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1981\nhv2-sandboxd: listening on 0.0.0.0:56411, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes are restored from template snapshots: base\n\nsandbox proxy on 0.0.0.0:53615 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:53615 process.Process/Start\n\u001b[2m2026-10-03T06:38:36.384646Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-d54130dfff4d4b0982f6 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_map\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1234\n\u001b[2m2026-10-03T06:38:36.385487Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-d54130dfff4d4b0982f6 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_machine\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m753\n\u001b[2m2026-10-03T06:38:36.386341Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-d54130dfff4d4b0982f6 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_vcpu\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m52 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m52 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m52 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m8 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m777\n\u001b[2m2026-10-03T06:38:36.387109Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-d54130dfff4d4b0982f6 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_devices\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m52 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m52 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m52 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m8 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m751\n\u001b[2m2026-10-03T06:38:36.387859Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-d54130dfff4d4b0982f6 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"before_run\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m52 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m52 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m52 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m8 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m736\n\u001b[2m2026-10-03T06:38:36.404256Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-d54130dfff4d4b0982f6 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_notice\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m24756 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m24756 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m24600 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m712 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m156 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1350\n\u001b[2m2026-10-03T06:38:36.404288Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-d54130dfff4d4b0982f6 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.13122 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m8.441923000000001 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m7.638168 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T06:38:36.426017Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-d54130dfff4d4b0982f6 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_exec\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m29096 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m29096 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m28840 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1400 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m256 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1452\n\u001b[2m2026-10-03T06:38:42.484804Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-0a1208c35ff648ab8dad \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_map\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1081\n\u001b[2m2026-10-03T06:38:42.487233Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-0a1208c35ff648ab8dad \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_machine\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m897\n\u001b[2m2026-10-03T06:38:42.488111Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-0a1208c35ff648ab8dad \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_vcpu\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m802\n\u001b[2m2026-10-03T06:38:42.489052Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-0a1208c35ff648ab8dad \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_devices\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m929\n\u001b[2m2026-10-03T06:38:42.489890Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-0a1208c35ff648ab8dad \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"before_run\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m822\n\u001b[2m2026-10-03T06:38:42.497311Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-0a1208c35ff648ab8dad \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_notice\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m21840 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m21840 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m21564 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1440 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m276 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1083\n\u001b[2m2026-10-03T06:38:42.497338Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-0a1208c35ff648ab8dad \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.041108 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m2.7127000000000003 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m4.5951960000000005 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T06:38:42.515514Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-0a1208c35ff648ab8dad \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_exec\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m27296 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m27296 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m26900 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1872 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m396 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1328\n\u001b[2m2026-10-03T06:38:57.799958Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-b592c5b1efc443a58f74 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_map\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1378\n\u001b[2m2026-10-03T06:38:57.802707Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-b592c5b1efc443a58f74 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_machine\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m925\n\u001b[2m2026-10-03T06:38:57.803555Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-b592c5b1efc443a58f74 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_vcpu\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m774\n\u001b[2m2026-10-03T06:38:57.804328Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-b592c5b1efc443a58f74 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_devices\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m761\n\u001b[2m2026-10-03T06:38:57.805112Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-b592c5b1efc443a58f74 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"before_run\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m776\n\u001b[2m2026-10-03T06:38:57.812509Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-b592c5b1efc443a58f74 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_notice\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m21880 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m21880 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m21584 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1440 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m296 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1258\n\u001b[2m2026-10-03T06:38:57.812537Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-b592c5b1efc443a58f74 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.15207 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m3.715344 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m3.475007 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T06:38:57.830787Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-b592c5b1efc443a58f74 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_exec\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m27252 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m27252 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m26856 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1828 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m396 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m2023\n\u001b[2m2026-10-03T06:39:02.896072Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-4dd1086e6b7f47af814d \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_map\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m923\n\u001b[2m2026-10-03T06:39:02.898183Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-4dd1086e6b7f47af814d \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_machine\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m934\n\u001b[2m2026-10-03T06:39:02.899120Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-4dd1086e6b7f47af814d \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_vcpu\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m871\n\u001b[2m2026-10-03T06:39:02.899936Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-4dd1086e6b7f47af814d \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_devices\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m800\n\u001b[2m2026-10-03T06:39:02.900788Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-4dd1086e6b7f47af814d \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"before_run\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m842\n\u001b[2m2026-10-03T06:39:02.907865Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-4dd1086e6b7f47af814d \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_notice\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m21880 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m21880 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m21584 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1440 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m296 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1042\n\u001b[2m2026-10-03T06:39:02.907881Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-4dd1086e6b7f47af814d \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.034525 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m3.600365 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m3.371383 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T06:39:02.924310Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-4dd1086e6b7f47af814d \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_exec\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m28272 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m28272 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m27876 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1828 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m396 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1292\n\u001b[2m2026-10-03T06:39:18.219756Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-80725b8658124dd6ab42 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_map\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1029\n\u001b[2m2026-10-03T06:39:18.222069Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-80725b8658124dd6ab42 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_machine\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1002\n\u001b[2m2026-10-03T06:39:18.222965Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-80725b8658124dd6ab42 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_vcpu\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m811\n\u001b[2m2026-10-03T06:39:18.223781Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-80725b8658124dd6ab42 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_devices\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m794\n\u001b[2m2026-10-03T06:39:18.224607Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-80725b8658124dd6ab42 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"before_run\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m814\n\u001b[2m2026-10-03T06:39:18.232371Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-80725b8658124dd6ab42 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_notice\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m21840 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m21840 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1440 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1440 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m20400 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1158\n\u001b[2m2026-10-03T06:39:18.232397Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-80725b8658124dd6ab42 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.135327 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m2.799405 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m4.749829 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T06:39:18.251957Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-80725b8658124dd6ab42 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_exec\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m28312 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m28312 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1868 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1868 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m26444 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1303\n"
+  },
+  "guest_restore_contract": {
+    "clock_rng_resynchronised": true,
+    "entropy_bytes": 64,
+    "hypermachine": "acknowledged by successful create, source-bound after_restore",
+    "firecracker": "Restored RPC acknowledgement before exec; replaces readiness ping"
+  },
+  "latency_phase_measurement": "client_monotonic_no_added_rpc",
+  "resource_validation_phase": "after_all_timed_attempts",
+  "preparation_phase": "complete",
+  "owned_firecracker_processes": [
+    {
+      "pid": 285,
+      "exit_code": -15
+    },
+    {
+      "pid": 296,
+      "exit_code": -15
+    },
+    {
+      "pid": 302,
+      "exit_code": -15
+    },
+    {
+      "pid": 321,
+      "exit_code": -15
+    },
+    {
+      "pid": 327,
+      "exit_code": -15
+    }
+  ],
+  "remaining_sandboxes_before_cleanup": 0,
+  "remaining_sandboxes": 0,
+  "owned_node_stopped": true,
+  "owned_node_exit_code": 0,
+  "node_log_tail": "\u001b[0m\u001b[2m=\u001b[0msbx-b592c5b1efc443a58f74 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_exec\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m27252 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m27252 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m26856 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1828 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m396 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m2023\n\u001b[2m2026-10-03T06:39:02.896072Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-4dd1086e6b7f47af814d \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_map\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m923\n\u001b[2m2026-10-03T06:39:02.898183Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-4dd1086e6b7f47af814d \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_machine\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m934\n\u001b[2m2026-10-03T06:39:02.899120Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-4dd1086e6b7f47af814d \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_vcpu\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m871\n\u001b[2m2026-10-03T06:39:02.899936Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-4dd1086e6b7f47af814d \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_devices\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m800\n\u001b[2m2026-10-03T06:39:02.900788Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-4dd1086e6b7f47af814d \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"before_run\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m842\n\u001b[2m2026-10-03T06:39:02.907865Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-4dd1086e6b7f47af814d \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_notice\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m21880 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m21880 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m21584 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1440 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m296 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1042\n\u001b[2m2026-10-03T06:39:02.907881Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-4dd1086e6b7f47af814d \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.034525 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m3.600365 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m3.371383 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T06:39:02.924310Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-4dd1086e6b7f47af814d \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_exec\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m28272 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m28272 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m27876 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1828 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m396 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1292\n\u001b[2m2026-10-03T06:39:18.219756Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-80725b8658124dd6ab42 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_map\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1029\n\u001b[2m2026-10-03T06:39:18.222069Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-80725b8658124dd6ab42 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_machine\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1002\n\u001b[2m2026-10-03T06:39:18.222965Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-80725b8658124dd6ab42 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_vcpu\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m811\n\u001b[2m2026-10-03T06:39:18.223781Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-80725b8658124dd6ab42 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_devices\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m794\n\u001b[2m2026-10-03T06:39:18.224607Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-80725b8658124dd6ab42 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"before_run\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1412 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m814\n\u001b[2m2026-10-03T06:39:18.232371Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-80725b8658124dd6ab42 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_notice\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m21840 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m21840 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1440 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1440 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m20400 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1158\n\u001b[2m2026-10-03T06:39:18.232397Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::agent_vm\u001b[0m\u001b[2m:\u001b[0m restored guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-80725b8658124dd6ab42 \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.135327 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m2.799405 \u001b[3mrestored_ms\u001b[0m\u001b[2m=\u001b[0m4.749829 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"restored\"\n\u001b[2m2026-10-03T06:39:18.251957Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_core::vm\u001b[0m\u001b[2m:\u001b[0m restore memory boundary diagnostic \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-80725b8658124dd6ab42 \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"after_exec\" \u001b[3msize_kib\u001b[0m\u001b[2m=\u001b[0m1048576 \u001b[3mrss_kib\u001b[0m\u001b[2m=\u001b[0m28312 \u001b[3mpss_kib\u001b[0m\u001b[2m=\u001b[0m28312 \u001b[3mprivate_dirty_kib\u001b[0m\u001b[2m=\u001b[0m1868 \u001b[3mshared_clean_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mshared_dirty_kib\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3manonymous_kib\u001b[0m\u001b[2m=\u001b[0m1868 \u001b[3mprivate_clean_kib\u001b[0m\u001b[2m=\u001b[0m26444 \u001b[3mread_us\u001b[0m\u001b[2m=\u001b[0m1303\n",
+  "artifacts_unchanged": true,
+  "boundary_probe_activation": {
+    "environment": "HM_RESTORE_MEMORY_DIAGNOSTICS=1",
+    "owned_daemon_count": 1,
+    "injected_before_launch": true
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "rejected": [
+    "missing_run",
+    "wrong_order",
+    "wrong_binary",
+    "diagnostic_ranked",
+    "prepared_source_changed",
+    "wrong_resources",
+    "state_unverified",
+    "adoption_claim",
+    "wrong_intervention",
+    "zero_slots",
+    "boolean_slots",
+    "malformed_source_binding",
+    "restore_contract_absent",
+    "clock_rng_unverified"
+  ],
+  "count": 14
+}

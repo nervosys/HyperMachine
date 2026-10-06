@@ -1,0 +1,43 @@
+{
+  "success": true,
+  "checks": [
+    "partial-hv2_access_audit",
+    "partial-hv2_access_audit_key_file",
+    "invalid-key",
+    "second-writer",
+    "restart-0-authorized-and-denied-records",
+    "restart-1-authorized-and-denied-records",
+    "independent-mac-verification-and-private-values-absent",
+    "wrong-key-restart",
+    "partial-tail-restart",
+    "edited-record-restart",
+    "storage-failure-latches-before-dispatch-and-health-remains-available",
+    "partial-storage-fault-restart",
+    "partial-storage-write-failure-latches-and-restart-refuses-corrupt-tail"
+  ],
+  "cleanup_errors": [],
+  "control_plane_sha256": "8b558cccbbe96147ad7f8f794386173fb011b3f43b29270e50831e3ef2d8ffbb",
+  "fixture_sha256": "add791c9b63de4ea0605bfd9d8a8bf634c4211fb6ba8d0330cc0a964bb9a0799",
+  "verifier_sha256": "731162d8a9b9457c5a7f9eac972b7423b023732a0c991b98f65b192f54591b03",
+  "synthetic_audit_key": "42 repeated 32 times",
+  "performance_comparison": false,
+  "audit": {
+    "verified_records": 20,
+    "uncompleted_admissions": 0,
+    "completion_statuses": {
+      "401": 2,
+      "200": 4,
+      "403": 2,
+      "404": 2
+    }
+  },
+  "partial_storage_fault": {
+    "prefix_bytes": 8410,
+    "partial_bytes": 64,
+    "sha256": "38e99f1d54e15e238688273b435f2921dd76f4621aa060130e9dec9304f3ea98",
+    "later_append_stopped": true,
+    "restart_refused": true
+  },
+  "owned_processes_stopped": true,
+  "artifact_unchanged": true
+}

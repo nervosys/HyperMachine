@@ -1,0 +1,11 @@
+{
+  "sha256": {
+    "lint.log": "6b29efdfad7af143e39912674e32936080845241d3ca9c2c1886aded6136d1cd",
+    "node.yaml": "c91016ce4838a62e5d1bf23124378bf660682d50b86cec596f5e9bb627c90cbc",
+    "README.md": "e7f930176cd9fbd05a61fc33c12d9a1b7d3b0eefe28c4b5480d5193d32ff95f9",
+    "test-sandbox-chart.py": "302c464a59c9af7b9de7f5b429722839a2dcd084e67f13bed7c02b9d36835a22",
+    "tests.log": "aea6554e12ba6d83b278176e923471dd58d19a96f974d73345465ece6ab070fd",
+    "values.schema.json": "0473f3349956e15e011c89e36b4ecc6fcd2418044e39a878f1a92dec1186c896",
+    "values.yaml": "a3fcc218044f4f7a777b3d1fb84b67d763d849b15fae3adfc5e470ed42cf3db3"
+  }
+}

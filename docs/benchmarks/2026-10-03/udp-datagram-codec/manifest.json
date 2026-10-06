@@ -1,0 +1,8 @@
+{
+  "sha256": {
+    "README.md": "08c387c759b4b8f909e4e6befa9bd74c7972b7711f688fadb309c805203fd2a9",
+    "datagram.rs": "b16c4c8027cca79e67dbf43af3abb993d6312fe4e3214007929b5c454f3c2219",
+    "protocol.rs": "67c6c227188b31d5013c9078d0a5d644145dfbf62c7e1a29fff1a2545638904b",
+    "tests.log": "fb97bc4da53b65ec0f9dccf3628c76982790e7cea4c320d4b177445b2d5c30a2"
+  }
+}

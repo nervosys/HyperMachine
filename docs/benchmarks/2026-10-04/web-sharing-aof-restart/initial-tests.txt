@@ -1,0 +1,19 @@
+   Compiling hv2-cluster v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-cluster)
+    Finished `test` profile [optimized + debuginfo] target(s) in 33.62s
+     Running unittests src/lib.rs (/var/tmp/hm-object-backup/target/debug/deps/hv2_cluster-39b572a236a06967)
+
+running 1 test
+
+thread 'store::tests::web_sharing_redis_owned_restart' (1181) panicked at crates/hv2-cluster/src/store.rs:2997:73:
+called `Result::unwrap()` on an `Err` value: StoreError("broken pipe")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test store::tests::web_sharing_redis_owned_restart ... FAILED
+
+failures:
+
+failures:
+    store::tests::web_sharing_redis_owned_restart
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 133 filtered out; finished in 0.31s
+
+error: test failed, to rerun pass `-p hv2-cluster --lib`

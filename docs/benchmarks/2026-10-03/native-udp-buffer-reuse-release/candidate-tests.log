@@ -1,0 +1,13 @@
+   Compiling hv2-cluster v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hv2-cluster)
+    Finished `test` profile [optimized + debuginfo] target(s) in 17.37s
+     Running unittests src/lib.rs (/var/tmp/hm-object-backup/target/debug/deps/hv2_cluster-39b572a236a06967)
+
+running 5 tests
+test native_udp::tests::wrong_reservations_refuse_dispatch ... ok
+test native_udp::tests::idle_sessions_expire_and_owner_cancellation_releases_socket ... ok
+test native_udp::tests::exact_peer_datagrams_ipv4_ipv6_and_cap_refusal ... ok
+test native_udp::tests::pressure_is_dropped_and_oversized_ipv6_ingress_never_opens_a_peer ... ok
+test native_udp::tests::failed_sessions_release_same_peer_slot ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 83 filtered out; finished in 0.31s
+

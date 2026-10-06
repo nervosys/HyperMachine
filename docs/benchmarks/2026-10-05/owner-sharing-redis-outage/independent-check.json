@@ -1,0 +1,8 @@
+{
+  "cases_passed": 13,
+  "inventory_empty": true,
+  "owned_directory_absent": true,
+  "all_seven_processes_waited": true,
+  "no_wake_independent_node_mtls": true,
+  "two_denials_below_eight_second_functional_deadline": true
+}

@@ -1,0 +1,25 @@
+   Compiling serde_json v1.0.151
+   Compiling tinytemplate v1.2.1
+   Compiling tracing-subscriber v0.3.23
+   Compiling criterion v0.5.1
+   Compiling hv2-core v1.1.0 (C:\Users\user\dev\nervosys\os\HyperMachine\crates\hv2-core)
+    Finished `test` profile [optimized + debuginfo] target(s) in 35.88s
+     Running unittests src\lib.rs (target\debug\deps\hv2_core-23a4f0be2fdf570c.exe)
+
+running 13 tests
+test security::audit_chain::tests::a_chain_written_under_another_key_does_not_verify ... ok
+test security::audit_chain::tests::an_untouched_chain_verifies ... ok
+test security::audit_chain::tests::a_record_spliced_in_from_another_chain_is_caught ... ok
+test security::audit_chain::tests::a_deletion_disguised_by_renumbering_is_caught ... ok
+test security::audit_chain::tests::an_edited_event_is_caught_where_it_was_edited ... ok
+test security::audit_chain::tests::a_deleted_record_is_caught ... ok
+test security::audit_chain::tests::key_order_and_value_encoding_do_not_break_verification ... ok
+test security::audit_chain::tests::swapped_records_are_caught ... ok
+test security::audit_chain::tests::fractional_request_timings_verify_after_json_round_trip ... ok
+test security::audit_chain::tests::a_file_chain_resumes_across_restarts_and_refuses_an_edited_one ... ok
+test security::audit_chain::tests::from_env_opens_only_what_was_asked_for_and_refuses_half_a_request ... ok
+test security::audit_chain::tests::exclusive_file_rejects_another_writer_and_resumes_after_drop ... ok
+test security::audit_chain::tests::exclusive_file_refuses_partial_and_oversized_records_without_extending_them ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 2332 filtered out; finished in 0.02s
+

@@ -1,0 +1,4740 @@
+//! Virtual Machine implementation
+//!
+//! This module provides the core VM abstraction including multi-vCPU
+//! parallel execution support using tokio tasks.
+
+use crate::hypervisor::VCpuDiagnostic;
+use crate::snapshot::device as snapshot_device;
+use crate::snapshot::file as snapshot_file;
+use crate::snapshot::vcpu::VCpuSnapshot;
+use crate::{
+    DeviceManager, Error, EventBus, GuestMemory, HypervisorBackend, IoDirection, Pic8259, Result,
+    VCpu, VmEvent, VmExit,
+};
+use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::{mpsc, Notify};
+use tokio::task::JoinHandle;
+
+/// VM state
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VMState {
+    Created,
+    Running,
+    Paused,
+    Stopped,
+    Error,
+}
+
+impl std::fmt::Display for VMState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Created => write!(f, "Created"),
+            Self::Running => write!(f, "Running"),
+            Self::Paused => write!(f, "Paused"),
+            Self::Stopped => write!(f, "Stopped"),
+            Self::Error => write!(f, "Error"),
+        }
+    }
+}
+
+/// VM configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VMConfig {
+    /// Human-readable name for this VM instance.
+    pub name: String,
+    /// Number of virtual CPUs to allocate.
+    pub vcpu_count: u32,
+    /// Total guest memory in bytes.
+    pub memory_size: u64,
+    /// Enable GPU virtualization for this VM.
+    pub enable_gpu: bool,
+    /// Enable network virtualization for this VM.
+    pub enable_networking: bool,
+    /// Enable tracing instrumentation for this VM.
+    pub enable_tracing: bool,
+    /// Enable parallel vCPU execution using multiple tokio tasks
+    #[serde(default = "default_parallel_vcpu")]
+    pub parallel_vcpu: bool,
+    /// vCPU affinity: map vCPU ID to host CPU core (optional)
+    #[serde(default)]
+    pub vcpu_affinity: Vec<(u32, usize)>,
+    /// Bind this VM's guest memory to a host NUMA node (optional). Pair with
+    /// `vcpu_affinity` cores on the same node for NUMA-local execution.
+    #[serde(default)]
+    pub memory_numa_node: Option<u32>,
+
+    /// What this VM boots — a Linux kernel, a Multiboot kernel, or a raw image.
+    ///
+    /// `None` creates a VM with vCPUs and empty guest memory. That is the right
+    /// shape for a caller that writes guest code itself (tests, unikernel
+    /// harnesses), but such a VM has nothing to execute until something does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boot: Option<crate::boot::source::BootSource>,
+
+    /// Refuse to show this VM any shared read-only region.
+    ///
+    /// Sharing one host allocation between guests is what makes a fleet of
+    /// agents over one model affordable -- see [`VM::attach_shared_rom`] -- and
+    /// it is also a channel between them. Two guests holding the same physical
+    /// pages can signal through the cache: one evicts a line, the other times
+    /// its own access to it and learns whether the first touched it. Read-only
+    /// mapping stops a guest writing to another's memory; it does not stop
+    /// this, because the channel is in the timing and not in the contents.
+    ///
+    /// Defaults to `false`, which preserves the sharing every existing caller
+    /// relies on. Set it on a host where two guests must not be able to reach
+    /// each other at all -- different tenants, different classifications --
+    /// and [`VM::attach_shared_rom`] will refuse rather than quietly
+    /// establishing the channel.
+    ///
+    /// Named for what it forbids rather than what it allows, so that the
+    /// stricter setting is the one that reads as `true` and a config review
+    /// sees which hosts have it.
+    #[serde(default)]
+    pub forbid_shared_memory: bool,
+}
+
+fn default_parallel_vcpu() -> bool {
+    true
+}
+
+impl VMConfig {
+    /// Validate the optional [`Self::vcpu_affinity`] map.
+    ///
+    /// Every entry must reference a vCPU that exists in this config and a host
+    /// core that exists on this machine, and no vCPU or host core may appear
+    /// twice. An empty map (the default) is always valid and leaves vCPU
+    /// scheduling to the host.
+    ///
+    /// This makes `vcpu_affinity` a *checked* input rather than silently-ignored
+    /// configuration. Enforcing the mapping at run time — pinning each vCPU
+    /// thread to its core — additionally requires running pinned vCPUs on
+    /// dedicated OS threads (see [`Self::affinity_for`]).
+    pub fn validate_affinity(&self) -> Result<()> {
+        if self.vcpu_affinity.is_empty() {
+            return Ok(());
+        }
+        let core_count = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
+        let mut seen_vcpus = std::collections::HashSet::new();
+        let mut seen_cores = std::collections::HashSet::new();
+        for &(vcpu, core) in &self.vcpu_affinity {
+            if vcpu >= self.vcpu_count {
+                return Err(Error::Config(format!(
+                    "vcpu_affinity references vCPU {vcpu}, but the VM has {} vCPU(s)",
+                    self.vcpu_count
+                )));
+            }
+            if core >= core_count {
+                return Err(Error::Config(format!(
+                    "vcpu_affinity pins vCPU {vcpu} to host core {core}, but only \
+                     {core_count} core(s) are available"
+                )));
+            }
+            if !seen_vcpus.insert(vcpu) {
+                return Err(Error::Config(format!(
+                    "vcpu_affinity maps vCPU {vcpu} more than once"
+                )));
+            }
+            if !seen_cores.insert(core) {
+                return Err(Error::Config(format!(
+                    "vcpu_affinity pins more than one vCPU to host core {core}"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// The host core a given vCPU is pinned to, if any.
+    pub fn affinity_for(&self, vcpu_id: u32) -> Option<usize> {
+        self.vcpu_affinity
+            .iter()
+            .find(|(id, _)| *id == vcpu_id)
+            .map(|(_, core)| *core)
+    }
+
+    /// Resolve the host NUMA node this VM's guest memory should be bound to.
+    ///
+    /// An explicit [`Self::memory_numa_node`] wins. Otherwise, if every pinned
+    /// core in [`Self::vcpu_affinity`] resolves to the *same* host NUMA node,
+    /// that node is used — so setting `vcpu_affinity` alone already yields
+    /// NUMA-local memory. Returns `None` (host-default placement) when there is
+    /// no affinity, the pinned cores span multiple nodes, or the host topology
+    /// cannot be queried.
+    pub fn resolve_memory_node(&self) -> Option<u32> {
+        if let Some(node) = self.memory_numa_node {
+            return Some(node);
+        }
+        if self.vcpu_affinity.is_empty() {
+            return None;
+        }
+        let mut resolved = None;
+        for &(_, core) in &self.vcpu_affinity {
+            // An unknown topology means we cannot promise NUMA locality, so
+            // fall back to host-default placement rather than guessing.
+            let node = crate::cpu_affinity::numa_node_for_core(core)?;
+            match resolved {
+                None => resolved = Some(node),
+                Some(existing) if existing == node => {}
+                Some(_) => return None, // cores span multiple nodes
+            }
+        }
+        resolved
+    }
+}
+
+impl Default for VMConfig {
+    fn default() -> Self {
+        Self {
+            name: "default".to_string(),
+            vcpu_count: 1,
+            memory_size: 1024 * 1024 * 1024, // 1GB
+            enable_gpu: false,
+            enable_networking: false,
+            enable_tracing: false,
+            parallel_vcpu: true,
+            vcpu_affinity: Vec::new(),
+            memory_numa_node: None,
+            boot: None,
+            forbid_shared_memory: false,
+        }
+    }
+}
+
+/// How long [`VM::stop`] waits for a launched execution loop to unwind before
+/// giving up on it. The loop checks the running flag once per VM exit, so this
+/// only elapses for a guest that has stopped exiting altogether.
+const RUN_LOOP_REAP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// How long [`VM::stop`] waits for a kicked vCPU thread to unwind.
+///
+/// A backstop, not the mechanism: a kicked vCPU leaves the guest in
+/// microseconds, so reaching this bound means the kick did not arrive and the
+/// thread is still inside `KVM_RUN`. Bounded so that failure is a warning and
+/// a returning `stop()` rather than a caller that never wakes up — which is
+/// the shape this defect had for the whole life of the crate.
+const VCPU_REAP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Message type for vCPU coordination
+#[derive(Debug)]
+enum VCpuMessage {
+    /// Stop the vCPU
+    Stop,
+    /// Pause the vCPU
+    Pause,
+    /// Resume the vCPU
+    Resume,
+    /// Inject an interrupt
+    Interrupt { vector: u8 },
+    /// Read architectural state on the execution owner between KVM_RUN calls.
+    Inspect {
+        reply: tokio::sync::oneshot::Sender<Result<VCpuDiagnostic>>,
+    },
+}
+
+/// vCPU execution statistics
+#[derive(Debug, Default)]
+pub struct VCpuStats {
+    /// Number of VM exits
+    pub exits: AtomicU64,
+    /// Time spent running (nanoseconds)
+    pub run_time_ns: AtomicU64,
+    /// Number of interrupts injected
+    pub interrupts: AtomicU64,
+    /// Number of MMIO exits
+    pub mmio_exits: AtomicU64,
+    /// Number of I/O exits
+    pub io_exits: AtomicU64,
+}
+
+impl VCpuStats {
+    #[inline]
+    pub fn exits(&self) -> u64 {
+        self.exits.load(Ordering::Relaxed)
+    }
+
+    #[inline]
+    pub fn run_time_ns(&self) -> u64 {
+        self.run_time_ns.load(Ordering::Relaxed)
+    }
+
+    #[inline]
+    pub fn interrupts(&self) -> u64 {
+        self.interrupts.load(Ordering::Relaxed)
+    }
+}
+
+/// State for a running vCPU task
+struct VCpuTaskState {
+    /// Channel to send commands to the vCPU
+    tx: mpsc::Sender<VCpuMessage>,
+    /// Join handle for the task
+    handle: JoinHandle<Result<()>>,
+}
+
+/// The [`InterruptSink`](crate::device::InterruptSink) a VM hands its devices.
+///
+/// A device raises into a queue rather than delivering directly, for two
+/// reasons: raising must not block, because it happens inside device code that
+/// may hold a lock the handler will want; and delivery needs the backend and
+/// an async context, which device code has neither of.
+#[derive(Debug)]
+struct QueuedInterrupts {
+    sender: tokio::sync::mpsc::UnboundedSender<(u8, IrqLevel)>,
+}
+
+/// What a queued interrupt asks the backend to do with the line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IrqLevel {
+    /// Assert and release, in that order.
+    Pulse,
+    /// Assert and hold, until a `Low` follows.
+    High,
+    /// Release a line held by a `High`.
+    Low,
+}
+
+impl crate::device::InterruptSink for QueuedInterrupts {
+    fn raise(&self, irq: u8) {
+        // A closed channel means the VM is gone. Nothing useful can be done
+        // about an interrupt for a VM that has stopped, and panicking inside a
+        // device because the machine shut down would be worse than dropping
+        // it, so this is deliberately quiet.
+        let _ = self.sender.send((irq, IrqLevel::Pulse));
+    }
+
+    fn assert_line(&self, irq: u8) {
+        let sent = self.sender.send((irq, IrqLevel::High)).is_ok();
+        tracing::trace!("queued IRQ {irq} high, sent={sent}");
+    }
+
+    fn deassert_line(&self, irq: u8) {
+        let sent = self.sender.send((irq, IrqLevel::Low)).is_ok();
+        tracing::trace!("queued IRQ {irq} low, sent={sent}");
+    }
+}
+
+/// Tells the delivery thread that a vsock packet is waiting for the guest.
+///
+/// The same shape and the same reason as [`QueuedInterrupts`]: the device
+/// cannot deliver its own packets, and the thread that can must not be woken
+/// from inside the device lock.
+#[derive(Debug)]
+struct QueuedPackets {
+    sender: std::sync::mpsc::Sender<()>,
+}
+
+impl crate::devices::virtio_vsock::PendingWake for QueuedPackets {
+    fn wake(&self) {
+        // A closed channel means the VM is gone; nothing useful follows from
+        // delivering a packet to a machine that has stopped.
+        let _ = self.sender.send(());
+    }
+}
+
+/// Write guest memory as a raw image of `total` bytes at `path`: every byte
+/// at its offset in the host buffer backing RAM -- its guest-physical address
+/// below the hole at 3 GiB, less the hole's size above it (see
+/// `crate::memory::ram_ranges`) -- with holes where a page is all zero. That
+/// is the layout an image is mapped over the buffer in.
+///
+/// Sparse because most of a guest is zero, and a hole costs nothing on disk
+/// and reads as zero -- through `read` or through a mapping.
+fn write_memory_image(
+    memory: &crate::memory::GuestMemory,
+    regions: &[snapshot_file::RegionRecord],
+    total: u64,
+    path: &std::path::Path,
+) -> Result<()> {
+    use std::io::{Seek, SeekFrom, Write};
+
+    let file = snapshot_file::create_new(path)?;
+    file.set_len(total)
+        .map_err(|e| Error::Config(format!("sizing {}: {e}", path.display())))?;
+    let mut out = std::io::BufWriter::with_capacity(1 << 20, file);
+    let page_size = snapshot_file::PAGE_SIZE;
+    let mut page = vec![0u8; page_size as usize];
+    // Where the writer's cursor is, so consecutive pages are one sequential
+    // write rather than a seek each.
+    let mut cursor = u64::MAX;
+    for region in regions.iter().filter(|r| !r.readonly) {
+        let Some(base) = memory
+            .host_offset(region.guest_addr)
+            .filter(|b| b + region.size <= total)
+        else {
+            return Err(Error::InvalidState(format!(
+                "region at {:#x} ({} bytes) lies outside a {total}-byte image",
+                region.guest_addr, region.size
+            )));
+        };
+        let mut at = 0u64;
+        while at < region.size {
+            let take = (page_size as usize).min((region.size - at) as usize);
+            memory.read_bytes_into(region.guest_addr + at, &mut page[..take])?;
+            if page[..take].iter().any(|byte| *byte != 0) {
+                let offset = base + at;
+                if cursor != offset {
+                    out.seek(SeekFrom::Start(offset))
+                        .map_err(|e| Error::Config(format!("seeking {}: {e}", path.display())))?;
+                }
+                out.write_all(&page[..take])
+                    .map_err(|e| Error::Config(format!("writing {}: {e}", path.display())))?;
+                cursor = offset + take as u64;
+            }
+            at += page_size;
+        }
+    }
+    out.flush()
+        .map_err(|e| Error::Config(format!("finishing {}: {e}", path.display())))?;
+    Ok(())
+}
+
+/// Where a snapshot puts guest memory.
+#[derive(Debug, PartialEq, Eq)]
+enum MemoryLayout {
+    /// Nonzero pages, in the snapshot file.
+    Inline,
+    /// A raw image beside the snapshot, for mapping.
+    Image,
+    /// Pages written since this base image was mapped, in the snapshot file.
+    Layered(std::path::PathBuf),
+}
+
+/// Which pages of guest memory the guest has written since its memory was
+/// mapped from an image, one bit per page as a snapshot's page map counts.
+///
+/// Asked of the host kernel rather than found by comparing against the
+/// image: a private file mapping's page is file-backed until it is written
+/// and anonymous after, and `/proc/self/pagemap` says which each is -- bit 61
+/// set for a file page, bit 63 for present, bit 62 for swapped out. A page
+/// that is neither present nor swapped was never touched. Reading 8 bytes a
+/// page from the kernel is far cheaper than reading 4096 from each of two
+/// places and comparing them.
+fn written_pages(
+    memory: &crate::memory::GuestMemory,
+    regions: &[snapshot_file::RegionRecord],
+    total_pages: u64,
+) -> Result<snapshot_file::PageMap> {
+    pages_where(memory, regions, total_pages, |entry| {
+        entry & (PAGEMAP_PRESENT | PAGEMAP_SWAPPED) != 0 && entry & PAGEMAP_FILE_PAGE == 0
+    })
+}
+
+/// Which pages of guest memory have been touched at all -- read or written,
+/// so mapped on the host -- since the memory was mapped.
+fn touched_pages(
+    memory: &crate::memory::GuestMemory,
+    regions: &[snapshot_file::RegionRecord],
+    total_pages: u64,
+) -> Result<snapshot_file::PageMap> {
+    pages_where(memory, regions, total_pages, |entry| {
+        entry & (PAGEMAP_PRESENT | PAGEMAP_SWAPPED) != 0
+    })
+}
+
+const PAGEMAP_PRESENT: u64 = 1 << 63;
+const PAGEMAP_SWAPPED: u64 = 1 << 62;
+const PAGEMAP_FILE_PAGE: u64 = 1 << 61;
+
+/// The pages of guest memory whose `/proc/self/pagemap` entry satisfies
+/// `want`, one bit per page as a snapshot's page map counts them.
+#[cfg(target_os = "linux")]
+fn pages_where(
+    memory: &crate::memory::GuestMemory,
+    regions: &[snapshot_file::RegionRecord],
+    total_pages: u64,
+    want: impl Fn(u64) -> bool,
+) -> Result<snapshot_file::PageMap> {
+    use std::os::unix::fs::FileExt;
+
+    let page_size = snapshot_file::PAGE_SIZE;
+    // SAFETY: sysconf has no preconditions.
+    let host_page = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+    if u64::try_from(host_page).ok() != Some(page_size) {
+        return Err(Error::Config(format!(
+            "a layered snapshot assumes {page_size}-byte host pages, and this host's are \
+             {host_page}"
+        )));
+    }
+    let pagemap = std::fs::File::open("/proc/self/pagemap")
+        .map_err(|e| Error::Config(format!("opening /proc/self/pagemap: {e}")))?;
+    let mut written = snapshot_file::PageMap::empty(total_pages);
+    let mut index = 0u64;
+    let mut entries = Vec::new();
+    for region in regions.iter().filter(|r| !r.readonly) {
+        let host = memory.translate(region.guest_addr)?;
+        if host % page_size != 0 {
+            return Err(Error::InvalidState(format!(
+                "guest memory at {:#x} is not page-aligned on the host",
+                region.guest_addr
+            )));
+        }
+        let pages = region.size.div_ceil(page_size);
+        entries.resize(usize::try_from(pages * 8).unwrap_or(usize::MAX), 0u8);
+        pagemap
+            .read_exact_at(&mut entries, host / page_size * 8)
+            .map_err(|e| Error::Config(format!("reading /proc/self/pagemap: {e}")))?;
+        for entry in entries.as_chunks::<8>().0 {
+            if want(u64::from_le_bytes(*entry)) {
+                written.set(index);
+            }
+            index += 1;
+        }
+    }
+    Ok(written)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn pages_where(
+    _memory: &crate::memory::GuestMemory,
+    _regions: &[snapshot_file::RegionRecord],
+    _total_pages: u64,
+    _want: impl Fn(u64) -> bool,
+) -> Result<snapshot_file::PageMap> {
+    Err(Error::Config(
+        "reading which guest pages the host has mapped needs /proc/self/pagemap, which only          Linux has"
+            .into(),
+    ))
+}
+
+/// Tells the delivery thread that a frame is waiting for the guest.
+///
+/// The same shape and the same reason as [`QueuedPackets`].
+#[derive(Debug)]
+struct QueuedFrames {
+    sender: std::sync::mpsc::Sender<()>,
+}
+
+impl crate::devices::virtio_net_mmio::FrameWake for QueuedFrames {
+    fn wake(&self) {
+        let _ = self.sender.send(());
+    }
+}
+
+/// What one I/O access produced.
+///
+/// Two separate things, and conflating them is how a device interrupt gets
+/// dropped: the data an `IN` read, and the interrupt line the device is
+/// asserting as a result of the access.
+#[derive(Debug, Default)]
+pub struct IoOutcome {
+    /// Data and width to write back to the guest, for an `IN`.
+    pub input: Option<(u32, u8)>,
+    /// The interrupt line the device is asserting, if any.
+    pub interrupt: Option<u8>,
+}
+
+/// Virtual Machine
+pub struct VM {
+    config: VMConfig,
+    state: Arc<RwLock<VMState>>,
+    vcpus: Vec<Arc<VCpu>>,
+    memory: Arc<GuestMemory>,
+    devices: Arc<DeviceManager>,
+    /// Kernel command-line arguments added by devices attached after the boot
+    /// source was written down.
+    ///
+    /// A vsock window does not exist when a caller describes how to boot, so
+    /// the argument that tells the guest where to find it cannot be there
+    /// either. Applied in `provision`, where the image is loaded.
+    extra_cmdline: parking_lot::Mutex<Vec<String>>,
+    /// Interrupts devices raised on their own, waiting to be delivered.
+    ///
+    /// Taken by [`VM::launch`], which spawns the task that drains it, and
+    /// `None` afterwards so a second launch cannot start a second drainer
+    /// competing for the same queue.
+    interrupt_queue:
+        parking_lot::Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<(u8, IrqLevel)>>>,
+    pic: Arc<Pic8259>,
+    backend: Arc<dyn HypervisorBackend>,
+    exit_notify: Arc<Notify>,
+    event_bus: EventBus,
+    /// Running state flag shared with vCPU tasks
+    running: Arc<AtomicBool>,
+    /// Per-vCPU statistics
+    vcpu_stats: Vec<Arc<VCpuStats>>,
+    /// vCPU task handles (only populated when running in parallel mode)
+    vcpu_tasks: RwLock<Vec<VCpuTaskState>>,
+    /// Backend VM handle (partition / VM fd), created by [`VM::provision`].
+    ///
+    /// Held for the VM's lifetime: dropping it would tear down the backend's
+    /// partition out from under the running vCPUs.
+    hv_vm: RwLock<Option<crate::hypervisor::HypervisorVm>>,
+    /// The background execution loop spawned by [`VM::launch`], if any.
+    run_task: RwLock<Option<JoinHandle<Result<()>>>>,
+    /// Image allowlist consulted by [`VM::provision`], if installed.
+    ///
+    /// `None` — the default — admits any readable boot image, which is what
+    /// every caller before this expected. Install one with
+    /// [`VM::set_image_registry`] to make a denied or revoked image fail to
+    /// provision rather than merely be queryable.
+    image_registry: RwLock<Option<Arc<crate::security::image_registry::ImageRegistry>>>,
+    /// Shared read-only regions this VM has been shown, held so that none can
+    /// be unmapped while a guest is reading it.
+    shared_roms: RwLock<Vec<Arc<crate::shared_rom::SharedRom>>>,
+
+    /// The vsock device attached by [`VM::attach_vsock`], if any.
+    ///
+    /// Held here because the host side of a vsock connection is reached from
+    /// outside the device manager — an agent opening a channel to a program in
+    /// the guest needs the device itself, not an MMIO handle.
+    vsock: RwLock<Option<AttachedVsock>>,
+    /// The network device attached by [`VM::attach_net`], if any.
+    ///
+    /// Held for the same reason `vsock` is: the host side of a link is reached
+    /// from outside the device manager. Something has to take the frames the
+    /// guest transmits and hand it the ones addressed to it, and that
+    /// something needs the device, not an MMIO handle.
+    net: RwLock<Option<AttachedNet>>,
+    /// The raw image guest RAM is a private mapping of, when a restore mapped
+    /// one. What [`Self::snapshot_layered`] records only the difference from.
+    memory_base: parking_lot::Mutex<Option<std::path::PathBuf>>,
+    /// The PCI root complex the guest reads through the 0xCF8 window.
+    ///
+    /// Held here rather than inside the machine model because attaching a PCI
+    /// device means adding its configuration space to the same root complex
+    /// the guest enumerates, and there is no way to reach one the model built
+    /// for itself.
+    pci_root: Arc<parking_lot::RwLock<crate::pci::PciRootComplex>>,
+}
+
+/// A network device and where the guest will find it.
+///
+/// The same shape as [`AttachedVsock`] and for the same reason: the address
+/// travels with the device because the kernel argument has to name the window
+/// that was actually mapped.
+#[derive(Clone)]
+struct AttachedNet {
+    device: Arc<parking_lot::Mutex<crate::devices::virtio_net_mmio::VirtioNetMmio>>,
+    /// Kept so the host side can signal the used queue after it publishes.
+    transport: Arc<tokio::sync::RwLock<crate::devices::VirtioMmioTransport>>,
+    base_address: u64,
+    irq: u8,
+}
+
+/// A vsock device and where the guest will find it.
+///
+/// The address travels with the device because the kernel arguments have to
+/// name the window that was actually mapped; a VM attached at a non-default
+/// address would otherwise tell its guest to probe the default one.
+#[derive(Clone)]
+struct AttachedVsock {
+    device: Arc<parking_lot::Mutex<crate::devices::virtio_vsock::VsockDevice>>,
+    /// Kept so the host side can signal the used queue after it publishes.
+    ///
+    /// The device cannot do it itself: the interrupt belongs to the transport,
+    /// which owns the status bits a driver reads to find out why it woke.
+    transport: VsockTransport,
+    base_address: u64,
+    irq: u8,
+}
+
+/// Which transport a vsock device is attached through.
+///
+/// The device is the same either way -- `VsockDevice` implements
+/// `VirtioMmioDevice`, whose name is historical rather than descriptive -- and
+/// the only thing the host side asks of a transport is that it can raise the
+/// used-queue interrupt after publishing.
+enum VsockTransport {
+    /// Found by the guest because the address was put on the kernel command
+    /// line. Needs `CONFIG_VIRTIO_MMIO_CMDLINE_DEVICES`.
+    Mmio(Arc<tokio::sync::RwLock<crate::devices::VirtioMmioTransport>>),
+    /// Found by the guest enumerating its PCI bus, with no command line
+    /// argument and nothing the kernel has to have been built for.
+    Pci(Arc<tokio::sync::RwLock<crate::devices::virtio_pci::VirtioPciTransport>>),
+}
+
+impl Clone for VsockTransport {
+    /// Both variants are handles, so a clone shares the transport rather than
+    /// copying it. Derived `Clone` would demand `Clone` on the transports
+    /// themselves, which they are not.
+    fn clone(&self) -> Self {
+        match self {
+            Self::Mmio(t) => Self::Mmio(Arc::clone(t)),
+            Self::Pci(t) => Self::Pci(Arc::clone(t)),
+        }
+    }
+}
+
+impl VsockTransport {
+    async fn signal_used_queue(&self) -> Result<()> {
+        match self {
+            Self::Mmio(t) => t.read().await.signal_used_queue(),
+            Self::Pci(t) => t.read().await.signal_used_queue(),
+        }
+    }
+}
+
+impl VM {
+    /// Create a new VM with the given configuration
+    pub fn new(config: VMConfig) -> Result<Self> {
+        // Validate configuration
+        if config.vcpu_count == 0 {
+            return Err(Error::Config("vCPU count must be > 0".to_string()));
+        }
+
+        if config.memory_size == 0 {
+            return Err(Error::Config("Memory size must be > 0".to_string()));
+        }
+
+        // Create hypervisor backend
+        let backend = Arc::from(crate::hypervisor::create_backend()?);
+
+        Self::new_with_backend(config, backend)
+    }
+
+    /// Create a new VM with a custom hypervisor backend
+    ///
+    /// This is primarily used for testing with mock backends.
+    pub fn new_with_backend(config: VMConfig, backend: Arc<dyn HypervisorBackend>) -> Result<Self> {
+        // Validate configuration
+        if config.vcpu_count == 0 {
+            return Err(Error::Config("vCPU count must be > 0".to_string()));
+        }
+
+        if config.memory_size == 0 {
+            return Err(Error::Config("Memory size must be > 0".to_string()));
+        }
+
+        // Reject a malformed vCPU affinity map instead of silently ignoring it.
+        config.validate_affinity()?;
+
+        // Reject a memory NUMA node that does not exist on this host.
+        if let Some(node) = config.memory_numa_node {
+            let node_count = crate::cpu_affinity::numa_node_count();
+            if node >= node_count {
+                return Err(Error::Config(format!(
+                    "memory_numa_node {node} does not exist (host has {node_count} NUMA node(s))"
+                )));
+            }
+        }
+
+        // Create vCPUs
+        let vcpus: Vec<Arc<VCpu>> = (0..config.vcpu_count)
+            .map(|id| Arc::new(VCpu::new(id)))
+            .collect();
+
+        // Create guest memory, bound to the resolved host NUMA node — explicit
+        // when set, otherwise derived from the pinned cores' node.
+        let memory = Arc::new(GuestMemory::new_on_node(
+            config.memory_size,
+            config.resolve_memory_node(),
+        )?);
+
+        // Initialize main memory region
+        memory.allocate_ram()?;
+
+        // Create device manager
+        let devices = Arc::new(DeviceManager::new());
+
+        // Installed before any device can be registered, so every device has a
+        // way to raise an interrupt while the guest is not touching it.
+        let (interrupt_tx, interrupt_rx) = tokio::sync::mpsc::unbounded_channel();
+        devices.set_interrupt_sink(Arc::new(QueuedInterrupts {
+            sender: interrupt_tx,
+        }));
+
+        // Create PIC (Intel 8259)
+        let pic = Arc::new(Pic8259::new());
+
+        let event_bus = EventBus::default();
+
+        // Create per-vCPU statistics
+        let vcpu_stats = (0..config.vcpu_count)
+            .map(|_| Arc::new(VCpuStats::default()))
+            .collect();
+
+        Ok(Self {
+            config,
+            state: Arc::new(RwLock::new(VMState::Created)),
+            vcpus,
+            memory,
+            devices,
+            extra_cmdline: parking_lot::Mutex::new(Vec::new()),
+            pci_root: Arc::new(parking_lot::RwLock::new(crate::pci::PciRootComplex::new())),
+            interrupt_queue: parking_lot::Mutex::new(Some(interrupt_rx)),
+            pic,
+            backend,
+            exit_notify: Arc::new(Notify::new()),
+            event_bus,
+            running: Arc::new(AtomicBool::new(false)),
+            vcpu_stats,
+            vcpu_tasks: RwLock::new(Vec::new()),
+            hv_vm: RwLock::new(None),
+            run_task: RwLock::new(None),
+            image_registry: RwLock::new(None),
+            shared_roms: RwLock::new(Vec::new()),
+            vsock: RwLock::new(None),
+            net: RwLock::new(None),
+            memory_base: parking_lot::Mutex::new(None),
+        })
+    }
+
+    /// Get VM configuration
+    pub fn config(&self) -> &VMConfig {
+        &self.config
+    }
+
+    /// Get VM state
+    pub fn state(&self) -> VMState {
+        *self.state.read()
+    }
+
+    /// Provision this VM on its hypervisor backend and load its boot source.
+    ///
+    /// This is the step that turns a configured VM into one the hardware knows
+    /// about: it creates the backend's partition (WHPX) or VM file descriptor
+    /// (KVM) along with the backing vCPUs, then — if [`VMConfig::boot`] names a
+    /// boot source — reads the images, writes them into guest physical memory,
+    /// and leaves vCPU 0 at the entry point with the architectural state the
+    /// boot protocol requires.
+    ///
+    /// Calling it more than once is a no-op, so [`VM::start`] and [`VM::launch`]
+    /// can both call it without coordinating.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend cannot create the VM, if a boot image is
+    /// missing or malformed, if the images do not fit in guest memory, or if
+    /// the backend does not support the configured boot protocol.
+    pub async fn provision(&self) -> Result<()> {
+        self.provision_inner(true).await
+    }
+
+    /// [`Self::provision`], loading the boot image only if `load_boot`.
+    ///
+    /// A VM about to be restored from a snapshot needs everything provisioning
+    /// attaches -- the legacy PC devices a booted guest had -- and not the
+    /// kernel: its memory is replaced before it runs, so reading and copying
+    /// the image is work thrown away. Measured at 15 ms of a 60 ms restore.
+    async fn provision_inner(&self, load_boot: bool) -> Result<()> {
+        if self.hv_vm.read().is_some() {
+            return Ok(());
+        }
+
+        // Resolve, admit, and size-check the boot image *before* the backend is
+        // asked for anything. Refusing a disallowed image after a partition
+        // exists would allocate hypervisor resources for a VM that was never
+        // going to run — and would hide the refusal behind whatever the backend
+        // happened to say first.
+        let boot = match &self.config.boot {
+            Some(source) if load_boot => {
+                let mut loaded = source.load()?;
+
+                // The kernel's memory map is built from this and has no other
+                // source: a guest booted this way runs no BIOS to ask.
+                loaded.set_memory_size(self.config.memory_size);
+
+                // Devices attached after the boot source was described get
+                // their arguments on now. Without this a caller has to attach a
+                // device, ask what argument it needs, and go back and rewrite
+                // the command line -- and a caller who forgets gets a guest
+                // that boots perfectly and enumerates nothing, which reads as
+                // a broken device rather than a missing argument.
+                for arg in self.extra_cmdline.lock().iter() {
+                    loaded.append_cmdline(arg);
+                }
+
+                self.admit_boot_image(&loaded)?;
+
+                let needed = loaded.highest_address()?;
+                if needed > self.config.memory_size {
+                    return Err(Error::Config(format!(
+                        "boot images need guest memory up to {:#x} but VM '{}' has only {:#x}",
+                        needed, self.config.name, self.config.memory_size
+                    )));
+                }
+                Some(loaded)
+            }
+            _ => None,
+        };
+
+        // A VM with a kernel to boot needs the legacy PC set, and until this
+        // ran here nothing attached it except the boot probe, by hand. So a VM
+        // created through a host had no console, no CMOS and no keyboard
+        // controller -- which is not a degraded guest but one that cannot reach
+        // userspace at all: its output goes nowhere and it spins on the first
+        // absent port it polls. Whatever the guest channel does, no agent can
+        // run in a guest that never gets that far.
+        //
+        // Only when there is something to boot. A VM with no boot source runs
+        // no guest code, and three emulated devices nothing will ever address
+        // are cost without a reader.
+        //
+        // `attach_absent` rather than `attach`: a caller who installed their
+        // own machine model before provisioning keeps it, and is not refused
+        // for having done the thing this is a default for.
+        if self.config.boot.is_some() {
+            crate::machine::Machine::legacy_pc_with_pci_root(Arc::clone(&self.pci_root))
+                .attach_absent(&self.devices)
+                .await?;
+        }
+
+        // A boot source on a backend that cannot execute is the one case where
+        // everything below succeeds and the guest still never runs. Say so here
+        // rather than leaving it to be inferred from a Running VM that produces
+        // no output.
+        if self.config.boot.is_some() && !self.backend.executes_guest_code() {
+            tracing::warn!(
+                "VM {} on the {} backend: guest code will not execute, so the loaded image will not run. Use KVM, WHPX or HVF to boot it.",
+                self.config.name,
+                self.backend.platform(),
+            );
+        }
+
+        let hv_vm = self
+            .backend
+            .create_vm(self.config.vcpu_count, self.config.memory_size)
+            .await?;
+
+        // The backend allocated the pages the guest actually runs in. Point the
+        // device model at them before anything is loaded or attached: until
+        // this happens every emulated device reads a buffer the guest never
+        // touches, and nothing says so, because the boot path writes through
+        // the backend and the guest boots either way.
+        if let Some(host_addr) = self.backend.guest_memory_host_addr() {
+            self.memory.adopt_backend_pages(host_addr)?;
+            tracing::debug!(
+                "VM '{}': device model now shares the backend's guest pages at {host_addr:#x}",
+                self.config.name
+            );
+        }
+
+        tracing::info!(
+            "Provisioned VM '{}' on the {} backend ({} vCPUs, {} MiB)",
+            self.config.name,
+            self.backend.platform(),
+            self.config.vcpu_count,
+            self.config.memory_size / (1024 * 1024),
+        );
+
+        if let Some(loaded) = boot {
+            let boot_vcpu = &self.vcpus[0];
+            self.backend.load_boot(boot_vcpu, &loaded).await?;
+
+            // Backends that keep no vCPU state of their own (TCG, mocks) read
+            // the shared `VCpu`, so the entry point has to land there too.
+            let mut regs = boot_vcpu.registers();
+            regs.rip = loaded.entry_point()?;
+            boot_vcpu.set_registers(regs);
+
+            tracing::info!(
+                "VM '{}': loaded {} boot image ({} bytes), entry {:#x}",
+                self.config.name,
+                loaded.protocol(),
+                loaded.image_bytes(),
+                loaded.entry_point()?,
+            );
+        }
+
+        *self.hv_vm.write() = Some(hv_vm);
+        Ok(())
+    }
+
+    /// Refuse a boot image the installed registry does not admit.
+    ///
+    /// With no registry installed this is a no-op, which is the default and
+    /// preserves the behaviour every existing caller relies on.
+    fn admit_boot_image(&self, loaded: &crate::boot::source::LoadedBoot) -> Result<()> {
+        use crate::security::image_registry::AdmissionDecision;
+
+        let Some(registry) = self.image_registry.read().clone() else {
+            return Ok(());
+        };
+
+        // Identify the bytes about to be loaded, not the path they came from.
+        // A digest we cannot compute is a denial, never a pass: an enforcement
+        // point that fails open is not one.
+        let digest = loaded.primary_image_digest()?;
+
+        match registry.check_admission_by_digest(&digest) {
+            AdmissionDecision::Allowed => Ok(()),
+            AdmissionDecision::AllowedWithWarning(warning) => {
+                tracing::warn!("VM '{}': {}", self.config.name, warning);
+                Ok(())
+            }
+            AdmissionDecision::Denied(reason) => Err(Error::PermissionDenied(format!(
+                "VM '{}': boot image rejected by the image registry: {reason}",
+                self.config.name
+            ))),
+        }
+    }
+
+    /// Gate this VM's boot images on an image allowlist.
+    ///
+    /// Without one — the default — any readable image boots. With one, a VM
+    /// refuses to provision unless the registry admits the digest of the kernel
+    /// (or raw image) it is about to load.
+    pub fn set_image_registry(
+        &self,
+        registry: Arc<crate::security::image_registry::ImageRegistry>,
+    ) {
+        *self.image_registry.write() = Some(registry);
+    }
+
+    /// The installed image registry, if any.
+    pub fn image_registry(&self) -> Option<Arc<crate::security::image_registry::ImageRegistry>> {
+        self.image_registry.read().clone()
+    }
+
+    /// Whether this VM backend actually executes guest instructions.
+    ///
+    /// `false` on the TCG fallback. A VM can still be created, provisioned
+    /// and started there; it simply will not run a guest, which is worth
+    /// being able to report rather than discover.
+    pub fn executes_guest_code(&self) -> bool {
+        self.backend.executes_guest_code()
+    }
+
+    /// Whether this VM has been provisioned on its backend.
+    pub fn is_provisioned(&self) -> bool {
+        self.hv_vm.read().is_some()
+    }
+
+    /// Provision, start, and begin executing this VM in the background.
+    ///
+    /// This is the whole-VM entry point a CLI or API handler wants: on return
+    /// the guest is running, and the execution loop continues on a spawned task
+    /// until [`VM::stop`] is called or the guest shuts down.
+    ///
+    /// Use [`VM::run`] instead when you want to own the execution loop and
+    /// await it yourself.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if provisioning fails or the VM is not in a startable
+    /// state. Failures *inside* the execution loop surface through
+    /// [`VM::stop`], which awaits the loop and propagates its result.
+    pub async fn launch(self: &Arc<Self>) -> Result<()> {
+        self.provision().await?;
+        self.start_in_background().await
+    }
+
+    /// Start a provisioned VM and run it on a background task: everything
+    /// [`Self::launch`] does after provisioning.
+    async fn start_in_background(self: &Arc<Self>) -> Result<()> {
+        self.start().await?;
+
+        // Drain self-raised device interrupts for as long as the VM runs.
+        //
+        // Separate from the vCPU loop on purpose: that loop spends most of its
+        // time blocked inside KVM_RUN, which is exactly when a device needs to
+        // be able to interrupt. Delivering from there would mean an interrupt
+        // could only arrive once the guest had already exited for some other
+        // reason -- which is the limitation this replaces.
+        if let Some(mut queue) = self.interrupt_queue.lock().take() {
+            // Weak, like every delivery thread here: the sender this thread
+            // waits on lives in a device the VM owns, so a strong reference
+            // made a cycle -- the VM could never be dropped, and every VM
+            // ever started kept its guest memory until the process exited.
+            // Found measuring per-sandbox memory: deleting sandboxes freed
+            // nothing. With a weak one, dropping the VM drops its devices,
+            // the sender goes with them, and this loop ends.
+            let vm = Arc::downgrade(self);
+            let handle = tokio::runtime::Handle::current();
+
+            // A dedicated OS thread, not a task on this runtime, and the
+            // reason is a deadlock rather than a preference.
+            //
+            // The vCPU loop calls `KVM_RUN`, which is a blocking ioctl: while
+            // the guest is running it does not return, and while the guest is
+            // *idle* it does not return for a long time, because KVM halts the
+            // vCPU in the kernel and waits there for an interrupt. As a task,
+            // that occupies a runtime worker for the whole of it.
+            //
+            // Deliver interrupts from another task on the same runtime and the
+            // two can meet in the middle: the guest is halted waiting for an
+            // interrupt, and the interrupt that would wake it is sitting in a
+            // queue behind a worker the guest itself is occupying. Nothing
+            // breaks -- the guest wakes on the next timer tick or console byte
+            // and finds the data that was there all along -- so it presents as
+            // latency of seconds, intermittently, which is a much harder thing
+            // to see than a hang.
+            std::thread::Builder::new()
+                .name(format!("hv2-irq-{}", self.config.name))
+                .spawn(move || {
+                    while let Some((irq, level)) = queue.blocking_recv() {
+                        let Some(vm) = vm.upgrade() else { break };
+                        handle.block_on(async {
+                            match level {
+                                IrqLevel::Pulse => {
+                                    Self::pulse_irq(vm.backend.as_ref(), irq).await;
+                                }
+                                IrqLevel::High => {
+                                    Self::set_irq(vm.backend.as_ref(), irq, true).await;
+                                }
+                                IrqLevel::Low => {
+                                    Self::set_irq(vm.backend.as_ref(), irq, false).await;
+                                }
+                            }
+                        });
+                    }
+                })
+                .map_err(|e| {
+                    Error::Config(format!(
+                        "could not start the interrupt delivery thread: {e}"
+                    ))
+                })?;
+        }
+
+        let vm = Arc::clone(self);
+        let queued_at = std::time::Instant::now();
+        let handle = tokio::spawn(async move {
+            tracing::debug!(target: "hv2_core::cold_dispatch", vm = %vm.config.name,
+                dispatch_queue_ms = queued_at.elapsed().as_secs_f64() * 1000.0,
+                "VM background dispatch");
+            match vm.run().await {
+                // A `stop()` that lands before the spawned loop is scheduled
+                // leaves it starting against a VM that is already stopped.
+                // That is the stop working, not a failure to report.
+                Err(Error::InvalidState(reason)) if vm.state() != VMState::Running => {
+                    tracing::debug!(
+                        "VM '{}' stopped before its loop ran: {reason}",
+                        vm.config.name
+                    );
+                    Ok(())
+                }
+                other => other,
+            }
+        });
+        *self.run_task.write() = Some(handle);
+
+        Ok(())
+    }
+
+    /// Step the guest one instruction at a time and report where it went.
+    ///
+    /// For a guest that produces nothing: it either faulted before it could,
+    /// or it is looping without ever exiting, and neither says anything on its
+    /// own. The trace ends at the first exit that is not a debug exit, and
+    /// `tail` holds the addresses leading up to it.
+    ///
+    /// Requires a provisioned VM and does not start the run loop -- this drives
+    /// the vCPU directly, so nothing else may be running it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InvalidState`] if the VM has not been provisioned, and
+    /// [`Error::NotSupported`] on a backend that cannot single-step.
+    pub async fn single_step_trace(
+        &self,
+        max_steps: u64,
+    ) -> Result<crate::hypervisor::SingleStepTrace> {
+        if self.hv_vm.read().is_none() {
+            return Err(Error::InvalidState(
+                "provision the VM before tracing it; there is no vCPU to step yet".into(),
+            ));
+        }
+        self.backend
+            .single_step_trace(&self.vcpus[0], max_steps)
+            .await
+    }
+
+    /// Start the VM
+    pub async fn start(&self) -> Result<()> {
+        let old_state = {
+            let mut state = self.state.write();
+
+            if *state != VMState::Created && *state != VMState::Stopped {
+                return Err(Error::InvalidState(format!(
+                    "Cannot start VM in state {:?}",
+                    *state
+                )));
+            }
+
+            let old = *state;
+            *state = VMState::Running;
+            old
+        };
+
+        // Set running flag
+        self.running.store(true, Ordering::SeqCst);
+
+        tracing::info!(
+            "Starting VM '{}' with {} vCPUs and {} GB memory (parallel={})",
+            self.config.name,
+            self.config.vcpu_count,
+            self.config.memory_size / (1024 * 1024 * 1024),
+            self.config.parallel_vcpu
+        );
+
+        // Emit state change event
+        self.event_bus.publish(VmEvent::state_changed(
+            self.config.name.clone(),
+            old_state,
+            VMState::Running,
+        ));
+
+        Ok(())
+    }
+
+    /// Suspend the guest, leaving it able to continue.
+    ///
+    /// Every vCPU is told to pause and then kicked out of `KVM_RUN`, because a
+    /// thread blocked in that ioctl never reaches the top of its loop to read
+    /// the message -- the same reason [`Self::stop`] kicks, and the reason
+    /// `stop()` once never returned for any guest.
+    ///
+    /// Returns once the message is sent and the kick delivered, not once every
+    /// vCPU has actually parked. A vCPU reaches its park a moment later, when
+    /// `KVM_RUN` returns; waiting for that would mean waiting on a thread that
+    /// may be mid-exit for an unrelated reason.
+    ///
+    /// # What this used to do
+    ///
+    /// It called `VCpu::pause`, which requires the vCPU be in
+    /// `VCpuState::Running` -- a state nothing in this repository has ever
+    /// written. So it failed on the first vCPU for every VM, and no VM was
+    /// ever paused. The machinery it needed was already here: the vCPU loop
+    /// has handled `VCpuMessage::Pause` by parking on its channel since it was
+    /// written, and nothing sent that message.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the VM is not running. A vCPU that cannot be kicked
+    /// is logged rather than failing the call: the message is still queued,
+    /// and the vCPU reads it at its next exit.
+    /// Write this VM -- its memory and its vCPUs -- to a file.
+    ///
+    /// The VM must be paused, for the same reason [`Self::save_vcpu_states`]
+    /// requires it, and more so: memory read while a guest is running is torn
+    /// between the pages copied before a write and those copied after, which
+    /// is a memory image no execution ever produced.
+    ///
+    /// Refuses to overwrite an existing file. These are the size of the
+    /// guest's RAM and are named by a human; the cost of a mistaken overwrite
+    /// is a guest that no longer exists anywhere.
+    ///
+    /// # What travels and what does not
+    ///
+    /// Memory and vCPU registers. Not host-side device state, and not the
+    /// parts of a vCPU listed in [`VCpuSnapshot::missing`]. See
+    /// [`crate::snapshot::file`] for what that costs.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidState`] unless paused; [`Error::Config`] if the file
+    /// exists or cannot be written; whatever [`Self::save_vcpu_states`]
+    /// reports on a backend that cannot read its vCPUs.
+    pub async fn snapshot(&self, path: &std::path::Path) -> Result<()> {
+        self.snapshot_with(path, false).await
+    }
+
+    /// [`Self::snapshot`], with guest memory written as a raw image beside the
+    /// snapshot (`<path>.mem`) when `memory_image` is set.
+    ///
+    /// The image is exactly guest-RAM-sized and sparse where pages were zero,
+    /// which is the layout a restore can map copy-on-write instead of copying
+    /// -- see [`Self::launch_from_snapshot`]. Meant for a template that many
+    /// VMs will be restored from; for one restore, the ordinary snapshot is
+    /// smaller.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::snapshot`]; also an image file that already exists.
+    pub async fn snapshot_with(&self, path: &std::path::Path, memory_image: bool) -> Result<()> {
+        let layout = if memory_image {
+            MemoryLayout::Image
+        } else {
+            MemoryLayout::Inline
+        };
+        self.snapshot_inner(path, layout).await
+    }
+
+    /// [`Self::snapshot`] of a VM whose memory is a mapped image, storing
+    /// only the pages the guest has written since that image was mapped.
+    ///
+    /// The snapshot names the image as its base, and a restore maps the base
+    /// and lays these pages over it. For a sandbox restored from a template
+    /// this is what the sandbox did, not what it is: a guest that wrote a few
+    /// megabytes pauses into a few megabytes, whatever its RAM size, and is
+    /// written without reading the rest of its memory at all. The base must
+    /// still exist, unchanged, when the snapshot is restored.
+    ///
+    /// Which pages were written comes from the host kernel (`/proc/self/pagemap`):
+    /// a written page of a private file mapping has become anonymous, and an
+    /// unwritten one has not. Linux only.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::snapshot`]; also a VM whose memory was not mapped from an
+    /// image, and a host that cannot say which pages were written.
+    pub async fn snapshot_layered(&self, path: &std::path::Path) -> Result<()> {
+        let base = self.memory_base.lock().clone().ok_or_else(|| {
+            Error::InvalidState(
+                "a layered snapshot needs guest memory mapped from an image, and this VM's \
+                 was not"
+                    .into(),
+            )
+        })?;
+        self.snapshot_inner(path, MemoryLayout::Layered(base)).await
+    }
+
+    /// The guest-physical ranges (address, length) of every page the host has
+    /// mapped for this guest since its memory was mapped -- which is every
+    /// page the guest has touched, read or written.
+    ///
+    /// Run on a guest restored from a snapshot and then asked to do what its
+    /// siblings will be asked first, this is that snapshot's working set: the
+    /// pages worth prefaulting for them (see
+    /// [`Self::launch_from_snapshot_prefaulted`]). Linux only.
+    ///
+    /// # Errors
+    ///
+    /// A host that cannot say which pages are mapped.
+    pub fn touched_ranges(&self) -> Result<Vec<(u64, u64)>> {
+        let memory = self.memory();
+        let regions: Vec<_> = memory
+            .regions()
+            .into_iter()
+            .map(|region| snapshot_file::RegionRecord {
+                guest_addr: region.guest_addr,
+                size: region.size,
+                readonly: region.readonly,
+            })
+            .collect();
+        let page_size = snapshot_file::PAGE_SIZE;
+        let total_pages: u64 = regions
+            .iter()
+            .filter(|r| !r.readonly)
+            .map(|r| r.size.div_ceil(page_size))
+            .sum();
+        let touched = touched_pages(&memory, &regions, total_pages)?;
+        let mut ranges: Vec<(u64, u64)> = Vec::new();
+        let mut index = 0u64;
+        for region in regions.iter().filter(|r| !r.readonly) {
+            let mut at = 0u64;
+            while at < region.size {
+                if touched.contains(index) {
+                    let gpa = region.guest_addr + at;
+                    let len = page_size.min(region.size - at);
+                    match ranges.last_mut() {
+                        Some((start, run)) if *start + *run == gpa => *run += len,
+                        _ => ranges.push((gpa, len)),
+                    }
+                }
+                index += 1;
+                at += page_size;
+            }
+        }
+        Ok(ranges)
+    }
+
+    async fn snapshot_inner(&self, path: &std::path::Path, layout: MemoryLayout) -> Result<()> {
+        {
+            let state = self.state.read();
+            if *state != VMState::Paused {
+                return Err(Error::InvalidState(format!(
+                    "a VM can only be snapshotted while paused; this one is {:?}. Memory read \
+                     from a running guest is torn between the pages copied before a write and \
+                     those copied after",
+                    *state
+                )));
+            }
+        }
+
+        let vcpus = self.save_vcpu_states().await?;
+        let memory = self.memory();
+        let regions: Vec<_> = memory
+            .regions()
+            .into_iter()
+            .map(|region| snapshot_file::RegionRecord {
+                guest_addr: region.guest_addr,
+                size: region.size,
+                readonly: region.readonly,
+            })
+            .collect();
+
+        // Only writable regions have pages in the file: a read-only region is
+        // host memory shared with other VMs, which the destination maps for
+        // itself.
+        let page_size = snapshot_file::PAGE_SIZE;
+        let total_pages: u64 = regions
+            .iter()
+            .filter(|r| !r.readonly)
+            .map(|r| r.size.div_ceil(page_size))
+            .sum();
+
+        // Two passes over guest memory: one to find out which pages are worth
+        // storing, one to store them. The alternative is buffering the whole
+        // image to fix the header afterwards, which would cost as much host
+        // memory as the guest has.
+        let mut present = snapshot_file::PageMap::empty(total_pages);
+        let mut page = vec![0u8; page_size as usize];
+
+        // With an image, the pages go there and this file's map stays empty.
+        // Layered, the map is the pages written since the base was mapped.
+        let mut memory_base = None;
+        let image_name = if let MemoryLayout::Layered(base) = &layout {
+            present = written_pages(&memory, &regions, total_pages)?;
+            memory_base = Some(base.to_string_lossy().into_owned());
+            None
+        } else if layout == MemoryLayout::Image {
+            let name = format!(
+                "{}.mem",
+                path.file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "snapshot".to_string())
+            );
+            let image_path = path.with_file_name(&name);
+            write_memory_image(&memory, &regions, memory.total_size(), &image_path)?;
+            Some(name)
+        } else {
+            let mut index = 0u64;
+            for region in regions.iter().filter(|r| !r.readonly) {
+                let mut at = 0u64;
+                while at < region.size {
+                    let take = (page_size as usize).min((region.size - at) as usize);
+                    memory.read_bytes_into(region.guest_addr + at, &mut page[..take])?;
+                    // A page of zeroes is the common case by far -- a guest
+                    // uses a few megabytes of the tens it is given -- and
+                    // storing it is storing nothing at the cost of writing
+                    // and reading it back.
+                    if page[..take].iter().any(|byte| *byte != 0) {
+                        present.set(index);
+                    }
+                    index += 1;
+                    at += page_size;
+                }
+            }
+            None
+        };
+
+        let devices = self.device_states().await;
+        let machine = self.backend.save_machine().await?;
+        let header = snapshot_file::Header {
+            vm_name: self.config.name.clone(),
+            memory_size: memory.total_size(),
+            regions,
+            vcpus,
+            total_pages,
+            present_pages: present.count(),
+            device_state_included: true,
+            devices,
+            machine,
+            memory_image: image_name,
+            memory_base,
+        };
+
+        let mut file = std::io::BufWriter::new(snapshot_file::create_new(path)?);
+        snapshot_file::Snapshot::write_header(&header, &mut file)?;
+        std::io::Write::write_all(&mut file, present.as_bytes())
+            .map_err(|e| Error::Config(format!("writing a snapshot's page map: {e}")))?;
+
+        let mut index = 0u64;
+        for region in header.regions.iter().filter(|r| !r.readonly) {
+            let mut at = 0u64;
+            while at < region.size {
+                let take = (page_size as usize).min((region.size - at) as usize);
+                if present.contains(index) {
+                    memory.read_bytes_into(region.guest_addr + at, &mut page[..take])?;
+                    // Short final page padded, so every present page in the
+                    // file is exactly one page long and the reader can find
+                    // the next one by counting rather than by parsing.
+                    page[take..].fill(0);
+                    std::io::Write::write_all(&mut file, &page)
+                        .map_err(|e| Error::Config(format!("writing guest memory: {e}")))?;
+                }
+                index += 1;
+                at += page_size;
+            }
+        }
+        std::io::Write::flush(&mut file)
+            .map_err(|e| Error::Config(format!("finishing {}: {e}", path.display())))?;
+
+        tracing::debug!(
+            "snapshot of '{}': {} of {} pages stored",
+            self.config.name,
+            header.present_pages,
+            header.total_pages
+        );
+
+        tracing::info!(
+            "VM '{}' snapshotted to {}",
+            self.config.name,
+            path.display()
+        );
+        Ok(())
+    }
+
+    /// Replace this VM's memory and vCPU state with a snapshot's.
+    ///
+    /// The VM must be paused. Afterwards it *is* the snapshotted guest: resume
+    /// it and it continues from where that one was.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidState`] unless paused, or if the snapshot describes a
+    /// different machine -- a different memory size or region layout is
+    /// refused rather than partially applied, because a guest restored into
+    /// the wrong shape runs until it touches the difference.
+    pub async fn restore(&self, path: &std::path::Path) -> Result<()> {
+        self.restore_with(path, crate::snapshot::machine::ClockOnRestore::Fresh)
+            .await
+    }
+
+    /// Is nothing executing this VM's vCPUs? Paused, or provisioned and not
+    /// yet started -- both leave registers and memory safe to write.
+    fn is_quiescent(&self) -> bool {
+        let state = *self.state.read();
+        state == VMState::Paused || (state == VMState::Created && self.is_provisioned())
+    }
+
+    /// [`Self::restore`], choosing what the guest's clock reads afterwards.
+    ///
+    /// Also accepts a VM that has been provisioned and never started, which
+    /// is what [`Self::launch_from_snapshot`] restores into: the guest it
+    /// becomes never has to boot first.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::restore`]; also a snapshot whose machine state this
+    /// backend cannot restore.
+    pub async fn restore_with(
+        &self,
+        path: &std::path::Path,
+        clock: crate::snapshot::machine::ClockOnRestore,
+    ) -> Result<()> {
+        if !self.is_quiescent() {
+            return Err(Error::InvalidState(format!(
+                "a VM can only be restored while paused, or provisioned and not yet started; \
+                 this one is {:?}",
+                self.state()
+            )));
+        }
+
+        let file = std::fs::File::open(path)
+            .map_err(|e| Error::Config(format!("opening {}: {e}", path.display())))?;
+        let mut file = std::io::BufReader::new(file);
+        let snapshot = snapshot_file::Snapshot::read_header(&mut file)?;
+        let header_len = snapshot_file::header_len(&snapshot.header)?;
+        snapshot.check_length(&mut file, header_len)?;
+        // `check_length` seeks to the end to measure, so the cursor has to go
+        // back to where the regions start before anything reads them.
+        std::io::Seek::seek(&mut file, std::io::SeekFrom::Start(8 + 4 + 4 + header_len))
+            .map_err(|e| Error::Config(format!("rewinding {}: {e}", path.display())))?;
+
+        let memory = self.memory();
+        if snapshot.header.memory_size != memory.total_size() {
+            return Err(Error::InvalidState(format!(
+                "that snapshot is of a {}-byte guest and this VM has {} bytes",
+                snapshot.header.memory_size,
+                memory.total_size()
+            )));
+        }
+
+        let here = memory.regions();
+        if here.len() != snapshot.header.regions.len() {
+            return Err(Error::InvalidState(format!(
+                "that snapshot has {} memory region(s) and this VM has {}",
+                snapshot.header.regions.len(),
+                here.len()
+            )));
+        }
+        for (recorded, current) in snapshot.header.regions.iter().zip(here.iter()) {
+            if recorded.guest_addr != current.guest_addr || recorded.size != current.size {
+                return Err(Error::InvalidState(format!(
+                    "that snapshot's region at {:#x} ({} bytes) does not match this VM's at \
+                     {:#x} ({} bytes)",
+                    recorded.guest_addr, recorded.size, current.guest_addr, current.size
+                )));
+            }
+        }
+
+        if let Some(name) = &snapshot.header.memory_image {
+            self.load_memory_image(&path.with_file_name(name), &memory)?;
+        } else if let Some(base) = &snapshot.header.memory_base {
+            // The base first, then this snapshot's pages over it. A page the
+            // map leaves out is the base's, so nothing here zeroes anything.
+            self.load_memory_image(std::path::Path::new(base), &memory)?;
+            let page_size = snapshot_file::PAGE_SIZE;
+            let present = snapshot_file::PageMap::read(&mut file, snapshot.header.total_pages)?;
+            let mut page = vec![0u8; page_size as usize];
+            let mut index = 0u64;
+            for region in snapshot.header.regions.iter().filter(|r| !r.readonly) {
+                let mut at = 0u64;
+                while at < region.size {
+                    if present.contains(index) {
+                        let take = (page_size as usize).min((region.size - at) as usize);
+                        std::io::Read::read_exact(&mut file, &mut page)
+                            .map_err(|e| Error::Config(format!("reading guest memory: {e}")))?;
+                        memory.write_bytes(region.guest_addr + at, &page[..take])?;
+                    }
+                    index += 1;
+                    at += page_size;
+                }
+            }
+        } else {
+            let page_size = snapshot_file::PAGE_SIZE;
+            let present = snapshot_file::PageMap::read(&mut file, snapshot.header.total_pages)?;
+            let mut page = vec![0u8; page_size as usize];
+            // A megabyte, not a page: this fills runs of absent pages now, and a
+            // run is usually most of the guest.
+            let zeroes = vec![0u8; 1 << 20];
+            let mut scratch = vec![0u8; 1 << 20];
+
+            // Ask the backend to hand back guest RAM that already reads as zero.
+            //
+            // When it can, every absent page in the snapshot is already correct
+            // and the loop below has nothing to do for it -- no read to check, no
+            // write to fix. That is the whole of the remaining restore cost for a
+            // guest that has touched little of its memory, which is most of them.
+            //
+            // The fallback is not a lesser correctness, only a slower one: read
+            // each absent page and write zeroes over it if it is not already zero.
+            // That is what ran before this, and what still runs on a backend that
+            // answers `false`.
+            //
+            // Not attempted at all when any region is read-only. The loop below
+            // skips those, so anything the backend zeroed in one would never be
+            // written back -- it would be discarded and left discarded. No such
+            // region exists today (every `allocate_region` call in the tree passes
+            // `readonly: false`, and `adopt_backend_pages` accepts exactly one
+            // region at address 0), which is precisely why this is a check and not
+            // a comment: the reason it is safe is a fact about current callers,
+            // and those change.
+            let has_readonly = snapshot.header.regions.iter().any(|r| r.readonly);
+            let memory_pre_zeroed = !has_readonly && self.backend.reset_guest_memory_to_zero()?;
+
+            // Runs of absent pages are zeroed in one call rather than one call
+            // each. This is where the time actually goes: making the file sparse
+            // took it from 64 MiB to 0.1 MiB and the restore only from 92ms to
+            // 71ms, because the restore still wrote every page -- the absent ones
+            // as zeroes. The cost was never the file; it was 16,384 calls into
+            // guest memory, each translating an address to copy four kilobytes.
+            let mut index = 0u64;
+            for region in snapshot.header.regions.iter().filter(|r| !r.readonly) {
+                let mut at = 0u64;
+                while at < region.size {
+                    if present.contains(index) {
+                        let take = (page_size as usize).min((region.size - at) as usize);
+                        std::io::Read::read_exact(&mut file, &mut page)
+                            .map_err(|e| Error::Config(format!("reading guest memory: {e}")))?;
+                        memory.write_bytes(region.guest_addr + at, &page[..take])?;
+                        index += 1;
+                        at += page_size;
+                        continue;
+                    }
+
+                    // How far the absent run goes.
+                    let run_start = at;
+                    while at < region.size && !present.contains(index) {
+                        index += 1;
+                        at += page_size;
+                    }
+                    let run = (at.min(region.size) - run_start) as usize;
+
+                    // Zeroed, not skipped. This VM has its own memory and has
+                    // usually booted something into it; leaving those pages alone
+                    // would restore a guest built half from the snapshot and half
+                    // from whatever was there before -- which runs, and is not the
+                    // guest that was captured.
+                    // Read before writing, and skip what is already zero.
+                    //
+                    // Counter-intuitive but measured: writing 64 MiB of zeroes
+                    // costs ~64ms because it *allocates* every page it touches,
+                    // while reading an untouched anonymous page costs almost
+                    // nothing -- the kernel maps one shared zero page. A
+                    // destination that has merely booted has most of its memory
+                    // in exactly that state, so checking is far cheaper than
+                    // unconditionally overwriting.
+                    if memory_pre_zeroed {
+                        continue;
+                    }
+
+                    let mut done = 0usize;
+                    while done < run {
+                        let take = zeroes.len().min(run - done);
+                        let at = region.guest_addr + run_start + done as u64;
+                        memory.read_bytes_into(at, &mut scratch[..take])?;
+                        if scratch[..take].iter().any(|byte| *byte != 0) {
+                            memory.write_bytes(at, &zeroes[..take])?;
+                        }
+                        done += take;
+                    }
+                }
+            }
+        }
+
+        let keep_clock = clock == crate::snapshot::machine::ClockOnRestore::Continue;
+
+        // Interrupt controllers and the timer before the vCPUs: the LAPIC a
+        // vCPU restore writes is wired to them.
+        if let Some(machine) = &snapshot.header.machine {
+            self.backend.restore_machine(machine, keep_clock).await?;
+        }
+
+        let vcpus: Vec<VCpuSnapshot> = if keep_clock {
+            snapshot.header.vcpus.clone()
+        } else {
+            // Fresh: every clock register stays as this VM has it.
+            snapshot
+                .header
+                .vcpus
+                .iter()
+                .map(|v| {
+                    let mut v = v.clone();
+                    v.msrs
+                        .retain(|m| !crate::snapshot::machine::CLOCK_MSRS.contains(&m.index));
+                    v
+                })
+                .collect()
+        };
+        self.restore_vcpu_states(&vcpus).await?;
+        self.restore_device_states(&snapshot.header.devices).await?;
+
+        tracing::info!("VM '{}' restored from {}", self.config.name, path.display());
+        Ok(())
+    }
+
+    /// Make guest memory the contents of a raw image: mapped copy-on-write
+    /// when the backend can, copied when it cannot.
+    fn load_memory_image(
+        &self,
+        image: &std::path::Path,
+        memory: &crate::memory::GuestMemory,
+    ) -> Result<()> {
+        let file = std::fs::File::open(image)
+            .map_err(|e| Error::Config(format!("opening {}: {e}", image.display())))?;
+        if self.backend.map_guest_memory_from(&file)? {
+            // Absolute, because a layered snapshot names it and may be
+            // written anywhere.
+            let base = std::fs::canonicalize(image).unwrap_or_else(|_| image.to_path_buf());
+            *self.memory_base.lock() = Some(base);
+            return Ok(());
+        }
+        // The slow way: every byte, including the zeroes, because this VM's
+        // memory may hold whatever it booted before.
+        // The image is the host buffer's layout: RAM's ranges, one after
+        // the other (`crate::memory::ram_ranges`).
+        let mut reader = std::io::BufReader::with_capacity(1 << 20, file);
+        let mut chunk = vec![0u8; 1 << 20];
+        for (start, len) in crate::memory::ram_ranges(memory.total_size()) {
+            let mut at = 0u64;
+            while at < len {
+                let take = (chunk.len() as u64).min(len - at) as usize;
+                std::io::Read::read_exact(&mut reader, &mut chunk[..take])
+                    .map_err(|e| Error::Config(format!("reading {}: {e}", image.display())))?;
+                memory.write_bytes(start + at, &chunk[..take])?;
+                at += take as u64;
+            }
+        }
+        Ok(())
+    }
+
+    /// Become the guest in `path` and run it, without booting.
+    ///
+    /// The fast path for a fleet: a guest is booted once, snapshotted once,
+    /// and every VM after that is created by provisioning -- devices attached
+    /// as the original had them -- restoring, and starting. Nothing the
+    /// guest's boot did is repeated.
+    ///
+    /// Devices must be attached before this, with the shapes the snapshot's
+    /// VM had: the same vsock CID and network MAC, since those live in guest
+    /// memory the guest will not re-read.
+    ///
+    /// # Errors
+    ///
+    /// Provisioning, the restore, or starting failed.
+    pub async fn launch_from_snapshot(
+        self: &Arc<Self>,
+        path: &std::path::Path,
+        clock: crate::snapshot::machine::ClockOnRestore,
+    ) -> Result<()> {
+        self.launch_from_snapshot_prefaulted(path, clock, &[]).await
+    }
+
+    /// [`Self::launch_from_snapshot`], mapping `prefault` -- guest-physical
+    /// (address, length) ranges -- before the guest runs, so it does not
+    /// take an exit for each of those pages as it first touches them.
+    ///
+    /// Meant for the pages a guest restored from this snapshot is known to
+    /// touch first: see [`Self::touched_ranges`], which is how to find them.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::launch_from_snapshot`]. A backend that cannot prefault is
+    /// not an error; the guest faults the pages in itself.
+    pub async fn launch_from_snapshot_prefaulted(
+        self: &Arc<Self>,
+        path: &std::path::Path,
+        clock: crate::snapshot::machine::ClockOnRestore,
+        prefault: &[(u64, u64)],
+    ) -> Result<()> {
+        let t0 = std::time::Instant::now();
+        self.provision_inner(false).await?;
+        let provisioned = t0.elapsed();
+        self.restore_with(path, clock).await?;
+        if !prefault.is_empty() {
+            if let Some(vcpu) = self.vcpus.first() {
+                self.backend.prefault_guest_memory(vcpu, prefault)?;
+            }
+        }
+        let restored = t0.elapsed();
+        self.start_in_background().await?;
+        tracing::debug!(
+            "VM '{}' from snapshot: provision {:?}, restore {:?}, start {:?}",
+            self.config.name,
+            provisioned,
+            restored - provisioned,
+            t0.elapsed() - restored
+        );
+        Ok(())
+    }
+
+    /// Capture the host-side state of every virtio-MMIO device attached.
+    ///
+    /// The rings live in guest memory and travel with it. This is what the
+    /// devices hold: where those rings are, what features the driver agreed
+    /// to, and how far each device has got through them.
+    pub async fn device_states(&self) -> Vec<snapshot_device::MmioDeviceState> {
+        let mut states = Vec::new();
+
+        // Only the MMIO variant. A PCI transport keeps its configuration in
+        // guest-visible BAR space rather than in host-side registers, so
+        // capturing it is a different job from this one, and claiming to have
+        // done it would be worse than saying nothing.
+        let vsock_mmio = match self.vsock.read().as_ref().map(|a| a.transport.clone()) {
+            Some(VsockTransport::Mmio(transport)) => Some(transport),
+            Some(VsockTransport::Pci(_)) => {
+                tracing::warn!("the vsock device is on PCI; its state is not captured");
+                None
+            }
+            None => None,
+        };
+        if let Some(transport) = vsock_mmio {
+            states.push(transport.read().await.save_state());
+        }
+
+        let net = self.net.read().as_ref().map(|a| a.transport.clone());
+        if let Some(transport) = net {
+            states.push(transport.read().await.save_state());
+        }
+        states
+    }
+
+    /// Put every captured device back into the state it was in.
+    ///
+    /// Matched by name rather than by position: a VM with a network device and
+    /// no vsock would otherwise be handed the vsock's queues.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a device that refuses the state -- a different queue count
+    /// means it is not the device the snapshot was taken from.
+    async fn restore_device_states(
+        &self,
+        states: &[snapshot_device::MmioDeviceState],
+    ) -> Result<()> {
+        let vsock_mmio = match self.vsock.read().as_ref().map(|a| a.transport.clone()) {
+            Some(VsockTransport::Mmio(transport)) => Some(transport),
+            _ => None,
+        };
+        let net = self.net.read().as_ref().map(|a| a.transport.clone());
+
+        for state in states {
+            let mut applied = false;
+            if let Some(transport) = vsock_mmio.as_ref() {
+                if transport.read().await.name() == state.name {
+                    transport.read().await.restore_state(state)?;
+                    applied = true;
+                }
+            }
+            if !applied {
+                if let Some(transport) = net.as_ref() {
+                    if transport.read().await.name() == state.name {
+                        transport.read().await.restore_state(state)?;
+                        applied = true;
+                    }
+                }
+            }
+            if !applied {
+                // Not fatal, and worth saying out loud: the snapshot has a
+                // device this VM does not, so the guest will find it missing.
+                tracing::warn!(
+                    "snapshot has device '{}', which this VM does not have",
+                    state.name
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Read every vCPU's architectural state.
+    ///
+    /// The VM must be paused. Reading a running vCPU's registers gives a
+    /// description of a machine that has already moved on, and a snapshot
+    /// built from one restores a guest to a moment that never existed -- so
+    /// this refuses rather than returning something that looks usable.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidState`] unless the VM is paused. [`Error::NotSupported`]
+    /// on a backend that cannot read its vCPUs, which is every backend but
+    /// KVM today.
+    pub async fn save_vcpu_states(&self) -> Result<Vec<VCpuSnapshot>> {
+        {
+            let state = self.state.read();
+            if *state != VMState::Paused {
+                return Err(Error::InvalidState(format!(
+                    "a vCPU's state can only be read while the VM is paused; this one is {:?}. \
+                     Call pause() first",
+                    *state
+                )));
+            }
+        }
+
+        let mut states = Vec::with_capacity(self.vcpus.len());
+        for vcpu in &self.vcpus {
+            states.push(self.backend.save_vcpu(vcpu).await?);
+        }
+        Ok(states)
+    }
+
+    /// Read diagnostic state on each running vCPU's execution thread.
+    ///
+    /// A kick brings even a halted or spinning guest out of its backend run.
+    /// The owner reads registers before re-entering the guest, avoiding a
+    /// concurrent register ioctl. These are independent samples, not an atomic
+    /// multi-vCPU snapshot, and must not be used for restoring a VM.
+    /// The whole response wait is bounded to five seconds.
+    pub async fn diagnostic_vcpu_states(&self) -> Result<Vec<VCpuSnapshot>> {
+        Ok(self
+            .diagnostic_vcpu_samples()
+            .await?
+            .into_iter()
+            .map(|sample| sample.architecture)
+            .collect())
+    }
+
+    /// Owner-thread architecture and interrupt-event observations.
+    pub async fn diagnostic_vcpu_samples(&self) -> Result<Vec<VCpuDiagnostic>> {
+        if self.state() != VMState::Running {
+            return Err(Error::InvalidState(
+                "diagnostics require a running VM".into(),
+            ));
+        }
+        let senders: Vec<_> = {
+            let tasks = self.vcpu_tasks.read();
+            if tasks.is_empty() || tasks.len() != self.vcpus.len() {
+                return Err(Error::InvalidState(
+                    "diagnostics require launched vCPU owners".into(),
+                ));
+            }
+            tasks.iter().map(|task| task.tx.clone()).collect()
+        };
+        let mut replies = Vec::with_capacity(senders.len());
+        for (sender, vcpu) in senders.into_iter().zip(&self.vcpus) {
+            let (reply, receive) = tokio::sync::oneshot::channel();
+            sender
+                .try_send(VCpuMessage::Inspect { reply })
+                .map_err(|error| {
+                    Error::InvalidState(format!("cannot request vCPU diagnostics: {error}"))
+                })?;
+            self.backend.kick_vcpu(vcpu).await?;
+            replies.push(receive);
+        }
+        tokio::time::timeout(Duration::from_secs(5), async {
+            let mut states = Vec::with_capacity(replies.len());
+            for reply in replies {
+                states.push(reply.await.map_err(|_| {
+                    Error::InvalidState("vCPU owner ended before diagnostic reply".into())
+                })??);
+            }
+            Ok(states)
+        })
+        .await
+        .map_err(|_| Error::InvalidState("vCPU diagnostic response exceeded five seconds".into()))?
+    }
+
+    /// Put every vCPU back into the state these snapshots describe.
+    ///
+    /// The VM must be paused, for the mirror of the reason above: writing
+    /// registers underneath a running vCPU races the guest.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidState`] unless the VM is paused, or if the snapshots do
+    /// not describe this VM's vCPUs -- a count mismatch is refused rather than
+    /// partially applied, because half-restoring a multiprocessor guest leaves
+    /// it in a state no execution ever produced.
+    pub async fn restore_vcpu_states(&self, states: &[VCpuSnapshot]) -> Result<()> {
+        if !self.is_quiescent() {
+            return Err(Error::InvalidState(format!(
+                "a vCPU's state can only be written while the VM is paused, or provisioned and \
+                 not yet started; this one is {:?}",
+                self.state()
+            )));
+        }
+
+        if states.len() != self.vcpus.len() {
+            return Err(Error::InvalidState(format!(
+                "this snapshot describes {} vCPU(s) and the VM has {}",
+                states.len(),
+                self.vcpus.len()
+            )));
+        }
+
+        // Matched by id rather than by position: the snapshot records which
+        // vCPU each state came from, and restoring vCPU 1's registers into
+        // vCPU 0 is a guest that resumes with two threads believing they are
+        // each other.
+        for state in states {
+            let vcpu = self
+                .vcpus
+                .iter()
+                .find(|vcpu| vcpu.id() == state.id)
+                .ok_or_else(|| {
+                    Error::InvalidState(format!(
+                        "the snapshot describes vCPU {} and this VM has no such vCPU",
+                        state.id
+                    ))
+                })?;
+            self.backend.restore_vcpu(vcpu, state).await?;
+        }
+        Ok(())
+    }
+
+    pub async fn pause(&self) -> Result<()> {
+        {
+            let state = self.state.read();
+            if *state != VMState::Running {
+                return Err(Error::InvalidState(format!(
+                    "Cannot pause VM in state {:?}",
+                    *state
+                )));
+            }
+        }
+
+        {
+            let tasks = self.vcpu_tasks.read();
+            if tasks.is_empty() {
+                return Err(Error::InvalidState(
+                    "this VM has no running vCPU tasks; it was started but never launched, so \
+                     there is nothing to suspend"
+                        .into(),
+                ));
+            }
+            for task in tasks.iter() {
+                let _ = task.tx.try_send(VCpuMessage::Pause);
+            }
+        }
+
+        for vcpu in &self.vcpus {
+            if let Err(e) = self.backend.kick_vcpu(vcpu).await {
+                tracing::warn!("failed to kick vCPU {} for pause: {}", vcpu.id(), e);
+            }
+        }
+
+        *self.state.write() = VMState::Paused;
+        tracing::info!("VM '{}' paused", self.config.name);
+        Ok(())
+    }
+
+    /// Continue a guest suspended by [`Self::pause`].
+    ///
+    /// No kick is needed in this direction: a paused vCPU is parked in
+    /// `rx.recv().await`, waiting for exactly this message, rather than inside
+    /// `KVM_RUN`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the VM is not paused.
+    pub async fn resume(&self) -> Result<()> {
+        {
+            let state = self.state.read();
+            if *state != VMState::Paused {
+                return Err(Error::InvalidState(format!(
+                    "Cannot resume VM in state {:?}",
+                    *state
+                )));
+            }
+        }
+
+        {
+            let tasks = self.vcpu_tasks.read();
+            for task in tasks.iter() {
+                let _ = task.tx.try_send(VCpuMessage::Resume);
+            }
+        }
+
+        *self.state.write() = VMState::Running;
+        tracing::info!("VM '{}' resumed", self.config.name);
+        Ok(())
+    }
+
+    /// Stop the VM
+    pub async fn stop(&self) -> Result<()> {
+        // Check if already stopped (don't hold guard across await)
+        {
+            let state = self.state.read();
+            if *state == VMState::Stopped {
+                return Ok(());
+            }
+        }
+
+        // Clear running flag first to signal vCPU tasks to stop
+        self.running.store(false, Ordering::SeqCst);
+
+        // Send stop messages to all vCPU tasks
+        {
+            let tasks = self.vcpu_tasks.read();
+            for task in tasks.iter() {
+                let _ = task.tx.try_send(VCpuMessage::Stop);
+            }
+        }
+
+        // And then make the vCPU threads capable of reading any of that. The
+        // flag above and the message above it are both polled at the top of
+        // the vCPU loop, which a thread blocked inside `KVM_RUN` does not
+        // reach: a halted guest sits in `kvm_vcpu_block` and a spinning one
+        // never leaves the guest at all. Without this kick, every `stop()`
+        // below waits on threads that have no way of learning they were asked
+        // to finish, which is why `stop()` never returned for any guest.
+        for vcpu in &self.vcpus {
+            if let Err(e) = self.backend.kick_vcpu(vcpu).await {
+                tracing::warn!("failed to kick vCPU {}: {}", vcpu.id(), e);
+            }
+        }
+
+        // Collect task handles (drop the lock before awaiting)
+        let handles: Vec<_> = {
+            let mut tasks = self.vcpu_tasks.write();
+            tasks.drain(..).map(|t| t.handle).collect()
+        };
+
+        // Wait for all vCPU tasks to complete (no lock held). Bounded: a
+        // kicked vCPU returns immediately, so the timeout is a report that the
+        // kick did not land rather than an expected outcome.
+        for handle in handles {
+            match tokio::time::timeout(VCPU_REAP_TIMEOUT, handle).await {
+                Ok(Ok(_)) => {}
+                Ok(Err(e)) => tracing::warn!("vCPU task join error: {:?}", e),
+                Err(_) => tracing::error!(
+                    "VM '{}': a vCPU thread did not leave the guest within {:?} of being                      kicked; abandoning it. The thread is leaked and the process will not                      exit cleanly.",
+                    self.config.name,
+                    VCPU_REAP_TIMEOUT
+                ),
+            }
+        }
+
+        // Stop all vCPUs
+        for vcpu in &self.vcpus {
+            vcpu.stop()?;
+        }
+
+        // Update state (brief lock acquisition)
+        {
+            let mut state = self.state.write();
+            *state = VMState::Stopped;
+        }
+        self.exit_notify.notify_waiters();
+
+        // Reap the background execution loop, if this VM was launched. This
+        // must come *after* `notify_waiters`: in parallel mode the loop is
+        // parked on that notification, so awaiting it any earlier would
+        // deadlock against the notification stop() has not yet sent.
+        //
+        // A guest that never takes a VM exit would park the loop indefinitely,
+        // so the wait is bounded — stop() stays responsive and the task is
+        // abandoned rather than allowed to hang its caller.
+        let run_task = self.run_task.write().take();
+        if let Some(handle) = run_task {
+            match tokio::time::timeout(RUN_LOOP_REAP_TIMEOUT, handle).await {
+                Ok(Ok(Ok(()))) => {}
+                Ok(Ok(Err(e))) => {
+                    tracing::error!("VM '{}' execution loop failed: {}", self.config.name, e);
+                    *self.state.write() = VMState::Error;
+                    return Err(e);
+                }
+                Ok(Err(e)) => tracing::warn!("VM execution task join error: {:?}", e),
+                Err(_) => tracing::warn!(
+                    "VM '{}' execution loop did not exit within {:?}; abandoning it",
+                    self.config.name,
+                    RUN_LOOP_REAP_TIMEOUT
+                ),
+            }
+        }
+
+        tracing::info!("VM '{}' stopped", self.config.name);
+
+        Ok(())
+    }
+
+    /// Get vCPU by ID
+    pub fn vcpu(&self, id: u32) -> Option<Arc<VCpu>> {
+        self.vcpus.get(id as usize).cloned()
+    }
+
+    /// Get all vCPUs
+    pub fn vcpus(&self) -> &[Arc<VCpu>] {
+        &self.vcpus
+    }
+
+    /// Get guest memory
+    pub fn memory(&self) -> Arc<GuestMemory> {
+        Arc::clone(&self.memory)
+    }
+
+    /// Get device manager
+    pub fn devices(&self) -> Arc<DeviceManager> {
+        Arc::clone(&self.devices)
+    }
+
+    /// Console output the guest has written, without consuming it.
+    ///
+    /// Concatenates every registered console device in name order. This is
+    /// empty when no console device has been registered with the VM's
+    /// [`DeviceManager`] — nothing registers one automatically, so a caller
+    /// that wants a boot log must attach a [`SerialDevice`](crate::SerialDevice)
+    /// itself.
+    ///
+    /// Output is capped per device (1 MiB, oldest bytes dropped first), so a
+    /// guest printing in a loop cannot grow this without bound. Bytes are
+    /// decoded lossily: a guest is free to write things that are not UTF-8.
+    pub async fn console_output(&self) -> String {
+        let mut out = String::new();
+        for (_, bytes) in self.devices.console_output().await {
+            out.push_str(&String::from_utf8_lossy(&bytes));
+        }
+        out
+    }
+
+    /// Console output per device, as raw bytes, without consuming it.
+    ///
+    /// The structured form of [`Self::console_output`], for a caller that
+    /// needs to tell COM1 from COM2 or that must not lose non-UTF-8 bytes.
+    pub async fn console_output_by_device(&self) -> Vec<(String, Vec<u8>)> {
+        self.devices.console_output().await
+    }
+
+    /// Get PIC (interrupt controller)
+    pub fn pic(&self) -> Arc<Pic8259> {
+        Arc::clone(&self.pic)
+    }
+
+    /// Attach a virtio-vsock device, giving the guest CID `guest_cid`.
+    ///
+    /// This is what a host process needs in order to talk to a program running
+    /// inside the guest: it registers a
+    /// [`VirtioMmioTransport`](crate::devices::VirtioMmioTransport) in guest
+    /// physical address space at [`Self::VSOCK_MMIO_BASE`], so a guest driver
+    /// can find it, and keeps the device so [`Self::vsock`] can hand it back.
+    ///
+    /// Attaching a device is not the same as a guest using it. The guest kernel
+    /// must be told the window exists — see [`Self::vsock_kernel_args`] — and
+    /// something in the guest must be listening. Neither is knowable from here.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a vsock device is already attached, if `guest_cid`
+    /// is one of the reserved context IDs, or if the register window would
+    /// overlap guest RAM.
+    pub async fn attach_vsock(
+        self: &Arc<Self>,
+        guest_cid: u64,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_vsock::VsockDevice>>> {
+        self.attach_vsock_at(guest_cid, Self::VSOCK_MMIO_BASE, Self::VSOCK_IRQ)
+            .await
+    }
+
+    /// Show this VM a shared read-only region at `guest_addr`.
+    ///
+    /// The region is host memory that any number of VMs may be given at once.
+    /// Each pays nothing for it: they are all mappings of the same allocation
+    /// in the same process, so the pages behind them are the same physical
+    /// pages. A fleet of agents sharing one model's weights costs the weights
+    /// once.
+    ///
+    /// The [`Arc`] is held for the life of the VM, so the region cannot be
+    /// unmapped while a guest is reading it.
+    ///
+    /// # What sharing costs
+    ///
+    /// The same physical pages in two guests is a channel between them. One
+    /// evicts a cache line belonging to the shared region; the other times its
+    /// own access to that line and learns whether the first touched it. That
+    /// is a covert channel of the Flush+Reload kind, and it needs neither
+    /// guest to write anything: the read-only mapping prevents a guest
+    /// corrupting another's memory and does nothing about this, because what
+    /// carries the signal is the timing rather than the contents.
+    ///
+    /// For a fleet of mutually-trusting agents over one model -- the case this
+    /// exists for -- that is a fair trade and the alternative is paying for
+    /// the weights per guest. For two guests that must not be able to reach
+    /// each other at all, it is not, and
+    /// [`VMConfig::forbid_shared_memory`] makes this refuse.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the VM has not been provisioned, if
+    /// [`VMConfig::forbid_shared_memory`] is set, if the region would overlap
+    /// guest RAM, or if the backend cannot share memory read-only.
+    pub async fn attach_shared_rom(
+        self: &Arc<Self>,
+        guest_addr: u64,
+        rom: Arc<crate::shared_rom::SharedRom>,
+    ) -> Result<()> {
+        if self.config.forbid_shared_memory {
+            return Err(Error::PermissionDenied(format!(
+                "VM '{}': shared memory is forbidden by its configuration, and a                  shared region is a timing channel between every guest that holds it",
+                self.config.name
+            )));
+        }
+
+        if self.hv_vm.read().is_none() {
+            return Err(Error::InvalidState(
+                "provision the VM before showing it a shared region".into(),
+            ));
+        }
+
+        // The same rule the vsock window follows, for the same reason: two
+        // meanings for one address is memory corruption wearing a bad address's
+        // clothes.
+        if self.memory.host_offset(guest_addr).is_some() {
+            return Err(Error::Device(format!(
+                "a shared region at {guest_addr:#x} overlaps {} bytes of guest RAM",
+                self.memory.total_size()
+            )));
+        }
+
+        self.backend
+            .map_shared_rom(guest_addr, rom.host_addr(), rom.len())
+            .await?;
+
+        tracing::info!(
+            "VM '{}': {} MiB shared read-only at {guest_addr:#x}",
+            self.config.name,
+            rom.len() / (1024 * 1024),
+        );
+        self.shared_roms.write().push(rom);
+        Ok(())
+    }
+
+    /// Guest physical address of the vsock register window, by default.
+    ///
+    /// 3.25 GiB: above any conventional low-memory layout and below the 4 GiB
+    /// line, which is where a guest expects MMIO to live.
+    pub const VSOCK_MMIO_BASE: u64 = 0xd000_0000;
+
+    /// Interrupt line the vsock device raises, by default.
+    pub const VSOCK_IRQ: u8 = 5;
+
+    /// Where a PCI vsock device's BAR window lands by default.
+    ///
+    /// Past [`Self::VSOCK_MMIO_BASE`] and its register window, so a VM can
+    /// carry both transports without them overlapping -- which is what the
+    /// tests do, and what anyone comparing the two would want.
+    pub const VSOCK_PCI_BAR_BASE: u64 = 0xd001_0000;
+
+    /// PCI slot the vsock device occupies on bus 0.
+    ///
+    /// Slot 0 is conventionally the host bridge. Nothing here models one, but
+    /// a guest that finds a virtio device there is being told something odd
+    /// about the machine, and slots are free.
+    pub const VSOCK_PCI_SLOT: u8 = 3;
+
+    /// Interrupt line reported to the guest for the PCI vsock device.
+    ///
+    /// 11 is the conventional line for a PCI device on a legacy PC, and is not
+    /// one the legacy machine model already uses: COM1 has 4, the RTC 8, the
+    /// i8042 1, and MMIO vsock 5.
+    pub const VSOCK_PCI_IRQ: u8 = 11;
+
+    /// The PCI root complex this VM's guest enumerates.
+    ///
+    /// A caller adding its own PCI device needs this: configuration space has
+    /// to go into the same root complex the `0xCF8` window reads, and a device
+    /// added anywhere else is invisible however complete it is.
+    pub fn pci_root(&self) -> Arc<parking_lot::RwLock<crate::pci::PciRootComplex>> {
+        Arc::clone(&self.pci_root)
+    }
+
+    /// Attach a vsock device the guest can find by enumerating PCI.
+    ///
+    /// The difference from [`attach_vsock`](Self::attach_vsock) is discovery,
+    /// not function. Over MMIO the guest is told where to look, on the kernel
+    /// command line, and only a kernel built with
+    /// `CONFIG_VIRTIO_MMIO_CMDLINE_DEVICES` can act on it. Here the guest
+    /// walks a bus it already knows how to walk, reads a vendor and device id
+    /// it already recognises, and binds `virtio_pci` -- so a stock
+    /// distribution image finds the device with no argument at all.
+    ///
+    /// Nothing is added to the kernel command line, deliberately. That is the
+    /// whole point.
+    ///
+    /// # Errors
+    ///
+    /// Refuses a second vsock device, and a window that overlaps guest RAM,
+    /// for the same reasons the MMIO path does.
+    pub async fn attach_vsock_pci(
+        self: &Arc<Self>,
+        guest_cid: u64,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_vsock::VsockDevice>>> {
+        self.attach_vsock_pci_at(guest_cid, Self::VSOCK_PCI_BAR_BASE, Self::VSOCK_PCI_IRQ)
+            .await
+    }
+
+    /// Attach a PCI vsock device at an explicit window and interrupt line.
+    pub async fn attach_vsock_pci_at(
+        self: &Arc<Self>,
+        guest_cid: u64,
+        bar_base: u64,
+        irq: u8,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_vsock::VsockDevice>>> {
+        use crate::devices::virtio_pci::{VirtioPciTransport, VIRTIO_PCI_BAR_SIZE};
+        use crate::devices::virtio_vsock::VsockDevice;
+
+        if self.vsock.read().is_some() {
+            return Err(Error::Device(
+                "this VM already has a vsock device; a second would give the guest two \
+                 devices claiming the same context ID"
+                    .to_string(),
+            ));
+        }
+
+        // The BAR window is not RAM. Placing it inside the guest's memory
+        // would give two different meanings to one address, and the failure
+        // would surface as memory corruption rather than as a bad address.
+        if self.memory.host_offset(bar_base).is_some() {
+            return Err(Error::Device(format!(
+                "vsock BAR window at {bar_base:#x} overlaps {} bytes of guest RAM",
+                self.memory.total_size()
+            )));
+        }
+
+        let device = Arc::new(parking_lot::Mutex::new(VsockDevice::new(guest_cid)?));
+        let transport = Arc::new(tokio::sync::RwLock::new(
+            VirtioPciTransport::new("virtio-vsock-pci", bar_base, self.memory(), device.clone())
+                .with_interrupt(self.pic(), irq),
+        ));
+
+        // Configuration space first: it has to exist before the guest reads
+        // it, and building it asks the transport where its own structures
+        // are, so the two cannot disagree.
+        let mut config = transport.read().await.config_space();
+        // Which line the guest should unmask. Without this a driver binds,
+        // programs its queues, and then waits on an interrupt nobody raises.
+        config.set_interrupt_line(irq);
+        config.set_interrupt_pin(crate::pci::InterruptPin::IntA);
+        self.pci_root
+            .write()
+            .add_device(Self::VSOCK_PCI_SLOT, 0, config);
+
+        self.devices
+            .register_device("virtio-vsock-pci", transport.clone())
+            .await?;
+        self.devices
+            .register_mmio_region(
+                "virtio-vsock-pci".to_string(),
+                bar_base,
+                VIRTIO_PCI_BAR_SIZE,
+            )
+            .await?;
+
+        // Deliver packets as they are queued rather than when a caller
+        // remembers to ask, on a dedicated thread for the same reason the MMIO
+        // path uses one: the vCPU loop blocks a runtime worker inside
+        // `KVM_RUN`, and a delivery task behind it would be starved exactly
+        // when the guest is idle and waiting to be told something.
+        let (packet_tx, packet_rx) = std::sync::mpsc::channel();
+        device
+            .lock()
+            .set_pending_wake(Arc::new(QueuedPackets { sender: packet_tx }));
+
+        // Weak: see the interrupt delivery thread in `launch`.
+        let pump_vm = Arc::downgrade(self);
+        let handle = tokio::runtime::Handle::current();
+        std::thread::Builder::new()
+            .name(format!("hv2-vsock-pci-{}", self.config.name))
+            .spawn(move || {
+                while packet_rx.recv().is_ok() {
+                    let Some(pump_vm) = pump_vm.upgrade() else {
+                        break;
+                    };
+                    handle.block_on(async {
+                        if let Err(e) = pump_vm.notify_vsock().await {
+                            tracing::debug!("vsock: a queued packet could not be delivered: {e}");
+                        }
+                    });
+                }
+            })
+            .map_err(|e| {
+                Error::Config(format!("could not start the vsock delivery thread: {e}"))
+            })?;
+
+        *self.vsock.write() = Some(AttachedVsock {
+            device: device.clone(),
+            transport: VsockTransport::Pci(transport),
+            base_address: bar_base,
+            irq,
+        });
+        tracing::info!(
+            "VM '{}': vsock device attached over PCI at slot {}, BAR {:#x} \
+             (guest CID {guest_cid}, IRQ {irq}) -- no kernel argument needed",
+            self.config.name,
+            Self::VSOCK_PCI_SLOT,
+            bar_base
+        );
+        Ok(device)
+    }
+
+    /// Guest physical address of the network register window, by default.
+    ///
+    /// Past [`Self::VSOCK_PCI_BAR_BASE`] and its window, so a VM can carry a
+    /// vsock device over either transport and a network device at once. Two
+    /// windows at one address is the failure this constant exists to avoid.
+    pub const NET_MMIO_BASE: u64 = 0xd002_0000;
+
+    /// Interrupt line the network device raises, by default.
+    ///
+    /// Not [`Self::VSOCK_IRQ`]: a shared line would have the vsock driver woken
+    /// for every frame and the net driver for every packet, and each would find
+    /// nothing often enough to look like a device that does not work.
+    pub const NET_IRQ: u8 = 6;
+
+    /// Attach a virtio-net device with MAC address `mac`.
+    ///
+    /// Registers a [`VirtioMmioTransport`](crate::devices::VirtioMmioTransport)
+    /// at [`Self::NET_MMIO_BASE`] so a guest driver can find it, and keeps the
+    /// device so [`Self::net`] can hand it back.
+    ///
+    /// This attaches a device, not a network. Nothing here is connected to a
+    /// host interface: frames the guest transmits collect in the device until
+    /// something takes them, and the guest receives only what something hands
+    /// to `VirtioNetMmio::queue_received`. Connecting that to a TAP device or
+    /// to NAT is a separate piece, and belongs outside the VM for the same
+    /// reason the vsock backend does.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a network device is already attached, or if the
+    /// register window would overlap guest RAM.
+    pub async fn attach_net(
+        self: &Arc<Self>,
+        mac: [u8; 6],
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_net_mmio::VirtioNetMmio>>> {
+        self.attach_net_at(mac, Self::NET_MMIO_BASE, Self::NET_IRQ)
+            .await
+    }
+
+    /// Attach a network device at an explicit address and interrupt line.
+    ///
+    /// The general form of [`Self::attach_net`], for a guest whose memory map
+    /// does not leave the default window free.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::attach_net`].
+    pub async fn attach_net_at(
+        self: &Arc<Self>,
+        mac: [u8; 6],
+        base_address: u64,
+        irq: u8,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_net_mmio::VirtioNetMmio>>> {
+        use crate::devices::virtio_mmio::{VirtioMmioTransport, VIRTIO_MMIO_REGION_SIZE};
+        use crate::devices::virtio_net_mmio::VirtioNetMmio;
+
+        if self.net.read().is_some() {
+            return Err(Error::Device(
+                "this VM already has a network device; a second at the same window would \
+                 give the guest two drivers writing one set of rings"
+                    .to_string(),
+            ));
+        }
+
+        // The register window is not RAM, for the reason given at the same
+        // check in `attach_vsock_at`.
+        if self.memory.host_offset(base_address).is_some() {
+            return Err(Error::Device(format!(
+                "network register window at {base_address:#x} overlaps {} bytes of guest RAM",
+                self.memory.total_size()
+            )));
+        }
+
+        let device = Arc::new(parking_lot::Mutex::new(VirtioNetMmio::new(mac)));
+        let transport = Arc::new(tokio::sync::RwLock::new(
+            VirtioMmioTransport::new("virtio-net", base_address, self.memory(), device.clone())
+                .with_interrupt(self.pic(), irq),
+        ));
+
+        self.devices
+            .register_device("virtio-net", transport.clone())
+            .await?;
+        self.devices
+            .register_mmio_region(
+                "virtio-net".to_string(),
+                base_address,
+                VIRTIO_MMIO_REGION_SIZE,
+            )
+            .await?;
+
+        // Tell the guest where to look. virtio-mmio has no enumeration: an
+        // unnamed window is a window nothing probes.
+        self.extra_cmdline
+            .lock()
+            .push(Self::virtio_mmio_kernel_args_for(base_address, irq));
+
+        // Deliver frames as they arrive rather than when a caller remembers to
+        // ask -- the lesson `attach_vsock_at` records below, which cost a
+        // published API that timed out saying the guest was not running.
+        let (frame_tx, frame_rx) = std::sync::mpsc::channel();
+        device
+            .lock()
+            .set_frame_wake(Arc::new(QueuedFrames { sender: frame_tx }));
+
+        // Weak: see the interrupt delivery thread in `launch`.
+        let pump_vm = Arc::downgrade(self);
+        let handle = tokio::runtime::Handle::current();
+        std::thread::Builder::new()
+            .name(format!("hv2-net-{}", self.config.name))
+            .spawn(move || {
+                while frame_rx.recv().is_ok() {
+                    // One delivery publishes everything queued, so a burst
+                    // of wakes is one interrupt, not one per frame: each is
+                    // an injection the guest has to take and answer.
+                    while frame_rx.try_recv().is_ok() {}
+                    let Some(pump_vm) = pump_vm.upgrade() else {
+                        break;
+                    };
+                    handle.block_on(async {
+                        if let Err(e) = pump_vm.notify_net().await {
+                            tracing::debug!(
+                                "virtio-net: a queued frame could not be delivered: {e}"
+                            );
+                        }
+                    });
+                }
+            })
+            .map_err(|e| Error::Config(format!("could not start the net delivery thread: {e}")))?;
+
+        *self.net.write() = Some(AttachedNet {
+            device: device.clone(),
+            transport,
+            base_address,
+            irq,
+        });
+        tracing::info!(
+            "VM '{}': network device attached at {:#x} (MAC {}, IRQ {irq}) -- no backend",
+            self.config.name,
+            base_address,
+            mac.iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<Vec<_>>()
+                .join(":"),
+        );
+        Ok(device)
+    }
+
+    /// Publish frames queued for the guest, and tell it.
+    ///
+    /// The network counterpart to [`Self::notify_vsock`], and the same two
+    /// steps in the same order for the same reason: publishing without
+    /// signalling leaves frames in a ring the guest has no reason to read.
+    ///
+    /// Returns whether anything was published.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a queue error, or a failure to raise the interrupt.
+    pub async fn notify_net(&self) -> Result<bool> {
+        let attached = {
+            let guard = self.net.read();
+            match guard.as_ref() {
+                Some(net) => (net.device.clone(), Arc::clone(&net.transport)),
+                None => return Ok(false),
+            }
+        };
+        let published = attached.0.lock().deliver_pending(&self.memory)?;
+        if published {
+            attached.1.read().await.signal_used_queue()?;
+        }
+        Ok(published)
+    }
+
+    /// The network device attached to this VM, if any.
+    ///
+    /// `None` means no device exists, which is distinct from a device with
+    /// nothing on the other end of it -- and at present every attached device
+    /// is the second of those until a backend is wired to it.
+    pub fn net(
+        &self,
+    ) -> Option<Arc<parking_lot::Mutex<crate::devices::virtio_net_mmio::VirtioNetMmio>>> {
+        self.net.read().as_ref().map(|n| n.device.clone())
+    }
+
+    /// Kernel command-line arguments that make a Linux guest probe the network
+    /// device attached by [`Self::attach_net`].
+    ///
+    /// Returns `None` when no device is attached.
+    pub fn net_kernel_args(&self) -> Option<String> {
+        self.net
+            .read()
+            .as_ref()
+            .map(|n| Self::virtio_mmio_kernel_args_for(n.base_address, n.irq))
+    }
+
+    /// Attach a vsock device at an explicit address and interrupt line.
+    ///
+    /// The general form of [`Self::attach_vsock`], for a guest whose memory
+    /// map does not leave the default window free.
+    pub async fn attach_vsock_at(
+        self: &Arc<Self>,
+        guest_cid: u64,
+        base_address: u64,
+        irq: u8,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_vsock::VsockDevice>>> {
+        use crate::devices::virtio_mmio::{VirtioMmioTransport, VIRTIO_MMIO_REGION_SIZE};
+        use crate::devices::virtio_vsock::VsockDevice;
+
+        if self.vsock.read().is_some() {
+            return Err(Error::Device(
+                "this VM already has a vsock device; a second would give the guest two \
+                 devices claiming the same context ID"
+                    .to_string(),
+            ));
+        }
+
+        // The register window is not RAM. Placing it inside the guest's memory
+        // would give two different meanings to one address, and the failure
+        // would surface as memory corruption rather than as a bad address.
+        if self.memory.host_offset(base_address).is_some() {
+            return Err(Error::Device(format!(
+                "vsock register window at {base_address:#x} overlaps {} bytes of guest RAM",
+                self.memory.total_size()
+            )));
+        }
+
+        let device = Arc::new(parking_lot::Mutex::new(VsockDevice::new(guest_cid)?));
+        let transport = Arc::new(tokio::sync::RwLock::new(
+            VirtioMmioTransport::new("virtio-vsock", base_address, self.memory(), device.clone())
+                .with_interrupt(self.pic(), irq),
+        ));
+
+        self.devices
+            .register_device("virtio-vsock", transport.clone())
+            .await?;
+        self.devices
+            .register_mmio_region(
+                "virtio-vsock".to_string(),
+                base_address,
+                VIRTIO_MMIO_REGION_SIZE,
+            )
+            .await?;
+
+        // Deliver packets as they are queued, rather than when a caller
+        // remembers to ask.
+        //
+        // Queueing is not delivering: a host-side packet sits in the device
+        // until something moves it into a receive buffer the driver posted and
+        // signals the used queue. The boot probe did that by hand after every
+        // step. Nothing else did -- so `AgentVM::exec_in_guest`, the published
+        // way to run a command in a guest, queued a connection request no guest
+        // ever saw and then timed out saying the guest was not running.
+        //
+        // A dedicated OS thread for the same reason interrupt delivery has one:
+        // the vCPU loop blocks a runtime worker inside `KVM_RUN`, and a
+        // delivery task behind it would be starved exactly when the guest is
+        // idle and waiting to be told something.
+        // Tell the guest where to find this, by putting it on the command
+        // line rather than by reporting it and hoping the caller passes it on.
+        self.extra_cmdline
+            .lock()
+            .push(Self::vsock_kernel_args_for(base_address, irq));
+
+        let (packet_tx, packet_rx) = std::sync::mpsc::channel();
+        device
+            .lock()
+            .set_pending_wake(Arc::new(QueuedPackets { sender: packet_tx }));
+
+        // Weak: see the interrupt delivery thread in `launch`.
+        let pump_vm = Arc::downgrade(self);
+        let handle = tokio::runtime::Handle::current();
+        std::thread::Builder::new()
+            .name(format!("hv2-vsock-{}", self.config.name))
+            .spawn(move || {
+                while packet_rx.recv().is_ok() {
+                    let Some(pump_vm) = pump_vm.upgrade() else {
+                        break;
+                    };
+                    handle.block_on(async {
+                        if let Err(e) = pump_vm.notify_vsock().await {
+                            tracing::debug!("vsock: a queued packet could not be delivered: {e}");
+                        }
+                    });
+                }
+            })
+            .map_err(|e| {
+                Error::Config(format!("could not start the vsock delivery thread: {e}"))
+            })?;
+
+        *self.vsock.write() = Some(AttachedVsock {
+            device: device.clone(),
+            transport: VsockTransport::Mmio(transport),
+            base_address,
+            irq,
+        });
+        tracing::info!(
+            "VM '{}': vsock device attached at {:#x} (guest CID {guest_cid}, IRQ {irq})",
+            self.config.name,
+            base_address
+        );
+        Ok(device)
+    }
+
+    /// Publish anything the host has queued for the guest, and tell it.
+    ///
+    /// Two steps that have to happen together and in this order: move pending
+    /// packets into the receive buffers the driver posted, then raise the
+    /// used-queue interrupt so the driver looks. Publishing without signalling
+    /// leaves the data sitting in a ring the guest has no reason to read, and
+    /// signalling without publishing wakes it to find nothing.
+    ///
+    /// Returns whether anything was published.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a queue error, or a failure to raise the interrupt.
+    pub async fn notify_vsock(&self) -> Result<bool> {
+        let attached = {
+            let guard = self.vsock.read();
+            match guard.as_ref() {
+                Some(vsock) => (vsock.device.clone(), vsock.transport.clone()),
+                None => return Ok(false),
+            }
+        };
+
+        let published = {
+            let mut device = attached.0.lock();
+            // Two different reasons nothing moves, and they need telling
+            // apart: no packet queued, or no receive buffer from the driver.
+            let pending = device.has_pending();
+            let queue = &crate::devices::VirtioMmioDevice::queues(&mut *device)[0];
+            tracing::debug!(
+                "vsock: pending={pending} rx_ready={} rx_size={} rx_desc={:#x}",
+                queue.is_ready(),
+                queue.size(),
+                queue.desc_addr()
+            );
+            tracing::debug!(
+                "vsock: rx_avail={:#x} rx_used={:#x} avail_idx={:?}",
+                queue.avail_addr(),
+                queue.used_addr(),
+                queue.avail_idx(&self.memory)
+            );
+            device.deliver_pending(&self.memory)?
+        };
+        if published {
+            attached.1.signal_used_queue().await?;
+        }
+        Ok(published)
+    }
+
+    /// The vsock device attached to this VM, if any.
+    ///
+    /// `None` means no channel to the guest exists — which is distinct from a
+    /// channel with nothing listening on the other end. A caller reporting on
+    /// guest connectivity needs to keep the two apart, for the same reason the
+    /// console reports `attached` separately from its contents.
+    pub fn vsock(
+        &self,
+    ) -> Option<Arc<parking_lot::Mutex<crate::devices::virtio_vsock::VsockDevice>>> {
+        self.vsock.read().as_ref().map(|v| v.device.clone())
+    }
+
+    /// Kernel command-line arguments that make a Linux guest probe the vsock
+    /// device attached by [`Self::attach_vsock`].
+    ///
+    /// Returns `None` when no device is attached. Without this the window is
+    /// mapped and no driver ever looks at it: virtio-mmio has no enumeration,
+    /// so a guest is told where to look or it does not look.
+    pub fn vsock_kernel_args(&self) -> Option<String> {
+        self.vsock
+            .read()
+            .as_ref()
+            .map(|v| Self::vsock_kernel_args_for(v.base_address, v.irq))
+    }
+
+    /// The argument a guest needs to find a vsock window at `base_address`.
+    ///
+    /// Public because it is the only place this string is built. A caller that
+    /// wants to describe a VM before one exists -- a tool surface rendering a
+    /// boot command line, say -- must not format it a second time: two
+    /// producers of one string drift, and the failure is a guest that probes an
+    /// address with nothing at it and reports nothing at all.
+    #[must_use]
+    pub fn vsock_kernel_args_for(base_address: u64, irq: u8) -> String {
+        Self::virtio_mmio_kernel_args_for(base_address, irq)
+    }
+
+    /// The argument a guest needs to find any virtio-mmio window at
+    /// `base_address`.
+    ///
+    /// Nothing in the string is specific to a device: the transport is what
+    /// the guest is being pointed at, and which device answers is read out of
+    /// the registers once it looks. So this is the single producer, and
+    /// [`Self::vsock_kernel_args_for`] is the name the vsock callers already
+    /// use for it.
+    #[must_use]
+    pub fn virtio_mmio_kernel_args_for(base_address: u64, irq: u8) -> String {
+        format!("virtio_mmio.device=4K@{base_address:#x}:{irq}")
+    }
+
+    /// Kernel command-line arguments this VM will add when it boots.
+    ///
+    /// Devices attached after the boot source was described add what a guest
+    /// needs in order to find them, and that happens when the image is loaded
+    /// -- so the configured [`BootSource`](crate::BootSource) does not
+    /// show it. A caller reporting what a guest will be booted with needs both.
+    #[must_use]
+    pub fn extra_kernel_args(&self) -> Vec<String> {
+        self.extra_cmdline.lock().clone()
+    }
+
+    /// Wait for VM exit
+    pub async fn wait_for_exit(&self) {
+        self.exit_notify.notified().await;
+    }
+
+    /// Get the event bus
+    pub fn event_bus(&self) -> &EventBus {
+        &self.event_bus
+    }
+
+    /// Subscribe to VM events
+    pub fn subscribe_events(&self) -> tokio::sync::broadcast::Receiver<VmEvent> {
+        self.event_bus.subscribe()
+    }
+
+    /// Get vCPU statistics
+    pub fn vcpu_stats(&self, id: u32) -> Option<Arc<VCpuStats>> {
+        self.vcpu_stats.get(id as usize).cloned()
+    }
+
+    /// Get all vCPU statistics
+    pub fn all_vcpu_stats(&self) -> &[Arc<VCpuStats>] {
+        &self.vcpu_stats
+    }
+
+    /// Run the VM execution loop
+    ///
+    /// This is the main execution loop that runs vCPUs and handles VM exits.
+    /// It will continue until the VM is stopped or encounters a shutdown exit.
+    ///
+    /// With `parallel_vcpu` enabled, each vCPU runs in its own tokio task.
+    /// Otherwise, a single-threaded round-robin approach is used.
+    pub async fn run(&self) -> Result<()> {
+        // Ensure VM is in running state
+        if self.state() != VMState::Running {
+            return Err(Error::InvalidState(format!(
+                "Cannot run VM in state {:?}",
+                self.state()
+            )));
+        }
+
+        tracing::info!(
+            "Starting VM execution for '{}' with {} vCPUs",
+            self.config.name,
+            self.config.vcpu_count
+        );
+
+        // Every vCPU gets its own thread, whatever the vCPU count. There used
+        // to be a `run_single` for the one-vCPU case that awaited
+        // `backend.run_vcpu()` inline on the shared runtime, and since
+        // `run_vcpu` blocks inside `KVM_RUN` until the guest exits, each such
+        // VM held a runtime worker for as long as its guest ran.
+        //
+        // A sandbox is a one-vCPU VM, so that was every sandbox, and it capped
+        // how many could exist at once at the host core count. Measured with
+        // `examples/memory_overhead` on a 24-core host:
+        //
+        //     23 VMs   0.139 MiB per VM, all guests ran
+        //     24 VMs   hangs at 0% CPU
+        //
+        // Nothing was short of memory -- twenty-three concurrent VMs cost
+        // 3.2 MiB between them -- and nothing was short of KVM: 400 bare
+        // `KVM_CREATE_VM` fds open on this host without error. The executor
+        // was the limit, and only for the path a sandbox actually takes.
+        //
+        // `run_parallel` spawns each vCPU through `spawn_vcpu_task`, which
+        // owns a thread, and then awaits a notification rather than blocking.
+        self.run_parallel().await
+    }
+
+    /// Run VM with single-threaded vCPU execution (round-robin)
+    async fn run_single(&self) -> Result<()> {
+        let vcpu = self.vcpus[0].clone();
+        let stats = self.vcpu_stats[0].clone();
+
+        tracing::info!(
+            "Starting single-threaded execution loop for vCPU {}",
+            vcpu.id()
+        );
+
+        loop {
+            // Check if VM should stop
+            if !self.running.load(Ordering::SeqCst) {
+                tracing::info!("VM stopped, exiting execution loop");
+                break;
+            }
+
+            // Run vCPU until exit
+            let start = std::time::Instant::now();
+            let exit = self.backend.run_vcpu(&vcpu).await?;
+            stats
+                .run_time_ns
+                .fetch_add(start.elapsed().as_nanos() as u64, Ordering::Relaxed);
+            stats.exits.fetch_add(1, Ordering::Relaxed);
+
+            tracing::debug!("VM exit: {}", exit);
+
+            // Handle the exit
+            match self.handle_exit(&vcpu, &stats, exit).await {
+                Ok(should_continue) => {
+                    if !should_continue {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Error handling VM exit: {}", e);
+                    *self.state.write() = VMState::Error;
+                    return Err(e);
+                }
+            }
+        }
+
+        tracing::info!("VM execution loop exited for '{}'", self.config.name);
+        Ok(())
+    }
+
+    /// Run VM with parallel vCPU execution
+    async fn run_parallel(&self) -> Result<()> {
+        tracing::info!(
+            "Starting parallel execution with {} vCPU tasks",
+            self.vcpus.len()
+        );
+
+        // Create channels and spawn tasks for each vCPU
+        let mut task_handles = Vec::with_capacity(self.vcpus.len());
+
+        for (idx, vcpu) in self.vcpus.iter().enumerate() {
+            let (tx, rx) = mpsc::channel::<VCpuMessage>(32);
+            let handle = self.spawn_vcpu_task(vcpu.clone(), self.vcpu_stats[idx].clone(), rx);
+
+            task_handles.push(VCpuTaskState { tx, handle });
+        }
+
+        // Store task handles
+        {
+            let mut tasks = self.vcpu_tasks.write();
+            *tasks = task_handles;
+        }
+
+        // Wait for the exit notification
+        self.exit_notify.notified().await;
+
+        tracing::info!("VM parallel execution completed for '{}'", self.config.name);
+
+        Ok(())
+    }
+
+    /// Spawn a vCPU execution task
+    fn spawn_vcpu_task(
+        &self,
+        vcpu: Arc<VCpu>,
+        stats: Arc<VCpuStats>,
+        rx: mpsc::Receiver<VCpuMessage>,
+    ) -> JoinHandle<Result<()>> {
+        let backend = self.backend.clone();
+        let running = self.running.clone();
+        let state = self.state.clone();
+        let exit_notify = self.exit_notify.clone();
+        let devices = self.devices.clone();
+        let pic = self.pic.clone();
+        let memory = self.memory.clone();
+        let event_bus = self.event_bus.clone();
+        let vm_name = self.config.name.clone();
+        let vcpu_id = vcpu.id();
+        let core = self.config.affinity_for(vcpu_id);
+
+        // Every vCPU runs on its own OS thread with its own current-thread
+        // runtime, pinned or not. A thin tokio task awaits the thread's result,
+        // so the returned handle type is unchanged.
+        //
+        // The unpinned case used to be a plain `tokio::spawn` onto the shared
+        // runtime, and that capped how many VMs a process could run at once.
+        // `run_vcpu` blocks inside `KVM_RUN` until the guest exits, so a vCPU
+        // task occupies a runtime worker for as long as its guest is running
+        // rather than yielding. Once every worker held one, nothing could make
+        // progress -- not another VM's provisioning, not the device I/O the
+        // running guests were waiting on -- and the process stopped at 0% CPU.
+        //
+        // Measured before this change, with `examples/memory_overhead`:
+        //
+        //     4 runtime workers    3 VMs ok,  6 hang
+        //    24 runtime workers   20 VMs ok, 30 hang
+        //
+        // About one VM per host core, which is a hard ceiling on density and
+        // has nothing to do with memory: twenty concurrent VMs cost 2.89 MiB
+        // between them. The rest of this file had already reached this
+        // conclusion twice -- interrupt delivery and the vsock pump each got a
+        // dedicated thread, both commented with the observation that the vCPU
+        // loop blocks a runtime worker inside `KVM_RUN`. Everything around the
+        // vCPU was moved off the runtime; the vCPU itself was not.
+        //
+        // A thread per vCPU is what a blocking ioctl wants anyway: the kernel
+        // is the scheduler here, the thread is descheduled inside the ioctl
+        // rather than spinning, and an idle guest costs a parked thread.
+        let queued_at = std::time::Instant::now();
+        tokio::spawn(async move {
+            let dispatched_at = std::time::Instant::now();
+            let (done_tx, done_rx) = tokio::sync::oneshot::channel();
+            let name = match core {
+                Some(core) => format!("vcpu-{vcpu_id}-core{core}"),
+                None => format!("vcpu-{vcpu_id}"),
+            };
+            let spawned = std::thread::Builder::new().name(name).spawn(move || {
+                let owner_entered_at = std::time::Instant::now();
+                tracing::debug!(target: "hv2_core::cold_dispatch", vm = %vm_name, vcpu_id,
+                    wrapper_queue_ms = (dispatched_at - queued_at).as_secs_f64() * 1000.0,
+                    thread_start_ms = dispatched_at.elapsed().as_secs_f64() * 1000.0,
+                    "vCPU owner thread entry");
+                if let Some(core) = core {
+                    match crate::cpu_affinity::pin_current_thread(core) {
+                        Ok(()) => {
+                            tracing::info!("vCPU {vcpu_id} pinned to host core {core}");
+                        }
+                        Err(e) => {
+                            tracing::warn!("vCPU {vcpu_id}: failed to pin to core {core}: {e}");
+                        }
+                    }
+                }
+                let rt = match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(rt) => rt,
+                    Err(e) => {
+                        let _ = done_tx.send(Err(Error::Config(format!(
+                            "failed to build vCPU {vcpu_id} runtime: {e}"
+                        ))));
+                        return;
+                    }
+                };
+                let res = rt.block_on(Self::run_vcpu_loop(
+                    vcpu,
+                    stats,
+                    rx,
+                    backend,
+                    running,
+                    state,
+                    exit_notify,
+                    devices,
+                    pic,
+                    memory,
+                    event_bus,
+                    vm_name,
+                    owner_entered_at,
+                ));
+                let _ = done_tx.send(res);
+            });
+            if let Err(e) = spawned {
+                return Err(Error::Config(format!(
+                    "failed to spawn vCPU {vcpu_id} thread: {e}"
+                )));
+            }
+            done_rx.await.unwrap_or(Ok(()))
+        })
+    }
+
+    /// The vCPU execution loop, run via `block_on` on the dedicated OS thread
+    /// this vCPU owns. Factored out so the spawning above stays readable.
+    #[allow(clippy::too_many_arguments)]
+    async fn run_vcpu_loop(
+        vcpu: Arc<VCpu>,
+        stats: Arc<VCpuStats>,
+        mut rx: mpsc::Receiver<VCpuMessage>,
+        backend: Arc<dyn HypervisorBackend>,
+        running: Arc<AtomicBool>,
+        state: Arc<RwLock<VMState>>,
+        exit_notify: Arc<Notify>,
+        devices: Arc<DeviceManager>,
+        pic: Arc<Pic8259>,
+        memory: Arc<GuestMemory>,
+        event_bus: EventBus,
+        vm_name: String,
+        owner_entered_at: std::time::Instant,
+    ) -> Result<()> {
+        tracing::info!("vCPU {} task started", vcpu.id());
+        let mut paused = false;
+        let mut first_run = true;
+
+        loop {
+            // Check for control messages (non-blocking)
+            match rx.try_recv() {
+                Ok(VCpuMessage::Stop) => {
+                    tracing::debug!("vCPU {} received stop", vcpu.id());
+                    break;
+                }
+                Ok(VCpuMessage::Pause) => {
+                    tracing::debug!("vCPU {} paused", vcpu.id());
+                    paused = true;
+                    continue;
+                }
+                Ok(VCpuMessage::Resume) => {
+                    tracing::debug!("vCPU {} resumed", vcpu.id());
+                    paused = false;
+                }
+                Ok(VCpuMessage::Inspect { reply }) => {
+                    let _ = reply.send(backend.inspect_vcpu(&vcpu).await);
+                    continue;
+                }
+                Ok(VCpuMessage::Interrupt { vector }) => {
+                    tracing::debug!("vCPU {} injecting interrupt {}", vcpu.id(), vector);
+                    if let Err(e) = backend.inject_interrupt(&vcpu, vector).await {
+                        tracing::warn!("Failed to inject interrupt: {}", e);
+                    }
+                    stats.interrupts.fetch_add(1, Ordering::Relaxed);
+                }
+                Err(mpsc::error::TryRecvError::Empty) => {}
+                Err(mpsc::error::TryRecvError::Disconnected) => {
+                    tracing::debug!("vCPU {} channel disconnected", vcpu.id());
+                    break;
+                }
+            }
+
+            // If paused, wait for resume message
+            if paused {
+                match rx.recv().await {
+                    Some(VCpuMessage::Resume) => paused = false,
+                    Some(VCpuMessage::Stop) | None => break,
+                    Some(VCpuMessage::Inspect { reply }) => {
+                        let _ = reply.send(backend.inspect_vcpu(&vcpu).await);
+                        continue;
+                    }
+                    _ => continue,
+                }
+            }
+
+            // Check if VM should stop
+            if !running.load(Ordering::SeqCst) {
+                break;
+            }
+
+            // Run vCPU until exit
+            let start = std::time::Instant::now();
+            if first_run {
+                tracing::debug!(target: "hv2_core::cold_dispatch", vm = %vm_name,
+                    vcpu_id = vcpu.id(),
+                    owner_setup_ms = (start - owner_entered_at).as_secs_f64() * 1000.0,
+                    "vCPU first backend call");
+            }
+            let exit = match backend.run_vcpu(&vcpu).await {
+                Ok(exit) => exit,
+                Err(e) => {
+                    tracing::error!("vCPU {} run error: {}", vcpu.id(), e);
+                    *state.write() = VMState::Error;
+                    exit_notify.notify_waiters();
+                    return Err(e);
+                }
+            };
+            if first_run {
+                let first_exit_kind = match &exit {
+                    VmExit::Hlt => "hlt",
+                    VmExit::Io {
+                        direction: IoDirection::Out,
+                        ..
+                    } => "io_out",
+                    VmExit::Io {
+                        direction: IoDirection::In,
+                        ..
+                    } => "io_in",
+                    VmExit::Mmio {
+                        is_write: false, ..
+                    } => "mmio_read",
+                    VmExit::Mmio { is_write: true, .. } => "mmio_write",
+                    VmExit::InterruptWindow => "interrupt_window",
+                    VmExit::Exception { .. } => "exception",
+                    VmExit::Shutdown => "shutdown",
+                    VmExit::Debug { .. } => "debug",
+                    VmExit::Hypercall { .. } => "hypercall",
+                    VmExit::SystemEvent { .. } => "system_event",
+                    VmExit::Nmi => "nmi",
+                    VmExit::Rdmsr { .. } => "rdmsr",
+                    VmExit::Wrmsr { .. } => "wrmsr",
+                    VmExit::IoapicEoi { .. } => "ioapic_eoi",
+                    VmExit::Interrupted => "interrupted",
+                    VmExit::Unknown { .. } => "unknown",
+                };
+                let first_exit_port = match &exit {
+                    VmExit::Io { port, .. } => Some(*port),
+                    _ => None,
+                };
+                tracing::debug!(target: "hv2_core::cold_dispatch", vm = %vm_name,
+                    vcpu_id = vcpu.id(), first_backend_ms = start.elapsed().as_secs_f64() * 1000.0,
+                    first_exit_kind,
+                    first_exit_port = ?first_exit_port,
+                    "vCPU first backend return");
+                first_run = false;
+            }
+            stats
+                .run_time_ns
+                .fetch_add(start.elapsed().as_nanos() as u64, Ordering::Relaxed);
+            stats.exits.fetch_add(1, Ordering::Relaxed);
+
+            // Handle the exit
+            let should_continue = Self::handle_exit_static(
+                &vcpu,
+                &stats,
+                exit,
+                &vm_name,
+                &devices,
+                &pic,
+                &memory,
+                backend.as_ref(),
+                &event_bus,
+                &state,
+                &exit_notify,
+            )
+            .await?;
+
+            if !should_continue {
+                running.store(false, Ordering::SeqCst);
+                exit_notify.notify_waiters();
+                break;
+            }
+        }
+
+        tracing::info!("vCPU {} task exited (exits={})", vcpu.id(), stats.exits());
+        Ok(())
+    }
+
+    /// Static version of handle_exit for use in spawned tasks
+    async fn handle_exit_static(
+        vcpu: &VCpu,
+        stats: &VCpuStats,
+        exit: VmExit,
+        vm_name: &str,
+        devices: &DeviceManager,
+        pic: &Pic8259,
+        _memory: &GuestMemory,
+        backend: &dyn HypervisorBackend,
+        event_bus: &EventBus,
+        state: &RwLock<VMState>,
+        exit_notify: &Notify,
+    ) -> Result<bool> {
+        match exit {
+            VmExit::Mmio {
+                phys_addr,
+                mut data,
+                len,
+                is_write,
+            } => {
+                stats.mmio_exits.fetch_add(1, Ordering::Relaxed);
+                Self::handle_mmio_static(
+                    phys_addr, &mut data, len, is_write, vm_name, devices, event_bus,
+                )
+                .await?;
+
+                // `data` is a copy taken out of the exit, so a read that is not
+                // written back is a read the guest never sees. It gets whatever
+                // was already in the shared page instead -- which is how a
+                // virtio driver came to read a stale magic number and refuse
+                // the device.
+                if !is_write {
+                    backend
+                        .set_mmio_result(vcpu, &data[..len.min(data.len() as u32) as usize])
+                        .await?;
+                }
+
+                Ok(true)
+            }
+
+            VmExit::Io {
+                port,
+                direction,
+                size,
+                data,
+            } => {
+                stats.io_exits.fetch_add(1, Ordering::Relaxed);
+                let io_result = Self::handle_io_static(
+                    port, direction, size, data, vm_name, devices, pic, event_bus,
+                )
+                .await?;
+
+                // Write IO IN data back to guest RAX
+                if let Some((in_data, in_size)) = io_result.input {
+                    backend.set_io_result(vcpu, in_data, in_size).await?;
+                }
+
+                if let Some(irq) = io_result.interrupt {
+                    Self::pulse_irq(backend, irq).await;
+                }
+
+                Ok(true)
+            }
+
+            VmExit::Hlt => {
+                Self::handle_hlt_static(vcpu, stats, vm_name, pic, backend, event_bus).await?;
+                Ok(true)
+            }
+
+            VmExit::Shutdown => {
+                tracing::info!("Guest initiated shutdown");
+                *state.write() = VMState::Stopped;
+                exit_notify.notify_waiters();
+                Ok(false)
+            }
+
+            VmExit::InterruptWindow => {
+                Self::handle_interrupt_window_static(vcpu, stats, vm_name, pic, backend, event_bus)
+                    .await?;
+                Ok(true)
+            }
+
+            VmExit::Exception { vector, error_code } => {
+                tracing::warn!(
+                    "Guest exception: vector={} error_code={:?}",
+                    vector,
+                    error_code
+                );
+
+                // Any exception that reaches userspace is fatal to this VM,
+                // not just a double fault.
+                //
+                // There is an injection path below and it is the wrong one:
+                // `inject_exception` defaults to `inject_interrupt`, which
+                // delivers a *hardware interrupt* carrying the exception's
+                // vector number. That is not the same as delivering the
+                // exception -- the faulting instruction is not re-run and the
+                // guest's fault handler never sees a fault. So the vCPU
+                // resumed, re-executed the same instruction, took the same
+                // exception, and did it again: roughly 60,000 exits a second,
+                // the VM still reported as Running, and nothing saying why.
+                //
+                // Stopping loses nothing that resuming would have recovered
+                // and it names the vector. Real injection needs
+                // KVM_SET_VCPU_EVENTS with the exception fields set; when that
+                // exists, this becomes the fallback for when it fails.
+                tracing::error!(
+                    "Guest exception vector={vector} error_code={error_code:?}: it cannot be emulated, and the only injection path here delivers an interrupt rather than a fault, so stopping instead of re-executing it forever"
+                );
+                *state.write() = VMState::Stopped;
+                exit_notify.notify_waiters();
+                Ok(false)
+            }
+
+            VmExit::Debug { info } => {
+                tracing::debug!("Debug exit: {}", info);
+                Ok(true)
+            }
+
+            // The VMM asked for this exit, so there is nothing to emulate.
+            // Continue, and let the top of the run loop read the control
+            // channel and the running flag — the reason it was kicked.
+            VmExit::Interrupted => Ok(true),
+
+            VmExit::Unknown { reason } => {
+                tracing::warn!("Unknown VM exit reason: {}", reason);
+                Ok(true)
+            }
+
+            VmExit::Hypercall { nr, .. } => {
+                tracing::debug!("Hypercall nr={:#x}", nr);
+                Ok(true)
+            }
+
+            VmExit::SystemEvent { type_, flags } => {
+                tracing::info!("System event: type={} flags={:#x}", type_, flags);
+                *state.write() = VMState::Stopped;
+                exit_notify.notify_waiters();
+                Ok(false)
+            }
+
+            VmExit::Nmi => {
+                tracing::debug!("NMI received");
+                Ok(true)
+            }
+
+            VmExit::Rdmsr { index } => {
+                tracing::debug!("RDMSR index={:#x}", index);
+                Ok(true)
+            }
+
+            VmExit::Wrmsr { index, data } => {
+                tracing::debug!("WRMSR index={:#x} data={:#x}", index, data);
+                Ok(true)
+            }
+
+            VmExit::IoapicEoi { vector } => {
+                tracing::debug!("IOAPIC EOI vector={}", vector);
+                Ok(true)
+            }
+        }
+    }
+
+    /// Static MMIO handler
+    async fn handle_mmio_static(
+        phys_addr: u64,
+        data: &mut [u8; 8],
+        len: u32,
+        is_write: bool,
+        vm_name: &str,
+        devices: &DeviceManager,
+        event_bus: &EventBus,
+    ) -> Result<()> {
+        if is_write {
+            tracing::debug!(
+                "MMIO write: addr={:#x} data={:?} len={}",
+                phys_addr,
+                &data[..len as usize],
+                len
+            );
+
+            if let Some(device) = devices.find_mmio_device(phys_addr).await {
+                let offset = phys_addr - device.base_address();
+                let value = match len {
+                    1 => data[0] as u32,
+                    2 => u16::from_le_bytes([data[0], data[1]]) as u32,
+                    4 => u32::from_le_bytes([data[0], data[1], data[2], data[3]]),
+                    8 => {
+                        let low = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+                        device.write_register(offset, low, 4).await?;
+                        let high = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+                        device.write_register(offset + 4, high, 4).await?;
+                        return Ok(());
+                    }
+                    _ => return Err(Error::InvalidMemoryAccess { address: phys_addr }),
+                };
+
+                device.write_register(offset, value, len as u8).await?;
+
+                event_bus.publish(VmEvent::memory_access(
+                    vm_name.to_string(),
+                    phys_addr,
+                    len as u64,
+                    true,
+                ));
+            } else {
+                tracing::warn!("MMIO write to unmapped address: {:#x}", phys_addr);
+            }
+        } else {
+            tracing::debug!("MMIO read: addr={:#x} len={}", phys_addr, len);
+
+            if let Some(device) = devices.find_mmio_device(phys_addr).await {
+                let offset = phys_addr - device.base_address();
+                let value = device.read_register(offset, len as u8).await?;
+
+                match len {
+                    1 => data[0] = value as u8,
+                    2 => {
+                        let bytes = (value as u16).to_le_bytes();
+                        data[..2].copy_from_slice(&bytes);
+                    }
+                    4 => {
+                        let bytes = value.to_le_bytes();
+                        data[..4].copy_from_slice(&bytes);
+                    }
+                    8 => {
+                        let low = device.read_register(offset, 4).await?;
+                        let high = device.read_register(offset + 4, 4).await?;
+                        data[..4].copy_from_slice(&low.to_le_bytes());
+                        data[4..8].copy_from_slice(&high.to_le_bytes());
+                    }
+                    _ => return Err(Error::InvalidMemoryAccess { address: phys_addr }),
+                }
+
+                event_bus.publish(VmEvent::memory_access(
+                    vm_name.to_string(),
+                    phys_addr,
+                    len as u64,
+                    false,
+                ));
+            } else {
+                tracing::warn!("MMIO read from unmapped address: {:#x}", phys_addr);
+                data[..len as usize].fill(0xFF);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Static I/O handler
+    ///
+    /// Returns `Some((data, size))` for IO IN operations so the caller can
+    /// write the result back to guest RAX via `set_io_result()`.
+    /// Assert an interrupt line and release it again.
+    ///
+    /// A pulse rather than a level, because the conditions this is called for
+    /// are edges in practice: a UART that transmits instantly is *always*
+    /// ready to send, so holding the line high would assert it forever and the
+    /// guest would take the same interrupt until it masked the source.
+    ///
+    /// A backend that cannot drive a line is not an error worth stopping a VM
+    /// for -- it means this guest gets no device interrupts, which is the
+    /// situation that already existed -- so it is logged once per access at
+    /// debug level and the guest runs on.
+    async fn pulse_irq(backend: &dyn HypervisorBackend, irq: u8) {
+        let line = u32::from(irq);
+        tracing::trace!("pulsing IRQ {line}");
+        if let Err(e) = backend.set_irq_line(line, true).await {
+            tracing::debug!("IRQ {line} could not be asserted: {e}");
+            return;
+        }
+        if let Err(e) = backend.set_irq_line(line, false).await {
+            tracing::debug!("IRQ {line} could not be released: {e}");
+        }
+    }
+
+    /// Drive an interrupt line to a level and leave it there.
+    ///
+    /// The level-triggered half of the sink. A virtio device holds its line
+    /// until the driver writes `InterruptACK`; releasing it earlier, as a
+    /// pulse does, can drop the interrupt between one delivery and the next.
+    async fn set_irq(backend: &dyn HypervisorBackend, irq: u8, level: bool) {
+        let line = u32::from(irq);
+        tracing::trace!("IRQ {line} -> {}", u8::from(level));
+        if let Err(e) = backend.set_irq_line(line, level).await {
+            tracing::debug!("IRQ {line} could not be driven to {level}: {e}");
+        }
+    }
+
+    async fn handle_io_static(
+        port: u16,
+        direction: IoDirection,
+        size: u8,
+        mut data: u32,
+        vm_name: &str,
+        devices: &DeviceManager,
+        pic: &Pic8259,
+        event_bus: &EventBus,
+    ) -> Result<IoOutcome> {
+        match direction {
+            IoDirection::Out => {
+                tracing::debug!("IO OUT: port={:#x} data={:#x}", port, data);
+
+                let mut interrupt = None;
+                if pic.handles_port(port) {
+                    pic.write_port(port, data as u8).await?;
+                } else if let Some(device) = devices.find_io_device(port).await {
+                    let offset = (port - device.base_port()) as u64;
+                    device.write_register(offset, data, size).await?;
+                    // Asked immediately after the access, because that is when
+                    // the condition changes: writing a byte to a UART makes it
+                    // ready to send the next one.
+                    interrupt = device.pending_interrupt().await;
+                } else {
+                    tracing::debug!("IO OUT to unhandled port: {:#x}", port);
+                }
+
+                event_bus.publish(VmEvent::io_operation(vm_name.to_string(), port, true));
+                Ok(IoOutcome {
+                    input: None,
+                    interrupt,
+                })
+            }
+
+            IoDirection::In => {
+                tracing::debug!("IO IN: port={:#x}", port);
+
+                let mut interrupt = None;
+                if pic.handles_port(port) {
+                    data = pic.read_port(port).await? as u32;
+                } else if let Some(device) = devices.find_io_device(port).await {
+                    let offset = (port - device.base_port()) as u64;
+                    data = device.read_register(offset, size).await?;
+                    interrupt = device.pending_interrupt().await;
+                } else {
+                    tracing::debug!("IO IN from unhandled port: {:#x}", port);
+                    data = 0xFF;
+                }
+
+                event_bus.publish(VmEvent::io_operation(vm_name.to_string(), port, false));
+                tracing::debug!("IO IN result: {:#x}", data);
+                Ok(IoOutcome {
+                    input: Some((data, size)),
+                    interrupt,
+                })
+            }
+        }
+    }
+
+    /// Static HLT handler
+    async fn handle_hlt_static(
+        vcpu: &VCpu,
+        stats: &VCpuStats,
+        vm_name: &str,
+        pic: &Pic8259,
+        backend: &dyn HypervisorBackend,
+        event_bus: &EventBus,
+    ) -> Result<()> {
+        tracing::debug!("HLT: vCPU {} halted, checking for interrupts", vcpu.id());
+
+        if let Some(vector) = pic.get_pending_interrupt() {
+            tracing::debug!("Injecting pending interrupt: vector {:#x}", vector);
+            backend.inject_interrupt(vcpu, vector).await?;
+            pic.acknowledge_interrupt(vector)?;
+            stats.interrupts.fetch_add(1, Ordering::Relaxed);
+
+            event_bus.publish(VmEvent::device_interrupt(
+                vm_name.to_string(),
+                vector as u32,
+            ));
+        } else {
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+
+        Ok(())
+    }
+
+    /// Static interrupt window handler
+    async fn handle_interrupt_window_static(
+        vcpu: &VCpu,
+        stats: &VCpuStats,
+        vm_name: &str,
+        pic: &Pic8259,
+        backend: &dyn HypervisorBackend,
+        event_bus: &EventBus,
+    ) -> Result<()> {
+        tracing::debug!("Interrupt window opened for vCPU {}", vcpu.id());
+
+        if let Some(vector) = pic.get_pending_interrupt() {
+            tracing::debug!("Injecting interrupt: vector {:#x}", vector);
+            backend.inject_interrupt(vcpu, vector).await?;
+            pic.acknowledge_interrupt(vector)?;
+            stats.interrupts.fetch_add(1, Ordering::Relaxed);
+
+            event_bus.publish(VmEvent::device_interrupt(
+                vm_name.to_string(),
+                vector as u32,
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Handle a VM exit (instance method for single-threaded mode)
+    ///
+    /// Returns Ok(true) if execution should continue, Ok(false) if VM should stop.
+    async fn handle_exit(&self, vcpu: &VCpu, stats: &VCpuStats, exit: VmExit) -> Result<bool> {
+        match exit {
+            VmExit::Mmio {
+                phys_addr,
+                mut data,
+                len,
+                is_write,
+            } => {
+                stats.mmio_exits.fetch_add(1, Ordering::Relaxed);
+                self.handle_mmio_exit(vcpu, phys_addr, &mut data, len, is_write)
+                    .await?;
+
+                // Same as the static path: without this the guest reads stale
+                // bytes rather than what the device produced.
+                if !is_write {
+                    self.backend
+                        .set_mmio_result(vcpu, &data[..len.min(data.len() as u32) as usize])
+                        .await?;
+                }
+
+                Ok(true)
+            }
+
+            VmExit::Io {
+                port,
+                direction,
+                size,
+                data,
+            } => {
+                stats.io_exits.fetch_add(1, Ordering::Relaxed);
+                self.handle_io_exit(vcpu, port, direction, size, data)
+                    .await?;
+                Ok(true)
+            }
+
+            VmExit::Hlt => {
+                self.handle_hlt_exit(vcpu, stats).await?;
+                Ok(true)
+            }
+
+            VmExit::Shutdown => {
+                tracing::info!("Guest initiated shutdown");
+                self.stop().await?;
+                Ok(false)
+            }
+
+            VmExit::InterruptWindow => {
+                self.handle_interrupt_window(vcpu, stats).await?;
+                Ok(true)
+            }
+
+            VmExit::Exception { vector, error_code } => {
+                tracing::warn!(
+                    "Guest exception: vector={} error_code={:?}",
+                    vector,
+                    error_code
+                );
+
+                // Any exception that reaches userspace is fatal to this VM,
+                // not just a double fault.
+                //
+                // There is an injection path below and it is the wrong one:
+                // `inject_exception` defaults to `inject_interrupt`, which
+                // delivers a *hardware interrupt* carrying the exception's
+                // vector number. That is not the same as delivering the
+                // exception -- the faulting instruction is not re-run and the
+                // guest's fault handler never sees a fault. So the vCPU
+                // resumed, re-executed the same instruction, took the same
+                // exception, and did it again: roughly 60,000 exits a second,
+                // the VM still reported as Running, and nothing saying why.
+                //
+                // Stopping loses nothing that resuming would have recovered
+                // and it names the vector. Real injection needs
+                // KVM_SET_VCPU_EVENTS with the exception fields set; when that
+                // exists, this becomes the fallback for when it fails.
+                tracing::error!(
+                    "Guest exception vector={vector} error_code={error_code:?}: it cannot be emulated, and the only injection path here delivers an interrupt rather than a fault, so stopping instead of re-executing it forever"
+                );
+                Ok(false)
+            }
+
+            VmExit::Debug { info } => {
+                tracing::debug!("Debug exit: {}", info);
+                Ok(true)
+            }
+
+            // The VMM asked for this exit, so there is nothing to emulate.
+            // Continue, and let the top of the run loop read the control
+            // channel and the running flag — the reason it was kicked.
+            VmExit::Interrupted => Ok(true),
+
+            VmExit::Unknown { reason } => {
+                tracing::warn!("Unknown VM exit reason: {}", reason);
+                Ok(true)
+            }
+
+            VmExit::Hypercall { nr, .. } => {
+                tracing::debug!("Hypercall nr={:#x}", nr);
+                Ok(true)
+            }
+
+            VmExit::SystemEvent { type_, flags } => {
+                tracing::info!("System event: type={} flags={:#x}", type_, flags);
+                self.stop().await?;
+                Ok(false)
+            }
+
+            VmExit::Nmi => {
+                tracing::debug!("NMI received");
+                Ok(true)
+            }
+
+            VmExit::Rdmsr { index } => {
+                tracing::debug!("RDMSR index={:#x}", index);
+                Ok(true)
+            }
+
+            VmExit::Wrmsr { index, data } => {
+                tracing::debug!("WRMSR index={:#x} data={:#x}", index, data);
+                Ok(true)
+            }
+
+            VmExit::IoapicEoi { vector } => {
+                tracing::debug!("IOAPIC EOI vector={}", vector);
+                Ok(true)
+            }
+        }
+    }
+
+    /// Handle MMIO exit
+    async fn handle_mmio_exit(
+        &self,
+        _vcpu: &VCpu,
+        phys_addr: u64,
+        data: &mut [u8; 8],
+        len: u32,
+        is_write: bool,
+    ) -> Result<()> {
+        if is_write {
+            // MMIO write
+            tracing::debug!(
+                "MMIO write: addr={:#x} data={:?} len={}",
+                phys_addr,
+                &data[..len as usize],
+                len
+            );
+
+            // Try to find device handler
+            if let Some(device) = self.devices.find_mmio_device(phys_addr).await {
+                let offset = phys_addr - device.base_address();
+                let value = match len {
+                    1 => data[0] as u32,
+                    2 => u16::from_le_bytes([data[0], data[1]]) as u32,
+                    4 => u32::from_le_bytes([data[0], data[1], data[2], data[3]]),
+                    8 => {
+                        // For 8-byte writes, we'll do two 4-byte writes
+                        let low = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+                        device.write_register(offset, low, 4).await?;
+                        let high = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+                        device.write_register(offset + 4, high, 4).await?;
+                        return Ok(());
+                    }
+                    _ => return Err(Error::InvalidMemoryAccess { address: phys_addr }),
+                };
+
+                device.write_register(offset, value, len as u8).await?;
+
+                // Publish event
+                self.event_bus.publish(VmEvent::memory_access(
+                    self.config.name.clone(),
+                    phys_addr,
+                    len as u64,
+                    true,
+                ));
+            } else {
+                tracing::warn!("MMIO write to unmapped address: {:#x}", phys_addr);
+            }
+        } else {
+            // MMIO read
+            tracing::debug!("MMIO read: addr={:#x} len={}", phys_addr, len);
+
+            if let Some(device) = self.devices.find_mmio_device(phys_addr).await {
+                let offset = phys_addr - device.base_address();
+                let value = device.read_register(offset, len as u8).await?;
+
+                // Write value into data buffer
+                match len {
+                    1 => data[0] = value as u8,
+                    2 => {
+                        let bytes = (value as u16).to_le_bytes();
+                        data[..2].copy_from_slice(&bytes);
+                    }
+                    4 => {
+                        let bytes = value.to_le_bytes();
+                        data[..4].copy_from_slice(&bytes);
+                    }
+                    8 => {
+                        // For 8-byte reads, we'll do two 4-byte reads
+                        let low = device.read_register(offset, 4).await?;
+                        let high = device.read_register(offset + 4, 4).await?;
+                        data[..4].copy_from_slice(&low.to_le_bytes());
+                        data[4..8].copy_from_slice(&high.to_le_bytes());
+                    }
+                    _ => return Err(Error::InvalidMemoryAccess { address: phys_addr }),
+                }
+
+                // Publish event
+                self.event_bus.publish(VmEvent::memory_access(
+                    self.config.name.clone(),
+                    phys_addr,
+                    len as u64,
+                    false,
+                ));
+            } else {
+                tracing::warn!("MMIO read from unmapped address: {:#x}", phys_addr);
+                // Return 0xFF for unmapped reads
+                data[..len as usize].fill(0xFF);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handle I/O port exit
+    async fn handle_io_exit(
+        &self,
+        _vcpu: &VCpu,
+        port: u16,
+        direction: IoDirection,
+        size: u8,
+        mut data: u32,
+    ) -> Result<()> {
+        match direction {
+            IoDirection::Out => {
+                tracing::debug!("IO OUT: port={:#x} data={:#x} size={}", port, data, size);
+
+                // Check if this is a PIC port
+                if self.pic.handles_port(port) {
+                    self.pic.write_port(port, data as u8).await?;
+                } else if let Some(device) = self.devices.find_io_device(port).await {
+                    // Device I/O write
+                    let offset = (port - device.base_port()) as u64;
+                    device.write_register(offset, data, size).await?;
+                    if let Some(irq) = device.pending_interrupt().await {
+                        Self::pulse_irq(self.backend.as_ref(), irq).await;
+                    }
+                } else {
+                    tracing::debug!("IO OUT to unhandled port: {:#x}", port);
+                }
+
+                // Publish event
+                self.event_bus
+                    .publish(VmEvent::io_operation(self.config.name.clone(), port, true));
+            }
+
+            IoDirection::In => {
+                tracing::debug!("IO IN: port={:#x} size={}", port, size);
+
+                // Check if this is a PIC port
+                if self.pic.handles_port(port) {
+                    data = self.pic.read_port(port).await? as u32;
+                } else if let Some(device) = self.devices.find_io_device(port).await {
+                    // Device I/O read
+                    let offset = (port - device.base_port()) as u64;
+                    data = device.read_register(offset, size).await?;
+                    if let Some(irq) = device.pending_interrupt().await {
+                        Self::pulse_irq(self.backend.as_ref(), irq).await;
+                    }
+                } else {
+                    tracing::debug!("IO IN from unhandled port: {:#x}", port);
+                    data = 0xFF; // Return 0xFF for unmapped ports
+                }
+
+                // Publish event
+                self.event_bus.publish(VmEvent::io_operation(
+                    self.config.name.clone(),
+                    port,
+                    false,
+                ));
+
+                // Write IO IN data back to guest RAX
+                self.backend.set_io_result(_vcpu, data, size).await?;
+                tracing::debug!("IO IN result: {:#x}", data);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handle HLT exit
+    async fn handle_hlt_exit(&self, vcpu: &VCpu, stats: &VCpuStats) -> Result<()> {
+        tracing::debug!("HLT: vCPU {} halted, checking for interrupts", vcpu.id());
+
+        // Check if there are pending interrupts
+        if let Some(vector) = self.pic.get_pending_interrupt() {
+            tracing::debug!("Injecting pending interrupt: vector {:#x}", vector);
+
+            // Inject the interrupt
+            self.backend.inject_interrupt(vcpu, vector).await?;
+
+            // Acknowledge the interrupt in PIC
+            self.pic.acknowledge_interrupt(vector)?;
+
+            // Update stats
+            stats.interrupts.fetch_add(1, Ordering::Relaxed);
+
+            // Publish interrupt event
+            self.event_bus.publish(VmEvent::device_interrupt(
+                self.config.name.clone(),
+                vector as u32,
+            ));
+        } else {
+            // No interrupts pending, sleep briefly
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+
+        Ok(())
+    }
+
+    /// Handle interrupt window exit
+    async fn handle_interrupt_window(&self, vcpu: &VCpu, stats: &VCpuStats) -> Result<()> {
+        tracing::debug!(
+            "Interrupt window opened for vCPU {}, injecting pending interrupts",
+            vcpu.id()
+        );
+
+        // Check if there are pending interrupts
+        if let Some(vector) = self.pic.get_pending_interrupt() {
+            tracing::debug!("Injecting interrupt: vector {:#x}", vector);
+
+            // Inject the interrupt
+            self.backend.inject_interrupt(vcpu, vector).await?;
+
+            // Acknowledge the interrupt in PIC
+            self.pic.acknowledge_interrupt(vector)?;
+
+            // Update stats
+            stats.interrupts.fetch_add(1, Ordering::Relaxed);
+
+            // Publish interrupt event
+            self.event_bus.publish(VmEvent::device_interrupt(
+                self.config.name.clone(),
+                vector as u32,
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Get the hypervisor backend
+    pub fn backend(&self) -> Arc<dyn HypervisorBackend> {
+        Arc::clone(&self.backend)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a VM for tests that need a real hypervisor backend, returning
+    /// `None` when none is available in the environment (e.g. CI or WSL2 where
+    /// `/dev/kvm` is not accessible). Callers return early on `None`, matching
+    /// the "skip when the backend is unavailable" convention the WHPX and KVM
+    /// backend tests already use.
+    fn vm_or_skip(config: VMConfig) -> Option<VM> {
+        match VM::new(config) {
+            Ok(vm) => Some(vm),
+            Err(e) => {
+                eprintln!("skipping: no hypervisor backend available ({e})");
+                None
+            }
+        }
+    }
+
+    /// A forbidden shared region is refused before anything else is checked.
+    ///
+    /// Deliberately on a VM that has not been provisioned: the refusal has to
+    /// come from the policy and not from the VM happening to be in the wrong
+    /// state, so this would pass for the wrong reason if the guard sat after
+    /// the provisioning check. The error message is checked for the same
+    /// reason -- `InvalidState` and `PermissionDenied` are both `Err`.
+    #[tokio::test]
+    async fn a_forbidden_shared_region_is_refused() {
+        let vm = Arc::new(
+            VM::new(VMConfig {
+                name: "strict".into(),
+                memory_size: 4 * 1024 * 1024,
+                forbid_shared_memory: true,
+                ..Default::default()
+            })
+            .expect("a VM that never runs needs no backend"),
+        );
+
+        let rom = crate::shared_rom::SharedRom::zeroed(4096).expect("a page of shared memory");
+        let err = vm
+            .attach_shared_rom(0x8000_0000, rom)
+            .await
+            .expect_err("forbid_shared_memory must refuse");
+
+        assert!(
+            matches!(err, Error::PermissionDenied(_)),
+            "refusal should be a policy denial, not a state error: {err}"
+        );
+        assert!(
+            err.to_string().contains("timing channel"),
+            "the refusal should say what it is protecting against: {err}"
+        );
+    }
+
+    /// And the default is unchanged: sharing is allowed unless forbidden.
+    #[test]
+    fn sharing_is_permitted_by_default() {
+        assert!(
+            !VMConfig::default().forbid_shared_memory,
+            "defaulting to forbid would break every existing caller"
+        );
+    }
+
+    /// A small VM for the vsock attachment tests.
+    /// An `Arc` because attaching a device gives the VM a delivery thread that
+    /// outlives the call and has to hold the machine it delivers to.
+    fn vsock_vm() -> Option<Arc<VM>> {
+        vm_or_skip(VMConfig {
+            name: "vsock-vm".to_string(),
+            vcpu_count: 1,
+            memory_size: 64 * 1024 * 1024,
+            ..Default::default()
+        })
+        .map(Arc::new)
+    }
+
+    fn net_vm() -> Option<Arc<VM>> {
+        vm_or_skip(VMConfig {
+            name: "net-vm".to_string(),
+            vcpu_count: 1,
+            memory_size: 64 * 1024 * 1024,
+            ..Default::default()
+        })
+        .map(Arc::new)
+    }
+
+    const TEST_MAC: [u8; 6] = [0x52, 0x54, 0x00, 0x12, 0x34, 0x56];
+
+    #[tokio::test]
+    async fn a_vm_has_no_network_device_until_one_is_attached() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        assert!(vm.net().is_none());
+        assert!(vm.net_kernel_args().is_none());
+
+        let device = vm.attach_net(TEST_MAC).await.expect("attach");
+        assert_eq!(device.lock().mac(), TEST_MAC);
+        assert!(vm.net().is_some());
+    }
+
+    #[tokio::test]
+    async fn attaching_a_network_device_maps_it_where_the_guest_will_look() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        vm.attach_net(TEST_MAC).await.expect("attach");
+
+        // The same rule as vsock: virtio-mmio has no enumeration, so an
+        // unnamed window is one nothing probes.
+        assert_eq!(
+            vm.net_kernel_args().as_deref(),
+            Some("virtio_mmio.device=4K@0xd0020000:6")
+        );
+        assert!(
+            vm.extra_kernel_args()
+                .iter()
+                .any(|a| a.contains("0xd0020000")),
+            "the argument has to reach the command line, not just be reportable"
+        );
+
+        // And the MMIO exit path has to find it, or the mapping is decoration.
+        let handle = vm
+            .devices()
+            .find_mmio_device(VM::NET_MMIO_BASE)
+            .await
+            .expect("the window should be registered");
+        assert_eq!(handle.device_name(), "virtio-net");
+        assert_eq!(
+            handle.read_register(0, 4).await.expect("magic"),
+            crate::devices::virtio_mmio::VIRTIO_MMIO_MAGIC
+        );
+    }
+
+    /// The device a guest driver finds has to say it is a network card. Read
+    /// through the transport rather than off the device, because the register
+    /// is what the driver actually sees.
+    #[tokio::test]
+    async fn the_guest_reads_a_network_device_id_out_of_the_window() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        vm.attach_net(TEST_MAC).await.expect("attach");
+        let handle = vm
+            .devices()
+            .find_mmio_device(VM::NET_MMIO_BASE)
+            .await
+            .expect("registered");
+
+        // Offset 8 is DEVICE_ID. 1 is a network card.
+        assert_eq!(handle.read_register(8, 4).await.expect("device id"), 1);
+    }
+
+    /// A network device and a vsock device on one VM, which is the arrangement
+    /// an agent VM wants: a channel to the host and a link to the world.
+    #[tokio::test]
+    async fn a_network_device_and_a_vsock_device_do_not_collide() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        vm.attach_vsock(3).await.expect("vsock");
+        vm.attach_net(TEST_MAC).await.expect("net");
+
+        // Two windows, two lines, and the guest told about both.
+        assert_ne!(VM::NET_MMIO_BASE, VM::VSOCK_MMIO_BASE);
+        assert_ne!(VM::NET_IRQ, VM::VSOCK_IRQ);
+        let args = vm.extra_kernel_args();
+        assert_eq!(args.len(), 2, "both devices name their window: {args:?}");
+    }
+
+    #[tokio::test]
+    async fn a_second_network_device_is_refused() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        vm.attach_net(TEST_MAC).await.expect("attach");
+
+        // Two devices at one window would have one driver's rings written by
+        // two devices, which is not a state a guest recovers from.
+        let err = vm
+            .attach_net(TEST_MAC)
+            .await
+            .expect_err("a second must refuse");
+        assert!(err.to_string().contains("already has a network device"));
+    }
+
+    #[tokio::test]
+    async fn a_network_window_inside_guest_ram_is_refused() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        // Below 64 MiB is RAM. Mapping registers there gives one address two
+        // meanings, and the failure surfaces as memory corruption.
+        let err = vm
+            .attach_net_at(TEST_MAC, 0x1000, 6)
+            .await
+            .expect_err("a window inside RAM must refuse");
+        assert!(err.to_string().contains("overlaps"));
+    }
+
+    #[tokio::test]
+    async fn a_custom_network_window_is_the_one_the_guest_is_told_about() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        vm.attach_net_at(TEST_MAC, 0xe100_0000, 10)
+            .await
+            .expect("attach");
+        assert_eq!(
+            vm.net_kernel_args().as_deref(),
+            Some("virtio_mmio.device=4K@0xe1000000:10")
+        );
+    }
+
+    /// Nothing is published to a guest that has posted no buffer, and the
+    /// frame is not lost either. This is `notify_net` reporting honestly
+    /// rather than a link that silently drops.
+    #[tokio::test]
+    async fn a_frame_queued_for_a_guest_with_no_buffers_is_kept_not_published() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        let device = vm.attach_net(TEST_MAC).await.expect("attach");
+
+        assert!(
+            !vm.notify_net().await.expect("notify"),
+            "nothing queued yet"
+        );
+        assert!(device.lock().queue_received(vec![1, 2, 3, 4]));
+        assert!(
+            !vm.notify_net().await.expect("notify"),
+            "the driver has published no rings, so nothing can be published to it"
+        );
+        assert!(
+            device.lock().has_pending(),
+            "and the frame waits rather than vanishing"
+        );
+    }
+
+    /// `notify_net` on a VM with no device is a no-op, not an error: a caller
+    /// pumping frames should not have to ask first.
+    #[tokio::test]
+    async fn notifying_a_vm_with_no_network_device_does_nothing() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        assert!(!vm.notify_net().await.expect("notify"));
+    }
+
+    #[tokio::test]
+    async fn a_vm_has_no_vsock_device_until_one_is_attached() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+
+        // Nothing attaches a channel to the guest automatically, and a caller
+        // must be able to tell "no channel" from "a channel with nothing
+        // listening".
+        assert!(vm.vsock().is_none());
+        assert!(vm.vsock_kernel_args().is_none());
+
+        let device = vm.attach_vsock(3).await.expect("attach");
+        assert_eq!(device.lock().guest_cid(), 3);
+        assert!(vm.vsock().is_some());
+    }
+
+    /// Attaching over PCI is only worth anything if a guest walking the bus
+    /// finds the device. This does exactly what a guest does -- write
+    /// CONFIG_ADDRESS, read CONFIG_DATA, through the same port the kernel
+    /// uses -- rather than inspecting the root complex directly, because
+    /// adding configuration space that no port exposes is the failure this
+    /// whole change exists to fix.
+    #[tokio::test]
+    async fn a_guest_enumerating_pci_finds_the_vsock_device() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        // The machine model rather than `provision`, which needs a hypervisor
+        // this host may not have. This registers the same devices provision
+        // does, including the PCI window the test then reads through.
+        crate::machine::Machine::legacy_pc_with_pci_root(vm.pci_root())
+            .attach_absent(&vm.devices())
+            .await
+            .expect("attach the legacy machine");
+        vm.attach_vsock_pci(3).await.expect("attach over PCI");
+
+        let pci = vm
+            .devices()
+            .find_io_device(crate::devices::PCI_CONFIG_IO_BASE)
+            .await
+            .expect("the PCI configuration mechanism is not mapped");
+
+        // CONFIG_ADDRESS for bus 0, the slot the device took, function 0,
+        // register 0 -- built the way a guest builds it.
+        let select = 0x8000_0000u32 | (u32::from(VM::VSOCK_PCI_SLOT) << 11);
+        pci.write_register(0, select, 4).await.unwrap();
+        let id = pci.read_register(4, 4).await.unwrap();
+
+        assert_eq!(id & 0xFFFF, 0x1AF4, "vendor id is not virtio");
+        // 0x1040 + 19: modern virtio-vsock.
+        assert_eq!(id >> 16, 0x1053, "device id is not virtio-vsock");
+
+        // The interrupt line, so the guest knows what to unmask. Without it a
+        // driver binds, programs its queues, and waits on an interrupt nobody
+        // raises.
+        pci.write_register(0, select | 0x3C, 4).await.unwrap();
+        let intr = pci.read_register(4, 4).await.unwrap();
+        assert_eq!(
+            intr & 0xFF,
+            u32::from(VM::VSOCK_PCI_IRQ),
+            "interrupt line not reported to the guest"
+        );
+        assert_eq!((intr >> 8) & 0xFF, 1, "interrupt pin should be INTA");
+    }
+
+    /// The BAR window has to be reachable as memory too, or the guest finds a
+    /// device it cannot talk to.
+    #[tokio::test]
+    async fn the_pci_vsock_bar_window_is_mapped_as_mmio() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        // The machine model rather than `provision`, which needs a hypervisor
+        // this host may not have. This registers the same devices provision
+        // does, including the PCI window the test then reads through.
+        crate::machine::Machine::legacy_pc_with_pci_root(vm.pci_root())
+            .attach_absent(&vm.devices())
+            .await
+            .expect("attach the legacy machine");
+        vm.attach_vsock_pci(3).await.expect("attach over PCI");
+
+        let mmio = vm
+            .devices()
+            .find_mmio_device(VM::VSOCK_PCI_BAR_BASE)
+            .await
+            .expect("the BAR window is not mapped");
+        assert_eq!(mmio.device_name(), "virtio-vsock-pci");
+
+        // The last byte of the window, to catch a region registered with the
+        // wrong size.
+        assert!(vm
+            .devices()
+            .find_mmio_device(
+                VM::VSOCK_PCI_BAR_BASE + crate::devices::virtio_pci::VIRTIO_PCI_BAR_SIZE - 1
+            )
+            .await
+            .is_some());
+    }
+
+    /// Discovery is the entire difference between the two transports, so a
+    /// PCI attach must not put anything on the command line.
+    #[tokio::test]
+    async fn attaching_over_pci_adds_no_kernel_argument() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        // The machine model rather than `provision`, which needs a hypervisor
+        // this host may not have. This registers the same devices provision
+        // does, including the PCI window the test then reads through.
+        crate::machine::Machine::legacy_pc_with_pci_root(vm.pci_root())
+            .attach_absent(&vm.devices())
+            .await
+            .expect("attach the legacy machine");
+        vm.attach_vsock_pci(3).await.expect("attach over PCI");
+
+        assert!(
+            vm.extra_kernel_args().is_empty(),
+            "a PCI device is found by enumeration; telling the guest where it \
+             is on the command line would mean it was not"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_second_vsock_device_is_refused_whichever_transport_asks() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        // The machine model rather than `provision`, which needs a hypervisor
+        // this host may not have. This registers the same devices provision
+        // does, including the PCI window the test then reads through.
+        crate::machine::Machine::legacy_pc_with_pci_root(vm.pci_root())
+            .attach_absent(&vm.devices())
+            .await
+            .expect("attach the legacy machine");
+        vm.attach_vsock_pci(3).await.expect("attach over PCI");
+
+        // Two devices claiming one context ID is not something a guest can
+        // make sense of, and the transport they arrive on does not change it.
+        assert!(vm.attach_vsock(4).await.is_err());
+        assert!(vm.attach_vsock_pci(4).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn attaching_a_vsock_device_maps_it_where_the_guest_will_look() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        vm.attach_vsock(3).await.expect("attach");
+
+        // virtio-mmio has no enumeration: the window is mapped and the kernel
+        // arguments name it, or no driver ever probes it.
+        let args = vm.vsock_kernel_args().expect("kernel args");
+        assert_eq!(args, "virtio_mmio.device=4K@0xd0000000:5");
+
+        // The MMIO exit path has to find it, or the mapping is decoration.
+        let handle = vm
+            .devices()
+            .find_mmio_device(VM::VSOCK_MMIO_BASE)
+            .await
+            .expect("the window should be registered");
+        assert_eq!(handle.device_name(), "virtio-vsock");
+        assert_eq!(
+            handle.read_register(0, 4).await.expect("magic"),
+            crate::devices::virtio_mmio::VIRTIO_MMIO_MAGIC
+        );
+    }
+
+    #[tokio::test]
+    async fn a_custom_window_is_the_one_the_guest_is_told_about() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        vm.attach_vsock_at(7, 0xe000_0000, 9).await.expect("attach");
+
+        // Reporting the default window here would send the guest driver to an
+        // address nothing is mapped at.
+        assert_eq!(
+            vm.vsock_kernel_args().as_deref(),
+            Some("virtio_mmio.device=4K@0xe0000000:9")
+        );
+    }
+
+    #[tokio::test]
+    async fn a_second_vsock_device_is_refused() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        vm.attach_vsock(3).await.expect("attach");
+
+        // Two devices would give the guest two claims on one context ID, and
+        // the host two channels it cannot tell apart.
+        let err = vm.attach_vsock(4).await.expect_err("a second must refuse");
+        assert!(
+            err.to_string().contains("already has a vsock device"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_register_window_inside_guest_ram_is_refused() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+
+        // One address would mean two things, and the symptom would be memory
+        // corruption rather than a bad address.
+        let err = vm
+            .attach_vsock_at(3, 0x1000, 5)
+            .await
+            .expect_err("an overlapping window must refuse");
+        assert!(
+            err.to_string().contains("overlaps"),
+            "unexpected error: {err}"
+        );
+        assert!(
+            vm.vsock().is_none(),
+            "a refused attach leaves nothing behind"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_reserved_guest_context_id_is_refused() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+
+        assert!(vm.attach_vsock(2).await.is_err(), "CID 2 is the host");
+        assert!(vm.vsock().is_none());
+        assert!(vm.attach_vsock(3).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_vm_creation() {
+        let config = VMConfig {
+            name: "test-vm".to_string(),
+            vcpu_count: 2,
+            memory_size: 1024 * 1024 * 1024,
+            ..Default::default()
+        };
+
+        let Some(vm) = vm_or_skip(config) else {
+            return;
+        };
+        assert_eq!(vm.state(), VMState::Created);
+        assert_eq!(vm.vcpus().len(), 2);
+        assert_eq!(vm.all_vcpu_stats().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_vm_lifecycle() {
+        let config = VMConfig::default();
+        let Some(vm) = vm_or_skip(config) else {
+            return;
+        };
+
+        vm.start().await.unwrap();
+        assert_eq!(vm.state(), VMState::Running);
+
+        vm.stop().await.unwrap();
+        assert_eq!(vm.state(), VMState::Stopped);
+    }
+
+    #[tokio::test]
+    async fn test_vcpu_stats() {
+        let config = VMConfig {
+            vcpu_count: 4,
+            ..Default::default()
+        };
+        let Some(vm) = vm_or_skip(config) else {
+            return;
+        };
+
+        // Each vCPU should have its own stats
+        for i in 0..4 {
+            let stats = vm.vcpu_stats(i).expect("Stats should exist");
+            assert_eq!(stats.exits(), 0);
+            assert_eq!(stats.run_time_ns(), 0);
+            assert_eq!(stats.interrupts(), 0);
+        }
+
+        // Non-existent vCPU
+        assert!(vm.vcpu_stats(10).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_parallel_config() {
+        let config = VMConfig {
+            name: "parallel-test".to_string(),
+            vcpu_count: 4,
+            parallel_vcpu: true,
+            ..Default::default()
+        };
+        assert!(config.parallel_vcpu);
+        assert_eq!(config.vcpu_count, 4);
+
+        let Some(vm) = vm_or_skip(config) else {
+            return;
+        };
+        assert_eq!(vm.vcpus().len(), 4);
+    }
+
+    #[test]
+    fn affinity_empty_is_valid() {
+        let config = VMConfig::default();
+        assert!(config.validate_affinity().is_ok());
+        assert_eq!(config.affinity_for(0), None);
+    }
+
+    #[test]
+    fn affinity_valid_mapping_passes() {
+        // Pin vCPU 0 to host core 0 (always exists); leave vCPU 1 unpinned.
+        let config = VMConfig {
+            vcpu_count: 2,
+            vcpu_affinity: vec![(0, 0)],
+            ..Default::default()
+        };
+        assert!(config.validate_affinity().is_ok());
+        assert_eq!(config.affinity_for(0), Some(0));
+        assert_eq!(config.affinity_for(1), None);
+    }
+
+    #[test]
+    fn affinity_rejects_unknown_vcpu() {
+        let config = VMConfig {
+            vcpu_count: 2,
+            vcpu_affinity: vec![(5, 0)],
+            ..Default::default()
+        };
+        assert!(config.validate_affinity().is_err());
+    }
+
+    #[test]
+    fn affinity_rejects_out_of_range_core() {
+        let config = VMConfig {
+            vcpu_count: 1,
+            vcpu_affinity: vec![(0, 1_000_000)],
+            ..Default::default()
+        };
+        assert!(config.validate_affinity().is_err());
+    }
+
+    #[test]
+    fn affinity_rejects_duplicate_core() {
+        let config = VMConfig {
+            vcpu_count: 2,
+            vcpu_affinity: vec![(0, 0), (1, 0)],
+            ..Default::default()
+        };
+        assert!(config.validate_affinity().is_err());
+    }
+
+    #[test]
+    fn affinity_rejects_duplicate_vcpu() {
+        let config = VMConfig {
+            vcpu_count: 2,
+            vcpu_affinity: vec![(0, 0), (0, 1)],
+            ..Default::default()
+        };
+        assert!(config.validate_affinity().is_err());
+    }
+
+    #[tokio::test]
+    async fn vm_new_rejects_invalid_affinity() {
+        let config = VMConfig {
+            vcpu_count: 1,
+            vcpu_affinity: vec![(7, 0)], // vCPU 7 does not exist
+            ..Default::default()
+        };
+        assert!(VM::new(config).is_err());
+    }
+
+    #[tokio::test]
+    async fn vm_new_rejects_invalid_memory_numa_node() {
+        let config = VMConfig {
+            vcpu_count: 1,
+            memory_numa_node: Some(9_999), // no such NUMA node
+            ..Default::default()
+        };
+        assert!(VM::new(config).is_err());
+    }
+
+    #[test]
+    fn resolve_memory_node_prefers_explicit() {
+        let config = VMConfig {
+            vcpu_count: 1,
+            vcpu_affinity: vec![(0, 0)],
+            memory_numa_node: Some(2),
+            ..Default::default()
+        };
+        assert_eq!(config.resolve_memory_node(), Some(2));
+    }
+
+    #[test]
+    fn resolve_memory_node_none_without_affinity_or_explicit() {
+        assert_eq!(VMConfig::default().resolve_memory_node(), None);
+    }
+
+    #[test]
+    fn resolve_memory_node_derives_from_pinned_core() {
+        let config = VMConfig {
+            vcpu_count: 1,
+            vcpu_affinity: vec![(0, 0)],
+            ..Default::default()
+        };
+        // With no explicit node, derivation follows the pinned core's host node.
+        assert_eq!(
+            config.resolve_memory_node(),
+            crate::cpu_affinity::numa_node_for_core(0)
+        );
+    }
+}

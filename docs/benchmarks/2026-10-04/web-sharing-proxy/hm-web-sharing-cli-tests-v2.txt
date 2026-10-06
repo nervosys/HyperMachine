@@ -1,0 +1,10 @@
+   Compiling hm-cli v1.1.0 (/var/tmp/hm-egress-log-mA2CCL/crates/hm-cli)
+    Finished `test` profile [optimized + debuginfo] target(s) in 25.21s
+     Running unittests src/lib.rs (/var/tmp/hm-object-backup/target/debug/deps/hm_cli-11b919e56a3d067b)
+
+running 2 tests
+test sandbox_vm::tests::web_sharing_cli_validates_revision_grants_and_no_owner_override ... ok
+test sandbox_vm::tests::web_sharing_cli_sends_exact_retry_payload_and_hides_server_errors ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 151 filtered out; finished in 0.00s
+

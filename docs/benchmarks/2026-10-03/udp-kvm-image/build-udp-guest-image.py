@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+"""Replace the agent in an exact accepted image for owned UDP KVM checks."""
+import argparse
+import gzip
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+
+BASE_SHA256 = '1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c'
+
+
+def digest(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    for name in ('base', 'agent', 'output', 'report'):
+        parser.add_argument('--' + name, type=Path, required=True)
+    args = parser.parse_args()
+    if digest(args.base) != BASE_SHA256 or args.output.exists() or args.report.exists():
+        raise ValueError('exact accepted base and fresh output/report required')
+    if len({p.resolve() for p in (args.base, args.agent, args.output, args.report)}) != 4:
+        raise ValueError('input/output paths overlap')
+    agent_hash = digest(args.agent)
+    headers = subprocess.run(['readelf', '-l', str(args.agent)], capture_output=True,
+                             text=True, check=True, timeout=15).stdout
+    if 'INTERP' in headers:
+        raise ValueError('guest agent must be static')
+    with tempfile.TemporaryDirectory(prefix='hm-udp-image-') as temporary:
+        root = Path(temporary)
+        subprocess.run(['cpio', '-id', '--no-absolute-filenames', '--quiet'],
+                       input=gzip.decompress(args.base.read_bytes()), cwd=root,
+                       capture_output=True, check=True, timeout=20)
+        target = root / 'bin/hv2-guest-agentd'
+        if target.is_symlink():
+            raise ValueError('agent target is a symlink')
+        shutil.copyfile(args.agent, target)
+        target.chmod(0o755)
+        names = sorted(['.'] + [str(p.relative_to(root)) for p in root.rglob('*')])
+        for name in names:
+            os.utime(root / name, (0, 0), follow_symlinks=False)
+        packed = subprocess.run(['cpio', '--null', '-o', '-H', 'newc', '-R', '0:0',
+                                 '--reproducible', '--quiet'], cwd=root,
+                                input=b'\0'.join(name.encode() for name in names) + b'\0',
+                                capture_output=True, check=True, timeout=20).stdout
+        image = gzip.compress(packed, compresslevel=9, mtime=0)
+        if digest(args.agent) != agent_hash or digest(args.base) != BASE_SHA256:
+            raise ValueError('input changed during image build')
+        with args.output.open('xb') as output:
+            output.write(image)
+    with args.report.open('x') as report:
+        json.dump({'base_sha256': BASE_SHA256, 'agent_sha256': agent_hash,
+                   'image_sha256': digest(args.output), 'image_bytes': len(image)}, report, indent=2)
+        report.write('\n')
+
+
+if __name__ == '__main__':
+    main()

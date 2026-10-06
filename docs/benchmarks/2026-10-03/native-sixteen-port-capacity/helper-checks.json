@@ -1,0 +1,45 @@
+{
+  "binary_sha256": "d03c8ba9e917356f17c948d567f36aa1a02700e8d937624a75a3fed83de71fb5",
+  "checks": [
+    {
+      "family": 4,
+      "tagged": false,
+      "payload_sizes": [
+        0,
+        4,
+        65507
+      ],
+      "process_reaped": true
+    },
+    {
+      "family": 4,
+      "tagged": true,
+      "payload_sizes": [
+        0,
+        4,
+        65505
+      ],
+      "process_reaped": true
+    },
+    {
+      "family": 6,
+      "tagged": false,
+      "payload_sizes": [
+        0,
+        4,
+        1024
+      ],
+      "process_reaped": true
+    },
+    {
+      "family": 6,
+      "tagged": true,
+      "payload_sizes": [
+        0,
+        4,
+        1024
+      ],
+      "process_reaped": true
+    }
+  ]
+}

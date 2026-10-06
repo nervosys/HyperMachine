@@ -1,0 +1,14 @@
+published-runtime-claim: rejected
+changed-artifact: rejected
+missing-outer-run: rejected
+wrong-order: rejected
+missing-source-binding: rejected
+missing-runtime-activation: rejected
+activation-after-scoring: rejected
+wrong-runtime-mode: rejected
+diagnostic-scored: rejected
+different-executable: rejected
+missing-guest-sample: rejected
+failed-guest-cleanup: rejected
+unmatched-clock-rng: rejected
+actual same-binary comparison accepted; thirteen damaged contracts rejected

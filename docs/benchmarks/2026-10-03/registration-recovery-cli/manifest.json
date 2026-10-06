@@ -1,0 +1,12 @@
+{
+  "README.md": "18ea300560f4ec9a9c45401feb5fbf6fecd1e91bff42845179070fa758ab2c34",
+  "cli-baseline.rs": "040e7b967e8e4dde1b1da445524a9982bc3db296f6a46db3b6dcb6d53b98fd2c",
+  "cli-candidate.rs": "4622218bbc72ec92dca5c28ca493791e51337c15f6cae966aa139fa4fb4234eb",
+  "cli-tests.log": "8b2b251b699f4bd3abbd1395aaa3990694b773cd199d2d018bdd926848a40491",
+  "cli.patch": "85ee5b36cbb9e6a03f5bdd7d48ac71a0888f464442571892604001e2baab8ae1",
+  "control-baseline.rs": "4016fcbe7257403e110246740fe51baf2a7c103ade7ea0b0a98bb404bc5e2e26",
+  "control-candidate.rs": "5c3a7888fd9292cc72c1115a4460121860ba5e9093f7874fb7d784de064c56cc",
+  "control-tests.log": "a7d274c6150800168c046bcb97852f0a86eff28edba60425a3903818e423dce3",
+  "control.patch": "40af021fdc6d8b05f7c33101d4c2dd1832b141154b0651517349119d680b8f21",
+  "source-context.json": "7cf987b3bf020de80a0fa9a7967a83193e2bee17805deac951e499d9c4624aa3"
+}

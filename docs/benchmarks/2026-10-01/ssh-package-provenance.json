@@ -1,0 +1,8 @@
+{
+  "source": "Debian trixie packages retrieved with apt-get download; fixture-only extraction, no host service installed",
+  "packages_sha256": {
+    "dropbear-bin_2025.89-1~deb13u1_amd64.deb": "1ddbd76749c7076097fb899eaf55f0a398d6f62799a6000501b32ed7b5d9257b",
+    "libtomcrypt1_1.18.2+dfsg-7+b2_amd64.deb": "704174c153914d76b8924f35113042f437abddd7f281da9fca8861defb707a01",
+    "libtommath1_1.3.0-1_amd64.deb": "0e6025c5c3c07c7055993eb23fd1eb8e55ec037ef46eca2e7622825e85f56a60"
+  }
+}

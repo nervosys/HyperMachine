@@ -1,0 +1,175 @@
+# HyperMachine sandbox cluster. See docs/CUBESANDBOX_PARITY_ROADMAP.md, Phases 4-5.
+
+image:
+  # Built from Containerfile.sandbox: `--target control-plane` and `--target node`.
+  controlPlane: ghcr.io/nervosys/hv2-control-plane:1.1.0
+  node: ghcr.io/nervosys/hv2-sandboxd:1.1.0
+  pullPolicy: IfNotPresent
+
+# The API key clients send as X-API-Key (E2B_API_KEY) and the token control
+# planes use with nodes, and the chart-deployed store's password. Left empty,
+# each is generated once and kept across upgrades. `existingSecret` names a
+# Secret with keys `api-key`, `cluster-token` and `store-password` instead.
+auth:
+  apiKey: ""
+  # Preserve the existing non-expiring admin credential by default.
+  # Set false only with apiKeysSecret configured for policy-only authentication.
+  legacyAdminEnabled: true
+  # Existing Secret containing the JSON array accepted by --api-keys-file.
+  # Policies load at startup: restart all control-plane pods after rotation.
+  apiKeysSecret: ""
+  apiKeysSecretKey: keys.json
+  clusterToken: ""
+  # Letters and digits only: it is spliced into the store's redis:// URL.
+  storePassword: ""
+  existingSecret: ""
+
+controlPlane:
+  replicas: 2
+  # How often each instance reaps sandboxes whose node stopped heartbeating.
+  reapIntervalSeconds: 5
+  service:
+    type: ClusterIP
+    apiPort: 80
+    proxyPort: 49983
+  resources:
+    requests: { cpu: 100m, memory: 64Mi }
+    limits: { memory: 256Mi }
+
+node:
+  # Sandbox nodes must expose /dev/kvm: bare metal, or a VM with nested
+  # virtualisation. Label them, and taint them so nothing else lands there:
+  #   kubectl label node N hypermachine.io/sandbox-node=true
+  #   kubectl taint node N hypermachine.io/sandbox-node=true:NoSchedule
+  nodeSelector:
+    hypermachine.io/sandbox-node: "true"
+  tolerations:
+    - key: hypermachine.io/sandbox-node
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+  # Sandboxes per node, and what each gets. A template-restored sandbox costs
+  # the host ~2.5 MiB until its guest writes memory; plan for the guest's
+  # working set, not its nominal size.
+  capacity: 32
+  memoryGb: 1
+  cpuCores: 1
+  # Give sandboxes a network behind the egress gateway (E2B's `network`
+  # fields). Off, a sandbox has no NIC at all.
+  network: true
+  # What a sandbox that configures no egress policy gets: deny or allow.
+  egressDefault: deny
+  # Existing Secrets copied at pod startup into owned private regular files.
+  # Restart node pods after changes; projected Secret updates are not reloaded.
+  # The policy uses exact sandbox IDs. Configure each eligible node consistently.
+  egressSecrets:
+    secretName: ""
+    key: policy.json
+  # Additional upstream TLS roots for intercepted HTTPS; node-wide trust.
+  # Requires network: true. Never use the guest interception CA implicitly.
+  egressUpstreamCa:
+    secretName: ""
+    key: roots.pem
+  # Private ranges a sandbox's `allowOut` may open. Empty, none: a tenant
+  # asking for 0.0.0.0/0 gets the internet, not this cluster's pod network.
+  # Anything listed here is also let out of the node pods' egress policy.
+  tenantReservedCidrs: []
+  # Restore sandboxes from a template snapshot (default) rather than boot.
+  template: true
+  # Oversubscription: when a node is full, pause the sandbox idle longest
+  # (at least this many seconds, with no request in flight) among those
+  # created with autoResume, and park requests for a slot instead of
+  # refusing them. Unset, a full node answers 503 and the control plane
+  # tries another. Paused sandboxes live on the pod's disk, so they do not
+  # survive the pod.
+  evictIdleAfterSeconds: null
+  # Prefault each restore's measured working set. Halves a restore's page
+  # faults; measure on your hardware before turning it on (it made no
+  # latency difference under nested virtualisation).
+  prefault: false
+  # A ReadWriteMany volume every node mounts -- templates, the egress CA and
+  # paused sandboxes live there, so a sandbox paused on one node resumes on
+  # any, survives its node, and a node draining (SIGTERM) pauses what it
+  # runs into it instead of ending it. Name an existing PVC (NFS, EFS,
+  # Filestore, CephFS...) to turn it on; the filesystem must make rename
+  # atomic, which is how nodes claim a paused sandbox. Empty: paused
+  # sandboxes stay on their node's disk and end with it.
+  snapshotStore:
+    claimName: ""
+  # Templates beyond `base`, each an initramfs built from an OCI image by
+  # tools/guest-image/from-oci.sh, e.g.
+  #   - { name: python, initramfs: /templates/python.cpio.gz }
+  # with the files reached through extraVolumes/extraVolumeMounts (a PVC or
+  # an image volume). A control plane sends a create for a template only to
+  # nodes offering it.
+  templates: []
+  extraVolumes: []
+  extraVolumeMounts: []
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }
+
+# Workload identity (E2B's `iam.tokens`): sandboxes' JWT-SVIDs, minted by
+# the egress gateway per request, with subject spiffe://TRUST_DOMAIN/sandbox/ID.
+# `issuer` is the URL tokens name as `iss` -- the control planes' public
+# address, which serves /.well-known/openid-configuration and jwks.json for
+# a cloud's OIDC federation to fetch. With a snapshot store every node signs
+# with one shared key; without one, each node its own, all in the JWKS.
+identity:
+  issuer: ""
+  trustDomain: hv2.local
+
+# Mutual TLS between control planes and nodes. Each names a Secret in
+# cert-manager's shape -- ca.crt, tls.crt, tls.key -- from one CA: nodes' with
+# DNS name hv2-node and server+client auth, control planes' with client auth
+# (tools/mtls-certs.sh makes both). Set both or neither. Without them nodes
+# are reached in plaintext, the cluster token and all envd traffic with them,
+# and only the NetworkPolicy stands between a node and the rest of the
+# cluster network. With them, a node's /metrics needs a client certificate
+# too.
+mtls:
+  nodeSecret: ""
+  controlPlaneSecret: ""
+
+store:
+  # Deploy a single Valkey instance with the chart, password-protected. For
+  # production, point `url` at a replicated Redis/Valkey instead (credentials
+  # in the URL: `redis://:PASSWORD@host:6379`), set `deploy: false`, and set
+  # `networkPolicy.externalStoreCidrs`.
+  deploy: true
+  url: ""
+  # For an external store over TLS (url: rediss://...): a Secret in
+  # cert-manager's shape -- ca.crt to verify the store, tls.crt and tls.key
+  # for a store that requires client certificates. The chart's own Valkey
+  # (deploy: true) is plaintext, and reached only through the NetworkPolicy.
+  tlsSecret: ""
+  namespace: default
+  image: valkey/valkey:8.1
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 512Mi }
+
+# Restrict each node daemon's API to the control planes (the cluster token is
+# required either way; this is the second lock), and what node pods -- whose
+# traffic carries their sandboxes' -- may reach: DNS, the store, the public
+# internet, and `node.tenantReservedCidrs`.
+networkPolicy:
+  enabled: true
+  # The cluster DNS a node resolves the store and sandboxes' names through.
+  dns:
+    namespace: kube-system
+    podLabels: { k8s-app: kube-dns }
+  # Everything but the internet: private, shared, link-local (the cloud
+  # metadata service) and loopback. Add the cluster's pod and service CIDRs
+  # here if either is public address space.
+  internalCidrs:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 100.64.0.0/10
+    - 169.254.0.0/16
+    - 127.0.0.0/8
+    - 0.0.0.0/8
+    - 224.0.0.0/3
+  # With `store.deploy: false`: where `store.url` lives, which node pods must
+  # still reach. Required then, because the rule above blocks private ranges.
+  externalStoreCidrs: []

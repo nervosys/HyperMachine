@@ -1,0 +1,14 @@
+error: failed to select a version for `unicode-segmentation`.
+    ... required by package `egui v0.36.0`
+    ... which satisfies dependency `egui = "^0.36.0"` of package `eframe v0.36.0`
+    ... which satisfies dependency `eframe = "^0.36"` of package `hm-gui v1.1.0 (/var/tmp/hm-domain-verification/source/crates/hm-gui)`
+versions that meet the requirements `^1.13` are: 1.13.3, 1.13.2
+
+all possible versions conflict with previously selected packages.
+
+  previously selected package `unicode-segmentation v1.12.0`
+    ... which satisfies dependency `unicode-segmentation = "^1.7.1"` of package `winit v0.30.13`
+    ... which satisfies dependency `winit = "^0.30.13"` of package `eframe v0.36.0`
+    ... which satisfies dependency `eframe = "^0.36"` of package `hm-gui v1.1.0 (/var/tmp/hm-domain-verification/source/crates/hm-gui)`
+
+failed to select a version for `unicode-segmentation` which could resolve this conflict

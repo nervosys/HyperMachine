@@ -1,0 +1,41 @@
+--- accepted-main.rs
++++ candidate-main.rs
+@@ -502,6 +502,8 @@
+     slots: Arc<tokio::sync::Semaphore>,
+     /// Optional cold-boot budget, held through agent readiness. Restores bypass it.
+     cold_boot_slots: Option<Arc<tokio::sync::Semaphore>>,
++    // Isolated experiment: bound active prepared launches through Restored acknowledgement.
++    restore_boot_slots: Arc<tokio::sync::Semaphore>,
+     /// This node's membership of a cluster, if it has one.
+     node: Option<NodeAgent>,
+     /// Sends lifecycle events to webhooks; over the cluster store, or this
+@@ -1324,6 +1326,13 @@
+     };
+ 
+     let t0 = std::time::Instant::now();
++    let restore_boot_permit = if snapshot.is_some() {
++        Some(Arc::clone(&state.restore_boot_slots).acquire_owned().await.map_err(|_| {
++            (StatusCode::SERVICE_UNAVAILABLE, "prepared restore admission unavailable".to_string())
++        })?)
++    } else {
++        None
++    };
+     let cold_boot_permit = if snapshot.is_none() {
+         match &state.cold_boot_slots {
+             Some(slots) => {
+@@ -1411,6 +1420,7 @@
+         ));
+     }
+     drop(cold_boot_permit);
++    drop(restore_boot_permit);
+     let answered = t0.elapsed();
+ 
+     let vm = Arc::new(vm);
+@@ -4458,6 +4468,7 @@
+         routes: Arc::clone(&routes),
+         slots: Arc::new(tokio::sync::Semaphore::new(opts_capacity)),
+         cold_boot_slots,
++        restore_boot_slots: Arc::new(tokio::sync::Semaphore::new(16)),
+         templates: parking_lot::RwLock::new(templates),
+         initrds: parking_lot::RwLock::new(initrds),
+         builds: Mutex::new(BTreeMap::new()),

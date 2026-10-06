@@ -1,0 +1,9 @@
+    Checking hv2-sandbox v1.1.0 (/var/tmp/hm-registration-acl/source/crates/hv2-sandbox)
+    Checking hv2-guest-agent v1.1.0 (/var/tmp/hm-registration-acl/source/crates/hv2-guest-agent)
+   Compiling hv2-api v1.1.0 (/var/tmp/hm-registration-acl/source/crates/hv2-api)
+    Checking hv2-core v1.1.0 (/var/tmp/hm-registration-acl/source/crates/hv2-core)
+    Checking hv2-context v1.1.0 (/var/tmp/hm-registration-acl/source/crates/hv2-context)
+    Checking hv2-agent v1.1.0 (/var/tmp/hm-registration-acl/source/crates/hv2-agent)
+    Checking hv2-runtime v1.1.0 (/var/tmp/hm-registration-acl/source/crates/hv2-runtime)
+    Checking hv2-cluster v1.1.0 (/var/tmp/hm-registration-acl/source/crates/hv2-cluster)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 36.02s

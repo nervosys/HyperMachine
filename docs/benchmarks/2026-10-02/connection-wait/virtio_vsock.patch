@@ -1,0 +1,52 @@
+--- /var/tmp/hm-registration-mutations/source/crates/hv2-core/src/devices/virtio_vsock.rs	2026-10-02 01:47:33.000000000 -0700
++++ /var/tmp/hm-event-connect/source/crates/hv2-core/src/devices/virtio_vsock.rs	2026-10-02 03:53:33.610965203 -0700
+@@ -586,12 +586,15 @@
+         if let Some(conn) = self.connections.get_mut(&id) {
+             conn.state = VsockConnectionState::Closing;
+         }
++        self.progress.signal();
+         Ok(())
+     }
+ 
+     /// Forget a closed connection and whatever it still held.
+     pub fn forget(&mut self, id: VsockConnectionId) {
+-        self.connections.remove(&id);
++        if self.connections.remove(&id).is_some() {
++            self.progress.signal();
++        }
+     }
+ 
+     /// Stop sending while allowing the guest to finish its reply.
+@@ -996,6 +999,7 @@
+         self.connections.clear();
+         self.accepted.clear();
+         self.pending.clear();
++        self.progress.signal();
+         // Listeners survive a reset: they are host-side intent, not
+         // negotiated state, and a guest rebooting should find the same ports
+         // open that it found the first time.
+@@ -1620,4 +1624,24 @@
+             "ports handed out twice: {ports:?}"
+         );
+     }
++    #[test]
++    fn host_connection_lifecycle_notifies_observers_even_before_they_wait() {
++        use std::time::{Duration, Instant};
++        let mut device = VsockDevice::new(3).unwrap();
++        let progress = device.progress();
++        for operation in 0..3 {
++            let id = device.connect_ephemeral(1024).unwrap();
++            let seen = progress.current();
++            match operation {
++                0 => device.close(id).unwrap(),
++                1 => device.forget(id),
++                _ => device.reset(),
++            }
++            assert_ne!(progress.current(), seen, "lifecycle operation {operation}");
++            let start = Instant::now();
++            assert_ne!(progress.wait_past(seen, Duration::from_secs(2)), seen);
++            assert!(start.elapsed() < Duration::from_secs(1));
++        }
++    }
++
+ }

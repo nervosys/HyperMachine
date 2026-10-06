@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/bench-mmap-threshold.py", line 122, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/bench-mmap-threshold.py", line 31, in main
+    require(not any(name in os.environ for name in ("LD_PRELOAD", "LD_DEBUG", "GLIBC_TUNABLES")
+                ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                    if os.environ[name]) and not any(name.startswith("MALLOC_") for name in os.environ),
+                    ^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/bench-mmap-threshold.py", line 32, in <genexpr>
+    if os.environ[name]) and not any(name.startswith("MALLOC_") for name in os.environ),
+       ~~~~~~~~~~^^^^^^
+  File "<frozen os>", line 717, in __getitem__
+KeyError: 'LD_PRELOAD'

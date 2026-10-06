@@ -1,0 +1,19 @@
+{
+  "base_source": "/var/tmp/hm-registration-mutations/source",
+  "base_commit": "cf02e4b",
+  "rustc": "rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)",
+  "candidate_files": {
+    "crates/hv2-agent/src/guest_agent.rs": "69e7776e97525ace67bbab2d9d8f47fe9440a0b4abc51ebc83c66eff030c3565",
+    "crates/hv2-core/src/devices/virtio_vsock.rs": "7a78534c57090cedaa08bcc182beb0096dcd6d96d01260529c5a76589ab44584"
+  },
+  "excluded_provisional_boot_files": {
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+    "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+  },
+  "baseline_daemon_sha256": "8a41a012b9eaac150dce7832dfb7fdc01d12ba3c28796cf98ca76f7070eb206c",
+  "candidate_daemon_sha256": "806c287a026040a8057c47a714ed186cf7db3d7129f66b9225508a5f76d7f4b6",
+  "provisional_boot_changes_excluded": true,
+  "release_build_command": "CARGO_TARGET_DIR=/var/tmp/hm-competitive-target cargo build --release -p hv2-sandboxd --bin hv2-sandboxd",
+  "runtime_change_adopted": false
+}

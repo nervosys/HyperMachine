@@ -1,0 +1,17 @@
+2026-10-04T14:54:01.627048Z  INFO hv2_core::vm: VM 'pci-guest-probe': vsock device attached over PCI at slot 3, BAR 0xd0010000 (guest CID 3, IRQ 11) -- no kernel argument needed
+[    0.169750] PCI: Using configuration type 1 for base access
+[    0.170122] PCI: Using configuration type 1 for extended access
+[    0.204205] PCI: Probing PCI hardware
+[    0.210531] pci 0000:00:00.0: [8086:1237] type 00 class 0x060000
+[    0.212492] pci 0000:00:03.0: [1af4:1053] type 00 class 0x088000
+[    0.213431] pci 0000:00:03.0: reg 0x10: [mem 0xd0010000-0xd0013fff 64bit]
+[    0.250788] pci 0000:00:00.0: Limiting direct PCI/PCI transfers
+[    0.252112] PCI: CLS 0 bytes, default 64
+[    0.300174] virtio-pci 0000:00:03.0: enabling device (0000 -> 0002)
+[    0.301631] virtio-pci 0000:00:03.0: can't find IRQ for PCI INT A; probably buggy MP table
+[    0.628152] NET: Registered PF_VSOCK protocol family
+[    0.629783] vmw_vsock_virtio_transport: probe of virtio0 failed with error -2
+=== HV2 READY ===
+hv2-guest-agentd 1.1.0 listening on vsock port 1024
+2026-10-04T14:54:16.673348Z  INFO hv2_core::vm: VM 'pci-guest-probe' stopped
+PCI_GUEST_PROBE_FAILED: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd

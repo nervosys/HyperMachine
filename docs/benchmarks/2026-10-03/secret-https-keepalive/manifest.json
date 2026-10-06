@@ -1,0 +1,8 @@
+{
+  "sha256": {
+    "check-secret-substitution-kvm.py": "945ced86aceb1565fc484e65f0fd842420f03cfe5e4b3863d2061ba4e39887c4",
+    "debug-128-bindings.json": "8efcd8fec6f53df1e56af23a2ab6f3747049bf8290a8baeb7e90294308c6797b",
+    "README.md": "0f98b2eef1d089670ed7e7ab23afd4ae475b6557f9c9ecf112cd36f4097d5d83",
+    "release-one-binding.json": "574a8bf28b926d99c3247c43d3900e7b8db59a0434a16321f329ab8fdfa00db8"
+  }
+}

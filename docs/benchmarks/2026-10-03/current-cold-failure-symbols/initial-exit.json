@@ -1,0 +1,17 @@
+{
+  "exit_code": 0,
+  "argv": [
+    "python3",
+    "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/diagnose-readiness-failures.py",
+    "--firecracker",
+    "/var/tmp/hm-competitive/firecracker/firecracker-v1.17.0-x86_64",
+    "--kernel",
+    "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+    "--initrd",
+    "/var/tmp/hm-competitive/guest-output-drain.cpio.gz",
+    "--failure-report",
+    "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/docs/benchmarks/2026-10-03/current-admission-sixteen/initial.json",
+    "--output",
+    "/var/tmp/hm-current-cold-failure-symbols-v1/initial.json"
+  ]
+}

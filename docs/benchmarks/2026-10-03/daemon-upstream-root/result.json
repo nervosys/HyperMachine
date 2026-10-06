@@ -1,0 +1,27 @@
+{
+  "checks": [
+    "Secret policy requires networking",
+    "Unsafe policy permissions refuse startup",
+    "Symlink policy refuses startup",
+    "Malformed policy refuses startup",
+    "Explicit upstream root requires networking",
+    "Unsafe upstream root permissions refuse startup",
+    "Symlink upstream root refuses startup",
+    "Invalid certificate DER refuses startup",
+    "Private valid policy starts an empty owned daemon",
+    "Explicit owned upstream root starts an empty owned daemon",
+    "Malformed SIGHUP reload is refused and daemon remains responsive",
+    "Valid SIGHUP reload completes and daemon remains responsive"
+  ],
+  "input_sha256": {
+    "daemon": "5fa9a94967726cf78fd7e4ecd74be0f92d0bde1f21f8cde5413f3041b6acf791",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "processes_reaped": true,
+  "guests_created": 0,
+  "limits": [
+    "No guest substitution, upstream TLS request, or policy retention contents observed",
+    "No performance comparison or managed competitor measurement"
+  ]
+}

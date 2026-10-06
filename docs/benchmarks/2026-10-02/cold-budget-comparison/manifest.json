@@ -1,0 +1,48 @@
+{
+  "cohorts": [
+    {
+      "kind": "budget",
+      "report": "c100.json",
+      "analysis": "c100-analysis.json"
+    },
+    {
+      "kind": "budget",
+      "report": "c100-repeat.json",
+      "analysis": "c100-repeat-analysis.json"
+    },
+    {
+      "kind": "native",
+      "report": "native16.json",
+      "analysis": "native16-analysis.json"
+    }
+  ],
+  "native_inputs": {
+    "hypermachine": "b7d2aba8a9a21845e187a10dbeda10c0c10f43d6794160739888435723a77d95",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "sha256": {
+    "README.md": "2e657af584444a8cbedc138f9536ae5986dee293ed90ffd355963e09dd2e9f5e",
+    "analysis-checks-linux.log": "cc56092359dd3294b6d6cfbc5769d8e9e88064553b971763fbea3f5c912a153b",
+    "analysis-checks-windows.log": "8f79d7ec0c064c5ee56ccc31f884decc10ff15ff3d9e95d88c2ab8959d2b2c4e",
+    "analyze-budget-engines.py": "6a2b7303428a7aeb01b4123e2af19059b0cbdc0f40effbaee83564479689a7d8",
+    "analyze-cold-start-limit.py": "ef641a27afacab61aaec1ca593deee864648015282561de20d8195760659cbc9",
+    "analyze-connection-wait.py": "6c919d1d109490cba2e889648825fed8f4977a09bc9a78390d9801ace031dd14",
+    "bench-cold-start-limit.py": "84e7be2256bb805881c33bd48b9fb399faf1d5c181329fdef173f736a2cc6a61",
+    "bench-connection-wait.py": "c82f36426a434c22d514e517effe5300bac482e4da1dd414b2d4c8e269dd3b50",
+    "bench-firecracker-local.py": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6",
+    "bench-local-engines-concurrent.py": "b4d6e2426360e13d02bf4f812b8b2bfaf7b69be7ddbcd0ae7986dab6c2ff1acf",
+    "bench-local-engines.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "build-context.json": "27adb622da2937181cac88052e24f54d4e9edcb02439f0801ba4b98e05ccc4f0",
+    "c100-analysis.json": "eaade6a2958f6207180486ddb8b261eb16df01310dd7faf28c0c376a97a21dd1",
+    "c100-repeat-analysis.json": "8dd6858f5dd41b47b4dd4ad1ead866892001dc1e77a905cc85428f66e219ee69",
+    "c100-repeat.json": "ba48e50dc9be8aaf4fc32854ce0387b1bd0d92b7f3bccdeaeb96e45afaae9633",
+    "c100.json": "9048c50b2078cf84087d8bcf54688afaa89f4beb2d92923223a10e7a14a412bf",
+    "check-budget-comparison.py": "41f0bd48fa24dc1f3858e86df11b94d93560d6d195538a22035a152b09fcaf06",
+    "compiled-main.rs": "e1b85b8a455a9afad0452113739a089f202b67787f419fc0d76a60a172334d5c",
+    "native16-analysis.json": "679c59ef06c91d16a4ff67afb9616310ef81718d4b50f6bae99882a91d62c174",
+    "native16.json": "f980e4a202836e39b724f4bc6213f5c81e6b74ca20328761f74da5961959c31b",
+    "verify-budget-comparison.py": "ebfd37a41abe66838d89628af533c471e4c3ab29b33242aef3b62850758abe47"
+  }
+}

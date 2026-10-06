@@ -1,0 +1,9 @@
+interval: correctly refused
+worker absent: correctly refused
+worker counts: correctly refused
+attempt count: correctly refused
+readiness: correctly refused
+idle hold: correctly refused
+memory delta: correctly refused
+guest resources: correctly refused
+8 malformed reports refused; cleanup error preserved; valid cohort accepted

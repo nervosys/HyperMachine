@@ -1,0 +1,42 @@
+diff --git a/crates/hv2-jobs/examples/dispatch_history.rs b/crates/hv2-jobs/examples/dispatch_history.rs
+index fc9b2be..c26faaf 100644
+--- a/crates/hv2-jobs/examples/dispatch_history.rs
++++ b/crates/hv2-jobs/examples/dispatch_history.rs
+@@ -8,15 +8,16 @@ use std::time::Instant;
+ 
+ fn main() -> Result<(), Box<dyn std::error::Error>> {
+     let mut rows = Vec::new();
+-    for completed in [0_u64, 100, 1000, 5000] {
++    for (completed, pending) in [(0_u64, 1_u64), (100, 1), (1000, 1), (5000, 1), (0, 1000), (0, 5000)] {
++        let through = completed + pending - 1;
+         let directory = tempfile::tempdir()?;
+         let store = Store::open(directory.path())?;
+         let schedule = serde_json::from_value(json!({"first_ms":0,"every_ms":1,
+             "vm":{"sandbox_id":"fixture","connection_profile":"local","timeout_secs":30},
+             "job":{"command":["true"]}}))?;
+         store.create_interval_schedule("history", &schedule)?;
+-        while store.interval_progress("history")? != Some(completed) {
+-            store.materialize_interval("history", completed, 1024)?;
++        while store.interval_progress("history")? != Some(through) {
++            store.materialize_interval("history", through, 1024)?;
+         }
+         // Fixture-only preparation excludes sequential claim scans from timing.
+         // These records use the real serialized claim/completion types.
+@@ -30,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
+             }
+             for record in records {
+                 cursor = Some(record.scheduled_ms);
+-                if record.scheduled_ms == completed {
++                if record.scheduled_ms >= completed {
+                     continue;
+                 }
+                 let key = format!("history--{}", record.scheduled_ms);
+@@ -73,7 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
+             assert_eq!(next.scheduled_ms, completed);
+             samples.push(elapsed);
+         }
+-        rows.push(json!({"completed_occurrences":completed,"selection_ms":samples}));
++        rows.push(json!({"completed_occurrences":completed,"pending_occurrences":pending,"selection_ms":samples}));
+     }
+     println!(
+         "{}",

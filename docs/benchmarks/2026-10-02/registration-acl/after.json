@@ -1,0 +1,8 @@
+{
+  "success": true,
+  "test_exit_code": 0,
+  "owned_redis_stopped": true,
+  "redis_exit_code": 0,
+  "temporary_acl_users_removed": true,
+  "filter": ""
+}

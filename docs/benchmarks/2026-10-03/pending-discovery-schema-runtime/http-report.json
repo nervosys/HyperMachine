@@ -1,0 +1,63 @@
+{
+  "checks": [
+    {
+      "case": "empty",
+      "status": 200
+    },
+    {
+      "case": "single",
+      "status": 200
+    },
+    {
+      "case": "capability",
+      "status": 502
+    },
+    {
+      "case": "row-capability",
+      "status": 502
+    },
+    {
+      "case": "missing-cursor",
+      "status": 502
+    },
+    {
+      "case": "wrong-kind",
+      "status": 502
+    },
+    {
+      "case": "duplicate",
+      "status": 502
+    },
+    {
+      "case": "too-many",
+      "status": 502
+    },
+    {
+      "case": "short-cursor",
+      "status": 502
+    },
+    {
+      "case": "invalid-json",
+      "status": 502
+    },
+    {
+      "case": "oversized",
+      "status": 502
+    },
+    {
+      "case": "exclusive-cursor",
+      "status": 502
+    },
+    {
+      "case": "unauthorized-no-node-call",
+      "status": 401
+    }
+  ],
+  "node_calls": 12,
+  "authenticated_node_requests": true,
+  "client_keys_not_forwarded": true,
+  "processes_reaped": true,
+  "control_sha256": "7ae12f28942f7ffa4a25a56f9e652da5032b7e0ac78a44d487c26e4fe62b8eac",
+  "checker_sha256": "6d248858acbb6cae199d8ebf0b21a2f253ab8e778d3a1fcd2b921cdead8f0d73",
+  "scope": "Owned loopback HTTP/Redis response-boundary fixture, not KVM/TLS or competitor performance"
+}

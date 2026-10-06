@@ -1,0 +1,200 @@
+{
+  "initial": {
+    "variants": {
+      "baseline": {
+        "planned": 400,
+        "attempted": 400,
+        "passed": 300,
+        "failed": 100,
+        "successful_p50_ms": 13212.22084699997,
+        "successful_p99_ms": 13644.124468999962,
+        "failed_runs": 1,
+        "median_held_pss_mib": 8609.69140625,
+        "median_incremental_pss_mib": 8602.42578125
+      },
+      "candidate": {
+        "planned": 400,
+        "attempted": 400,
+        "passed": 400,
+        "failed": 0,
+        "successful_p50_ms": 4333.417913000005,
+        "successful_p99_ms": 14032.895304000021,
+        "failed_runs": 0,
+        "median_held_pss_mib": 8543.16845703125,
+        "median_incremental_pss_mib": 8536.03759765625
+      }
+    },
+    "pairs": [
+      {
+        "pair": 0,
+        "complete_successful_pair": true,
+        "candidate_mean_reduction_ms": 9027.523547949999,
+        "candidate_p50_reduction_ms": 8929.924663000009,
+        "candidate_p99_reduction_ms": 6237.1747440000145
+      },
+      {
+        "pair": 1,
+        "complete_successful_pair": true,
+        "candidate_mean_reduction_ms": 6730.575915929993,
+        "candidate_p50_reduction_ms": 9650.10236799992,
+        "candidate_p99_reduction_ms": -465.0754340000276
+      },
+      {
+        "pair": 2,
+        "complete_successful_pair": true,
+        "candidate_mean_reduction_ms": 2345.2161686400004,
+        "candidate_p50_reduction_ms": 2374.4418660000974,
+        "candidate_p99_reduction_ms": -260.3986490000807
+      },
+      {
+        "pair": 3,
+        "complete_successful_pair": false,
+        "candidate_mean_reduction_ms": null,
+        "candidate_p50_reduction_ms": null,
+        "candidate_p99_reduction_ms": null
+      }
+    ],
+    "complete_successful_pairs": 3,
+    "candidate_faster_pairs": 3,
+    "median_paired_mean_reduction_ms": 6730.575915929993,
+    "cleanup_verified": true,
+    "artifacts_unchanged": true,
+    "cohort_success": false,
+    "latencies_conditional_on_success": true,
+    "runtime_change_adopted": false,
+    "competitor_win_established": false,
+    "candidate_limit": 16,
+    "same_binary": true,
+    "queue_included_in_ready_ms": true,
+    "experimental_candidate": true,
+    "note": "Incomplete pairs remain in failure totals; their mean latency difference is unavailable",
+    "baseline_limit": null,
+    "memory_idle_seconds": 5.0,
+    "memory_pairs": [
+      {
+        "pair": 0,
+        "complete_successful_pair": true,
+        "candidate_held_pss_reduction_mib": -12.552734375,
+        "candidate_incremental_pss_reduction_mib": -12.482421875
+      },
+      {
+        "pair": 1,
+        "complete_successful_pair": true,
+        "candidate_held_pss_reduction_mib": 57.630859375,
+        "candidate_incremental_pss_reduction_mib": 57.50390625
+      },
+      {
+        "pair": 2,
+        "complete_successful_pair": true,
+        "candidate_held_pss_reduction_mib": -62.330078125,
+        "candidate_incremental_pss_reduction_mib": -62.4873046875
+      },
+      {
+        "pair": 3,
+        "complete_successful_pair": false,
+        "candidate_held_pss_reduction_mib": null,
+        "candidate_incremental_pss_reduction_mib": null
+      }
+    ],
+    "memory_conditional_on_complete_successful_runs": true
+  },
+  "repeat": {
+    "variants": {
+      "baseline": {
+        "planned": 400,
+        "attempted": 400,
+        "passed": 271,
+        "failed": 129,
+        "successful_p50_ms": 10883.981000000062,
+        "successful_p99_ms": 16053.418846,
+        "failed_runs": 2,
+        "median_held_pss_mib": 8577.8369140625,
+        "median_incremental_pss_mib": 8570.712890625
+      },
+      "candidate": {
+        "planned": 400,
+        "attempted": 400,
+        "passed": 400,
+        "failed": 0,
+        "successful_p50_ms": 5131.461447999982,
+        "successful_p99_ms": 19190.01830299999,
+        "failed_runs": 0,
+        "median_held_pss_mib": 8574.4921875,
+        "median_incremental_pss_mib": 8567.21533203125
+      }
+    },
+    "pairs": [
+      {
+        "pair": 0,
+        "complete_successful_pair": true,
+        "candidate_mean_reduction_ms": 5897.178161860002,
+        "candidate_p50_reduction_ms": 5601.047636999965,
+        "candidate_p99_reduction_ms": 2680.044670999905
+      },
+      {
+        "pair": 1,
+        "complete_successful_pair": true,
+        "candidate_mean_reduction_ms": -3321.209125500003,
+        "candidate_p50_reduction_ms": -8167.569085999959,
+        "candidate_p99_reduction_ms": -10433.686556999986
+      },
+      {
+        "pair": 2,
+        "complete_successful_pair": false,
+        "candidate_mean_reduction_ms": null,
+        "candidate_p50_reduction_ms": null,
+        "candidate_p99_reduction_ms": null
+      },
+      {
+        "pair": 3,
+        "complete_successful_pair": false,
+        "candidate_mean_reduction_ms": null,
+        "candidate_p50_reduction_ms": null,
+        "candidate_p99_reduction_ms": null
+      }
+    ],
+    "complete_successful_pairs": 2,
+    "candidate_faster_pairs": 1,
+    "median_paired_mean_reduction_ms": 1287.9845181799992,
+    "cleanup_verified": true,
+    "artifacts_unchanged": true,
+    "cohort_success": false,
+    "latencies_conditional_on_success": true,
+    "runtime_change_adopted": false,
+    "competitor_win_established": false,
+    "candidate_limit": 16,
+    "same_binary": true,
+    "queue_included_in_ready_ms": true,
+    "experimental_candidate": true,
+    "note": "Incomplete pairs remain in failure totals; their mean latency difference is unavailable",
+    "baseline_limit": null,
+    "memory_idle_seconds": 5.0,
+    "memory_pairs": [
+      {
+        "pair": 0,
+        "complete_successful_pair": true,
+        "candidate_held_pss_reduction_mib": -66.1875,
+        "candidate_incremental_pss_reduction_mib": -66.0029296875
+      },
+      {
+        "pair": 1,
+        "complete_successful_pair": true,
+        "candidate_held_pss_reduction_mib": 169.9755859375,
+        "candidate_incremental_pss_reduction_mib": 170.08984375
+      },
+      {
+        "pair": 2,
+        "complete_successful_pair": false,
+        "candidate_held_pss_reduction_mib": null,
+        "candidate_incremental_pss_reduction_mib": null
+      },
+      {
+        "pair": 3,
+        "complete_successful_pair": false,
+        "candidate_held_pss_reduction_mib": null,
+        "candidate_incremental_pss_reduction_mib": null
+      }
+    ],
+    "memory_conditional_on_complete_successful_runs": true
+  }
+}

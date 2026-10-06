@@ -1,0 +1,275 @@
+{
+  "purpose": "alternating warm-cache history selection diagnostic, no guest or competitor measurement",
+  "order": [
+    "baseline",
+    "candidate",
+    "candidate",
+    "baseline"
+  ],
+  "binary_sha256": {
+    "baseline": "407d3b4dbe296c20c1672896c59bb390f73445751a85bda60bda3d6c278f0c4d",
+    "candidate": "407d3b4dbe296c20c1672896c59bb390f73445751a85bda60bda3d6c278f0c4d"
+  },
+  "runs": [
+    {
+      "binary": "baseline",
+      "report": {
+        "purpose": "warm-cache durable history selection diagnostic; no guest or competitor measurement",
+        "rows": [
+          {
+            "completed_occurrences": 0,
+            "selection_ms": [
+              0.040769,
+              0.034767,
+              0.030840000000000003,
+              0.028486,
+              0.029107,
+              0.030728999999999996,
+              0.060397,
+              0.031431,
+              0.031151
+            ]
+          },
+          {
+            "completed_occurrences": 100,
+            "selection_ms": [
+              1.920522,
+              2.1034970000000004,
+              1.885182,
+              1.894471,
+              1.728688,
+              2.044813,
+              1.954978,
+              1.763104,
+              1.796049
+            ]
+          },
+          {
+            "completed_occurrences": 1000,
+            "selection_ms": [
+              29.829541000000003,
+              38.159715,
+              29.713777,
+              27.101593,
+              29.349596,
+              32.411492,
+              25.678039,
+              23.540301,
+              34.681103
+            ]
+          },
+          {
+            "completed_occurrences": 5000,
+            "selection_ms": [
+              162.690904,
+              148.24332700000002,
+              131.644539,
+              125.07951,
+              154.436559,
+              114.477541,
+              135.423743,
+              135.22240599999998,
+              129.75124699999998
+            ]
+          }
+        ],
+        "samples_per_size": 9
+      }
+    },
+    {
+      "binary": "candidate",
+      "report": {
+        "purpose": "warm-cache durable history selection diagnostic; no guest or competitor measurement",
+        "rows": [
+          {
+            "completed_occurrences": 0,
+            "selection_ms": [
+              0.025129,
+              0.025941000000000002,
+              0.024397000000000002,
+              0.024087,
+              0.026933000000000002,
+              0.051961,
+              0.029017,
+              0.025058999999999998,
+              0.024508
+            ]
+          },
+          {
+            "completed_occurrences": 100,
+            "selection_ms": [
+              1.690474,
+              1.541223,
+              1.5536969999999999,
+              1.5705,
+              1.607051,
+              2.1326330000000002,
+              2.636857,
+              2.444162,
+              2.068961
+            ]
+          },
+          {
+            "completed_occurrences": 1000,
+            "selection_ms": [
+              22.247262,
+              24.371029,
+              28.152987,
+              22.608542999999997,
+              20.124432000000002,
+              21.816744,
+              23.210112000000002,
+              25.821075,
+              24.704971
+            ]
+          },
+          {
+            "completed_occurrences": 5000,
+            "selection_ms": [
+              158.24456800000002,
+              164.111163,
+              158.114755,
+              141.598521,
+              121.822616,
+              141.984322,
+              137.988586,
+              131.058394,
+              120.175392
+            ]
+          }
+        ],
+        "samples_per_size": 9
+      }
+    },
+    {
+      "binary": "candidate",
+      "report": {
+        "purpose": "warm-cache durable history selection diagnostic; no guest or competitor measurement",
+        "rows": [
+          {
+            "completed_occurrences": 0,
+            "selection_ms": [
+              0.042132,
+              0.03107,
+              0.029908,
+              0.036862,
+              0.03632,
+              0.060578,
+              0.03077,
+              0.043475,
+              0.030449
+            ]
+          },
+          {
+            "completed_occurrences": 100,
+            "selection_ms": [
+              2.131502,
+              1.980669,
+              1.970725,
+              1.744729,
+              1.601521,
+              2.90265,
+              2.174075,
+              1.990388,
+              2.185742
+            ]
+          },
+          {
+            "completed_occurrences": 1000,
+            "selection_ms": [
+              27.740524999999998,
+              29.635752,
+              27.612168999999998,
+              26.560726,
+              25.692930999999998,
+              29.339243,
+              26.393214,
+              27.173454,
+              24.388063000000002
+            ]
+          },
+          {
+            "completed_occurrences": 5000,
+            "selection_ms": [
+              125.999368,
+              118.27030400000001,
+              117.84353899999999,
+              129.58882499999999,
+              111.227835,
+              119.756049,
+              121.60149100000001,
+              122.076703,
+              140.67532999999997
+            ]
+          }
+        ],
+        "samples_per_size": 9
+      }
+    },
+    {
+      "binary": "baseline",
+      "report": {
+        "purpose": "warm-cache durable history selection diagnostic; no guest or competitor measurement",
+        "rows": [
+          {
+            "completed_occurrences": 0,
+            "selection_ms": [
+              0.09381300000000001,
+              0.040839,
+              0.029516999999999998,
+              0.040448000000000005,
+              0.029417,
+              0.027243999999999997,
+              0.026893,
+              0.027433,
+              0.026612
+            ]
+          },
+          {
+            "completed_occurrences": 100,
+            "selection_ms": [
+              1.905102,
+              2.306459,
+              2.146396,
+              6.517288000000001,
+              2.5693859999999997,
+              2.030274,
+              1.918063,
+              1.8022909999999999,
+              2.0056819999999997
+            ]
+          },
+          {
+            "completed_occurrences": 1000,
+            "selection_ms": [
+              23.818738,
+              26.254775000000002,
+              28.937345,
+              26.059268,
+              25.10444,
+              23.528392,
+              24.868013,
+              25.286634,
+              29.598798
+            ]
+          },
+          {
+            "completed_occurrences": 5000,
+            "selection_ms": [
+              147.620136,
+              129.98635,
+              129.299116,
+              134.910012,
+              135.315532,
+              128.20265,
+              151.53450099999998,
+              140.882899,
+              129.04944500000002
+            ]
+          }
+        ],
+        "samples_per_size": 9
+      }
+    }
+  ]
+}

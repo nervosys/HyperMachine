@@ -1,0 +1,12 @@
+{
+  "rejected": [
+    "missing_process",
+    "duplicated_pid",
+    "fabricated_pss",
+    "missing_raw",
+    "invalid_unit",
+    "no_baseline",
+    "scoring_claim"
+  ],
+  "count": 7
+}

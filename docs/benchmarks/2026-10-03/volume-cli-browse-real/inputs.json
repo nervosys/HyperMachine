@@ -1,0 +1,15 @@
+{
+  "unchanged_binary_sha256": {
+    "/var/tmp/hm-object-backup/target/debug/hv2-sandboxd": "12e585d9a72e3540eac862fc0dcdade92d90aa650527180509806e78551218a7",
+    "/var/tmp/hm-object-backup/target/debug/hm": "fa45b23d19c810a1d9576223e300fddfb72e65b947b6cd297243e94439371d74",
+    "/var/tmp/hm-competitive/bzImage-known-uart-irq": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "/var/tmp/hm-competitive/guest-output-drain.cpio.gz": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "root_and_isolated_source_sha256": {
+    "crates/hv2-cluster/src/control.rs": "3247276d4949931cac1c2c6b771dea7069201bb88a9690d22ec0b29aa1393d54",
+    "crates/hv2-cluster/src/store.rs": "0c73540795cd8e2a359195b241f591d08184e91e05a3a36d452117450604d49f",
+    "crates/hv2-cluster/src/keys.rs": "d25e314aa7b1b0a6142f22b3c34e2417f4b99737d174ba1e492d05f87135a3f5",
+    "crates/hv2-cluster/tests/volume_routing.rs": "838dbdff5395d66fd79da66cb1fa82f9ddc2c420b6ab82116419a07121e3774f",
+    "crates/hm-cli/src/sandbox_vm.rs": "3baf029c9ff8f4c2f8415262ee805d8bbb7a511c457a77a201c71f8b1d2cbf5c"
+  }
+}

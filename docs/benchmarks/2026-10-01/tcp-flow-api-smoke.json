@@ -1,0 +1,440 @@
+{
+  "success": true,
+  "environment": "API socket candidate smoke, shared nested KVM",
+  "artifact_sha256": {
+    "hypermachine": "03043e33a6efe017bf0f9d2f0d7ee9caf4e0c09705abeaf849f21825128f799d",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "f226c599d385609fc03af2223b6829a5249b28193c96179daeb7d47383005d1b",
+    "harness": "cc9df787719005ca7e1a3c8f149c923e1492c2dfa645e97b64d07aee3f446f8c",
+    "engine_harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "fc_harness": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6"
+  },
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "host_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "concurrency": 1,
+  "pairs": 2,
+  "rounds_per_size_per_guest": 2,
+  "preparation": [
+    {
+      "pair": 0,
+      "engine": "hypermachine",
+      "success": true,
+      "cleanup_success": true
+    },
+    {
+      "pair": 0,
+      "engine": "firecracker",
+      "success": true,
+      "cleanup_success": true,
+      "console_utf8": "2026-10-01T09:20:43.300607990 [anonymous-instance:main] Running Firecracker v1.17.0\n2026-10-01T09:20:43.300914858 [anonymous-instance:main] Listening on API socket (\"/var/tmp/hm-tcp-bench-suj4s_cm/fc-api.sock\").\n2026-10-01T09:20:43.301170158 [anonymous-instance:fc_api] API server started.\n2026-10-01T09:20:43.301844262 [anonymous-instance:fc_api] The API server received a Get request on \"/machine-config\".\n2026-10-01T09:20:43.301925095 [anonymous-instance:fc_api] The request was executed successfully. Status code: 200 OK.\n2026-10-01T09:20:43.302276671 [anonymous-instance:fc_api] The API server received a Put request on \"/machine-config\" with body \"{\\\"vcpu_count\\\": 1, \\\"mem_size_mib\\\": 1024}\".\n2026-10-01T09:20:43.302355024 [anonymous-instance:fc_api] The request was executed successfully. Status code: 204 No Content.\n2026-10-01T09:20:43.302596194 [anonymous-instance:fc_api] The API server received a Put request on \"/boot-source\" with body \"{\\\"kernel_image_path\\\": \\\"/var/tmp/hm-competitive/bzImage-known-uart-irq\\\", \\\"initrd_path\\\": \\\"/var/tmp/hm-tcp/guest-tcp.cpio.gz\\\", \\\"boot_args\\\": \\\"console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd\\\"}\".\n2026-10-01T09:20:43.302675198 [anonymous-instance:fc_api] The request was executed successfully. Status code: 204 No Content.\n2026-10-01T09:20:43.302895808 [anonymous-instance:fc_api] The API server received a Put request on \"/vsock\" with body \"{\\\"guest_cid\\\": 3, \\\"uds_path\\\": \\\"/var/tmp/hm-tcp-bench-suj4s_cm/fc-vsock.sock\\\"}\".\n2026-10-01T09:20:43.303076861 [anonymous-instance:fc_api] The request was executed successfully. Status code: 204 No Content.\n2026-10-01T09:20:43.303275830 [anonymous-instance:fc_api] The API server received a Put request on \"/actions\" with body \"{\\\"action_type\\\": \\\"InstanceStart\\\"}\".\n2026-10-01T09:20:43.314068268 [anonymous-instance:main] Artificially kick devices\n2026-10-01T09:20:43.314256520 [anonymous-instance:fc_vcpu 0] Received a VcpuEvent::Resume message with immediate_exit enabled. immediate_exit was disabled before proceeding\n2026-10-01T09:20:43.314360774 [anonymous-instance:fc_api] The request was executed successfully. Status code: 204 No Content.\n2026-10-01T09:20:43.314968680 [anonymous-instance:fc_api] The API server received a Get request on \"/machine-config\".\n2026-10-01T09:20:43.315093333 [anonymous-instance:fc_api] The request was executed successfully. Status code: 200 OK.\n2026-10-01T09:20:43.495411885 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0xcf8:0x4 failed: Failed to find address range.\n2026-10-01T09:20:43.495570795 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0xcfc:0x2 failed: Failed to find address range.\n2026-10-01T09:20:43.571093773 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:20:43.571151286 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:20:43.571161496 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:20:43.571169932 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:20:43.571177968 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:20:43.571185993 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:20:43.571194280 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:20:43.571202455 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:20:43.571210421 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:20:43.571218507 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:20:43.571226563 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:20:43.571234438 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:20:43.571253966 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:20:43.571262252 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:20:43.571270238 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:20:43.571278143 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:20:43.571286179 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:20:43.571294645 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:20:43.630714326 [anonymous-instance:fc_vcpu 0] [Vsock:vsock] notifying queues\n=== HV2 READY ===\r\nhv2-guest-agentd 1.1.0 listening on vsock port \r\n\r\nBusyBox v1.37.0 (Debian 1:1.37.0-6+b9) built-in shell (ash)\r\n1024\r\nEnter 'help' for a list of built-in commands.\r\n\r\nsh: can't access tty; job control turned off\r\n/ # \u001b[6n"
+    },
+    {
+      "pair": 1,
+      "engine": "firecracker",
+      "success": true,
+      "cleanup_success": true,
+      "console_utf8": "2026-10-01T09:20:43.759645913 [anonymous-instance:main] Running Firecracker v1.17.0\n2026-10-01T09:20:43.759815093 [anonymous-instance:main] Listening on API socket (\"/var/tmp/hm-tcp-bench-suj4s_cm/fc-api.sock\").\n2026-10-01T09:20:43.759995349 [anonymous-instance:fc_api] API server started.\n2026-10-01T09:20:43.760883612 [anonymous-instance:fc_api] The API server received a Get request on \"/machine-config\".\n2026-10-01T09:20:43.760985411 [anonymous-instance:fc_api] The request was executed successfully. Status code: 200 OK.\n2026-10-01T09:20:43.761412514 [anonymous-instance:fc_api] The API server received a Put request on \"/machine-config\" with body \"{\\\"vcpu_count\\\": 1, \\\"mem_size_mib\\\": 1024}\".\n2026-10-01T09:20:43.761511060 [anonymous-instance:fc_api] The request was executed successfully. Status code: 204 No Content.\n2026-10-01T09:20:43.761790201 [anonymous-instance:fc_api] The API server received a Put request on \"/boot-source\" with body \"{\\\"kernel_image_path\\\": \\\"/var/tmp/hm-competitive/bzImage-known-uart-irq\\\", \\\"initrd_path\\\": \\\"/var/tmp/hm-tcp/guest-tcp.cpio.gz\\\", \\\"boot_args\\\": \\\"console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd\\\"}\".\n2026-10-01T09:20:43.761891488 [anonymous-instance:fc_api] The request was executed successfully. Status code: 204 No Content.\n2026-10-01T09:20:43.762141536 [anonymous-instance:fc_api] The API server received a Put request on \"/vsock\" with body \"{\\\"guest_cid\\\": 3, \\\"uds_path\\\": \\\"/var/tmp/hm-tcp-bench-suj4s_cm/fc-vsock.sock\\\"}\".\n2026-10-01T09:20:43.762350444 [anonymous-instance:fc_api] The request was executed successfully. Status code: 204 No Content.\n2026-10-01T09:20:43.762776114 [anonymous-instance:fc_api] The API server received a Put request on \"/actions\" with body \"{\\\"action_type\\\": \\\"InstanceStart\\\"}\".\n2026-10-01T09:20:43.774401737 [anonymous-instance:main] Artificially kick devices\n2026-10-01T09:20:43.774471788 [anonymous-instance:fc_vcpu 0] Received a VcpuEvent::Resume message with immediate_exit enabled. immediate_exit was disabled before proceeding\n2026-10-01T09:20:43.774562745 [anonymous-instance:fc_api] The request was executed successfully. Status code: 204 No Content.\n2026-10-01T09:20:43.774957627 [anonymous-instance:fc_api] The API server received a Get request on \"/machine-config\".\n2026-10-01T09:20:43.775059726 [anonymous-instance:fc_api] The request was executed successfully. Status code: 200 OK.\n2026-10-01T09:20:43.956878686 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0xcf8:0x4 failed: Failed to find address range.\n2026-10-01T09:20:43.956939505 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0xcfc:0x2 failed: Failed to find address range.\n2026-10-01T09:20:44.027057889 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:20:44.027106394 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:20:44.027117305 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:20:44.027126744 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:20:44.027135731 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:20:44.027144609 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:20:44.027153756 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:20:44.027169918 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:20:44.027179126 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:20:44.027238912 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:20:44.027255495 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:20:44.027265414 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:20:44.027286956 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:20:44.027296375 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:20:44.027305352 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:20:44.027314219 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:20:44.027323157 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:20:44.027332004 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:20:44.085221920 [anonymous-instance:fc_vcpu 0] [Vsock:vsock] notifying queues\n=== HV2 READY ===\r\nhv2-guest-agentd 1.1.0 listening on vsock port \r\n\r\nBusyBox v1.37.0 (Debian 1:1.37.0-6+b9) built-in shell (ash)\r\n1024\r\nEnter 'help' for a list of built-in commands.\r\n\r\nsh: can't access tty; job control turned off\r\n/ # \u001b[6n"
+    },
+    {
+      "pair": 1,
+      "engine": "hypermachine",
+      "success": true,
+      "cleanup_success": true
+    }
+  ],
+  "rows": [
+    {
+      "success": true,
+      "attempted": true,
+      "payload_bytes": 4096,
+      "handshake_ms": 2.522704999137204,
+      "transfer_ms": 1.0499640047783032,
+      "transaction_ms": 3.5726690039155073,
+      "aggregate_payload_mib_s": 7.440731267401482,
+      "payload_sha256": "3310e6a02797163db45fdbebda9e49e70c82a9410a3b16029d391bd587d2dfd4",
+      "engine": "hypermachine",
+      "pair": 0,
+      "round": 0
+    },
+    {
+      "success": true,
+      "attempted": true,
+      "payload_bytes": 1048576,
+      "handshake_ms": 1.3521080036298372,
+      "transfer_ms": 7.431161000567954,
+      "transaction_ms": 8.783269004197791,
+      "aggregate_payload_mib_s": 269.1369491048764,
+      "payload_sha256": "bd0acba69837fd5cc2069bedf9b98e950b5c368444e2f7a362baa9d68e752a8e",
+      "engine": "hypermachine",
+      "pair": 0,
+      "round": 0
+    },
+    {
+      "success": true,
+      "attempted": true,
+      "payload_bytes": 4096,
+      "handshake_ms": 1.5392479981528595,
+      "transfer_ms": 0.6278700020629913,
+      "transaction_ms": 2.1671180002158508,
+      "aggregate_payload_mib_s": 12.442862335086058,
+      "payload_sha256": "4c297fa9d5b7ca33c08ffc6f92f387232328c05c07dc1b5edc2f5eb89d109b96",
+      "engine": "hypermachine",
+      "pair": 0,
+      "round": 1
+    },
+    {
+      "success": true,
+      "attempted": true,
+      "payload_bytes": 1048576,
+      "handshake_ms": 1.608662998478394,
+      "transfer_ms": 7.444034999934956,
+      "transaction_ms": 9.05269799841335,
+      "aggregate_payload_mib_s": 268.67149335239225,
+      "payload_sha256": "dd5107b258c7a93bacf6e49a95cc43f3521c0b023cf5a6df7596280cccbca609",
+      "engine": "hypermachine",
+      "pair": 0,
+      "round": 1
+    },
+    {
+      "success": true,
+      "attempted": true,
+      "payload_bytes": 4096,
+      "handshake_ms": 1.3885349981137551,
+      "transfer_ms": 0.5248369998298585,
+      "transaction_ms": 1.9133719979436137,
+      "aggregate_payload_mib_s": 14.8855740020857,
+      "payload_sha256": "3310e6a02797163db45fdbebda9e49e70c82a9410a3b16029d391bd587d2dfd4",
+      "engine": "firecracker",
+      "pair": 0,
+      "round": 0
+    },
+    {
+      "success": true,
+      "attempted": true,
+      "payload_bytes": 1048576,
+      "handshake_ms": 0.6502649994217791,
+      "transfer_ms": 7.14826000330504,
+      "transaction_ms": 7.798525002726819,
+      "aggregate_payload_mib_s": 279.7883679490237,
+      "payload_sha256": "bd0acba69837fd5cc2069bedf9b98e950b5c368444e2f7a362baa9d68e752a8e",
+      "engine": "firecracker",
+      "pair": 0,
+      "round": 0
+    },
+    {
+      "success": true,
+      "attempted": true,
+      "payload_bytes": 4096,
+      "handshake_ms": 0.7929959974717349,
+      "transfer_ms": 0.42034999933093786,
+      "transaction_ms": 1.2133459968026727,
+      "aggregate_payload_mib_s": 18.585702420447223,
+      "payload_sha256": "4c297fa9d5b7ca33c08ffc6f92f387232328c05c07dc1b5edc2f5eb89d109b96",
+      "engine": "firecracker",
+      "pair": 0,
+      "round": 1
+    },
+    {
+      "success": true,
+      "attempted": true,
+      "payload_bytes": 1048576,
+      "handshake_ms": 0.51680800243048,
+      "transfer_ms": 4.665902000851929,
+      "transaction_ms": 5.182710003282409,
+      "aggregate_payload_mib_s": 428.6416644916305,
+      "payload_sha256": "dd5107b258c7a93bacf6e49a95cc43f3521c0b023cf5a6df7596280cccbca609",
+      "engine": "firecracker",
+      "pair": 0,
+      "round": 1
+    },
+    {
+      "success": true,
+      "attempted": true,
+      "payload_bytes": 4096,
+      "handshake_ms": 1.4365119932335801,
+      "transfer_ms": 0.6426040054066107,
+      "transaction_ms": 2.079115998640191,
+      "aggregate_payload_mib_s": 12.157565054479553,
+      "payload_sha256": "6fadee2a0ae19fbb22b1e30e948756baa032cd4e484610fa2a37ac5038eec8ff",
+      "engine": "firecracker",
+      "pair": 1,
+      "round": 0
+    },
+    {
+      "success": true,
+      "attempted": true,
+      "payload_bytes": 1048576,
+      "handshake_ms": 0.5724360016756691,
+      "transfer_ms": 7.26309899619082,
+      "transaction_ms": 7.835534997866489,
+      "aggregate_payload_mib_s": 275.3645518323395,
+      "payload_sha256": "903d466fbe955f0322192625b0b59aa42c795b98416e15591b515988ab2fc5d4",
+      "engine": "firecracker",
+      "pair": 1,
+      "round": 0
+    },
+    {
+      "success": true,
+      "attempted": true,
+      "payload_bytes": 4096,
+      "handshake_ms": 0.6919000006746501,
+      "transfer_ms": 0.4014129954157397,
+      "transaction_ms": 1.0933129960903898,
+      "aggregate_payload_mib_s": 19.462498945527827,
+      "payload_sha256": "83c1a299c02fdcfa310f7de9f26bcb823b3e0dc55ffde62a93934fb83adbc49f",
+      "engine": "firecracker",
+      "pair": 1,
+      "round": 1
+    },
+    {
+      "success": true,
+      "attempted": true,
+      "payload_bytes": 1048576,
+      "handshake_ms": 0.6241080045583658,
+      "transfer_ms": 5.783895998320077,
+      "transaction_ms": 6.408004002878442,
+      "aggregate_payload_mib_s": 345.7876836964041,
+      "payload_sha256": "b4a0c8c1eb72f129a6e604006aae8cf72af69efe8989a63e080e8b5d5c0f0227",
+      "engine": "firecracker",
+      "pair": 1,
+      "round": 1
+    },
+    {
+      "success": true,
+      "attempted": true,
+      "payload_bytes": 4096,
+      "handshake_ms": 2.843846996256616,
+      "transfer_ms": 0.8221440002671443,
+      "transaction_ms": 3.6659909965237603,
+      "aggregate_payload_mib_s": 9.502593216591542,
+      "payload_sha256": "6fadee2a0ae19fbb22b1e30e948756baa032cd4e484610fa2a37ac5038eec8ff",
+      "engine": "hypermachine",
+      "pair": 1,
+      "round": 0
+    },
+    {
+      "success": true,
+      "attempted": true,
+      "payload_bytes": 1048576,
+      "handshake_ms": 1.2683490058407187,
+      "transfer_ms": 8.386434994463343,
+      "transaction_ms": 9.654784000304062,
+      "aggregate_payload_mib_s": 238.4803556362607,
+      "payload_sha256": "903d466fbe955f0322192625b0b59aa42c795b98416e15591b515988ab2fc5d4",
+      "engine": "hypermachine",
+      "pair": 1,
+      "round": 0
+    },
+    {
+      "success": true,
+      "attempted": true,
+      "payload_bytes": 4096,
+      "handshake_ms": 1.557098003104329,
+      "transfer_ms": 0.6197689945111051,
+      "transaction_ms": 2.1768669976154342,
+      "aggregate_payload_mib_s": 12.605503129698777,
+      "payload_sha256": "83c1a299c02fdcfa310f7de9f26bcb823b3e0dc55ffde62a93934fb83adbc49f",
+      "engine": "hypermachine",
+      "pair": 1,
+      "round": 1
+    },
+    {
+      "success": true,
+      "attempted": true,
+      "payload_bytes": 1048576,
+      "handshake_ms": 1.4472080001723953,
+      "transfer_ms": 5.743036999774631,
+      "transaction_ms": 7.190244999947026,
+      "aggregate_payload_mib_s": 348.24779991465914,
+      "payload_sha256": "b4a0c8c1eb72f129a6e604006aae8cf72af69efe8989a63e080e8b5d5c0f0227",
+      "engine": "hypermachine",
+      "pair": 1,
+      "round": 1
+    }
+  ],
+  "cleanup_errors": [],
+  "transport": {
+    "hypermachine": "authenticated loopback HTTP/1.1 upgrade",
+    "firecracker": "native Unix vsock socket plus same guest Forward RPC"
+  },
+  "limitations": [
+    "No startup score: verified readiness and service preparation precede timing",
+    "Different native host transports; no CLI, TLS, cluster, managed service or fleet comparison",
+    "Repeated transactions share a guest; percentile rows are not independent guests",
+    "Fixed-length streaming echo on port 18082; no client half-close or server EOF requirement",
+    "MiB/s sums request and echo bytes; includes per-transaction writer-thread creation; not sustained line-rate capacity",
+    "Shared nested KVM host; no dedicated-host or concurrent load claim"
+  ],
+  "client_tcp_nodelay": true,
+  "fixture_tcp_nodelay": false,
+  "remaining_sandboxes": 0,
+  "node_stopped": true,
+  "node_log_utf8": "hv2-sandboxd: listening on 0.0.0.0:42753, capacity 2\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:48979 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:48979 process.Process/Start\n",
+  "artifacts_unchanged": true,
+  "summaries": {
+    "hypermachine-4096": {
+      "handshake_ms": {
+        "n": 4,
+        "min": 1.5392479981528595,
+        "max": 2.843846996256616,
+        "mean": 2.115724499162752,
+        "p50": 1.557098003104329,
+        "p95": 2.843846996256616,
+        "p99": 2.843846996256616
+      },
+      "transfer_ms": {
+        "n": 4,
+        "min": 0.6197689945111051,
+        "max": 1.0499640047783032,
+        "mean": 0.779936750404886,
+        "p50": 0.6278700020629913,
+        "p95": 1.0499640047783032,
+        "p99": 1.0499640047783032
+      },
+      "transaction_ms": {
+        "n": 4,
+        "min": 2.1671180002158508,
+        "max": 3.6659909965237603,
+        "mean": 2.895661249567638,
+        "p50": 2.1768669976154342,
+        "p95": 3.6659909965237603,
+        "p99": 3.6659909965237603
+      },
+      "aggregate_payload_mib_s": {
+        "n": 4,
+        "min": 7.440731267401482,
+        "max": 12.605503129698777,
+        "mean": 10.497922487194465,
+        "p50": 9.502593216591542,
+        "p95": 12.605503129698777,
+        "p99": 12.605503129698777
+      }
+    },
+    "hypermachine-1048576": {
+      "handshake_ms": {
+        "n": 4,
+        "min": 1.2683490058407187,
+        "max": 1.608662998478394,
+        "mean": 1.4190820020303363,
+        "p50": 1.3521080036298372,
+        "p95": 1.608662998478394,
+        "p99": 1.608662998478394
+      },
+      "transfer_ms": {
+        "n": 4,
+        "min": 5.743036999774631,
+        "max": 8.386434994463343,
+        "mean": 7.251166998685221,
+        "p50": 7.431161000567954,
+        "p95": 8.386434994463343,
+        "p99": 8.386434994463343
+      },
+      "transaction_ms": {
+        "n": 4,
+        "min": 7.190244999947026,
+        "max": 9.654784000304062,
+        "mean": 8.670249000715557,
+        "p50": 8.783269004197791,
+        "p95": 9.654784000304062,
+        "p99": 9.654784000304062
+      },
+      "aggregate_payload_mib_s": {
+        "n": 4,
+        "min": 238.4803556362607,
+        "max": 348.24779991465914,
+        "mean": 281.13414950204714,
+        "p50": 268.67149335239225,
+        "p95": 348.24779991465914,
+        "p99": 348.24779991465914
+      }
+    },
+    "firecracker-4096": {
+      "handshake_ms": {
+        "n": 4,
+        "min": 0.6919000006746501,
+        "max": 1.4365119932335801,
+        "mean": 1.07748574737343,
+        "p50": 0.7929959974717349,
+        "p95": 1.4365119932335801,
+        "p99": 1.4365119932335801
+      },
+      "transfer_ms": {
+        "n": 4,
+        "min": 0.4014129954157397,
+        "max": 0.6426040054066107,
+        "mean": 0.4973009999957867,
+        "p50": 0.42034999933093786,
+        "p95": 0.6426040054066107,
+        "p99": 0.6426040054066107
+      },
+      "transaction_ms": {
+        "n": 4,
+        "min": 1.0933129960903898,
+        "max": 2.079115998640191,
+        "mean": 1.5747867473692168,
+        "p50": 1.2133459968026727,
+        "p95": 2.079115998640191,
+        "p99": 2.079115998640191
+      },
+      "aggregate_payload_mib_s": {
+        "n": 4,
+        "min": 12.157565054479553,
+        "max": 19.462498945527827,
+        "mean": 16.272835105635075,
+        "p50": 14.8855740020857,
+        "p95": 19.462498945527827,
+        "p99": 19.462498945527827
+      }
+    },
+    "firecracker-1048576": {
+      "handshake_ms": {
+        "n": 4,
+        "min": 0.51680800243048,
+        "max": 0.6502649994217791,
+        "mean": 0.5909042520215735,
+        "p50": 0.5724360016756691,
+        "p95": 0.6502649994217791,
+        "p99": 0.6502649994217791
+      },
+      "transfer_ms": {
+        "n": 4,
+        "min": 4.665902000851929,
+        "max": 7.26309899619082,
+        "mean": 6.2152892496669665,
+        "p50": 5.783895998320077,
+        "p95": 7.26309899619082,
+        "p99": 7.26309899619082
+      },
+      "transaction_ms": {
+        "n": 4,
+        "min": 5.182710003282409,
+        "max": 7.835534997866489,
+        "mean": 6.80619350168854,
+        "p50": 6.408004002878442,
+        "p95": 7.835534997866489,
+        "p99": 7.835534997866489
+      },
+      "aggregate_payload_mib_s": {
+        "n": 4,
+        "min": 275.3645518323395,
+        "max": 428.6416644916305,
+        "mean": 332.3955669923495,
+        "p50": 279.7883679490237,
+        "p95": 428.6416644916305,
+        "p99": 428.6416644916305
+      }
+    }
+  }
+}

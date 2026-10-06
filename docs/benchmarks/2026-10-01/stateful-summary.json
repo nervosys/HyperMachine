@@ -1,0 +1,300 @@
+{
+  "sample_groups": [
+    {
+      "operation": "resume",
+      "concurrency": 1,
+      "batches": 100,
+      "attempts": 100,
+      "passed": 100,
+      "failed": 0,
+      "ready_ms": {
+        "n": 100,
+        "min": 69.32194299952243,
+        "max": 142.44463999784784,
+        "mean": 101.94838880004681,
+        "p50": 113.22209799982375,
+        "p95": 117.38885100203333,
+        "p99": 141.5209219994722
+      },
+      "operation_ms": {
+        "n": 100,
+        "min": 10.048658001323929,
+        "max": 16.56015399930766,
+        "mean": 12.403212580029503,
+        "p50": 12.26214800044545,
+        "p95": 14.403852001123596,
+        "p99": 15.476982000109274
+      },
+      "pause_preparation_ms": {
+        "n": 100,
+        "min": 6.994286999542965,
+        "max": 78.65390699953423,
+        "mean": 41.25876368023455,
+        "p50": 46.018749999348074,
+        "p95": 64.69875600305386,
+        "p99": 75.58983100170735
+      },
+      "max_operation_start_spread_ms": 0.0,
+      "raw_file": "stateful-final-resume-c1.json"
+    },
+    {
+      "operation": "fork",
+      "concurrency": 1,
+      "batches": 100,
+      "attempts": 100,
+      "passed": 99,
+      "failed": 1,
+      "ready_ms": {
+        "n": 99,
+        "min": 71.54196400006185,
+        "max": 129.33233099829522,
+        "mean": 105.50307644444554,
+        "p50": 116.11711200021091,
+        "p95": 125.43323299905751,
+        "p99": 129.33233099829522
+      },
+      "operation_ms": {
+        "n": 99,
+        "min": 13.384062000113772,
+        "max": 27.101050000055693,
+        "mean": 15.561210626419962,
+        "p50": 14.369249001902062,
+        "p95": 24.718839002161985,
+        "p99": 27.101050000055693
+      },
+      "pause_preparation_ms": null,
+      "max_operation_start_spread_ms": 0.0,
+      "raw_file": "stateful-final-fork-c1.json"
+    },
+    {
+      "operation": "fork",
+      "concurrency": 8,
+      "batches": 13,
+      "attempts": 104,
+      "passed": 104,
+      "failed": 0,
+      "ready_ms": {
+        "n": 104,
+        "min": 86.46815899919602,
+        "max": 166.44201899907785,
+        "mean": 134.99689740382775,
+        "p50": 136.5979359979974,
+        "p95": 154.18092799882288,
+        "p99": 162.7849469987268
+      },
+      "operation_ms": {
+        "n": 104,
+        "min": 24.655146997247357,
+        "max": 64.16107000040938,
+        "mean": 31.94697935574508,
+        "p50": 30.100911000772612,
+        "p95": 54.22638199888752,
+        "p99": 62.65198400069494
+      },
+      "pause_preparation_ms": null,
+      "max_operation_start_spread_ms": 2.889360999688506,
+      "raw_file": "stateful-final-fork-c8.json"
+    },
+    {
+      "operation": "resume",
+      "concurrency": 8,
+      "batches": 13,
+      "attempts": 104,
+      "passed": 104,
+      "failed": 0,
+      "ready_ms": {
+        "n": 104,
+        "min": 75.32483600152773,
+        "max": 150.58513900294201,
+        "mean": 128.7385170289431,
+        "p50": 133.24188499973388,
+        "p95": 148.67464900089544,
+        "p99": 150.39046300080372
+      },
+      "operation_ms": {
+        "n": 104,
+        "min": 18.717124999966472,
+        "max": 40.43737400206737,
+        "mean": 28.795551327045988,
+        "p50": 28.325360002781963,
+        "p95": 37.465793000592384,
+        "p99": 39.68856600113213
+      },
+      "pause_preparation_ms": {
+        "n": 104,
+        "min": 5.702585996914422,
+        "max": 102.36431999874185,
+        "mean": 47.947435913381646,
+        "p50": 49.46924500109162,
+        "p95": 97.7290759983589,
+        "p99": 102.3362099986116
+      },
+      "max_operation_start_spread_ms": 2.8585069994733203,
+      "raw_file": "stateful-final-resume-c8.json"
+    },
+    {
+      "operation": "resume",
+      "concurrency": 50,
+      "batches": 2,
+      "attempts": 100,
+      "passed": 100,
+      "failed": 0,
+      "ready_ms": {
+        "n": 100,
+        "min": 219.4367730007798,
+        "max": 647.7254050005286,
+        "mean": 392.7841992302274,
+        "p50": 396.9557380005426,
+        "p95": 635.9740480002074,
+        "p99": 641.2538389995461
+      },
+      "operation_ms": {
+        "n": 100,
+        "min": 33.54630999820074,
+        "max": 213.02463400206761,
+        "mean": 177.5595845805219,
+        "p50": 185.4416489986761,
+        "p95": 207.13440000326955,
+        "p99": 212.60357099890825
+      },
+      "pause_preparation_ms": {
+        "n": 100,
+        "min": 9.366983998916112,
+        "max": 180.16620699927444,
+        "mean": 75.71265667018451,
+        "p50": 62.13576500158524,
+        "p95": 175.26798300241353,
+        "p99": 178.5844250007358
+      },
+      "max_operation_start_spread_ms": 21.64221500061103,
+      "raw_file": "stateful-final-resume-c50.json"
+    },
+    {
+      "operation": "fork",
+      "concurrency": 50,
+      "batches": 2,
+      "attempts": 100,
+      "passed": 100,
+      "failed": 0,
+      "ready_ms": {
+        "n": 100,
+        "min": 357.30427100133966,
+        "max": 560.4490289988462,
+        "mean": 443.91894187992875,
+        "p50": 446.5072320017498,
+        "p95": 499.779508998472,
+        "p99": 511.58769899848267
+      },
+      "operation_ms": {
+        "n": 100,
+        "min": 102.05474499889533,
+        "max": 455.06242199917324,
+        "mean": 267.05770277992997,
+        "p50": 268.758969999908,
+        "p95": 393.67110500097624,
+        "p99": 426.036914002907
+      },
+      "pause_preparation_ms": null,
+      "max_operation_start_spread_ms": 16.504385999724036,
+      "raw_file": "stateful-final-fork-c50.json"
+    },
+    {
+      "operation": "fork",
+      "concurrency": 100,
+      "batches": 2,
+      "attempts": 200,
+      "passed": 200,
+      "failed": 0,
+      "ready_ms": {
+        "n": 200,
+        "min": 626.3250379997771,
+        "max": 1436.9893809998757,
+        "mean": 891.5779665099762,
+        "p50": 902.4837410033797,
+        "p95": 976.1561890009034,
+        "p99": 1064.2664129991317
+      },
+      "operation_ms": {
+        "n": 200,
+        "min": 95.88816099858377,
+        "max": 916.0288409984787,
+        "mean": 477.5369524350026,
+        "p50": 457.0852079996257,
+        "p95": 794.103330001235,
+        "p99": 900.8429839996097
+      },
+      "pause_preparation_ms": null,
+      "max_operation_start_spread_ms": 39.42692400232772,
+      "raw_file": "stateful-final-fork-c100.json"
+    },
+    {
+      "operation": "resume",
+      "concurrency": 100,
+      "batches": 2,
+      "attempts": 200,
+      "passed": 200,
+      "failed": 0,
+      "ready_ms": {
+        "n": 200,
+        "min": 408.4489580018271,
+        "max": 1113.3898530024453,
+        "mean": 714.2659932349306,
+        "p50": 692.1583240000473,
+        "p95": 1043.32526899816,
+        "p99": 1089.486503002263
+      },
+      "operation_ms": {
+        "n": 200,
+        "min": 140.88895099848742,
+        "max": 419.8633440028061,
+        "mean": 356.08228194998446,
+        "p50": 360.1928810021491,
+        "p95": 389.5824899991567,
+        "p99": 409.0881609990902
+      },
+      "pause_preparation_ms": {
+        "n": 200,
+        "min": 22.31013300115592,
+        "max": 531.9770649985003,
+        "mean": 163.06040544002826,
+        "p50": 133.61498599988408,
+        "p95": 345.91447900311323,
+        "p99": 520.3236679990368
+      },
+      "max_operation_start_spread_ms": 37.25786200084258,
+      "raw_file": "stateful-final-resume-c100.json"
+    }
+  ],
+  "failed_rows": [
+    {
+      "index": 8,
+      "success": false,
+      "sandbox_id": "sbx-4e5ecce730be44a38d8c",
+      "create_ms": 19.535035997250816,
+      "operation_start_offset_ms": 4617.543438002031,
+      "phase": "fork",
+      "error": "fork did not return exactly one successful sandbox",
+      "batch_index": 8,
+      "operation": "fork",
+      "concurrency": 1
+    }
+  ],
+  "total_attempts": 1008,
+  "total_passed": 1007,
+  "limitations": [
+    "Shared nested WSL/KVM, eight host CPUs and one pinned CPU worker; no bare-metal run",
+    "No matched competitor run or performance win",
+    "SDK operations are synchronized after preparation; observed client launch spreads are reported",
+    "Two batches at concurrency 50/100; guests in a batch are dependent samples",
+    "Pause timings come from preparation, not synchronized pause bursts",
+    "Readiness stops at the first state-verified command; fork filesystem independence is checked afterward",
+    "Short BusyBox workload; no oversubscription, sustained arrivals, large heap or application recovery SLA"
+  ],
+  "artifact_sha256": {
+    "daemon": "d420dabe8ad568ed7d90b0806ad4fe186e42be0dfbf3a46f8997174871400159",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "sdk_harness": "30ac43be27ab656d3aac52d617b167471f5772b298430c695258e6e581f5a028",
+    "request_harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433"
+  }
+}

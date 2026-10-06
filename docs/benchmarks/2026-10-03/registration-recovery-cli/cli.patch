@@ -1,0 +1,42 @@
+--- baseline/crates/hm-cli/src/sandbox_vm.rs
++++ candidate/crates/hm-cli/src/sandbox_vm.rs
+@@ -40,6 +40,13 @@
+ /// VM sandbox lifecycle commands. Responses are JSON for shell automation.
+ #[derive(Debug, Subcommand)]
+ pub enum VmCommand {
++    /// Administrator recovery of a preserved guest with uncertain registration
++    ReconcileRegistration {
++        id: String,
++        /// Registered node retaining the preserved running guest
++        #[arg(long)]
++        node_id: String,
++    },
+     /// Administrator-only adoption of an existing ownerless VM
+     AdoptOwner {
+         id: String,
+@@ -716,6 +723,8 @@
+         args.api_ca_cert.as_deref(),
+     )?;
+     let value = match args.command {
++        VmCommand::ReconcileRegistration { id, node_id } => api.request_bounded(Method::POST,
++            &["cluster","nodes",&node_id,"sandboxes",&id,"registration","reconcile"],Some(json!({})),16384).await?,
+         VmCommand::AdoptOwner { id, principal_id } => api.request_bounded(Method::POST,&["sandboxes",&id,"owner"],Some(json!({"principalId":principal_id})),16384).await?,
+         VmCommand::PublicPorts { command } => public_ports(&api, command).await?,
+         VmCommand::Udp { id, port, listen, max_peers, guest_ipv6 } => {
+@@ -1455,6 +1464,16 @@
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    #[test]
++    fn reconciliation_cli_requires_explicit_node() {
++        use clap::Parser;
++        #[derive(Parser)]
++        struct Command { #[command(flatten)] vm: VmArgs }
++        assert!(Command::try_parse_from(["hm","reconcile-registration","sandbox-a"]).is_err());
++        let parsed=Command::try_parse_from(["hm","reconcile-registration","sandbox-a","--node-id","node-a"]).unwrap();
++        assert!(matches!(parsed.vm.command,VmCommand::ReconcileRegistration { id,node_id } if id=="sandbox-a" && node_id=="node-a"));
++    }
++
+ 
+     #[test]
+     fn owner_adoption_cli_requires_valid_explicit_principal() {

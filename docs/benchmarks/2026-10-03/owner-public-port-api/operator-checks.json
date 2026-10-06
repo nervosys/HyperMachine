@@ -1,0 +1,30 @@
+[
+  {
+    "range": "0-1",
+    "refused": true
+  },
+  {
+    "range": "2-1",
+    "refused": true
+  },
+  {
+    "range": "1-4097",
+    "refused": true
+  },
+  {
+    "range": "bad",
+    "refused": true
+  },
+  {
+    "range": "1-65536",
+    "refused": true
+  },
+  {
+    "range": "1-2-3",
+    "refused": true
+  },
+  {
+    "range": "49100-49103",
+    "help_validates_without_store": true
+  }
+]

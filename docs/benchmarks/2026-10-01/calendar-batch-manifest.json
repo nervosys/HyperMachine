@@ -1,0 +1,12 @@
+{
+  "baseline_source_commit": "8749288",
+  "binary_sha256": {
+    "baseline": "1eed0f9737d9d6e0559f185db59d384b5892c82bb7088dcb61cb5a940636ab40",
+    "candidate": "bc213aa5f0b948084e6a4f527ae0f3dfec0c6825e6f647881bca9ed44ce82505"
+  },
+  "files_sha256": {
+    "calendar-batch-comparison.json": "0cf40caa9ba20dc904c92ae83eaf74d53b857142e0d72f10633a146e4f4b7cfe",
+    "calendar-batch-source.rs": "91bc816ba26771297c5205134bdc70556ecce59495b5a80174b53ec1c5d7708c",
+    "calendar-batch.patch": "d963ce4cf97e1656b32c87a3ffcc877d16f99e3c80229854d10b40972a2ab524"
+  }
+}

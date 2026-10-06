@@ -1,0 +1,5 @@
+hv2-control-plane: E2B API on 0.0.0.0:53331, envd proxy on 0.0.0.0:55677, store redis://127.0.0.1:49863
+hv2-control-plane: API key policies reloaded
+hv2-control-plane: web access policies reloaded
+hv2-control-plane: web access policies reloaded
+hv2-control-plane: API key policies reloaded

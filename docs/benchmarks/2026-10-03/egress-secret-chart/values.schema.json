@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "node": {
+      "type": "object",
+      "properties": {
+        "network": { "type": "boolean" },
+        "egressSecrets": { "$ref": "#/definitions/egressSecret" },
+        "egressUpstreamCa": { "$ref": "#/definitions/egressSecret" }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "properties": {
+        "legacyAdminEnabled": { "type": "boolean" },
+        "apiKeysSecret": { "type": "string" },
+        "apiKeysSecretKey": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "definitions": {
+    "egressSecret": {
+      "type": "object",
+      "required": ["secretName", "key"],
+      "additionalProperties": false,
+      "properties": {
+        "secretName": { "type": "string" },
+        "key": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9._-]+$" }
+      }
+    }
+  }
+}

@@ -1,0 +1,325 @@
+{
+  "order": [
+    "baseline",
+    "candidate",
+    "candidate",
+    "baseline"
+  ],
+  "cohorts": [
+    {
+      "index": 1,
+      "kind": "baseline",
+      "daemon_sha256": "8afb215a2ff476147b8ebf9ce96f25d161ae361876d16b32f9f72b97808c9fa3",
+      "checks": 51,
+      "scored_operations": 128,
+      "paired_differences": [
+        {
+          "payload_bytes": 64,
+          "complete_pairs": 32,
+          "setup_ms_private_minus_standard_p50": 0.3323204999999998,
+          "echo_ms_private_minus_standard_p50": -0.0027955000000000063,
+          "total_ms_private_minus_standard_p50": 0.3537919999999999
+        },
+        {
+          "payload_bytes": 65507,
+          "complete_pairs": 32,
+          "setup_ms_private_minus_standard_p50": 0.24841849999999988,
+          "echo_ms_private_minus_standard_p50": 0.04144050000000005,
+          "total_ms_private_minus_standard_p50": 0.32335749999999996
+        }
+      ],
+      "summary": [
+        {
+          "path": "private",
+          "payload_bytes": 64,
+          "planned": 32,
+          "successful": 32,
+          "failed": 0,
+          "setup_ms_p50": 2.3435145,
+          "setup_ms_p95": 2.852139,
+          "echo_ms_p50": 0.509206,
+          "echo_ms_p95": 0.727611,
+          "total_ms_p50": 2.853481,
+          "total_ms_p95": 3.550231
+        },
+        {
+          "path": "standard",
+          "payload_bytes": 64,
+          "planned": 32,
+          "successful": 32,
+          "failed": 0,
+          "setup_ms_p50": 2.0455734999999997,
+          "setup_ms_p95": 2.571632,
+          "echo_ms_p50": 0.51384,
+          "echo_ms_p95": 2.408139,
+          "total_ms_p50": 2.5502655,
+          "total_ms_p95": 4.659697
+        },
+        {
+          "path": "private",
+          "payload_bytes": 65507,
+          "planned": 32,
+          "successful": 32,
+          "failed": 0,
+          "setup_ms_p50": 2.271158,
+          "setup_ms_p95": 2.597404,
+          "echo_ms_p50": 0.788665,
+          "echo_ms_p95": 1.20615,
+          "total_ms_p50": 3.1103075000000002,
+          "total_ms_p95": 3.469716
+        },
+        {
+          "path": "standard",
+          "payload_bytes": 65507,
+          "planned": 32,
+          "successful": 32,
+          "failed": 0,
+          "setup_ms_p50": 1.9800149999999999,
+          "setup_ms_p95": 2.218457,
+          "echo_ms_p50": 0.743644,
+          "echo_ms_p95": 1.175638,
+          "total_ms_p50": 2.7258310000000003,
+          "total_ms_p95": 3.303159
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "kind": "candidate",
+      "daemon_sha256": "aef812594544d708d6c0101c27b3cdc0c93f6c3ded3e408f1eff9e253be955ef",
+      "checks": 51,
+      "scored_operations": 128,
+      "paired_differences": [
+        {
+          "payload_bytes": 64,
+          "complete_pairs": 32,
+          "setup_ms_private_minus_standard_p50": 0.365096,
+          "echo_ms_private_minus_standard_p50": 0.01891599999999999,
+          "total_ms_private_minus_standard_p50": 0.33690549999999986
+        },
+        {
+          "payload_bytes": 65507,
+          "complete_pairs": 32,
+          "setup_ms_private_minus_standard_p50": 0.41284900000000013,
+          "echo_ms_private_minus_standard_p50": 0.01600950000000001,
+          "total_ms_private_minus_standard_p50": 0.4160185000000003
+        }
+      ],
+      "summary": [
+        {
+          "path": "private",
+          "payload_bytes": 64,
+          "planned": 32,
+          "successful": 32,
+          "failed": 0,
+          "setup_ms_p50": 2.2727735,
+          "setup_ms_p95": 2.564922,
+          "echo_ms_p50": 0.5401945,
+          "echo_ms_p95": 0.641157,
+          "total_ms_p50": 2.824532,
+          "total_ms_p95": 3.155712
+        },
+        {
+          "path": "standard",
+          "payload_bytes": 64,
+          "planned": 32,
+          "successful": 32,
+          "failed": 0,
+          "setup_ms_p50": 1.86697,
+          "setup_ms_p95": 2.327305,
+          "echo_ms_p50": 0.5277585,
+          "echo_ms_p95": 2.551743,
+          "total_ms_p50": 2.409185,
+          "total_ms_p95": 4.286759
+        },
+        {
+          "path": "private",
+          "payload_bytes": 65507,
+          "planned": 32,
+          "successful": 32,
+          "failed": 0,
+          "setup_ms_p50": 2.120963,
+          "setup_ms_p95": 2.382455,
+          "echo_ms_p50": 0.7518750000000001,
+          "echo_ms_p95": 1.229421,
+          "total_ms_p50": 2.8842790000000003,
+          "total_ms_p95": 3.489396
+        },
+        {
+          "path": "standard",
+          "payload_bytes": 65507,
+          "planned": 32,
+          "successful": 32,
+          "failed": 0,
+          "setup_ms_p50": 1.749072,
+          "setup_ms_p95": 2.028736,
+          "echo_ms_p50": 0.7169494999999999,
+          "echo_ms_p95": 1.128665,
+          "total_ms_p50": 2.5471744999999997,
+          "total_ms_p95": 2.971254
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "kind": "candidate",
+      "daemon_sha256": "aef812594544d708d6c0101c27b3cdc0c93f6c3ded3e408f1eff9e253be955ef",
+      "checks": 51,
+      "scored_operations": 128,
+      "paired_differences": [
+        {
+          "payload_bytes": 64,
+          "complete_pairs": 32,
+          "setup_ms_private_minus_standard_p50": 0.365368,
+          "echo_ms_private_minus_standard_p50": 0.01265700000000003,
+          "total_ms_private_minus_standard_p50": 0.28126300000000004
+        },
+        {
+          "payload_bytes": 65507,
+          "complete_pairs": 32,
+          "setup_ms_private_minus_standard_p50": 0.3333869999999999,
+          "echo_ms_private_minus_standard_p50": 0.06421600000000005,
+          "total_ms_private_minus_standard_p50": 0.42299850000000006
+        }
+      ],
+      "summary": [
+        {
+          "path": "private",
+          "payload_bytes": 64,
+          "planned": 32,
+          "successful": 32,
+          "failed": 0,
+          "setup_ms_p50": 2.2895475000000003,
+          "setup_ms_p95": 2.686412,
+          "echo_ms_p50": 0.559674,
+          "echo_ms_p95": 0.665889,
+          "total_ms_p50": 2.8743635000000003,
+          "total_ms_p95": 3.227285
+        },
+        {
+          "path": "standard",
+          "payload_bytes": 64,
+          "planned": 32,
+          "successful": 32,
+          "failed": 0,
+          "setup_ms_p50": 1.888373,
+          "setup_ms_p95": 2.27037,
+          "echo_ms_p50": 0.530278,
+          "echo_ms_p95": 3.04639,
+          "total_ms_p50": 2.4401010000000003,
+          "total_ms_p95": 4.789285
+        },
+        {
+          "path": "private",
+          "payload_bytes": 65507,
+          "planned": 32,
+          "successful": 32,
+          "failed": 0,
+          "setup_ms_p50": 2.1514405,
+          "setup_ms_p95": 2.340276,
+          "echo_ms_p50": 0.7822585,
+          "echo_ms_p95": 1.213169,
+          "total_ms_p50": 2.9177045,
+          "total_ms_p95": 3.349666
+        },
+        {
+          "path": "standard",
+          "payload_bytes": 65507,
+          "planned": 32,
+          "successful": 32,
+          "failed": 0,
+          "setup_ms_p50": 1.768865,
+          "setup_ms_p95": 2.079815,
+          "echo_ms_p50": 0.7331475000000001,
+          "echo_ms_p95": 1.081422,
+          "total_ms_p50": 2.5229815,
+          "total_ms_p95": 3.040198
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "kind": "baseline",
+      "daemon_sha256": "8afb215a2ff476147b8ebf9ce96f25d161ae361876d16b32f9f72b97808c9fa3",
+      "checks": 51,
+      "scored_operations": 128,
+      "paired_differences": [
+        {
+          "payload_bytes": 64,
+          "complete_pairs": 32,
+          "setup_ms_private_minus_standard_p50": 0.3771420000000001,
+          "echo_ms_private_minus_standard_p50": 0.028323000000000015,
+          "total_ms_private_minus_standard_p50": 0.35398700000000005
+        },
+        {
+          "payload_bytes": 65507,
+          "complete_pairs": 32,
+          "setup_ms_private_minus_standard_p50": 0.37340850000000003,
+          "echo_ms_private_minus_standard_p50": 0.06218949999999995,
+          "total_ms_private_minus_standard_p50": 0.393178
+        }
+      ],
+      "summary": [
+        {
+          "path": "private",
+          "payload_bytes": 64,
+          "planned": 32,
+          "successful": 32,
+          "failed": 0,
+          "setup_ms_p50": 2.3644809999999996,
+          "setup_ms_p95": 2.663464,
+          "echo_ms_p50": 0.5430605,
+          "echo_ms_p95": 0.713381,
+          "total_ms_p50": 2.9297750000000002,
+          "total_ms_p95": 3.375189
+        },
+        {
+          "path": "standard",
+          "payload_bytes": 64,
+          "planned": 32,
+          "successful": 32,
+          "failed": 0,
+          "setup_ms_p50": 2.0100905,
+          "setup_ms_p95": 2.393329,
+          "echo_ms_p50": 0.510178,
+          "echo_ms_p95": 2.503354,
+          "total_ms_p50": 2.5489805,
+          "total_ms_p95": 4.377602
+        },
+        {
+          "path": "private",
+          "payload_bytes": 65507,
+          "planned": 32,
+          "successful": 32,
+          "failed": 0,
+          "setup_ms_p50": 2.249981,
+          "setup_ms_p95": 2.484088,
+          "echo_ms_p50": 0.802928,
+          "echo_ms_p95": 1.289438,
+          "total_ms_p50": 3.0035735,
+          "total_ms_p95": 3.5827
+        },
+        {
+          "path": "standard",
+          "payload_bytes": 65507,
+          "planned": 32,
+          "successful": 32,
+          "failed": 0,
+          "setup_ms_p50": 1.8927955,
+          "setup_ms_p95": 2.113173,
+          "echo_ms_p50": 0.747835,
+          "echo_ms_p95": 1.068126,
+          "total_ms_p50": 2.665543,
+          "total_ms_p95": 3.032097
+        }
+      ]
+    }
+  ],
+  "scored_operations": 512,
+  "all_scored_success": true,
+  "checker_sha256": "8092ae98a8092dfa99a4446d6d1dd2799b5d7371472eeb383afc5839fed44869",
+  "daemon_sha256": {
+    "baseline": "8afb215a2ff476147b8ebf9ce96f25d161ae361876d16b32f9f72b97808c9fa3",
+    "candidate": "aef812594544d708d6c0101c27b3cdc0c93f6c3ded3e408f1eff9e253be955ef"
+  }
+}

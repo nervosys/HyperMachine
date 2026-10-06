@@ -1,0 +1,38 @@
+{
+  "cli_root_and_isolated_match_sha256": {
+    "crates/hm-cli/src/agentic/adapters.rs": "ea55e0b5eb4ff05a0dab92869cbbded71cd764b3bfa9e54a7a5c4013892682bc",
+    "crates/hm-cli/src/agentic/mod.rs": "f55cf7535704dc074924fcb20360cb6e630949920475e12777aaea4df3403ee1",
+    "crates/hm-cli/src/agentic/ontology.rs": "616705305a7869a24ad0181e8b65b740caf47742be0dbe70dc8e71d882c41675",
+    "crates/hm-cli/src/agentic/schema.rs": "91db9a1122a53d316e85d67c92bbba392020485d3b03110cd5506ddd84fc4b02",
+    "crates/hm-cli/src/agentic/tools.rs": "bc3d188653883c7ddf1adc1f81dc998ae82dea4233f3597645e70f387b7a2a52",
+    "crates/hm-cli/src/jobs_cmd.rs": "926981303dacd323b8226344c2598e0a63e4f1360b5b2463249a5b800460b03f",
+    "crates/hm-cli/src/jobs_profile.rs": "b85a72a62fb29e7025665837defeda9bbdc05ce026a651c802fa63f1926a1005",
+    "crates/hm-cli/src/jobs_vm_dispatch.rs": "7ab846707f07713cf14b2a7ec53341af28524a715b40c73cc0a023ea2bb36534",
+    "crates/hm-cli/src/lib.rs": "0f6ee5da689cfc5f8f4befae91c4ec50d1def1548533fa5e2b5804316b53e122",
+    "crates/hm-cli/src/main.rs": "62a7118b76a1e7f1c8c7898e3f1d466f1c34a1ee8bb502bc8023f8aa950d3cdb",
+    "crates/hm-cli/src/mcp_server.rs": "8f7a9724a814d6c2343346ec8c75bf5ba498ef6469aed3a2a2ac4f4e22779746",
+    "crates/hm-cli/src/sandbox_cmd.rs": "146061372c75768c8e077d2fad67b3a8aa6850562042c8b782e17d6e15a556ec",
+    "crates/hm-cli/src/sandbox_vm.rs": "c54c39cf48dacd659a0607b309851b0d6c410f60a656aa4177f4815beddb5709",
+    "crates/hm-cli/src/sandbox_vm_mcp.rs": "e4271ceaade1daead894d12f098d694f0568a80800626ccfdd9abf0cc22625de",
+    "crates/hm-cli/src/sandbox_vm_mcp_files.rs": "334ca7774060f4090200b7fdce414ff2e1a97379c11341f342575178f4b19c2c",
+    "crates/hm-cli/src/sandbox_vm_mcp_http.rs": "a0d3c67508188331dbf5bb54966877c040889ef111c82a1f8bf20d6862d4ccaf",
+    "crates/hm-cli/src/sandbox_vm_mcp_transport_tests.rs": "74071402b5a8645b74eed78fb02d8ade23c7f7d262afee826ef9da671bb4131d",
+    "crates/hm-cli/src/sandbox_vm_udp.rs": "936decd596d2989a60de9be2c8ed6bc4075fa5400987e59bae93c76456d4b1d2",
+    "crates/hm-cli/src/t1_manager.rs": "7f51bdaf159647ff0e10d9d1b9d76933e38953786636047de47aac4c4b79dccf",
+    "crates/hm-cli/src/vm_manager.rs": "659925d20f4e3fb107cde719184710d5bea9d83bd13a43eb8d327acab72fddd4",
+    "crates/hm-cli/tests/boot_source_registry.rs": "ebc53e0eb1336af1791437698be57dd606b5399f718f75be6bd31c41791a34c3",
+    "crates/hm-cli/tests/jobs_schedule.rs": "9c718620f660c3cceb0a35ee1a3a13323d95fee42d87f9d158cb6f6cfd1ff18d",
+    "crates/hm-cli/tests/mcp_server_integration.rs": "020dbd25ef5b653fc1acee424b577cae0a4bf7879e9a9e7c09c2bf548946f76c",
+    "crates/hm-cli/tests/sandbox_vm_client.rs": "32b093054ec7ae35550f15f78b9aa72ee9944cc600d2bd25680f017707589d39",
+    "crates/hm-cli/tests/volume_client.rs": "1e896a9be96e0839df0091bb28d86080b462139ae5d9f1a110ddd8415729b43f",
+    "crates/hm-cli/Cargo.toml": "7fe7a3fe30c4c0ebe771c947f29369e2ec24ef9ba7213b74646103c1aa2ba9d8"
+  },
+  "accepted_isolated_core_sha256": {
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+    "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+  },
+  "isolated_cargo_lock_sha256": "72b971c6f6a1d27ccd6adb47852d02687381923da99f7f5487767637ab407a70",
+  "root_cargo_lock_sha256": "81f02cd2ce8b7117f0c8279a03ad0c6d0758d20f5d8138048692ff20298e24da",
+  "cli_binary_sha256": "551e5282bc7609be0da5da66a702161cd3fb832f9af4318c4751c8ce85b3fe6e"
+}

@@ -1,0 +1,143 @@
+{
+  "experiment": "matched-native-gzip-lz4-c100",
+  "blocks": 6,
+  "pairs_per_kernel": 2,
+  "coordinator_sha256": "71b08a3e656c588e533388b3d9fb0a174305d224c4c8209b59439d852096a5fa",
+  "driver_sha256": "dda304123a2063e730f54a062e082c8bd8b3a0dc764ea2523d278b56eba27d12",
+  "cohorts": [
+    {
+      "block": 0,
+      "profile": "gzip",
+      "file": "kernel-compression-block-0-gzip.json",
+      "exit_code": 0,
+      "elapsed_seconds": 34.972577673997876,
+      "stdout": "{\"success\": true, \"ready_ms\": {\"hypermachine\": {\"n\": 200, \"min\": 4770.842836998781, \"max\": 9982.186999000987, \"mean\": 7319.286115480008, \"p50\": 6866.124863998266, \"p95\": 9947.078463002981, \"p99\": 9970.53493400017}, \"firecracker\": {\"n\": 200, \"min\": 4681.809452002199, \"max\": 7731.369388002349, \"mean\": 6480.095559370019, \"p50\": 5813.39232100072, \"p95\": 7669.860630001494, \"p99\": 7721.356996000395}}, \"setup_error\": null, \"cleanup_errors\": [], \"failed_samples\": []}\n",
+      "stderr": "",
+      "raw_sha256": "4594ff9dac4bef75bbcd2aff4252cb998acd27a0185b52a75ee6901449c1d108",
+      "success": true
+    },
+    {
+      "block": 0,
+      "profile": "lz4",
+      "file": "kernel-compression-block-0-lz4.json",
+      "exit_code": 0,
+      "elapsed_seconds": 28.38350711399835,
+      "stdout": "{\"success\": true, \"ready_ms\": {\"hypermachine\": {\"n\": 200, \"min\": 3262.3084070000914, \"max\": 7070.297379999829, \"mean\": 6230.159047450161, \"p50\": 6565.453661001811, \"p95\": 7005.154426002264, \"p99\": 7049.262813998212}, \"firecracker\": {\"n\": 200, \"min\": 3893.4604130008665, \"max\": 5017.210976999195, \"mean\": 4641.516762105093, \"p50\": 4805.890884999826, \"p95\": 4981.848022001941, \"p99\": 5008.001748999959}}, \"setup_error\": null, \"cleanup_errors\": [], \"failed_samples\": []}\n",
+      "stderr": "",
+      "raw_sha256": "989a117c165410e02ae15c8fd11064214a3f691f00dcd6ac9242a4e30014dd79",
+      "success": true
+    },
+    {
+      "block": 1,
+      "profile": "lz4",
+      "file": "kernel-compression-block-1-lz4.json",
+      "exit_code": 0,
+      "elapsed_seconds": 32.91289847000007,
+      "stdout": "{\"success\": true, \"ready_ms\": {\"hypermachine\": {\"n\": 200, \"min\": 3549.130866998894, \"max\": 11673.410977000458, \"mean\": 8452.20336621518, \"p50\": 6726.324999999633, \"p95\": 11616.203559999121, \"p99\": 11667.335608002759}, \"firecracker\": {\"n\": 200, \"min\": 3734.818428998551, \"max\": 5089.432143999147, \"mean\": 4706.598976615096, \"p50\": 4729.354072998831, \"p95\": 5055.634060998273, \"p99\": 5087.119669002277}}, \"setup_error\": null, \"cleanup_errors\": [], \"failed_samples\": []}\n",
+      "stderr": "",
+      "raw_sha256": "70d905cd44261d3f0501dd2521ebbe7bac7e930e76d1b0c36fc623812cf12841",
+      "success": true
+    },
+    {
+      "block": 1,
+      "profile": "gzip",
+      "file": "kernel-compression-block-1-gzip.json",
+      "exit_code": 0,
+      "elapsed_seconds": 37.105101979999745,
+      "stdout": "{\"success\": true, \"ready_ms\": {\"hypermachine\": {\"n\": 200, \"min\": 3916.656684999907, \"max\": 13986.507727000571, \"mean\": 9598.393065825021, \"p50\": 7034.423517001414, \"p95\": 13965.090301997407, \"p99\": 13979.035809999914}, \"firecracker\": {\"n\": 200, \"min\": 4354.957337996893, \"max\": 6040.351907999138, \"mean\": 5491.850597829907, \"p50\": 5507.357062000665, \"p95\": 6001.175596000394, \"p99\": 6034.408772000461}}, \"setup_error\": null, \"cleanup_errors\": [], \"failed_samples\": []}\n",
+      "stderr": "",
+      "raw_sha256": "b1f1b083e98f0391991a2b7e8fb81a7988ff427a1b5b1a41087d720f55bab8af",
+      "success": true
+    },
+    {
+      "block": 2,
+      "profile": "gzip",
+      "file": "kernel-compression-block-2-gzip.json",
+      "exit_code": 0,
+      "elapsed_seconds": 34.6369558410006,
+      "stdout": "{\"success\": true, \"ready_ms\": {\"hypermachine\": {\"n\": 200, \"min\": 3368.144926000241, \"max\": 10893.232973001432, \"mean\": 7904.3993301550645, \"p50\": 7101.110345996858, \"p95\": 10845.601150998846, \"p99\": 10884.439576999284}, \"firecracker\": {\"n\": 200, \"min\": 3964.080683999782, \"max\": 6194.367767999211, \"mean\": 5706.333326374951, \"p50\": 5674.077204999776, \"p95\": 6151.781157001096, \"p99\": 6179.902632000449}}, \"setup_error\": null, \"cleanup_errors\": [], \"failed_samples\": []}\n",
+      "stderr": "",
+      "raw_sha256": "89c1a9e15c8affdd0d0b6d507cf998b981ad037954043cf52c6b3fa26c0eb2ec",
+      "success": true
+    },
+    {
+      "block": 2,
+      "profile": "lz4",
+      "file": "kernel-compression-block-2-lz4.json",
+      "exit_code": 0,
+      "elapsed_seconds": 31.33579928200197,
+      "stdout": "{\"success\": true, \"ready_ms\": {\"hypermachine\": {\"n\": 200, \"min\": 5004.887658000371, \"max\": 9666.342978998728, \"mean\": 7935.4527357800725, \"p50\": 7049.666003000311, \"p95\": 9638.623616003315, \"p99\": 9657.672848999937}, \"firecracker\": {\"n\": 200, \"min\": 2220.398325000133, \"max\": 5098.888757998793, \"mean\": 4610.468944844779, \"p50\": 4813.564181000402, \"p95\": 5047.681324002042, \"p99\": 5070.319633003237}}, \"setup_error\": null, \"cleanup_errors\": [], \"failed_samples\": []}\n",
+      "stderr": "",
+      "raw_sha256": "e27f3d283065bdeb27e7631da701d845f9a97314c6138f53bed6e1da4983ee8c",
+      "success": true
+    },
+    {
+      "block": 3,
+      "profile": "lz4",
+      "file": "kernel-compression-block-3-lz4.json",
+      "exit_code": 0,
+      "elapsed_seconds": 30.72456229599993,
+      "stdout": "{\"success\": true, \"ready_ms\": {\"hypermachine\": {\"n\": 200, \"min\": 4301.615630000015, \"max\": 10221.069297000213, \"mean\": 7725.2414054300425, \"p50\": 6138.494398997864, \"p95\": 10187.927712999226, \"p99\": 10205.311210997024}, \"firecracker\": {\"n\": 200, \"min\": 3938.440565001656, \"max\": 4970.19802900104, \"mean\": 4679.229848100094, \"p50\": 4685.446660998423, \"p95\": 4937.942422002379, \"p99\": 4964.730922998569}}, \"setup_error\": null, \"cleanup_errors\": [], \"failed_samples\": []}\n",
+      "stderr": "",
+      "raw_sha256": "5080243ff42f7407bac0730b2ed5efb37d05957108f109e6170a69f3c98f7faf",
+      "success": true
+    },
+    {
+      "block": 3,
+      "profile": "gzip",
+      "file": "kernel-compression-block-3-gzip.json",
+      "exit_code": 0,
+      "elapsed_seconds": 36.63353991199983,
+      "stdout": "{\"success\": true, \"ready_ms\": {\"hypermachine\": {\"n\": 200, \"min\": 3699.9447859998327, \"max\": 7221.263920000638, \"mean\": 6123.889951885121, \"p50\": 6330.064896999829, \"p95\": 7177.028477999556, \"p99\": 7198.148858999048}, \"firecracker\": {\"n\": 200, \"min\": 4570.159656002943, \"max\": 11213.051613998687, \"mean\": 7249.752834850042, \"p50\": 6477.999771999748, \"p95\": 11150.644748002378, \"p99\": 11205.601744000887}}, \"setup_error\": null, \"cleanup_errors\": [], \"failed_samples\": []}\n",
+      "stderr": "",
+      "raw_sha256": "c1b99d158b0ad82684bca5ae636d016539669298ec689d8cbd4431b5da9cc666",
+      "success": true
+    },
+    {
+      "block": 4,
+      "profile": "gzip",
+      "file": "kernel-compression-block-4-gzip.json",
+      "exit_code": 0,
+      "elapsed_seconds": 31.322276529997907,
+      "stdout": "{\"success\": true, \"ready_ms\": {\"hypermachine\": {\"n\": 200, \"min\": 4081.3598329987144, \"max\": 8210.287137997511, \"mean\": 6863.381193655041, \"p50\": 6827.836992000812, \"p95\": 8156.908506000036, \"p99\": 8205.100543000299}, \"firecracker\": {\"n\": 200, \"min\": 3558.920005998516, \"max\": 5737.250232999941, \"mean\": 5416.323214635031, \"p50\": 5494.875666001462, \"p95\": 5668.71442500269, \"p99\": 5700.274124999851}}, \"setup_error\": null, \"cleanup_errors\": [], \"failed_samples\": []}\n",
+      "stderr": "",
+      "raw_sha256": "9e443186c685ec84a2e7ae37234b164059f756b92ad599d71386ab2c13646272",
+      "success": true
+    },
+    {
+      "block": 4,
+      "profile": "lz4",
+      "file": "kernel-compression-block-4-lz4.json",
+      "exit_code": 0,
+      "elapsed_seconds": 29.951082418003352,
+      "stdout": "{\"success\": true, \"ready_ms\": {\"hypermachine\": {\"n\": 200, \"min\": 3195.299424998666, \"max\": 9130.135030998645, \"mean\": 7313.764885715045, \"p50\": 6360.877672999777, \"p95\": 9111.52629299977, \"p99\": 9128.597320999688}, \"firecracker\": {\"n\": 200, \"min\": 3747.359373999643, \"max\": 4934.778347000247, \"mean\": 4610.425478285015, \"p50\": 4753.451402000792, \"p95\": 4880.648398000631, \"p99\": 4907.982700999128}}, \"setup_error\": null, \"cleanup_errors\": [], \"failed_samples\": []}\n",
+      "stderr": "",
+      "raw_sha256": "e28ab5b761e03177c7520f83b665aad0ca01ff166baf1a180988bf3ec716bc73",
+      "success": true
+    },
+    {
+      "block": 5,
+      "profile": "lz4",
+      "file": "kernel-compression-block-5-lz4.json",
+      "exit_code": 0,
+      "elapsed_seconds": 27.286743862001458,
+      "stdout": "{\"success\": true, \"ready_ms\": {\"hypermachine\": {\"n\": 200, \"min\": 2606.8354659983015, \"max\": 6527.162992999365, \"mean\": 5781.36787604506, \"p50\": 6182.513125997502, \"p95\": 6506.974108000577, \"p99\": 6523.373028998321}, \"firecracker\": {\"n\": 200, \"min\": 4015.5135040004097, \"max\": 5006.382337000105, \"mean\": 4738.229432414992, \"p50\": 4791.472717999568, \"p95\": 4958.989555001608, \"p99\": 4978.606394000963}}, \"setup_error\": null, \"cleanup_errors\": [], \"failed_samples\": []}\n",
+      "stderr": "",
+      "raw_sha256": "c47fab54e9d41ff2f7d26f9b8248a12f7c46133e5b7e2d8a0eb390344c8ec4c2",
+      "success": true
+    },
+    {
+      "block": 5,
+      "profile": "gzip",
+      "file": "kernel-compression-block-5-gzip.json",
+      "exit_code": 1,
+      "elapsed_seconds": 40.74637184400126,
+      "stdout": "{\"success\": false, \"ready_ms\": {\"hypermachine\": {\"n\": 190, \"min\": 3492.5281850009924, \"max\": 15691.154322001239, \"mean\": 9668.891167642141, \"p50\": 6784.704154997598, \"p95\": 15650.030100998265, \"p99\": 15681.90904400035}, \"firecracker\": {\"n\": 200, \"min\": 2746.9873410009313, \"max\": 5871.74745500306, \"mean\": 5308.333948744876, \"p50\": 5524.385144002736, \"p95\": 5836.388994997833, \"p99\": 5858.7336690034135}}, \"setup_error\": null, \"cleanup_errors\": [], \"failed_samples\": [{\"engine\": \"hypermachine\", \"pair\": 0, \"index\": 2, \"error\": \"HTTP 503: {\\\"code\\\":503,\\\"message\\\":\\\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (8 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3054 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21092889092823, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21092889092883; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x497c000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\\\"}\", \"cleanup_error\": null, \"hold_error\": null}, {\"engine\": \"hypermachine\", \"pair\": 0, \"index\": 12, \"error\": \"HTTP 503: {\\\"code\\\":503,\\\"message\\\":\\\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (3 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3033 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21092926735260, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21092926735320; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\\\"}\", \"cleanup_error\": null, \"hold_error\": null}, {\"engine\": \"hypermachine\", \"pair\": 0, \"index\": 24, \"error\": \"HTTP 503: {\\\"code\\\":503,\\\"message\\\":\\\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (3 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3033 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093064961958, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093064962009; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\\\"}\", \"cleanup_error\": null, \"hold_error\": null}, {\"engine\": \"hypermachine\", \"pair\": 0, \"index\": 36, \"error\": \"HTTP 503: {\\\"code\\\":503,\\\"message\\\":\\\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (5 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3040 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093264855493, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093264855553; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\\\"}\", \"cleanup_error\": null, \"hold_error\": null}, {\"engine\": \"hypermachine\", \"pair\": 0, \"index\": 45, \"error\": \"HTTP 503: {\\\"code\\\":503,\\\"message\\\":\\\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (2 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3026 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21092837424495, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21092837424555; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\\\"}\", \"cleanup_error\": null, \"hold_error\": null}, {\"engine\": \"hypermachine\", \"pair\": 0, \"index\": 48, \"error\": \"HTTP 503: {\\\"code\\\":503,\\\"message\\\":\\\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (5 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3043 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093088830490, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093088830540; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\\\"}\", \"cleanup_error\": null, \"hold_error\": null}, {\"engine\": \"hypermachine\", \"pair\": 0, \"index\": 50, \"error\": \"HTTP 503: {\\\"code\\\":503,\\\"message\\\":\\\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 444 exits (439 I/O) in 0.5 s, 3023 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21092964347459, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21092964347519; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\\\"}\", \"cleanup_error\": null, \"hold_error\": null}, {\"engine\": \"hypermachine\", \"pair\": 0, \"index\": 55, \"error\": \"HTTP 503: {\\\"code\\\":503,\\\"message\\\":\\\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (7 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; its console ended: === HV2 READY === | BusyBox v1.37.0 (Debian 1:1.37.0-6+b9) built-in shell (ash) | Enter 'help' for a list of built-in commands. | sh: can't access tty; job control turned off | / # \\\\u001b[6nhv2-guest-agentd 1.1.0 listening on vsock port 1024; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 3050 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093035925665, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093035925725; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x497c000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\\\"}\", \"cleanup_error\": null, \"hold_error\": null}, {\"engine\": \"hypermachine\", \"pair\": 0, \"index\": 59, \"error\": \"HTTP 503: {\\\"code\\\":503,\\\"message\\\":\\\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (3 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3031 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21092915098565, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21092915098615; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x497c000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\\\"}\", \"cleanup_error\": null, \"hold_error\": null}, {\"engine\": \"hypermachine\", \"pair\": 0, \"index\": 60, \"error\": \"HTTP 503: {\\\"code\\\":503,\\\"message\\\":\\\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (4 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 403 exits (403 I/O) in 0.5 s, 3036 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093318166626, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093318166676; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\\\"}\", \"cleanup_error\": null, \"hold_error\": null}]}\n",
+      "stderr": "",
+      "raw_sha256": "220614cca5876d931066e30ba015758f9ca80595df60268fab534f3d48a2f02d",
+      "success": false
+    }
+  ],
+  "success": false,
+  "complete": true
+}

@@ -1,0 +1,7 @@
+# Authenticated control-plane UDP routing
+
+Added /sandboxes/{id}/ports/{port}/udp behind the existing API-key policy. Shared TCP/UDP forwarding selects the exact upgrade protocol, rejects invalid negotiation/port zero, resolves only a known unpaused sandbox and its registered node, and forwards only the configured cluster credential. Incoming API keys are not forwarded to the node. Upstream upgrade negotiation is bounded to 15 seconds and the protocol identifier is checked before accepting the client upgrade.
+
+All 27 control_plane integration tests pass in the accepted isolated checkout. The new owned HTTP-node fixture verifies wrong-key 401, inventory-key 403, bodyless-upgrade/port validation before node contact, preservation of concatenated empty/binary/maximum IPv4-size framed payloads through both upgrades, node failure 502, paused sandbox 409, absent node 503 and deleted sandbox 404. Existing TCP tests remain passing. An initial fixture call-count assertion inherited from the two-session TCP test was corrected to match UDP's one data session plus one failure request; the final full run is archived.
+
+Reproduce with `cargo test --offline --locked -p hv2-cluster --test control_plane`. This uses an actual control router with MemoryStore and an owned protocol node, not a real guest UDP socket. Real daemon/KVM routing, cancellation, TLS/mTLS, CLI peer isolation and production rollout remain unverified. UDP stays incomplete in the capability matrix.

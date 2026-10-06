@@ -1,0 +1,8 @@
+{
+  "base_sha256": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+  "agent_sha256": "4d1e45affe4e18e29544d88eeed142bfbc718174f12b98cf33a4a24803eb1ce8",
+  "echo_sha256": "d03c8ba9e917356f17c948d567f36aa1a02700e8d937624a75a3fed83de71fb5",
+  "tcp_fixture_sha256": "2fd0eb16d9f6e63bf4cef0238b721b2b6d4d448ef48ae5bdc620a8a63c80793c",
+  "image_sha256": "a00cd88d52f5f0788b2113e26bf3bc45c66569b6dee21400aaaf5c9b12d29b7d",
+  "image_bytes": 2548713
+}

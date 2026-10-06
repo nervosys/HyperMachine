@@ -1,0 +1,19 @@
+{
+  "sha256": {
+    "README.md": "2dc593b99df6c8ca563dbea8111f016ab9defdf88156f90ffef205357bf7b806",
+    "backup-snapshot-store.py": "8055959543b75b4bef2f4f86df3b7122181f112c682b860aef4d69cff830cea8",
+    "check-multipart-backup.py": "a6151c5d77bef732504f433141e7782b2788814883cc647d317fa3ebf79507d4",
+    "check-object-backup.py": "ece179a42c4025e1f3c2cafaf717dcdb67fbd08fd54a8d58e0cbce7362203f32",
+    "first-check-multipart-backup.py": "53f77d2f49340326385bf414a4a98806fbe91ba27d55f5826e3f8faea6c64284",
+    "kvm/report.json": "5a0047a51ed46cf4421f2412ae358bfc4231d40f994f6f9cb8c59dc05e10b5f6",
+    "kvm/s3.log": "6f17f78f95660d7f1dde093bb1fff678075a37d3d3478353faec752c0cac55c0",
+    "second-check-multipart-backup.py": "0a2e73e90ec2c10fe657796a141ef3c36f48f26b410efc54bb90d59ec013dd98",
+    "synthetic/report.json": "ff337443e2d3f7a20c91289e1218e488f1e96b645d37973fc134450c57cd33cc",
+    "synthetic/s3.log": "0804206e2083e1d54698e904d2cdcf1c57b7bb3c7f0fb291ddc67fd8b01913b4",
+    "synthetic-corrected/report.json": "f379d0cf81173fc4064df0bc91ccec9ff48ed68aface2275c55a77fc12ef37eb",
+    "synthetic-corrected/s3.log": "19c26a8a9483cdad57c86f87f63386ced2628b3c79017028f40764b31199b09c",
+    "synthetic-verified/report.json": "c39cb576567d5ad777eb2fa3140bf39baf6f1927c72728ccf71e54e6eca577a2",
+    "synthetic-verified/s3.log": "4d70a8bce0f9dbfb3db8a2c363bb847899586fb7ee2d3abf0ffa8cba9a4b8336",
+    "verify-version-backup.py": "77a9127f1509f306f5065d9fa991e233061b277de7d968828f510c4716a6a059"
+  }
+}

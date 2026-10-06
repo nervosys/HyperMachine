@@ -1,0 +1,18 @@
+{
+  "diagnostic_only": true,
+  "production_runtime_changed": false,
+  "source_files_verified": 550,
+  "source_sha256": {
+    "crates/hv2-core/src/vm.rs": "6c0e0495f1a8e55f144657f6c1e667e94b029a7fb1afeb11ce103dd48d01c2de",
+    "crates/hv2-agent/src/agent_vm.rs": "46b7fbe8040adde2d8015a22354b7038ecd9b4ce1d11bb1b0bc2d4d49b93776b"
+  },
+  "activation_environment": "HM_RESTORE_MEMORY_DIAGNOSTICS=1",
+  "counter_profile": "anonymous_private_clean",
+  "restore_stage_profile": "host_restore",
+  "logged_payload": "VM identity, phase, residency counters and read duration only",
+  "binary_sha256": "47460763d7e92cb7ff436aa9de331e0155cb79f9feb9a44e8281f7a9b87ca5f5",
+  "build_exit_code": 0,
+  "build_command": "cargo build --locked --offline --release -p hv2-sandboxd",
+  "strict_core_agent_library_clippy_passed": true,
+  "measurements_excluded_from_rankings": true
+}

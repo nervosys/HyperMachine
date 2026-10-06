@@ -1,0 +1,13 @@
+# UDP peer capacity recovery
+
+CLI UDP previously removed a peer only after a successful task join. Panicked or cancelled tasks therefore left a sender entry consuming the bounded peer budget. The CLI now maps Tokio task IDs to peer addresses and processes both successful joins and JoinError IDs. Each completed task releases its peer and task bookkeeping; packet queue bounds and peer limits are unchanged.
+
+The injected-failure unit test covers one panicked, one cancelled and one normally completed task, requires both failure kinds to occur, and verifies all peer/task entries are removed. All 146 CLI library tests and 12 existing VM client integration tests pass; exact logs are archived.
+
+The owned HTTP upgrade fixture runs a real CLI with max-peers 1. A second source is refused while the first session is live. Closing the first upstream connection releases capacity for a different source. Closing that connection again allows the same source to reconnect. Exact binary replies, three distinct upstream sessions, clean CLI interrupt and server cleanup pass. This checks ordinary transport EOF behavior; panic/cancellation cleanup is verified by task injection rather than an induced production panic.
+
+The updated CLI also passes ten checks through the real control API HTTPS/node mTLS/Redis/KVM stack with eight concurrent peers and 1,000 tagged 4 KiB replies each, including empty/binary/maximum datagrams, trust/key refusal, malformed-frame recovery and pause/resume/delete. All owned services are reaped and guest inventory is empty. The earlier two-peer protocol fixture's payload and cap checks also pass. This KVM run is a correctness regression, not a matched performance claim.
+
+Reproduce check-udp-cli-recovery.py --cli CLI --output FRESH_DIRECTORY, then check-udp-cluster-kvm.py with recorded daemon/control/CLI/kernel/initrd inputs and --tls --mtls --peer-count 8 --concurrent-samples 1000 --concurrent-payload-bytes 4096. Test with cargo test --offline --locked -p hm-cli --lib and --test sandbox_vm_client in the accepted isolated checkout. CLI Rust source/tests/manifests match the current root files; the isolated core uses the accepted immutable version and its lockfile differs from the root. Root protected core modifications were not read or executed. Source hashes and input binary hashes are archived.
+
+The benchmark archives preceding this change describe their preserved binaries. They do not directly establish performance of this revised binary; added bounded task bookkeeping has not received a matched resource/performance comparison. Exhaustive failure schedules, sustained churn and competitor service recovery remain unverified.

@@ -1,0 +1,4194 @@
+{
+  "schema_version": 1,
+  "lifecycle": "native-cold-create-to-command-bursts",
+  "concurrency": 100,
+  "pairs": 2,
+  "order": "alternating engine-batch AB/BA",
+  "environment": "shared-WSL-nested-KVM-eight-host-CPU-affinity-one-pinned-worker-concurrent-bursts",
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "artifact_sha256": {
+    "hypermachine": "8ea52a369067d99f281b96bc513c59216304ac8e7eea0462d746f854e9d7aa5d",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "harness": "efbddbf1380dbcbdc06398fddd446bcd59f9f4f582384535377514d12ea307bf",
+    "shared_harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "firecracker_harness": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6"
+  },
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "driver_cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "guest_readiness_timeout_s": {
+    "hypermachine": 15,
+    "firecracker": 15
+  },
+  "firecracker_total_startup_timeout_s": 30,
+  "common_boot_args": "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd",
+  "batches": [
+    {
+      "engine": "hypermachine",
+      "pair": 0,
+      "concurrency": 100,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.6798750002635643,
+          "ready_ms": 15577.241751001566,
+          "validated_offset_ms": 15638.166497999919
+        },
+        {
+          "index": 1,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 30.23218300222652,
+          "ready_ms": 15561.600242999702,
+          "validated_offset_ms": 15625.68634499985
+        },
+        {
+          "index": 2,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": false,
+          "cleanup_success": false,
+          "start_offset_ms": 1.92064200018649,
+          "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (8 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3054 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21092889092823, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21092889092883; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x497c000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+          "validated_offset_ms": 15709.371175998967
+        },
+        {
+          "index": 3,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.908537001436343,
+          "ready_ms": 4420.196834998933,
+          "validated_offset_ms": 4552.731701001903
+        },
+        {
+          "index": 4,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.0809420020668767,
+          "ready_ms": 15035.028729998885,
+          "validated_offset_ms": 15096.80977500102
+        },
+        {
+          "index": 5,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 19.65665399984573,
+          "ready_ms": 15464.22301200073,
+          "validated_offset_ms": 15566.572006002389
+        },
+        {
+          "index": 6,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 7.146867999836104,
+          "ready_ms": 15594.704358001763,
+          "validated_offset_ms": 15693.61115600259
+        },
+        {
+          "index": 7,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.2451799995906185,
+          "ready_ms": 15652.043182002672,
+          "validated_offset_ms": 15693.237940999097
+        },
+        {
+          "index": 8,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.3931120013003238,
+          "ready_ms": 4327.002207999612,
+          "validated_offset_ms": 4449.847439002042
+        },
+        {
+          "index": 9,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 7.317749001231277,
+          "ready_ms": 15001.867222999863,
+          "validated_offset_ms": 15057.975275001809
+        },
+        {
+          "index": 10,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.5536770008329768,
+          "ready_ms": 15190.651593999064,
+          "validated_offset_ms": 15251.114226000936
+        },
+        {
+          "index": 11,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 7.475630001863465,
+          "ready_ms": 15581.042981997598,
+          "validated_offset_ms": 15638.241845001176
+        },
+        {
+          "index": 12,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": false,
+          "cleanup_success": false,
+          "start_offset_ms": 2.717555002163863,
+          "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (3 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3033 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21092926735260, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21092926735320; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+          "validated_offset_ms": 15777.599790999375
+        },
+        {
+          "index": 13,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 7.571174999611685,
+          "ready_ms": 15654.259232000186,
+          "validated_offset_ms": 15693.380947999685
+        },
+        {
+          "index": 14,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.869423999072751,
+          "ready_ms": 4614.613258003374,
+          "validated_offset_ms": 4643.904782999016
+        },
+        {
+          "index": 15,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 17.265043999941554,
+          "ready_ms": 15672.647650000727,
+          "validated_offset_ms": 15696.70268200207
+        },
+        {
+          "index": 16,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.0166040014592,
+          "ready_ms": 4564.782284000103,
+          "validated_offset_ms": 4620.582372001081
+        },
+        {
+          "index": 17,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 10.525813999265665,
+          "ready_ms": 15320.85109900072,
+          "validated_offset_ms": 15366.358825001953
+        },
+        {
+          "index": 18,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.1616740016033873,
+          "ready_ms": 15572.688280000875,
+          "validated_offset_ms": 15653.847565001342
+        },
+        {
+          "index": 19,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 60.49479099965538,
+          "ready_ms": 15514.224513000954,
+          "validated_offset_ms": 15602.217949999613
+        },
+        {
+          "index": 20,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.320652002003044,
+          "ready_ms": 15534.29087999757,
+          "validated_offset_ms": 15586.030885002401
+        },
+        {
+          "index": 21,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 11.234314999455819,
+          "ready_ms": 14993.35039700236,
+          "validated_offset_ms": 15101.01773200222
+        },
+        {
+          "index": 22,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.4634580006240867,
+          "ready_ms": 15353.03498400026,
+          "validated_offset_ms": 15481.554890000552
+        },
+        {
+          "index": 23,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 13.774236002063844,
+          "ready_ms": 4396.786940000311,
+          "validated_offset_ms": 4446.667927000817
+        },
+        {
+          "index": 24,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": false,
+          "cleanup_success": false,
+          "start_offset_ms": 3.602012002374977,
+          "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (3 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3033 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093064961958, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093064962009; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+          "validated_offset_ms": 15905.748227000004
+        },
+        {
+          "index": 25,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 61.63195200133487,
+          "ready_ms": 15626.392289999785,
+          "validated_offset_ms": 15696.885017001478
+        },
+        {
+          "index": 26,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.7595909998344723,
+          "ready_ms": 15625.136966002174,
+          "validated_offset_ms": 15648.663464002311
+        },
+        {
+          "index": 27,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 42.423742001119535,
+          "ready_ms": 15496.672989000217,
+          "validated_offset_ms": 15602.279265000107
+        },
+        {
+          "index": 28,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.898626000591321,
+          "ready_ms": 4612.909272000252,
+          "validated_offset_ms": 4643.749208000372
+        },
+        {
+          "index": 29,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 13.947703002486378,
+          "ready_ms": 15613.819849997526,
+          "validated_offset_ms": 15656.436354001926
+        },
+        {
+          "index": 30,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.044061999593396,
+          "ready_ms": 15465.28721499999,
+          "validated_offset_ms": 15566.65644000168
+        },
+        {
+          "index": 31,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 62.83053800143534,
+          "ready_ms": 15297.29151599895,
+          "validated_offset_ms": 15464.10905599987
+        },
+        {
+          "index": 32,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.181684002105612,
+          "ready_ms": 15560.115734999272,
+          "validated_offset_ms": 15590.225551000913
+        },
+        {
+          "index": 33,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 65.55992599896854,
+          "ready_ms": 4562.742631002038,
+          "validated_offset_ms": 4640.178018002189
+        },
+        {
+          "index": 34,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.3200159998377785,
+          "ready_ms": 15528.991686001973,
+          "validated_offset_ms": 15572.685781000473
+        },
+        {
+          "index": 35,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 60.154372000397416,
+          "ready_ms": 15459.480077999615,
+          "validated_offset_ms": 15590.082794002228
+        },
+        {
+          "index": 36,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": false,
+          "cleanup_success": false,
+          "start_offset_ms": 4.45668600150384,
+          "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (5 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3040 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093264855493, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093264855553; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+          "validated_offset_ms": 16089.849009000318
+        },
+        {
+          "index": 37,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 59.63798300217604,
+          "ready_ms": 4511.604694998823,
+          "validated_offset_ms": 4620.213237001735
+        },
+        {
+          "index": 38,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.590479002217762,
+          "ready_ms": 15514.584953998565,
+          "validated_offset_ms": 15576.98082600109
+        },
+        {
+          "index": 39,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 35.861078002199065,
+          "ready_ms": 15613.091107999935,
+          "validated_offset_ms": 15683.776772999408
+        },
+        {
+          "index": 40,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.727921001176583,
+          "ready_ms": 15582.83058500092,
+          "validated_offset_ms": 15657.06766600124
+        },
+        {
+          "index": 41,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.762132000905694,
+          "ready_ms": 15363.285366998753,
+          "validated_offset_ms": 15463.966158000403
+        },
+        {
+          "index": 42,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 10.669235001842026,
+          "ready_ms": 4793.623541998386,
+          "validated_offset_ms": 4816.461107999203
+        },
+        {
+          "index": 43,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.934245000185911,
+          "ready_ms": 15512.044949002302,
+          "validated_offset_ms": 15601.053935999516
+        },
+        {
+          "index": 44,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 14.326927001093281,
+          "ready_ms": 15674.047200998757,
+          "validated_offset_ms": 15696.199919002538
+        },
+        {
+          "index": 45,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": false,
+          "cleanup_success": false,
+          "start_offset_ms": 5.079131002275972,
+          "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (2 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3026 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21092837424495, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21092837424555; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+          "validated_offset_ms": 15689.852387000428
+        },
+        {
+          "index": 46,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 14.340764002554351,
+          "ready_ms": 15509.49945100001,
+          "validated_offset_ms": 15565.474652001285
+        },
+        {
+          "index": 47,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.219246999331517,
+          "ready_ms": 15643.925907002995,
+          "validated_offset_ms": 15662.114089001989
+        },
+        {
+          "index": 48,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": false,
+          "cleanup_success": false,
+          "start_offset_ms": 29.97557699927711,
+          "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (5 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3043 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093088830490, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093088830540; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+          "validated_offset_ms": 15981.772647999605
+        },
+        {
+          "index": 49,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 31.38579599908553,
+          "ready_ms": 15163.415688002715,
+          "validated_offset_ms": 15241.050235999865
+        },
+        {
+          "index": 50,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": false,
+          "cleanup_success": false,
+          "start_offset_ms": 5.404686002293602,
+          "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 444 exits (439 I/O) in 0.5 s, 3023 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21092964347459, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21092964347519; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+          "validated_offset_ms": 15813.627553001425
+        },
+        {
+          "index": 51,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 15.87018300051568,
+          "ready_ms": 15461.06778000103,
+          "validated_offset_ms": 15564.2115619994
+        },
+        {
+          "index": 52,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.549386001803214,
+          "ready_ms": 15618.741104997753,
+          "validated_offset_ms": 15649.555588999647
+        },
+        {
+          "index": 53,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 24.663644002430374,
+          "ready_ms": 15569.715608999104,
+          "validated_offset_ms": 15625.941030000831
+        },
+        {
+          "index": 54,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.683135001163464,
+          "ready_ms": 15512.202605998027,
+          "validated_offset_ms": 15566.457382999943
+        },
+        {
+          "index": 55,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": false,
+          "cleanup_success": false,
+          "start_offset_ms": 24.837520999426488,
+          "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (7 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; its console ended: === HV2 READY === | BusyBox v1.37.0 (Debian 1:1.37.0-6+b9) built-in shell (ash) | Enter 'help' for a list of built-in commands. | sh: can't access tty; job control turned off | / # \\u001b[6nhv2-guest-agentd 1.1.0 listening on vsock port 1024; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 3050 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093035925665, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093035925725; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x497c000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+          "validated_offset_ms": 15885.607234002237
+        },
+        {
+          "index": 56,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.819919999339618,
+          "ready_ms": 15473.976666002272,
+          "validated_offset_ms": 15568.31328699991
+        },
+        {
+          "index": 57,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 61.58516200230224,
+          "ready_ms": 4580.554165997455,
+          "validated_offset_ms": 4650.496894002572
+        },
+        {
+          "index": 58,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.951274000835838,
+          "ready_ms": 15681.90904400035,
+          "validated_offset_ms": 15695.357791999413
+        },
+        {
+          "index": 59,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": false,
+          "cleanup_success": false,
+          "start_offset_ms": 15.732326999568613,
+          "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (3 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3031 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21092915098565, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21092915098615; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x497c000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+          "validated_offset_ms": 15745.615514002566
+        },
+        {
+          "index": 60,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": false,
+          "cleanup_success": false,
+          "start_offset_ms": 16.30820100035635,
+          "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (4 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 403 exits (403 I/O) in 0.5 s, 3036 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093318166626, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093318166676; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+          "validated_offset_ms": 16166.223333999369
+        },
+        {
+          "index": 61,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.089746999350609,
+          "ready_ms": 15464.426524002192,
+          "validated_offset_ms": 15564.121166000405
+        },
+        {
+          "index": 62,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 16.30007600033423,
+          "ready_ms": 15672.469829001784,
+          "validated_offset_ms": 15696.77837999916
+        },
+        {
+          "index": 63,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 11.223779001738876,
+          "ready_ms": 15427.790705998632,
+          "validated_offset_ms": 15485.103761002392
+        },
+        {
+          "index": 64,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 40.76914100005524,
+          "ready_ms": 15536.573438999767,
+          "validated_offset_ms": 15622.802688001684
+        },
+        {
+          "index": 65,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.246426000870997,
+          "ready_ms": 15568.223678001232,
+          "validated_offset_ms": 15647.528452002007
+        },
+        {
+          "index": 66,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 60.89564700232586,
+          "ready_ms": 15540.801004997775,
+          "validated_offset_ms": 15659.330140999373
+        },
+        {
+          "index": 67,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 66.69528800193802,
+          "ready_ms": 15526.261282997439,
+          "validated_offset_ms": 15637.567673999001
+        },
+        {
+          "index": 68,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 29.072273999190656,
+          "ready_ms": 15565.070664000814,
+          "validated_offset_ms": 15647.835429001134
+        },
+        {
+          "index": 69,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.231064999155933,
+          "ready_ms": 15677.787768003327,
+          "validated_offset_ms": 15695.850645999599
+        },
+        {
+          "index": 70,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 53.69231300210231,
+          "ready_ms": 4562.9518879977695,
+          "validated_offset_ms": 4642.363007002132
+        },
+        {
+          "index": 71,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 47.466943000472384,
+          "ready_ms": 3492.5281850009924,
+          "validated_offset_ms": 3621.2048580018745
+        },
+        {
+          "index": 72,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 37.00796900011483,
+          "ready_ms": 15479.228275002242,
+          "validated_offset_ms": 15576.792730000307
+        },
+        {
+          "index": 73,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 12.509878000855679,
+          "ready_ms": 4193.741735998628,
+          "validated_offset_ms": 4226.5377460025775
+        },
+        {
+          "index": 74,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 29.013915001996793,
+          "ready_ms": 15353.684502999386,
+          "validated_offset_ms": 15577.267614000448
+        },
+        {
+          "index": 75,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 24.901384000258986,
+          "ready_ms": 15635.920332999376,
+          "validated_offset_ms": 15692.963261000841
+        },
+        {
+          "index": 76,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 11.378408999007661,
+          "ready_ms": 4411.631092003518,
+          "validated_offset_ms": 4570.940068002528
+        },
+        {
+          "index": 77,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 24.956541001301957,
+          "ready_ms": 15299.90098000053,
+          "validated_offset_ms": 15475.439023000945
+        },
+        {
+          "index": 78,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 20.120286000747,
+          "ready_ms": 13704.536280001776,
+          "validated_offset_ms": 13824.89878600245
+        },
+        {
+          "index": 79,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 28.967425001610536,
+          "ready_ms": 15623.349302997667,
+          "validated_offset_ms": 15693.68691300042
+        },
+        {
+          "index": 80,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 36.6145170009986,
+          "ready_ms": 15585.319376998086,
+          "validated_offset_ms": 15637.538537001092
+        },
+        {
+          "index": 81,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 29.605540999909863,
+          "ready_ms": 4605.540208001912,
+          "validated_offset_ms": 4651.71316100168
+        },
+        {
+          "index": 82,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 37.1342430007644,
+          "ready_ms": 14983.966121999401,
+          "validated_offset_ms": 15070.720642001106
+        },
+        {
+          "index": 83,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.485085999884177,
+          "ready_ms": 15593.976659001783,
+          "validated_offset_ms": 15661.266531002184
+        },
+        {
+          "index": 84,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 47.40334000234725,
+          "ready_ms": 15650.030100998265,
+          "validated_offset_ms": 15703.518209000322
+        },
+        {
+          "index": 85,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.515765999210998,
+          "ready_ms": 15691.154322001239,
+          "validated_offset_ms": 15702.09301900104
+        },
+        {
+          "index": 86,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.495847999758553,
+          "ready_ms": 4743.058165000548,
+          "validated_offset_ms": 4756.056156998966
+        },
+        {
+          "index": 87,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 57.245130999945104,
+          "ready_ms": 15319.852766999247,
+          "validated_offset_ms": 15481.403245001275
+        },
+        {
+          "index": 88,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 65.40948900146759,
+          "ready_ms": 15406.725012999232,
+          "validated_offset_ms": 15519.5417190007
+        },
+        {
+          "index": 89,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 30.24438200009172,
+          "ready_ms": 15626.919972000906,
+          "validated_offset_ms": 15693.57777100231
+        },
+        {
+          "index": 90,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 62.30506499923649,
+          "ready_ms": 15426.83444800059,
+          "validated_offset_ms": 15578.805280001689
+        },
+        {
+          "index": 91,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 35.29774400158203,
+          "ready_ms": 15450.934647000395,
+          "validated_offset_ms": 15590.164122000715
+        },
+        {
+          "index": 92,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 22.887096001795726,
+          "ready_ms": 15350.650885000505,
+          "validated_offset_ms": 15488.317925999581
+        },
+        {
+          "index": 93,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 48.167179000301985,
+          "ready_ms": 15526.061271000799,
+          "validated_offset_ms": 15602.14992300098
+        },
+        {
+          "index": 94,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 60.451216999354074,
+          "ready_ms": 15622.70729300144,
+          "validated_offset_ms": 15693.097621999186
+        },
+        {
+          "index": 95,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 20.139534000918502,
+          "ready_ms": 15448.687467000127,
+          "validated_offset_ms": 15534.745930999634
+        },
+        {
+          "index": 96,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 37.410808999993606,
+          "ready_ms": 4586.596205001115,
+          "validated_offset_ms": 4641.522778001672
+        },
+        {
+          "index": 97,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 33.80124099930981,
+          "ready_ms": 15501.405816001352,
+          "validated_offset_ms": 15577.095880002162
+        },
+        {
+          "index": 98,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 30.535841000528308,
+          "ready_ms": 15454.707921999216,
+          "validated_offset_ms": 15522.181018000992
+        },
+        {
+          "index": 99,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.763727000361541,
+          "ready_ms": 15680.879663999804,
+          "validated_offset_ms": 15698.339610000403
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 16166.223333999369,
+      "launch_spread_ms": 65.01541300167446,
+      "passing_attempts": 90,
+      "passing_attempts_per_second": 5.567162975580077,
+      "held_process_count": 1,
+      "held_process_memory_kib": {
+        "Rss_kib": 8014092,
+        "Pss_kib": 8011906,
+        "Private_Clean_kib": 7752,
+        "Private_Dirty_kib": 8003976,
+        "Anonymous_kib": 8003256
+      },
+      "all_guests_validated_while_held": false,
+      "total_wall_ms_including_cleanup": 17374.386003000836,
+      "success": false
+    },
+    {
+      "engine": "firecracker",
+      "pair": 0,
+      "concurrency": 100,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.4738499996601604,
+          "ready_ms": 5005.324215002474,
+          "validated_offset_ms": 5016.057870001532
+        },
+        {
+          "index": 1,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.3175909993587993,
+          "ready_ms": 5871.74745500306,
+          "validated_offset_ms": 5875.273902001936
+        },
+        {
+          "index": 2,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 7.9513109994877595,
+          "ready_ms": 5516.607714002021,
+          "validated_offset_ms": 5524.92534799967
+        },
+        {
+          "index": 3,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 34.005369001533836,
+          "ready_ms": 3306.3503529992886,
+          "validated_offset_ms": 3344.651388000784
+        },
+        {
+          "index": 4,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.501333002030151,
+          "ready_ms": 3198.2500809972407,
+          "validated_offset_ms": 3208.132346000639
+        },
+        {
+          "index": 5,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 51.84797800029628,
+          "ready_ms": 5848.059359999752,
+          "validated_offset_ms": 5900.276453001425
+        },
+        {
+          "index": 6,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 20.46818000235362,
+          "ready_ms": 5851.036373998795,
+          "validated_offset_ms": 5872.113375000481
+        },
+        {
+          "index": 7,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 9.315535000496311,
+          "ready_ms": 5603.774766001152,
+          "validated_offset_ms": 5613.2954099994095
+        },
+        {
+          "index": 8,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 72.8942530004133,
+          "ready_ms": 5632.534954998846,
+          "validated_offset_ms": 5705.848614001297
+        },
+        {
+          "index": 9,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 36.163749999104766,
+          "ready_ms": 5858.7336690034135,
+          "validated_offset_ms": 5895.21043700006
+        },
+        {
+          "index": 10,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 65.77376700079185,
+          "ready_ms": 5832.088800001657,
+          "validated_offset_ms": 5898.163382000348
+        },
+        {
+          "index": 11,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 24.99020300092525,
+          "ready_ms": 5683.346616999188,
+          "validated_offset_ms": 5708.618147000379
+        },
+        {
+          "index": 12,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 54.104131002532085,
+          "ready_ms": 5838.150216997747,
+          "validated_offset_ms": 5892.582325999683
+        },
+        {
+          "index": 13,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 30.87846900234581,
+          "ready_ms": 5540.361010997003,
+          "validated_offset_ms": 5571.579211002245
+        },
+        {
+          "index": 14,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 27.20780100207776,
+          "ready_ms": 5668.0561319990375,
+          "validated_offset_ms": 5695.595057000901
+        },
+        {
+          "index": 15,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 68.02211000103853,
+          "ready_ms": 5657.9067159982515,
+          "validated_offset_ms": 5726.495734001219
+        },
+        {
+          "index": 16,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 52.32413400153746,
+          "ready_ms": 5376.861551998445,
+          "validated_offset_ms": 5429.702713001461
+        },
+        {
+          "index": 17,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 9.738927001308184,
+          "ready_ms": 5682.005989998288,
+          "validated_offset_ms": 5692.118402999768
+        },
+        {
+          "index": 18,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 30.95256700180471,
+          "ready_ms": 5454.862851998769,
+          "validated_offset_ms": 5488.263961000484
+        },
+        {
+          "index": 19,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 34.665286002564244,
+          "ready_ms": 5824.4855259981705,
+          "validated_offset_ms": 5859.633551001025
+        },
+        {
+          "index": 20,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 10.938260002149036,
+          "ready_ms": 3437.13600999763,
+          "validated_offset_ms": 3448.481643001287
+        },
+        {
+          "index": 21,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 50.218144002428744,
+          "ready_ms": 5848.194262998732,
+          "validated_offset_ms": 5898.809590002202
+        },
+        {
+          "index": 22,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 95.0323600009142,
+          "ready_ms": 5771.582490000583,
+          "validated_offset_ms": 5866.983427000378
+        },
+        {
+          "index": 23,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 57.13920800189953,
+          "ready_ms": 5459.9253889973625,
+          "validated_offset_ms": 5520.211929000652
+        },
+        {
+          "index": 24,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 46.353304001968354,
+          "ready_ms": 5581.458466000186,
+          "validated_offset_ms": 5628.107906002697
+        },
+        {
+          "index": 25,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 12.347289000899764,
+          "ready_ms": 5600.143766998372,
+          "validated_offset_ms": 5612.728497999342
+        },
+        {
+          "index": 26,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 31.2116960012645,
+          "ready_ms": 5590.549349999492,
+          "validated_offset_ms": 5622.060708999925
+        },
+        {
+          "index": 27,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 112.69257599997218,
+          "ready_ms": 5770.578089999617,
+          "validated_offset_ms": 5883.541572002287
+        },
+        {
+          "index": 28,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 29.013683000812307,
+          "ready_ms": 5531.544992998533,
+          "validated_offset_ms": 5560.909168001672
+        },
+        {
+          "index": 29,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 19.652514001791133,
+          "ready_ms": 5530.29963699737,
+          "validated_offset_ms": 5550.455330001569
+        },
+        {
+          "index": 30,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.422333000955405,
+          "ready_ms": 5498.996725000325,
+          "validated_offset_ms": 5509.154052000667
+        },
+        {
+          "index": 31,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 29.793780002364656,
+          "ready_ms": 5593.476957998064,
+          "validated_offset_ms": 5623.504122002487
+        },
+        {
+          "index": 32,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 7.359029001236195,
+          "ready_ms": 5867.445600000792,
+          "validated_offset_ms": 5875.0321619991155
+        },
+        {
+          "index": 33,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 28.792517001420492,
+          "ready_ms": 5747.762333998253,
+          "validated_offset_ms": 5777.021007001167
+        },
+        {
+          "index": 34,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 51.17734500163351,
+          "ready_ms": 3343.615007997869,
+          "validated_offset_ms": 3395.2261459999136
+        },
+        {
+          "index": 35,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 49.72103299951414,
+          "ready_ms": 5516.8173240017495,
+          "validated_offset_ms": 5567.057707001368
+        },
+        {
+          "index": 36,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 52.24801700023818,
+          "ready_ms": 5814.838329999475,
+          "validated_offset_ms": 5867.299010002171
+        },
+        {
+          "index": 37,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 75.15924800100038,
+          "ready_ms": 3336.6918139981863,
+          "validated_offset_ms": 3412.3520770008327
+        },
+        {
+          "index": 38,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 66.6723100002855,
+          "ready_ms": 5590.7436960005725,
+          "validated_offset_ms": 5657.80965200247
+        },
+        {
+          "index": 39,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 116.5342820022488,
+          "ready_ms": 3318.7488639996445,
+          "validated_offset_ms": 3435.794370001531
+        },
+        {
+          "index": 40,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 54.87618199913413,
+          "ready_ms": 3375.2442770019115,
+          "validated_offset_ms": 3430.7500930008246
+        },
+        {
+          "index": 41,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 23.20375500130467,
+          "ready_ms": 5854.521528999612,
+          "validated_offset_ms": 5883.837944002153
+        },
+        {
+          "index": 42,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 58.75302500135149,
+          "ready_ms": 4195.140272000572,
+          "validated_offset_ms": 4254.31754300007
+        },
+        {
+          "index": 43,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 67.53866500002914,
+          "ready_ms": 5471.480349999183,
+          "validated_offset_ms": 5539.352544001304
+        },
+        {
+          "index": 44,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 57.63438999929349,
+          "ready_ms": 5524.2231210031605,
+          "validated_offset_ms": 5582.250666000618
+        },
+        {
+          "index": 45,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 93.84246700210497,
+          "ready_ms": 5789.002304998576,
+          "validated_offset_ms": 5886.340255001414
+        },
+        {
+          "index": 46,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 123.18727800084162,
+          "ready_ms": 5795.2282699989155,
+          "validated_offset_ms": 5918.823177002196
+        },
+        {
+          "index": 47,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 55.89898600010201,
+          "ready_ms": 5552.4831430011545,
+          "validated_offset_ms": 5608.650792000844
+        },
+        {
+          "index": 48,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 31.04740600247169,
+          "ready_ms": 4205.833590996917,
+          "validated_offset_ms": 4237.3025359993335
+        },
+        {
+          "index": 49,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 55.48554100096226,
+          "ready_ms": 5838.279155999771,
+          "validated_offset_ms": 5894.2841259995475
+        },
+        {
+          "index": 50,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 32.53825000138022,
+          "ready_ms": 5578.951016999781,
+          "validated_offset_ms": 5611.80089300251
+        },
+        {
+          "index": 51,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 99.50560500146821,
+          "ready_ms": 4107.275807000406,
+          "validated_offset_ms": 4207.277096000325
+        },
+        {
+          "index": 52,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 12.830147999920882,
+          "ready_ms": 2746.9873410009313,
+          "validated_offset_ms": 2760.2855789991736
+        },
+        {
+          "index": 53,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 107.21458500120207,
+          "ready_ms": 5777.09076300016,
+          "validated_offset_ms": 5884.592827002052
+        },
+        {
+          "index": 54,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 108.5273579992645,
+          "ready_ms": 5585.0453750026645,
+          "validated_offset_ms": 5694.086923002033
+        },
+        {
+          "index": 55,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 66.36084899946582,
+          "ready_ms": 5536.288911000156,
+          "validated_offset_ms": 5602.986825000698
+        },
+        {
+          "index": 56,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 26.70882500024163,
+          "ready_ms": 5564.475063001737,
+          "validated_offset_ms": 5591.496506000112
+        },
+        {
+          "index": 57,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 21.895515001233434,
+          "ready_ms": 5473.8773009994475,
+          "validated_offset_ms": 5496.105853999325
+        },
+        {
+          "index": 58,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 62.038824002229376,
+          "ready_ms": 5742.22148699846,
+          "validated_offset_ms": 5804.812145001051
+        },
+        {
+          "index": 59,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 47.62630900222575,
+          "ready_ms": 3865.3639709991694,
+          "validated_offset_ms": 3913.61656799927
+        },
+        {
+          "index": 60,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 66.92915399980848,
+          "ready_ms": 5470.406197000557,
+          "validated_offset_ms": 5537.703858000896
+        },
+        {
+          "index": 61,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 103.31332300120266,
+          "ready_ms": 5580.034962000354,
+          "validated_offset_ms": 5684.079467999254
+        },
+        {
+          "index": 62,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 24.347774000489153,
+          "ready_ms": 3345.9603459996288,
+          "validated_offset_ms": 3370.804935999331
+        },
+        {
+          "index": 63,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 55.194586002471624,
+          "ready_ms": 3299.22283599808,
+          "validated_offset_ms": 3354.7922809993906
+        },
+        {
+          "index": 64,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 50.081018001947086,
+          "ready_ms": 3386.213054000109,
+          "validated_offset_ms": 3436.7385059995286
+        },
+        {
+          "index": 65,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 69.43982200027676,
+          "ready_ms": 4288.365656000678,
+          "validated_offset_ms": 4358.4038320004765
+        },
+        {
+          "index": 66,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 24.023083002248313,
+          "ready_ms": 5852.620327998011,
+          "validated_offset_ms": 5877.074874002574
+        },
+        {
+          "index": 67,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 57.344566001120256,
+          "ready_ms": 5684.4124249983,
+          "validated_offset_ms": 5742.219027000829
+        },
+        {
+          "index": 68,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 48.39701799937757,
+          "ready_ms": 5570.692868001061,
+          "validated_offset_ms": 5619.465547002619
+        },
+        {
+          "index": 69,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 8.655415000248468,
+          "ready_ms": 5578.310118002264,
+          "validated_offset_ms": 5587.311636001687
+        },
+        {
+          "index": 70,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 15.173724001215305,
+          "ready_ms": 5520.582220000506,
+          "validated_offset_ms": 5536.565098002029
+        },
+        {
+          "index": 71,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 76.85744899936253,
+          "ready_ms": 5477.496338000492,
+          "validated_offset_ms": 5554.703096000594
+        },
+        {
+          "index": 72,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 28.83198299969081,
+          "ready_ms": 5566.520251999464,
+          "validated_offset_ms": 5595.682127001055
+        },
+        {
+          "index": 73,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 48.50957600137917,
+          "ready_ms": 5113.149341999815,
+          "validated_offset_ms": 5162.097461001395
+        },
+        {
+          "index": 74,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 117.77060500025982,
+          "ready_ms": 5544.361373998981,
+          "validated_offset_ms": 5662.4246280007355
+        },
+        {
+          "index": 75,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 68.60923600106617,
+          "ready_ms": 5833.53030500075,
+          "validated_offset_ms": 5902.53746000235
+        },
+        {
+          "index": 76,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 36.76023600201006,
+          "ready_ms": 5706.7878960006055,
+          "validated_offset_ms": 5743.8360519990965
+        },
+        {
+          "index": 77,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 35.01289199994062,
+          "ready_ms": 5463.145122001151,
+          "validated_offset_ms": 5504.520198999671
+        },
+        {
+          "index": 78,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 66.44991700159153,
+          "ready_ms": 5836.388994997833,
+          "validated_offset_ms": 5903.158608001831
+        },
+        {
+          "index": 79,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 61.64826500025811,
+          "ready_ms": 5811.555360000057,
+          "validated_offset_ms": 5873.473390001891
+        },
+        {
+          "index": 80,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 39.23174599913182,
+          "ready_ms": 5545.587317003083,
+          "validated_offset_ms": 5585.076374001801
+        },
+        {
+          "index": 81,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 56.28569699911168,
+          "ready_ms": 5532.327785000234,
+          "validated_offset_ms": 5589.09349500027
+        },
+        {
+          "index": 82,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 47.09675000049174,
+          "ready_ms": 5599.49911700096,
+          "validated_offset_ms": 5647.018168001523
+        },
+        {
+          "index": 83,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 52.661920999526046,
+          "ready_ms": 4704.326541999762,
+          "validated_offset_ms": 4757.5109290010005
+        },
+        {
+          "index": 84,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 66.14336100028595,
+          "ready_ms": 5509.456849998969,
+          "validated_offset_ms": 5576.853517999552
+        },
+        {
+          "index": 85,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 32.40730499965139,
+          "ready_ms": 5613.5536010006035,
+          "validated_offset_ms": 5646.404237999377
+        },
+        {
+          "index": 86,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 54.65947500124457,
+          "ready_ms": 5772.444353999163,
+          "validated_offset_ms": 5827.4594909999
+        },
+        {
+          "index": 87,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 50.85327400229289,
+          "ready_ms": 5562.155307998182,
+          "validated_offset_ms": 5613.483326000278
+        },
+        {
+          "index": 88,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 54.02144500112627,
+          "ready_ms": 3324.6916530006274,
+          "validated_offset_ms": 3379.071796000062
+        },
+        {
+          "index": 89,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 48.216977000265615,
+          "ready_ms": 5551.580818999355,
+          "validated_offset_ms": 5600.160652000341
+        },
+        {
+          "index": 90,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 62.61174800238223,
+          "ready_ms": 4280.594299998484,
+          "validated_offset_ms": 4343.771107000066
+        },
+        {
+          "index": 91,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 38.3295569990878,
+          "ready_ms": 4174.878416000865,
+          "validated_offset_ms": 4213.651886999287
+        },
+        {
+          "index": 92,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 35.505931002262514,
+          "ready_ms": 5511.418144997151,
+          "validated_offset_ms": 5547.262314001273
+        },
+        {
+          "index": 93,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 70.68492699909257,
+          "ready_ms": 5716.93193000101,
+          "validated_offset_ms": 5788.043707001634
+        },
+        {
+          "index": 94,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 66.82575300146709,
+          "ready_ms": 3761.639448999631,
+          "validated_offset_ms": 3829.4089779992646
+        },
+        {
+          "index": 95,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 51.66920600095182,
+          "ready_ms": 5637.907764001284,
+          "validated_offset_ms": 5690.196023999306
+        },
+        {
+          "index": 96,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 29.328435000934405,
+          "ready_ms": 5518.518682001741,
+          "validated_offset_ms": 5548.414771001262
+        },
+        {
+          "index": 97,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 61.058589002641384,
+          "ready_ms": 3399.038585997914,
+          "validated_offset_ms": 3460.8079770005133
+        },
+        {
+          "index": 98,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 49.61198599994532,
+          "ready_ms": 5690.74360599916,
+          "validated_offset_ms": 5740.7183880022785
+        },
+        {
+          "index": 99,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 59.51860999994096,
+          "ready_ms": 3254.85858400134,
+          "validated_offset_ms": 3319.4144920016697
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 5918.823177002196,
+      "launch_spread_ms": 120.71342800118146,
+      "passing_attempts": 100,
+      "passing_attempts_per_second": 16.89525045934024,
+      "held_process_count": 100,
+      "held_process_memory_kib": {
+        "Rss_kib": 8795992,
+        "Pss_kib": 8560292,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 8557592,
+        "Anonymous_kib": 8556792
+      },
+      "all_guests_validated_while_held": true,
+      "total_wall_ms_including_cleanup": 6370.074657999794,
+      "success": true
+    },
+    {
+      "engine": "firecracker",
+      "pair": 1,
+      "concurrency": 100,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 36.5384790020471,
+          "ready_ms": 5370.135616998596,
+          "validated_offset_ms": 5407.066892999865
+        },
+        {
+          "index": 1,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 38.610399002209306,
+          "ready_ms": 5572.203361996799,
+          "validated_offset_ms": 5611.0487100013415
+        },
+        {
+          "index": 2,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 22.638557999016484,
+          "ready_ms": 5321.103967002273,
+          "validated_offset_ms": 5344.743875000859
+        },
+        {
+          "index": 3,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 49.174681000295095,
+          "ready_ms": 5478.561796000577,
+          "validated_offset_ms": 5528.216554001119
+        },
+        {
+          "index": 4,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.3882310017361306,
+          "ready_ms": 5642.570343999978,
+          "validated_offset_ms": 5650.358855000377
+        },
+        {
+          "index": 5,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.283708000002662,
+          "ready_ms": 5657.036143998994,
+          "validated_offset_ms": 5661.578571001883
+        },
+        {
+          "index": 6,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 15.75417300045956,
+          "ready_ms": 5350.320330999239,
+          "validated_offset_ms": 5366.432724000333
+        },
+        {
+          "index": 7,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 88.83585900184698,
+          "ready_ms": 5544.915413996932,
+          "validated_offset_ms": 5634.143028000835
+        },
+        {
+          "index": 8,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 36.58258500217926,
+          "ready_ms": 5543.7771339966275,
+          "validated_offset_ms": 5580.648719002056
+        },
+        {
+          "index": 9,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 84.55421500184457,
+          "ready_ms": 5581.2144839983375,
+          "validated_offset_ms": 5666.1478490023
+        },
+        {
+          "index": 10,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 39.3401930014079,
+          "ready_ms": 5515.5816309998045,
+          "validated_offset_ms": 5555.228192999493
+        },
+        {
+          "index": 11,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 14.35609799955273,
+          "ready_ms": 5526.575136002066,
+          "validated_offset_ms": 5541.586995001126
+        },
+        {
+          "index": 12,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 51.59365700092167,
+          "ready_ms": 5552.088612999796,
+          "validated_offset_ms": 5604.084155002056
+        },
+        {
+          "index": 13,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 18.230654000944924,
+          "ready_ms": 5251.037141999404,
+          "validated_offset_ms": 5299.735649001377
+        },
+        {
+          "index": 14,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 68.16935300230398,
+          "ready_ms": 5512.034677998599,
+          "validated_offset_ms": 5580.578622000758
+        },
+        {
+          "index": 15,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 66.19278799917083,
+          "ready_ms": 5360.221402002935,
+          "validated_offset_ms": 5426.7315399993095
+        },
+        {
+          "index": 16,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 89.21102800013614,
+          "ready_ms": 5096.65817199857,
+          "validated_offset_ms": 5186.359547999018
+        },
+        {
+          "index": 17,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 86.75936000145157,
+          "ready_ms": 5352.543912998954,
+          "validated_offset_ms": 5439.730607002275
+        },
+        {
+          "index": 18,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.05882799916435,
+          "ready_ms": 5378.820055000688,
+          "validated_offset_ms": 5384.194058999128
+        },
+        {
+          "index": 19,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 55.998754000029294,
+          "ready_ms": 5501.224183000886,
+          "validated_offset_ms": 5559.766794001916
+        },
+        {
+          "index": 20,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.967511999187991,
+          "ready_ms": 4839.089056000375,
+          "validated_offset_ms": 4871.931777001009
+        },
+        {
+          "index": 21,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 54.84724400230334,
+          "ready_ms": 5598.409001999244,
+          "validated_offset_ms": 5653.646201000811
+        },
+        {
+          "index": 22,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 39.04612000042107,
+          "ready_ms": 5460.183375998895,
+          "validated_offset_ms": 5499.644610001269
+        },
+        {
+          "index": 23,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 20.041386000229977,
+          "ready_ms": 5421.652597000502,
+          "validated_offset_ms": 5441.908772001625
+        },
+        {
+          "index": 24,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 7.231741001305636,
+          "ready_ms": 5298.235538997687,
+          "validated_offset_ms": 5305.819166998845
+        },
+        {
+          "index": 25,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 11.456950000138022,
+          "ready_ms": 5139.684034998936,
+          "validated_offset_ms": 5187.841483999364
+        },
+        {
+          "index": 26,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 24.612446999526583,
+          "ready_ms": 5611.656214001414,
+          "validated_offset_ms": 5636.641329001577
+        },
+        {
+          "index": 27,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 56.081344999256544,
+          "ready_ms": 5572.551329001726,
+          "validated_offset_ms": 5628.879977000906
+        },
+        {
+          "index": 28,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 44.0447690016299,
+          "ready_ms": 5622.989415998745,
+          "validated_offset_ms": 5668.259157999273
+        },
+        {
+          "index": 29,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 80.14159800222842,
+          "ready_ms": 5211.540914999205,
+          "validated_offset_ms": 5300.290195998969
+        },
+        {
+          "index": 30,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 47.03161300130887,
+          "ready_ms": 5522.71656800076,
+          "validated_offset_ms": 5570.062094000605
+        },
+        {
+          "index": 31,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 38.16454700063332,
+          "ready_ms": 5617.766013001528,
+          "validated_offset_ms": 5656.238832001691
+        },
+        {
+          "index": 32,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 50.71636000138824,
+          "ready_ms": 5365.227521000634,
+          "validated_offset_ms": 5416.175734000717
+        },
+        {
+          "index": 33,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 92.44261400090181,
+          "ready_ms": 5321.912793999218,
+          "validated_offset_ms": 5414.622119002161
+        },
+        {
+          "index": 34,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 44.162979000248015,
+          "ready_ms": 5583.362511999439,
+          "validated_offset_ms": 5627.75664199944
+        },
+        {
+          "index": 35,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 45.32298499907483,
+          "ready_ms": 5620.001596002112,
+          "validated_offset_ms": 5665.631234001921
+        },
+        {
+          "index": 36,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 54.407299001468346,
+          "ready_ms": 5364.5122589987295,
+          "validated_offset_ms": 5419.442710001022
+        },
+        {
+          "index": 37,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 46.893014001398114,
+          "ready_ms": 5562.520581999706,
+          "validated_offset_ms": 5609.729562998837
+        },
+        {
+          "index": 38,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 42.97241300082533,
+          "ready_ms": 5580.695812001068,
+          "validated_offset_ms": 5623.997029000748
+        },
+        {
+          "index": 39,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 66.78520800051047,
+          "ready_ms": 5375.332718998834,
+          "validated_offset_ms": 5447.757358000672
+        },
+        {
+          "index": 40,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 41.61494300205959,
+          "ready_ms": 5625.526661999174,
+          "validated_offset_ms": 5668.074922999949
+        },
+        {
+          "index": 41,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 87.75609800068196,
+          "ready_ms": 5581.978010999592,
+          "validated_offset_ms": 5670.103541000572
+        },
+        {
+          "index": 42,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 43.56790200108662,
+          "ready_ms": 5363.673142001062,
+          "validated_offset_ms": 5407.626807002089
+        },
+        {
+          "index": 43,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 99.1509710001992,
+          "ready_ms": 5550.589187001606,
+          "validated_offset_ms": 5650.054249999812
+        },
+        {
+          "index": 44,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 55.34393999914755,
+          "ready_ms": 5501.42773799962,
+          "validated_offset_ms": 5557.966196000052
+        },
+        {
+          "index": 45,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 47.13596600049641,
+          "ready_ms": 5430.331709001621,
+          "validated_offset_ms": 5478.179817000637
+        },
+        {
+          "index": 46,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.8052819988224655,
+          "ready_ms": 5469.233381001686,
+          "validated_offset_ms": 5477.02882700105
+        },
+        {
+          "index": 47,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 95.42021000015666,
+          "ready_ms": 5339.976987001137,
+          "validated_offset_ms": 5435.786882000684
+        },
+        {
+          "index": 48,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 29.685605000850046,
+          "ready_ms": 5294.572260998393,
+          "validated_offset_ms": 5324.707935000333
+        },
+        {
+          "index": 49,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 45.96188299910864,
+          "ready_ms": 5558.486453999649,
+          "validated_offset_ms": 5604.764104002243
+        },
+        {
+          "index": 50,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 89.60068099986529,
+          "ready_ms": 5529.965308000101,
+          "validated_offset_ms": 5621.796128001733
+        },
+        {
+          "index": 51,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 58.57495899908827,
+          "ready_ms": 5608.864232999622,
+          "validated_offset_ms": 5668.1781629995385
+        },
+        {
+          "index": 52,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 27.746497999032727,
+          "ready_ms": 5510.356005001086,
+          "validated_offset_ms": 5538.5465399995155
+        },
+        {
+          "index": 53,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 26.184103000559844,
+          "ready_ms": 5616.827760000888,
+          "validated_offset_ms": 5643.366967000475
+        },
+        {
+          "index": 54,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 101.95383899917942,
+          "ready_ms": 5524.385144002736,
+          "validated_offset_ms": 5626.610985000298
+        },
+        {
+          "index": 55,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 71.12358300219057,
+          "ready_ms": 5458.392040000035,
+          "validated_offset_ms": 5531.839052000578
+        },
+        {
+          "index": 56,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 45.39191900039441,
+          "ready_ms": 5448.306112000864,
+          "validated_offset_ms": 5494.057553001767
+        },
+        {
+          "index": 57,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 20.810871999856317,
+          "ready_ms": 5351.174348001223,
+          "validated_offset_ms": 5372.2733829999925
+        },
+        {
+          "index": 58,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 28.936989001522306,
+          "ready_ms": 4984.754589997465,
+          "validated_offset_ms": 5027.819435999845
+        },
+        {
+          "index": 59,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 71.20641900110058,
+          "ready_ms": 5564.4166599995515,
+          "validated_offset_ms": 5636.053310001444
+        },
+        {
+          "index": 60,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 25.004449002153706,
+          "ready_ms": 5400.738418997207,
+          "validated_offset_ms": 5426.102080000419
+        },
+        {
+          "index": 61,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 52.57736999919871,
+          "ready_ms": 5594.288342002983,
+          "validated_offset_ms": 5647.213891999854
+        },
+        {
+          "index": 62,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 44.76782500205445,
+          "ready_ms": 5328.330448999623,
+          "validated_offset_ms": 5373.4999490006885
+        },
+        {
+          "index": 63,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 58.1513309989532,
+          "ready_ms": 5571.042890001991,
+          "validated_offset_ms": 5629.439006999746
+        },
+        {
+          "index": 64,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 62.52446700091241,
+          "ready_ms": 5594.623599001352,
+          "validated_offset_ms": 5657.576425001025
+        },
+        {
+          "index": 65,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 69.05848600217723,
+          "ready_ms": 5588.5724689978815,
+          "validated_offset_ms": 5657.901605001825
+        },
+        {
+          "index": 66,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 53.161498999543255,
+          "ready_ms": 5555.38892000186,
+          "validated_offset_ms": 5610.72222599978
+        },
+        {
+          "index": 67,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 42.8657859993109,
+          "ready_ms": 5360.27531900254,
+          "validated_offset_ms": 5403.891180001665
+        },
+        {
+          "index": 68,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 45.923563000542345,
+          "ready_ms": 5550.996370999201,
+          "validated_offset_ms": 5597.197466999205
+        },
+        {
+          "index": 69,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 81.4904069993645,
+          "ready_ms": 5519.310353000037,
+          "validated_offset_ms": 5608.053690000816
+        },
+        {
+          "index": 70,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 53.424607001943514,
+          "ready_ms": 5467.517372999282,
+          "validated_offset_ms": 5521.634192999045
+        },
+        {
+          "index": 71,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 38.7664070003666,
+          "ready_ms": 5326.628308001091,
+          "validated_offset_ms": 5365.8294640008535
+        },
+        {
+          "index": 72,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 71.01250200139475,
+          "ready_ms": 5515.924676998111,
+          "validated_offset_ms": 5587.273675999313
+        },
+        {
+          "index": 73,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 57.640929000626784,
+          "ready_ms": 5393.5293950016785,
+          "validated_offset_ms": 5451.454910002212
+        },
+        {
+          "index": 74,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 60.363788001268404,
+          "ready_ms": 5593.3689789999335,
+          "validated_offset_ms": 5654.122779000318
+        },
+        {
+          "index": 75,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 51.66989500139607,
+          "ready_ms": 5580.800905998331,
+          "validated_offset_ms": 5632.952853000461
+        },
+        {
+          "index": 76,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 83.02453600117587,
+          "ready_ms": 5154.70306700081,
+          "validated_offset_ms": 5238.19537700183
+        },
+        {
+          "index": 77,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 17.62583299932885,
+          "ready_ms": 5277.118761001475,
+          "validated_offset_ms": 5295.002827999269
+        },
+        {
+          "index": 78,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 35.149411000020336,
+          "ready_ms": 5621.707939000771,
+          "validated_offset_ms": 5657.458347999636
+        },
+        {
+          "index": 79,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 82.09223700032453,
+          "ready_ms": 5486.598939001851,
+          "validated_offset_ms": 5569.3264869987615
+        },
+        {
+          "index": 80,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 77.56064299974241,
+          "ready_ms": 5545.725136002147,
+          "validated_offset_ms": 5623.855031000858
+        },
+        {
+          "index": 81,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 55.47511099939584,
+          "ready_ms": 5571.379499000614,
+          "validated_offset_ms": 5627.282286000991
+        },
+        {
+          "index": 82,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 69.69016000221018,
+          "ready_ms": 5536.878348997561,
+          "validated_offset_ms": 5606.834328002151
+        },
+        {
+          "index": 83,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 19.06774300005054,
+          "ready_ms": 5409.60324900152,
+          "validated_offset_ms": 5428.957693002303
+        },
+        {
+          "index": 84,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 85.4756480002834,
+          "ready_ms": 5368.860329999734,
+          "validated_offset_ms": 5454.682474999572
+        },
+        {
+          "index": 85,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 100.73914600070566,
+          "ready_ms": 5381.136087999039,
+          "validated_offset_ms": 5482.603045998985
+        },
+        {
+          "index": 86,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 26.57788999931654,
+          "ready_ms": 5316.15509599942,
+          "validated_offset_ms": 5343.09717799988
+        },
+        {
+          "index": 87,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 70.4754079997656,
+          "ready_ms": 5525.802136999118,
+          "validated_offset_ms": 5596.86775800219
+        },
+        {
+          "index": 88,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 71.24572500106297,
+          "ready_ms": 5569.941533998644,
+          "validated_offset_ms": 5641.525549999642
+        },
+        {
+          "index": 89,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 74.18515099925571,
+          "ready_ms": 5241.674520002562,
+          "validated_offset_ms": 5320.143409000593
+        },
+        {
+          "index": 90,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 79.19322200177703,
+          "ready_ms": 5511.956811998971,
+          "validated_offset_ms": 5591.4104629991925
+        },
+        {
+          "index": 91,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 57.002903002285166,
+          "ready_ms": 5299.670344997139,
+          "validated_offset_ms": 5356.93602199899
+        },
+        {
+          "index": 92,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 36.873283999739215,
+          "ready_ms": 5389.734148000571,
+          "validated_offset_ms": 5426.883717002056
+        },
+        {
+          "index": 93,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 76.48588300071424,
+          "ready_ms": 5208.611244001077,
+          "validated_offset_ms": 5292.585847000737
+        },
+        {
+          "index": 94,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 41.379630001756595,
+          "ready_ms": 5297.282734998589,
+          "validated_offset_ms": 5339.009553001233
+        },
+        {
+          "index": 95,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 49.45663300168235,
+          "ready_ms": 5546.182687998225,
+          "validated_offset_ms": 5595.988322998892
+        },
+        {
+          "index": 96,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 49.49350199967739,
+          "ready_ms": 5250.444416000391,
+          "validated_offset_ms": 5300.551647000248
+        },
+        {
+          "index": 97,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 39.624786000786116,
+          "ready_ms": 5315.468144999613,
+          "validated_offset_ms": 5355.441873001837
+        },
+        {
+          "index": 98,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 8.829399001115235,
+          "ready_ms": 5596.4780260001135,
+          "validated_offset_ms": 5605.558987001132
+        },
+        {
+          "index": 99,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.3136349991546012,
+          "ready_ms": 5018.423356999847,
+          "validated_offset_ms": 5055.855038001027
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 5670.103541000572,
+      "launch_spread_ms": 99.64020400002482,
+      "passing_attempts": 100,
+      "passing_attempts_per_second": 17.636362242223456,
+      "held_process_count": 100,
+      "held_process_memory_kib": {
+        "Rss_kib": 8796208,
+        "Pss_kib": 8560600,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 8557900,
+        "Anonymous_kib": 8557100
+      },
+      "all_guests_validated_while_held": true,
+      "total_wall_ms_including_cleanup": 6135.342574001697,
+      "success": true
+    },
+    {
+      "engine": "hypermachine",
+      "pair": 1,
+      "concurrency": 100,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.6243879981630016,
+          "ready_ms": 6686.8352240016975,
+          "validated_offset_ms": 6714.190837999922
+        },
+        {
+          "index": 1,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.6659489992889576,
+          "ready_ms": 6859.9210510001285,
+          "validated_offset_ms": 6867.199936998077
+        },
+        {
+          "index": 2,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 16.595769997366006,
+          "ready_ms": 6446.859037001559,
+          "validated_offset_ms": 6520.46341499954
+        },
+        {
+          "index": 3,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.9085979984083679,
+          "ready_ms": 5869.831308998982,
+          "validated_offset_ms": 5876.591844997165
+        },
+        {
+          "index": 4,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.92025799799012,
+          "ready_ms": 6819.390356002259,
+          "validated_offset_ms": 6844.3978969989985
+        },
+        {
+          "index": 5,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.064006999717094,
+          "ready_ms": 5713.515522998932,
+          "validated_offset_ms": 5822.418845997163
+        },
+        {
+          "index": 6,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 43.69429599682917,
+          "ready_ms": 6796.949143001257,
+          "validated_offset_ms": 6855.247077997774
+        },
+        {
+          "index": 7,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 7.091532999766059,
+          "ready_ms": 6280.447026998445,
+          "validated_offset_ms": 6355.671458997676
+        },
+        {
+          "index": 8,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.3521499970229343,
+          "ready_ms": 5271.201687002758,
+          "validated_offset_ms": 5307.553022998036
+        },
+        {
+          "index": 9,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 7.28678399900673,
+          "ready_ms": 6684.886930001085,
+          "validated_offset_ms": 6715.114483999059
+        },
+        {
+          "index": 10,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.499496997188544,
+          "ready_ms": 6273.89073300219,
+          "validated_offset_ms": 6311.401828999806
+        },
+        {
+          "index": 11,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.654720999998972,
+          "ready_ms": 6548.802022996824,
+          "validated_offset_ms": 6566.5502559968445
+        },
+        {
+          "index": 12,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 7.433655999193434,
+          "ready_ms": 6784.704154997598,
+          "validated_offset_ms": 6808.787766996829
+        },
+        {
+          "index": 13,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 7.583954997244291,
+          "ready_ms": 5203.2440260009025,
+          "validated_offset_ms": 5283.7844979985675
+        },
+        {
+          "index": 14,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.804572999593802,
+          "ready_ms": 5306.217048997496,
+          "validated_offset_ms": 5322.319047998462
+        },
+        {
+          "index": 15,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 7.723036000243155,
+          "ready_ms": 6839.408775998891,
+          "validated_offset_ms": 6853.049363999162
+        },
+        {
+          "index": 16,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.957015996798873,
+          "ready_ms": 6712.412595999922,
+          "validated_offset_ms": 6739.669683000102
+        },
+        {
+          "index": 17,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 85.59101299761096,
+          "ready_ms": 6766.389120002714,
+          "validated_offset_ms": 6857.572389999405
+        },
+        {
+          "index": 18,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.1118629995035008,
+          "ready_ms": 5320.230489000096,
+          "validated_offset_ms": 5423.52167199715
+        },
+        {
+          "index": 19,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 8.173230999091174,
+          "ready_ms": 6820.803156999318,
+          "validated_offset_ms": 6846.444194998185
+        },
+        {
+          "index": 20,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.306848997453926,
+          "ready_ms": 6420.571765000204,
+          "validated_offset_ms": 6521.0044699997525
+        },
+        {
+          "index": 21,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 20.322278996900422,
+          "ready_ms": 6124.523483002122,
+          "validated_offset_ms": 6154.759216999082
+        },
+        {
+          "index": 22,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.4600439976202324,
+          "ready_ms": 6214.479944999766,
+          "validated_offset_ms": 6239.289822999126
+        },
+        {
+          "index": 23,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 8.413228999415878,
+          "ready_ms": 5821.717590999469,
+          "validated_offset_ms": 5840.761596999073
+        },
+        {
+          "index": 24,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.6150710002402775,
+          "ready_ms": 6064.763469999889,
+          "validated_offset_ms": 6080.7555399987905
+        },
+        {
+          "index": 25,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 8.559354999306379,
+          "ready_ms": 6813.312125999801,
+          "validated_offset_ms": 6841.344291999121
+        },
+        {
+          "index": 26,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.7607009981002193,
+          "ready_ms": 6843.833328999608,
+          "validated_offset_ms": 6853.787570998975
+        },
+        {
+          "index": 27,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 8.700110000063432,
+          "ready_ms": 5315.637741998216,
+          "validated_offset_ms": 5344.748912997602
+        },
+        {
+          "index": 28,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.9036799971654546,
+          "ready_ms": 6689.801569002157,
+          "validated_offset_ms": 6713.354966999759
+        },
+        {
+          "index": 29,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 8.8440109975636,
+          "ready_ms": 6262.087868999515,
+          "validated_offset_ms": 6355.856366997614
+        },
+        {
+          "index": 30,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 114.63556499802507,
+          "ready_ms": 6525.933016000636,
+          "validated_offset_ms": 6664.648064997891
+        },
+        {
+          "index": 31,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.070240996952634,
+          "ready_ms": 6521.152283999982,
+          "validated_offset_ms": 6563.7191889982205
+        },
+        {
+          "index": 32,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 8.990316997369519,
+          "ready_ms": 6830.605580002157,
+          "validated_offset_ms": 6852.345885999966
+        },
+        {
+          "index": 33,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.210789997159736,
+          "ready_ms": 6391.925533000176,
+          "validated_offset_ms": 6473.850825997943
+        },
+        {
+          "index": 34,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 9.089502000279026,
+          "ready_ms": 6692.37225499819,
+          "validated_offset_ms": 6719.682953997108
+        },
+        {
+          "index": 35,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.349926999566378,
+          "ready_ms": 6221.5113370002655,
+          "validated_offset_ms": 6239.09174399887
+        },
+        {
+          "index": 36,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.388351997477002,
+          "ready_ms": 5317.18361700041,
+          "validated_offset_ms": 5344.686570999329
+        },
+        {
+          "index": 37,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 9.317315998487175,
+          "ready_ms": 5308.980171001167,
+          "validated_offset_ms": 5366.3764519988035
+        },
+        {
+          "index": 38,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.5182510002632625,
+          "ready_ms": 5110.736365997582,
+          "validated_offset_ms": 5189.881522997894
+        },
+        {
+          "index": 39,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 9.5340549996763,
+          "ready_ms": 5585.859620998235,
+          "validated_offset_ms": 5613.142457998038
+        },
+        {
+          "index": 40,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.655204000300728,
+          "ready_ms": 6841.499890997511,
+          "validated_offset_ms": 6856.1358349979855
+        },
+        {
+          "index": 41,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.696914998930879,
+          "ready_ms": 5374.541902998317,
+          "validated_offset_ms": 5405.062077999901
+        },
+        {
+          "index": 42,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 9.712678998766933,
+          "ready_ms": 6605.291539999598,
+          "validated_offset_ms": 6639.454876996751
+        },
+        {
+          "index": 43,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.805772998224711,
+          "ready_ms": 6681.264048002049,
+          "validated_offset_ms": 6714.632295999763
+        },
+        {
+          "index": 44,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 16.265644997474737,
+          "ready_ms": 6527.655770001729,
+          "validated_offset_ms": 6563.837142999546
+        },
+        {
+          "index": 45,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.953450999892084,
+          "ready_ms": 6794.317820000288,
+          "validated_offset_ms": 6841.250574998412
+        },
+        {
+          "index": 46,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 10.101588999532396,
+          "ready_ms": 6823.319857998285,
+          "validated_offset_ms": 6851.579973998014
+        },
+        {
+          "index": 47,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.106815999170067,
+          "ready_ms": 6521.893975001149,
+          "validated_offset_ms": 6552.695284997753
+        },
+        {
+          "index": 48,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 11.182599999301601,
+          "ready_ms": 6780.46873600033,
+          "validated_offset_ms": 6811.039573996823
+        },
+        {
+          "index": 49,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.2503509978123475,
+          "ready_ms": 6529.839710001397,
+          "validated_offset_ms": 6561.001836998912
+        },
+        {
+          "index": 50,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 48.90917000011541,
+          "ready_ms": 5200.720772998466,
+          "validated_offset_ms": 5277.8762509988155
+        },
+        {
+          "index": 51,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.39692199890851,
+          "ready_ms": 6843.723924001097,
+          "validated_offset_ms": 6854.865373999928
+        },
+        {
+          "index": 52,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 47.85514299874194,
+          "ready_ms": 5282.308928999555,
+          "validated_offset_ms": 5345.366007997654
+        },
+        {
+          "index": 53,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.560546997003257,
+          "ready_ms": 6467.258569002297,
+          "validated_offset_ms": 6526.885420000326
+        },
+        {
+          "index": 54,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 73.92191199687659,
+          "ready_ms": 6645.210329003021,
+          "validated_offset_ms": 6742.409008998948
+        },
+        {
+          "index": 55,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.704674000298837,
+          "ready_ms": 6658.615187996475,
+          "validated_offset_ms": 6683.341692998511
+        },
+        {
+          "index": 56,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 43.455338000057964,
+          "ready_ms": 6471.098739999434,
+          "validated_offset_ms": 6560.934853998333
+        },
+        {
+          "index": 57,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.855578998307465,
+          "ready_ms": 6801.541294000344,
+          "validated_offset_ms": 6837.951637997321
+        },
+        {
+          "index": 58,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 34.33715699793538,
+          "ready_ms": 6778.110541999922,
+          "validated_offset_ms": 6842.940495000221
+        },
+        {
+          "index": 59,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.0224389999348205,
+          "ready_ms": 6393.387069998425,
+          "validated_offset_ms": 6472.4601229972905
+        },
+        {
+          "index": 60,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 47.566152999934275,
+          "ready_ms": 6786.886249999952,
+          "validated_offset_ms": 6849.022274996969
+        },
+        {
+          "index": 61,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 75.66726299774018,
+          "ready_ms": 6441.027001001203,
+          "validated_offset_ms": 6536.0275239982
+        },
+        {
+          "index": 62,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 120.7898379980179,
+          "ready_ms": 5418.998135999573,
+          "validated_offset_ms": 5554.039863000071
+        },
+        {
+          "index": 63,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 51.62963699694956,
+          "ready_ms": 6792.19723999995,
+          "validated_offset_ms": 6852.577415997075
+        },
+        {
+          "index": 64,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 19.399957000132417,
+          "ready_ms": 5329.212433000066,
+          "validated_offset_ms": 5379.047583999636
+        },
+        {
+          "index": 65,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 16.410752999945544,
+          "ready_ms": 6728.377004998038,
+          "validated_offset_ms": 6798.405129997263
+        },
+        {
+          "index": 66,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 37.75316399696749,
+          "ready_ms": 6152.893102000235,
+          "validated_offset_ms": 6218.559159999131
+        },
+        {
+          "index": 67,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 49.102424000011524,
+          "ready_ms": 6603.928818996792,
+          "validated_offset_ms": 6683.282424997742
+        },
+        {
+          "index": 68,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 17.387559997587232,
+          "ready_ms": 6796.86812699947,
+          "validated_offset_ms": 6828.461860997777
+        },
+        {
+          "index": 69,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.217104997631395,
+          "ready_ms": 6826.073670999904,
+          "validated_offset_ms": 6849.052620000293
+        },
+        {
+          "index": 70,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 90.03969299737946,
+          "ready_ms": 5258.950375002314,
+          "validated_offset_ms": 5363.315982998756
+        },
+        {
+          "index": 71,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 12.26021999900695,
+          "ready_ms": 6833.384559999104,
+          "validated_offset_ms": 6858.116721999977
+        },
+        {
+          "index": 72,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 17.40256999983103,
+          "ready_ms": 6815.890328998648,
+          "validated_offset_ms": 6848.509098999784
+        },
+        {
+          "index": 73,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 20.38331299991114,
+          "ready_ms": 6204.036114999326,
+          "validated_offset_ms": 6240.420494999853
+        },
+        {
+          "index": 74,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 38.559363998501794,
+          "ready_ms": 6413.714779999282,
+          "validated_offset_ms": 6522.2390339986305
+        },
+        {
+          "index": 75,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 13.036129999818513,
+          "ready_ms": 5961.685014997784,
+          "validated_offset_ms": 5991.224964000139
+        },
+        {
+          "index": 76,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 56.07475999931921,
+          "ready_ms": 6467.662063998432,
+          "validated_offset_ms": 6546.700118997251
+        },
+        {
+          "index": 77,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 19.97879299960914,
+          "ready_ms": 6819.485751999309,
+          "validated_offset_ms": 6851.897929998813
+        },
+        {
+          "index": 78,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 73.1653209986689,
+          "ready_ms": 6494.510402000742,
+          "validated_offset_ms": 6573.222708997491
+        },
+        {
+          "index": 79,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.351082000037422,
+          "ready_ms": 5165.44804699879,
+          "validated_offset_ms": 5216.805680996913
+        },
+        {
+          "index": 80,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 127.33845399998245,
+          "ready_ms": 6611.751206997724,
+          "validated_offset_ms": 6812.8381289971
+        },
+        {
+          "index": 81,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 51.97118299838621,
+          "ready_ms": 6479.355655999825,
+          "validated_offset_ms": 6566.484404997027
+        },
+        {
+          "index": 82,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 56.8147849990055,
+          "ready_ms": 5274.624012999993,
+          "validated_offset_ms": 5379.123662998609
+        },
+        {
+          "index": 83,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 17.604565997316968,
+          "ready_ms": 6770.922388001054,
+          "validated_offset_ms": 6840.119817999948
+        },
+        {
+          "index": 84,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 31.08547999727307,
+          "ready_ms": 5242.00983099945,
+          "validated_offset_ms": 5339.20463299728
+        },
+        {
+          "index": 85,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 83.24929399896064,
+          "ready_ms": 6320.067468001071,
+          "validated_offset_ms": 6425.777111999196
+        },
+        {
+          "index": 86,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 83.22604799832334,
+          "ready_ms": 6308.2247780002945,
+          "validated_offset_ms": 6451.360150997061
+        },
+        {
+          "index": 87,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 17.587641999853076,
+          "ready_ms": 5802.04850699738,
+          "validated_offset_ms": 5834.172484999726
+        },
+        {
+          "index": 88,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 61.24770499809529,
+          "ready_ms": 6786.738353999681,
+          "validated_offset_ms": 6857.004195997433
+        },
+        {
+          "index": 89,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 52.1894199991948,
+          "ready_ms": 6553.697495997767,
+          "validated_offset_ms": 6629.123554997932
+        },
+        {
+          "index": 90,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 35.39707699746941,
+          "ready_ms": 6695.564687001024,
+          "validated_offset_ms": 6742.291054997622
+        },
+        {
+          "index": 91,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 39.20224999819766,
+          "ready_ms": 6412.673605998862,
+          "validated_offset_ms": 6472.796671998367
+        },
+        {
+          "index": 92,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 86.76589399692602,
+          "ready_ms": 6773.460091000743,
+          "validated_offset_ms": 6865.676959998382
+        },
+        {
+          "index": 93,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 32.63693999906536,
+          "ready_ms": 6691.084693000448,
+          "validated_offset_ms": 6744.438854999316
+        },
+        {
+          "index": 94,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.624263998673996,
+          "ready_ms": 6828.64979200167,
+          "validated_offset_ms": 6851.402514999791
+        },
+        {
+          "index": 95,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 110.26738699729322,
+          "ready_ms": 6405.979125000158,
+          "validated_offset_ms": 6556.254320999869
+        },
+        {
+          "index": 96,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 20.343645999673754,
+          "ready_ms": 5338.473807998525,
+          "validated_offset_ms": 5447.594517998368
+        },
+        {
+          "index": 97,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 85.86336499865865,
+          "ready_ms": 6758.603442998719,
+          "validated_offset_ms": 6851.919492997695
+        },
+        {
+          "index": 98,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 43.236039997282205,
+          "ready_ms": 6781.561411000439,
+          "validated_offset_ms": 6834.806760998617
+        },
+        {
+          "index": 99,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 35.67047599790385,
+          "ready_ms": 6618.627505002223,
+          "validated_offset_ms": 6667.944917997374
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 6867.199936998077,
+      "launch_spread_ms": 125.71406600181945,
+      "passing_attempts": 100,
+      "passing_attempts_per_second": 14.561975902468618,
+      "held_process_count": 1,
+      "held_process_memory_kib": {
+        "Rss_kib": 8867752,
+        "Pss_kib": 8865569,
+        "Private_Clean_kib": 7880,
+        "Private_Dirty_kib": 8857508,
+        "Anonymous_kib": 8856708
+      },
+      "all_guests_validated_while_held": true,
+      "total_wall_ms_including_cleanup": 8108.748752998508,
+      "success": true
+    }
+  ],
+  "setup_error": null,
+  "cleanup_errors": [],
+  "success": false,
+  "limitations": [
+    "Shared nested-KVM host; no dedicated hardware",
+    "Persistent HyperMachine HTTP daemon versus fresh Firecracker processes and Unix APIs",
+    "Barrier-released arrivals have measured scheduling spread; not sustained arrivals",
+    "All guests held until last validation; earlier guests have longer idle time",
+    "Aggregate process PSS includes guest/VMM memory but excludes kernel allocations; no long idle/density test",
+    "Cold native engines only; no managed SDK, snapshot or fleet comparison"
+  ],
+  "hypermachine_template_preflight": {
+    "aliases": [
+      "base"
+    ],
+    "buildID": "base",
+    "buildStatus": "ready",
+    "cpuCount": 1,
+    "envdVersion": "0.6.3",
+    "memoryMB": 1024,
+    "public": false,
+    "snapshot": false,
+    "templateID": "base"
+  },
+  "node_memory_baseline_kib": {
+    "Rss_kib": 8896,
+    "Pss_kib": 6946,
+    "Private_Clean_kib": 5832,
+    "Private_Dirty_kib": 956,
+    "Anonymous_kib": 956
+  },
+  "remaining_sandbox_count": 0,
+  "node_log_tail": "000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T08:25:23.316904Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-04a44ddd5a9b45198547: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (7 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; its console ended: === HV2 READY === | BusyBox v1.37.0 (Debian 1:1.37.0-6+b9) built-in shell (ash) | Enter 'help' for a list of built-in commands. | sh: can't access tty; job control turned off | / # \\x1b[6nhv2-guest-agentd 1.1.0 listening on vsock port 1024; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 3050 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093035925665, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093035925725; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x497c000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T08:25:23.335446Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-c1e3d745725b418cbbce: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (3 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3033 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093064961958, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093064962009; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T08:25:23.439196Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-a8b7e03f48d445b4a342: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (5 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3043 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093088830490, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093088830540; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T08:25:23.541153Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-1a3c2643ecac440c84bf: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (5 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 406 exits (403 I/O) in 0.5 s, 3040 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093264855493, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093264855553; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T08:25:23.611832Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-bae51052eddc480499aa: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (4 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 403 exits (403 I/O) in 0.5 s, 3036 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=21093318166626, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=21093318166676; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497a000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n",
+  "artifacts_unchanged": true,
+  "ready_ms": {
+    "hypermachine": {
+      "n": 190,
+      "min": 3492.5281850009924,
+      "max": 15691.154322001239,
+      "mean": 9668.891167642141,
+      "p50": 6784.704154997598,
+      "p95": 15650.030100998265,
+      "p99": 15681.90904400035
+    },
+    "firecracker": {
+      "n": 200,
+      "min": 2746.9873410009313,
+      "max": 5871.74745500306,
+      "mean": 5308.333948744876,
+      "p50": 5524.385144002736,
+      "p95": 5836.388994997833,
+      "p99": 5858.7336690034135
+    }
+  },
+  "cohort_exit_code": 1,
+  "cohort_stderr": "",
+  "controlled_cpu_load": {
+    "workers": 1,
+    "cpu": 0,
+    "worker_code": "import time\nend=time.monotonic()+7200\nx=1\nwhile time.monotonic()<end:\n for _ in range(10000): x=(x*1664525+1013904223)&0xffffffff\n",
+    "all_alive_through_cohort": true,
+    "workers_cleaned_up": true
+  },
+  "coordinator_sha256": "71b08a3e656c588e533388b3d9fb0a174305d224c4c8209b59439d852096a5fa"
+}

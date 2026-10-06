@@ -1,0 +1,43 @@
+{
+  "reviewed_on": "2026-10-03",
+  "sources": {
+    "boxd": "https://docs.boxd.sh/llms-full.txt",
+    "exe_dev": "https://exe.dev/docs/all"
+  },
+  "boxd_documented_contract": {
+    "public_port_allocated": true,
+    "protocols": [
+      "tcp",
+      "udp",
+      "both"
+    ],
+    "protocol_update_preserves_public_port": true,
+    "max_forwards_per_machine": 3,
+    "management_owner_only": true,
+    "persists_across_reboots": true,
+    "removed_on_machine_destruction": true
+  },
+  "exe_dev_documented_http_proxy": {
+    "additional_ports": [
+      3000,
+      9999
+    ],
+    "additional_ports_require_vm_access": true,
+    "single_public_target": true,
+    "native_udp_not_established_by_reviewed_page": true
+  },
+  "hypermachine_current": {
+    "local_framed_ipv4_ipv6_udp_verified": true,
+    "managed_public_forward_allocation_implemented": false
+  },
+  "implementation_and_verification_requirements": [
+    "Durable atomic reservation of a stable public port per VM destination",
+    "TCP/UDP/both on the same reserved public port; protocol changes preserve allocation",
+    "Authenticated owner-aware expose/list/remove management; no observer or unrelated owner access",
+    "Gateway recovery after restart and guest reboot without remapping a reserved public port",
+    "Bounded peer/task/queue budgets and explicit listener configuration",
+    "Real native datagram checks through owned control/node/KVM services",
+    "Removal and guest deletion release the exact owned reservation and listener",
+    "Matched performance evidence without assuming local stream tunnel results apply to native ingress"
+  ]
+}

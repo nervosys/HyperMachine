@@ -1,0 +1,25 @@
+--- accepted/crates/hv2-core/src/vm.rs
++++ candidate/crates/hv2-core/src/vm.rs
+@@ -1582,6 +1582,7 @@
+             let page_size = snapshot_file::PAGE_SIZE;
+             let present = snapshot_file::PageMap::read(&mut file, snapshot.header.total_pages)?;
+             let mut page = vec![0u8; page_size as usize];
++            let mut current = vec![0u8; page_size as usize];
+             let mut index = 0u64;
+             for region in snapshot.header.regions.iter().filter(|r| !r.readonly) {
+                 let mut at = 0u64;
+@@ -1590,7 +1591,13 @@
+                         let take = (page_size as usize).min((region.size - at) as usize);
+                         std::io::Read::read_exact(&mut file, &mut page)
+                             .map_err(|e| Error::Config(format!("reading guest memory: {e}")))?;
+-                        memory.write_bytes(region.guest_addr + at, &page[..take])?;
++                        // The captured page may have been dirtied and then restored
++                        // to its base contents. Preserve the shared mapping when
++                        // it already has exactly the bytes this layer requires.
++                        memory.read_bytes_into(region.guest_addr + at, &mut current[..take])?;
++                        if current[..take] != page[..take] {
++                            memory.write_bytes(region.guest_addr + at, &page[..take])?;
++                        }
+                     }
+                     index += 1;
+                     at += page_size;

@@ -40,9 +40,7 @@ jobs:
       # whole run has been failing before a single line of coverage was
       # measured.
       - name: Install protoc
-        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: python tools/ci-install-protoc.py
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@6db3a280da9eee4283c045c7431ab5116f1a0089 # cargo-llvm-cov

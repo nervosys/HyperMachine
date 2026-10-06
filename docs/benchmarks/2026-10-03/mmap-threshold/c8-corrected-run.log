@@ -1,0 +1,12 @@
+{"pair": 0, "variant": "baseline", "success": false}
+{"pair": 0, "variant": "candidate", "success": false}
+{"pair": 0, "engine": "hypermachine", "success": true}
+{"pair": 0, "engine": "firecracker", "success": true}
+{"pair": 1, "engine": "firecracker", "success": true}
+{"pair": 1, "engine": "hypermachine", "success": true}
+{"pair": 1, "variant": "candidate", "success": true}
+{"pair": 0, "engine": "hypermachine", "success": true}
+{"pair": 0, "engine": "firecracker", "success": true}
+{"pair": 1, "engine": "firecracker", "success": true}
+{"pair": 1, "engine": "hypermachine", "success": true}
+{"pair": 1, "variant": "baseline", "success": true}
