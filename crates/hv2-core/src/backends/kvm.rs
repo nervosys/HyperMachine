@@ -1074,6 +1074,16 @@ impl HypervisorBackend for KvmBackend {
                     mptable::MPTABLE_ADDR,
                     &mptable::build(kvm_vm.vcpu_count),
                 )?;
+                // A PCI-less guest is also described as a hardware-reduced
+                // ACPI platform, which Linux prefers to the MP table: no legacy
+                // PIC, and no 24-entry I/O APIC mask pass at boot.
+                if let Some(devices) = &params.hw_reduced_acpi {
+                    use crate::boot::acpi_tables;
+                    kvm_vm.write_guest_memory(
+                        acpi_tables::ACPI_ADDR,
+                        &acpi_tables::build(kvm_vm.vcpu_count, devices),
+                    )?;
+                }
 
                 let mut sregs = kvm_vcpu.get_sregs()?;
                 sregs.gdt.base = gdt_base;

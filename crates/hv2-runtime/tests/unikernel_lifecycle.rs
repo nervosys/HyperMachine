@@ -118,6 +118,7 @@ fn linux_bzimage_validates_and_prepares_memory_regions() {
         kernel_addr: 0x100000,
         // The e820 map the kernel reads is built from this.
         memory_size: 64 * 1024 * 1024,
+        hw_reduced_acpi: None,
     };
 
     LinuxBootProtocol::validate_params(&params).unwrap();
@@ -226,6 +227,7 @@ fn guest_memory_holds_linux_boot_regions() {
         kernel_addr: 0x100000,
         // The e820 map the kernel reads is built from this.
         memory_size: 64 * 1024 * 1024,
+        hw_reduced_acpi: None,
     };
 
     let regions = LinuxBootProtocol::prepare_guest_memory(&params).unwrap();
@@ -592,6 +594,7 @@ fn full_unikernel_lifecycle_e2e() {
         kernel_addr: 0x100000,
         // The e820 map the kernel reads is built from this.
         memory_size: 64 * 1024 * 1024,
+        hw_reduced_acpi: None,
     };
     LinuxBootProtocol::validate_params(&params).unwrap();
 

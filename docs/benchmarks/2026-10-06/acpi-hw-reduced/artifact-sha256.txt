@@ -1,0 +1,5 @@
+719dd35868c08c3b6ad9f1aae6ef353c4a3ed46fa158ef82de37bdc90b2794da  hv2-sandboxd-baseline
+e6bb7358ef25476b8ababcbc6f157969162c77451ab08f19db0bdf1d68e6ed92  hv2-sandboxd-candidate
+afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd  /var/tmp/hm-competitive/bzImage-known-uart-irq
+1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c  /var/tmp/hm-competitive/guest-output-drain.cpio.gz
+99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5  /var/tmp/hm-competitive/firecracker/firecracker-v1.17.0-x86_64

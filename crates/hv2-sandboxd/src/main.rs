@@ -4475,10 +4475,16 @@ async fn new_vm(
         .await
         .map_err(|e| format!("building the VM: {e}"))?;
     match opts.guest_transport {
-        GuestTransport::Mmio => vm
-            .attach_guest_channel(cid)
-            .await
-            .map_err(|e| e.to_string()),
+        GuestTransport::Mmio => {
+            // No PCI here, so the guest can be told it is on a
+            // hardware-reduced ACPI platform: no legacy PIC to set up and no
+            // I/O APIC mask pass, as a Firecracker guest. A template keeps
+            // the tables it booted with, so its cache key need not change.
+            vm.vm().use_hw_reduced_acpi();
+            vm.attach_guest_channel(cid)
+                .await
+                .map_err(|e| e.to_string())
+        }
         GuestTransport::Pci => vm
             .vm()
             .attach_vsock_pci(cid)
