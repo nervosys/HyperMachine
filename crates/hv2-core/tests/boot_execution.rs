@@ -106,6 +106,7 @@ async fn test_linux_boot_complete() {
         kernel_addr: 0x100000,
         // The e820 map the kernel reads is built from this.
         memory_size: 64 * 1024 * 1024,
+        hw_reduced_acpi: None,
     };
 
     // Validate parameters
@@ -275,6 +276,7 @@ async fn test_boot_state_validation() {
                     kernel_addr: 0x100000,
                     // The e820 map the kernel reads is built from this.
                     memory_size: 64 * 1024 * 1024,
+                    hw_reduced_acpi: None,
                 };
 
                 if vcpu.boot_linux(&vm, &params, 0x100000).is_ok() {
@@ -320,6 +322,7 @@ async fn test_memory_layout_validation() {
                     kernel_addr: 0x100000,
                     // The e820 map the kernel reads is built from this.
                     memory_size: 64 * 1024 * 1024,
+                    hw_reduced_acpi: None,
                 };
 
                 if vcpu.boot_linux(&vm, &params, 0x100000).is_ok() {
@@ -373,6 +376,7 @@ async fn test_segment_configuration() {
                     kernel_addr: 0x100000,
                     // The e820 map the kernel reads is built from this.
                     memory_size: 64 * 1024 * 1024,
+                    hw_reduced_acpi: None,
                 };
 
                 if vcpu.boot_linux(&vm, &params, 0x100000).is_ok() {
@@ -431,6 +435,7 @@ async fn test_boot_error_handling() {
                     kernel_addr: 0x100000,
                     // The e820 map the kernel reads is built from this.
                     memory_size: 64 * 1024 * 1024,
+                    hw_reduced_acpi: None,
                 };
 
                 match LinuxBootProtocol::validate_params(&params) {
@@ -497,6 +502,7 @@ async fn test_boot_performance() {
                     kernel_addr: 0x100000,
                     // The e820 map the kernel reads is built from this.
                     memory_size: 64 * 1024 * 1024,
+                    hw_reduced_acpi: None,
                 };
 
                 let start = Instant::now();

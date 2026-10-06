@@ -59,6 +59,15 @@ pub struct LinuxBootParams {
     /// [`LinuxBootProtocol::prepare_guest_memory`] refuses rather than handing
     /// the kernel an empty one.
     pub memory_size: u64,
+
+    /// Describe the platform with hardware-reduced ACPI tables naming these
+    /// virtio-mmio windows, as well as the MP table; `None` writes the MP
+    /// table alone.
+    ///
+    /// See [`crate::boot::acpi_tables`]. Only for guests without PCI: the
+    /// DSDT has no host bridge, and an x86 Linux that finds ACPI does not
+    /// fall back to probing PCI configuration space itself.
+    pub hw_reduced_acpi: Option<Vec<crate::boot::acpi_tables::MmioDevice>>,
 }
 
 impl Default for LinuxBootParams {
@@ -70,6 +79,7 @@ impl Default for LinuxBootParams {
             setup_addr: 0x90000,
             kernel_addr: 0x100000,
             memory_size: 0,
+            hw_reduced_acpi: None,
         }
     }
 }
@@ -607,6 +617,7 @@ mod tests {
             setup_addr: 0x90000,
             kernel_addr: 0x100000,
             memory_size: 256 * 1024 * 1024,
+            hw_reduced_acpi: None,
         };
 
         let boot_params = LinuxBootProtocol::create_boot_params(&params, None, None);
@@ -660,6 +671,7 @@ mod tests {
             setup_addr: 0x90000,
             kernel_addr: 0x100000,
             memory_size: 256 * 1024 * 1024,
+            hw_reduced_acpi: None,
         };
 
         assert!(LinuxBootProtocol::validate_params(&params).is_ok());
@@ -695,6 +707,7 @@ mod tests {
             setup_addr: 0x90000,
             kernel_addr: 0x100000,
             memory_size: 256 * 1024 * 1024,
+            hw_reduced_acpi: None,
         };
 
         let regions = LinuxBootProtocol::prepare_guest_memory(&params).unwrap();
@@ -724,6 +737,7 @@ mod tests {
             setup_addr: 0x90000,
             kernel_addr: 0x100000,
             memory_size: 256 * 1024 * 1024,
+            hw_reduced_acpi: None,
         };
 
         let regions = LinuxBootProtocol::prepare_guest_memory(&params).unwrap();

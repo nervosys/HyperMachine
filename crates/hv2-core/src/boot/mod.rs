@@ -24,6 +24,7 @@
 //!     kernel_addr: 0x10_0000,
 //!     // The kernel's memory map is built from this and from nowhere else.
 //!     memory_size: 64 * 1024 * 1024,
+//!     hw_reduced_acpi: None,
 //! };
 //!
 //! // What the guest's RAM has to contain before the first instruction runs:
@@ -56,6 +57,7 @@
 //! # }
 //! ```
 
+pub mod acpi_tables;
 pub mod descriptor;
 pub mod linux;
 pub mod mode;

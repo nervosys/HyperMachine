@@ -275,6 +275,7 @@ impl BootSource {
                     kernel_addr: *kernel_addr,
                     // Filled in by `set_memory_size` once a VM exists.
                     memory_size: 0,
+                    hw_reduced_acpi: None,
                 };
                 // Fail here — with the path in hand — rather than deep inside a
                 // backend where the error has lost its context.
@@ -387,6 +388,16 @@ impl LoadedBoot {
     pub fn set_memory_size(&mut self, bytes: u64) {
         if let Self::Linux(params) = self {
             params.memory_size = bytes;
+        }
+    }
+
+    /// Describe a Linux guest's platform with hardware-reduced ACPI tables
+    /// naming these virtio-mmio windows. See [`LinuxBootParams::hw_reduced_acpi`].
+    ///
+    /// Does nothing for other protocols.
+    pub fn set_hw_reduced_acpi(&mut self, devices: Vec<crate::boot::acpi_tables::MmioDevice>) {
+        if let Self::Linux(params) = self {
+            params.hw_reduced_acpi = Some(devices);
         }
     }
 
@@ -798,6 +809,7 @@ mod tests {
             setup_addr: 0,
             kernel_addr: 0,
             memory_size: 0,
+            hw_reduced_acpi: None,
         }));
 
         boot.append_cmdline("virtio_mmio.device=4K@0xd0000000:5");
@@ -818,6 +830,7 @@ mod tests {
             setup_addr: 0,
             kernel_addr: 0,
             memory_size: 0,
+            hw_reduced_acpi: None,
         }));
 
         boot.append_cmdline("quiet");

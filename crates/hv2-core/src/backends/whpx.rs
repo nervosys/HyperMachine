@@ -4396,6 +4396,7 @@ impl WhpxVcpu {
     ///     cmdline: "console=ttyS0".to_string(),
     ///     initrd: None,
     ///     memory_size: 16 * 1024 * 1024,
+    ///     hw_reduced_acpi: None,
     /// };
     ///
     /// let vm = WhpxVm::new(1, 16 * 1024 * 1024)?;
@@ -5537,6 +5538,7 @@ mod tests {
             kernel_addr: 0x100000,
             // Matches the VM these tests create; the e820 map is built from it.
             memory_size: 16 * 1024 * 1024,
+            hw_reduced_acpi: None,
         };
 
         // Check if WHPX is available and try to boot
@@ -5602,6 +5604,7 @@ mod tests {
             kernel_addr: 0x100000,
             // Matches the VM these tests create; the e820 map is built from it.
             memory_size: 16 * 1024 * 1024,
+            hw_reduced_acpi: None,
         };
 
         if let Ok(_backend) = WhpxBackend::new() {

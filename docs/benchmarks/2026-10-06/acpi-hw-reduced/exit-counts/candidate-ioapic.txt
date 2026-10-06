@@ -1,0 +1,4 @@
+== vcpu-0 tid 30729: 30 IOAPIC accesses over 381 ms
+  kinds: {'select': 15, 'reg0 read': 1, 'reg1 read': 3, 'reg2 read': 1, 'rte-lo write unmasked': 6} EOI writes: 0
+  busiest RTE accesses: [('RTE5.lo write', 3), ('RTE4.lo write', 3), ('RTE5.hi write', 2), ('RTE4.hi write', 2)]
+  accesses per 50 ms from first: [(0, 10), (350, 20)]

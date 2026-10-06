@@ -46,6 +46,7 @@ fn linux_boot_params_for_ai_kernel() {
         kernel_addr: 0x100000,
         // The e820 map the kernel reads is built from this.
         memory_size: 64 * 1024 * 1024,
+        hw_reduced_acpi: None,
     };
 
     assert!(!params.kernel_image.is_empty());
@@ -456,6 +457,7 @@ fn unikernel_ai_service_e2e() {
         kernel_addr: 0x100000,
         // The e820 map the kernel reads is built from this.
         memory_size: 64 * 1024 * 1024,
+        hw_reduced_acpi: None,
     };
     assert!(boot_params.cmdline.contains(&placement.gpu_ids[0]));
 

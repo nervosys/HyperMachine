@@ -248,6 +248,7 @@ async fn test_linux_boot_validation() -> Result<()> {
         kernel_addr: 0x100000,
         // The e820 map the kernel reads is built from this.
         memory_size: 64 * 1024 * 1024,
+        hw_reduced_acpi: None,
     };
 
     // Validate parameters

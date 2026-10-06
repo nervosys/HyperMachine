@@ -624,6 +624,12 @@ pub struct VM {
     /// the argument that tells the guest where to find it cannot be there
     /// either. Applied in `provision`, where the image is loaded.
     extra_cmdline: parking_lot::Mutex<Vec<String>>,
+    /// The virtio-mmio windows behind the `virtio_mmio.device=` entries in
+    /// `extra_cmdline`, for a guest that is told about them through ACPI
+    /// instead. See [`VM::use_hw_reduced_acpi`].
+    virtio_mmio_windows: parking_lot::Mutex<Vec<crate::boot::acpi_tables::MmioDevice>>,
+    /// Set by [`VM::use_hw_reduced_acpi`].
+    hw_reduced_acpi: std::sync::atomic::AtomicBool,
     /// Interrupts devices raised on their own, waiting to be delivered.
     ///
     /// Taken by [`VM::launch`], which spawns the task that drains it, and
@@ -837,6 +843,8 @@ impl VM {
             memory,
             devices,
             extra_cmdline: parking_lot::Mutex::new(Vec::new()),
+            virtio_mmio_windows: parking_lot::Mutex::new(Vec::new()),
+            hw_reduced_acpi: std::sync::atomic::AtomicBool::new(false),
             pci_root: Arc::new(parking_lot::RwLock::new(crate::pci::PciRootComplex::new())),
             interrupt_queue: parking_lot::Mutex::new(Some(interrupt_rx)),
             pic,
@@ -917,8 +925,23 @@ impl VM {
                 // the command line -- and a caller who forgets gets a guest
                 // that boots perfectly and enumerates nothing, which reads as
                 // a broken device rather than a missing argument.
+                //
+                // On a hardware-reduced ACPI platform the DSDT names the
+                // virtio-mmio windows instead: the command-line form gives the
+                // guest an IRQ number that nothing maps once there is no legacy
+                // PIC, and naming a window in both places would probe it twice.
+                let acpi = self
+                    .hw_reduced_acpi
+                    .load(std::sync::atomic::Ordering::Relaxed)
+                    && loaded.protocol() == "linux";
                 for arg in self.extra_cmdline.lock().iter() {
+                    if acpi && arg.starts_with("virtio_mmio.device=") {
+                        continue;
+                    }
                     loaded.append_cmdline(arg);
+                }
+                if acpi {
+                    loaded.set_hw_reduced_acpi(self.virtio_mmio_windows.lock().clone());
                 }
 
                 self.admit_boot_image(&loaded)?;
@@ -2813,9 +2836,7 @@ impl VM {
 
         // Tell the guest where to look. virtio-mmio has no enumeration: an
         // unnamed window is a window nothing probes.
-        self.extra_cmdline
-            .lock()
-            .push(Self::virtio_mmio_kernel_args_for(base_address, irq));
+        self.name_virtio_mmio_window(base_address, irq);
 
         // Deliver frames as they arrive rather than when a caller remembers to
         // ask -- the lesson `attach_vsock_at` records below, which cost a
@@ -2980,9 +3001,7 @@ impl VM {
         // idle and waiting to be told something.
         // Tell the guest where to find this, by putting it on the command
         // line rather than by reporting it and hoping the caller passes it on.
-        self.extra_cmdline
-            .lock()
-            .push(Self::vsock_kernel_args_for(base_address, irq));
+        self.name_virtio_mmio_window(base_address, irq);
 
         let (packet_tx, packet_rx) = std::sync::mpsc::channel();
         device
@@ -3120,6 +3139,39 @@ impl VM {
     #[must_use]
     pub fn virtio_mmio_kernel_args_for(base_address: u64, irq: u8) -> String {
         format!("virtio_mmio.device=4K@{base_address:#x}:{irq}")
+    }
+
+    /// Tell the guest where a virtio-mmio window is: on the command line, or
+    /// in the DSDT when [`Self::use_hw_reduced_acpi`] is set.
+    fn name_virtio_mmio_window(&self, base_address: u64, irq: u8) {
+        use crate::devices::virtio_mmio::VIRTIO_MMIO_REGION_SIZE;
+        self.extra_cmdline
+            .lock()
+            .push(Self::virtio_mmio_kernel_args_for(base_address, irq));
+        self.virtio_mmio_windows
+            .lock()
+            .push(crate::boot::acpi_tables::MmioDevice {
+                base: base_address,
+                size: VIRTIO_MMIO_REGION_SIZE as u32,
+                gsi: u32::from(irq),
+            });
+    }
+
+    /// Boot a Linux guest on a hardware-reduced ACPI platform.
+    ///
+    /// The guest is given ACPI tables as well as the MP table, and finds its
+    /// virtio-mmio devices in the DSDT rather than on the command line. Linux
+    /// then sets up no legacy PIC and skips reading and masking every I/O APIC
+    /// redirection entry -- about 500 fewer VM exits per boot -- as a
+    /// Firecracker guest does.
+    ///
+    /// Only for a guest without PCI devices: the tables describe no PCI host
+    /// bridge, and x86 Linux that finds ACPI does not go looking for one
+    /// itself. Set before the VM is provisioned; it changes nothing for a
+    /// guest restored from a snapshot, which keeps the tables it booted with.
+    pub fn use_hw_reduced_acpi(&self) {
+        self.hw_reduced_acpi
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Kernel command-line arguments this VM will add when it boots.
