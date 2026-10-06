@@ -28,6 +28,10 @@
 //! - Linux kernel: arch/x86/include/uapi/asm/bootparam.h
 
 use crate::{Error, Result};
+use std::borrow::Cow;
+
+/// A guest address and boot bytes, borrowing image payloads where possible.
+pub type BorrowedBootRegion<'a> = (u64, Cow<'a, [u8]>);
 
 /// Linux boot parameters configuration
 #[derive(Debug, Clone)]
@@ -395,6 +399,22 @@ impl LinuxBootProtocol {
     /// Returns an error if the kernel image is invalid or parameters fail
     /// validation.
     pub fn prepare_guest_memory(params: &LinuxBootParams) -> Result<Vec<(u64, Vec<u8>)>> {
+        Ok(Self::prepare_guest_memory_borrowed(params)?
+            .into_iter()
+            .map(|(address, bytes)| (address, bytes.into_owned()))
+            .collect())
+    }
+
+    /// Prepare the same regions while borrowing kernel and initrd payloads.
+    /// Only generated boot parameters and command-line bytes are allocated.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::prepare_guest_memory`]. The caller must finish writing these
+    /// regions before dropping the supplied parameters.
+    pub fn prepare_guest_memory_borrowed(
+        params: &LinuxBootParams,
+    ) -> Result<Vec<BorrowedBootRegion<'_>>> {
         // 1. Validate everything first
         Self::validate_params(params)?;
 
@@ -413,12 +433,12 @@ impl LinuxBootProtocol {
         // 2. Parse header to determine setup vs kernel split
         let header = Self::parse_header(&params.kernel_image)?;
 
-        let mut regions: Vec<(u64, Vec<u8>)> = Vec::new();
+        let mut regions: Vec<BorrowedBootRegion<'_>> = Vec::new();
 
         // 3. Initrd (optional) — place at 32 MB (above kernel)
         let (initrd_addr, initrd_size) = if let Some(ref initrd) = params.initrd {
             let addr = Self::initrd_address(params, initrd.len() as u64)?;
-            regions.push((addr, initrd.clone()));
+            regions.push((addr, Cow::Borrowed(initrd.as_slice())));
             (Some(addr), Some(initrd.len()))
         } else {
             (None, None)
@@ -426,18 +446,18 @@ impl LinuxBootProtocol {
 
         // 4. Boot parameters structure at setup_addr
         let boot_params = Self::create_boot_params(params, initrd_addr, initrd_size);
-        regions.push((params.setup_addr, boot_params));
+        regions.push((params.setup_addr, Cow::Owned(boot_params)));
 
         // 5. Command line at setup_addr + 0x1000
         let cmdline_addr = params.setup_addr + 0x1000;
         let mut cmdline_bytes = params.cmdline.as_bytes().to_vec();
         cmdline_bytes.push(0); // null-terminate
-        regions.push((cmdline_addr, cmdline_bytes));
+        regions.push((cmdline_addr, Cow::Owned(cmdline_bytes)));
 
         // 6. Protected-mode kernel at kernel_addr (skip setup sectors)
         let kernel_offset = header.setup_size;
         if kernel_offset < params.kernel_image.len() {
-            let kernel_data = params.kernel_image[kernel_offset..].to_vec();
+            let kernel_data = Cow::Borrowed(&params.kernel_image[kernel_offset..]);
             regions.push((params.kernel_addr, kernel_data));
         }
 
@@ -707,6 +727,25 @@ mod tests {
         };
 
         let regions = LinuxBootProtocol::prepare_guest_memory(&params).unwrap();
+        let borrowed = LinuxBootProtocol::prepare_guest_memory_borrowed(&params).unwrap();
+        assert_eq!(regions.len(), borrowed.len());
+        for ((address, bytes), (borrowed_address, borrowed_bytes)) in regions.iter().zip(&borrowed)
+        {
+            assert_eq!(address, borrowed_address);
+            assert_eq!(bytes.as_slice(), borrowed_bytes.as_ref());
+        }
+        assert_eq!(
+            borrowed[0].1.as_ptr(),
+            params.initrd.as_ref().unwrap().as_ptr()
+        );
+        let payload = LinuxBootProtocol::parse_header(&params.kernel_image)
+            .unwrap()
+            .setup_size;
+        let kernel = borrowed
+            .iter()
+            .find(|(address, _)| *address == params.kernel_addr)
+            .unwrap();
+        assert_eq!(kernel.1.as_ptr(), params.kernel_image[payload..].as_ptr());
 
         // Should have: initrd, boot_params, cmdline, kernel
         assert!(regions.len() >= 3);
