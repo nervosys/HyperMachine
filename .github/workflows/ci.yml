@@ -158,6 +158,12 @@ jobs:
               run: python3 tools/find-unread-controls.py
             - name: No unreachable states
               run: python3 tools/find-unreachable-states.py
+            # The repository is public: no real user's home directory in any
+            # tracked file (scripts, build logs, benchmark evidence).
+            - name: No local home paths
+              run: |
+                  python3 tools/check-no-local-paths.py --self-test
+                  python3 tools/check-no-local-paths.py
 
     sandbox-containment:
         name: Sandbox Containment (Linux, all controls)

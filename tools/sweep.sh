@@ -158,6 +158,15 @@ if command -v python3 >/dev/null 2>&1; then
         echo "$out" | grep '^NEW' | sed 's/^/  /'
         bad "a control claims to act and nothing acts on it; see tools/find-unread-controls.py"
     }
+    # The repository is public: a real home directory in a tracked file
+    # leaks a user name, and had to be scrubbed out of history once.
+    out=$(python3 tools/check-no-local-paths.py 2>&1)
+    code=$?
+    echo "$out" | tail -1 | sed 's/^/  /'
+    [ "$code" -eq 0 ] || {
+        echo "$out" | grep -v '^$' | head -20 | sed 's/^/  /'
+        bad "a tracked file names a local home directory; see tools/check-no-local-paths.py"
+    }
 else
     echo "  skipped: no python3"
 fi
