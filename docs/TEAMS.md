@@ -42,6 +42,13 @@ on each key:
 | Detail, exec, pause/resume, fork, ports, logs, checkpoints, delete | yes (operator); observers read the inventory only | 403 |
 | Public ports, web sharing, private networks | yes: a teammate acts as the sandbox's creator | 403 |
 | `/events/sandboxes/{id}` | yes | 403 |
+| `/events/sandboxes` (all events) | its team's sandboxes' events | not listed |
+| Webhooks (`/events/webhooks…`) | the team's own: create, list, change, delete, deliveries | not there (404) |
+
+A webhook belongs to the team that created it and receives only that team's
+sandboxes' events. An administrator's webhook receives every event. An event
+that concerns no sandbox's team (a node joining) is visible to administrators
+only.
 
 The team travels with the sandbox. The control plane sends it to the node on
 create, in an internal header that clients cannot set, and the node records it.
@@ -57,8 +64,7 @@ administrators use them:
 - Volumes (`/volumes`), snapshots (`/snapshots`, `POST /sandboxes/{id}/snapshots`)
 - Template builds and deletion (`POST /templates`, `/v2/templates`, `/v3/templates`,
   `/templates/{id}…`). Reading `GET /templates` is allowed.
-- The all-sandboxes event stream (`/events/sandboxes`), webhooks
-  (`/events/webhooks…`) and `/cluster/events`
+- `/cluster/events`, the operator's view of nodes and sandboxes together
 
 Also not done: single sign-on (keys are still operator-provisioned), team
 membership as durable records with an API, and per-team private networks.

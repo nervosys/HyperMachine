@@ -70,6 +70,21 @@ impl From<TeamId> for String {
     }
 }
 
+/// The team a request acts for, set by the control plane's authentication
+/// for routes served outside it (events and webhooks). `None` is every team:
+/// an administrator, or a deployment without teams. Absent altogether on a
+/// node, which serves those routes to its control plane only.
+#[derive(Debug, Clone)]
+pub struct RequestTeam(pub Option<TeamId>);
+
+impl RequestTeam {
+    /// Whether something belonging to `team` is visible to this request.
+    #[must_use]
+    pub fn sees(&self, team: Option<&TeamId>) -> bool {
+        self.0.as_ref().is_none_or(|mine| team == Some(mine))
+    }
+}
+
 /// Atomic legacy adoption; never transfers an existing owner or reservations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OwnerAdoption {

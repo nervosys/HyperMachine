@@ -19,11 +19,13 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
+use axum::Extension;
 use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::model::{now_ms, rfc3339, ClusterEvent, Delivery, Webhook};
+use crate::ownership::RequestTeam;
 use crate::store::ClusterStore;
 
 /// The team every event belongs to: this cluster has one.
@@ -176,7 +178,12 @@ struct EventQuery {
     types: Option<String>,
 }
 
-async fn query_events(store: &dyn ClusterStore, sandbox: Option<&str>, q: &EventQuery) -> Response {
+async fn query_events(
+    store: &dyn ClusterStore,
+    sandbox: Option<&str>,
+    team: &RequestTeam,
+    q: &EventQuery,
+) -> Response {
     let events = match store.events(SCAN).await {
         Ok(events) => events,
         Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
@@ -185,6 +192,7 @@ async fn query_events(store: &dyn ClusterStore, sandbox: Option<&str>, q: &Event
     let mut out: Vec<Value> = events
         .iter()
         .filter(|e| sandbox.is_none_or(|s| e.sandbox_id.as_deref() == Some(s)))
+        .filter(|e| team.sees(e.team_id.as_ref()))
         .filter_map(to_e2b)
         .filter(|v| {
             types
@@ -204,16 +212,26 @@ async fn query_events(store: &dyn ClusterStore, sandbox: Option<&str>, q: &Event
     Json(out).into_response()
 }
 
-async fn all_events(State(store): Store, Query(q): Query<EventQuery>) -> Response {
-    query_events(store.as_ref(), None, &q).await
+/// The caller's team, or every team when nothing set one.
+fn team_of(team: Option<Extension<RequestTeam>>) -> RequestTeam {
+    team.map_or(RequestTeam(None), |Extension(team)| team)
+}
+
+async fn all_events(
+    State(store): Store,
+    team: Option<Extension<RequestTeam>>,
+    Query(q): Query<EventQuery>,
+) -> Response {
+    query_events(store.as_ref(), None, &team_of(team), &q).await
 }
 
 async fn sandbox_events(
     State(store): Store,
+    team: Option<Extension<RequestTeam>>,
     Path(id): Path<String>,
     Query(q): Query<EventQuery>,
 ) -> Response {
-    query_events(store.as_ref(), Some(&id), &q).await
+    query_events(store.as_ref(), Some(&id), &team_of(team), &q).await
 }
 
 fn detail(hook: &Webhook) -> Value {
@@ -254,7 +272,11 @@ struct WebhookCreate {
     signature_secret: String,
 }
 
-async fn create_webhook(State(store): Store, Json(req): Json<WebhookCreate>) -> Response {
+async fn create_webhook(
+    State(store): Store,
+    team: Option<Extension<RequestTeam>>,
+    Json(req): Json<WebhookCreate>,
+) -> Response {
     if !valid_url(&req.url) {
         return api_error(
             StatusCode::BAD_REQUEST,
@@ -278,6 +300,7 @@ async fn create_webhook(State(store): Store, Json(req): Json<WebhookCreate>) -> 
         enabled: req.enabled.unwrap_or(true),
         secret: req.signature_secret,
         created_ms: now_ms(),
+        team_id: team_of(team).0,
     };
     match store.put_webhook(&hook).await {
         Ok(()) => (StatusCode::CREATED, Json(detail(&hook))).into_response(),
@@ -285,27 +308,41 @@ async fn create_webhook(State(store): Store, Json(req): Json<WebhookCreate>) -> 
     }
 }
 
-async fn list_webhooks(State(store): Store) -> Response {
+async fn list_webhooks(State(store): Store, team: Option<Extension<RequestTeam>>) -> Response {
+    let team = team_of(team);
     match store.webhooks().await {
-        Ok(hooks) => Json(hooks.iter().map(detail).collect::<Vec<_>>()).into_response(),
+        Ok(hooks) => Json(
+            hooks
+                .iter()
+                .filter(|hook| team.sees(hook.team_id.as_ref()))
+                .map(detail)
+                .collect::<Vec<_>>(),
+        )
+        .into_response(),
         Err(e) => api_error(StatusCode::SERVICE_UNAVAILABLE, e),
     }
 }
 
 // The error is the reply, returned by the handler at once.
 #[allow(clippy::result_large_err)]
-async fn find(store: &dyn ClusterStore, id: &str) -> Result<Webhook, Response> {
+async fn find(store: &dyn ClusterStore, team: &RequestTeam, id: &str) -> Result<Webhook, Response> {
+    // Another team's webhook is not there, rather than forbidden: its ID
+    // says nothing to a team that did not make it.
     match store.webhooks().await {
         Ok(hooks) => hooks
             .into_iter()
-            .find(|h| h.id == id)
+            .find(|h| h.id == id && team.sees(h.team_id.as_ref()))
             .ok_or_else(|| api_error(StatusCode::NOT_FOUND, format!("no webhook {id}"))),
         Err(e) => Err(api_error(StatusCode::SERVICE_UNAVAILABLE, e)),
     }
 }
 
-async fn get_webhook(State(store): Store, Path(id): Path<String>) -> Response {
-    match find(store.as_ref(), &id).await {
+async fn get_webhook(
+    State(store): Store,
+    team: Option<Extension<RequestTeam>>,
+    Path(id): Path<String>,
+) -> Response {
+    match find(store.as_ref(), &team_of(team), &id).await {
         Ok(hook) => Json(detail(&hook)).into_response(),
         Err(r) => r,
     }
@@ -323,10 +360,11 @@ struct WebhookConfiguration {
 
 async fn update_webhook(
     State(store): Store,
+    team: Option<Extension<RequestTeam>>,
     Path(id): Path<String>,
     Json(req): Json<WebhookConfiguration>,
 ) -> Response {
-    let mut hook = match find(store.as_ref(), &id).await {
+    let mut hook = match find(store.as_ref(), &team_of(team), &id).await {
         Ok(hook) => hook,
         Err(r) => return r,
     };
@@ -366,7 +404,14 @@ async fn update_webhook(
     }
 }
 
-async fn delete_webhook(State(store): Store, Path(id): Path<String>) -> Response {
+async fn delete_webhook(
+    State(store): Store,
+    team: Option<Extension<RequestTeam>>,
+    Path(id): Path<String>,
+) -> Response {
+    if let Err(r) = find(store.as_ref(), &team_of(team), &id).await {
+        return r;
+    }
     match store.delete_webhook(&id).await {
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
         Ok(false) => api_error(StatusCode::NOT_FOUND, format!("no webhook {id}")),
@@ -404,10 +449,11 @@ struct Limit {
 /// `GET /events/webhooks/{id}/deliveries`: attempts, grouped by event.
 async fn deliveries(
     State(store): Store,
+    team: Option<Extension<RequestTeam>>,
     Path(id): Path<String>,
     Query(q): Query<Limit>,
 ) -> Response {
-    if let Err(r) = find(store.as_ref(), &id).await {
+    if let Err(r) = find(store.as_ref(), &team_of(team), &id).await {
         return r;
     }
     let all = match store
@@ -440,8 +486,12 @@ async fn deliveries(
 }
 
 /// `GET /events/webhooks/{id}/stats`: totals, and per hour.
-async fn stats(State(store): Store, Path(id): Path<String>) -> Response {
-    if let Err(r) = find(store.as_ref(), &id).await {
+async fn stats(
+    State(store): Store,
+    team: Option<Extension<RequestTeam>>,
+    Path(id): Path<String>,
+) -> Response {
+    if let Err(r) = find(store.as_ref(), &team_of(team), &id).await {
         return r;
     }
     let all = match store.deliveries(&id, crate::store::DELIVERY_TAIL).await {
@@ -517,6 +567,7 @@ impl Dispatcher {
             return;
         };
         let this = self.clone();
+        let event_team = event.team_id.clone();
         tokio::spawn(async move {
             let Ok(hooks) = this.store.webhooks().await else {
                 return;
@@ -524,6 +575,10 @@ impl Dispatcher {
             let kind = payload["type"].as_str().unwrap_or_default().to_string();
             for hook in hooks {
                 if !hook.enabled || !(hook.events.is_empty() || hook.events.contains(&kind)) {
+                    continue;
+                }
+                // A team's webhook hears only its own team's sandboxes.
+                if hook.team_id.is_some() && hook.team_id != event_team {
                     continue;
                 }
                 let this = this.clone();
@@ -713,6 +768,76 @@ pub fn is_global(ip: IpAddr) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A team's webhook hears its own team's sandboxes and no other's; an
+    /// administrator's hears every one.
+    #[tokio::test]
+    async fn a_team_webhook_receives_only_its_teams_events() {
+        use crate::ownership::TeamId;
+        use crate::store::MemoryStore;
+        let received = Arc::new(parking_lot::Mutex::new(Vec::<(String, String)>::new()));
+        let seen = Arc::clone(&received);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let receiver = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new().route(
+                    "/{hook}",
+                    axum::routing::post(move |Path(hook): Path<String>, body: String| {
+                        let seen = Arc::clone(&seen);
+                        async move {
+                            let payload: Value = serde_json::from_str(&body).unwrap();
+                            let sandbox = payload["sandbox_id"].as_str().unwrap_or("").to_owned();
+                            seen.lock().push((hook, sandbox));
+                            StatusCode::OK
+                        }
+                    }),
+                ),
+            )
+            .await
+            .unwrap();
+        });
+        let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+        for (id, team) in [("red", Some("red")), ("admin", None)] {
+            store
+                .put_webhook(&Webhook {
+                    id: id.into(),
+                    name: id.into(),
+                    url: format!("http://{address}/{id}"),
+                    events: vec![],
+                    enabled: true,
+                    secret: "0123456789abcdef".into(),
+                    created_ms: 1,
+                    team_id: team.map(|t| TeamId::parse(t).unwrap()),
+                })
+                .await
+                .unwrap();
+        }
+        let dispatcher = Dispatcher::new(Arc::clone(&store), true);
+        for (sandbox, team) in [("sbx-blue", "blue"), ("sbx-red", "red")] {
+            let mut event = ClusterEvent::new("sandbox-created", "n", Some(sandbox));
+            event.team_id = Some(TeamId::parse(team).unwrap());
+            dispatcher.deliver(&event);
+        }
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while received.lock().len() < 3 && Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        // Long enough for a fourth, wrong delivery to have arrived too.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let mut got = received.lock().clone();
+        got.sort();
+        assert_eq!(
+            got,
+            vec![
+                ("admin".to_owned(), "sbx-blue".to_owned()),
+                ("admin".to_owned(), "sbx-red".to_owned()),
+                ("red".to_owned(), "sbx-red".to_owned()),
+            ]
+        );
+        receiver.abort();
+    }
 
     #[test]
     fn signatures_are_e2bs() {

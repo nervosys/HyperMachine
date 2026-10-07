@@ -1031,14 +1031,13 @@ fn shared_across_teams(route: &str, method: &axum::http::Method) -> bool {
     use axum::http::Method;
     match route {
         "/templates" => *method != Method::GET && *method != Method::HEAD,
-        "/sandboxes/{id}/snapshots" | "/events/sandboxes" | "/cluster/events" => true,
+        "/sandboxes/{id}/snapshots" | "/cluster/events" => true,
         _ => [
             "/snapshots",
             "/templates/{id}",
             "/v2/templates",
             "/v3/templates",
             "/volumes",
-            "/events/webhooks",
         ]
         .iter()
         .any(|prefix| route.starts_with(prefix)),
@@ -1174,6 +1173,9 @@ async fn require_api_key(
     };
     request.extensions_mut().insert(access);
     request.extensions_mut().insert(CreatorPrincipal(principal));
+    request
+        .extensions_mut()
+        .insert(crate::ownership::RequestTeam(team.clone()));
     request.extensions_mut().insert(CreatorTeam(team));
     request
         .extensions_mut()
