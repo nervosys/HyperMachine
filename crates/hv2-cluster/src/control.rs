@@ -1074,7 +1074,6 @@ fn shared_across_teams(route: &str, method: &axum::http::Method) -> bool {
             "/templates/{id}",
             "/v2/templates",
             "/v3/templates",
-            "/volumes",
         ]
         .iter()
         .any(|prefix| route.starts_with(prefix)),
@@ -2792,6 +2791,19 @@ async fn relay(
     headers: &HeaderMap,
     body: reqwest::Body,
 ) -> Response {
+    relay_with_team(control, node, method, uri, headers, body, None).await
+}
+
+/// [`relay`], telling the node which team the caller acts for.
+async fn relay_with_team(
+    control: &ControlPlane,
+    node: &crate::model::NodeInfo,
+    method: &Method,
+    uri: &axum::http::Uri,
+    headers: &HeaderMap,
+    body: reqwest::Body,
+    team: Option<&crate::ownership::TeamId>,
+) -> Response {
     let path_and_query = uri.path_and_query().map_or(uri.path(), |p| p.as_str());
     let reqwest_method =
         reqwest::Method::from_bytes(method.as_str().as_bytes()).unwrap_or(reqwest::Method::GET);
@@ -2812,6 +2824,9 @@ async fn relay(
     }
     if let Some(proto) = headers.get("x-forwarded-proto") {
         request = request.header("x-forwarded-proto", proto.as_bytes());
+    }
+    if let Some(team) = team {
+        request = request.header(crate::ownership::TEAM_HEADER, team.as_str());
     }
     if let Some(token) = &control.config.cluster_token {
         request = request.header(CLUSTER_TOKEN_HEADER, token);
@@ -2837,6 +2852,7 @@ async fn relay(
 /// store every node holds every volume, and the choice only spreads load.
 async fn to_volume_node(
     State(control): State<Arc<ControlPlane>>,
+    team: Option<Extension<crate::ownership::RequestTeam>>,
     method: Method,
     uri: axum::http::Uri,
     headers: HeaderMap,
@@ -2850,7 +2866,11 @@ async fn to_volume_node(
         };
         let parsed = serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null);
         let name = parsed["name"].as_str().unwrap_or_default();
-        (crate::model::volume_id(name), reqwest::Body::from(bytes))
+        let team = team.as_ref().and_then(|Extension(team)| team.0.as_ref());
+        (
+            crate::model::team_volume_id(team, name),
+            reqwest::Body::from(bytes),
+        )
     } else {
         // /volumes/{id} and /volumecontent/{id}/...
         let id = path.split('/').nth(2).unwrap_or_default().to_string();
@@ -2860,7 +2880,21 @@ async fn to_volume_node(
         Ok(node) => node,
         Err((status, message)) => return api_error(status, message),
     };
-    relay(&control, &node, &method, &uri, &headers, body).await
+    // The volume API carries the caller's team, which the node checks; the
+    // content API is the volume's own token and carries none. Taken from
+    // authentication, never from the request: a client's copy of the
+    // header is not forwarded.
+    let team = team.and_then(|Extension(team)| team.0);
+    relay_with_team(
+        &control,
+        &node,
+        &method,
+        &uri,
+        &headers,
+        body,
+        team.as_ref(),
+    )
+    .await
 }
 
 /// `GET /sandboxes/metrics`: each sandbox's latest sample, from whichever
@@ -2908,8 +2942,12 @@ async fn sandboxes_metrics(
     Json(json!({ "sandboxes": merged })).into_response()
 }
 
-/// `GET /volumes`: every live node's volumes, once each.
-async fn list_volumes(State(control): State<Arc<ControlPlane>>) -> Response {
+/// `GET /volumes`: every live node's volumes, once each -- the caller's
+/// team's only, when it has one.
+async fn list_volumes(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(team): Extension<crate::ownership::RequestTeam>,
+) -> Response {
     let answers = match on_every_node(&control, Method::GET, "/volumes").await {
         Ok(answers) => answers,
         Err((status, message)) => return api_error(status, message),
@@ -2918,6 +2956,12 @@ async fn list_volumes(State(control): State<Arc<ControlPlane>>) -> Response {
     for (_, status, answer) in answers {
         if status == 200 {
             for volume in answer.as_array().cloned().unwrap_or_default() {
+                let owner = volume["teamID"]
+                    .as_str()
+                    .and_then(|t| crate::ownership::TeamId::parse(t).ok());
+                if !team.sees(owner.as_ref()) {
+                    continue;
+                }
                 if let Some(id) = volume["volumeID"].as_str() {
                     merged.entry(id.to_string()).or_insert(volume);
                 }

@@ -25,7 +25,11 @@ fn refused() -> Response {
 }
 
 /// Any mount at all is refused, with the reason.
-pub(crate) fn check(_state: &AppState, mounts: &[VolumeMount]) -> Result<(), String> {
+pub(crate) fn check(
+    _state: &AppState,
+    _team: Option<&hv2_cluster::ownership::TeamId>,
+    mounts: &[VolumeMount],
+) -> Result<(), String> {
     if mounts.is_empty() {
         Ok(())
     } else {
@@ -36,10 +40,11 @@ pub(crate) fn check(_state: &AppState, mounts: &[VolumeMount]) -> Result<(), Str
 /// Unreachable in practice, since [`check`] refuses first; refuses anyway.
 pub(crate) async fn mount(
     _state: &AppState,
+    _team: Option<&hv2_cluster::ownership::TeamId>,
     _vm: &Arc<AgentVM>,
     mounts: &[VolumeMount],
 ) -> Result<(), String> {
-    check(_state, mounts)
+    check(_state, None, mounts)
 }
 
 pub(crate) async fn create() -> Response {

@@ -196,6 +196,7 @@ pub(crate) async fn reboot(
         None,
         network,
         &record.volume_mounts,
+        record.team_id.as_ref(),
         disk.as_ref(),
         &env,
         &token,
