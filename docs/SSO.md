@@ -70,6 +70,9 @@ policy](API_KEY_ROTATION.md), keyed by email instead of a key digest:
   forgets it.
 - **Scripts:** send a session token as `Authorization: Bearer hms1.…`.
 
+Evidence: [the shipped binaries against an owned provider over TLS](benchmarks/2026-10-07/sso-binaries/README.md):
+browser and CLI sign-in, the origin check, a non-member, and revocation on reload.
+
 ## What it protects against
 
 - **Login state.** The `state`, nonce and PKCE verifier travel in a short-lived
