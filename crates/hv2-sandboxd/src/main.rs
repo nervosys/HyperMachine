@@ -121,12 +121,14 @@ mod boot_diagnostics;
 mod builds;
 mod checkpoints;
 mod cloud_login;
+mod disks;
 mod env_vars;
 mod forwards;
 mod identity;
 mod idle;
 mod initramfs;
 mod private_source;
+mod reboot;
 // Volumes are served with openat2 and O_PATH, which only Linux has; see
 // volumes_unsupported.rs for what other hosts answer.
 #[cfg(target_os = "linux")]
@@ -274,6 +276,9 @@ struct Options {
     /// Where volumes are kept; the snapshot store's `volumes` when unset,
     /// so every node sharing it has them.
     volume_dir: Option<String>,
+    /// Where disks are kept: this node's own, never the snapshot store. See
+    /// disks.rs.
+    disk_dir: Option<String>,
     /// Let webhooks reach loopback, private and link-local addresses.
     allow_private_webhooks: bool,
     /// Prefault a restored guest's working set. Off by default: it halves
@@ -335,6 +340,7 @@ fn parse_options() -> Result<Options, String> {
         templates: Vec::new(),
         guest_kit: std::env::var_os("HV2_GUEST_KIT").map(Into::into),
         volume_dir: None,
+        disk_dir: None,
         allow_private_webhooks: false,
         snapshot_store: None,
         mtls_ca: None,
@@ -385,6 +391,7 @@ fn parse_options() -> Result<Options, String> {
             "--no-net-offload" => opts.no_net_offload = true,
             "--guest-kit" => opts.guest_kit = Some(value(&mut i)?.into()),
             "--volume-dir" => opts.volume_dir = Some(value(&mut i)?),
+            "--disk-dir" => opts.disk_dir = Some(value(&mut i)?),
             "--allow-private-webhooks" => opts.allow_private_webhooks = true,
             "--template" => {
                 let spec = value(&mut i)?;
@@ -725,6 +732,7 @@ struct NodeMetrics {
     evictions: Counter,
     forks_ok: Counter,
     forks_failed: Counter,
+    reboots: Counter,
     pause_latency: Histogram,
     resume_latency: Histogram,
     checkpoint_latency: Histogram,
@@ -767,6 +775,10 @@ struct NewSandbox {
     /// Volumes to mount, by name, at paths in the guest.
     #[serde(rename = "volumeMounts", default)]
     volume_mounts: Vec<hv2_cluster::model::VolumeMount>,
+    /// A disk to attach, held by this sandbox alone until it ends. Not
+    /// E2B's: see disks.rs.
+    #[serde(rename = "diskMount")]
+    disk_mount: Option<disks::DiskMount>,
     /// Environment variables for every command the sandbox runs. Never
     /// returned: see env_vars.rs.
     #[serde(rename = "envVars", default)]
@@ -1326,7 +1338,7 @@ async fn node_metrics(State(state): State<Arc<AppState>>) -> Response {
     );
     e.counters(
         "hv2_node_transitions_total",
-        "Pauses, resumes (and those a request triggered), evictions to make room, and forks.",
+        "Pauses, resumes (and those a request triggered), evictions to make room, forks, and reboots.",
         "kind",
         &[
             ("pause", m.pauses.get()),
@@ -1335,6 +1347,7 @@ async fn node_metrics(State(state): State<Arc<AppState>>) -> Response {
             ("evict", m.evictions.get()),
             ("fork_ok", m.forks_ok.get()),
             ("fork_failed", m.forks_failed.get()),
+            ("reboot", m.reboots.get()),
         ],
     );
     e.histogram(
@@ -1528,6 +1541,7 @@ async fn bring_up(
     network: Option<NetworkSpec>,
     mounts: &[hv2_cluster::model::VolumeMount],
     team: Option<&hv2_cluster::ownership::TeamId>,
+    disk: Option<&disks::Claim>,
     env: &BTreeMap<String, String>,
     access_token: &str,
 ) -> Result<Running, (StatusCode, String)> {
@@ -1537,7 +1551,13 @@ async fn bring_up(
     // each has its own vsock device and its own gateway, and nothing outside
     // this VM ever sees either.
     let template = state.templates.read().get(template_id).cloned();
-    let snapshot = snapshot.or(template.as_ref().map(|t| t.snapshot.as_path()));
+    // With a disk, a cold boot: the template's guest booted without one, and
+    // virtio-mmio has no hot-plug to give it one now.
+    let snapshot = if disk.is_some() {
+        None
+    } else {
+        snapshot.or(template.as_ref().map(|t| t.snapshot.as_path()))
+    };
     let (cid, mac) = match snapshot {
         Some(_) => (TEMPLATE_CID, TEMPLATE_MAC),
         None => {
@@ -1594,6 +1614,7 @@ async fn bring_up(
         sandbox_id,
         cid,
         network.is_some().then_some(mac),
+        disk.map(|d| (d.image.as_path(), d.serial.as_str())),
     )
     .await
     .map_err(internal)?;
@@ -1663,6 +1684,16 @@ async fn bring_up(
     // mounted anew: its host end was the node that took the snapshot.
     if !mounts.is_empty() {
         if let Err(e) = volumes::mount(state, team, &vm, mounts).await {
+            if let Some(network) = network {
+                network.bridge.abort();
+            }
+            startup_cleanup.stop().await;
+            return Err(internal(e));
+        }
+    }
+
+    if let Some(disk) = disk {
+        if let Err(e) = disks::mount(&vm, &disk.path).await {
             if let Some(network) = network {
                 network.bridge.abort();
             }
@@ -2178,6 +2209,9 @@ async fn ended(
     running: u32,
 ) {
     checkpoints::forget(state, sandbox_id);
+    disks::release(state, sandbox_id);
+    env_vars::forget(sandbox_id);
+    reboot::forget(sandbox_id);
     let event = match &state.node {
         Some(node) => match node.ended(sandbox_id, record, kind, running).await {
             Ok(Some(event)) => event,
@@ -2392,6 +2426,22 @@ async fn create_sandbox(
     if let Err(e) = env_vars::validate(&req.env_vars) {
         return api_error(StatusCode::BAD_REQUEST, e);
     }
+    // A disk rules out what would restore its guest's memory against a disk
+    // that has moved on: starting from a snapshot, and pausing.
+    if req.disk_mount.is_some() {
+        if from_snapshot.is_some() {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                "a sandbox with a diskMount cannot start from a snapshot",
+            );
+        }
+        if req.auto_pause == Some(true) {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                "a sandbox with a diskMount cannot pause; autoPause must be off",
+            );
+        }
+    }
     // Room first, before anything is parsed or booted: a full node should
     // answer at once so a control plane can try the next one.
     let slot = match reserve(&state, create_park(&state)).await {
@@ -2458,6 +2508,13 @@ async fn create_sandbox(
     });
     let sandbox_id = new_sandbox_id();
     let access_token = new_access_token();
+    let disk = match &req.disk_mount {
+        Some(mount) => match disks::claim(&state, &sandbox_id, mount) {
+            Ok(claim) => Some(claim),
+            Err((status, e)) => return api_error(status, e),
+        },
+        None => None,
+    };
     let running = match bring_up(
         &state,
         &sandbox_id,
@@ -2466,6 +2523,7 @@ async fn create_sandbox(
         network,
         &mounts,
         team_id.as_ref(),
+        disk.as_ref(),
         &req.env_vars,
         &access_token,
     )
@@ -2530,6 +2588,11 @@ async fn create_sandbox(
     {
         return api_error(status, error);
     }
+    // Its end gives the disk back now, through `ended`.
+    if let Some(disk) = disk {
+        disk.keep();
+    }
+    env_vars::keep(&sandbox_id, &req.env_vars);
 
     (StatusCode::CREATED, Json(descriptor)).into_response()
 }
@@ -2810,6 +2873,12 @@ async fn pause_sandbox(
             "pausing needs sandboxes restored from a template, and this node boots them".into(),
         ));
     }
+    if disks::holds_one(sandbox_id) {
+        return Err((
+            StatusCode::CONFLICT,
+            format!("sandbox {sandbox_id} holds a disk, and a sandbox with a disk cannot pause"),
+        ));
+    }
     let live = {
         let mut sandboxes = state.sandboxes.lock();
         match sandboxes.get(sandbox_id) {
@@ -3072,6 +3141,7 @@ async fn resume_sandbox(
         network,
         &paused.record.volume_mounts,
         paused.record.team_id.as_ref(),
+        None,
         &BTreeMap::new(),
         &paused.descriptor.envd_access_token,
     )
@@ -3409,6 +3479,14 @@ async fn fork_route(
             "forking needs sandboxes restored from a template, and this node boots them",
         );
     }
+    if disks::holds_one(&sandbox_id) {
+        return api_error(
+            StatusCode::CONFLICT,
+            format!(
+                "sandbox {sandbox_id} holds a disk, and a sandbox with a disk cannot be forked"
+            ),
+        );
+    }
 
     let checkpoint = state.suspend_dir.join(format!(
         "{sandbox_id}-fork-{}.snap",
@@ -3511,6 +3589,7 @@ async fn fork_route(
             let network_request = source_request.clone();
             let volume_mounts = volume_mounts.clone();
             let creator = creator.clone();
+            let source_id = sandbox_id.clone();
             async move {
                 let slot = reserve(&state, create_park(&state))
                     .await
@@ -3525,6 +3604,7 @@ async fn fork_route(
                     network,
                     &volume_mounts,
                     creator.1.as_ref(),
+                    None,
                     &BTreeMap::new(),
                     &access_token,
                 )
@@ -3576,6 +3656,7 @@ async fn fork_route(
                     RegistrationContext::default(),
                 )
                 .await?;
+                env_vars::inherit(&source_id, &descriptor.sandbox_id);
                 Ok::<_, (StatusCode, String)>(descriptor)
             }
         })
@@ -4475,8 +4556,11 @@ const MMIO_BOOT_ARGS: &str = concat!(
 );
 
 fn guest_cmdline(network: bool, transport: GuestTransport) -> String {
+    // `panic=1`: a kernel that panics resets a second later instead of
+    // hanging, so the sandbox is rebooted in place (reboot.rs) rather than
+    // left listed as running with nothing answering.
     format!(
-        "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 {}{}",
+        "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 panic=1 {}{}",
         match transport {
             // No PCI device exists on an MMIO guest, so the kernel is told not
             // to look: probing bus 0 (and 254, 255) costs about 1,800
@@ -4508,6 +4592,7 @@ async fn new_vm(
     name: &str,
     cid: u64,
     mac: Option<[u8; 6]>,
+    disk: Option<(&std::path::Path, &str)>,
 ) -> Result<(AgentVM, Option<NetDevice>), String> {
     let mut capabilities = CapabilitySet::default();
     capabilities.add(Capability::GuestExec);
@@ -4559,6 +4644,13 @@ async fn new_vm(
         }
         None => None,
     };
+    // Before launch, for the same reason.
+    if let Some((image, serial)) = disk {
+        vm.vm()
+            .attach_block(image, false, serial)
+            .await
+            .map_err(|e| format!("attaching the disk: {e}"))?;
+    }
     // A console, on every VM alike -- template, booted sandbox, restored
     // one -- so a guest that never answers says why: its kernel's panic, its
     // init's last words. On every VM, not only a template's, because a guest
@@ -4679,6 +4771,7 @@ async fn build_template(
         "template",
         TEMPLATE_CID,
         opts.network.then_some(TEMPLATE_MAC),
+        None,
     )
     .await?;
     vm.launch().await.map_err(|e| format!("launching: {e}"))?;
@@ -4746,6 +4839,7 @@ async fn working_set(
         "template-probe",
         TEMPLATE_CID,
         opts.network.then_some(TEMPLATE_MAC),
+        None,
     )
     .await?;
     let measured = async {
@@ -5034,6 +5128,7 @@ async fn expire(state: Arc<AppState>) {
                 tracing::info!("sandbox {id} reached its timeout");
             }
         }
+        reboot::reboot_stopped(&state).await;
         idle::pause_idle(&state, now).await;
     }
 }
@@ -5535,6 +5630,7 @@ async fn main() -> std::process::ExitCode {
         .route("/sandboxes/{sandboxID}/pause", post(pause_route))
         .route("/sandboxes/{sandboxID}/resume", post(resume_route))
         .route("/sandboxes/{sandboxID}/fork", post(fork_route))
+        .route("/sandboxes/{sandboxID}/reboot", post(reboot::route))
         .route("/sandboxes/{sandboxID}/owner", post(adopt_owner_route))
         .route("/sandboxes/{sandboxID}/snapshots", post(snapshots::create))
         .route(
@@ -5570,6 +5666,8 @@ async fn main() -> std::process::ExitCode {
         .route("/templates/aliases/{alias}", get(builds::alias))
         .merge(hv2_cluster::events::router(event_store))
         .route("/volumes", get(volumes::list).post(volumes::create))
+        .route("/disks", get(disks::list).post(disks::create))
+        .route("/disks/{diskID}", get(disks::get).delete(disks::delete))
         .route(
             "/volumes/{volumeID}",
             get(volumes::get).delete(volumes::delete),

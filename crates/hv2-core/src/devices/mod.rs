@@ -18,6 +18,7 @@ pub mod timer;
 pub mod vga;
 pub mod virtio;
 pub mod virtio_blk;
+pub mod virtio_blk_mmio;
 pub mod virtio_mmio;
 pub mod virtio_net_mmio;
 pub mod virtio_pci;

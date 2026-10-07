@@ -87,6 +87,12 @@ pub(crate) async fn create(
             "checkpoints need sandboxes restored from a template, and this node boots them",
         );
     }
+    if crate::disks::holds_one(&sandbox_id) {
+        return api_error(
+            StatusCode::CONFLICT,
+            format!("sandbox {sandbox_id} holds a disk, and a sandbox with a disk cannot be checkpointed"),
+        );
+    }
 
     let lock = transition_lock(&state, &sandbox_id);
     let _held = lock.lock().await;
@@ -259,6 +265,7 @@ pub(crate) async fn restore(
         network,
         &record.volume_mounts,
         record.team_id.as_ref(),
+        None,
         &BTreeMap::new(),
         &descriptor.envd_access_token,
     )
