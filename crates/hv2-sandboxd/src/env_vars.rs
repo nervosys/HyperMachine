@@ -9,8 +9,16 @@
 //!
 //! Write-only, as in E2B: no response returns them, so a secret passed here
 //! is readable inside its sandbox and nowhere else.
+//!
+//! One copy is kept on the host, in this process's memory only ([`keep`]):
+//! a guest that reboots ([`crate::reboot`]) starts again from its template,
+//! whose defaults do not have them, and they are put back from here. Never
+//! written to disk, never in a record, and gone when the sandbox ends -- so a
+//! sandbox resumed on another node, or after this daemon restarts, reboots
+//! without them.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::Mutex;
 use std::time::Duration;
 
 use hv2_agent::AgentVM;
@@ -23,6 +31,39 @@ pub(crate) const MAX_VARS: usize = 1024;
 /// At most this many bytes of names and values together: what the guest
 /// reads at every command start, so it is kept small.
 pub(crate) const MAX_BYTES: usize = 128 * 1024;
+
+/// What each sandbox was created with, for its reboots.
+static KEPT: Mutex<Option<HashMap<String, BTreeMap<String, String>>>> = Mutex::new(None);
+
+fn kept_map<T>(f: impl FnOnce(&mut HashMap<String, BTreeMap<String, String>>) -> T) -> T {
+    let mut guard = KEPT
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    f(guard.get_or_insert_with(HashMap::new))
+}
+
+/// Keep `env` for `sandbox_id`'s reboots. Nothing is kept for none.
+pub(crate) fn keep(sandbox_id: &str, env: &BTreeMap<String, String>) {
+    if !env.is_empty() {
+        kept_map(|m| m.insert(sandbox_id.to_string(), env.clone()));
+    }
+}
+
+/// What `sandbox_id` was created with, as far as this process knows.
+pub(crate) fn kept(sandbox_id: &str) -> BTreeMap<String, String> {
+    kept_map(|m| m.get(sandbox_id).cloned().unwrap_or_default())
+}
+
+/// A fork has its source's variables in its memory; its reboots need them too.
+pub(crate) fn inherit(source: &str, fork: &str) {
+    let env = kept(source);
+    keep(fork, &env);
+}
+
+/// The sandbox ended.
+pub(crate) fn forget(sandbox_id: &str) {
+    kept_map(|m| m.remove(sandbox_id));
+}
 
 /// Refuse what cannot be an environment variable, or is too much of one.
 pub(crate) fn validate(env: &BTreeMap<String, String>) -> Result<(), String> {

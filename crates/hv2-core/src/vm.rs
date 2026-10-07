@@ -678,6 +678,11 @@ pub struct VM {
     /// guest transmits and hand it the ones addressed to it, and that
     /// something needs the device, not an MMIO handle.
     net: RwLock<Option<AttachedNet>>,
+    /// The block device attached by [`VM::attach_block`], if any.
+    ///
+    /// Held so its transport's state can be saved with a snapshot and put back
+    /// on restore, as the other two devices' are.
+    block: RwLock<Option<AttachedBlock>>,
     /// The raw image guest RAM is a private mapping of, when a restore mapped
     /// one. What [`Self::snapshot_layered`] records only the difference from.
     memory_base: parking_lot::Mutex<Option<std::path::PathBuf>>,
@@ -696,6 +701,12 @@ pub struct VM {
 /// travels with the device because the kernel argument has to name the window
 /// that was actually mapped.
 #[derive(Clone)]
+/// A block device and where the guest will find it.
+struct AttachedBlock {
+    device: Arc<parking_lot::Mutex<crate::devices::virtio_blk_mmio::VirtioBlockMmio>>,
+    transport: Arc<tokio::sync::RwLock<crate::devices::VirtioMmioTransport>>,
+}
+
 struct AttachedNet {
     device: Arc<parking_lot::Mutex<crate::devices::virtio_net_mmio::VirtioNetMmio>>,
     /// Kept so the host side can signal the used queue after it publishes.
@@ -860,6 +871,7 @@ impl VM {
             shared_roms: RwLock::new(Vec::new()),
             vsock: RwLock::new(None),
             net: RwLock::new(None),
+            block: RwLock::new(None),
             memory_base: parking_lot::Mutex::new(None),
         })
     }
@@ -942,6 +954,14 @@ impl VM {
                 }
                 if acpi {
                     loaded.set_hw_reduced_acpi(self.virtio_mmio_windows.lock().clone());
+                    // On a hardware-reduced platform Linux reboots through
+                    // EFI by default, and with no EFI falls through to a
+                    // real-mode jump into a BIOS that is not there, where it
+                    // spins forever: `reboot` hung the guest. The keyboard
+                    // controller's reset pulse is what the run loop answers
+                    // (see `i8042_reset_as_shutdown`), and what a Firecracker
+                    // guest is told to use for the same reason.
+                    loaded.append_cmdline("reboot=k");
                 }
 
                 self.admit_boot_image(&loaded)?;
@@ -1935,6 +1955,11 @@ impl VM {
         if let Some(transport) = net {
             states.push(transport.read().await.save_state());
         }
+
+        let block = self.block.read().as_ref().map(|a| a.transport.clone());
+        if let Some(transport) = block {
+            states.push(transport.read().await.save_state());
+        }
         states
     }
 
@@ -2093,6 +2118,7 @@ impl VM {
             _ => None,
         };
         let net = self.net.read().as_ref().map(|a| a.transport.clone());
+        let block = self.block.read().as_ref().map(|a| a.transport.clone());
 
         for state in states {
             let mut applied = false;
@@ -2104,6 +2130,14 @@ impl VM {
             }
             if !applied {
                 if let Some(transport) = net.as_ref() {
+                    if transport.read().await.name() == state.name {
+                        transport.read().await.restore_state(state)?;
+                        applied = true;
+                    }
+                }
+            }
+            if !applied {
+                if let Some(transport) = block.as_ref() {
                     if transport.read().await.name() == state.name {
                         transport.read().await.restore_state(state)?;
                         applied = true;
@@ -2937,6 +2971,114 @@ impl VM {
             .map(|n| Self::virtio_mmio_kernel_args_for(n.base_address, n.irq))
     }
 
+    /// Guest physical address of the block device's register window, by
+    /// default: past the network window, for the reason that one is past
+    /// vsock's.
+    pub const BLOCK_MMIO_BASE: u64 = 0xd003_0000;
+
+    /// Interrupt line the block device raises, by default. Its own, for the
+    /// reason [`Self::NET_IRQ`] is not vsock's.
+    pub const BLOCK_IRQ: u8 = 7;
+
+    /// Attach the raw image at `path` as a virtio-blk disk.
+    ///
+    /// The guest finds it as `/dev/vda`, with `serial` as its ID
+    /// (`/dev/disk/by-id/virtio-<serial>`). Requests are served on the vCPU
+    /// thread that made them, straight to the file, so the guest's view and
+    /// the file's never differ by more than requests still in flight.
+    ///
+    /// Must be called before the VM is launched or restored: virtio-mmio has
+    /// no hot-plug, and a guest probes only the windows it was told about when
+    /// it booted. A VM restored from a snapshot taken without a disk has no
+    /// driver for one.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a block device is already attached, if the file
+    /// cannot be opened, or if the register window would overlap guest RAM.
+    pub async fn attach_block(
+        self: &Arc<Self>,
+        path: &std::path::Path,
+        read_only: bool,
+        serial: &str,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_blk_mmio::VirtioBlockMmio>>> {
+        self.attach_block_at(
+            path,
+            read_only,
+            serial,
+            Self::BLOCK_MMIO_BASE,
+            Self::BLOCK_IRQ,
+        )
+        .await
+    }
+
+    /// Attach a block device at an explicit address and interrupt line.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::attach_block`].
+    pub async fn attach_block_at(
+        self: &Arc<Self>,
+        path: &std::path::Path,
+        read_only: bool,
+        serial: &str,
+        base_address: u64,
+        irq: u8,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_blk_mmio::VirtioBlockMmio>>> {
+        use crate::devices::virtio_blk_mmio::VirtioBlockMmio;
+        use crate::devices::virtio_mmio::{VirtioMmioTransport, VIRTIO_MMIO_REGION_SIZE};
+
+        if self.block.read().is_some() {
+            return Err(Error::Device(
+                "this VM already has a block device".to_string(),
+            ));
+        }
+        if self.memory.host_offset(base_address).is_some() {
+            return Err(Error::Device(format!(
+                "block register window at {base_address:#x} overlaps {} bytes of guest RAM",
+                self.memory.total_size()
+            )));
+        }
+
+        let device = Arc::new(parking_lot::Mutex::new(VirtioBlockMmio::open(
+            path, read_only, serial,
+        )?));
+        let capacity = device.lock().capacity_bytes();
+        let transport = Arc::new(tokio::sync::RwLock::new(
+            VirtioMmioTransport::new("virtio-blk", base_address, self.memory(), device.clone())
+                .with_interrupt(self.pic(), irq),
+        ));
+        self.devices
+            .register_device("virtio-blk", transport.clone())
+            .await?;
+        self.devices
+            .register_mmio_region(
+                "virtio-blk".to_string(),
+                base_address,
+                VIRTIO_MMIO_REGION_SIZE,
+            )
+            .await?;
+        self.name_virtio_mmio_window(base_address, irq);
+
+        *self.block.write() = Some(AttachedBlock {
+            device: device.clone(),
+            transport,
+        });
+        tracing::info!(
+            "VM '{}': block device attached at {base_address:#x} (IRQ {irq}, {capacity} bytes{})",
+            self.config.name,
+            if read_only { ", read-only" } else { "" },
+        );
+        Ok(device)
+    }
+
+    /// The block device attached to this VM, if any.
+    pub fn block(
+        &self,
+    ) -> Option<Arc<parking_lot::Mutex<crate::devices::virtio_blk_mmio::VirtioBlockMmio>>> {
+        self.block.read().as_ref().map(|b| b.device.clone())
+    }
+
     /// Attach a vsock device at an explicit address and interrupt line.
     ///
     /// The general form of [`Self::attach_vsock`], for a guest whose memory
@@ -3169,6 +3311,9 @@ impl VM {
     /// bridge, and x86 Linux that finds ACPI does not go looking for one
     /// itself. Set before the VM is provisioned; it changes nothing for a
     /// guest restored from a snapshot, which keeps the tables it booted with.
+    ///
+    /// Also adds `reboot=k`, so that a guest's `reboot` pulses the i8042's
+    /// reset line, which stops the VM, rather than hanging in a BIOS jump.
     pub fn use_hw_reduced_acpi(&self) {
         self.hw_reduced_acpi
             .store(true, std::sync::atomic::Ordering::Relaxed);
@@ -3623,6 +3768,29 @@ impl VM {
         Ok(())
     }
 
+    /// A guest's write of 0xFE to the i8042 command port, as the shutdown it
+    /// asks for.
+    ///
+    /// That command pulses the CPU reset line, and it is how a Linux guest
+    /// with no ACPI reset register restarts: `reboot` tries ACPI, then this,
+    /// then a jump into a BIOS that is not there, which runs off into zeroed
+    /// memory and never exits. Firecracker treats it the same way. What
+    /// happens after the stop -- a fresh guest, or none -- is the caller's.
+    fn i8042_reset_as_shutdown(exit: VmExit) -> VmExit {
+        match exit {
+            VmExit::Io {
+                port: crate::machine::I8042_LAST,
+                direction: IoDirection::Out,
+                data,
+                ..
+            } if data & 0xff == 0xfe => {
+                tracing::info!("Guest pulsed the reset line through the i8042");
+                VmExit::Shutdown
+            }
+            other => other,
+        }
+    }
+
     /// Static version of handle_exit for use in spawned tasks
     async fn handle_exit_static(
         vcpu: &VCpu,
@@ -3637,7 +3805,7 @@ impl VM {
         state: &RwLock<VMState>,
         exit_notify: &Notify,
     ) -> Result<bool> {
-        match exit {
+        match Self::i8042_reset_as_shutdown(exit) {
             VmExit::Mmio {
                 phys_addr,
                 mut data,
@@ -4031,7 +4199,7 @@ impl VM {
     ///
     /// Returns Ok(true) if execution should continue, Ok(false) if VM should stop.
     async fn handle_exit(&self, vcpu: &VCpu, stats: &VCpuStats, exit: VmExit) -> Result<bool> {
-        match exit {
+        match Self::i8042_reset_as_shutdown(exit) {
             VmExit::Mmio {
                 phys_addr,
                 mut data,
@@ -4413,6 +4581,23 @@ mod tests {
         drop(rollback);
         assert!(matches!(ar.recv().await, Some(VCpuMessage::Resume)));
         assert!(matches!(br.recv().await, Some(VCpuMessage::Resume)));
+    }
+
+    /// Only the reset command, written to the command port, stops the VM:
+    /// the same byte to the data port is a keyboard command, and a read is
+    /// a status poll.
+    #[test]
+    fn an_i8042_reset_pulse_is_a_shutdown() {
+        let io = |port, direction, data| VmExit::Io {
+            port,
+            direction,
+            size: 1,
+            data,
+        };
+        assert!(VM::i8042_reset_as_shutdown(io(0x64, IoDirection::Out, 0xfe)).is_shutdown());
+        assert!(!VM::i8042_reset_as_shutdown(io(0x64, IoDirection::Out, 0xd1)).is_shutdown());
+        assert!(!VM::i8042_reset_as_shutdown(io(0x60, IoDirection::Out, 0xfe)).is_shutdown());
+        assert!(!VM::i8042_reset_as_shutdown(io(0x64, IoDirection::In, 0xfe)).is_shutdown());
     }
 
     #[tokio::test]
