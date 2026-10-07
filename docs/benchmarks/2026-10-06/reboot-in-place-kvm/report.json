@@ -1,0 +1,51 @@
+{
+  "daemon": "/var/tmp/hm-reboot-daemon",
+  "kernel": "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+  "initrd": "/var/tmp/hm-competitive/guest-output-drain.cpio.gz",
+  "checks": [
+    {
+      "name": "a guest that reboots itself comes back as the same sandbox",
+      "sandbox": "sbx-4ec540c0f4864f56b95c",
+      "back_after_seconds": 6.317,
+      "guest_uptime_after": 4.74,
+      "same_access_token": true,
+      "env_after": "kept-across-reboot"
+    },
+    {
+      "name": "its URL reaches the rebooted guest",
+      "before": "before-reboot",
+      "before_server_restarted": {
+        "status": 502
+      },
+      "after": "after-reboot"
+    },
+    {
+      "name": "a kernel panic comes back the same way",
+      "back_after_seconds": 6.307
+    },
+    {
+      "name": "a sandbox with a disk reboots holding it, data intact",
+      "sandbox": "sbx-88d8a634159943da88c9",
+      "back_after_seconds": 6.306,
+      "mount": "/dev/vda /data ext4 rw,relatime 0 0",
+      "sha256": "795e880240a9701de2ff502e0bb9266f23798e9c920a3a13ebf9e41074b8028f"
+    },
+    {
+      "name": "POST /sandboxes/{id}/reboot reboots a running guest",
+      "request_seconds": 0.02
+    },
+    {
+      "name": "past the limit within the window, the sandbox is ended",
+      "answers": [
+        200,
+        200,
+        409
+      ]
+    },
+    {
+      "name": "reboots are counted",
+      "hv2_node_transitions_total_reboot": 6
+    }
+  ],
+  "result": "pass"
+}

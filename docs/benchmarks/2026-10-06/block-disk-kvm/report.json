@@ -1,0 +1,73 @@
+{
+  "daemon": "/var/tmp/hm-blk-daemon",
+  "kernel": "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+  "initrd": "/var/tmp/hm-competitive/guest-output-drain.cpio.gz",
+  "checks": [
+    {
+      "name": "disk created",
+      "disk": {
+        "attachedTo": null,
+        "diskID": "disk-a06517cbd91c5991",
+        "name": "movable",
+        "sizeMiB": 64
+      },
+      "allocated_bytes": 356352
+    },
+    {
+      "name": "a sandbox without a disk still restores from the template",
+      "create_seconds": 0.021
+    },
+    {
+      "name": "sandbox A mounts the disk and writes to it",
+      "sandbox": "sbx-34c41f54dd0b4ba183f6",
+      "mount": "/dev/vda /data ext4 rw,relatime 0 0",
+      "create_seconds": 0.293,
+      "sha256": "3e41331e780cb0a096d13c02d5c7eec20e6f329ee9426c61adf790a2dd34d3bb"
+    },
+    {
+      "name": "an attached disk is exclusive",
+      "second_attach": "disk movable is attached to sandbox sbx-34c41f54dd0b4ba183f6",
+      "delete": "disk movable is attached to sandbox sbx-34c41f54dd0b4ba183f6"
+    },
+    {
+      "name": "operations that would restore memory against a moved disk are refused",
+      "refusals": {
+        "fork": {
+          "status": 409,
+          "message": "sandbox sbx-34c41f54dd0b4ba183f6 holds a disk, and a sandbox with a disk cannot be forked"
+        },
+        "snapshot": {
+          "status": 409,
+          "message": "sandbox sbx-34c41f54dd0b4ba183f6 holds a disk, and a sandbox with a disk cannot be snapshotted"
+        },
+        "checkpoint": {
+          "status": 409,
+          "message": "sandbox sbx-34c41f54dd0b4ba183f6 holds a disk, and a sandbox with a disk cannot be checkpointed"
+        },
+        "pause": {
+          "status": 409,
+          "message": "sandbox sbx-34c41f54dd0b4ba183f6 holds a disk, and a sandbox with a disk cannot pause"
+        },
+        "autoPause": {
+          "status": 400,
+          "message": "a sandbox with a diskMount cannot pause; autoPause must be off"
+        }
+      }
+    },
+    {
+      "name": "ended, A gives the disk back and B reads what A wrote",
+      "sandbox": "sbx-799f9c2b6d454c3a8392",
+      "create_seconds": 0.253,
+      "sha256": "3e41331e780cb0a096d13c02d5c7eec20e6f329ee9426c61adf790a2dd34d3bb"
+    },
+    {
+      "name": "a killed daemon's claim does not outlive it",
+      "sandbox": "sbx-a17f46d26b93448cb01e",
+      "sha256": "3e41331e780cb0a096d13c02d5c7eec20e6f329ee9426c61adf790a2dd34d3bb"
+    },
+    {
+      "name": "a free disk deletes, image and all"
+    }
+  ],
+  "result": "pass"
+}
