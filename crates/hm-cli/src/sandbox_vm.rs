@@ -95,6 +95,11 @@ pub enum VmCommand {
         #[command(subcommand)]
         command: VolumeCommand,
     },
+    /// Manage block disks, each attached to one VM at a time, on a node
+    Disk {
+        #[command(subcommand)]
+        command: DiskCommand,
+    },
     /// Serve remote sandbox lifecycle tools using the MCP stdio protocol
     Mcp {
         /// Operator-selected envd endpoint for binary file tools
@@ -148,6 +153,9 @@ pub enum VmCommand {
         /// Sandbox lifetime in seconds
         #[arg(long, default_value_t = 300, value_parser = clap::value_parser!(u64).range(1..))]
         lifetime: u64,
+        /// Attach a disk, held by this VM until it ends: NAME:/guest/path
+        #[arg(long, value_parser = disk_mount)]
+        disk: Option<(String, String)>,
     },
     /// Assign or inspect a reserved alias for an existing VM
     Alias {
@@ -377,6 +385,30 @@ async fn web_sharing(api: &Api, command: WebSharingCommand) -> Result<Value> {
             .await
         }
     }
+}
+
+#[derive(Debug, Subcommand)]
+pub enum DiskCommand {
+    /// Create an ext4-formatted disk on the node
+    Create {
+        #[arg(value_parser = volume_name)]
+        name: String,
+        /// Size in MiB; the image is sparse
+        #[arg(long, value_parser = clap::value_parser!(u64).range(16..=1_048_576))]
+        size_mib: u64,
+    },
+    /// List disks and which VM holds each
+    List,
+    /// Inspect a disk
+    Inspect {
+        #[arg(value_parser = volume_name)]
+        id: String,
+    },
+    /// Delete a disk no VM holds, and its contents
+    Delete {
+        #[arg(value_parser = volume_name)]
+        id: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -665,6 +697,17 @@ async fn download_volume(
         .map_err(|error| error.error)
         .context("could not publish volume download without replacing destination")?;
     Ok(json!({"path":destination,"size":size}))
+}
+
+/// `NAME:/guest/path`, for `vm create --disk`.
+fn disk_mount(value: &str) -> std::result::Result<(String, String), String> {
+    let (name, path) = value
+        .split_once(':')
+        .ok_or_else(|| "expected NAME:/guest/path".to_string())?;
+    if !path.starts_with('/') {
+        return Err("the guest path must be absolute".into());
+    }
+    Ok((volume_name(name)?, path.to_string()))
 }
 
 fn volume_name(value: &str) -> std::result::Result<String, String> {
@@ -1148,6 +1191,29 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                     .await?
             }
         },
+        VmCommand::Disk { command } => match command {
+            DiskCommand::Create { name, size_mib } => {
+                api.request_bounded(
+                    Method::POST,
+                    &["disks"],
+                    Some(json!({"name": name, "sizeMiB": size_mib})),
+                    65536,
+                )
+                .await?
+            }
+            DiskCommand::List => {
+                api.request_bounded(Method::GET, &["disks"], None, 1024 * 1024)
+                    .await?
+            }
+            DiskCommand::Inspect { id } => {
+                api.request_bounded(Method::GET, &["disks", &id], None, 65536)
+                    .await?
+            }
+            DiskCommand::Delete { id } => {
+                api.request_bounded(Method::DELETE, &["disks", &id], None, 65536)
+                    .await?
+            }
+        },
         VmCommand::TcpStdio { id, name, port } => {
             let id = match id {
                 Some(id) => id,
@@ -1217,10 +1283,14 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             template,
             lifetime,
             name,
+            disk,
         } => {
             let mut body = json!({"templateID": template, "timeout": lifetime});
             if let Some(name) = name {
                 body["metadata"] = json!({"hm.name": name});
+            }
+            if let Some((disk, path)) = disk {
+                body["diskMount"] = json!({"name": disk, "path": path});
             }
             api.request(Method::POST, &["v2", "sandboxes"], Some(body))
                 .await?

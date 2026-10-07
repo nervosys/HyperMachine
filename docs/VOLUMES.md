@@ -17,8 +17,8 @@ deployment with [teams](TEAMS.md), a volume belongs to its creator's team and
 names are unique within a team.
 
 Multiple guests can mount the same directory. Guest memory snapshots and forks
-do not copy volume data; mounts remain shared storage. This is directory sharing,
-not a standalone block device with exclusive attach/detach semantics. Deleting a
+do not copy volume data; mounts remain shared storage. This is directory sharing.
+For a block device that one sandbox holds at a time, see [disks](DISKS.md). Deleting a
 volume removes its files and makes it unavailable through the volume API.
 
 The daemon selects storage in this order:
