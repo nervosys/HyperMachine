@@ -44,6 +44,13 @@ on each key:
 | `/events/sandboxes/{id}` | yes | 403 |
 | `/events/sandboxes` (all events) | its team's sandboxes' events | not listed |
 | Webhooks (`/events/webhooks…`) | the team's own: create, list, change, delete, deliveries | not there (404) |
+| Volumes (`/volumes…`, `volumeMounts`) | the team's own, by name | not there (404), and a mount by name finds only the team's |
+
+A volume belongs to the team that created it. Its ID is derived from the team
+and the name, so two teams can each have a volume called `data`, and a
+sandbox's `volumeMounts` finds a name among its own team's volumes only. The
+volume content API still uses each volume's own bearer token. Volumes made
+before teams belong to no team, and only administrators reach them.
 
 A webhook belongs to the team that created it and receives only that team's
 sandboxes' events. An administrator's webhook receives every event. An event
@@ -61,7 +68,7 @@ These resources are still shared by every team. Until each has a per-team
 namespace, team keys get 403 on them ("shared by every team"), and only
 administrators use them:
 
-- Volumes (`/volumes`), snapshots (`/snapshots`, `POST /sandboxes/{id}/snapshots`)
+- Snapshots (`/snapshots`, `POST /sandboxes/{id}/snapshots`)
 - Template builds and deletion (`POST /templates`, `/v2/templates`, `/v3/templates`,
   `/templates/{id}…`). Reading `GET /templates` is allowed.
 - `/cluster/events`, the operator's view of nodes and sandboxes together

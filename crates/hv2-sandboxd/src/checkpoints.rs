@@ -258,6 +258,7 @@ pub(crate) async fn restore(
         Some(&checkpoint.path),
         network,
         &record.volume_mounts,
+        record.team_id.as_ref(),
         &BTreeMap::new(),
         &descriptor.envd_access_token,
     )

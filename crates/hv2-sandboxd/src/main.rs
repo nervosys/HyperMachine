@@ -1527,6 +1527,7 @@ async fn bring_up(
     snapshot: Option<&std::path::Path>,
     network: Option<NetworkSpec>,
     mounts: &[hv2_cluster::model::VolumeMount],
+    team: Option<&hv2_cluster::ownership::TeamId>,
     env: &BTreeMap<String, String>,
     access_token: &str,
 ) -> Result<Running, (StatusCode, String)> {
@@ -1661,7 +1662,7 @@ async fn bring_up(
     // them. After a restore, a mount the snapshot held is detached and
     // mounted anew: its host end was the node that took the snapshot.
     if !mounts.is_empty() {
-        if let Err(e) = volumes::mount(state, &vm, mounts).await {
+        if let Err(e) = volumes::mount(state, team, &vm, mounts).await {
             if let Some(network) = network {
                 network.bridge.abort();
             }
@@ -2385,7 +2386,7 @@ async fn create_sandbox(
     // Volumes that do not exist are the caller's mistake, found before a
     // slot is taken.
     let mounts = req.volume_mounts.clone();
-    if let Err(e) = volumes::check(&state, &mounts) {
+    if let Err(e) = volumes::check(&state, team_id.as_ref(), &mounts) {
         return api_error(StatusCode::BAD_REQUEST, e);
     }
     if let Err(e) = env_vars::validate(&req.env_vars) {
@@ -2464,6 +2465,7 @@ async fn create_sandbox(
         from_snapshot.as_ref().map(|s| s.file.as_path()),
         network,
         &mounts,
+        team_id.as_ref(),
         &req.env_vars,
         &access_token,
     )
@@ -3069,6 +3071,7 @@ async fn resume_sandbox(
         Some(&paused.snapshot),
         network,
         &paused.record.volume_mounts,
+        paused.record.team_id.as_ref(),
         &BTreeMap::new(),
         &paused.descriptor.envd_access_token,
     )
@@ -3521,6 +3524,7 @@ async fn fork_route(
                     Some(&checkpoint),
                     network,
                     &volume_mounts,
+                    creator.1.as_ref(),
                     &BTreeMap::new(),
                     &access_token,
                 )
