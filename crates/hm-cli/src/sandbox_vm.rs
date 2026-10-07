@@ -7,6 +7,8 @@ use clap::{Args, Subcommand, ValueEnum};
 use reqwest::{Client, Method, Url};
 use serde_json::{json, Value};
 
+#[path = "sandbox_vm_login.rs"]
+mod login;
 #[path = "sandbox_vm_mcp.rs"]
 mod mcp;
 #[path = "sandbox_vm_mcp_http.rs"]
@@ -90,6 +92,17 @@ pub enum VmCommand {
         #[arg(long, default_value_t = 64, value_parser = clap::value_parser!(u32).range(1..=1024))]
         max_peers: u32,
     },
+    /// Sign in through the control plane's single sign-on and keep the session
+    Login {
+        /// Seconds to wait for the browser sign-in
+        #[arg(long, default_value_t = 300, value_parser = clap::value_parser!(u64).range(10..=3600))]
+        wait: u64,
+        /// Print the sign-in URL without opening a browser
+        #[arg(long)]
+        no_browser: bool,
+    },
+    /// Forget this endpoint's sign-on session
+    Logout,
     /// Manage persistent volumes through the node or control-plane API
     Volume {
         #[command(subcommand)]
@@ -801,6 +814,18 @@ impl Api {
         key: Option<String>,
         ca: Option<&std::path::Path>,
     ) -> Result<Self> {
+        Self::with_credentials(endpoint, timeout, key, None, ca)
+    }
+
+    /// As [`Self::with_ca`], sending `session` as a bearer token when there
+    /// is no key.
+    pub(crate) fn with_credentials(
+        endpoint: &str,
+        timeout: u64,
+        key: Option<String>,
+        session: Option<String>,
+        ca: Option<&std::path::Path>,
+    ) -> Result<Self> {
         let base = Url::parse(endpoint).context("invalid sandbox endpoint")?;
         if !matches!(base.scheme(), "http" | "https")
             || base.host_str().is_none()
@@ -817,6 +842,11 @@ impl Api {
                 .map_err(|_| anyhow::anyhow!("HV2_API_KEY is not a valid HTTP header value"))?;
             value.set_sensitive(true);
             headers.insert("x-api-key", value);
+        } else if let Some(session) = session.filter(|s| !s.is_empty()) {
+            let mut value = reqwest::header::HeaderValue::from_str(&format!("Bearer {session}"))
+                .map_err(|_| anyhow::anyhow!("the stored session is not a valid header value"))?;
+            value.set_sensitive(true);
+            headers.insert(reqwest::header::AUTHORIZATION, value);
         }
         let certificate = ca
             .map(|path| -> Result<_> {
@@ -1085,14 +1115,24 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 | VolumeCommand::Mkdir { .. }
         }
     );
-    let api = Api::with_ca(
+    // A key, when one is set; otherwise the session `login` kept.
+    let key = if content_only {
+        None
+    } else {
+        std::env::var("HV2_API_KEY")
+            .ok()
+            .filter(|key| !key.is_empty())
+    };
+    let session = if content_only || key.is_some() {
+        None
+    } else {
+        login::stored_token(&endpoint)
+    };
+    let api = Api::with_credentials(
         &endpoint,
         args.request_timeout,
-        if content_only {
-            None
-        } else {
-            std::env::var("HV2_API_KEY").ok()
-        },
+        key,
+        session,
         args.api_ca_cert.as_deref(),
     )?;
     let value = match args.command {
@@ -1311,6 +1351,16 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             }
         },
         VmCommand::List => api.request(Method::GET, &["sandboxes"], None).await?,
+        VmCommand::Login { wait, no_browser } => {
+            login::login(
+                &endpoint,
+                args.api_ca_cert.as_deref(),
+                Duration::from_secs(wait),
+                !no_browser,
+            )
+            .await?
+        }
+        VmCommand::Logout => login::logout(&endpoint)?,
         VmCommand::Inspect { id } => api.request(Method::GET, &["sandboxes", &id], None).await?,
         VmCommand::Delete { id } => {
             api.request(Method::DELETE, &["sandboxes", &id], None)
