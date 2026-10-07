@@ -71,6 +71,8 @@ pub struct ControlPlane {
     domain_verification:
         parking_lot::RwLock<Option<Arc<crate::domain_verification::DomainVerification>>>,
     native_port_range: parking_lot::RwLock<Option<crate::ports::PublicPortRange>>,
+    /// Single sign-on, when an operator configured a provider.
+    sso: parking_lot::RwLock<Option<Arc<crate::sso_login::SsoLogin>>>,
     metrics: ControlMetrics,
 }
 
@@ -118,6 +120,25 @@ impl ControlPlane {
         *active = Some(policy);
         Ok(())
     }
+    /// Sign people in through an OpenID Connect provider. Once enabled, a
+    /// request with neither a key nor a session is refused, even where no API
+    /// keys are configured.
+    ///
+    /// # Errors
+    /// Reject a second installation.
+    pub fn enable_sso(&self, sso: Arc<crate::sso_login::SsoLogin>) -> Result<(), String> {
+        let mut active = self.sso.write();
+        if active.is_some() {
+            return Err("single sign-on is already configured".into());
+        }
+        *active = Some(sso);
+        Ok(())
+    }
+
+    pub(crate) fn sso(&self) -> Option<Arc<crate::sso_login::SsoLogin>> {
+        self.sso.read().clone()
+    }
+
     /// Atomically replace scoped policies after validating the full JSON array.
     /// Rejected replacements leave active policies unchanged. In-flight requests
     /// retain their original authorization; new requests use the replacement.
@@ -180,6 +201,7 @@ impl ControlPlane {
             domain_verification: parking_lot::RwLock::new(None),
             config,
             native_port_range: parking_lot::RwLock::new(None),
+            sso: parking_lot::RwLock::new(None),
             metrics: ControlMetrics::default(),
         })
     }
@@ -294,6 +316,16 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
             get(openid_configuration),
         )
         .route("/ui", get(ui))
+        // Signing in: outside the key check, since these are how a person
+        // without a key gets a session.
+        .route("/auth/login", get(crate::sso_login::login))
+        .route("/auth/callback", get(crate::sso_login::callback))
+        .route("/auth/session", get(crate::sso_login::session))
+        .route("/auth/logout", axum::routing::post(crate::sso_login::logout))
+        .route(
+            "/auth/cli-token",
+            axum::routing::post(crate::sso_login::cli_token),
+        )
         // Without the key: the SDK sends none with an upload. The node
         // checks the token its authenticated link carried.
         .route(
@@ -1076,7 +1108,69 @@ async fn require_api_key(
         "TRACE" => "TRACE",
         _ => "OTHER",
     };
-    let (kind, key_id, mut rejection, principal, team, administrator) = {
+    // A session -- a bearer token, or the cookie a browser sends by itself --
+    // is tried before a key. A cookie may only change something when the
+    // request came from this control plane's own pages: sandbox pages are on
+    // the same site, and SameSite=Lax still sends it with their POSTs.
+    let sso = control.sso();
+    let session = sso.as_ref().and_then(|sso| {
+        let (token, from_cookie) = crate::sso_login::session_token(request.headers())?;
+        Some((sso.member_for(token), from_cookie))
+    });
+    let (kind, key_id, mut rejection, principal, team, administrator) = if let Some((
+        member,
+        from_cookie,
+    )) = session
+    {
+        match member {
+            Some((member, expires_at)) => {
+                let policy = crate::keys::ApiKeyPolicy::for_member(&member, expires_at);
+                let origin = sso.as_ref().map_or("", |sso| sso.origin());
+                let rejection = if from_cookie
+                    && !crate::sso_login::same_origin(request.method(), request.headers(), origin)
+                {
+                    Some(api_error(
+                        StatusCode::FORBIDDEN,
+                        "a change made with the session cookie must come from this control plane's own pages",
+                    ))
+                } else if !policy.permits(request.method(), request.uri().path()) {
+                    Some(api_error(
+                        StatusCode::FORBIDDEN,
+                        "this member's scopes do not permit this operation",
+                    ))
+                } else {
+                    None
+                };
+                let key_id = {
+                    use sha2::{Digest, Sha256};
+                    Sha256::digest(member.email.as_bytes())[..8]
+                        .iter()
+                        .map(|byte| format!("{byte:02x}"))
+                        .collect::<String>()
+                };
+                let administrator = rejection.is_none() && policy.is_administrator();
+                (
+                    "session",
+                    key_id,
+                    rejection,
+                    policy.principal_id().cloned(),
+                    policy.team_id().cloned(),
+                    administrator,
+                )
+            }
+            None => (
+                "session",
+                "invalid".into(),
+                Some(api_error(
+                    StatusCode::UNAUTHORIZED,
+                    "the session has expired, is not valid, or its member was removed",
+                )),
+                None,
+                None,
+                false,
+            ),
+        }
+    } else {
         let policies = control.api_keys.read();
         let (kind, key_id, rejection) = authorize(&control.config, &policies, &request);
         let matched = (kind == "scoped" && rejection.is_none())
@@ -1100,6 +1194,15 @@ async fn require_api_key(
         let team = matched.as_ref().and_then(|p| p.team_id()).cloned();
         let administrator = rejection.is_none()
             && (kind == "legacy_admin" || matched.as_ref().is_some_and(|p| p.is_administrator()));
+        // With sign-on configured nobody is anonymous, keys or no keys.
+        let rejection = if sso.is_some() && kind == "anonymous" && rejection.is_none() {
+            Some(api_error(
+                StatusCode::UNAUTHORIZED,
+                "sign in at /auth/login, or send an X-API-Key",
+            ))
+        } else {
+            rejection
+        };
         (kind, key_id, rejection, principal, team, administrator)
     };
     // Authentication supplies this context. A client cannot choose its owner

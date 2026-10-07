@@ -1,0 +1,58 @@
+{
+  "success": true,
+  "purpose": "functional verification of SSO with the shipped binaries",
+  "input_sha256": {
+    "control": "d69aecbb58622d8146baad987db2690051ad9977d5c7187de148ad19d2dd46da",
+    "cli": "ee94ba5bffc9c4cd9bb128050bcb4ec8315b33a4813cb07a32c0a31f7eaa6abb",
+    "driver": "5489392dc4bc107ddb6df81f14221aeaaf66a8d06b8f51cb46cd385b755a1d9c"
+  },
+  "cases": [
+    {
+      "name": "nobody is anonymous with SSO on",
+      "success": true,
+      "detail": {
+        "status": 401
+      }
+    },
+    {
+      "name": "a browser sign-in ends in a session the API admits",
+      "success": true,
+      "detail": {
+        "email": "alice@example.com",
+        "cookie_attributes": "Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=43200"
+      }
+    },
+    {
+      "name": "a cookie change needs this control plane's Origin",
+      "success": true,
+      "detail": {
+        "no_origin": 403,
+        "sandbox_origin": 403,
+        "own_origin": 503
+      }
+    },
+    {
+      "name": "a provider identity that is not a member gets no session",
+      "success": true,
+      "detail": {
+        "status": 403
+      }
+    },
+    {
+      "name": "hm sandbox vm login keeps a session the CLI uses, and logout forgets it",
+      "success": true,
+      "detail": {
+        "email": "alice@example.com",
+        "session_file_mode": "0o600",
+        "after_logout": "401"
+      }
+    },
+    {
+      "name": "removing the member ends the session on reload",
+      "success": true,
+      "detail": {
+        "status": 401
+      }
+    }
+  ]
+}
