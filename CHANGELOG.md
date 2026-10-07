@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `reboot` hung MMIO guests. On the hardware-reduced ACPI platform, Linux
+  reboots through EFI and, with no EFI, spins in a BIOS jump. Guests now boot
+  with `reboot=k`, and the VM stops on the i8042 reset pulse. Sandbox guests
+  also boot with `panic=1`.
+
 ### Added
+- Sandboxes reboot in place. A guest that runs `reboot`, panics or triple-faults
+  comes back within about a second, with the same ID, token, URL, network policy,
+  volumes, disk and `envVars`. There is also `POST /sandboxes/{id}/reboot`. A
+  sandbox rebooted five times in 60 s is ended as lost. See `docs/REBOOT.md`.
 - Movable block disks: a file-backed virtio-blk device (`VM::attach_block`), and
   node-level `POST/GET/DELETE /disks` with `"diskMount"` on sandbox create. Each
   disk is ext4-formatted and held by one sandbox at a time, then released when

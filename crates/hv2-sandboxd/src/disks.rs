@@ -88,6 +88,9 @@ pub(crate) struct Meta {
     /// when that is believed.
     #[serde(rename = "attachedTo", default)]
     attached_to: Option<String>,
+    /// Where that sandbox mounts it, so a reboot can mount it there again.
+    #[serde(rename = "mountPath", default, skip_serializing_if = "Option::is_none")]
+    mount_path: Option<String>,
 }
 
 impl Meta {
@@ -210,6 +213,7 @@ pub(crate) async fn create(
         name: req.name,
         size_mib: req.size_mib,
         attached_to: None,
+        mount_path: None,
     };
     let state2 = Arc::clone(&state);
     let made = tokio::task::spawn_blocking(move || make(&state2, &meta).map(|()| meta))
@@ -383,6 +387,7 @@ pub(crate) fn claim(
         ));
     }
     meta.attached_to = Some(sandbox_id.to_string());
+    meta.mount_path = Some(mount.path.clone());
     write_meta(state, &meta).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -412,6 +417,7 @@ pub(crate) fn release(state: &AppState, sandbox_id: &str) {
     for mut meta in all(state) {
         if meta.attached_to.as_deref() == Some(sandbox_id) {
             meta.attached_to = None;
+            meta.mount_path = None;
             if let Err(e) = write_meta(state, &meta) {
                 // Still free: the claim is believed only while held.
                 tracing::warn!("releasing disk {}: {e}", meta.name);
@@ -419,6 +425,28 @@ pub(crate) fn release(state: &AppState, sandbox_id: &str) {
         }
     }
     set_held(sandbox_id, false);
+}
+
+/// The disk `sandbox_id` already holds, to attach to its next guest: what a
+/// reboot boots with. Dropping it gives nothing back; the sandbox's end does.
+pub(crate) fn reattach(state: &Arc<AppState>, sandbox_id: &str) -> Option<Claim> {
+    if !held(sandbox_id) {
+        return None;
+    }
+    let _lock = LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let meta = all(state)
+        .into_iter()
+        .find(|m| m.attached_to.as_deref() == Some(sandbox_id))?;
+    Some(Claim {
+        state: Arc::clone(state),
+        sandbox_id: sandbox_id.to_string(),
+        image: image(state, &meta.id),
+        path: meta.mount_path.clone()?,
+        serial: meta.id,
+        kept: true,
+    })
 }
 
 /// Whether `sandbox_id` holds a disk, for the operations it rules out.
@@ -479,6 +507,7 @@ mod tests {
             name: "x".into(),
             size_mib: 16,
             attached_to: Some("sbx-from-a-dead-daemon".into()),
+            mount_path: Some("/data".into()),
         };
         assert_eq!(meta.holder(), None, "a claim nobody holds is stale");
         set_held("sbx-from-a-dead-daemon", true);
