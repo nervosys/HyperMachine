@@ -59,7 +59,16 @@ policy](API_KEY_ROTATION.md), keyed by email instead of a key digest:
   and back to `/auth/callback`, which sets the session cookie and returns to the
   page asked for. `GET /auth/session` says who you are; `POST /auth/logout` clears
   the cookie.
-- **Scripts:** send the session token as `Authorization: Bearer hms1.…`.
+- **The CLI:** `hm sandbox vm login` prints a sign-in URL and opens it (pass
+  `--no-browser` to only print it). After you sign in, the browser lands on a
+  listener the CLI opened on `127.0.0.1`. The CLI trades the one-time code it
+  receives, together with a PKCE verifier that never leaves the process, for a
+  session token at `/auth/cli-token`. A code seen in transit is useless without
+  the verifier, and it expires in a minute. The token is kept per control plane
+  in `sessions.json` beside the CLI's other state (mode 0600 on Unix) and sent
+  as a bearer token whenever `HV2_API_KEY` is not set. `hm sandbox vm logout`
+  forgets it.
+- **Scripts:** send a session token as `Authorization: Bearer hms1.…`.
 
 ## What it protects against
 
@@ -82,7 +91,6 @@ policy](API_KEY_ROTATION.md), keyed by email instead of a key digest:
 
 ## Not yet
 
-- **`hm login` for the CLI.** Until then, scripts use an API key.
 - **Private guest URLs (`{port}-{sandbox}.domain`).** These still use their own
   Basic credentials. Sharing the session with them needs the proxy to strip the
   cookie before it reaches the guest.

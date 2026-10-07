@@ -13,6 +13,12 @@
 //!   file. A member gets a session cookie; anyone else, nothing.
 //! - `GET /auth/session` says who the session is; `POST /auth/logout` clears
 //!   the cookie.
+//! - `hm login` uses the same flow with `cliPort` and `cliChallenge`: the
+//!   callback sends the browser on to the CLI's listener on `127.0.0.1` with
+//!   a sealed one-time code instead of setting a cookie, and the CLI trades
+//!   code and PKCE verifier for a session token at `POST /auth/cli-token`. A
+//!   code seen on its way to the CLI is useless without the verifier, and
+//!   expires in a minute.
 //!
 //! The session cookie is `__Host-hm_session`: `Secure`, `HttpOnly`, `Path=/`,
 //! no `Domain`, `SameSite=Lax`. Host-only, so sandbox hosts under the same
@@ -49,6 +55,8 @@ pub const SESSION_COOKIE: &str = "__Host-hm_session";
 pub const LOGIN_COOKIE: &str = "__Host-hm_login";
 /// How long a login may take at the provider.
 const LOGIN_TTL_SECS: i64 = 600;
+/// How long the CLI has to trade its one-time code for a session.
+const CLI_CODE_TTL_SECS: i64 = 60;
 /// The least time between two JWKS fetches for an unknown `kid`.
 const JWKS_REFETCH: Duration = Duration::from_secs(60);
 
@@ -326,6 +334,24 @@ struct Pending {
     #[serde(rename = "returnTo")]
     return_to: String,
     exp: i64,
+    /// For `hm login`: the port its loopback listener is on, and the PKCE
+    /// challenge it will answer at `/auth/cli-token`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cli: Option<CliLogin>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct CliLogin {
+    port: u16,
+    challenge: String,
+}
+
+/// The one-time code a CLI login ends in.
+#[derive(Serialize, Deserialize)]
+struct CliCode {
+    email: String,
+    challenge: String,
+    exp: i64,
 }
 
 /// A path to return to after signing in: this control plane's own, never
@@ -350,6 +376,33 @@ fn safe_return(path: Option<&str>) -> String {
 pub(crate) struct LoginQuery {
     #[serde(rename = "returnTo")]
     return_to: Option<String>,
+    #[serde(rename = "cliPort")]
+    cli_port: Option<u16>,
+    #[serde(rename = "cliChallenge")]
+    cli_challenge: Option<String>,
+}
+
+/// A CLI login's parameters, if the request is one: an unprivileged port
+/// and a challenge shaped like a base64url SHA-256.
+fn cli_login(query: &LoginQuery) -> Result<Option<CliLogin>, &'static str> {
+    match (query.cli_port, &query.cli_challenge) {
+        (None, None) => Ok(None),
+        (Some(port), Some(challenge))
+            if port >= 1024
+                && challenge.len() == 43
+                && challenge
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') =>
+        {
+            Ok(Some(CliLogin {
+                port,
+                challenge: challenge.clone(),
+            }))
+        }
+        _ => Err(
+            "cliPort and cliChallenge go together: a port from 1024, a 43-character S256 challenge",
+        ),
+    }
 }
 
 /// `GET /auth/login`.
@@ -359,6 +412,10 @@ pub(crate) async fn login(
 ) -> Response {
     let Some(sso) = control.sso() else {
         return not_configured();
+    };
+    let cli = match cli_login(&query) {
+        Ok(cli) => cli,
+        Err(message) => return error(StatusCode::BAD_REQUEST, message),
     };
     let tokens = (random_token(32), random_token(32), random_token(32));
     let (Ok(state), Ok(nonce), Ok(verifier)) = tokens else {
@@ -371,6 +428,7 @@ pub(crate) async fn login(
         verifier,
         return_to: safe_return(query.return_to.as_deref()),
         exp: now() + LOGIN_TTL_SECS,
+        cli,
     };
     let Ok(sealed) = sso.key.seal("hml1", &pending) else {
         return error(StatusCode::INTERNAL_SERVER_ERROR, "sealing the login");
@@ -493,6 +551,31 @@ pub(crate) async fn callback(
             "signed in, but not a member of this control plane",
         );
     }
+    if let Some(cli) = pending.cli {
+        // On to the CLI on this machine, with a code only its verifier opens.
+        let code = CliCode {
+            email: identity.email.clone(),
+            challenge: cli.challenge,
+            exp: now() + CLI_CODE_TTL_SECS,
+        };
+        let Ok(sealed) = sso.key.seal("hmc1", &code) else {
+            return error(StatusCode::INTERNAL_SERVER_ERROR, "sealing the CLI code");
+        };
+        tracing::info!("SSO: {} signed in for the CLI", identity.email);
+        let mut response = StatusCode::SEE_OTHER.into_response();
+        let headers = response.headers_mut();
+        headers.insert(
+            header::LOCATION,
+            HeaderValue::from_str(&format!(
+                "http://127.0.0.1:{}/callback?code={sealed}",
+                cli.port
+            ))
+            .expect("a port and base64url"),
+        );
+        headers.insert(header::SET_COOKIE, cookie(LOGIN_COOKIE, "", 0));
+        headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+        return response;
+    }
     let ttl = i64::try_from(sso.config.session_ttl.as_secs()).unwrap_or(i64::MAX);
     let Ok(session) = sso.key.mint(&identity.email, now(), ttl) else {
         return error(StatusCode::INTERNAL_SERVER_ERROR, "minting the session");
@@ -508,6 +591,62 @@ pub(crate) async fn callback(
     headers.append(header::SET_COOKIE, cookie(LOGIN_COOKIE, "", 0));
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
+}
+
+#[derive(Deserialize)]
+pub(crate) struct CliTokenRequest {
+    code: String,
+    verifier: String,
+}
+
+/// `POST /auth/cli-token`: a CLI login's code and verifier, for a session
+/// token. The member is looked up again: one removed since signing in gets
+/// nothing.
+pub(crate) async fn cli_token(
+    State(control): State<Arc<ControlPlane>>,
+    Json(request): Json<CliTokenRequest>,
+) -> Response {
+    let Some(sso) = control.sso() else {
+        return not_configured();
+    };
+    let Some(code) = sso
+        .key
+        .open::<CliCode>("hmc1", &request.code)
+        .ok()
+        .filter(|code| code.exp > now())
+    else {
+        return error(
+            StatusCode::UNAUTHORIZED,
+            "the sign-in code is not valid or has expired",
+        );
+    };
+    let answered = URL_SAFE_NO_PAD.encode(sha256(request.verifier.as_bytes()));
+    if !bool::from(subtle::ConstantTimeEq::ct_eq(
+        answered.as_bytes(),
+        code.challenge.as_bytes(),
+    )) {
+        return error(
+            StatusCode::UNAUTHORIZED,
+            "the verifier does not answer this sign-in",
+        );
+    }
+    if sso.members.read().get(&code.email).is_none() {
+        return error(
+            StatusCode::FORBIDDEN,
+            "no longer a member of this control plane",
+        );
+    }
+    let ttl = i64::try_from(sso.config.session_ttl.as_secs()).unwrap_or(i64::MAX);
+    let issued = now();
+    match sso.key.mint(&code.email, issued, ttl) {
+        Ok(token) => Json(json!({
+            "token": token,
+            "email": code.email,
+            "expiresAt": issued + ttl,
+        }))
+        .into_response(),
+        Err(_) => error(StatusCode::INTERNAL_SERVER_ERROR, "minting the session"),
+    }
 }
 
 /// `GET /auth/session`: who the session is.
@@ -599,6 +738,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_cli_login_needs_both_parameters_well_formed() {
+        let query = |port: Option<u16>, challenge: Option<&str>| LoginQuery {
+            return_to: None,
+            cli_port: port,
+            cli_challenge: challenge.map(str::to_string),
+        };
+        let good = URL_SAFE_NO_PAD.encode([1u8; 32]);
+        assert!(cli_login(&query(None, None)).unwrap().is_none());
+        assert_eq!(
+            cli_login(&query(Some(49152), Some(&good)))
+                .unwrap()
+                .unwrap()
+                .port,
+            49152
+        );
+        for bad in [
+            query(Some(49152), None),
+            query(None, Some(&good)),
+            query(Some(80), Some(&good)),
+            query(Some(49152), Some("short")),
+            query(Some(49152), Some(&format!("{}!", &good[..42]))),
+        ] {
+            assert!(cli_login(&bad).is_err());
+        }
+    }
+
+    #[test]
     fn only_this_control_planes_own_paths_are_returned_to() {
         assert_eq!(safe_return(Some("/sandboxes")), "/sandboxes");
         for hostile in [
@@ -622,6 +788,7 @@ mod tests {
             verifier: "v".into(),
             return_to: "/ui".into(),
             exp: 10,
+            cli: None,
         };
         let sealed = key.seal("hml1", &pending).unwrap();
         let opened: Pending = key.open("hml1", &sealed).unwrap();

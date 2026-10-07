@@ -20,7 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with their scopes, role, principal and team. ID tokens are checked with
   RS256 or ES256 through IronCrypto. Cookie-authenticated changes must come
   from the control plane's own origin, and nobody is anonymous once SSO is on.
-  See `docs/SSO.md`.
+  `hm sandbox vm login` signs the CLI in through a loopback listener and keeps
+  the session per endpoint. See `docs/SSO.md`.
 - Teams. An API key policy may name a `team_id`. Each sandbox is then recorded
   in its creator's team, and a key reaches every sandbox in its team by role,
   and none outside it, on every sandbox route, the inventory, metrics and

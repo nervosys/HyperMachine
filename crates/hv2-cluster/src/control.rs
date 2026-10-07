@@ -322,6 +322,10 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/auth/callback", get(crate::sso_login::callback))
         .route("/auth/session", get(crate::sso_login::session))
         .route("/auth/logout", axum::routing::post(crate::sso_login::logout))
+        .route(
+            "/auth/cli-token",
+            axum::routing::post(crate::sso_login::cli_token),
+        )
         // Without the key: the SDK sends none with an upload. The node
         // checks the token its authenticated link carried.
         .route(

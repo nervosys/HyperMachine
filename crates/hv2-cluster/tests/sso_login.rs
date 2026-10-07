@@ -472,3 +472,90 @@ async fn a_provider_naming_another_issuer_is_refused_at_startup() {
     .await;
     assert!(result.unwrap_err().contains("must be HTTPS"));
 }
+
+/// `hm login`'s flow: the callback hands the CLI's listener a one-time code,
+/// which only the CLI's verifier trades for a session token.
+#[tokio::test]
+async fn a_cli_login_trades_its_code_and_verifier_for_a_session() {
+    use sha2::Digest;
+    let provider = spawn_provider().await;
+    let cluster = spawn_cluster(&provider).await;
+    let verifier = "a-cli-verifier-that-is-long-enough-to-be-unguessable-0123456789";
+    let challenge = URL_SAFE_NO_PAD.encode(sha2::Sha256::digest(verifier.as_bytes()));
+    let login = cluster
+        .client
+        .get(format!(
+            "{}/auth/login?cliPort=49231&cliChallenge={challenge}",
+            cluster.base
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(login.status(), 303);
+    let pending = set_cookie(&login, "__Host-hm_login").unwrap();
+    let back = cluster
+        .client
+        .get(login.headers()[header::LOCATION].to_str().unwrap())
+        .send()
+        .await
+        .unwrap();
+    let callback = reqwest::Url::parse(back.headers()[header::LOCATION].to_str().unwrap()).unwrap();
+    let query: std::collections::HashMap<_, _> = callback.query_pairs().into_owned().collect();
+    let response = cluster
+        .client
+        .get(format!(
+            "{}/auth/callback?code={}&state={}",
+            cluster.base, query["code"], query["state"]
+        ))
+        .header(header::COOKIE, format!("__Host-hm_login={pending}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 303);
+    assert!(
+        set_cookie(&response, "__Host-hm_session").is_none(),
+        "a CLI login sets no browser session"
+    );
+    let to_cli =
+        reqwest::Url::parse(response.headers()[header::LOCATION].to_str().unwrap()).unwrap();
+    assert_eq!(to_cli.host_str(), Some("127.0.0.1"));
+    assert_eq!(to_cli.port(), Some(49231));
+    let code = to_cli
+        .query_pairs()
+        .find(|(k, _)| k == "code")
+        .unwrap()
+        .1
+        .into_owned();
+
+    let trade = |verifier: &str| {
+        cluster
+            .client
+            .post(format!("{}/auth/cli-token", cluster.base))
+            .json(&json!({"code": code, "verifier": verifier}))
+            .send()
+    };
+    assert_eq!(trade("someone-elses-verifier").await.unwrap().status(), 401);
+    let issued: Value = trade(verifier).await.unwrap().json().await.unwrap();
+    assert_eq!(issued["email"], "alice@example.com");
+    let token = issued["token"].as_str().unwrap();
+    assert_eq!(
+        cluster
+            .client
+            .get(format!("{}/sandboxes", cluster.base))
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    // A session token is not a CLI code.
+    let response = cluster
+        .client
+        .post(format!("{}/auth/cli-token", cluster.base))
+        .json(&json!({"code": token, "verifier": verifier}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 401);
+}
