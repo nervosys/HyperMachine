@@ -560,7 +560,7 @@ async fn main() -> std::process::ExitCode {
                                     );
                                 }
                                 Err(_) => {
-                                    eprintln!("hv2-control-plane: SSO members reload task failed")
+                                    eprintln!("hv2-control-plane: SSO members reload task failed");
                                 }
                             }
                         }
