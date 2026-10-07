@@ -16,6 +16,7 @@ use super::{
     api_error, now_ms, transition_lock, valid_template_name, AppState, Arc, BTreeMap, Deserialize,
     Duration, IntoResponse, Json, Path, Query, Response, Serialize, State, StatusCode,
 };
+use hv2_cluster::ownership::TeamId;
 use serde_json::json;
 
 /// A snapshot offered as a template.
@@ -25,6 +26,9 @@ pub(crate) struct Snapshot {
     pub file: std::path::PathBuf,
     pub sandbox_id: String,
     pub created_ms: u64,
+    /// The team of the sandbox it was taken from: the only team that may
+    /// use it. `None` for an operator's, which every team may use.
+    pub team: Option<TeamId>,
     /// Deleted with the last reference: one taken on a node with no store.
     /// A store's are deleted by `DELETE /templates/{id}` only.
     owned: bool,
@@ -48,6 +52,8 @@ struct Record {
     sandbox_id: String,
     #[serde(rename = "createdAt")]
     created_ms: u64,
+    #[serde(rename = "teamID", default, skip_serializing_if = "Option::is_none")]
+    team: Option<TeamId>,
 }
 
 pub(crate) use hv2_cluster::model::untagged;
@@ -96,15 +102,17 @@ pub(crate) async fn create(
         Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     };
 
-    let base = {
+    let (base, team) = {
         let lock = transition_lock(&state, &sandbox_id);
         let _held = lock.lock().await;
-        let source = state
-            .sandboxes
-            .lock()
-            .get(&sandbox_id)
-            .map(|live| (Arc::clone(&live.vm), live.record.template_id.clone()));
-        let Some((vm, base)) = source else {
+        let source = state.sandboxes.lock().get(&sandbox_id).map(|live| {
+            (
+                Arc::clone(&live.vm),
+                live.record.template_id.clone(),
+                live.record.team_id.clone(),
+            )
+        });
+        let Some((vm, base, team)) = source else {
             return if state.paused.lock().contains_key(&sandbox_id) {
                 api_error(
                     StatusCode::CONFLICT,
@@ -120,6 +128,15 @@ pub(crate) async fn create(
                 "snapshots need sandboxes restored from a template, and this one was booted",
             );
         }
+        // Names are one namespace, so a team cannot take over another's:
+        // replacing a snapshot is for the team that owns it.
+        if lookup(&state, &name).is_some_and(|existing| existing.team != team) {
+            let _ = std::fs::remove_file(&file);
+            return api_error(
+                StatusCode::CONFLICT,
+                format!("the snapshot name {name} is taken"),
+            );
+        }
         let started = std::time::Instant::now();
         if let Err(e) = vm.checkpoint_to(&file).await {
             let _ = std::fs::remove_file(&file);
@@ -129,9 +146,9 @@ pub(crate) async fn create(
             );
         }
         state.metrics.checkpoint_latency.observe(started.elapsed());
-        base
+        (base, team)
     };
-    if let Err(e) = keep(&state, &name, base, file, sandbox_id).await {
+    if let Err(e) = keep(&state, &name, base, file, sandbox_id, team).await {
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, e);
     }
     tracing::info!("snapshot {name} taken");
@@ -158,12 +175,14 @@ pub(crate) async fn keep(
     base: String,
     file: std::path::PathBuf,
     sandbox_id: String,
+    team: Option<TeamId>,
 ) -> Result<(), String> {
     let snapshot = Snapshot {
         base,
         file,
         sandbox_id,
         created_ms: now_ms(),
+        team,
         owned: state.store.is_none(),
     };
     if let (Some(_), Some(dir)) = (&state.store, snapshot.file.parent()) {
@@ -176,6 +195,7 @@ pub(crate) async fn keep(
                 .unwrap_or_default(),
             sandbox_id: snapshot.sandbox_id.clone(),
             created_ms: snapshot.created_ms,
+            team: snapshot.team.clone(),
         };
         if let Err(e) = publish(dir, name, &record) {
             let _ = std::fs::remove_file(&snapshot.file);
@@ -239,6 +259,7 @@ pub(crate) async fn list(
             entry["sandboxID"] = json!(s.sandbox_id);
             entry["templateID"] = json!(s.base);
             entry["createdAt"] = json!(s.created_ms);
+            entry["teamID"] = json!(s.team);
             entry
         })
         .collect();
@@ -299,6 +320,7 @@ pub(crate) fn lookup(state: &AppState, name: &str) -> Option<Arc<Snapshot>> {
         file: dir.join(&record.file),
         sandbox_id: record.sandbox_id,
         created_ms: record.created_ms,
+        team: record.team,
         owned: false,
     });
     state
@@ -356,6 +378,7 @@ pub(crate) async fn follow_store(state: Arc<AppState>) {
                         file,
                         sandbox_id: record.sandbox_id,
                         created_ms: record.created_ms,
+                        team: record.team,
                         owned: false,
                     }),
                 );
@@ -367,5 +390,29 @@ pub(crate) async fn follow_store(state: Arc<AppState>) {
             super::advertise_templates(&state);
         }
         tokio::time::sleep(Duration::from_secs(2)).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A record written before teams is an operator's snapshot; a team's
+    /// round-trips with its team.
+    #[test]
+    fn a_snapshot_record_carries_its_team_and_older_ones_have_none() {
+        let old: Record = serde_json::from_str(
+            r#"{"base":"base","file":"a.snap","sandboxID":"sbx","createdAt":1}"#,
+        )
+        .unwrap();
+        assert!(old.team.is_none());
+        let red = Record {
+            team: Some(TeamId::parse("red").unwrap()),
+            ..old
+        };
+        let written = serde_json::to_string(&red).unwrap();
+        assert!(written.contains(r#""teamID":"red""#));
+        let back: Record = serde_json::from_str(&written).unwrap();
+        assert_eq!(back.team, red.team);
     }
 }

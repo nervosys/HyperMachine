@@ -786,7 +786,15 @@ async fn steps_then_snapshot(
             let file = snapshots::new_file(state, cache)?;
             let started = Instant::now();
             vm.checkpoint_to(&file).await.map_err(|e| e.to_string())?;
-            snapshots::keep(state, cache, base.to_string(), file, sandbox_id.to_string()).await?;
+            snapshots::keep(
+                state,
+                cache,
+                base.to_string(),
+                file,
+                sandbox_id.to_string(),
+                None,
+            )
+            .await?;
             Ok::<_, String>(started.elapsed())
         }
         .await;
@@ -949,6 +957,7 @@ async fn finalize(
         base.to_string(),
         file,
         sandbox_id.to_string(),
+        None,
     )
     .await
     .map_err(&finalize)?;

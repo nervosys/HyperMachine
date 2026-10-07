@@ -1031,15 +1031,12 @@ fn shared_across_teams(route: &str, method: &axum::http::Method) -> bool {
     use axum::http::Method;
     match route {
         "/templates" => *method != Method::GET && *method != Method::HEAD,
-        "/sandboxes/{id}/snapshots" | "/cluster/events" => true,
-        _ => [
-            "/snapshots",
-            "/templates/{id}",
-            "/v2/templates",
-            "/v3/templates",
-        ]
-        .iter()
-        .any(|prefix| route.starts_with(prefix)),
+        // A team deletes its own snapshots; see `delete_template`.
+        "/templates/{id}" => *method != Method::DELETE,
+        "/cluster/events" => true,
+        _ => ["/templates/{id}/", "/v2/templates", "/v3/templates"]
+            .iter()
+            .any(|prefix| route.starts_with(prefix)),
     }
 }
 #[derive(Clone, Copy)]
@@ -1442,7 +1439,11 @@ async fn create_inner(
                 .map(str::to_string)
         })
         .unwrap_or_else(|| "base".to_string());
-    let nodes: Vec<_> = nodes.into_iter().filter(|n| n.offers(&template)).collect();
+    let requester = crate::ownership::RequestTeam(team.cloned());
+    let nodes: Vec<_> = nodes
+        .into_iter()
+        .filter(|n| n.offers_to(&template, &requester))
+        .collect();
     if nodes.is_empty() {
         return api_error(
             StatusCode::NOT_FOUND,
@@ -2405,7 +2406,10 @@ async fn metrics(State(control): State<Arc<ControlPlane>>) -> Response {
 
 /// `GET /templates`: every template a live node offers, E2B's `Template`
 /// shape as far as the cluster knows it, with the nodes offering each.
-async fn templates(State(control): State<Arc<ControlPlane>>) -> Response {
+async fn templates(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(team): Extension<crate::ownership::RequestTeam>,
+) -> Response {
     let nodes = match control.store.nodes().await {
         Ok(nodes) => nodes,
         Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
@@ -2420,6 +2424,9 @@ async fn templates(State(control): State<Arc<ControlPlane>>) -> Response {
         };
         for name in names {
             let metadata = node.template_metadata.get(&name);
+            if !team.may_use_template(metadata.and_then(|m| m.team.as_ref())) {
+                continue;
+            }
             offered.entry(name).or_default().push((node, metadata));
         }
     }
@@ -2548,7 +2555,11 @@ async fn on_every_node(
 
 /// `GET /snapshots`: every live node's snapshots, once each -- nodes that
 /// share a snapshot store offer the same ones -- with the nodes offering it.
-async fn snapshots(State(control): State<Arc<ControlPlane>>, uri: axum::http::Uri) -> Response {
+async fn snapshots(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(team): Extension<crate::ownership::RequestTeam>,
+    uri: axum::http::Uri,
+) -> Response {
     let path = uri
         .path_and_query()
         .map_or("/snapshots", axum::http::uri::PathAndQuery::as_str);
@@ -2562,6 +2573,12 @@ async fn snapshots(State(control): State<Arc<ControlPlane>>, uri: axum::http::Ur
             continue;
         }
         for mut snapshot in answer.as_array().cloned().unwrap_or_default() {
+            let owner = snapshot["teamID"]
+                .as_str()
+                .and_then(|t| crate::ownership::TeamId::parse(t).ok());
+            if !team.may_use_template(owner.as_ref()) {
+                continue;
+            }
             let Some(id) = snapshot["snapshotID"].as_str().map(str::to_string) else {
                 continue;
             };
@@ -2580,9 +2597,27 @@ async fn snapshots(State(control): State<Arc<ControlPlane>>, uri: axum::http::Ur
 /// `DELETE /templates/{id}`: delete a snapshot wherever it is offered.
 async fn delete_template(
     State(control): State<Arc<ControlPlane>>,
+    Extension(team): Extension<crate::ownership::RequestTeam>,
     Path(id): Path<String>,
 ) -> Response {
-    let path = format!("/templates/{}", crate::model::untagged(&id));
+    let name = crate::model::untagged(&id);
+    // A team deletes its own snapshots and nothing else: not another
+    // team's, and not an operator's template every team uses.
+    if let Some(mine) = &team.0 {
+        let nodes = match control.store.nodes().await {
+            Ok(nodes) => nodes,
+            Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        };
+        let owned = nodes.iter().any(|node| {
+            node.template_metadata
+                .get(name)
+                .is_some_and(|info| info.team.as_ref() == Some(mine))
+        });
+        if !owned {
+            return api_error(StatusCode::NOT_FOUND, format!("no snapshot {id}"));
+        }
+    }
+    let path = format!("/templates/{name}");
     let answers = match on_every_node(&control, Method::DELETE, &path).await {
         Ok(answers) => answers,
         Err((status, message)) => return api_error(status, message),
@@ -2867,6 +2902,7 @@ async fn list_volumes(
 /// of that name.
 async fn template_alias(
     State(control): State<Arc<ControlPlane>>,
+    Extension(team): Extension<crate::ownership::RequestTeam>,
     Path(alias): Path<String>,
 ) -> Response {
     let nodes = match control.store.nodes().await {
@@ -2874,7 +2910,7 @@ async fn template_alias(
         Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
     };
     let name = crate::model::untagged(&alias);
-    if nodes.iter().any(|n| n.offers(name)) {
+    if nodes.iter().any(|n| n.offers_to(name, &team)) {
         Json(json!({ "templateID": name, "public": false })).into_response()
     } else {
         api_error(StatusCode::NOT_FOUND, format!("no template {name}"))

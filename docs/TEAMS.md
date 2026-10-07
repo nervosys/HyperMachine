@@ -45,6 +45,15 @@ on each key:
 | `/events/sandboxes` (all events) | its team's sandboxes' events | not listed |
 | Webhooks (`/events/webhooks…`) | the team's own: create, list, change, delete, deliveries | not there (404) |
 | Volumes (`/volumes…`, `volumeMounts`) | the team's own, by name | not there (404), and a mount by name finds only the team's |
+| Snapshots and templates (`/snapshots`, `/templates`, aliases, `templateID`) | the team's snapshots, plus every operator template | not listed, not startable (404), not deletable |
+
+A snapshot belongs to the team of the sandbox it was taken from, even when an
+administrator takes it, because it holds that sandbox's memory. Only that team
+lists it, starts sandboxes from it (an administrator cannot start a teamless
+copy either) and deletes it. Snapshot names are one namespace, so a name
+another team holds answers 409. Operator templates (`base`, images built by an
+administrator) belong to no team: every team may start from them, and only
+administrators delete them.
 
 A volume belongs to the team that created it. Its ID is derived from the team
 and the name, so two teams can each have a volume called `data`, and a
@@ -68,9 +77,8 @@ These resources are still shared by every team. Until each has a per-team
 namespace, team keys get 403 on them ("shared by every team"), and only
 administrators use them:
 
-- Snapshots (`/snapshots`, `POST /sandboxes/{id}/snapshots`)
-- Template builds and deletion (`POST /templates`, `/v2/templates`, `/v3/templates`,
-  `/templates/{id}…`). Reading `GET /templates` is allowed.
+- Building templates from images (`POST /templates`, `/v2/templates`,
+  `/v3/templates`, and build files and status under `/templates/{id}/…`)
 - `/cluster/events`, the operator's view of nodes and sandboxes together
 
 Also not done: single sign-on (keys are still operator-provisioned), team

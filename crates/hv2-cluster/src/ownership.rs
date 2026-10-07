@@ -83,6 +83,14 @@ impl RequestTeam {
     pub fn sees(&self, team: Option<&TeamId>) -> bool {
         self.0.as_ref().is_none_or(|mine| team == Some(mine))
     }
+
+    /// Whether a template belonging to `owner` may be used, listed or
+    /// started from: an operator's template (no owner) by every team, a
+    /// team's snapshot by that team alone.
+    #[must_use]
+    pub fn may_use_template(&self, owner: Option<&TeamId>) -> bool {
+        owner.is_none() || self.sees(owner)
+    }
 }
 
 /// Atomic legacy adoption; never transfers an existing owner or reservations.

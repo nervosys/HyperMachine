@@ -11,9 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Teams. An API key policy may name a `team_id`. Each sandbox is then recorded
   in its creator's team, and a key reaches every sandbox in its team by role,
   and none outside it, on every sandbox route, the inventory, metrics and
-  per-sandbox events. Resources still shared by every team (snapshots,
+  per-sandbox events. Resources still shared by every team (image
   template builds and cluster events) are refused to team keys until they are
   partitioned. Administrators stay global. See `docs/TEAMS.md`.
+- Snapshots per team. A snapshot belongs to its sandbox's team, which alone
+  lists it, starts from it and deletes it. Operator templates stay usable by
+  every team. Image builds remain administrator-only.
 - Volumes per team. A volume belongs to its creator's team, its ID is derived
   from team and name, the volume API shows a team only its own, and
   `volumeMounts` resolves names within the sandbox's team.

@@ -2365,6 +2365,17 @@ async fn create_sandbox(
     // pages copied in. Held until then: a delete meanwhile waits for it.
     let requested = snapshots::untagged(req.template_id.as_deref().unwrap_or("base")).to_string();
     let from_snapshot = snapshots::lookup(&state, &requested);
+    // A team's snapshot starts that team's sandboxes and no others -- not
+    // another team's, and not a teamless copy of its data.
+    if from_snapshot
+        .as_ref()
+        .is_some_and(|s| s.team.is_some() && s.team != team_id)
+    {
+        return api_error(
+            StatusCode::NOT_FOUND,
+            format!("template {requested:?} not found"),
+        );
+    }
     let template_id = from_snapshot
         .as_ref()
         .map_or_else(|| requested.clone(), |s| s.base.clone());
@@ -4323,6 +4334,7 @@ fn advertise_templates(state: &AppState) {
                     snapshot: state.templates.read().contains_key(&name),
                     cpu_count: sizes.cpus,
                     memory_mb: sizes.memory_mb,
+                    team: None,
                 };
                 (name, info)
             })
@@ -4331,9 +4343,9 @@ fn advertise_templates(state: &AppState) {
             .snapshots
             .read()
             .iter()
-            .map(|(name, snapshot)| (name.clone(), snapshot.base.clone()))
+            .map(|(name, snapshot)| (name.clone(), snapshot.base.clone(), snapshot.team.clone()))
             .collect();
-        for (name, base) in snapshots {
+        for (name, base, team) in snapshots {
             let sizes = sizes_of(state, &base);
             metadata.insert(
                 name,
@@ -4341,6 +4353,7 @@ fn advertise_templates(state: &AppState) {
                     snapshot: state.templates.read().contains_key(&base),
                     cpu_count: sizes.cpus,
                     memory_mb: sizes.memory_mb,
+                    team,
                 },
             );
         }
@@ -5301,6 +5314,7 @@ async fn main() -> std::process::ExitCode {
                                 snapshot: templates.contains_key(name),
                                 cpu_count: opts.cpu_cores,
                                 memory_mb: opts.memory_mb,
+                                team: None,
                             },
                         )
                     })
