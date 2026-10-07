@@ -141,6 +141,19 @@ pub fn volume_id(name: &str) -> String {
     )
 }
 
+/// The ID of `team`'s volume named `name`. Outside a team, [`volume_id`]
+/// itself; inside one, derived from the team too, so two teams each have
+/// their own volume of a name and neither can reach the other's by it.
+#[must_use]
+pub fn team_volume_id(team: Option<&crate::ownership::TeamId>, name: &str) -> String {
+    match team {
+        None => volume_id(name),
+        // A `/` is in no team label and no volume name, so no pair of them
+        // collides with another, or with a teamless name.
+        Some(team) => volume_id(&format!("{}/{name}", team.as_str())),
+    }
+}
+
 /// A volume, by name, mounted at a path in a sandbox: E2B's
 /// `SandboxVolumeMount`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -352,6 +365,28 @@ pub fn untagged(template: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
+    /// Two teams' volumes of one name are two volumes, and neither is the
+    /// teamless volume of that name.
+    #[test]
+    fn a_volume_id_is_per_team() {
+        use crate::ownership::TeamId;
+        let red = TeamId::parse("red").unwrap();
+        let blue = TeamId::parse("blue").unwrap();
+        assert_eq!(
+            super::team_volume_id(None, "data"),
+            super::volume_id("data")
+        );
+        let ids = [
+            super::team_volume_id(None, "data"),
+            super::team_volume_id(Some(&red), "data"),
+            super::team_volume_id(Some(&blue), "data"),
+        ];
+        assert_ne!(ids[0], ids[1]);
+        assert_ne!(ids[1], ids[2]);
+        assert_ne!(ids[0], ids[2]);
+        assert_eq!(super::team_volume_id(Some(&red), "data"), ids[1], "stable");
+    }
+
     use super::*;
 
     #[test]

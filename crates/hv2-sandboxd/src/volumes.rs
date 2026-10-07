@@ -12,6 +12,13 @@
 //!
 //! The content API resolves paths the way the 9P server does -- beneath
 //! the volume, no symlinks followed -- so it cannot be steered out either.
+//!
+//! A volume made for a team ([`hv2_cluster::ownership::TEAM_HEADER`], from
+//! an authenticated control plane) belongs to it: its ID is derived from the
+//! team and the name, the volume API shows it to that team only, and a
+//! sandbox mounts by name from its own team's volumes. Without the header --
+//! an administrator, or a deployment without teams -- every volume is in
+//! reach, as before.
 
 use std::os::fd::AsRawFd;
 use std::time::Duration;
@@ -22,6 +29,7 @@ use serde_json::{json, Value};
 
 use hv2_agent::AgentVM;
 use hv2_cluster::model::VolumeMount;
+use hv2_cluster::ownership::TeamId;
 
 use super::{
     api_error, new_access_token, AppState, Arc, Deserialize, IntoResponse, Json, Path, Query,
@@ -41,6 +49,33 @@ pub(crate) struct Meta {
     id: String,
     name: String,
     token: String,
+    /// The team it belongs to; `None` outside a multi-tenant deployment.
+    #[serde(rename = "teamID", default, skip_serializing_if = "Option::is_none")]
+    team: Option<TeamId>,
+}
+
+impl Meta {
+    /// Whether a caller acting for `team` may reach it: anyone without a
+    /// team reaches every volume, a team only its own.
+    fn reachable_by(&self, team: Option<&TeamId>) -> bool {
+        team.is_none_or(|team| self.team.as_ref() == Some(team))
+    }
+}
+
+/// The team the control plane says the caller acts for, if any.
+// The error is the reply, returned by the handler at once.
+#[allow(clippy::result_large_err)]
+fn caller_team(state: &AppState, headers: &HeaderMap) -> Result<Option<TeamId>, Response> {
+    super::creator_team(
+        headers,
+        state.node.is_some(),
+        state
+            .opts
+            .cluster_token
+            .as_ref()
+            .is_some_and(|token| !token.is_empty()),
+    )
+    .map_err(|(status, error)| api_error(status, error))
 }
 
 fn root(state: &AppState) -> std::path::PathBuf {
@@ -76,8 +111,12 @@ fn by_id(state: &AppState, id: &str) -> Option<Meta> {
     serde_json::from_slice(&bytes).ok()
 }
 
-fn by_name(state: &AppState, name: &str) -> Option<Meta> {
-    all(state).into_iter().find(|v| v.name == name)
+/// `team`'s volume named `name`. Names are unique within a team, and the
+/// same name in two teams is two volumes.
+fn by_name(state: &AppState, team: Option<&TeamId>, name: &str) -> Option<Meta> {
+    all(state)
+        .into_iter()
+        .find(|v| v.name == name && v.team.as_ref() == team)
 }
 
 /// E2B's pattern for a volume name, which an ID also meets.
@@ -147,21 +186,27 @@ pub(crate) struct NewVolume {
 /// `POST /volumes`.
 pub(crate) async fn create(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(req): Json<NewVolume>,
 ) -> Response {
+    let team = match caller_team(&state, &headers) {
+        Ok(team) => team,
+        Err(response) => return response,
+    };
     if !valid_name(&req.name) {
         return api_error(
             StatusCode::BAD_REQUEST,
             format!("volume name {:?}: letters, digits, _ and - only", req.name),
         );
     }
-    if by_name(&state, &req.name).is_some() {
+    if by_name(&state, team.as_ref(), &req.name).is_some() {
         return api_error(StatusCode::CONFLICT, format!("volume {} exists", req.name));
     }
     let meta = Meta {
-        id: hv2_cluster::model::volume_id(&req.name),
+        id: hv2_cluster::model::team_volume_id(team.as_ref(), &req.name),
         name: req.name,
         token: new_access_token(),
+        team,
     };
     let dir = root(&state).join(&meta.id);
     let made = create_metadata(&root(&state), &meta);
@@ -175,6 +220,33 @@ pub(crate) async fn create(
         );
     }
     (StatusCode::CREATED, Json(with_token(&meta))).into_response()
+}
+
+#[cfg(test)]
+mod team_tests {
+    use super::*;
+
+    /// A volume written before teams reads back as no team's, which only a
+    /// caller without a team reaches; a team reaches its own and no other.
+    #[test]
+    fn a_volume_is_reachable_by_its_team_and_by_callers_without_one() {
+        let old: Meta =
+            serde_json::from_str(r#"{"volumeID":"vol-1","name":"data","token":"t"}"#).unwrap();
+        assert!(old.team.is_none());
+        let red = TeamId::parse("red").unwrap();
+        let blue = TeamId::parse("blue").unwrap();
+        assert!(old.reachable_by(None));
+        assert!(!old.reachable_by(Some(&red)));
+        let reds = Meta {
+            team: Some(red.clone()),
+            ..old
+        };
+        assert!(reds.reachable_by(None));
+        assert!(reds.reachable_by(Some(&red)));
+        assert!(!reds.reachable_by(Some(&blue)));
+        let written = serde_json::to_value(&reds).unwrap();
+        assert_eq!(written["teamID"], "red");
+    }
 }
 
 #[cfg(test)]
@@ -231,6 +303,7 @@ mod creation_tests {
                 id: "vol-owned".into(),
                 name: "owned".into(),
                 token: "owned-token".into(),
+                team: None,
             };
             let mut stage = 0;
             let result = create_metadata_with_sync(&root, &meta, |_| {
@@ -272,6 +345,7 @@ mod creation_tests {
                         id: "vol-owned".into(),
                         name: "owned".into(),
                         token: index.to_string(),
+                        team: None,
                     };
                     barrier.wait();
                     (meta.token.clone(), create_metadata(&root, &meta))
@@ -304,6 +378,7 @@ mod creation_tests {
             id: "vol-owned".into(),
             name: "owned".into(),
             token: "replacement".into(),
+            team: None,
         };
         assert_eq!(
             create_metadata(&root, &duplicate).unwrap_err().kind(),
@@ -324,6 +399,7 @@ mod creation_tests {
             id: "vol-owned".into(),
             name: "owned".into(),
             token: "replacement".into(),
+            team: None,
         };
         assert_eq!(
             create_metadata(&root, &meta).unwrap_err().kind(),
@@ -339,27 +415,51 @@ mod creation_tests {
 }
 
 /// `GET /volumes`.
-pub(crate) async fn list(State(state): State<Arc<AppState>>) -> Response {
+pub(crate) async fn list(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    let team = match caller_team(&state, &headers) {
+        Ok(team) => team,
+        Err(response) => return response,
+    };
     let listed: Vec<Value> = all(&state)
         .iter()
-        .map(|m| json!({ "volumeID": m.id, "name": m.name }))
+        .filter(|m| m.reachable_by(team.as_ref()))
+        .map(|m| json!({ "volumeID": m.id, "name": m.name, "teamID": m.team }))
         .collect();
     Json(listed).into_response()
 }
 
+/// The volume `id`, if the caller's team may reach it. Another team's is
+/// not there, rather than forbidden.
+// The error is the reply, returned by the handler at once.
+#[allow(clippy::result_large_err)]
+fn reachable(state: &AppState, headers: &HeaderMap, id: &str) -> Result<Meta, Response> {
+    let team = caller_team(state, headers)?;
+    by_id(state, id)
+        .filter(|meta| meta.reachable_by(team.as_ref()))
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, format!("no volume {id}")))
+}
+
 /// `GET /volumes/{id}`.
-pub(crate) async fn get(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Response {
-    match by_id(&state, &id) {
-        Some(meta) => Json(with_token(&meta)).into_response(),
-        None => api_error(StatusCode::NOT_FOUND, format!("no volume {id}")),
+pub(crate) async fn get(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    match reachable(&state, &headers, &id) {
+        Ok(meta) => Json(with_token(&meta)).into_response(),
+        Err(response) => response,
     }
 }
 
 /// `DELETE /volumes/{id}`: the volume and its files. Sandboxes still
 /// mounting it see an empty directory from then on.
-pub(crate) async fn delete(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Response {
-    if by_id(&state, &id).is_none() {
-        return api_error(StatusCode::NOT_FOUND, format!("no volume {id}"));
+pub(crate) async fn delete(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    if let Err(response) = reachable(&state, &headers, &id) {
+        return response;
     }
     match std::fs::remove_dir_all(root(&state).join(&id)) {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
@@ -369,10 +469,14 @@ pub(crate) async fn delete(State(state): State<Arc<AppState>>, Path(id): Path<St
 
 /// The mounts a create asks for, checked before anything boots: each names
 /// a volume that exists, at an absolute path, no path twice.
-pub(crate) fn check(state: &AppState, mounts: &[VolumeMount]) -> Result<(), String> {
+pub(crate) fn check(
+    state: &AppState,
+    team: Option<&TeamId>,
+    mounts: &[VolumeMount],
+) -> Result<(), String> {
     let mut seen = std::collections::BTreeSet::new();
     for m in mounts {
-        if by_name(state, &m.name).is_none() {
+        if by_name(state, team, &m.name).is_none() {
             return Err(format!("no volume named {:?}", m.name));
         }
         let parts = ninep::components(&m.path).map_err(|_| format!("mount path {:?}", m.path))?;
@@ -391,12 +495,13 @@ pub(crate) fn check(state: &AppState, mounts: &[VolumeMount]) -> Result<(), Stri
 /// every mount is in the guest's mount table.
 pub(crate) async fn mount(
     state: &AppState,
+    team: Option<&TeamId>,
     vm: &Arc<AgentVM>,
     mounts: &[VolumeMount],
 ) -> Result<(), String> {
     for m in mounts {
         let meta =
-            by_name(state, &m.name).ok_or_else(|| format!("no volume named {:?}", m.name))?;
+            by_name(state, team, &m.name).ok_or_else(|| format!("no volume named {:?}", m.name))?;
         let fs = Beneath::open(&data_dir(state, &meta.id))
             .map_err(|e| format!("volume {}: {e}", m.name))?;
         let path = format!(

@@ -2846,6 +2846,170 @@ async fn resource_audit_correlates_decoded_targets_without_recording_path_values
     assert!(records[18].event.get("sandbox_ref").is_none());
 }
 
+/// The volume API reaches the node with the caller's team and never a
+/// client's; the volume list is the caller's team's.
+#[tokio::test]
+async fn volumes_carry_the_callers_team_and_list_only_its_own() {
+    use hv2_cluster::ownership::TEAM_HEADER;
+    use sha2::{Digest, Sha256};
+    struct Owned(tokio::task::JoinHandle<()>);
+    impl Drop for Owned {
+        fn drop(&mut self) {
+            self.0.abort();
+        }
+    }
+    let node_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let node_address = node_listener.local_addr().unwrap();
+    let observed = Arc::new(Mutex::new(Vec::<(String, Vec<String>)>::new()));
+    let calls = observed.clone();
+    let _node = Owned(tokio::spawn(async move {
+        axum::serve(
+            node_listener,
+            Router::new().fallback(move |uri: axum::http::Uri, headers: HeaderMap| {
+                let calls = calls.clone();
+                async move {
+                    let teams = headers
+                        .get_all(TEAM_HEADER)
+                        .iter()
+                        .map(|value| value.to_str().unwrap().to_owned())
+                        .collect();
+                    calls.lock().push((uri.path().to_owned(), teams));
+                    if uri.path() == "/volumes" {
+                        // Every volume on the node, as an administrator's
+                        // call would see them.
+                        return (
+                            StatusCode::OK,
+                            Json(json!([
+                                {"volumeID":"vol-red","name":"data","teamID":"red"},
+                                {"volumeID":"vol-blue","name":"data","teamID":"blue"},
+                                {"volumeID":"vol-none","name":"data"},
+                            ])),
+                        );
+                    }
+                    (StatusCode::OK, Json(json!({})))
+                }
+            }),
+        )
+        .await
+        .unwrap();
+    }));
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    store
+        .put_node(
+            &hv2_cluster::model::NodeInfo {
+                id: "volume-node".into(),
+                api: format!("http://{node_address}"),
+                proxy: node_address,
+                capacity: 8,
+                running: 0,
+                heartbeat_ms: now_ms(),
+                version: "fixture".into(),
+                jwk: None,
+                templates: vec!["base".into()],
+                template_metadata: Default::default(),
+            },
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
+    let digest = |key: &str| {
+        Sha256::digest(key.as_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    };
+    let expires = chrono::Utc::now().timestamp() + 60;
+    let policies = json!([
+        {"sha256":digest("red-key"),"expires_at":expires,"scopes":["volumes"],
+         "principal_id":"alice","team_id":"red"},
+        {"sha256":digest("admin-key"),"expires_at":expires,"scopes":["admin"]},
+    ]);
+    let control = ControlPlane::new(
+        store,
+        ControlConfig {
+            api_key: None,
+            api_keys: hv2_cluster::keys::ApiKeyPolicy::from_json(&policies.to_string()).unwrap(),
+            access_audit: None,
+            cluster_token: Some(TOKEN.into()),
+            proxy_port: 3000,
+            create_timeout: Duration::from_secs(5),
+            identity_issuer: None,
+        },
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let router = control::router(control.clone());
+    let _server = Owned(tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    }));
+    let volume_ids = |rows: Value| -> Vec<String> {
+        let mut ids: Vec<String> = rows
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["volumeID"].as_str().unwrap().to_owned())
+            .collect();
+        ids.sort();
+        ids
+    };
+    for (key, expected) in [
+        ("red-key", vec!["vol-red"]),
+        ("admin-key", vec!["vol-blue", "vol-none", "vol-red"]),
+    ] {
+        let response = client()
+            .get(format!("{base}/volumes"))
+            .header("x-api-key", key)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200, "{key}");
+        assert_eq!(
+            volume_ids(response.json().await.unwrap()),
+            expected,
+            "{key}"
+        );
+    }
+    observed.lock().clear();
+    for (key, path) in [
+        ("red-key", "/volumes"),
+        ("red-key", "/volumes/vol-red"),
+        ("admin-key", "/volumes/vol-blue"),
+    ] {
+        let request = if path == "/volumes" {
+            client()
+                .post(format!("{base}{path}"))
+                .json(&json!({"name":"data"}))
+        } else {
+            client().get(format!("{base}{path}"))
+        };
+        let status = request
+            .header("x-api-key", key)
+            .header(TEAM_HEADER, "blue")
+            .send()
+            .await
+            .unwrap()
+            .status();
+        assert_eq!(status, 200, "{key} {path}");
+    }
+    // The content API is the volume's token: no team, whatever the client sends.
+    client()
+        .get(format!("{base}/volumecontent/vol-red/file?path=/x"))
+        .header(TEAM_HEADER, "blue")
+        .send()
+        .await
+        .unwrap();
+    let seen = observed.lock().clone();
+    assert_eq!(
+        seen,
+        vec![
+            ("/volumes".to_owned(), vec!["red".to_owned()]),
+            ("/volumes/vol-red".to_owned(), vec!["red".to_owned()]),
+            ("/volumes/vol-blue".to_owned(), Vec::new()),
+            ("/volumecontent/vol-red/file".to_owned(), Vec::new()),
+        ]
+    );
+}
+
 /// A team key's create reaches the node carrying its team and principal,
 /// whatever team header the client sent; an administrator's carries none.
 #[tokio::test]
@@ -3771,7 +3935,6 @@ async fn team_keys_reach_their_whole_team_and_nothing_else() {
 
     // What every team shares is closed to team keys until it is partitioned.
     for (method, path) in [
-        (reqwest::Method::GET, "/volumes"),
         (reqwest::Method::GET, "/snapshots"),
         (reqwest::Method::POST, "/templates"),
         (reqwest::Method::POST, "/sandboxes/red-alice/snapshots"),

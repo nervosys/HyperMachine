@@ -12,7 +12,9 @@ Linux sandbox nodes expose persistent directories to guests using 9P over vsock.
 Create a volume through `POST /volumes` with `{"name":"workspace"}`, then use
 `"volumeMounts":[{"name":"workspace","path":"/workspace"}]` when creating a
 sandbox. Volume names accept letters, digits, underscores and hyphens, up to 64
-characters. The API returns the volume ID and its content access token.
+characters. The API returns the volume ID and its content access token. In a
+deployment with [teams](TEAMS.md), a volume belongs to its creator's team and
+names are unique within a team.
 
 Multiple guests can mount the same directory. Guest memory snapshots and forks
 do not copy volume data; mounts remain shared storage. This is directory sharing.
