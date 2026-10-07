@@ -26,7 +26,7 @@ cd "$REPO" || exit 1
 # twenty-minute one.
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/var/tmp/hm-target}"
 # hv2-api's build script needs this and WSL has no system protoc.
-export PROTOC="${PROTOC:-/var/tmp/protoc/bin/protoc}"
+export PROTOC="${PROTOC:-$(command -v protoc || echo /var/tmp/protoc/bin/protoc)}"
 
 # How many test-result lines a healthy run produces, derived rather than
 # observed:

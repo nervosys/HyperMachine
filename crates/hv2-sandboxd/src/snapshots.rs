@@ -91,6 +91,12 @@ pub(crate) async fn create(
             format!("{name} is a template built from an image, not a snapshot"),
         );
     }
+    if crate::disks::holds_one(&sandbox_id) {
+        return api_error(
+            StatusCode::CONFLICT,
+            format!("sandbox {sandbox_id} holds a disk, and a sandbox with a disk cannot be snapshotted"),
+        );
+    }
     let file = match new_file(&state, &name) {
         Ok(file) => file,
         Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, e),

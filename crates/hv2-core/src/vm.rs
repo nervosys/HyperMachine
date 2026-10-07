@@ -678,6 +678,11 @@ pub struct VM {
     /// guest transmits and hand it the ones addressed to it, and that
     /// something needs the device, not an MMIO handle.
     net: RwLock<Option<AttachedNet>>,
+    /// The block device attached by [`VM::attach_block`], if any.
+    ///
+    /// Held so its transport's state can be saved with a snapshot and put back
+    /// on restore, as the other two devices' are.
+    block: RwLock<Option<AttachedBlock>>,
     /// The raw image guest RAM is a private mapping of, when a restore mapped
     /// one. What [`Self::snapshot_layered`] records only the difference from.
     memory_base: parking_lot::Mutex<Option<std::path::PathBuf>>,
@@ -696,6 +701,12 @@ pub struct VM {
 /// travels with the device because the kernel argument has to name the window
 /// that was actually mapped.
 #[derive(Clone)]
+/// A block device and where the guest will find it.
+struct AttachedBlock {
+    device: Arc<parking_lot::Mutex<crate::devices::virtio_blk_mmio::VirtioBlockMmio>>,
+    transport: Arc<tokio::sync::RwLock<crate::devices::VirtioMmioTransport>>,
+}
+
 struct AttachedNet {
     device: Arc<parking_lot::Mutex<crate::devices::virtio_net_mmio::VirtioNetMmio>>,
     /// Kept so the host side can signal the used queue after it publishes.
@@ -860,6 +871,7 @@ impl VM {
             shared_roms: RwLock::new(Vec::new()),
             vsock: RwLock::new(None),
             net: RwLock::new(None),
+            block: RwLock::new(None),
             memory_base: parking_lot::Mutex::new(None),
         })
     }
@@ -1935,6 +1947,11 @@ impl VM {
         if let Some(transport) = net {
             states.push(transport.read().await.save_state());
         }
+
+        let block = self.block.read().as_ref().map(|a| a.transport.clone());
+        if let Some(transport) = block {
+            states.push(transport.read().await.save_state());
+        }
         states
     }
 
@@ -2093,6 +2110,7 @@ impl VM {
             _ => None,
         };
         let net = self.net.read().as_ref().map(|a| a.transport.clone());
+        let block = self.block.read().as_ref().map(|a| a.transport.clone());
 
         for state in states {
             let mut applied = false;
@@ -2104,6 +2122,14 @@ impl VM {
             }
             if !applied {
                 if let Some(transport) = net.as_ref() {
+                    if transport.read().await.name() == state.name {
+                        transport.read().await.restore_state(state)?;
+                        applied = true;
+                    }
+                }
+            }
+            if !applied {
+                if let Some(transport) = block.as_ref() {
                     if transport.read().await.name() == state.name {
                         transport.read().await.restore_state(state)?;
                         applied = true;
@@ -2935,6 +2961,114 @@ impl VM {
             .read()
             .as_ref()
             .map(|n| Self::virtio_mmio_kernel_args_for(n.base_address, n.irq))
+    }
+
+    /// Guest physical address of the block device's register window, by
+    /// default: past the network window, for the reason that one is past
+    /// vsock's.
+    pub const BLOCK_MMIO_BASE: u64 = 0xd003_0000;
+
+    /// Interrupt line the block device raises, by default. Its own, for the
+    /// reason [`Self::NET_IRQ`] is not vsock's.
+    pub const BLOCK_IRQ: u8 = 7;
+
+    /// Attach the raw image at `path` as a virtio-blk disk.
+    ///
+    /// The guest finds it as `/dev/vda`, with `serial` as its ID
+    /// (`/dev/disk/by-id/virtio-<serial>`). Requests are served on the vCPU
+    /// thread that made them, straight to the file, so the guest's view and
+    /// the file's never differ by more than requests still in flight.
+    ///
+    /// Must be called before the VM is launched or restored: virtio-mmio has
+    /// no hot-plug, and a guest probes only the windows it was told about when
+    /// it booted. A VM restored from a snapshot taken without a disk has no
+    /// driver for one.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a block device is already attached, if the file
+    /// cannot be opened, or if the register window would overlap guest RAM.
+    pub async fn attach_block(
+        self: &Arc<Self>,
+        path: &std::path::Path,
+        read_only: bool,
+        serial: &str,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_blk_mmio::VirtioBlockMmio>>> {
+        self.attach_block_at(
+            path,
+            read_only,
+            serial,
+            Self::BLOCK_MMIO_BASE,
+            Self::BLOCK_IRQ,
+        )
+        .await
+    }
+
+    /// Attach a block device at an explicit address and interrupt line.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::attach_block`].
+    pub async fn attach_block_at(
+        self: &Arc<Self>,
+        path: &std::path::Path,
+        read_only: bool,
+        serial: &str,
+        base_address: u64,
+        irq: u8,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_blk_mmio::VirtioBlockMmio>>> {
+        use crate::devices::virtio_blk_mmio::VirtioBlockMmio;
+        use crate::devices::virtio_mmio::{VirtioMmioTransport, VIRTIO_MMIO_REGION_SIZE};
+
+        if self.block.read().is_some() {
+            return Err(Error::Device(
+                "this VM already has a block device".to_string(),
+            ));
+        }
+        if self.memory.host_offset(base_address).is_some() {
+            return Err(Error::Device(format!(
+                "block register window at {base_address:#x} overlaps {} bytes of guest RAM",
+                self.memory.total_size()
+            )));
+        }
+
+        let device = Arc::new(parking_lot::Mutex::new(VirtioBlockMmio::open(
+            path, read_only, serial,
+        )?));
+        let capacity = device.lock().capacity_bytes();
+        let transport = Arc::new(tokio::sync::RwLock::new(
+            VirtioMmioTransport::new("virtio-blk", base_address, self.memory(), device.clone())
+                .with_interrupt(self.pic(), irq),
+        ));
+        self.devices
+            .register_device("virtio-blk", transport.clone())
+            .await?;
+        self.devices
+            .register_mmio_region(
+                "virtio-blk".to_string(),
+                base_address,
+                VIRTIO_MMIO_REGION_SIZE,
+            )
+            .await?;
+        self.name_virtio_mmio_window(base_address, irq);
+
+        *self.block.write() = Some(AttachedBlock {
+            device: device.clone(),
+            transport,
+        });
+        tracing::info!(
+            "VM '{}': block device attached at {base_address:#x} (IRQ {irq}, {capacity} bytes{})",
+            self.config.name,
+            if read_only { ", read-only" } else { "" },
+        );
+        Ok(device)
+    }
+
+    /// The block device attached to this VM, if any.
+    pub fn block(
+        &self,
+    ) -> Option<Arc<parking_lot::Mutex<crate::devices::virtio_blk_mmio::VirtioBlockMmio>>> {
+        self.block.read().as_ref().map(|b| b.device.clone())
     }
 
     /// Attach a vsock device at an explicit address and interrupt line.
