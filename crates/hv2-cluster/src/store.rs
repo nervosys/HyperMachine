@@ -3863,6 +3863,7 @@ pub(crate) mod tests {
             enabled: true,
             secret: "s".into(),
             created_ms: 1,
+            team_id: None,
         };
         store.put_webhook(&hook).await.unwrap();
         assert!(store.webhooks().await.unwrap().contains(&hook));
