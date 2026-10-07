@@ -2245,6 +2245,35 @@ fn named_creation_operation(
         .map_err(|_| (StatusCode::BAD_REQUEST, "invalid name operation context"))
 }
 
+/// The creating key's team, from the control plane's header: under the same
+/// rules as [`creator_owner`].
+fn creator_team(
+    headers: &HeaderMap,
+    clustered: bool,
+    authenticated_cluster: bool,
+) -> Result<Option<hv2_cluster::ownership::TeamId>, (StatusCode, &'static str)> {
+    use hv2_cluster::ownership::{TeamId, TEAM_HEADER};
+    let mut values = headers.get_all(TEAM_HEADER).iter();
+    let Some(value) = values.next() else {
+        return Ok(None);
+    };
+    if !clustered || !authenticated_cluster {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "team attribution requires an authenticated cluster node",
+        ));
+    }
+    if values.next().is_some() {
+        return Err((StatusCode::BAD_REQUEST, "duplicate team context"));
+    }
+    let value = value
+        .to_str()
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid team context"))?;
+    TeamId::parse(value)
+        .map(Some)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid team context"))
+}
+
 fn creator_owner(
     headers: &HeaderMap,
     clustered: bool,
@@ -2297,6 +2326,18 @@ async fn create_sandbox(
             .is_some_and(|token| !token.is_empty()),
     ) {
         Ok(owner) => owner,
+        Err((status, error)) => return api_error(status, error),
+    };
+    let team_id = match creator_team(
+        &headers,
+        state.node.is_some(),
+        state
+            .opts
+            .cluster_token
+            .as_ref()
+            .is_some_and(|token| !token.is_empty()),
+    ) {
+        Ok(team) => team,
         Err((status, error)) => return api_error(status, error),
     };
     drop(headers);
@@ -2450,6 +2491,7 @@ async fn create_sandbox(
     let sizes = sizes_of(&state, &template_id);
     let record = SandboxRecord {
         owner_id,
+        team_id,
         sandbox_id: sandbox_id.clone(),
         node_id: state
             .node
@@ -2956,7 +2998,10 @@ async fn resume_sandbox(
         .await;
         paused = returned_paused;
         match ownership {
-            Ok(Some(record)) => paused.record.owner_id = record.owner_id,
+            Ok(Some(record)) => {
+                paused.record.owner_id = record.owner_id;
+                paused.record.team_id = record.team_id;
+            }
             Ok(None) => {
                 give_back(paused);
                 return Err((
@@ -3366,7 +3411,7 @@ async fn fork_route(
         "{sandbox_id}-fork-{}.snap",
         uuid::Uuid::new_v4().simple()
     ));
-    let (template_id, metadata, network, source_request, volume_mounts, owner_id) = {
+    let (template_id, metadata, network, source_request, volume_mounts, creator) = {
         let lock = transition_lock(&state, &sandbox_id);
         let _held = lock.lock().await;
         let source = {
@@ -3396,11 +3441,11 @@ async fn fork_route(
                     }),
                     live.network_request.clone(),
                     live.record.volume_mounts.clone(),
-                    live.record.owner_id.clone(),
+                    (live.record.owner_id.clone(), live.record.team_id.clone()),
                 )
             })
         };
-        let Some((vm, template_id, metadata, network, source_request, volume_mounts, owner_id)) =
+        let Some((vm, template_id, metadata, network, source_request, volume_mounts, creator)) =
             source
         else {
             return if state.paused.lock().contains_key(&sandbox_id) {
@@ -3412,9 +3457,9 @@ async fn fork_route(
                 api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}"))
             };
         };
-        let owner_id = if let Some(node) = &state.node {
+        let creator = if let Some(node) = &state.node {
             match node.store().sandbox(&sandbox_id).await {
-                Ok(Some(record)) => record.owner_id,
+                Ok(Some(record)) => (record.owner_id, record.team_id),
                 Ok(None) => return api_error(StatusCode::NOT_FOUND, "fork source record missing"),
                 Err(_) => {
                     return api_error(
@@ -3424,7 +3469,7 @@ async fn fork_route(
                 }
             }
         } else {
-            owner_id
+            creator
         };
         let started = std::time::Instant::now();
         if let Err(e) = vm.checkpoint_to(&checkpoint).await {
@@ -3441,7 +3486,7 @@ async fn fork_route(
             network,
             source_request,
             volume_mounts,
-            owner_id,
+            creator,
         )
     };
 
@@ -3462,7 +3507,7 @@ async fn fork_route(
             let network = network.clone();
             let network_request = source_request.clone();
             let volume_mounts = volume_mounts.clone();
-            let owner_id = owner_id.clone();
+            let creator = creator.clone();
             async move {
                 let slot = reserve(&state, create_park(&state))
                     .await
@@ -3493,7 +3538,8 @@ async fn fork_route(
                 };
                 let sizes = sizes_of(&state, &template_id);
                 let record = SandboxRecord {
-                    owner_id,
+                    owner_id: creator.0,
+                    team_id: creator.1,
                     sandbox_id: fork_id,
                     node_id: state
                         .node
@@ -5733,6 +5779,41 @@ mod tests {
         headers.insert(OWNER_HEADER, "bad/owner".parse().unwrap());
         assert_eq!(
             creator_owner(&headers, true, true).unwrap_err().0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    /// The team header, under the owner header's rules: only from an
+    /// authenticated control plane, exactly once, and a valid label.
+    #[test]
+    fn team_context_requires_authenticated_cluster_and_one_valid_header() {
+        use hv2_cluster::ownership::TEAM_HEADER;
+        let mut headers = HeaderMap::new();
+        assert!(creator_team(&headers, true, true).unwrap().is_none());
+        headers.insert(TEAM_HEADER, "red".parse().unwrap());
+        for (clustered, authenticated) in [(false, false), (false, true), (true, false)] {
+            assert_eq!(
+                creator_team(&headers, clustered, authenticated)
+                    .unwrap_err()
+                    .0,
+                StatusCode::SERVICE_UNAVAILABLE
+            );
+        }
+        assert_eq!(
+            creator_team(&headers, true, true)
+                .unwrap()
+                .unwrap()
+                .as_str(),
+            "red"
+        );
+        headers.append(TEAM_HEADER, "blue".parse().unwrap());
+        assert_eq!(
+            creator_team(&headers, true, true).unwrap_err().0,
+            StatusCode::BAD_REQUEST
+        );
+        headers.insert(TEAM_HEADER, "bad/team".parse().unwrap());
+        assert_eq!(
+            creator_team(&headers, true, true).unwrap_err().0,
             StatusCode::BAD_REQUEST
         );
     }

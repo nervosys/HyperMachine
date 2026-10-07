@@ -37,6 +37,39 @@ impl From<OwnerId> for String {
     }
 }
 
+/// Internal control-to-node header carrying the creating key's team. Like
+/// [`OWNER_HEADER`], set only by an authenticated control plane.
+pub const TEAM_HEADER: &str = "x-hv2-sandbox-team";
+
+/// The team a key and the sandboxes it creates belong to: the isolation
+/// boundary between tenants. An operator-assigned label, under the same rules
+/// as an [`OwnerId`].
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct TeamId(String);
+impl TeamId {
+    /// Reject empty, non-ASCII, decorated and oversized team labels.
+    pub fn parse(value: &str) -> Result<Self, &'static str> {
+        OwnerId::parse(value)
+            .map(|owner| Self(owner.0))
+            .map_err(|_| "team ID must be a bounded opaque ASCII label")
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+impl TryFrom<String> for TeamId {
+    type Error = &'static str;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::parse(&value)
+    }
+}
+impl From<TeamId> for String {
+    fn from(value: TeamId) -> Self {
+        value.0
+    }
+}
+
 /// Atomic legacy adoption; never transfers an existing owner or reservations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OwnerAdoption {

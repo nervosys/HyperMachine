@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Teams. An API key policy may name a `team_id`. Each sandbox is then recorded
+  in its creator's team, and a key reaches every sandbox in its team by role,
+  and none outside it, on every sandbox route, the inventory, metrics and
+  per-sandbox events. Resources still shared by every team (volumes, snapshots,
+  template builds, event streams and webhooks) are refused to team keys until
+  they are partitioned. Administrators stay global. See `docs/TEAMS.md`.
+
 ### Benchmark evidence
 - Sample failed-boot architectural state on the vCPU execution owner after a
   kick, with a bounded response wait. Add a real-KVM halted/spinning regression

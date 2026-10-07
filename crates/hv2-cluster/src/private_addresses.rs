@@ -183,6 +183,7 @@ mod tests {
         SandboxRecord {
             sandbox_id: id.into(),
             owner_id: Some(OwnerId::parse("owner").unwrap()),
+            team_id: None,
             node_id: "node".into(),
             template_id: "base".into(),
             started_at_ms: 1,

@@ -237,6 +237,7 @@ mod tests {
         SandboxRecord {
             sandbox_id: "source".into(),
             owner_id: Some(hv2_cluster::ownership::OwnerId::parse("owner-a").unwrap()),
+            team_id: None,
             node_id: "node".into(),
             template_id: "base".into(),
             started_at_ms: 10,

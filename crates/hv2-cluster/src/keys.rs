@@ -1,5 +1,11 @@
 //! Operator-provisioned, expiring API keys. Policies hold SHA-256 digests,
-//! never plaintext credentials. Scopes apply to the whole configured team.
+//! never plaintext credentials.
+//!
+//! Without `team_id` on any policy, scopes apply to the one configured team,
+//! as they always have. Once any policy names a team the deployment is
+//! multi-tenant: every key that is not an administrator must name its team
+//! and its principal, and reaches only that team's sandboxes -- all of them,
+//! as its role allows. Administrators stay global.
 
 use axum::http::Method;
 use serde::Deserialize;
@@ -55,6 +61,7 @@ pub struct ApiKeyPolicy {
     scopes: BTreeSet<ApiScope>,
     role: ApiRole,
     principal_id: Option<crate::ownership::OwnerId>,
+    team_id: Option<crate::ownership::TeamId>,
 }
 
 impl std::fmt::Debug for ApiKeyPolicy {
@@ -77,6 +84,8 @@ struct RawPolicy {
     role: ApiRole,
     #[serde(default)]
     principal_id: Option<crate::ownership::OwnerId>,
+    #[serde(default)]
+    team_id: Option<crate::ownership::TeamId>,
 }
 
 impl ApiKeyPolicy {
@@ -97,7 +106,9 @@ impl ApiKeyPolicy {
             return Err("API key policy needs 1-256 entries".into());
         }
         let mut seen = BTreeSet::new();
-        raw.into_iter()
+        let teams = raw.iter().any(|raw| raw.team_id.is_some());
+        let policies: Vec<Self> = raw
+            .into_iter()
             .map(|raw| {
                 if raw.sha256.len() != 64 || !raw.sha256.bytes().all(|c| c.is_ascii_hexdigit()) {
                     return Err("API key sha256 must contain 64 hexadecimal characters".into());
@@ -119,9 +130,24 @@ impl ApiKeyPolicy {
                     scopes: raw.scopes,
                     role: raw.role,
                     principal_id: raw.principal_id,
+                    team_id: raw.team_id,
                 })
             })
-            .collect()
+            .collect::<Result<_, String>>()?;
+        // Half a tenancy is none: a key with no team in a multi-tenant file
+        // would be global by omission, which is the one mistake that matters.
+        if teams
+            && policies.iter().any(|policy| {
+                !policy.is_administrator()
+                    && (policy.team_id.is_none() || policy.principal_id.is_none())
+            })
+        {
+            return Err(
+                "once any API key names a team_id, every non-administrator key needs both                  team_id and principal_id"
+                    .into(),
+            );
+        }
+        Ok(policies)
     }
 
     /// Reject a legacy admin credential also present in scoped policies.
@@ -146,6 +172,12 @@ impl ApiKeyPolicy {
 
     pub fn principal_id(&self) -> Option<&crate::ownership::OwnerId> {
         self.principal_id.as_ref()
+    }
+
+    /// The team this key acts for, unless it is an administrator, which is
+    /// global whatever its policy says.
+    pub fn team_id(&self) -> Option<&crate::ownership::TeamId> {
+        self.team_id.as_ref().filter(|_| !self.is_administrator())
     }
 
     pub(crate) fn has_digest(&self, digest: &[u8; 32]) -> bool {
@@ -224,6 +256,61 @@ mod tests {
             read_policy_file(&path).unwrap_err(),
             "could not read API key policy file"
         );
+    }
+
+    fn digest(key: &str) -> String {
+        Sha256::digest(key.as_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
+    }
+
+    /// One key with a team makes the file multi-tenant, and then a key with
+    /// no team would be global by omission: refused, as is a team key with no
+    /// principal. Administrators are exempt, and global whatever they say.
+    #[test]
+    fn a_multi_tenant_file_leaves_no_key_without_a_team() {
+        let entry = |key: &str, scope: &str, extra: &str| {
+            format!(
+                r#"{{"sha256":"{}","expires_at":100,"scopes":["{scope}"]{extra}}}"#,
+                digest(key)
+            )
+        };
+        let red = entry(
+            "red",
+            "sandboxes",
+            r#","team_id":"red","principal_id":"alice""#,
+        );
+        let admin = entry("admin", "admin", r#","team_id":"red""#);
+        let loose = entry("loose", "sandboxes", r#","principal_id":"bob""#);
+        let anonymous_member = entry("anon", "sandboxes", r#","team_id":"red""#);
+
+        let policies = ApiKeyPolicy::from_json(&format!("[{red},{admin}]")).unwrap();
+        assert_eq!(policies[0].team_id().unwrap().as_str(), "red");
+        assert!(
+            policies[1].team_id().is_none(),
+            "an administrator is global"
+        );
+
+        for bad in [loose, anonymous_member] {
+            assert!(ApiKeyPolicy::from_json(&format!("[{red},{bad}]"))
+                .unwrap_err()
+                .contains("team_id and principal_id"));
+        }
+        // Without any team, nothing changes.
+        let single = entry("solo", "sandboxes", r#","principal_id":"bob""#);
+        assert!(ApiKeyPolicy::from_json(&format!("[{single}]")).unwrap()[0]
+            .team_id()
+            .is_none());
+        assert!(ApiKeyPolicy::from_json(&format!(
+            "[{}]",
+            entry(
+                "x",
+                "sandboxes",
+                r#","team_id":"has space","principal_id":"p""#
+            )
+        ))
+        .is_err());
     }
 
     fn policy(scope: &str) -> ApiKeyPolicy {
