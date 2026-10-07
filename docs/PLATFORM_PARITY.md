@@ -147,8 +147,15 @@ These are provider documentation claims, not independent service measurements.
 The [exe.dev primary documentation](https://exe.dev/docs/all) was also retrieved;
 absence of a volume entry establishes no runtime absence.
 
-The HTTPS interception relay keeps request bodies streaming and currently
-accepts only header transforms; it has no host-bound placeholder policy or
+**Superseded:** host-bound placeholder substitution has since been built and
+verified on real KVM, covering headers, Basic auth, the query, and form, JSON and
+raw bodies, with exact-sandbox scopes and SIGHUP rotation and revocation. See the
+[operator guide](EGRESS_SECRETS.md) and the
+[KVM evidence](benchmarks/2026-10-03/secret-substitution-kvm/README.md). The rest
+of this paragraph records the state at that step.
+
+At that step, the HTTPS interception relay kept request bodies streaming and
+accepted only header transforms; it had no host-bound placeholder policy or
 query/body/Basic-auth substitution API. Before extending that surface, request
 URI debug logging was removed from the working relay because paths and query
 strings may contain guest credentials. Method and response status remain logged.
