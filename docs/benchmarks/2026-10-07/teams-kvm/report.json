@@ -1,0 +1,51 @@
+{
+  "success": true,
+  "purpose": "local KVM functional verification of team isolation; no performance comparison",
+  "input_sha256": {
+    "daemon": "f12d8a1da3a16994fdb22eca0ba2474e1ff17263555db7477babc49c1397c077",
+    "control": "14765d54f1d5ce32d81c60903e0a238b52925bb09dbd1a6eaf05d89ad8909048",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "driver": "d7d901ce18c7c2372fa1ea72fac60df680460026e3428ba9775e9f6406c218f7"
+  },
+  "cases": [
+    {
+      "name": "a team reaches its whole team's sandboxes and nothing else",
+      "success": true,
+      "detail": {
+        "red": "sbx-1e55fd9397fd460ba0c1",
+        "blue": "sbx-49f944a93b734dfca8fc"
+      }
+    },
+    {
+      "name": "volumes of one name are each team's own",
+      "success": true,
+      "detail": {
+        "red": "vol-7173ff45a7747a83",
+        "blue": "vol-bc4a76b18c6185e2"
+      }
+    },
+    {
+      "name": "a team's snapshot is its own to start from and delete",
+      "success": true,
+      "detail": {
+        "restored": "sbx-5a94218c4af94c8b82e7"
+      }
+    },
+    {
+      "name": "a fork stays in its team",
+      "success": true,
+      "detail": {
+        "fork": "sbx-580c3a59ddb1485bb321"
+      }
+    },
+    {
+      "name": "events and webhooks are each team's own",
+      "success": true,
+      "detail": {
+        "blue_events": 2,
+        "red_events": 4
+      }
+    }
+  ]
+}

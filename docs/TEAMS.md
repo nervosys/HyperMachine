@@ -71,6 +71,10 @@ create, in an internal header that clients cannot set, and the node records it.
 Forks inherit it. Pause and resume, on any node, keep it. An update
 that omits it cannot clear it.
 
+Evidence: [two teams on one real KVM cluster](benchmarks/2026-10-07/teams-kvm/README.md):
+sandboxes, volumes, snapshots, forks, events and webhooks, through the shipped
+control plane and node over TLS and mTLS.
+
 ## Not yet partitioned
 
 These resources are still shared by every team. Until each has a per-team
