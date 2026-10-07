@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Movable block disks: a file-backed virtio-blk device (`VM::attach_block`), and
+  node-level `POST/GET/DELETE /disks` with `"diskMount"` on sandbox create. Each
+  disk is ext4-formatted and held by one sandbox at a time, then released when
+  that sandbox ends. Also `hm vm disk …` and `hm vm create --disk NAME:/path`.
+  Verified on real KVM, where data written in one sandbox was read in the next;
+  see `docs/DISKS.md` for the limits.
+
 ### Benchmark evidence
 - Sample failed-boot architectural state on the vCPU execution owner after a
   kick, with a bounded response wait. Add a real-KVM halted/spinning regression
