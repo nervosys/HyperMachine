@@ -954,6 +954,14 @@ impl VM {
                 }
                 if acpi {
                     loaded.set_hw_reduced_acpi(self.virtio_mmio_windows.lock().clone());
+                    // On a hardware-reduced platform Linux reboots through
+                    // EFI by default, and with no EFI falls through to a
+                    // real-mode jump into a BIOS that is not there, where it
+                    // spins forever: `reboot` hung the guest. The keyboard
+                    // controller's reset pulse is what the run loop answers
+                    // (see `i8042_reset_as_shutdown`), and what a Firecracker
+                    // guest is told to use for the same reason.
+                    loaded.append_cmdline("reboot=k");
                 }
 
                 self.admit_boot_image(&loaded)?;
@@ -3303,6 +3311,9 @@ impl VM {
     /// bridge, and x86 Linux that finds ACPI does not go looking for one
     /// itself. Set before the VM is provisioned; it changes nothing for a
     /// guest restored from a snapshot, which keeps the tables it booted with.
+    ///
+    /// Also adds `reboot=k`, so that a guest's `reboot` pulses the i8042's
+    /// reset line, which stops the VM, rather than hanging in a BIOS jump.
     pub fn use_hw_reduced_acpi(&self) {
         self.hw_reduced_acpi
             .store(true, std::sync::atomic::Ordering::Relaxed);
@@ -3757,6 +3768,29 @@ impl VM {
         Ok(())
     }
 
+    /// A guest's write of 0xFE to the i8042 command port, as the shutdown it
+    /// asks for.
+    ///
+    /// That command pulses the CPU reset line, and it is how a Linux guest
+    /// with no ACPI reset register restarts: `reboot` tries ACPI, then this,
+    /// then a jump into a BIOS that is not there, which runs off into zeroed
+    /// memory and never exits. Firecracker treats it the same way. What
+    /// happens after the stop -- a fresh guest, or none -- is the caller's.
+    fn i8042_reset_as_shutdown(exit: VmExit) -> VmExit {
+        match exit {
+            VmExit::Io {
+                port: crate::machine::I8042_LAST,
+                direction: IoDirection::Out,
+                data,
+                ..
+            } if data & 0xff == 0xfe => {
+                tracing::info!("Guest pulsed the reset line through the i8042");
+                VmExit::Shutdown
+            }
+            other => other,
+        }
+    }
+
     /// Static version of handle_exit for use in spawned tasks
     async fn handle_exit_static(
         vcpu: &VCpu,
@@ -3771,7 +3805,7 @@ impl VM {
         state: &RwLock<VMState>,
         exit_notify: &Notify,
     ) -> Result<bool> {
-        match exit {
+        match Self::i8042_reset_as_shutdown(exit) {
             VmExit::Mmio {
                 phys_addr,
                 mut data,
@@ -4165,7 +4199,7 @@ impl VM {
     ///
     /// Returns Ok(true) if execution should continue, Ok(false) if VM should stop.
     async fn handle_exit(&self, vcpu: &VCpu, stats: &VCpuStats, exit: VmExit) -> Result<bool> {
-        match exit {
+        match Self::i8042_reset_as_shutdown(exit) {
             VmExit::Mmio {
                 phys_addr,
                 mut data,
@@ -4547,6 +4581,23 @@ mod tests {
         drop(rollback);
         assert!(matches!(ar.recv().await, Some(VCpuMessage::Resume)));
         assert!(matches!(br.recv().await, Some(VCpuMessage::Resume)));
+    }
+
+    /// Only the reset command, written to the command port, stops the VM:
+    /// the same byte to the data port is a keyboard command, and a read is
+    /// a status poll.
+    #[test]
+    fn an_i8042_reset_pulse_is_a_shutdown() {
+        let io = |port, direction, data| VmExit::Io {
+            port,
+            direction,
+            size: 1,
+            data,
+        };
+        assert!(VM::i8042_reset_as_shutdown(io(0x64, IoDirection::Out, 0xfe)).is_shutdown());
+        assert!(!VM::i8042_reset_as_shutdown(io(0x64, IoDirection::Out, 0xd1)).is_shutdown());
+        assert!(!VM::i8042_reset_as_shutdown(io(0x60, IoDirection::Out, 0xfe)).is_shutdown());
+        assert!(!VM::i8042_reset_as_shutdown(io(0x64, IoDirection::In, 0xfe)).is_shutdown());
     }
 
     #[tokio::test]

@@ -128,6 +128,7 @@ mod identity;
 mod idle;
 mod initramfs;
 mod private_source;
+mod reboot;
 // Volumes are served with openat2 and O_PATH, which only Linux has; see
 // volumes_unsupported.rs for what other hosts answer.
 #[cfg(target_os = "linux")]
@@ -731,6 +732,7 @@ struct NodeMetrics {
     evictions: Counter,
     forks_ok: Counter,
     forks_failed: Counter,
+    reboots: Counter,
     pause_latency: Histogram,
     resume_latency: Histogram,
     checkpoint_latency: Histogram,
@@ -1336,7 +1338,7 @@ async fn node_metrics(State(state): State<Arc<AppState>>) -> Response {
     );
     e.counters(
         "hv2_node_transitions_total",
-        "Pauses, resumes (and those a request triggered), evictions to make room, and forks.",
+        "Pauses, resumes (and those a request triggered), evictions to make room, forks, and reboots.",
         "kind",
         &[
             ("pause", m.pauses.get()),
@@ -1345,6 +1347,7 @@ async fn node_metrics(State(state): State<Arc<AppState>>) -> Response {
             ("evict", m.evictions.get()),
             ("fork_ok", m.forks_ok.get()),
             ("fork_failed", m.forks_failed.get()),
+            ("reboot", m.reboots.get()),
         ],
     );
     e.histogram(
@@ -2206,6 +2209,8 @@ async fn ended(
 ) {
     checkpoints::forget(state, sandbox_id);
     disks::release(state, sandbox_id);
+    env_vars::forget(sandbox_id);
+    reboot::forget(sandbox_id);
     let event = match &state.node {
         Some(node) => match node.ended(sandbox_id, record, kind, running).await {
             Ok(Some(event)) => event,
@@ -2543,6 +2548,7 @@ async fn create_sandbox(
     if let Some(disk) = disk {
         disk.keep();
     }
+    env_vars::keep(&sandbox_id, &req.env_vars);
 
     (StatusCode::CREATED, Json(descriptor)).into_response()
 }
@@ -3535,6 +3541,7 @@ async fn fork_route(
             let network_request = source_request.clone();
             let volume_mounts = volume_mounts.clone();
             let owner_id = owner_id.clone();
+            let source_id = sandbox_id.clone();
             async move {
                 let slot = reserve(&state, create_park(&state))
                     .await
@@ -3599,6 +3606,7 @@ async fn fork_route(
                     RegistrationContext::default(),
                 )
                 .await?;
+                env_vars::inherit(&source_id, &descriptor.sandbox_id);
                 Ok::<_, (StatusCode, String)>(descriptor)
             }
         })
@@ -4498,8 +4506,11 @@ const MMIO_BOOT_ARGS: &str = concat!(
 );
 
 fn guest_cmdline(network: bool, transport: GuestTransport) -> String {
+    // `panic=1`: a kernel that panics resets a second later instead of
+    // hanging, so the sandbox is rebooted in place (reboot.rs) rather than
+    // left listed as running with nothing answering.
     format!(
-        "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 {}{}",
+        "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 panic=1 {}{}",
         match transport {
             // No PCI device exists on an MMIO guest, so the kernel is told not
             // to look: probing bus 0 (and 254, 255) costs about 1,800
@@ -5067,6 +5078,7 @@ async fn expire(state: Arc<AppState>) {
                 tracing::info!("sandbox {id} reached its timeout");
             }
         }
+        reboot::reboot_stopped(&state).await;
         idle::pause_idle(&state, now).await;
     }
 }
@@ -5568,6 +5580,7 @@ async fn main() -> std::process::ExitCode {
         .route("/sandboxes/{sandboxID}/pause", post(pause_route))
         .route("/sandboxes/{sandboxID}/resume", post(resume_route))
         .route("/sandboxes/{sandboxID}/fork", post(fork_route))
+        .route("/sandboxes/{sandboxID}/reboot", post(reboot::route))
         .route("/sandboxes/{sandboxID}/owner", post(adopt_owner_route))
         .route("/sandboxes/{sandboxID}/snapshots", post(snapshots::create))
         .route(
