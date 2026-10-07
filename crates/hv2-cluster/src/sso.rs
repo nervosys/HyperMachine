@@ -406,7 +406,7 @@ impl SessionKey {
         Ok(Self(zeroize::Zeroizing::new(bytes)))
     }
 
-    fn mac(&self, body: &str) -> Result<[u8; 32], SsoError> {
+    pub(crate) fn mac_of(&self, body: &str) -> Result<[u8; 32], SsoError> {
         crypto()?
             .hmac_sha256(&self.0, body.as_bytes())
             .map_err(|e| SsoError::Config(e.to_string()))
@@ -426,7 +426,7 @@ impl SessionKey {
             "{SESSION_PREFIX}.{}",
             URL_SAFE_NO_PAD.encode(serde_json::to_vec(&session).expect("serializable"))
         );
-        let mac = self.mac(&body)?;
+        let mac = self.mac_of(&body)?;
         Ok(format!("{body}.{}", URL_SAFE_NO_PAD.encode(mac)))
     }
 
@@ -442,7 +442,7 @@ impl SessionKey {
         let Some(payload) = body.strip_prefix(&format!("{SESSION_PREFIX}.")) else {
             return Err(SsoError::Malformed("not a session token"));
         };
-        let expected = self.mac(body)?;
+        let expected = self.mac_of(body)?;
         let given = decode(mac, "session MAC")?;
         if !bool::from(subtle::ConstantTimeEq::ct_eq(
             given.as_slice(),
@@ -500,8 +500,19 @@ impl Members {
         if raw.len() > 1024 {
             return Err("members document lists more than 1024 people".into());
         }
+        // As in an API key file: once anyone has a team, a member without one
+        // would be global by omission.
+        let teams = raw.iter().any(|member| member.team_id.is_some());
         let mut by_email = BTreeMap::new();
         for mut member in raw {
+            let administrator = member.role == crate::keys::ApiRole::Operator
+                && member.scopes.contains(&crate::keys::ApiScope::Admin);
+            if teams && !administrator && member.team_id.is_none() {
+                return Err(
+                    "once any member names a team_id, every non-administrator member needs one"
+                        .into(),
+                );
+            }
             member.email = member.email.to_ascii_lowercase();
             if !member.email.contains('@') || member.email.len() > 254 {
                 return Err("every member needs an email address".into());
@@ -824,10 +835,11 @@ mod tests {
     fn members_are_keyed_by_email_ignoring_case() {
         let members = Members::from_json(
             r#"[{"email":"Alice@Example.com","scopes":["sandboxes"],"principal_id":"alice","team_id":"red"},
-                {"email":"bob@example.com","scopes":["inventory"],"role":"observer","principal_id":"bob"}]"#,
+                {"email":"bob@example.com","scopes":["inventory"],"role":"observer","principal_id":"bob","team_id":"red"},
+                {"email":"root@example.com","scopes":["admin"],"principal_id":"root"}]"#,
         )
         .unwrap();
-        assert_eq!(members.len(), 2);
+        assert_eq!(members.len(), 3, "an administrator needs no team");
         let alice = members.get("ALICE@example.com").unwrap();
         assert_eq!(alice.principal_id.as_str(), "alice");
         assert_eq!(alice.team_id.as_ref().unwrap().as_str(), "red");
@@ -838,6 +850,8 @@ mod tests {
             r#"[{"email":"a@x","scopes":[],"principal_id":"a"}]"#,
             r#"[{"email":"a@x","scopes":["sandboxes"],"principal_id":"a","extra":1}]"#,
             r#"[{"email":"a@x","scopes":["root"],"principal_id":"a"}]"#,
+            // With teams, a member without one would be global by omission.
+            r#"[{"email":"a@x","scopes":["sandboxes"],"principal_id":"a","team_id":"red"},{"email":"b@x","scopes":["sandboxes"],"principal_id":"b"}]"#,
         ] {
             assert!(Members::from_json(bad).is_err(), "{bad}");
         }

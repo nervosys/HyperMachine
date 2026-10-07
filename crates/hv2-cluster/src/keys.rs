@@ -165,6 +165,20 @@ impl ApiKeyPolicy {
         Ok(())
     }
 
+    /// The policy a signed-in member acts under: their scopes, role,
+    /// principal and team, until their session ends. Its digest is all
+    /// zeros, which no key hashes to, so no `X-API-Key` ever matches it.
+    pub(crate) fn for_member(member: &crate::sso::Member, session_expires_at: i64) -> Self {
+        Self {
+            digest: [0u8; 32],
+            expires_at: session_expires_at,
+            scopes: member.scopes.clone(),
+            role: member.role,
+            principal_id: Some(member.principal_id.clone()),
+            team_id: member.team_id.clone(),
+        }
+    }
+
     /// Operator-provisioned stable principal; not derived from credential bytes.
     pub(crate) fn is_administrator(&self) -> bool {
         self.role == ApiRole::Operator && self.scopes.contains(&ApiScope::Admin)
