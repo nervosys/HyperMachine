@@ -30,6 +30,7 @@ pub mod private_networks;
 pub mod private_node;
 pub mod private_router;
 pub mod scheduler;
+pub mod sso;
 pub mod store;
 pub mod udp_socket;
 pub mod web_access;
