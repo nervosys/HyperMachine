@@ -92,6 +92,10 @@ pub struct SandboxRecord {
     /// Trusted creator principal; legacy records remain explicitly ownerless.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner_id: Option<crate::ownership::OwnerId>,
+    /// The creating key's team: who else may see and use it. `None` outside
+    /// a multi-tenant deployment, and for records from before one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub team_id: Option<crate::ownership::TeamId>,
     pub node_id: String,
     pub template_id: String,
     pub started_at_ms: u64,
@@ -351,6 +355,7 @@ mod tests {
     fn record() -> SandboxRecord {
         SandboxRecord {
             owner_id: None,
+            team_id: None,
             sandbox_id: "sbx-1".into(),
             node_id: "node-a".into(),
             template_id: "base".into(),

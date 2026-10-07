@@ -693,6 +693,14 @@ impl ClusterStore for MemoryStore {
                 .get(&record.sandbox_id)
                 .and_then(|current| current.owner_id.clone());
         }
+        // The team is kept the same way: an update that omits it cannot move
+        // a sandbox out of its tenant.
+        if updated.team_id.is_none() {
+            updated.team_id = state
+                .records
+                .get(&record.sandbox_id)
+                .and_then(|current| current.team_id.clone());
+        }
         state.records.insert(record.sandbox_id.clone(), updated);
         Ok(())
     }
@@ -1784,15 +1792,19 @@ local encoded=ARGV[2]
 local index_type=redis.call('TYPE',KEYS[2]);if type(index_type)=='table' then index_type=index_type.ok end
 if index_type~='none' and index_type~='set' then return redis.error_reply('invalid sandbox inventory index type') end
 local current=redis.call('GET',KEYS[1])
-if current and updated.owner_id==nil then
- local previous=cjson.decode(current)
+local previous=nil
+if current then
+ previous=cjson.decode(current)
  if previous.sandbox_id~=ARGV[1] then return redis.error_reply('invalid sandbox record identity') end
- if previous.owner_id~=nil and previous.owner_id~=cjson.null then
-  local owner=previous.owner_id
-  if type(owner)~='string' or #owner<1 or #owner>128 or owner:find('[^%w_.%-]') then return redis.error_reply('invalid sandbox owner') end
-  -- Rust omits a None owner and serializes an object. Append only that field;
-  -- re-encoding the whole record in Lua would change empty JSON arrays.
-  encoded=string.sub(encoded,1,-2)..',"owner_id":'..cjson.encode(owner)..'}'
+end
+-- An update that omits the owner or the team keeps the stored one. Rust omits
+-- a None field and serializes an object, so append only that field;
+-- re-encoding the whole record in Lua would change empty JSON arrays.
+for _,field in ipairs({'owner_id','team_id'}) do
+ if previous and updated[field]==nil and previous[field]~=nil and previous[field]~=cjson.null then
+  local label=previous[field]
+  if type(label)~='string' or #label<1 or #label>128 or label:find('[^%w_.%-]') then return redis.error_reply('invalid sandbox '..field) end
+  encoded=string.sub(encoded,1,-2)..',"'..field..'":'..cjson.encode(label)..'}'
  end
 end
 if type(redis.acl_check_cmd)~='function' or not redis.acl_check_cmd('SET',KEYS[1],encoded) or
@@ -2497,6 +2509,7 @@ pub(crate) mod tests {
     pub(crate) fn sandbox(id: &str, node: &str) -> SandboxRecord {
         SandboxRecord {
             owner_id: None,
+            team_id: None,
             sandbox_id: id.into(),
             node_id: node.into(),
             template_id: "base".into(),
@@ -3386,6 +3399,25 @@ pub(crate) mod tests {
 
     /// The contract, run against any store.
     pub(crate) async fn contract(store: &dyn ClusterStore) {
+        // An update that omits the owner or the team keeps both: a node's
+        // record cannot move a sandbox away from its creator or its tenant.
+        let mut labelled = sandbox("labelled", "a");
+        labelled.owner_id = Some(crate::ownership::OwnerId::parse("owner-a").unwrap());
+        labelled.team_id = Some(crate::ownership::TeamId::parse("team-a").unwrap());
+        store.put_sandbox(&labelled).await.unwrap();
+        let mut bare = labelled.clone();
+        bare.owner_id = None;
+        bare.team_id = None;
+        bare.end_at_ms += 1;
+        store.put_sandbox(&bare).await.unwrap();
+        let kept = store.sandbox("labelled").await.unwrap().unwrap();
+        assert_eq!(kept.owner_id, labelled.owner_id);
+        assert_eq!(kept.team_id, labelled.team_id);
+        assert_eq!(
+            kept.end_at_ms, bare.end_at_ms,
+            "the rest of the update applies"
+        );
+        store.delete_sandbox("labelled").await.unwrap();
         private_address_ledger_contract(store).await;
         private_membership_contract(store).await;
         private_route_snapshot_contract(store).await;

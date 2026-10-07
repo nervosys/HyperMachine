@@ -760,6 +760,7 @@ mod tests {
     fn a_webhook_payload_has_e2bs_documented_shape() {
         let record = crate::model::SandboxRecord {
             owner_id: None,
+            team_id: None,
             sandbox_id: "sb".into(),
             node_id: "n".into(),
             template_id: "base".into(),

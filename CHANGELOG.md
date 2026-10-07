@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   also boot with `panic=1`.
 
 ### Added
+- Teams. An API key policy may name a `team_id`. Each sandbox is then recorded
+  in its creator's team, and a key reaches every sandbox in its team by role,
+  and none outside it, on every sandbox route, the inventory, metrics and
+  per-sandbox events. Resources still shared by every team (volumes, snapshots,
+  template builds, event streams and webhooks) are refused to team keys until
+  they are partitioned. Administrators stay global. See `docs/TEAMS.md`.
 - Sandboxes reboot in place. A guest that runs `reboot`, panics or triple-faults
   comes back within about a second, with the same ID, token, URL, network policy,
   volumes, disk and `envVars`. There is also `POST /sandboxes/{id}/reboot`. A

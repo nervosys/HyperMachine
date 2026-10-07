@@ -1002,13 +1002,46 @@ async fn resolve_sandbox_name(
 
 #[derive(Clone)]
 struct CreatorPrincipal(Option<crate::ownership::OwnerId>);
+/// The creating key's team, recorded on what it creates.
 #[derive(Clone)]
-struct SandboxAccess(Option<crate::ownership::OwnerId>);
+struct CreatorTeam(Option<crate::ownership::TeamId>);
+/// Which sandboxes a caller may reach.
+#[derive(Clone)]
+enum SandboxAccess {
+    /// Every sandbox: an administrator, or a deployment without owners.
+    All,
+    /// Only those it created: a key with a principal and no team.
+    Owner(crate::ownership::OwnerId),
+    /// Every sandbox in its team, whoever created it.
+    Team(crate::ownership::TeamId),
+}
 impl SandboxAccess {
     fn allows(&self, record: &SandboxRecord) -> bool {
-        self.0
-            .as_ref()
-            .is_none_or(|owner| record.owner_id.as_ref() == Some(owner))
+        match self {
+            Self::All => true,
+            Self::Owner(owner) => record.owner_id.as_ref() == Some(owner),
+            Self::Team(team) => record.team_id.as_ref() == Some(team),
+        }
+    }
+}
+
+/// Routes a team key may not use until their resources are partitioned by
+/// team: each would read or write a namespace every tenant shares.
+fn shared_across_teams(route: &str, method: &axum::http::Method) -> bool {
+    use axum::http::Method;
+    match route {
+        "/templates" => *method != Method::GET && *method != Method::HEAD,
+        "/sandboxes/{id}/snapshots" | "/events/sandboxes" | "/cluster/events" => true,
+        _ => [
+            "/snapshots",
+            "/templates/{id}",
+            "/v2/templates",
+            "/v3/templates",
+            "/volumes",
+            "/events/webhooks",
+        ]
+        .iter()
+        .any(|prefix| route.starts_with(prefix)),
     }
 }
 #[derive(Clone, Copy)]
@@ -1045,52 +1078,61 @@ async fn require_api_key(
         "TRACE" => "TRACE",
         _ => "OTHER",
     };
-    let (kind, key_id, mut rejection, principal, administrator) = {
+    let (kind, key_id, mut rejection, principal, team, administrator) = {
         let policies = control.api_keys.read();
         let (kind, key_id, rejection) = authorize(&control.config, &policies, &request);
-        let principal = if kind == "scoped" && rejection.is_none() {
-            use sha2::{Digest, Sha256};
-            let digest = Sha256::digest(
-                request
-                    .headers()
-                    .get("x-api-key")
-                    .map(HeaderValue::as_bytes)
-                    .unwrap_or_default(),
-            )
-            .into();
-            policies
-                .iter()
-                .find(|policy| policy.has_digest(&digest))
-                .and_then(|policy| policy.principal_id())
-                .cloned()
-        } else {
-            None
-        };
+        let matched = (kind == "scoped" && rejection.is_none())
+            .then(|| {
+                use sha2::{Digest, Sha256};
+                let digest = Sha256::digest(
+                    request
+                        .headers()
+                        .get("x-api-key")
+                        .map(HeaderValue::as_bytes)
+                        .unwrap_or_default(),
+                )
+                .into();
+                policies
+                    .iter()
+                    .find(|policy| policy.has_digest(&digest))
+                    .cloned()
+            })
+            .flatten();
+        let principal = matched.as_ref().and_then(|p| p.principal_id()).cloned();
+        let team = matched.as_ref().and_then(|p| p.team_id()).cloned();
         let administrator = rejection.is_none()
-            && (kind == "legacy_admin"
-                || (kind == "scoped" && {
-                    use sha2::{Digest, Sha256};
-                    let digest = Sha256::digest(
-                        request
-                            .headers()
-                            .get("x-api-key")
-                            .map(HeaderValue::as_bytes)
-                            .unwrap_or_default(),
-                    )
-                    .into();
-                    policies
-                        .iter()
-                        .find(|policy| policy.has_digest(&digest))
-                        .is_some_and(|policy| policy.is_administrator())
-                }));
-        (kind, key_id, rejection, principal, administrator)
+            && (kind == "legacy_admin" || matched.as_ref().is_some_and(|p| p.is_administrator()));
+        (kind, key_id, rejection, principal, team, administrator)
     };
-    // Authentication supplies this context. A client cannot choose its owner.
+    // Authentication supplies this context. A client cannot choose its owner
+    // or its team.
     request.headers_mut().remove(crate::ownership::OWNER_HEADER);
-    let access = SandboxAccess(principal.clone().filter(|_| !administrator));
+    request.headers_mut().remove(crate::ownership::TEAM_HEADER);
+    let access = match (administrator, &team, &principal) {
+        (true, _, _) => SandboxAccess::All,
+        (false, Some(team), _) => SandboxAccess::Team(team.clone()),
+        (false, None, Some(owner)) => SandboxAccess::Owner(owner.clone()),
+        (false, None, None) => SandboxAccess::All,
+    };
     if rejection.is_none()
-        && access.0.is_some()
-        && (route.starts_with("/sandboxes/{id}") || route.starts_with("/v2/sandboxes/{id}"))
+        && matches!(access, SandboxAccess::Team(_))
+        && shared_across_teams(&route, request.method())
+    {
+        rejection = Some(api_error(
+            StatusCode::FORBIDDEN,
+            "this resource is shared by every team and is not available to team keys",
+        ));
+    }
+    // A teammate acts on a sandbox as its creator, which is who the store's
+    // own ownership checks (ports, sharing, private networks) are written
+    // for: authorization is the team check below, and those checks still
+    // fence an ownership change mid-request.
+    let mut acting_owner = None;
+    if rejection.is_none()
+        && !matches!(access, SandboxAccess::All)
+        && (route.starts_with("/sandboxes/{id}")
+            || route.starts_with("/v2/sandboxes/{id}")
+            || route == "/events/sandboxes/{id}")
     {
         use axum::extract::FromRequestParts;
         let (mut parts, body) = request.into_parts();
@@ -1107,7 +1149,10 @@ async fn require_api_key(
                         StatusCode::SERVICE_UNAVAILABLE,
                         "sandbox ownership lookup unavailable",
                     )),
-                    Ok(Ok(Some(record))) if access.allows(&record) => None,
+                    Ok(Ok(Some(record))) if access.allows(&record) => {
+                        acting_owner = Some(record.owner_id);
+                        None
+                    }
                     Ok(Ok(Some(_))) => {
                         Some(api_error(StatusCode::FORBIDDEN, "sandbox owner required"))
                     }
@@ -1123,8 +1168,13 @@ async fn require_api_key(
             _ => Some(api_error(StatusCode::BAD_REQUEST, "invalid sandbox ID")),
         };
     }
+    let principal = match (&access, acting_owner) {
+        (SandboxAccess::Team(_), Some(owner)) => owner,
+        _ => principal,
+    };
     request.extensions_mut().insert(access);
     request.extensions_mut().insert(CreatorPrincipal(principal));
+    request.extensions_mut().insert(CreatorTeam(team));
     request
         .extensions_mut()
         .insert(AdministratorContext(administrator));
@@ -1298,17 +1348,33 @@ async fn health(State(control): State<Arc<ControlPlane>>) -> Response {
 async fn create_v1(
     State(control): State<Arc<ControlPlane>>,
     Extension(principal): Extension<CreatorPrincipal>,
+    Extension(team): Extension<CreatorTeam>,
     body: Bytes,
 ) -> Response {
-    create(&control, "/sandboxes", body, principal.0.as_ref()).await
+    create(
+        &control,
+        "/sandboxes",
+        body,
+        principal.0.as_ref(),
+        team.0.as_ref(),
+    )
+    .await
 }
 
 async fn create_v2(
     State(control): State<Arc<ControlPlane>>,
     Extension(principal): Extension<CreatorPrincipal>,
+    Extension(team): Extension<CreatorTeam>,
     body: Bytes,
 ) -> Response {
-    create(&control, "/v2/sandboxes", body, principal.0.as_ref()).await
+    create(
+        &control,
+        "/v2/sandboxes",
+        body,
+        principal.0.as_ref(),
+        team.0.as_ref(),
+    )
+    .await
 }
 
 /// Point a node's descriptor at this control plane's proxy.
@@ -1324,9 +1390,10 @@ async fn create(
     path: &str,
     body: Bytes,
     principal: Option<&crate::ownership::OwnerId>,
+    team: Option<&crate::ownership::TeamId>,
 ) -> Response {
     let started = Instant::now();
-    let response = create_inner(control, path, body, principal).await;
+    let response = create_inner(control, path, body, principal, team).await;
     let m = &control.metrics;
     match response.status() {
         StatusCode::CREATED => {
@@ -1345,8 +1412,9 @@ async fn create_inner(
     path: &str,
     body: Bytes,
     principal: Option<&crate::ownership::OwnerId>,
+    team: Option<&crate::ownership::TeamId>,
 ) -> Response {
-    if principal.is_some()
+    if (principal.is_some() || team.is_some())
         && control
             .config
             .cluster_token
@@ -1457,6 +1525,11 @@ async fn create_inner(
             let mut value = HeaderValue::from_str(principal.as_str()).expect("validated owner ID");
             value.set_sensitive(true);
             request = request.header(crate::ownership::OWNER_HEADER, value);
+        }
+        if let Some(team) = team {
+            let mut value = HeaderValue::from_str(team.as_str()).expect("validated team ID");
+            value.set_sensitive(true);
+            request = request.header(crate::ownership::TEAM_HEADER, value);
         }
         if let Some(operation) = &reservation {
             let mut value = HeaderValue::from_str(operation.operation_token())
@@ -1847,7 +1920,7 @@ async fn adopt_owner(
     headers.insert("content-type", HeaderValue::from_static("application/json"));
     forward(
         State(control),
-        Extension(SandboxAccess(None)),
+        Extension(SandboxAccess::All),
         Path(parameters),
         method,
         uri,
@@ -2684,11 +2757,27 @@ async fn to_volume_node(
 /// node runs it.
 async fn sandboxes_metrics(
     State(control): State<Arc<ControlPlane>>,
+    Extension(access): Extension<SandboxAccess>,
     uri: axum::http::Uri,
 ) -> Response {
     let path = uri
         .path_and_query()
         .map_or("/sandboxes/metrics", axum::http::uri::PathAndQuery::as_str);
+    // Only the sandboxes this caller may reach. Nodes report every sandbox
+    // they run, so the store says which those are.
+    let reachable: Option<std::collections::HashSet<String>> = match &access {
+        SandboxAccess::All => None,
+        _ => match control.store.sandboxes().await {
+            Ok(records) => Some(
+                records
+                    .into_iter()
+                    .filter(|record| access.allows(record))
+                    .map(|record| record.sandbox_id)
+                    .collect(),
+            ),
+            Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        },
+    };
     let answers = match on_every_node(&control, Method::GET, path).await {
         Ok(answers) => answers,
         Err((status, message)) => return api_error(status, message),
@@ -2697,7 +2786,12 @@ async fn sandboxes_metrics(
     for (_, status, answer) in answers {
         if status == 200 {
             if let Some(found) = answer["sandboxes"].as_object() {
-                merged.extend(found.clone());
+                merged.extend(
+                    found
+                        .iter()
+                        .filter(|(id, _)| reachable.as_ref().is_none_or(|ids| ids.contains(*id)))
+                        .map(|(id, value)| (id.clone(), value.clone())),
+                );
             }
         }
     }

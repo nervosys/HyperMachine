@@ -1473,6 +1473,7 @@ async fn node_create(
     };
     let record = SandboxRecord {
         owner_id: None,
+        team_id: None,
         sandbox_id: id.clone(),
         node_id: node.agent.id().to_string(),
         template_id: "base".into(),
@@ -2845,6 +2846,120 @@ async fn resource_audit_correlates_decoded_targets_without_recording_path_values
     assert!(records[18].event.get("sandbox_ref").is_none());
 }
 
+/// A team key's create reaches the node carrying its team and principal,
+/// whatever team header the client sent; an administrator's carries none.
+#[tokio::test]
+async fn creation_carries_the_keys_team_to_the_node_and_never_the_clients() {
+    use hv2_cluster::ownership::{OWNER_HEADER, TEAM_HEADER};
+    use sha2::{Digest, Sha256};
+    struct Owned(tokio::task::JoinHandle<()>);
+    impl Drop for Owned {
+        fn drop(&mut self) {
+            self.0.abort();
+        }
+    }
+    let node_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let node_address = node_listener.local_addr().unwrap();
+    type Seen = Vec<(Vec<String>, Option<String>)>;
+    let observed = Arc::new(Mutex::new(Seen::new()));
+    let calls = observed.clone();
+    let _node = Owned(tokio::spawn(async move {
+        axum::serve(
+            node_listener,
+            Router::new().fallback(move |headers: HeaderMap| {
+                let calls = calls.clone();
+                async move {
+                    calls.lock().push((
+                        headers
+                            .get_all(TEAM_HEADER)
+                            .iter()
+                            .map(|value| value.to_str().unwrap().to_owned())
+                            .collect(),
+                        headers
+                            .get(OWNER_HEADER)
+                            .map(|value| value.to_str().unwrap().to_owned()),
+                    ));
+                    (
+                        StatusCode::CREATED,
+                        Json(json!({"sandboxID":"team-fixture"})),
+                    )
+                }
+            }),
+        )
+        .await
+        .unwrap();
+    }));
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    store
+        .put_node(
+            &hv2_cluster::model::NodeInfo {
+                id: "team-node".into(),
+                api: format!("http://{node_address}"),
+                proxy: node_address,
+                capacity: 8,
+                running: 0,
+                heartbeat_ms: now_ms(),
+                version: "fixture".into(),
+                jwk: None,
+                templates: vec!["base".into()],
+                template_metadata: Default::default(),
+            },
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
+    let digest = |key: &str| {
+        Sha256::digest(key.as_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    };
+    let expires = chrono::Utc::now().timestamp() + 60;
+    let policies = json!([
+        {"sha256":digest("red-key"),"expires_at":expires,"scopes":["sandboxes"],
+         "principal_id":"alice","team_id":"red"},
+        {"sha256":digest("admin-key"),"expires_at":expires,"scopes":["admin"]},
+    ]);
+    let control = ControlPlane::new(
+        store,
+        ControlConfig {
+            api_key: None,
+            api_keys: hv2_cluster::keys::ApiKeyPolicy::from_json(&policies.to_string()).unwrap(),
+            access_audit: None,
+            cluster_token: Some(TOKEN.into()),
+            proxy_port: 3000,
+            create_timeout: Duration::from_secs(5),
+            identity_issuer: None,
+        },
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let router = control::router(control.clone());
+    let _server = Owned(tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    }));
+    for (key, path) in [("red-key", "sandboxes"), ("admin-key", "v2/sandboxes")] {
+        let status = client()
+            .post(format!("{base}/{path}"))
+            .header("x-api-key", key)
+            .header(TEAM_HEADER, "blue")
+            .json(&json!({"templateID":"base","team_id":"blue"}))
+            .send()
+            .await
+            .unwrap()
+            .status();
+        assert_eq!(status, 201, "{key}");
+    }
+    let seen = observed.lock().clone();
+    assert_eq!(
+        seen,
+        vec![
+            (vec!["red".to_owned()], Some("alice".to_owned())),
+            (Vec::new(), None),
+        ]
+    );
+}
+
 #[tokio::test]
 async fn creator_context_comes_from_current_policy_not_client_headers_or_metadata() {
     use hv2_cluster::ownership::OWNER_HEADER;
@@ -3493,6 +3608,201 @@ async fn legacy_owner_adoption_requires_administrator_before_node_dispatch() {
             .status(),
         403
     );
+}
+
+#[tokio::test]
+async fn team_keys_reach_their_whole_team_and_nothing_else() {
+    use sha2::{Digest, Sha256};
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    for (id, owner, team) in [
+        ("red-alice", Some("alice"), Some("red")),
+        ("red-bob", Some("bob"), Some("red")),
+        ("blue-carol", Some("carol"), Some("blue")),
+        ("legacy", None, None),
+    ] {
+        let record: SandboxRecord = serde_json::from_value(json!({"sandbox_id":id,"node_id":"missing-node","template_id":"base",
+            "started_at_ms":1,"end_at_ms":600000,"cpu_count":1,"memory_mb":1024,"envd_version":"fixture","descriptor":{},
+            "owner_id":owner,"team_id":team})).unwrap();
+        store.put_sandbox(&record).await.unwrap();
+    }
+    let policy = |key: &str,
+                  scopes: &[&str],
+                  role: &str,
+                  principal: Option<&str>,
+                  team: Option<&str>| {
+        json!({
+        "sha256":Sha256::digest(key.as_bytes()).iter().map(|v|format!("{v:02x}")).collect::<String>(),
+        "expires_at":chrono::Utc::now().timestamp()+60,"scopes":scopes,"role":role,
+        "principal_id":principal,"team_id":team})
+    };
+    let all = ["sandboxes", "inventory", "volumes", "templates", "events"];
+    let policies = json!([
+        policy("alice", &all, "operator", Some("alice"), Some("red")),
+        policy(
+            "red-viewer",
+            &["inventory"],
+            "observer",
+            Some("viewer"),
+            Some("red")
+        ),
+        policy("carol", &all, "operator", Some("carol"), Some("blue")),
+        policy("admin", &["admin"], "operator", None, None),
+    ]);
+    let control = ControlPlane::new(
+        store.clone(),
+        ControlConfig {
+            api_key: None,
+            api_keys: hv2_cluster::keys::ApiKeyPolicy::from_json(&policies.to_string()).unwrap(),
+            access_audit: None,
+            cluster_token: Some(TOKEN.into()),
+            proxy_port: 3000,
+            create_timeout: Duration::from_secs(5),
+            identity_issuer: None,
+        },
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let router = control::router(control.clone());
+    let server = tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    });
+    let send = |method: reqwest::Method, path: &str, key: &str| {
+        client()
+            .request(method, format!("{base}{path}"))
+            .header("x-api-key", key)
+    };
+    let listed = |rows: Value| -> std::collections::BTreeSet<String> {
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["sandboxID"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let names = |ids: &[&str]| ids.iter().map(|id| (*id).to_owned()).collect();
+
+    // The whole team, whoever created it; nothing of another team's, or of
+    // no team's.
+    for key in ["alice", "red-viewer"] {
+        let response = send(reqwest::Method::GET, "/sandboxes", key)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200, "{key}");
+        assert_eq!(
+            listed(response.json().await.unwrap()),
+            names(&["red-alice", "red-bob"])
+        );
+    }
+    let response = send(reqwest::Method::GET, "/sandboxes", "carol")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        listed(response.json().await.unwrap()),
+        names(&["blue-carol"])
+    );
+    let response = send(reqwest::Method::GET, "/sandboxes", "admin")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        listed(response.json().await.unwrap()).len(),
+        4,
+        "an administrator is global"
+    );
+
+    // A teammate's sandbox is reachable; another team's is not, nor is one
+    // with no team -- and a client cannot claim a team by header.
+    assert_eq!(
+        send(reqwest::Method::GET, "/sandboxes/red-bob", "alice")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    for (id, key) in [
+        ("blue-carol", "alice"),
+        ("legacy", "alice"),
+        ("red-alice", "carol"),
+    ] {
+        for (method, suffix) in [
+            (reqwest::Method::GET, ""),
+            (reqwest::Method::DELETE, ""),
+            (reqwest::Method::POST, "/pause"),
+            (reqwest::Method::POST, "/exec"),
+            (reqwest::Method::GET, "/ports/80/tcp"),
+            (reqwest::Method::GET, "/public-ports"),
+            (reqwest::Method::GET, "/web-sharing"),
+        ] {
+            let status = send(method.clone(), &format!("/sandboxes/{id}{suffix}"), key)
+                .header(hv2_cluster::ownership::TEAM_HEADER, "red")
+                .header(hv2_cluster::ownership::TEAM_HEADER, "blue")
+                .send()
+                .await
+                .unwrap()
+                .status();
+            assert_eq!(status, 403, "{key} {method} /sandboxes/{id}{suffix}");
+        }
+        let status = send(
+            reqwest::Method::GET,
+            &format!("/events/sandboxes/{id}"),
+            key,
+        )
+        .send()
+        .await
+        .unwrap()
+        .status();
+        assert_eq!(status, 403, "{key} events of {id}");
+        assert!(
+            store.sandbox(id).await.unwrap().is_some(),
+            "a denied delete removes nothing"
+        );
+    }
+    // An observer reads the inventory and nothing more, even in its team.
+    assert_eq!(
+        send(reqwest::Method::GET, "/sandboxes/red-alice", "red-viewer")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+
+    // What every team shares is closed to team keys until it is partitioned.
+    for (method, path) in [
+        (reqwest::Method::GET, "/volumes"),
+        (reqwest::Method::GET, "/snapshots"),
+        (reqwest::Method::GET, "/events/sandboxes"),
+        (reqwest::Method::GET, "/events/webhooks"),
+        (reqwest::Method::POST, "/templates"),
+        (reqwest::Method::POST, "/sandboxes/red-alice/snapshots"),
+    ] {
+        let response = send(method.clone(), path, "alice").send().await.unwrap();
+        assert_eq!(response.status(), 403, "{method} {path}");
+        let body: Value = response.json().await.unwrap();
+        assert!(body["message"]
+            .as_str()
+            .unwrap()
+            .contains("shared by every team"));
+    }
+    assert_ne!(
+        send(reqwest::Method::GET, "/templates", "alice")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    assert_ne!(
+        send(reqwest::Method::GET, "/volumes", "admin")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    server.abort();
 }
 
 #[tokio::test]
