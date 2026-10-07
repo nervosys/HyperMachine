@@ -122,11 +122,18 @@ mod builds;
 mod checkpoints;
 mod cloud_login;
 mod disks;
+// Machines boot from ext4 root disks made with mkfs.ext4 and Unix file
+// modes; see machines_unsupported.rs for other hosts.
 mod env_vars;
 mod forwards;
 mod identity;
 mod idle;
 mod initramfs;
+#[cfg(target_os = "linux")]
+mod machines;
+#[cfg(not(target_os = "linux"))]
+#[path = "machines_unsupported.rs"]
+mod machines;
 mod private_source;
 mod reboot;
 // Volumes are served with openat2 and O_PATH, which only Linux has; see
@@ -279,6 +286,8 @@ struct Options {
     /// Where disks are kept: this node's own, never the snapshot store. See
     /// disks.rs.
     disk_dir: Option<String>,
+    /// Where machines -- long-lived VMs -- are kept: this node's own.
+    machine_dir: Option<String>,
     /// Let webhooks reach loopback, private and link-local addresses.
     allow_private_webhooks: bool,
     /// Prefault a restored guest's working set. Off by default: it halves
@@ -341,6 +350,7 @@ fn parse_options() -> Result<Options, String> {
         guest_kit: std::env::var_os("HV2_GUEST_KIT").map(Into::into),
         volume_dir: None,
         disk_dir: None,
+        machine_dir: None,
         allow_private_webhooks: false,
         snapshot_store: None,
         mtls_ca: None,
@@ -392,6 +402,7 @@ fn parse_options() -> Result<Options, String> {
             "--guest-kit" => opts.guest_kit = Some(value(&mut i)?.into()),
             "--volume-dir" => opts.volume_dir = Some(value(&mut i)?),
             "--disk-dir" => opts.disk_dir = Some(value(&mut i)?),
+            "--machine-dir" => opts.machine_dir = Some(value(&mut i)?),
             "--allow-private-webhooks" => opts.allow_private_webhooks = true,
             "--template" => {
                 let spec = value(&mut i)?;
@@ -1610,7 +1621,7 @@ async fn bring_up(
     };
     let (vm, nic) = new_vm(
         opts,
-        &initrd,
+        Some(&initrd),
         sandbox_id,
         cid,
         network.is_some().then_some(mac),
@@ -4585,10 +4596,11 @@ fn guest_cmdline(network: bool, transport: GuestTransport) -> String {
 type NetDevice = Arc<parking_lot::Mutex<hv2_core::devices::virtio_net_mmio::VirtioNetMmio>>;
 
 /// A sandbox VM, built and wired but not started: guest channel on `cid`,
-/// and a NIC with `mac` when one is given.
+/// and a NIC with `mac` when one is given. With no `initrd`, the guest boots
+/// from `disk` as its root filesystem -- a machine, not a sandbox.
 async fn new_vm(
     opts: &Options,
-    initrd: &str,
+    initrd: Option<&str>,
     name: &str,
     cid: u64,
     mac: Option<[u8; 6]>,
@@ -4601,11 +4613,18 @@ async fn new_vm(
         .cpu_cores(opts.cpu_cores)
         .memory_mb(opts.memory_mb)
         .capabilities(capabilities)
-        .boot_linux(
-            &opts.kernel,
-            Some(initrd),
-            guest_cmdline(mac.is_some(), opts.guest_transport),
-        )
+        .boot_linux(&opts.kernel, initrd, {
+            let cmdline = guest_cmdline(mac.is_some(), opts.guest_transport);
+            if initrd.is_some() {
+                cmdline
+            } else {
+                // No initramfs: the kernel mounts the disk and runs its init.
+                cmdline.replace(
+                    "rdinit=/init",
+                    "root=/dev/vda rw rootfstype=ext4 init=/init",
+                )
+            }
+        })
         .build()
         .await
         .map_err(|e| format!("building the VM: {e}"))?;
@@ -4767,7 +4786,7 @@ async fn build_template(
     let started = std::time::Instant::now();
     let (vm, _nic) = new_vm(
         opts,
-        &opts.initrd,
+        Some(&opts.initrd),
         "template",
         TEMPLATE_CID,
         opts.network.then_some(TEMPLATE_MAC),
@@ -4835,7 +4854,7 @@ async fn working_set(
 ) -> Result<Vec<(u64, u64)>, String> {
     let (vm, _nic) = new_vm(
         opts,
-        &opts.initrd,
+        Some(&opts.initrd),
         "template-probe",
         TEMPLATE_CID,
         opts.network.then_some(TEMPLATE_MAC),
@@ -5514,6 +5533,7 @@ async fn main() -> std::process::ExitCode {
     tokio::spawn(expire(Arc::clone(&state)));
     tokio::spawn(adopt_built(Arc::clone(&state)));
     tokio::spawn(snapshots::follow_store(Arc::clone(&state)));
+    tokio::spawn(machines::supervise(Arc::clone(&state)));
     tokio::spawn(telemetry::sample(Arc::clone(&state)));
 
     // The proxy, on its own port beside the control plane.
@@ -5667,6 +5687,14 @@ async fn main() -> std::process::ExitCode {
         .merge(hv2_cluster::events::router(event_store))
         .route("/volumes", get(volumes::list).post(volumes::create))
         .route("/disks", get(disks::list).post(disks::create))
+        .route("/machines", get(machines::list).post(machines::create))
+        .route(
+            "/machines/{name}",
+            get(machines::get).delete(machines::delete),
+        )
+        .route("/machines/{name}/exec", post(machines::exec))
+        .route("/machines/{name}/console", get(machines::console))
+        .route("/machines/{name}/{action}", post(machines::action))
         .route("/disks/{diskID}", get(disks::get).delete(disks::delete))
         .route(
             "/volumes/{volumeID}",
