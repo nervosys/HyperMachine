@@ -227,6 +227,10 @@ pub struct ClusterEvent {
     /// metadata, and for a pause or an end, its execution so far.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<Value>,
+    /// The team of the sandbox it concerns: who may read it, and whose
+    /// webhooks receive it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub team_id: Option<crate::ownership::TeamId>,
 }
 
 impl ClusterEvent {
@@ -241,6 +245,7 @@ impl ClusterEvent {
             detail: None,
             template_id: None,
             data: None,
+            team_id: None,
         }
     }
 
@@ -249,6 +254,7 @@ impl ClusterEvent {
     #[must_use]
     pub fn with_record(mut self, record: &SandboxRecord) -> Self {
         self.template_id = Some(record.template_id.clone());
+        self.team_id.clone_from(&record.team_id);
         let mut data = json!({ "sandbox_metadata": record.metadata });
         if matches!(
             self.kind.as_str(),
@@ -291,6 +297,10 @@ pub struct Webhook {
     /// Signs each payload; never returned by the API.
     pub secret: String,
     pub created_ms: u64,
+    /// The team that made it, which receives only that team's events. `None`
+    /// for an administrator's, which receives every event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub team_id: Option<crate::ownership::TeamId>,
 }
 
 /// One attempt to deliver an event to a webhook: E2B's `WebhookDelivery`.

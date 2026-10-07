@@ -3773,8 +3773,6 @@ async fn team_keys_reach_their_whole_team_and_nothing_else() {
     for (method, path) in [
         (reqwest::Method::GET, "/volumes"),
         (reqwest::Method::GET, "/snapshots"),
-        (reqwest::Method::GET, "/events/sandboxes"),
-        (reqwest::Method::GET, "/events/webhooks"),
         (reqwest::Method::POST, "/templates"),
         (reqwest::Method::POST, "/sandboxes/red-alice/snapshots"),
     ] {
@@ -3801,6 +3799,151 @@ async fn team_keys_reach_their_whole_team_and_nothing_else() {
             .unwrap()
             .status(),
         403
+    );
+
+    // Events: each team reads its own sandboxes' events, an administrator
+    // every one, and an event about no sandbox's team is an administrator's.
+    for id in ["red-alice", "red-bob", "blue-carol", "legacy"] {
+        let record = store.sandbox(id).await.unwrap().unwrap();
+        store
+            .publish(
+                &hv2_cluster::model::ClusterEvent::new("sandbox-created", "n", Some(id))
+                    .with_record(&record),
+            )
+            .await
+            .unwrap();
+    }
+    store
+        .publish(&hv2_cluster::model::ClusterEvent::new(
+            "node-joined",
+            "n",
+            None,
+        ))
+        .await
+        .unwrap();
+    let sandboxes_in = |rows: Value| -> std::collections::BTreeSet<String> {
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["sandboxId"].as_str().unwrap_or("").to_owned())
+            .collect()
+    };
+    for (key, expected) in [
+        ("alice", vec!["red-alice", "red-bob"]),
+        ("carol", vec!["blue-carol"]),
+        (
+            "admin",
+            vec!["red-alice", "red-bob", "blue-carol", "legacy"],
+        ),
+    ] {
+        let response = send(reqwest::Method::GET, "/events/sandboxes", key)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200, "{key}");
+        assert_eq!(
+            sandboxes_in(response.json().await.unwrap()),
+            names(&expected),
+            "{key}"
+        );
+    }
+    let response = send(reqwest::Method::GET, "/events/sandboxes/red-bob", "alice")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        sandboxes_in(response.json().await.unwrap()),
+        names(&["red-bob"])
+    );
+
+    // Webhooks: a team sees, changes and removes only its own; another
+    // team's is not there at all.
+    let hook = |key: &str, name: &str| {
+        send(reqwest::Method::POST, "/events/webhooks", key).json(&json!({
+            "name": name, "url": "https://example.com/hook", "signatureSecret": "0123456789abcdef"}))
+    };
+    let red_hook: Value = hook("alice", "red-hook")
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let blue_hook: Value = hook("carol", "blue-hook")
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let red_id = red_hook["id"].as_str().unwrap();
+    let blue_id = blue_hook["id"].as_str().unwrap();
+    let hook_names = |rows: Value| -> std::collections::BTreeSet<String> {
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["name"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let listed_hooks = send(reqwest::Method::GET, "/events/webhooks", "alice")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        hook_names(listed_hooks.json().await.unwrap()),
+        names(&["red-hook"])
+    );
+    let listed_hooks = send(reqwest::Method::GET, "/events/webhooks", "admin")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        hook_names(listed_hooks.json().await.unwrap()),
+        names(&["red-hook", "blue-hook"])
+    );
+    for (method, suffix) in [
+        (reqwest::Method::GET, ""),
+        (reqwest::Method::PATCH, ""),
+        (reqwest::Method::DELETE, ""),
+        (reqwest::Method::GET, "/deliveries"),
+        (reqwest::Method::GET, "/stats"),
+    ] {
+        let request = send(
+            method.clone(),
+            &format!("/events/webhooks/{blue_id}{suffix}"),
+            "alice",
+        );
+        let request = if method == reqwest::Method::PATCH {
+            request.json(&json!({"enabled": false}))
+        } else {
+            request
+        };
+        assert_eq!(
+            request.send().await.unwrap().status(),
+            404,
+            "{method} {suffix}"
+        );
+    }
+    assert_eq!(
+        send(
+            reqwest::Method::DELETE,
+            &format!("/events/webhooks/{red_id}"),
+            "alice"
+        )
+        .send()
+        .await
+        .unwrap()
+        .status(),
+        204
+    );
+    assert!(
+        store
+            .webhooks()
+            .await
+            .unwrap()
+            .iter()
+            .any(|h| h.id == blue_id),
+        "another team's webhook survives"
     );
     server.abort();
 }
