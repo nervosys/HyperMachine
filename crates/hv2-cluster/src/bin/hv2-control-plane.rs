@@ -52,6 +52,8 @@ struct SsoOptions {
     session_key_file: Option<String>,
     provider_ca: Option<String>,
     session_hours: Option<u64>,
+    /// Sign people in on private guest URLs too; see `sso_guest`.
+    guest_urls: bool,
 }
 
 fn parse() -> Result<Options, String> {
@@ -144,6 +146,7 @@ fn parse() -> Result<Options, String> {
             "--sso-members-file" => opts.sso.members_file = Some(value()?),
             "--sso-session-key-file" => opts.sso.session_key_file = Some(value()?),
             "--sso-provider-ca" => opts.sso.provider_ca = Some(value()?),
+            "--sso-guest-urls" => opts.sso.guest_urls = true,
             "--sso-session-hours" => {
                 opts.sso.session_hours = Some(
                     value()?
@@ -163,7 +166,7 @@ fn parse() -> Result<Options, String> {
                      [--identity-issuer URL] [--web-access-file F] [--domain-verification-file F] \
                      [--sso-issuer URL --sso-client-id ID --sso-redirect-url URL \
                      --sso-members-file F --sso-session-key-file F [--sso-client-secret-file F] \
-                     [--sso-provider-ca F] [--sso-session-hours N]]\n\
+                     [--sso-provider-ca F] [--sso-session-hours N] [--sso-guest-urls]]\n\
                      HV2_API_KEY and HV2_CLUSTER_TOKEN are read from the environment too."
                 );
                 std::process::exit(0);
@@ -345,10 +348,39 @@ async fn main() -> std::process::ExitCode {
             }
         }
     };
+    // Discovered before the proxy starts: guest URLs and the API share it.
+    let sso_login = match opts.sso.issuer.clone() {
+        Some(issuer) => match sso(issuer, &opts.sso).await {
+            Ok(sso) => Some(Arc::new(sso)),
+            Err(e) => {
+                eprintln!("hv2-control-plane: SSO: {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+        },
+        None if opts.sso.client_id.is_some()
+            || opts.sso.members_file.is_some()
+            || opts.sso.guest_urls =>
+        {
+            eprintln!("hv2-control-plane: the --sso-* options need --sso-issuer");
+            return std::process::ExitCode::FAILURE;
+        }
+        None => None,
+    };
+    // `__Host-` cookies are Secure: guest URLs must be served over TLS.
+    if opts.sso.guest_urls && opts.tls_cert.is_none() && opts.tls_bundle_file.is_none() {
+        eprintln!(
+            "hv2-control-plane: --sso-guest-urls needs proxy TLS (--tls-cert or --tls-bundle-file)"
+        );
+        return std::process::ExitCode::FAILURE;
+    }
     let routes = ClusterRoutes::new(Arc::clone(&store), Duration::from_secs(2));
     let routes = match &web_access {
         Some(policy) => routes.with_web_access(Arc::clone(policy)),
         None => routes,
+    };
+    let routes = match (&sso_login, opts.sso.guest_urls) {
+        (Some(sso), true) => routes.with_guest_sso(Arc::clone(sso)),
+        _ => routes,
     };
     let routes = match &mtls {
         None => Arc::new(routes),
@@ -527,54 +559,40 @@ async fn main() -> std::process::ExitCode {
             }
         });
     }
-    if let Some(issuer) = opts.sso.issuer.clone() {
-        match sso(issuer, &opts.sso).await {
-            Ok(sso) => {
-                let sso = Arc::new(sso);
-                if let Err(e) = control.enable_sso(Arc::clone(&sso)) {
-                    eprintln!("hv2-control-plane: SSO: {e}");
-                    return std::process::ExitCode::FAILURE;
-                }
-                #[cfg(unix)]
-                if let Some(path) = opts.sso.members_file.clone() {
-                    let Ok(mut reload) =
-                        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())
-                    else {
-                        eprintln!("hv2-control-plane: SSO members reload signal unavailable");
-                        return std::process::ExitCode::FAILURE;
-                    };
-                    tokio::spawn(async move {
-                        while reload.recv().await.is_some() {
-                            let path = path.clone();
-                            let sso = Arc::clone(&sso);
-                            let result = tokio::task::spawn_blocking(move || {
-                                let json = hv2_cluster::keys::read_policy_file(path)?;
-                                sso.replace_members(&json)
-                            })
-                            .await;
-                            match result {
-                                Ok(Ok(())) => eprintln!("hv2-control-plane: SSO members reloaded"),
-                                Ok(Err(e)) => {
-                                    eprintln!(
-                                        "hv2-control-plane: SSO members reload rejected: {e}"
-                                    );
-                                }
-                                Err(_) => {
-                                    eprintln!("hv2-control-plane: SSO members reload task failed");
-                                }
-                            }
-                        }
-                    });
-                }
-            }
-            Err(e) => {
-                eprintln!("hv2-control-plane: SSO: {e}");
-                return std::process::ExitCode::FAILURE;
-            }
+    if let Some(sso) = sso_login {
+        if let Err(e) = control.enable_sso(Arc::clone(&sso)) {
+            eprintln!("hv2-control-plane: SSO: {e}");
+            return std::process::ExitCode::FAILURE;
         }
-    } else if opts.sso.client_id.is_some() || opts.sso.members_file.is_some() {
-        eprintln!("hv2-control-plane: the --sso-* options need --sso-issuer");
-        return std::process::ExitCode::FAILURE;
+        #[cfg(unix)]
+        if let Some(path) = opts.sso.members_file.clone() {
+            let Ok(mut reload) =
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())
+            else {
+                eprintln!("hv2-control-plane: SSO members reload signal unavailable");
+                return std::process::ExitCode::FAILURE;
+            };
+            tokio::spawn(async move {
+                while reload.recv().await.is_some() {
+                    let path = path.clone();
+                    let sso = Arc::clone(&sso);
+                    let result = tokio::task::spawn_blocking(move || {
+                        let json = hv2_cluster::keys::read_policy_file(path)?;
+                        sso.replace_members(&json)
+                    })
+                    .await;
+                    match result {
+                        Ok(Ok(())) => eprintln!("hv2-control-plane: SSO members reloaded"),
+                        Ok(Err(e)) => {
+                            eprintln!("hv2-control-plane: SSO members reload rejected: {e}");
+                        }
+                        Err(_) => {
+                            eprintln!("hv2-control-plane: SSO members reload task failed");
+                        }
+                    }
+                }
+            });
+        }
     }
     tokio::spawn(control::reaper(Arc::clone(&control), opts.reap_interval));
     let addr = format!("0.0.0.0:{}", opts.port);
