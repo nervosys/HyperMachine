@@ -212,6 +212,48 @@ jobs:
                       exit 1
                   fi
 
+    fips:
+        name: FIPS Build (AWS-LC validated module)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+
+            - name: Install protoc
+              run: python tools/ci-install-protoc.py
+
+            # AWS-LC's FIPS module is built from source: CMake, Go and a C
+            # compiler, all on the runner image already. Fail early and say
+            # which, rather than deep inside a build script.
+            - name: Check the FIPS build's tools
+              run: cmake --version && go version && cc --version
+
+            # The provider must report FIPS mode on every component. A
+            # dependency one patch version back made it report otherwise
+            # (rustls-webpki 0.103.14), which would have made --fips refuse a
+            # correct build; this is what catches the next one.
+            - name: The FIPS provider reports FIPS mode
+              run: cargo test -p hv2-tls --features fips
+
+            - name: The control plane starts with --fips, and a default build refuses
+              shell: bash
+              run: |
+                  cargo build -p hv2-cluster --bin hv2-control-plane --features hv2-cluster/fips
+                  set +e
+                  timeout 5 target/debug/hv2-control-plane --fips --port 59813 --proxy-port 59814 > fips.log 2>&1
+                  code=$?
+                  set -e
+                  cat fips.log
+                  test "$code" -eq 124
+                  grep -q "FIPS mode: TLS on AWS-LC's validated module" fips.log
+                  cargo build -p hv2-cluster --bin hv2-control-plane
+                  if target/debug/hv2-control-plane --fips --port 59813 --proxy-port 59814; then
+                      echo "::error::a default build accepted --fips"
+                      exit 1
+                  fi
+
     test-core:
         name: Test Core (Linux only)
         runs-on: ubuntu-latest

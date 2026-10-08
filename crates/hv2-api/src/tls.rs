@@ -40,6 +40,7 @@ pub fn build_rustls_config(tls: &TlsConfig) -> crate::Result<Arc<rustls::ServerC
     let certs = load_certs(Path::new(&tls.cert_path))?;
     let key = load_key(Path::new(&tls.key_path))?;
 
+    hv2_tls::install_default();
     let mut config = rustls::ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, key)

@@ -222,16 +222,13 @@ pub(crate) async fn login(
     }
     let code = wait_for_code(listener, Instant::now() + wait).await?;
 
-    let mut builder = reqwest::Client::builder()
+    let ca_pem = ca
+        .map(|path| std::fs::read(path).context("could not read API CA certificate"))
+        .transpose()?;
+    let response = hv2_tls::http_client(ca_pem.as_deref())
+        .map_err(|e| anyhow::anyhow!("invalid API CA certificate: {e}"))?
         .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(30));
-    if let Some(path) = ca {
-        let bytes = std::fs::read(path).context("could not read API CA certificate")?;
-        builder = builder.add_root_certificate(
-            reqwest::Certificate::from_pem(&bytes).context("invalid API CA certificate")?,
-        );
-    }
-    let response = builder
+        .timeout(Duration::from_secs(30))
         .build()?
         .post(base.join("/auth/cli-token")?)
         .json(&json!({ "code": code, "verifier": verifier }))

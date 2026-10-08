@@ -152,7 +152,7 @@ async fn private_guest_urls_authenticate_before_open_and_strip_credentials_over_
         "denied.example.test".into(),
     ])
     .unwrap();
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    hv2_tls::install_default();
     let mut tls = rustls::ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(
@@ -1103,7 +1103,7 @@ async fn custom_domain_https_reaches_the_node_with_guest_routing_and_host_intact
         200
     );
     let cert = rcgen::generate_simple_self_signed(vec!["app.example.com".into()]).unwrap();
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    hv2_tls::install_default();
     let mut tls = rustls::ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(

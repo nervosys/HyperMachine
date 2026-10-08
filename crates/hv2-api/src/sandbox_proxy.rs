@@ -458,7 +458,7 @@ pub fn tls_config(
     // process-level CryptoProvider". The workspace enables `ring` and only
     // `ring`, so that is the one to install. Idempotent -- a second call
     // returns Err because one is already installed, which is not a failure.
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    hv2_tls::install_default();
 
     let mut config = rustls::ServerConfig::builder()
         .with_no_client_auth()

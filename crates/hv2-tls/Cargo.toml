@@ -1,0 +1,27 @@
+[package]
+name = "hv2-tls"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "The one place HyperMachine chooses its TLS crypto provider: ring, or AWS-LC's FIPS module"
+
+[features]
+default = []
+# Build every TLS endpoint and HTTP client on AWS-LC's FIPS 140-3 validated
+# module (through aws-lc-rs). Needs CMake, Go and a C compiler at build time.
+fips = ["rustls/aws_lc_rs", "rustls/fips"]
+
+[dependencies]
+rustls = { workspace = true }
+reqwest = { workspace = true }
+webpki-roots = "1"
+rustls-pemfile = { workspace = true }
+
+[lints]
+workspace = true

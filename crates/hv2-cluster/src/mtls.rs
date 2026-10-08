@@ -45,7 +45,7 @@ impl std::fmt::Debug for Mtls {
 }
 
 fn provider() -> Arc<rustls::crypto::CryptoProvider> {
-    Arc::new(rustls::crypto::ring::default_provider())
+    hv2_tls::provider()
 }
 
 fn invalid(what: &Path, e: impl std::fmt::Display) -> Error {

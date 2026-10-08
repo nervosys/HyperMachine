@@ -11,8 +11,12 @@ keywords.workspace = true
 categories.workspace = true
 description = "HyperMachine networking with TCP/IP stack and virtio-net"
 
+[features]
+fips = ["hv2-tls/fips"]
+
 [dependencies]
 hv2-core = { path = "../hv2-core", version = "1.1.0" }
+hv2-tls = { path = "../hv2-tls", version = "1.1.0" }
 
 # The device the bridge joins to a host link is behind one of these, because
 # that is how `VM::attach_net` hands it out.

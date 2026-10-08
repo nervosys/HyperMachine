@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   also boot with `panic=1`.
 
 ### Added
+- A FIPS build (`--features …/fips`): every TLS endpoint and HTTPS client in
+  the control plane, node daemon and `hm` runs on AWS-LC's FIPS 140-3 validated
+  module, chosen in one place (the new `hv2-tls` crate). `--fips` / `HV2_FIPS=1`
+  refuses to start a build that is not it. See `docs/FIPS.md` for what is and is
+  not covered.
 - Single sign-on through any OpenID Connect provider (`--sso-*`). Members
   listed by verified email sign in at `/auth/login` with code + PKCE. They get
   a `__Host-` session cookie, or send the token as a bearer token, and act

@@ -11,8 +11,13 @@ keywords.workspace = true
 categories.workspace = true
 description = "HyperMachine REST and gRPC API server"
 
+[features]
+# TLS on AWS-LC's FIPS module; see hv2-tls.
+fips = ["hv2-tls/fips"]
+
 [dependencies]
 hv2-core = { path = "../hv2-core", version = "1.1.0" }
+hv2-tls = { path = "../hv2-tls", version = "1.1.0" }
 hv2-agent = { path = "../hv2-agent", version = "1.1.0" }
 hv2-guest-agent = { path = "../hv2-guest-agent", version = "1.1.0" }
 hv2-runtime = { path = "../hv2-runtime", version = "1.1.0" }

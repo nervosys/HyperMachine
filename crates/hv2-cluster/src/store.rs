@@ -1149,7 +1149,7 @@ return {1,encoded}
         let client = if url.starts_with("rediss://") {
             // The workspace's one provider, for a crate that asks for the
             // process default. Already installed is fine.
-            let _ = rustls::crypto::ring::default_provider().install_default();
+            hv2_tls::install_default();
             let read = |var: &str| -> Result<Option<Vec<u8>>> {
                 match std::env::var_os(var) {
                     None => Ok(None),

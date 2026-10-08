@@ -159,11 +159,13 @@ impl ControlPlane {
     pub fn new(store: Arc<dyn ClusterStore>, config: ControlConfig) -> Arc<Self> {
         // No global timeout: a streaming or long request is the caller's
         // business. Creation gets its own below.
-        let http = reqwest::Client::builder()
+        let http = hv2_tls::http_client(None)
+            .unwrap_or_default()
             .connect_timeout(Duration::from_secs(5))
             .build()
             .unwrap_or_default();
-        let tcp_http = reqwest::Client::builder()
+        let tcp_http = hv2_tls::http_client(None)
+            .unwrap_or_default()
             .http1_only()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(Duration::from_secs(5))

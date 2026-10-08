@@ -848,24 +848,18 @@ impl Api {
             value.set_sensitive(true);
             headers.insert(reqwest::header::AUTHORIZATION, value);
         }
-        let certificate = ca
-            .map(|path| -> Result<_> {
-                let bytes = std::fs::read(path).context("could not read API CA certificate")?;
-                reqwest::Certificate::from_pem(&bytes).context("invalid API CA certificate")
-            })
+        let ca_pem = ca
+            .map(|path| std::fs::read(path).context("could not read API CA certificate"))
             .transpose()?;
-        let builder = || {
-            let mut builder = Client::builder()
+        let builder = || -> Result<reqwest::ClientBuilder> {
+            Ok(hv2_tls::http_client(ca_pem.as_deref())
+                .map_err(|e| anyhow::anyhow!("invalid API CA certificate: {e}"))?
                 .default_headers(headers.clone())
                 .redirect(reqwest::redirect::Policy::none())
-                .timeout(Duration::from_secs(timeout));
-            if let Some(certificate) = &certificate {
-                builder = builder.add_root_certificate(certificate.clone());
-            }
-            builder
+                .timeout(Duration::from_secs(timeout)))
         };
-        let client = builder().build()?;
-        let tcp_client = builder().http1_only().build()?;
+        let client = builder()?.build()?;
+        let tcp_client = builder()?.http1_only().build()?;
         Ok(Self {
             client,
             tcp_client,

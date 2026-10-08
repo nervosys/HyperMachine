@@ -159,17 +159,12 @@ impl SsoLogin {
         if issuer.scheme() != "https" && !loopback {
             return Err("the SSO issuer must be HTTPS".into());
         }
-        let mut builder = reqwest::Client::builder()
+        let http = hv2_tls::http_client(config.provider_ca_pem.as_deref())
+            .map_err(|e| format!("provider CA: {e}"))?
             .timeout(Duration::from_secs(10))
-            .redirect(reqwest::redirect::Policy::none());
-        if let Some(pem) = &config.provider_ca_pem {
-            for certificate in reqwest::Certificate::from_pem_bundle(pem)
-                .map_err(|e| format!("provider CA: {e}"))?
-            {
-                builder = builder.add_root_certificate(certificate);
-            }
-        }
-        let http = builder.build().map_err(|e| e.to_string())?;
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|e| e.to_string())?;
         let url = format!(
             "{}/.well-known/openid-configuration",
             config.issuer.trim_end_matches('/')

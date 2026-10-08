@@ -100,9 +100,9 @@ impl DomainVerification {
             if pem.len() > 64 * 1024 {
                 return Err("DNS resolver CA certificate exceeds 64 KiB".into());
             }
-            let certificate = reqwest::Certificate::from_pem(&pem)
+            reqwest::Certificate::from_pem(&pem)
                 .map_err(|_| "invalid DNS resolver CA certificate")?;
-            verification.client = resolver_client(Some(certificate))?;
+            verification.client = resolver_client(Some(&pem))?;
         }
         Ok(Arc::new(verification))
     }
@@ -253,15 +253,12 @@ impl DomainVerification {
     }
 }
 
-fn resolver_client(certificate: Option<reqwest::Certificate>) -> Result<reqwest::Client, String> {
-    let mut builder = reqwest::Client::builder()
+fn resolver_client(ca_pem: Option<&[u8]>) -> Result<reqwest::Client, String> {
+    hv2_tls::http_client(ca_pem)
+        .map_err(|_| "invalid DNS resolver CA certificate".to_string())?
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(5))
-        .connect_timeout(Duration::from_secs(3));
-    if let Some(certificate) = certificate {
-        builder = builder.add_root_certificate(certificate);
-    }
-    builder
+        .connect_timeout(Duration::from_secs(3))
         .build()
         .map_err(|_| "could not configure DNS resolver client".into())
 }
@@ -325,7 +322,7 @@ mod tests {
 
     async fn resolver_fixture() -> (DomainVerification, ResolverFixture) {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        hv2_tls::install_default();
         let issued =
             rcgen::generate_simple_self_signed(vec!["resolver.example.test".into()]).unwrap();
         let config = rustls::ServerConfig::builder()

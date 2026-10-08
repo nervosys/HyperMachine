@@ -11,10 +11,14 @@ keywords.workspace = true
 categories.workspace = true
 description = "HyperMachine multi-node sandbox cluster: shared store, scheduler, stateless control plane"
 
+[features]
+fips = ["hv2-tls/fips", "hv2-api/fips"]
+
 [dependencies]
 # The envd proxy the control plane runs, with cluster-aware routes.
 hv2-api = { path = "../hv2-api", version = "1.1.0" }
 hv2-core = { path = "../hv2-core", version = "1.1.0" }
+hv2-tls = { path = "../hv2-tls", version = "1.1.0" }
 zeroize = "1.9.0"
 base64 = "0.22"
 
