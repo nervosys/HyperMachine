@@ -45,7 +45,7 @@ const HANDSHAKE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10
 /// rustls' process default, because the workspace carries one backend (`ring`)
 /// and a default chosen by feature unification is how a second one sneaks in.
 fn provider() -> Arc<CryptoProvider> {
-    Arc::new(rustls::crypto::ring::default_provider())
+    hv2_tls::provider()
 }
 
 /// The certificate authority a gateway signs its interception leaves with.

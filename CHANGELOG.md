@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   also boot with `panic=1`.
 
 ### Added
+- A FIPS build (`--features …/fips`): every TLS endpoint and HTTPS client in
+  the control plane, node daemon and `hm` runs on AWS-LC's FIPS 140-3 validated
+  module, chosen in one place (the new `hv2-tls` crate). `--fips` / `HV2_FIPS=1`
+  refuses to start a build that is not it. See `docs/FIPS.md` for what is and is
+  not covered.
 - Machines: long-lived VMs that boot from their own persistent ext4 root disk
   (made from any template), with no lifetime cap. They keep what they write
   across stop and start, guest reboots and daemon restarts (`autostart`), and

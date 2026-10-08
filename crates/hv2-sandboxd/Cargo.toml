@@ -11,8 +11,12 @@ keywords.workspace = true
 categories.workspace = true
 description = "HyperMachine sandbox node daemon: E2B's API and envd for microVMs on one host, alone or in a cluster"
 
+[features]
+fips = ["hv2-tls/fips", "hv2-api/fips", "hv2-net/fips", "hv2-cluster/fips"]
+
 [dependencies]
 hv2-core = { path = "../hv2-core", version = "1.1.0" }
+hv2-tls = { path = "../hv2-tls", version = "1.1.0" }
 hv2-agent = { path = "../hv2-agent", version = "1.1.0" }
 hv2-api = { path = "../hv2-api", version = "1.1.0" }
 hv2-net = { path = "../hv2-net", version = "1.1.0" }

@@ -38,6 +38,8 @@ struct Options {
     mtls_key: Option<String>,
     mtls_node_name: String,
     identity_issuer: Option<String>,
+    /// Refuse to start unless TLS runs on AWS-LC's FIPS module.
+    fips: bool,
     /// Single sign-on through an OpenID Connect provider; see `sso_login`.
     sso: SsoOptions,
 }
@@ -82,6 +84,7 @@ fn parse() -> Result<Options, String> {
         mtls_key: None,
         mtls_node_name: hv2_cluster::mtls::DEFAULT_NODE_NAME.to_string(),
         identity_issuer: None,
+        fips: false,
         sso: SsoOptions::default(),
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -139,6 +142,7 @@ fn parse() -> Result<Options, String> {
             "--mtls-key" => opts.mtls_key = Some(value()?),
             "--mtls-node-name" => opts.mtls_node_name = value()?,
             "--identity-issuer" => opts.identity_issuer = Some(value()?),
+            "--fips" => opts.fips = true,
             "--sso-issuer" => opts.sso.issuer = Some(value()?),
             "--sso-client-id" => opts.sso.client_id = Some(value()?),
             "--sso-client-secret-file" => opts.sso.client_secret_file = Some(value()?),
@@ -245,6 +249,14 @@ async fn main() -> std::process::ExitCode {
             return std::process::ExitCode::FAILURE;
         }
     };
+    // FIPS mode: refuse to run a build that only claims it.
+    if opts.fips || std::env::var("HV2_FIPS").is_ok_and(|v| v == "1") {
+        if let Err(e) = hv2_tls::require_fips() {
+            eprintln!("hv2-control-plane: {e}");
+            return std::process::ExitCode::FAILURE;
+        }
+        eprintln!("hv2-control-plane: FIPS mode: TLS on AWS-LC's validated module");
+    }
     let api_keys = match opts
         .api_keys_file
         .as_ref()

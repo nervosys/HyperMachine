@@ -675,7 +675,8 @@ impl Dispatcher {
             })?;
         // The address checked is the address used: a name that resolves
         // somewhere else by the time the request connects is not asked again.
-        let client = reqwest::Client::builder()
+        let client = hv2_tls::http_client(None)
+            .unwrap_or_default()
             .resolve(&host, addr)
             .redirect(reqwest::redirect::Policy::none())
             .timeout(DELIVERY_TIMEOUT)

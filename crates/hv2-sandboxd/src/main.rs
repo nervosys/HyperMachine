@@ -274,6 +274,8 @@ struct Options {
     identity_key: Option<std::path::PathBuf>,
     /// Do not offer sandboxes' NICs checksum and segmentation offload.
     no_net_offload: bool,
+    /// Refuse to start unless TLS runs on AWS-LC's FIPS module.
+    fips: bool,
     /// Templates beyond `base` (which is `HV2_INITRD`): name and initramfs,
     /// from `--template NAME=PATH`.
     templates: Vec<(String, String)>,
@@ -346,6 +348,7 @@ fn parse_options() -> Result<Options, String> {
         require_template: false,
         prefault: false,
         no_net_offload: false,
+        fips: false,
         templates: Vec::new(),
         guest_kit: std::env::var_os("HV2_GUEST_KIT").map(Into::into),
         volume_dir: None,
@@ -399,6 +402,7 @@ fn parse_options() -> Result<Options, String> {
             "--require-template" => opts.require_template = true,
             "--prefault" => opts.prefault = true,
             "--no-net-offload" => opts.no_net_offload = true,
+            "--fips" => opts.fips = true,
             "--guest-kit" => opts.guest_kit = Some(value(&mut i)?.into()),
             "--volume-dir" => opts.volume_dir = Some(value(&mut i)?),
             "--disk-dir" => opts.disk_dir = Some(value(&mut i)?),
@@ -5203,6 +5207,14 @@ async fn main() -> std::process::ExitCode {
             return std::process::ExitCode::FAILURE;
         }
     };
+    // FIPS mode: refuse to run a build that only claims it.
+    if opts.fips || std::env::var("HV2_FIPS").is_ok_and(|v| v == "1") {
+        if let Err(e) = hv2_tls::require_fips() {
+            eprintln!("hv2-sandboxd: {e}");
+            return std::process::ExitCode::FAILURE;
+        }
+        eprintln!("hv2-sandboxd: FIPS mode: TLS on AWS-LC's validated module");
+    }
     let port = opts.port;
     let proxy_port = opts.proxy_port;
     let tls_cert = opts.tls_cert.clone();
@@ -5486,7 +5498,8 @@ async fn main() -> std::process::ExitCode {
         snapshots: parking_lot::RwLock::new(BTreeMap::new()),
         step_builds: parking_lot::Mutex::new(HashMap::new()),
         upload_tokens: Mutex::new(HashMap::new()),
-        http: reqwest::Client::builder()
+        http: hv2_tls::http_client(None)
+            .unwrap_or_default()
             .connect_timeout(Duration::from_secs(10))
             .build()
             .unwrap_or_default(),

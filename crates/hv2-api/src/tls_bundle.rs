@@ -88,7 +88,7 @@ impl TlsBundle {
     /// Build a workload-proxy configuration supporting HTTP/1.1 and HTTP/2.
     #[must_use]
     pub fn server_config(self: &Arc<Self>) -> rustls::ServerConfig {
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        hv2_tls::install_default();
         let mut config = rustls::ServerConfig::builder()
             .with_no_client_auth()
             .with_cert_resolver(self.clone());
@@ -153,7 +153,7 @@ fn pair(pair: &Pair, total: &mut usize) -> Result<CertifiedKey, String> {
         .map_err(|_| "invalid TLS certificate PEM")?;
     valid_certificates(&certs, x509_parser::time::ASN1Time::now())?;
     let key = PrivateKeyDer::from_pem_slice(&key).map_err(|_| "invalid TLS private key PEM")?;
-    let provider = rustls::crypto::ring::default_provider();
+    let provider = hv2_tls::provider();
     let certified = CertifiedKey::from_der(certs, key, &provider)
         .map_err(|_| "invalid TLS certificate/key pair")?;
     certified
