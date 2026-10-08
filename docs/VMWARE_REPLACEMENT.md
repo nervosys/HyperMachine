@@ -1,0 +1,101 @@
+# HyperMachine as a VMware replacement on AWS GovCloud
+
+**Goal:** run HyperMachine where an organisation runs vSphere (ESXi hosts managed by
+vCenter): long-lived, general-purpose VMs, on a fleet of EC2 bare-metal hosts in AWS
+GovCloud (US). It must meet FedRAMP High / DoD IL4–5 expectations for cryptography,
+encryption at rest, audit and hardening.
+
+This page is the plan and its status. Each pull request in the program updates its row.
+An item is marked done only with evidence: a test, or a run on real KVM or a real host
+that is archived under `docs/benchmarks/`.
+
+## Where it starts (2026-10-07)
+
+HyperMachine today is an ephemeral microVM **sandbox** platform. It is fast KVM boot,
+fork and checkpoints, teams, SSO, egress policy and block disks, built for E2B-style
+workloads. Against vSphere and GovCloud, the gaps found were:
+
+- **VMs:** sandboxes have a 24 h lifetime cap and a RAM root filesystem, boot only a
+  Linux kernel and initramfs, and do not survive a host restart.
+- **Boot:**
+  - there is no UEFI/BIOS firmware path; `hv2-core/src/uefi` is type models only;
+  - there is no ISO install path;
+  - disks are raw only (QCOW2 and VHDX are header parsers; there is no VMDK).
+- **Operations:**
+  - live migration is in-memory only, and KVM dirty logging is never called;
+  - there is no HA restart, maintenance mode or resource-aware placement;
+  - each VM has one disk and one NIC, with no hot-plug, behind a userspace NAT.
+- **Government:**
+  - TLS runs on `ring`, which is not a validated module, and nothing selects FIPS mode
+    at runtime;
+  - nothing is encrypted at rest, and there is no KMS integration;
+  - the Terraform hardcodes `arn:aws:` and defaults to a public EKS endpoint;
+  - the node runs privileged as root with no seccomp or jailer;
+  - audit has no export or retention.
+
+## Decisions
+
+| Decision | Choice |
+|---|---|
+| Order | Phase 1 (persistent VMs) and Phase 2 (Gov baseline) are built in parallel |
+| Guests | Linux first. Windows comes in Phase 4 |
+| FIPS 140-3 | AWS-LC's validated FIPS module (through `aws-lc-rs`) for TLS and the primitives that need a validated module. IronCrypto stays for everything else until it has its own CMVP certificate |
+| Deployment | A fleet of EC2 bare-metal hosts (a hardened AMI with systemd services), not EKS |
+
+## Hosting on GovCloud
+
+KVM needs hardware virtualisation, which on EC2 means a `.metal` instance. GovCloud
+(US-East) offers several families that come in `.metal` sizes, among them M5n, C5n, M6i,
+M7i, R8i, I4i and I7i. Each `.metal` size must still be confirmed per GovCloud region
+before it is relied on. EC2 nested virtualisation on non-metal C8i/M8i/R8i instances was
+announced in February 2026 for commercial regions only, so this plan does not depend
+on it.
+
+## Phases
+
+Status is one of: not started, in progress, done (with evidence link).
+
+### Phase 1: Persistent VMs
+
+| Item | Status |
+|---|---|
+| A VM object separate from sandboxes: a definition, persistent state, no lifetime cap | not started |
+| Boot from a persistent root disk (raw), with root on `/dev/vda` | not started |
+| Restart policy and autostart; VMs come back after a host or daemon restart | not started |
+| QCOW2 read/write and thin images | not started |
+| UEFI firmware boot (OVMF), so stock cloud images and ISO installers work | not started |
+| Serial console over the API, then a web console | not started |
+
+### Phase 2: Gov baseline
+
+| Item | Status |
+|---|---|
+| TLS through AWS-LC's FIPS module, with suites and groups restricted to approved ones | not started |
+| A `--fips` strict mode in every binary that refuses non-approved algorithms | not started |
+| Encryption at rest: KMS envelope keys for snapshots, memory images, disks and volumes; encrypted EBS | not started |
+| GovCloud infrastructure: partition-aware, private-only, IMDSv2, VPC endpoints, KMS; a hardened AMI | not started |
+| VMM isolation: per-VM unprivileged process, seccomp, no privileged root | not started |
+| Audit export to CloudWatch with retention, and node and guest actions covered | not started |
+| Signed releases and images, provenance, SBOM published | not started |
+
+### Phase 3: Operations
+
+| Item | Status |
+|---|---|
+| Live migration: KVM dirty logging, a network transport, convergence | not started |
+| HA restart on host failure; maintenance mode and evacuation | not started |
+| Resource-aware placement (CPU, memory, affinity) | not started |
+| Shared datastores (EBS, FSx or Ceph); several disks per VM; hot-plug over virtio-pci | not started |
+| Several NICs per VM; bridged and VLAN networking; IPAM | not started |
+| Disk snapshots and clones | not started |
+| VMDK and OVA import | not started |
+
+### Phase 4: Enterprise and Windows
+
+| Item | Status |
+|---|---|
+| VGA and a VNC or web graphical console | not started |
+| Windows guests and a Windows guest agent | not started |
+| A vTPM device a guest can reach; Secure Boot in the firmware path | not started |
+| PIV/CAC client-certificate sign-in; SAML; group-based roles | not started |
+| A vCenter-style UI: inventory, lifecycle, console, alarms | not started |
