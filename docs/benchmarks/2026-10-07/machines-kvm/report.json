@@ -1,0 +1,51 @@
+{
+  "success": true,
+  "purpose": "functional verification of persistent machines on KVM",
+  "input_sha256": {
+    "daemon": "efad6c493d7ffa7b58b2768bd17670c8ae75d9e70a4709fac1d9ea7dc63422c8",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "driver": "a43aec5e6af4b70378bad9fe3388700df0e7c7f44e0349e0fdddda309a1b7712"
+  },
+  "cases": [
+    {
+      "name": "a machine boots with its root on its own disk",
+      "success": true,
+      "detail": {
+        "root_mount": "/dev/root / ext4 rw,relatime 0 0",
+        "image_bytes": 1073741824,
+        "image_allocated": 38305792
+      }
+    },
+    {
+      "name": "what it wrote survives stop and start",
+      "success": true,
+      "detail": {
+        "sha256": "149a91add8b46be7531f49a942f2422d5ec7c9414ee5d1fa3e434b329b1523cc"
+      }
+    },
+    {
+      "name": "what it wrote survives the guest rebooting itself",
+      "success": true,
+      "detail": {
+        "sha256": "149a91add8b46be7531f49a942f2422d5ec7c9414ee5d1fa3e434b329b1523cc"
+      }
+    },
+    {
+      "name": "a killed daemon's successor starts it again with its data",
+      "success": true,
+      "detail": {
+        "sha256": "149a91add8b46be7531f49a942f2422d5ec7c9414ee5d1fa3e434b329b1523cc",
+        "autostart_off": "stopped"
+      }
+    },
+    {
+      "name": "a running machine cannot be deleted; a stopped one can",
+      "success": true,
+      "detail": {
+        "running_delete": 409,
+        "stopped_delete": 204
+      }
+    }
+  ]
+}

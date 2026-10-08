@@ -139,6 +139,10 @@ impl ControlPlane {
         self.sso.read().clone()
     }
 
+    pub(crate) fn store(&self) -> &Arc<dyn ClusterStore> {
+        &self.store
+    }
+
     /// Atomically replace scoped policies after validating the full JSON array.
     /// Rejected replacements leave active policies unchanged. In-flight requests
     /// retain their original authorization; new requests use the replacement.
@@ -321,6 +325,7 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/auth/login", get(crate::sso_login::login))
         .route("/auth/callback", get(crate::sso_login::callback))
         .route("/auth/session", get(crate::sso_login::session))
+        .route("/auth/guest", get(crate::sso_guest::guest))
         .route("/auth/logout", axum::routing::post(crate::sso_login::logout))
         .route(
             "/auth/cli-token",
@@ -3084,6 +3089,8 @@ async fn ui() -> Response {
 pub struct ClusterRoutes {
     store: Arc<dyn ClusterStore>,
     web_access: Option<Arc<crate::web_access::WebAccessPolicy>>,
+    /// Single sign-on for guest URLs; see `sso_guest`.
+    guest_sso: Option<Arc<crate::sso_login::SsoLogin>>,
     cache: Mutex<HashMap<String, (SocketAddr, Instant)>>,
     ttl: Duration,
     backend_tls: Option<(
@@ -3098,10 +3105,20 @@ impl ClusterRoutes {
         Self {
             store,
             web_access: None,
+            guest_sso: None,
             cache: Mutex::new(HashMap::new()),
             ttl,
             backend_tls: None,
         }
+    }
+
+    /// Require a signed-in member on guest application URLs, who may view the
+    /// sandbox, and tell the guest who they are. Alongside `with_web_access`,
+    /// a browser may use either.
+    #[must_use]
+    pub fn with_guest_sso(mut self, sso: Arc<crate::sso_login::SsoLogin>) -> Self {
+        self.guest_sso = Some(sso);
+        self
     }
 
     /// Require dedicated browser credentials on guest application URLs.
@@ -3125,7 +3142,9 @@ impl ClusterRoutes {
 #[async_trait::async_trait]
 impl hv2_api::sandbox_proxy::SandboxRoutes for ClusterRoutes {
     fn prepare_response(&self, _sandbox: &str, port: u16, headers: &mut HeaderMap) {
-        if self.web_access.is_some() && port != hv2_api::sandbox_proxy::ENVD_PORT {
+        if (self.web_access.is_some() || self.guest_sso.is_some())
+            && port != hv2_api::sandbox_proxy::ENVD_PORT
+        {
             headers.insert(
                 axum::http::header::CACHE_CONTROL,
                 HeaderValue::from_static("private, no-store"),
@@ -3160,12 +3179,50 @@ impl hv2_api::sandbox_proxy::SandboxRoutes for ClusterRoutes {
         );
         Ok(())
     }
+    async fn intercept(
+        &self,
+        _sandbox: &str,
+        port: u16,
+        uri: &axum::http::Uri,
+        headers: &HeaderMap,
+    ) -> Option<hv2_api::sandbox_proxy::ProxyAnswer> {
+        let sso = self.guest_sso.as_ref()?;
+        if port == hv2_api::sandbox_proxy::ENVD_PORT {
+            return None;
+        }
+        crate::sso_guest::intercept(sso, uri, headers, self.web_access.is_some())
+    }
+
     async fn admit_request(
         &self,
         sandbox: &str,
         port: u16,
         headers: &mut HeaderMap,
     ) -> Result<(), hv2_api::sandbox_proxy::ProxyAccessDenied> {
+        // A signed-in member's pass first: the guest never sees it, and is
+        // told only the verified email. With guest SSO on and no web access
+        // file, a request with no valid pass is refused -- never forwarded
+        // as if no policy applied.
+        if let Some(sso) = self.guest_sso.as_ref() {
+            if port != hv2_api::sandbox_proxy::ENVD_PORT {
+                headers.remove(crate::web_access::IDENTITY_HEADER);
+                match crate::sso_guest::admit(sso, self.store.as_ref(), sandbox, headers).await {
+                    crate::sso_guest::Admission::Member(email) => {
+                        let identity = email.parse().map_err(|_| {
+                            hv2_api::sandbox_proxy::ProxyAccessDenied { challenge: None }
+                        })?;
+                        headers.insert(crate::web_access::IDENTITY_HEADER, identity);
+                        return Ok(());
+                    }
+                    crate::sso_guest::Admission::Refused | crate::sso_guest::Admission::None
+                        if self.web_access.is_none() =>
+                    {
+                        return Err(hv2_api::sandbox_proxy::ProxyAccessDenied { challenge: None });
+                    }
+                    _ => {}
+                }
+            }
+        }
         // Existing operator scopes and envd token transport retain their policy.
         let denied = match self.authorize_request(sandbox, port, headers) {
             Ok(()) => return Ok(()),

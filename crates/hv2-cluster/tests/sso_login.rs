@@ -173,12 +173,13 @@ struct Cluster {
     base: String,
     sso: Arc<SsoLogin>,
     client: reqwest::Client,
+    store: Arc<dyn ClusterStore>,
 }
 
 async fn spawn_cluster(provider: &Provider) -> Cluster {
     let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
     let control = ControlPlane::new(
-        store,
+        Arc::clone(&store),
         ControlConfig {
             api_key: None,
             api_keys: Vec::new(),
@@ -213,6 +214,7 @@ async fn spawn_cluster(provider: &Provider) -> Cluster {
     Cluster {
         base,
         sso,
+        store,
         client: reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .build()
@@ -554,6 +556,182 @@ async fn a_cli_login_trades_its_code_and_verifier_for_a_session() {
         .client
         .post(format!("{}/auth/cli-token", cluster.base))
         .json(&json!({"code": token, "verifier": verifier}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 401);
+}
+
+/// Guest URLs: a signed-in member who may view the sandbox gets a pass for
+/// that one host; the guest sees their verified email and never the pass.
+#[tokio::test]
+async fn a_guest_url_tells_the_guest_who_signed_in_and_never_shows_it_the_pass() {
+    use hv2_cluster::control::ClusterRoutes;
+    let provider = spawn_provider().await;
+    let cluster = spawn_cluster(&provider).await;
+    cluster
+        .sso
+        .replace_members(
+            r#"[{"email":"alice@example.com","scopes":["sandboxes"],"principal_id":"alice","team_id":"red"},
+                {"email":"bob@example.com","scopes":["sandboxes"],"principal_id":"bob","team_id":"blue"}]"#,
+        )
+        .unwrap();
+
+    // The "node": answers with the headers the guest received.
+    let node_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let node = node_listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(
+            node_listener,
+            Router::new().fallback(|headers: HeaderMap| async move {
+                let seen: serde_json::Map<String, Value> = headers
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), json!(v.to_str().unwrap_or(""))))
+                    .collect();
+                Json(Value::Object(seen))
+            }),
+        )
+        .await
+        .unwrap();
+    });
+    cluster
+        .store
+        .put_node(
+            &hv2_cluster::model::NodeInfo {
+                id: "guest-node".into(),
+                api: format!("http://{node}"),
+                proxy: node,
+                capacity: 4,
+                running: 1,
+                heartbeat_ms: hv2_cluster::model::now_ms(),
+                version: "fixture".into(),
+                jwk: None,
+                templates: vec!["base".into()],
+                template_metadata: Default::default(),
+            },
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
+    let record: hv2_cluster::model::SandboxRecord = serde_json::from_value(json!({
+        "sandbox_id":"redsbx","node_id":"guest-node","template_id":"base","started_at_ms":1,
+        "end_at_ms":9_999_999_999_999u64,"cpu_count":1,"memory_mb":512,"envd_version":"x","descriptor":{},
+        "owner_id":"alice","team_id":"red"}))
+    .unwrap();
+    cluster.store.put_sandbox(&record).await.unwrap();
+
+    let proxy_port = {
+        let probe = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        probe.local_addr().unwrap().port()
+    };
+    let routes = ClusterRoutes::new(Arc::clone(&cluster.store), Duration::from_secs(2))
+        .with_guest_sso(Arc::clone(&cluster.sso));
+    let (_stop, stopped) = tokio::sync::oneshot::channel();
+    tokio::spawn(hv2_api::sandbox_proxy::serve(
+        std::net::SocketAddr::from(([127, 0, 0, 1], proxy_port)),
+        Arc::new(routes),
+        stopped,
+    ));
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let host = format!("8080-redsbx.example.test:{proxy_port}");
+    let via_proxy = |path: &str, host: &str| {
+        cluster
+            .client
+            .get(format!("http://127.0.0.1:{proxy_port}{path}"))
+            .header(header::HOST, host)
+    };
+
+    // No credential: off to sign in, remembering where.
+    let response = via_proxy("/app?x=1", &host).send().await.unwrap();
+    assert_eq!(response.status(), 303);
+    let to_guest = response.headers()[header::LOCATION]
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        to_guest.starts_with(
+            "https://cp.test/auth/guest?url=https%3A%2F%2F8080-redsbx.example.test%3A"
+        ),
+        "{to_guest}"
+    );
+    let guest_path = to_guest.trim_start_matches("https://cp.test").to_string();
+
+    // At the control plane, signed in as alice.
+    let callback = sign_in(&cluster, untouched).await;
+    let session = set_cookie(&callback, "__Host-hm_session").unwrap();
+    let response = cluster
+        .client
+        .get(format!("{}{guest_path}", cluster.base))
+        .header(header::COOKIE, format!("__Host-hm_session={session}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 303);
+    let handoff =
+        reqwest::Url::parse(response.headers()[header::LOCATION].to_str().unwrap()).unwrap();
+    assert_eq!(handoff.path(), "/__hm/auth");
+    let handoff_path = format!("{}?{}", handoff.path(), handoff.query().unwrap());
+
+    // The handoff on another host is refused; on its own, it becomes a pass.
+    let other = format!("8080-othersbx.example.test:{proxy_port}");
+    let response = via_proxy(&handoff_path, &other).send().await.unwrap();
+    assert_eq!(response.status(), 403);
+    let response = via_proxy(&handoff_path, &host).send().await.unwrap();
+    assert_eq!(response.status(), 303);
+    assert_eq!(response.headers()[header::LOCATION], "/app?x=1");
+    let pass = set_cookie(&response, "__Host-hm_guest").expect("a guest pass");
+
+    // Through to the guest: told who, never shown the pass, a forged
+    // identity header replaced, its own cookies kept.
+    let seen: Value = via_proxy("/app?x=1", &host)
+        .header(header::COOKIE, format!("app=1; __Host-hm_guest={pass}"))
+        .header("x-hypermachine-user", "mallory@example.com")
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(seen["x-hypermachine-user"], "alice@example.com");
+    assert_eq!(seen["cookie"], "app=1");
+    assert!(
+        !seen.to_string().contains("hmh1."),
+        "the pass reached the guest"
+    );
+
+    // The pass is this host's alone.
+    let response = via_proxy("/", &other)
+        .header(header::COOKIE, format!("__Host-hm_guest={pass}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 401);
+
+    // Someone who may not view the sandbox gets no handoff.
+    *provider.next.lock() = Next {
+        email: "bob@example.com".into(),
+        verified: true,
+        wrong_nonce: false,
+    };
+    let bob = set_cookie(&sign_in(&cluster, untouched).await, "__Host-hm_session").unwrap();
+    let response = cluster
+        .client
+        .get(format!("{}{guest_path}", cluster.base))
+        .header(header::COOKIE, format!("__Host-hm_session={bob}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 403);
+
+    // Removed from the members, alice's pass stops working.
+    cluster
+        .sso
+        .replace_members(
+            r#"[{"email":"bob@example.com","scopes":["sandboxes"],"principal_id":"bob","team_id":"blue"}]"#,
+        )
+        .unwrap();
+    let response = via_proxy("/app", &host)
+        .header(header::COOKIE, format!("__Host-hm_guest={pass}"))
         .send()
         .await
         .unwrap();

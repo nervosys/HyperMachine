@@ -73,6 +73,39 @@ policy](API_KEY_ROTATION.md), keyed by email instead of a key digest:
 Evidence: [the shipped binaries against an owned provider over TLS](benchmarks/2026-10-07/sso-binaries/README.md):
 browser and CLI sign-in, the origin check, a non-member, and revocation on reload.
 
+## Private guest URLs
+
+With `--sso-guest-urls`, which needs proxy TLS, a browser at a sandbox's
+`{port}-{sandbox}.{domain}` URL (or a bound custom domain) must be a signed-in
+member who may view that sandbox. The guest app is then told who they are in
+`X-HyperMachine-User: <verified email>`, as an exe.dev app receives
+`X-ExeDev-Email`.
+
+The API session cookie never goes to a guest host: a guest URL is served by a
+program in the guest, and it could keep anything its browser sent. Instead:
+
+1. A browser at a guest URL with no credential is sent to the control plane's
+   `/auth/guest?url=…`. If it has no session there, it signs in first.
+2. If the member may view the sandbox, they get a one-minute handoff token
+   sealed to that one host, and are sent back to `https://{host}/__hm/auth`.
+3. The proxy checks the handoff names this host, sets `__Host-hm_guest`
+   (`Secure`, `HttpOnly`, host-only), and returns the browser to the page it
+   asked for.
+4. On every request the proxy checks the pass, looks the member up again, and
+   checks they may still view the sandbox. It then removes the pass from the
+   request (the guest's own cookies are kept), replaces any client-sent
+   `X-HyperMachine-User`, and forwards.
+
+**Who may view a sandbox:**
+
+- an administrator;
+- a member of its [team](TEAMS.md), or in a deployment without teams, its creator;
+- an email its owner granted through [web sharing](PRIVATE_GUEST_URLS.md).
+
+With a `--web-access-file` too, a browser may use either Basic credentials or
+SSO. Without one, a request with no valid pass is refused, never forwarded.
+Envd's own port keeps its per-sandbox token and is not affected.
+
 ## What it protects against
 
 - **Login state.** The `state`, nonce and PKCE verifier travel in a short-lived
@@ -94,9 +127,6 @@ browser and CLI sign-in, the origin check, a non-member, and revocation on reloa
 
 ## Not yet
 
-- **Private guest URLs (`{port}-{sandbox}.domain`).** These still use their own
-  Basic credentials. Sharing the session with them needs the proxy to strip the
-  cookie before it reaches the guest.
 - **Revoking one session before it expires.** Remove the member instead, or
   rotate the session key.
 - **SAML.**

@@ -107,9 +107,11 @@ Browsers may cache Basic credentials; revocation or expiry is the server-side
 way to deny subsequent requests.
 
 This is operator-provisioned access to selected or all guest application URLs
-behind the configured proxy. It does not implement SSO/OIDC user login,
-account self-service, a logout portal, verified email claims
-or guest/proxy access auditing. Private mode is opt-in; other proxy instances
+behind the configured proxy. It does not implement account self-service, a
+logout portal or guest/proxy access auditing. For sign-in through an OpenID
+Connect provider, with the verified email passed to the guest, see
+[single sign-on for guest URLs](SSO.md#private-guest-urls), which can run
+alongside this. Private mode is opt-in; other proxy instances
 must be configured consistently. No authentication-throughput improvement or
 managed competitor performance win is implied.
 
