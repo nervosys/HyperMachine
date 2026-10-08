@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   module, chosen in one place (the new `hv2-tls` crate). `--fips` / `HV2_FIPS=1`
   refuses to start a build that is not it. See `docs/FIPS.md` for what is and is
   not covered.
+- Machine networking: a machine created with `network` has one NIC behind the
+  node's egress gateway, with a sandbox's `allowOut`/`denyOut` rules, kept with
+  the machine and applied at every boot. `GET /machines/{name}/network/decisions`
+  shows what was allowed and refused. Egress only; nothing can connect in.
 - Machines: long-lived VMs that boot from their own persistent ext4 root disk
   (made from any template), with no lifetime cap. They keep what they write
   across stop and start, guest reboots and daemon restarts (`autostart`), and

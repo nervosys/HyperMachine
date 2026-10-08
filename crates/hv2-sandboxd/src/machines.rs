@@ -35,8 +35,9 @@ use serde_json::{json, Value};
 use hv2_agent::AgentVM;
 
 use super::{
-    api_error, new_vm, now_ms, reserve, AppState, Arc, Deserialize, IntoResponse, Json, Path,
-    Response, Serialize, Sizes, Slot, State, StatusCode,
+    api_error, new_vm, now_ms, reserve, start_network, AppState, Arc, Deserialize, IntoResponse,
+    Json, LiveNetwork, NetworkRequest, NetworkSpec, Path, Response, SandboxNetworkConfig,
+    Serialize, Sizes, Slot, State, StatusCode,
 };
 
 /// How long a booting machine's guest agent has to answer.
@@ -55,6 +56,17 @@ struct Live {
     /// Its share of capacity.
     _slot: Slot,
     started_ms: u64,
+    /// Its gateway and the loop carrying its frames, when it has a NIC.
+    network: Option<LiveNetwork>,
+}
+
+impl Drop for Live {
+    fn drop(&mut self) {
+        // However it stopped, by the API or by itself: its gateway goes too.
+        if let Some(network) = &self.network {
+            network.bridge.abort();
+        }
+    }
 }
 
 static LIVE: StdMutex<Option<HashMap<String, Live>>> = StdMutex::new(None);
@@ -104,7 +116,49 @@ pub(crate) struct Stored {
     desired: Desired,
     #[serde(rename = "createdAt")]
     created_ms: u64,
+    /// Its network, as asked for. `None` is no NIC at all.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    network: Option<MachineNetwork>,
 }
+
+/// A machine's network: one NIC behind this node's egress gateway, which
+/// decides every connection the guest makes. The same rules as a sandbox's.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub(crate) struct MachineNetwork {
+    /// Whether it may reach the Internet. The node's default when absent.
+    #[serde(
+        rename = "allowInternetAccess",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    allow_internet_access: Option<bool>,
+    /// Hosts, addresses and CIDRs it may reach whatever the default.
+    #[serde(rename = "allowOut", default)]
+    allow_out: Vec<String>,
+    /// And those it may not.
+    #[serde(rename = "denyOut", default)]
+    deny_out: Vec<String>,
+}
+
+impl MachineNetwork {
+    /// The network this asks for, decided now.
+    async fn decide(&self, state: &AppState) -> Result<NetworkSpec, String> {
+        NetworkRequest {
+            allow_internet_access: self.allow_internet_access,
+            network: Some(SandboxNetworkConfig {
+                allow_out: self.allow_out.clone(),
+                deny_out: self.deny_out.clone(),
+                ..SandboxNetworkConfig::default()
+            }),
+            iam: BTreeMap::new(),
+        }
+        .decide(&state.opts)
+        .await
+    }
+}
+
+/// The MAC of a machine's one NIC. Only its own gateway ever sees it.
+const MACHINE_MAC: [u8; 6] = [0x52, 0x54, 0x00, 0x00, 0x00, 0x02];
 
 fn root(state: &AppState) -> PathBuf {
     match &state.opts.machine_dir {
@@ -178,6 +232,7 @@ fn describe(machine: &Stored) -> Value {
         "state": if running { "running" } else { "stopped" },
         "startedAt": started,
         "createdAt": machine.created_ms,
+        "network": machine.network,
     })
 }
 
@@ -326,12 +381,18 @@ async fn boot(state: &Arc<AppState>, machine: &Stored) -> Result<(), String> {
     }
     .applied(&state.opts);
     let image = dir_of(state, &machine.id).join("root.img");
-    let (vm, _nic) = new_vm(
+    // Decided at every boot, as a sandbox's is on resume: the node's default
+    // and reserved ranges may have changed since.
+    let spec = match &machine.network {
+        Some(network) => Some(network.decide(state).await?),
+        None => None,
+    };
+    let (vm, nic) = new_vm(
         &sized,
         None,
         &machine.id,
         cid,
-        None,
+        spec.is_some().then_some(MACHINE_MAC),
         Some((image.as_path(), machine.id.as_str())),
     )
     .await?;
@@ -345,6 +406,29 @@ async fn boot(state: &Arc<AppState>, machine: &Stored) -> Result<(), String> {
         let _ = vm.stop().await;
         return Err(format!("the guest never answered: {e}; {report}"));
     }
+    let network = match (spec, nic) {
+        (Some(spec), Some(device)) => {
+            // The guest is configured at every boot, by a script that is safe
+            // to run again on a disk that kept the last boot's changes.
+            match start_network(state, &machine.id, &vm, device, spec, false, false).await {
+                Ok(network) => {
+                    if let Err(e) =
+                        configure_network(&vm, network.gateway.ca_pem().as_deref()).await
+                    {
+                        network.bridge.abort();
+                        let _ = vm.stop().await;
+                        return Err(e);
+                    }
+                    Some(network)
+                }
+                Err(e) => {
+                    let _ = vm.stop().await;
+                    return Err(e);
+                }
+            }
+        }
+        _ => None,
+    };
     live(|l| {
         l.insert(
             machine.id.clone(),
@@ -352,10 +436,43 @@ async fn boot(state: &Arc<AppState>, machine: &Stored) -> Result<(), String> {
                 vm,
                 _slot: slot,
                 started_ms: now_ms(),
+                network,
             },
         )
     });
     tracing::info!("machine {} is running", machine.name);
+    Ok(())
+}
+
+/// Point a machine's guest at its gateway's resolver and make it trust the
+/// egress CA, when there is one.
+///
+/// Unlike a sandbox's, this runs at every boot on a disk that persists, so it
+/// changes nothing it already did: the CA is appended to the trust bundle only
+/// when the bundle does not hold it.
+async fn configure_network(vm: &AgentVM, ca: Option<&str>) -> Result<(), String> {
+    let mut script = String::from("mkdir -p /etc && ln -sf /proc/net/pnp /etc/resolv.conf");
+    // A line of the certificate's base64 body: enough to recognise it by.
+    let marker = ca.and_then(|ca| ca.lines().nth(1));
+    if let (Some(ca), Some(marker)) = (ca, marker) {
+        script.push_str(&format!(
+            " && mkdir -p /etc/ssl/certs && {{ grep -qF '{marker}' /etc/ssl/certs/ca-certificates.crt 2>/dev/null || printf '%s' '{ca}' >> /etc/ssl/certs/ca-certificates.crt; }}"
+        ));
+    }
+    let setup = vm
+        .exec_in_guest(
+            "/bin/sh",
+            &["-c".to_string(), script],
+            Duration::from_secs(10),
+        )
+        .await
+        .map_err(|e| format!("configuring the guest's network: {e}"))?;
+    if setup.exit_code != Some(0) {
+        return Err(format!(
+            "configuring the guest's network exited {:?}: {}",
+            setup.exit_code, setup.stderr
+        ));
+    }
     Ok(())
 }
 
@@ -482,6 +599,7 @@ pub(crate) struct NewMachine {
     #[serde(rename = "restartPolicy")]
     restart: Option<RestartPolicy>,
     start: Option<bool>,
+    network: Option<MachineNetwork>,
 }
 
 /// `POST /machines`.
@@ -506,6 +624,12 @@ pub(crate) async fn create(
     if !(1..=2048).contains(&disk_gib) {
         return api_error(StatusCode::BAD_REQUEST, "diskGiB is 1 to 2048");
     }
+    if let Some(network) = &req.network {
+        // Refused now, not at its first boot.
+        if let Err(e) = network.decide(&state).await {
+            return api_error(StatusCode::BAD_REQUEST, format!("network: {e}"));
+        }
+    }
     let node = Sizes::of(&state.opts);
     let machine = Stored {
         id: machine_id(&req.name),
@@ -521,6 +645,7 @@ pub(crate) async fn create(
         restart: req.restart.unwrap_or_default(),
         desired: Desired::Stopped,
         created_ms: now_ms(),
+        network: req.network,
     };
     let dir = dir_of(&state, &machine.id);
     if let Err(e) = std::fs::create_dir_all(root(&state)) {
@@ -689,6 +814,29 @@ pub(crate) async fn exec(
     }
 }
 
+/// `GET /machines/{name}/network/decisions`: what its gateway allowed and
+/// refused, since this boot.
+pub(crate) async fn network_decisions(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> Response {
+    let Some(machine) = by_name(&state, &name) else {
+        return api_error(StatusCode::NOT_FOUND, format!("no machine {name}"));
+    };
+    let gateway = live(|l| {
+        l.get(&machine.id)
+            .map(|m| m.network.as_ref().map(|n| n.gateway.clone()))
+    });
+    match gateway {
+        None => api_error(
+            StatusCode::CONFLICT,
+            format!("machine {name} is not running"),
+        ),
+        Some(None) => api_error(StatusCode::BAD_REQUEST, "this machine has no network"),
+        Some(Some(gateway)) => Json(super::gateway_decisions(&gateway)).into_response(),
+    }
+}
+
 /// `GET /machines/{name}/console`: the end of its serial console.
 pub(crate) async fn console(
     State(state): State<Arc<AppState>>,
@@ -744,6 +892,26 @@ mod tests {
         }
         assert!(matches!(&entries["bin/sh"], CpioEntry::Symlink(t) if t == "busybox"));
         assert!(read_cpio(b"not gzip").is_err());
+    }
+
+    /// A machine written before networks existed still loads, with none.
+    #[test]
+    fn a_machine_without_a_network_still_loads() {
+        let old = r#"{"machineID":"vm-a","name":"a","templateID":"base","cpuCount":1,
+            "memoryMB":512,"diskGiB":1,"autostart":true,"restartPolicy":"always",
+            "desired":"running","createdAt":1}"#;
+        let machine: Stored = serde_json::from_str(old).unwrap();
+        assert!(machine.network.is_none());
+        assert!(!serde_json::to_string(&machine).unwrap().contains("network"));
+
+        let new = old.replace(
+            r#""createdAt":1"#,
+            r#""createdAt":1,"network":{"allowOut":["10.0.0.0/8"]}"#,
+        );
+        let machine: Stored = serde_json::from_str(&new).unwrap();
+        let network = machine.network.unwrap();
+        assert_eq!(network.allow_out, ["10.0.0.0/8"]);
+        assert!(network.deny_out.is_empty() && network.allow_internet_access.is_none());
     }
 
     #[test]

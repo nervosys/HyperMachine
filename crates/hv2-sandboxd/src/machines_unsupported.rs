@@ -40,3 +40,6 @@ pub(crate) async fn exec() -> Response {
 pub(crate) async fn console() -> Response {
     refused()
 }
+pub(crate) async fn network_decisions() -> Response {
+    refused()
+}
