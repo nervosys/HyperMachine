@@ -38,6 +38,20 @@ struct Options {
     mtls_key: Option<String>,
     mtls_node_name: String,
     identity_issuer: Option<String>,
+    /// Single sign-on through an OpenID Connect provider; see `sso_login`.
+    sso: SsoOptions,
+}
+
+#[derive(Default)]
+struct SsoOptions {
+    issuer: Option<String>,
+    client_id: Option<String>,
+    client_secret_file: Option<String>,
+    redirect_url: Option<String>,
+    members_file: Option<String>,
+    session_key_file: Option<String>,
+    provider_ca: Option<String>,
+    session_hours: Option<u64>,
 }
 
 fn parse() -> Result<Options, String> {
@@ -66,6 +80,7 @@ fn parse() -> Result<Options, String> {
         mtls_key: None,
         mtls_node_name: hv2_cluster::mtls::DEFAULT_NODE_NAME.to_string(),
         identity_issuer: None,
+        sso: SsoOptions::default(),
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -122,6 +137,22 @@ fn parse() -> Result<Options, String> {
             "--mtls-key" => opts.mtls_key = Some(value()?),
             "--mtls-node-name" => opts.mtls_node_name = value()?,
             "--identity-issuer" => opts.identity_issuer = Some(value()?),
+            "--sso-issuer" => opts.sso.issuer = Some(value()?),
+            "--sso-client-id" => opts.sso.client_id = Some(value()?),
+            "--sso-client-secret-file" => opts.sso.client_secret_file = Some(value()?),
+            "--sso-redirect-url" => opts.sso.redirect_url = Some(value()?),
+            "--sso-members-file" => opts.sso.members_file = Some(value()?),
+            "--sso-session-key-file" => opts.sso.session_key_file = Some(value()?),
+            "--sso-provider-ca" => opts.sso.provider_ca = Some(value()?),
+            "--sso-session-hours" => {
+                opts.sso.session_hours = Some(
+                    value()?
+                        .parse()
+                        .ok()
+                        .filter(|h| (1..=168).contains(h))
+                        .ok_or("--sso-session-hours: 1 to 168")?,
+                );
+            }
             "--help" | "-h" => {
                 println!(
                     "usage: hv2-control-plane [--store memory:|redis://host:port] [--namespace N] \
@@ -129,7 +160,10 @@ fn parse() -> Result<Options, String> {
                      [--api-keys-file F] [--native-port-range FIRST-LAST] [--reap-interval SECS] [--tls-cert F --tls-key F] \
                      [--tls-bundle-file F] [--api-tls-cert F --api-tls-key F] \
                      [--mtls-ca F --mtls-cert F --mtls-key F [--mtls-node-name N]] \
-                     [--identity-issuer URL] [--web-access-file F] [--domain-verification-file F]\n\
+                     [--identity-issuer URL] [--web-access-file F] [--domain-verification-file F] \
+                     [--sso-issuer URL --sso-client-id ID --sso-redirect-url URL \
+                     --sso-members-file F --sso-session-key-file F [--sso-client-secret-file F] \
+                     [--sso-provider-ca F] [--sso-session-hours N]]\n\
                      HV2_API_KEY and HV2_CLUSTER_TOKEN are read from the environment too."
                 );
                 std::process::exit(0);
@@ -142,6 +176,54 @@ fn parse() -> Result<Options, String> {
         return Err("--tls-bundle-file cannot be combined with --tls-cert or --tls-key".into());
     }
     Ok(opts)
+}
+
+/// The provider, from the `--sso-*` options: discovered, with its members and
+/// the session key read from their files.
+async fn sso(
+    issuer: String,
+    opts: &SsoOptions,
+) -> Result<hv2_cluster::sso_login::SsoLogin, String> {
+    let need = |value: &Option<String>, flag: &str| {
+        value
+            .clone()
+            .ok_or_else(|| format!("--sso-issuer needs {flag}"))
+    };
+    let client_id = need(&opts.client_id, "--sso-client-id")?;
+    let redirect_url = need(&opts.redirect_url, "--sso-redirect-url")?;
+    let members_file = need(&opts.members_file, "--sso-members-file")?;
+    let key_file = need(&opts.session_key_file, "--sso-session-key-file")?;
+    let members =
+        hv2_cluster::sso::Members::from_json(&hv2_cluster::keys::read_policy_file(&members_file)?)?;
+    let key = std::fs::read(&key_file)
+        .map_err(|_| "could not read the SSO session key file".to_string())?;
+    let key = hv2_cluster::sso::SessionKey::new(key).map_err(|e| e.to_string())?;
+    let client_secret = match &opts.client_secret_file {
+        Some(path) => Some(zeroize::Zeroizing::new(
+            std::fs::read_to_string(path)
+                .map_err(|_| "could not read the SSO client secret file".to_string())?
+                .trim_end()
+                .to_string(),
+        )),
+        None => None,
+    };
+    let provider_ca_pem = match &opts.provider_ca {
+        Some(path) => Some(std::fs::read(path).map_err(|e| format!("{path}: {e}"))?),
+        None => None,
+    };
+    hv2_cluster::sso_login::SsoLogin::discover(
+        hv2_cluster::sso_login::SsoConfig {
+            issuer,
+            client_id,
+            client_secret,
+            redirect_url,
+            session_ttl: Duration::from_secs(opts.session_hours.unwrap_or(12) * 3600),
+            provider_ca_pem,
+        },
+        members,
+        key,
+    )
+    .await
 }
 
 #[tokio::main]
@@ -444,6 +526,55 @@ async fn main() -> std::process::ExitCode {
                 }
             }
         });
+    }
+    if let Some(issuer) = opts.sso.issuer.clone() {
+        match sso(issuer, &opts.sso).await {
+            Ok(sso) => {
+                let sso = Arc::new(sso);
+                if let Err(e) = control.enable_sso(Arc::clone(&sso)) {
+                    eprintln!("hv2-control-plane: SSO: {e}");
+                    return std::process::ExitCode::FAILURE;
+                }
+                #[cfg(unix)]
+                if let Some(path) = opts.sso.members_file.clone() {
+                    let Ok(mut reload) =
+                        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())
+                    else {
+                        eprintln!("hv2-control-plane: SSO members reload signal unavailable");
+                        return std::process::ExitCode::FAILURE;
+                    };
+                    tokio::spawn(async move {
+                        while reload.recv().await.is_some() {
+                            let path = path.clone();
+                            let sso = Arc::clone(&sso);
+                            let result = tokio::task::spawn_blocking(move || {
+                                let json = hv2_cluster::keys::read_policy_file(path)?;
+                                sso.replace_members(&json)
+                            })
+                            .await;
+                            match result {
+                                Ok(Ok(())) => eprintln!("hv2-control-plane: SSO members reloaded"),
+                                Ok(Err(e)) => {
+                                    eprintln!(
+                                        "hv2-control-plane: SSO members reload rejected: {e}"
+                                    );
+                                }
+                                Err(_) => {
+                                    eprintln!("hv2-control-plane: SSO members reload task failed");
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+            Err(e) => {
+                eprintln!("hv2-control-plane: SSO: {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+        }
+    } else if opts.sso.client_id.is_some() || opts.sso.members_file.is_some() {
+        eprintln!("hv2-control-plane: the --sso-* options need --sso-issuer");
+        return std::process::ExitCode::FAILURE;
     }
     tokio::spawn(control::reaper(Arc::clone(&control), opts.reap_interval));
     let addr = format!("0.0.0.0:{}", opts.port);
