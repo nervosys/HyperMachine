@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   module, chosen in one place (the new `hv2-tls` crate). `--fips` / `HV2_FIPS=1`
   refuses to start a build that is not it. See `docs/FIPS.md` for what is and is
   not covered.
+- Firmware boot in the VMM, on KVM: `BootSource::Pvh` enters a firmware image by
+  the PVH boot protocol, and `VM::attach_block_pci` puts a disk on the PCI bus
+  where firmware and a stock kernel look for one. An unmodified CirrOS cloud
+  image boots to its login prompt. Not yet available to machines. See
+  `docs/FIRMWARE_BOOT.md`.
 - `hm sandbox vm machine`: create, list, inspect, start, stop, restart, delete,
   exec (with the guest command's exit code), console and network decisions,
   against a node or the control plane.

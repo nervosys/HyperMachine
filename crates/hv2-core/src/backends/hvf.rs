@@ -707,6 +707,10 @@ impl HypervisorBackend for HvfBackend {
                 tracing::info!("HVF: raw image entered at {:04x}:{:04x}", segment, offset);
                 Ok(())
             }
+
+            LoadedBoot::Pvh(_) => Err(Error::NotSupported(
+                "PVH firmware boot is implemented on KVM only".into(),
+            )),
         }
     }
 

@@ -34,6 +34,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::boot::linux::{BorrowedBootRegion, LinuxBootParams, LinuxBootProtocol};
 use crate::boot::multiboot::{MultibootInfo, MultibootLayout, MultibootModule, MultibootProtocol};
+use crate::boot::pvh::PvhBoot;
 use crate::{Error, Result};
 
 /// Default guest physical address a Linux protected-mode kernel is loaded at.
@@ -96,6 +97,17 @@ pub enum BootSource {
         #[serde(default = "default_boot_sector_addr")]
         entry: u64,
     },
+
+    /// Firmware entered by the PVH boot protocol.
+    ///
+    /// An ELF image whose PVH note names its entry point, such as Rust
+    /// Hypervisor Firmware or edk2's `CloudHv` build. The firmware finds an
+    /// operating system on the VM's disks itself, so there is no kernel and no
+    /// command line here. See [`crate::boot::pvh`].
+    Pvh {
+        /// Path to the firmware image.
+        firmware: PathBuf,
+    },
 }
 
 fn default_kernel_addr() -> u64 {
@@ -128,6 +140,13 @@ impl BootSource {
             kernel: kernel.into(),
             modules: Vec::new(),
             cmdline: String::new(),
+        }
+    }
+
+    /// Firmware entered by the PVH boot protocol.
+    pub fn pvh(firmware: impl Into<PathBuf>) -> Self {
+        Self::Pvh {
+            firmware: firmware.into(),
         }
     }
 
@@ -196,7 +215,7 @@ impl BootSource {
                 }
                 cmdline.push_str(Self::MICROVM_FAST_BOOT_ARGS);
             }
-            Self::Raw { .. } => {}
+            Self::Raw { .. } | Self::Pvh { .. } => {}
         }
         self
     }
@@ -206,7 +225,7 @@ impl BootSource {
     pub fn with_cmdline(mut self, line: impl Into<String>) -> Self {
         match &mut self {
             Self::Linux { cmdline, .. } | Self::Multiboot { cmdline, .. } => *cmdline = line.into(),
-            Self::Raw { .. } => {}
+            Self::Raw { .. } | Self::Pvh { .. } => {}
         }
         self
     }
@@ -240,6 +259,7 @@ impl BootSource {
         match self {
             Self::Linux { kernel, .. } | Self::Multiboot { kernel, .. } => kernel,
             Self::Raw { image, .. } => image,
+            Self::Pvh { firmware } => firmware,
         }
     }
 
@@ -249,6 +269,7 @@ impl BootSource {
             Self::Linux { .. } => "linux",
             Self::Multiboot { .. } => "multiboot",
             Self::Raw { .. } => "raw",
+            Self::Pvh { .. } => "pvh",
         }
     }
 
@@ -314,6 +335,14 @@ impl BootSource {
                 load_addr: *load_addr,
                 entry: *entry,
             }),
+
+            Self::Pvh { firmware } => {
+                let boot = PvhBoot::new(read_image(firmware)?);
+                boot.validate().map_err(|e| {
+                    Error::VM(format!("invalid firmware {}: {e}", firmware.display()))
+                })?;
+                Ok(LoadedBoot::Pvh(Box::new(boot)))
+            }
         }
     }
 }
@@ -347,6 +376,8 @@ pub enum LoadedBoot {
         /// Guest physical address to begin execution at.
         entry: u64,
     },
+    /// A firmware image entered by PVH, and what it is told.
+    Pvh(Box<PvhBoot>),
 }
 
 impl LoadedBoot {
@@ -373,6 +404,7 @@ impl LoadedBoot {
             )?
             .entry),
             Self::Raw { entry, .. } => Ok(*entry),
+            Self::Pvh(boot) => Ok(PvhBoot::place(&boot.image)?.entry),
         }
     }
 
@@ -386,8 +418,20 @@ impl LoadedBoot {
     ///
     /// Does nothing for protocols that do not carry a memory map.
     pub fn set_memory_size(&mut self, bytes: u64) {
-        if let Self::Linux(params) = self {
-            params.memory_size = bytes;
+        match self {
+            Self::Linux(params) => params.memory_size = bytes,
+            Self::Pvh(boot) => boot.memory_size = bytes,
+            Self::Multiboot(_) | Self::Raw { .. } => {}
+        }
+    }
+
+    /// Tell PVH firmware where the ACPI RSDP is, for it to hand to the
+    /// operating system it starts.
+    ///
+    /// Does nothing for other protocols.
+    pub fn set_rsdp(&mut self, addr: u64) {
+        if let Self::Pvh(boot) = self {
+            boot.rsdp_addr = addr;
         }
     }
 
@@ -420,7 +464,7 @@ impl LoadedBoot {
         let cmdline = match self {
             Self::Linux(params) => &mut params.cmdline,
             Self::Multiboot(info) => &mut info.cmdline,
-            Self::Raw { .. } => return,
+            Self::Raw { .. } | Self::Pvh(_) => return,
         };
         if cmdline.split_whitespace().any(|token| token == arg) {
             return;
@@ -442,7 +486,7 @@ impl LoadedBoot {
         match self {
             Self::Linux(params) => Some(&params.cmdline),
             Self::Multiboot(info) => Some(&info.cmdline),
-            Self::Raw { .. } => None,
+            Self::Raw { .. } | Self::Pvh(_) => None,
         }
     }
 
@@ -452,6 +496,7 @@ impl LoadedBoot {
             Self::Linux(_) => "linux",
             Self::Multiboot(_) => "multiboot",
             Self::Raw { .. } => "raw",
+            Self::Pvh(_) => "pvh",
         }
     }
 
@@ -466,6 +511,7 @@ impl LoadedBoot {
             Self::Linux(params) => &params.kernel_image,
             Self::Multiboot(info) => &info.kernel_image,
             Self::Raw { data, .. } => data,
+            Self::Pvh(boot) => &boot.image,
         }
     }
 
@@ -492,6 +538,7 @@ impl LoadedBoot {
                 info.kernel_image.len() + info.modules.iter().map(|m| m.data.len()).sum::<usize>()
             }
             Self::Raw { data, .. } => data.len(),
+            Self::Pvh(boot) => boot.image.len(),
         }
     }
 
@@ -509,6 +556,11 @@ impl LoadedBoot {
             Self::Raw {
                 data, load_addr, ..
             } => Ok(vec![(*load_addr, data.clone())]),
+            Self::Pvh(_) => Ok(self
+                .memory_regions_borrowed()?
+                .into_iter()
+                .map(|(address, bytes)| (address, bytes.into_owned()))
+                .collect()),
         }
     }
 
@@ -520,6 +572,21 @@ impl LoadedBoot {
             Self::Raw {
                 data, load_addr, ..
             } => Ok(vec![(*load_addr, Cow::Borrowed(data.as_slice()))]),
+            // The image's bytes, then the structures the guest is pointed at.
+            // Its `.bss` is in `zero_ranges`, never materialised here.
+            Self::Pvh(boot) => {
+                let mut regions: Vec<BorrowedBootRegion<'_>> = PvhBoot::place(&boot.image)?
+                    .regions
+                    .into_iter()
+                    .map(|(address, range)| (address, Cow::Borrowed(&boot.image[range])))
+                    .collect();
+                regions.extend(
+                    boot.start_info()
+                        .into_iter()
+                        .map(|(address, bytes)| (address, Cow::Owned(bytes))),
+                );
+                Ok(regions)
+            }
             Self::Multiboot(_) => Ok(self
                 .memory_regions()?
                 .into_iter()
@@ -563,6 +630,7 @@ impl LoadedBoot {
                 &MultibootLayout::default(),
             )?
             .zeroed),
+            Self::Pvh(boot) => Ok(PvhBoot::place(&boot.image)?.zeroed),
             // Neither of these has a zero-fill region: a Linux image and a raw
             // one are both entirely bytes.
             Self::Linux(_) | Self::Raw { .. } => Ok(Vec::new()),
@@ -579,6 +647,11 @@ impl LoadedBoot {
     ///
     /// As [`Self::memory_regions`].
     pub fn data_regions(&self) -> Result<Vec<(u64, Vec<u8>)>> {
+        // PVH's regions never include its zero ranges, so there is nothing to
+        // take back out.
+        if matches!(self, Self::Pvh(_)) {
+            return self.memory_regions();
+        }
         let zeroed = self.zero_ranges()?;
         if zeroed.is_empty() {
             return self.memory_regions();
@@ -605,6 +678,7 @@ impl LoadedBoot {
             .memory_regions_borrowed()?
             .iter()
             .map(|(addr, data)| addr + data.len() as u64)
+            .chain(self.zero_ranges()?.iter().map(|(addr, len)| addr + len))
             .max()
             .unwrap_or(0))
     }

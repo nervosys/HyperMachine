@@ -1,0 +1,41 @@
+platform      : Kvm
+firmware      : /var/tmp/hm-firmware/hypervisor-fw (135960 bytes)
+disk          : /var/tmp/hm-firmware-check-4uuo262v/disk.raw (read-only, over PCI)
+provision     : OK
+exits         : 672187
+state         : Running
+console       :
+[INFO] Setting up 4 GiB identity mapping
+[INFO] Page tables setup
+[INFO] Booting with PVH Boot Protocol
+[INFO] Found PCI device vendor=8086 device=1237 in slot=0
+[INFO] Found PCI device vendor=1af4 device=1042 in slot=4
+[INFO] PCI Device: 0:4.0 1af4:1042
+[INFO] Bar: type=MemorySpace64 address=0xd0040000 size=0x4000
+[INFO] Bar: type=MemorySpace32 address=0x0 size=0x0
+[INFO] Bar: type=MemorySpace32 address=0x0 size=0x0
+[INFO] Bar: type=MemorySpace32 address=0x0 size=0x0
+[INFO] Bar: type=MemorySpace32 address=0x0 size=0x0
+[INFO] Bar: type=Unused address=0x0 size=0x0
+[INFO] Updated BARs: type=MemorySpace64 address=d0040000 size=4000
+[INFO] Updated BARs: type=MemorySpace32 address=0 size=0
+[INFO] Updated BARs: type=MemorySpace32 address=0 size=0
+[INFO] Updated BARs: type=MemorySpace32 address=0 size=0
+[INFO] Updated BARs: type=MemorySpace32 address=0 size=0
+[INFO] Updated BARs: type=Unused address=0 size=0
+[INFO] Virtio block device configured. Capacity: 229376 sectors
+[INFO] Found EFI partition
+[INFO] Filesystem ready
+[WARN] Error loading default entry: File(NotFound)
+[INFO] Using EFI boot.
+[INFO] Found bootloader: \EFI\BOOT\BOOTX64.EFI
+[INFO] Executable loaded
+GNU GRUB  version 2.06
+
+      Use the � and � keys to select which entry is highlighted.
+      Press enter to boot the selected OS, `e' to edit the commands
+      before booting or `c' for a command-line.                                                                           *CirrOS
+   The highlighted entry will be executed automatically in 1s.
+   The highlighted entry will be executed automatically in 0s.
+login as 'cirros' user. default password: 'gocubsgo'. use 'sudo' for root.
+cirros login:

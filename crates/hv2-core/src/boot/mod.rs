@@ -63,6 +63,7 @@ pub mod linux;
 pub mod mode;
 pub mod mptable;
 pub mod multiboot;
+pub mod pvh;
 pub mod sector;
 pub mod source;
 

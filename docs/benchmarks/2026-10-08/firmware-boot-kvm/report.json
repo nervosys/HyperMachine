@@ -1,0 +1,38 @@
+{
+  "success": true,
+  "purpose": "functional verification of PVH firmware boot on KVM; no timing claim",
+  "input_sha256": {
+    "probe": "e8c0b5bc858c7b7f74c88918ee8a7185a84ffebedf82e4c22f11cd2c78ab273b",
+    "firmware": "4a0a1e977368f6b15d2198a216bdedf9a350bf5e5ae07e29e695373ec16ad958",
+    "image": "800f530322907ababfe948271255107959ea780ac118a1d47109e3adaf484e96",
+    "driver": "3e333382e066420d05b347595f2e1f4903cc2fd107bf2ff4ab206bbfb86f1769"
+  },
+  "cases": [
+    {
+      "name": "the firmware is entered by PVH and has nothing to boot without a disk",
+      "success": true,
+      "detail": {
+        "said": "Booting with PVH Boot Protocol"
+      }
+    },
+    {
+      "name": "the firmware finds the disk on the PCI bus and loads the bootloader from its EFI partition",
+      "success": true,
+      "detail": {
+        "pci_slot": 4,
+        "sectors": 229376,
+        "bootloader": "\\EFI\\BOOT\\BOOTX64.EFI"
+      }
+    },
+    {
+      "name": "the image's own bootloader and kernel bring the guest to a login prompt on serial",
+      "success": true,
+      "detail": {
+        "last_lines": [
+          "login as 'cirros' user. default password: 'gocubsgo'. use 'sudo' for root.",
+          "cirros login:"
+        ]
+      }
+    }
+  ]
+}
