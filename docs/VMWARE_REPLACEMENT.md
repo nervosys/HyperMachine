@@ -71,7 +71,7 @@ Status is one of: not started, in progress, done (with evidence link).
 
 | Item | Status |
 |---|---|
-| TLS through AWS-LC's FIPS module, with suites and groups restricted to approved ones | **done** in the [FIPS build](FIPS.md). Only the provider tests have run under the FIPS feature; the full suites have not. Distributing FIPS binaries waits on a licensing decision (`aws-lc-fips-sys` carries the OpenSSL license) |
+| TLS through AWS-LC's FIPS module, with suites and groups restricted to approved ones | **done** in the [FIPS build](FIPS.md). The full suites of the six crates that carry the feature pass under it when run by hand (1,853 tests on Linux, 2026-10-08); CI runs only the provider tests under it. Distributing FIPS binaries waits on a licensing decision (`aws-lc-fips-sys` carries the OpenSSL license) |
 | A `--fips` strict mode in every binary that refuses non-approved algorithms | **partial**: `--fips` on `hv2-control-plane` and `hv2-sandboxd` refuses a non-FIPS build. It covers TLS only; [non-TLS primitives](FIPS.md#what-it-does-not-cover-yet) still run outside a validated module |
 | Encryption at rest: KMS envelope keys for snapshots, memory images, disks and volumes; encrypted EBS | not started |
 | GovCloud infrastructure: partition-aware, private-only, IMDSv2, VPC endpoints, KMS; a hardened AMI | not started |
