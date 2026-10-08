@@ -113,6 +113,11 @@ pub enum VmCommand {
         #[command(subcommand)]
         command: DiskCommand,
     },
+    /// Manage machines: long-lived VMs that boot from their own disk
+    Machine {
+        #[command(subcommand)]
+        command: MachineCommand,
+    },
     /// Serve remote sandbox lifecycle tools using the MCP stdio protocol
     Mcp {
         /// Operator-selected envd endpoint for binary file tools
@@ -398,6 +403,118 @@ async fn web_sharing(api: &Api, command: WebSharingCommand) -> Result<Value> {
             .await
         }
     }
+}
+
+/// A machine's name, or its `vm-…` ID.
+fn machine_name(value: &str) -> std::result::Result<String, String> {
+    if value.is_empty()
+        || value.len() > 63
+        || !value
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
+    {
+        return Err(
+            "machine names and IDs require 1-63 ASCII letters, digits, underscores or hyphens"
+                .into(),
+        );
+    }
+    Ok(value.into())
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum MachineRestart {
+    /// Boot it again when its guest reboots or crashes
+    Always,
+    /// Leave it stopped
+    Never,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum MachineCommand {
+    /// Create a machine with its own persistent root disk
+    Create {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        /// Template whose file tree becomes the root disk
+        #[arg(long, default_value = "base")]
+        template: String,
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..=64))]
+        cpus: Option<u32>,
+        #[arg(long, value_parser = clap::value_parser!(u64).range(128..=1_048_576))]
+        memory_mb: Option<u64>,
+        /// Root disk size; the image is sparse
+        #[arg(long, default_value_t = 8, value_parser = clap::value_parser!(u64).range(1..=2048))]
+        disk_gib: u64,
+        /// Control plane only: the node to place it on
+        #[arg(long)]
+        node: Option<String>,
+        /// Do not start it again when the node's daemon starts
+        #[arg(long)]
+        no_autostart: bool,
+        #[arg(long, value_enum, default_value = "always")]
+        restart: MachineRestart,
+        /// Create it stopped
+        #[arg(long)]
+        no_start: bool,
+        /// Give it a NIC with the node's default egress policy
+        #[arg(long)]
+        network: bool,
+        /// Give it a NIC; a host, address or CIDR it may reach (repeatable)
+        #[arg(long = "allow-out")]
+        allow_out: Vec<String>,
+        /// Give it a NIC; an address or CIDR it may not reach (repeatable)
+        #[arg(long = "deny-out")]
+        deny_out: Vec<String>,
+        /// Give it a NIC that reaches only what --allow-out names
+        #[arg(long)]
+        no_internet: bool,
+    },
+    /// List machines
+    List,
+    /// Inspect a machine
+    Inspect {
+        #[arg(value_parser = machine_name)]
+        name: String,
+    },
+    /// Start a stopped machine
+    Start {
+        #[arg(value_parser = machine_name)]
+        name: String,
+    },
+    /// Stop a machine, its filesystems synced first
+    Stop {
+        #[arg(value_parser = machine_name)]
+        name: String,
+    },
+    /// Stop a machine and start it again
+    Restart {
+        #[arg(value_parser = machine_name)]
+        name: String,
+    },
+    /// Delete a stopped machine and its disk
+    Delete {
+        #[arg(value_parser = machine_name)]
+        name: String,
+    },
+    /// Run a program inside a machine; prints its streams and exits with its code
+    Exec {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        #[arg(long, default_value_t = 60, value_parser = clap::value_parser!(u64).range(1..=3600))]
+        timeout: u64,
+        #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<String>,
+    },
+    /// Print the end of a machine's serial console
+    Console {
+        #[arg(value_parser = machine_name)]
+        name: String,
+    },
+    /// Show what a machine's egress gateway allowed and refused since it booted
+    Decisions {
+        #[arg(value_parser = machine_name)]
+        name: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1223,6 +1340,137 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             VolumeCommand::Delete { id } => {
                 api.request_bounded(Method::DELETE, &["volumes", &id], None, 65536)
                     .await?
+            }
+        },
+        VmCommand::Machine { command } => match command {
+            MachineCommand::Create {
+                name,
+                template,
+                cpus,
+                memory_mb,
+                disk_gib,
+                node,
+                no_autostart,
+                restart,
+                no_start,
+                network,
+                allow_out,
+                deny_out,
+                no_internet,
+            } => {
+                let mut body = json!({
+                    "name": name,
+                    "templateID": template,
+                    "diskGiB": disk_gib,
+                    "autostart": !no_autostart,
+                    "restartPolicy": match restart {
+                        MachineRestart::Always => "always",
+                        MachineRestart::Never => "never",
+                    },
+                    "start": !no_start,
+                });
+                if let Some(cpus) = cpus {
+                    body["cpuCount"] = json!(cpus);
+                }
+                if let Some(memory_mb) = memory_mb {
+                    body["memoryMB"] = json!(memory_mb);
+                }
+                if let Some(node) = node {
+                    body["nodeID"] = json!(node);
+                }
+                // Any network flag asks for a NIC; none leaves it without one.
+                if network || no_internet || !allow_out.is_empty() || !deny_out.is_empty() {
+                    let mut rules = json!({ "allowOut": allow_out, "denyOut": deny_out });
+                    if no_internet {
+                        rules["allowInternetAccess"] = json!(false);
+                    }
+                    body["network"] = rules;
+                }
+                api.request_bounded(Method::POST, &["machines"], Some(body), 65536)
+                    .await?
+            }
+            MachineCommand::List => {
+                api.request_bounded(Method::GET, &["machines"], None, 1024 * 1024)
+                    .await?
+            }
+            MachineCommand::Inspect { name } => {
+                api.request_bounded(Method::GET, &["machines", &name], None, 65536)
+                    .await?
+            }
+            MachineCommand::Start { name } => {
+                api.request_bounded(Method::POST, &["machines", &name, "start"], None, 65536)
+                    .await?
+            }
+            MachineCommand::Stop { name } => {
+                api.request_bounded(Method::POST, &["machines", &name, "stop"], None, 65536)
+                    .await?
+            }
+            MachineCommand::Restart { name } => {
+                api.request_bounded(Method::POST, &["machines", &name, "restart"], None, 65536)
+                    .await?
+            }
+            MachineCommand::Delete { name } => {
+                api.request_bounded(Method::DELETE, &["machines", &name], None, 65536)
+                    .await?
+            }
+            MachineCommand::Decisions { name } => {
+                api.request_bounded(
+                    Method::GET,
+                    &["machines", &name, "network", "decisions"],
+                    None,
+                    1024 * 1024,
+                )
+                .await?
+            }
+            MachineCommand::Exec {
+                name,
+                timeout,
+                command,
+            } => {
+                if timeout >= args.request_timeout {
+                    bail!("--request-timeout must exceed the guest command's --timeout");
+                }
+                let cmd = shell_exec(&command)?;
+                let value = api
+                    .request(
+                        Method::POST,
+                        &["machines", &name, "exec"],
+                        Some(json!({"cmd": cmd, "timeout_secs": timeout})),
+                    )
+                    .await?;
+                let stdout = value["stdout"]
+                    .as_str()
+                    .context("exec response missing stdout")?;
+                let stderr = value["stderr"]
+                    .as_str()
+                    .context("exec response missing stderr")?;
+                let code = exec_exit_code(&value, false)?;
+                use std::io::Write;
+                std::io::stdout().write_all(stdout.as_bytes())?;
+                std::io::stderr().write_all(stderr.as_bytes())?;
+                return Ok(code);
+            }
+            MachineCommand::Console { name } => {
+                // Text, not JSON: the guest's own serial output.
+                let mut response = api
+                    .client
+                    .get(api.url(&["machines", &name, "console"])?)
+                    .send()
+                    .await
+                    .context("sandbox API request failed")?;
+                if !response.status().is_success() {
+                    bail!("sandbox API returned {}", response.status());
+                }
+                let mut bytes = Vec::new();
+                while let Some(chunk) = response.chunk().await? {
+                    if chunk.len() > (1024 * 1024usize).saturating_sub(bytes.len()) {
+                        bail!("sandbox response exceeds byte limit");
+                    }
+                    bytes.extend_from_slice(&chunk);
+                }
+                use std::io::Write;
+                std::io::stdout().write_all(&bytes)?;
+                return Ok(0);
             }
         },
         VmCommand::Disk { command } => match command {
