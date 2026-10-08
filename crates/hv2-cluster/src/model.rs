@@ -34,6 +34,10 @@ pub struct TemplateInfo {
     pub snapshot: bool,
     pub cpu_count: u32,
     pub memory_mb: u64,
+    /// The team whose snapshot it is, which alone may use it. `None` for an
+    /// operator's template, which every team may use.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub team: Option<crate::ownership::TeamId>,
 }
 
 /// A node, as it last reported itself.
@@ -74,6 +78,18 @@ impl NodeInfo {
         } else {
             self.templates.iter().any(|t| t == template)
         }
+    }
+
+    /// Whether it offers `template` to a caller acting for `team`: offered
+    /// here, and either an operator's template or the team's own.
+    #[must_use]
+    pub fn offers_to(&self, template: &str, team: &crate::ownership::RequestTeam) -> bool {
+        self.offers(template)
+            && team.may_use_template(
+                self.template_metadata
+                    .get(untagged(template))
+                    .and_then(|info| info.team.as_ref()),
+            )
     }
 
     /// Room for one more, as of its last heartbeat. The node itself is the

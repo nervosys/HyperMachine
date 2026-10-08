@@ -329,6 +329,7 @@ mod tests {
                     snapshot: true,
                     cpu_count: 2,
                     memory_mb: 256,
+                    team: None,
                 },
             )]
             .into_iter()

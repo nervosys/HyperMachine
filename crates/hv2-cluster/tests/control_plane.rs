@@ -1341,6 +1341,7 @@ async fn template_metadata_distinguishes_snapshot_cold_legacy_and_heterogeneous_
                 snapshot,
                 cpu_count,
                 memory_mb,
+                team: None,
             },
         )]
         .into_iter()
@@ -2846,6 +2847,210 @@ async fn resource_audit_correlates_decoded_targets_without_recording_path_values
     assert!(records[18].event.get("sandbox_ref").is_none());
 }
 
+/// A team sees, uses and deletes its own snapshots and every operator
+/// template, and never another team's snapshot.
+#[tokio::test]
+async fn snapshots_and_templates_are_the_teams_own_or_the_operators() {
+    use hv2_cluster::model::TemplateInfo;
+    use hv2_cluster::ownership::TeamId;
+    use sha2::{Digest, Sha256};
+    struct Owned(tokio::task::JoinHandle<()>);
+    impl Drop for Owned {
+        fn drop(&mut self) {
+            self.0.abort();
+        }
+    }
+    let node_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let node_address = node_listener.local_addr().unwrap();
+    let observed = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
+    let calls = observed.clone();
+    let _node = Owned(tokio::spawn(async move {
+        axum::serve(
+            node_listener,
+            Router::new().fallback(move |method: axum::http::Method, uri: axum::http::Uri| {
+                let calls = calls.clone();
+                async move {
+                    calls
+                        .lock()
+                        .push((method.to_string(), uri.path().to_owned()));
+                    match (method.as_str(), uri.path()) {
+                        ("GET", "/snapshots") => (
+                            StatusCode::OK,
+                            Json(json!([
+                                {"snapshotID":"red-snap:default","teamID":"red"},
+                                {"snapshotID":"blue-snap:default","teamID":"blue"},
+                                {"snapshotID":"shared-snap:default"},
+                            ])),
+                        ),
+                        ("DELETE", _) => (StatusCode::NO_CONTENT, Json(json!(null))),
+                        _ => (StatusCode::CREATED, Json(json!({"sandboxID":"from-snap"}))),
+                    }
+                }
+            }),
+        )
+        .await
+        .unwrap();
+    }));
+    let info = |team: Option<&str>| TemplateInfo {
+        snapshot: true,
+        cpu_count: 1,
+        memory_mb: 512,
+        team: team.map(|t| TeamId::parse(t).unwrap()),
+    };
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    store
+        .put_node(
+            &hv2_cluster::model::NodeInfo {
+                id: "snap-node".into(),
+                api: format!("http://{node_address}"),
+                proxy: node_address,
+                capacity: 8,
+                running: 0,
+                heartbeat_ms: now_ms(),
+                version: "fixture".into(),
+                jwk: None,
+                templates: vec!["base".into(), "red-snap".into(), "blue-snap".into()],
+                template_metadata: [
+                    ("base".to_string(), info(None)),
+                    ("red-snap".to_string(), info(Some("red"))),
+                    ("blue-snap".to_string(), info(Some("blue"))),
+                ]
+                .into_iter()
+                .collect(),
+            },
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
+    let digest = |key: &str| {
+        Sha256::digest(key.as_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    };
+    let expires = chrono::Utc::now().timestamp() + 60;
+    let policies = json!([
+        {"sha256":digest("red-key"),"expires_at":expires,"scopes":["sandboxes","templates","inventory"],
+         "principal_id":"alice","team_id":"red"},
+        {"sha256":digest("admin-key"),"expires_at":expires,"scopes":["admin"]},
+    ]);
+    let control = ControlPlane::new(
+        store,
+        ControlConfig {
+            api_key: None,
+            api_keys: hv2_cluster::keys::ApiKeyPolicy::from_json(&policies.to_string()).unwrap(),
+            access_audit: None,
+            cluster_token: Some(TOKEN.into()),
+            proxy_port: 3000,
+            create_timeout: Duration::from_secs(5),
+            identity_issuer: None,
+        },
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let router = control::router(control.clone());
+    let _server = Owned(tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    }));
+    let send = |method: reqwest::Method, path: &str, key: &str| {
+        client()
+            .request(method, format!("{base}{path}"))
+            .header("x-api-key", key)
+    };
+    let field = |rows: Value, name: &str| -> Vec<String> {
+        let mut out: Vec<String> = rows
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row[name].as_str().unwrap().to_owned())
+            .collect();
+        out.sort();
+        out
+    };
+
+    for (key, templates, snapshots) in [
+        (
+            "red-key",
+            vec!["base", "red-snap"],
+            vec!["red-snap:default", "shared-snap:default"],
+        ),
+        (
+            "admin-key",
+            vec!["base", "blue-snap", "red-snap"],
+            vec![
+                "blue-snap:default",
+                "red-snap:default",
+                "shared-snap:default",
+            ],
+        ),
+    ] {
+        let listed = send(reqwest::Method::GET, "/templates", key)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            field(listed.json().await.unwrap(), "templateID"),
+            templates,
+            "{key}"
+        );
+        let listed = send(reqwest::Method::GET, "/snapshots", key)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(listed.status(), 200, "{key}");
+        assert_eq!(
+            field(listed.json().await.unwrap(), "snapshotID"),
+            snapshots,
+            "{key}"
+        );
+    }
+    for (alias, status) in [("red-snap", 200), ("base", 200), ("blue-snap", 404)] {
+        let response = send(
+            reqwest::Method::GET,
+            &format!("/templates/aliases/{alias}"),
+            "red-key",
+        )
+        .send()
+        .await
+        .unwrap();
+        assert_eq!(response.status(), status, "alias {alias}");
+    }
+
+    observed.lock().clear();
+    // Created from: its own snapshot and the operator's template, not
+    // another team's -- which is not offered to it, so no node is asked.
+    for (template, status) in [("red-snap", 201), ("base", 201), ("blue-snap", 404)] {
+        let response = send(reqwest::Method::POST, "/sandboxes", "red-key")
+            .json(&json!({"templateID": template}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), status, "create from {template}");
+    }
+    // Deleted: its own snapshot only.
+    for (template, status) in [("blue-snap", 404), ("base", 404), ("red-snap", 204)] {
+        let response = send(
+            reqwest::Method::DELETE,
+            &format!("/templates/{template}"),
+            "red-key",
+        )
+        .send()
+        .await
+        .unwrap();
+        assert_eq!(response.status(), status, "delete {template}");
+    }
+    let calls = observed.lock().clone();
+    assert_eq!(
+        calls,
+        vec![
+            ("POST".to_owned(), "/sandboxes".to_owned()),
+            ("POST".to_owned(), "/sandboxes".to_owned()),
+            ("DELETE".to_owned(), "/templates/red-snap".to_owned()),
+        ],
+        "nothing of another team's reached the node"
+    );
+}
+
 /// The volume API reaches the node with the caller's team and never a
 /// client's; the volume list is the caller's team's.
 #[tokio::test]
@@ -3935,9 +4140,10 @@ async fn team_keys_reach_their_whole_team_and_nothing_else() {
 
     // What every team shares is closed to team keys until it is partitioned.
     for (method, path) in [
-        (reqwest::Method::GET, "/snapshots"),
         (reqwest::Method::POST, "/templates"),
-        (reqwest::Method::POST, "/sandboxes/red-alice/snapshots"),
+        (reqwest::Method::POST, "/v3/templates"),
+        (reqwest::Method::GET, "/templates/base/builds/b1/status"),
+        (reqwest::Method::GET, "/templates/base/files/0123"),
     ] {
         let response = send(method.clone(), path, "alice").send().await.unwrap();
         assert_eq!(response.status(), 403, "{method} {path}");
