@@ -59,7 +59,7 @@ Status is one of: not started, in progress, done (with evidence link).
 
 | Item | Status |
 |---|---|
-| A VM object separate from sandboxes: a definition, persistent state, no lifetime cap | **done on a node**: [machines](MACHINES.md), [verified on real KVM](benchmarks/2026-10-07/machines-kvm/README.md). Not yet routed through the control plane, and no guest networking |
+| A VM object separate from sandboxes: a definition, persistent state, no lifetime cap | **done**: [machines](MACHINES.md), [verified on real KVM](benchmarks/2026-10-07/machines-kvm/README.md) on a node and [through the control plane with two teams](benchmarks/2026-10-08/machines-cluster-kvm/README.md). The KVM run had one node; placement and lookup across several nodes are covered by a test against stand-in nodes. No `hm` command and no events for machines yet |
 | Boot from a persistent root disk (raw), with root on `/dev/vda` | **done**: an ext4 root disk made from any template, [verified on real KVM](benchmarks/2026-10-07/machines-kvm/README.md) |
 | Restart policy and autostart; VMs come back after a host or daemon restart | **done for daemon restarts**, [verified on real KVM](benchmarks/2026-10-07/machines-kvm/README.md). A host reboot is not yet tested |
 | A network for a machine | **partial**: one NIC behind the node's egress gateway, with allow and deny rules kept with the machine, [verified on real KVM](benchmarks/2026-10-08/machine-network-kvm/README.md). Egress only: nothing can connect in, and bridged or VLAN networking is a Phase 3 item |
