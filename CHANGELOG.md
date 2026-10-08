@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   module, chosen in one place (the new `hv2-tls` crate). `--fips` / `HV2_FIPS=1`
   refuses to start a build that is not it. See `docs/FIPS.md` for what is and is
   not covered.
+- Machines: long-lived VMs that boot from their own persistent ext4 root disk
+  (made from any template), with no lifetime cap. They keep what they write
+  across stop and start, guest reboots and daemon restarts (`autostart`), and
+  restart by policy when the guest stops by itself. `/machines` on the node,
+  `--machine-dir`. See `docs/MACHINES.md`.
 - Single sign-on through any OpenID Connect provider (`--sso-*`). Members
   listed by verified email sign in at `/auth/login` with code + PKCE. They get
   a `__Host-` session cookie, or send the token as a bearer token, and act
