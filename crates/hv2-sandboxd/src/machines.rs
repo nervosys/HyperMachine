@@ -32,7 +32,9 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
+use axum::http::HeaderMap;
 use hv2_agent::AgentVM;
+use hv2_cluster::ownership::TeamId;
 
 use super::{
     api_error, new_vm, now_ms, reserve, start_network, AppState, Arc, Deserialize, IntoResponse,
@@ -102,6 +104,9 @@ pub(crate) struct Stored {
     #[serde(rename = "machineID")]
     id: String,
     name: String,
+    /// The team it belongs to; `None` outside a multi-tenant deployment.
+    #[serde(rename = "teamID", default, skip_serializing_if = "Option::is_none")]
+    team: Option<TeamId>,
     #[serde(rename = "templateID")]
     template: String,
     #[serde(rename = "cpuCount")]
@@ -171,9 +176,36 @@ fn dir_of(state: &AppState, id: &str) -> PathBuf {
     root(state).join(id)
 }
 
-fn machine_id(name: &str) -> String {
-    let volume = hv2_cluster::model::volume_id(name);
+/// The ID of `team`'s machine named `name`: derived from both, so two teams
+/// each have their own machine of a name. Outside a team, from the name alone,
+/// as it was before teams.
+fn machine_id(team: Option<&TeamId>, name: &str) -> String {
+    let volume = hv2_cluster::model::team_volume_id(team, name);
     format!("vm-{}", volume.trim_start_matches("vol-"))
+}
+
+impl Stored {
+    /// Whether a caller acting for `team` may reach it: anyone without a
+    /// team reaches every machine, a team only its own.
+    fn reachable_by(&self, team: Option<&TeamId>) -> bool {
+        team.is_none_or(|team| self.team.as_ref() == Some(team))
+    }
+}
+
+/// The team the control plane says the caller acts for, if any.
+// The error is the reply, returned by the handler at once.
+#[allow(clippy::result_large_err)]
+fn caller_team(state: &AppState, headers: &HeaderMap) -> Result<Option<TeamId>, Response> {
+    super::creator_team(
+        headers,
+        state.node.is_some(),
+        state
+            .opts
+            .cluster_token
+            .as_ref()
+            .is_some_and(|token| !token.is_empty()),
+    )
+    .map_err(|(status, error)| api_error(status, error))
 }
 
 fn valid_name(name: &str) -> bool {
@@ -222,6 +254,7 @@ fn describe(machine: &Stored) -> Value {
     json!({
         "machineID": machine.id,
         "name": machine.name,
+        "teamID": machine.team,
         "templateID": machine.template,
         "cpuCount": machine.cpus,
         "memoryMB": machine.memory_mb,
@@ -236,11 +269,26 @@ fn describe(machine: &Stored) -> Value {
     })
 }
 
-fn by_name(state: &AppState, name: &str) -> Option<Stored> {
-    if !valid_name(name) {
+/// The machine `reference` names for a caller acting for `team`: one of the
+/// caller's own by name, or any the caller may reach by its ID. Another
+/// team's machine is not found, by either.
+fn find(state: &AppState, team: Option<&TeamId>, reference: &str) -> Option<Stored> {
+    if !valid_name(reference) {
         return None;
     }
-    load(state, &machine_id(name))
+    load(state, &machine_id(team, reference))
+        .filter(|machine| machine.team.as_ref() == team)
+        .or_else(|| load(state, reference).filter(|machine| machine.reachable_by(team)))
+}
+
+/// [`find`], for the caller the request's headers name. A machine that is not
+/// the caller's answers as one that does not exist.
+// The error is the reply, returned by the handler at once.
+#[allow(clippy::result_large_err)]
+fn named(state: &AppState, headers: &HeaderMap, name: &str) -> Result<Stored, Response> {
+    let team = caller_team(state, headers)?;
+    find(state, team.as_ref(), name)
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, format!("no machine {name}")))
 }
 
 // ── The root disk ───────────────────────────────────────────────────────────
@@ -605,8 +653,13 @@ pub(crate) struct NewMachine {
 /// `POST /machines`.
 pub(crate) async fn create(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(req): Json<NewMachine>,
 ) -> Response {
+    let team = match caller_team(&state, &headers) {
+        Ok(team) => team,
+        Err(response) => return response,
+    };
     if !valid_name(&req.name) {
         return api_error(
             StatusCode::BAD_REQUEST,
@@ -632,8 +685,9 @@ pub(crate) async fn create(
     }
     let node = Sizes::of(&state.opts);
     let machine = Stored {
-        id: machine_id(&req.name),
+        id: machine_id(team.as_ref(), &req.name),
         name: req.name,
+        team,
         template,
         cpus: req.cpus.unwrap_or(node.cpus).clamp(1, 64),
         memory_mb: req
@@ -705,25 +759,42 @@ async fn set_running(state: &Arc<AppState>, id: &str, running: bool) -> Result<(
 }
 
 /// `GET /machines`.
-pub(crate) async fn list(State(state): State<Arc<AppState>>) -> Response {
-    Json(all(&state).iter().map(describe).collect::<Vec<_>>()).into_response()
+pub(crate) async fn list(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    let team = match caller_team(&state, &headers) {
+        Ok(team) => team,
+        Err(response) => return response,
+    };
+    Json(
+        all(&state)
+            .iter()
+            .filter(|machine| machine.reachable_by(team.as_ref()))
+            .map(describe)
+            .collect::<Vec<_>>(),
+    )
+    .into_response()
 }
 
 /// `GET /machines/{name}`.
-pub(crate) async fn get(State(state): State<Arc<AppState>>, Path(name): Path<String>) -> Response {
-    match by_name(&state, &name) {
-        Some(machine) => Json(describe(&machine)).into_response(),
-        None => api_error(StatusCode::NOT_FOUND, format!("no machine {name}")),
+pub(crate) async fn get(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(name): Path<String>,
+) -> Response {
+    match named(&state, &headers, &name) {
+        Ok(machine) => Json(describe(&machine)).into_response(),
+        Err(response) => response,
     }
 }
 
 /// `POST /machines/{name}/{start,stop,restart}`.
 pub(crate) async fn action(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path((name, action)): Path<(String, String)>,
 ) -> Response {
-    let Some(machine) = by_name(&state, &name) else {
-        return api_error(StatusCode::NOT_FOUND, format!("no machine {name}"));
+    let machine = match named(&state, &headers, &name) {
+        Ok(machine) => machine,
+        Err(response) => return response,
     };
     let result = match action.as_str() {
         "start" => set_running(&state, &machine.id, true).await,
@@ -751,11 +822,13 @@ pub(crate) async fn action(
 /// `DELETE /machines/{name}`: a stopped machine and its disk.
 pub(crate) async fn delete(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(name): Path<String>,
 ) -> Response {
     let _ops = OPS.lock().await;
-    let Some(machine) = by_name(&state, &name) else {
-        return api_error(StatusCode::NOT_FOUND, format!("no machine {name}"));
+    let machine = match named(&state, &headers, &name) {
+        Ok(machine) => machine,
+        Err(response) => return response,
     };
     if live(|l| l.contains_key(&machine.id)) {
         return api_error(
@@ -777,9 +850,8 @@ pub(crate) struct ExecRequest {
 
 // The error is the reply, returned by the handler at once.
 #[allow(clippy::result_large_err)]
-fn running_vm(state: &AppState, name: &str) -> Result<Arc<AgentVM>, Response> {
-    let machine = by_name(state, name)
-        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, format!("no machine {name}")))?;
+fn running_vm(state: &AppState, headers: &HeaderMap, name: &str) -> Result<Arc<AgentVM>, Response> {
+    let machine = named(state, headers, name)?;
     live(|l| l.get(&machine.id).map(|m| Arc::clone(&m.vm))).ok_or_else(|| {
         api_error(
             StatusCode::CONFLICT,
@@ -791,10 +863,11 @@ fn running_vm(state: &AppState, name: &str) -> Result<Arc<AgentVM>, Response> {
 /// `POST /machines/{name}/exec`.
 pub(crate) async fn exec(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(name): Path<String>,
     Json(req): Json<ExecRequest>,
 ) -> Response {
-    let vm = match running_vm(&state, &name) {
+    let vm = match running_vm(&state, &headers, &name) {
         Ok(vm) => vm,
         Err(response) => return response,
     };
@@ -818,10 +891,12 @@ pub(crate) async fn exec(
 /// refused, since this boot.
 pub(crate) async fn network_decisions(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(name): Path<String>,
 ) -> Response {
-    let Some(machine) = by_name(&state, &name) else {
-        return api_error(StatusCode::NOT_FOUND, format!("no machine {name}"));
+    let machine = match named(&state, &headers, &name) {
+        Ok(machine) => machine,
+        Err(response) => return response,
     };
     let gateway = live(|l| {
         l.get(&machine.id)
@@ -840,9 +915,10 @@ pub(crate) async fn network_decisions(
 /// `GET /machines/{name}/console`: the end of its serial console.
 pub(crate) async fn console(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(name): Path<String>,
 ) -> Response {
-    match running_vm(&state, &name) {
+    match running_vm(&state, &headers, &name) {
         Ok(vm) => super::guest_report(&vm).await.into_response(),
         Err(response) => response,
     }
@@ -919,8 +995,45 @@ mod tests {
         assert!(valid_name("web-01"));
         assert!(!valid_name("../x"));
         assert!(!valid_name(""));
-        assert_eq!(machine_id("web-01"), machine_id("web-01"));
-        assert!(machine_id("web-01").starts_with("vm-"));
+        assert_eq!(machine_id(None, "web-01"), machine_id(None, "web-01"));
+        assert!(machine_id(None, "web-01").starts_with("vm-"));
+    }
+
+    /// Two teams each have their own machine of a name, and a machine made
+    /// before teams keeps the ID it had.
+    #[test]
+    fn a_team_has_its_own_machine_of_a_name() {
+        let red = TeamId::parse("red").unwrap();
+        let blue = TeamId::parse("blue").unwrap();
+        let teamless = machine_id(None, "web-01");
+        assert_ne!(machine_id(Some(&red), "web-01"), teamless);
+        assert_ne!(
+            machine_id(Some(&red), "web-01"),
+            machine_id(Some(&blue), "web-01")
+        );
+        let volume = hv2_cluster::model::volume_id("web-01");
+        assert_eq!(
+            teamless,
+            format!("vm-{}", volume.trim_start_matches("vol-"))
+        );
+    }
+
+    /// A team reaches its own machines and no other's; a caller without a
+    /// team reaches all of them.
+    #[test]
+    fn a_machine_is_reachable_by_its_team_and_by_callers_without_one() {
+        let red = TeamId::parse("red").unwrap();
+        let blue = TeamId::parse("blue").unwrap();
+        let old = r#"{"machineID":"vm-a","name":"a","templateID":"base","cpuCount":1,
+            "memoryMB":512,"diskGiB":1,"autostart":true,"restartPolicy":"always",
+            "desired":"running","createdAt":1}"#;
+        let mut machine: Stored = serde_json::from_str(old).unwrap();
+        assert!(machine.team.is_none());
+        assert!(machine.reachable_by(None) && !machine.reachable_by(Some(&red)));
+        machine.team = Some(red.clone());
+        assert!(machine.reachable_by(None) && machine.reachable_by(Some(&red)));
+        assert!(!machine.reachable_by(Some(&blue)));
+        assert_eq!(describe(&machine)["teamID"], "red");
     }
 
     #[test]

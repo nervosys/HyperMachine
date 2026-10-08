@@ -43,6 +43,33 @@ curl -s -X DELETE localhost:3980/machines/web-01     # stopped machines only
 | `start` | true | Start it once created. |
 | `network` | none | Give it a NIC. See [Networking](#networking). Without it the machine has no network device at all. |
 
+## Through the control plane
+
+The control plane serves the same `/machines` routes, so a cluster's machines
+are managed in one place:
+
+```sh
+curl -s -X POST https://control.example/machines -H "X-API-Key: $KEY" \
+  -d '{"name":"web-01","diskGiB":20}'
+curl -s https://control.example/machines -H "X-API-Key: $KEY"
+```
+
+- **Placement.** A new machine goes to the live node with the most free
+  capacity that offers its template, or to the node `nodeID` names. The reply's
+  `x-hv2-node` header and each listed machine's `nodeID` say where it is. A
+  machine stays on the node that holds its disk.
+- **Finding it.** No store records where a machine is: the control plane asks
+  the nodes on each request. So a control plane restart loses nothing. While a
+  node is not answering, a machine that is not found answers 503 rather than
+  404, and creating one is refused, since its name may be taken on that node.
+- **Access.** A key needs the `machines` scope (or `admin`). An `inventory` key
+  and an `observer` role do not reach machines.
+- **Teams.** A machine belongs to the [team](TEAMS.md) of the key that created
+  it. Its ID is derived from the team and the name, so two teams can each have
+  a machine called `web-01`. A team reaches its own machines by name; another
+  team's answer 404, by name and by ID. An administrator lists every machine
+  and reaches a team's by its ID.
+
 ## Networking
 
 A machine created with a `network` object has one NIC, behind the same egress
@@ -98,7 +125,9 @@ without the VM exiting. Stop a machine through the API.
   second NIC. Its network cannot be changed after creation, and it does not join
   private sandbox networks.
 - **Formats.** QCOW2, and several disks per machine.
-- **Control plane.** It does not route `/machines` yet; use the node API.
+- **Control plane.** It routes `/machines`, but there is no `hm` command for
+  them yet, no event or webhook when a machine changes state, and each request
+  asks every node where the machine is, which will not suit a large fleet.
 - **Migration.** Moving a machine between nodes, live migration, and HA restart
   on another host.
 
@@ -107,3 +136,4 @@ These are tracked in the [VMware replacement plan](VMWARE_REPLACEMENT.md).
 Evidence:
 - [real KVM: boot from disk, stop/start, guest reboot, daemon kill, delete](benchmarks/2026-10-07/machines-kvm/README.md)
 - [real KVM: a machine's NIC, allowed and refused egress, the network after a restart and a reboot](benchmarks/2026-10-08/machine-network-kvm/README.md)
+- [real KVM: machines through the control plane, with two teams](benchmarks/2026-10-08/machines-cluster-kvm/README.md)

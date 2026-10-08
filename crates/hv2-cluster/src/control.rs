@@ -287,6 +287,15 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .merge(crate::events::router(Arc::clone(&control.store)))
         .route("/volumes", get(list_volumes).post(to_volume_node))
         .route("/volumes/{id}", get(to_volume_node).delete(to_volume_node))
+        .route("/machines", get(list_machines).post(create_machine))
+        .route(
+            "/machines/{name}",
+            get(to_machine_node).delete(to_machine_node),
+        )
+        .route("/machines/{name}/exec", post(to_machine_node))
+        .route("/machines/{name}/console", get(to_machine_node))
+        .route("/machines/{name}/network/decisions", get(to_machine_node))
+        .route("/machines/{name}/{action}", post(to_machine_node))
         .route("/sandboxes/{id}/refreshes", post(forward))
         .route("/sandboxes/{id}/network", any(forward))
         .route("/sandboxes/{id}/network/decisions", get(forward))
@@ -3006,6 +3015,212 @@ async fn list_volumes(
         }
     }
     Json(merged.into_values().collect::<Vec<_>>()).into_response()
+}
+
+/// Every machine on every live node, with the node holding it.
+///
+/// A machine's disk is on one node, and no store records which: the nodes
+/// are asked. So the answer survives a control plane restarting, and is
+/// never out of step with the node. `complete` is false when a node that
+/// may hold machines did not answer, so a machine not found here may still
+/// exist.
+struct MachineInventory {
+    machines: Vec<(crate::model::NodeInfo, Value)>,
+    nodes: Vec<crate::model::NodeInfo>,
+    complete: bool,
+}
+
+async fn machine_inventory(
+    control: &ControlPlane,
+) -> Result<MachineInventory, (StatusCode, String)> {
+    let nodes = control
+        .store
+        .nodes()
+        .await
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+    let mut machines = Vec::new();
+    let mut complete = true;
+    for node in &nodes {
+        let mut request = control.http.get(format!("{}/machines", node.api));
+        if let Some(token) = &control.config.cluster_token {
+            request = request.header(CLUSTER_TOKEN_HEADER, token);
+        }
+        let listed = match request.send().await {
+            // A node that cannot run machines says so; it holds none.
+            Ok(response) if response.status() == StatusCode::NOT_IMPLEMENTED => Some(Vec::new()),
+            Ok(response) if response.status().is_success() => response
+                .json::<Value>()
+                .await
+                .ok()
+                .and_then(|answer| answer.as_array().cloned()),
+            _ => None,
+        };
+        match listed {
+            Some(listed) => machines.extend(listed.into_iter().map(|m| (node.clone(), m))),
+            None => complete = false,
+        }
+    }
+    Ok(MachineInventory {
+        machines,
+        nodes,
+        complete,
+    })
+}
+
+/// The team a node says a machine belongs to.
+fn machine_team(machine: &Value) -> Option<crate::ownership::TeamId> {
+    machine["teamID"]
+        .as_str()
+        .and_then(|team| crate::ownership::TeamId::parse(team).ok())
+}
+
+impl MachineInventory {
+    /// The node holding the machine `reference` names for `team`: one of the
+    /// caller's own by name, or any the caller may see by its ID.
+    fn locate(
+        &self,
+        team: &crate::ownership::RequestTeam,
+        reference: &str,
+    ) -> Option<&crate::model::NodeInfo> {
+        let visible = || {
+            self.machines
+                .iter()
+                .filter(|(_, machine)| team.sees(machine_team(machine).as_ref()))
+        };
+        visible()
+            .find(|(_, machine)| {
+                machine["name"].as_str() == Some(reference) && machine_team(machine) == team.0
+            })
+            .or_else(|| {
+                visible().find(|(_, machine)| machine["machineID"].as_str() == Some(reference))
+            })
+            .map(|(node, _)| node)
+    }
+}
+
+/// `GET /machines`: every live node's machines the caller may see, each with
+/// the node holding it.
+async fn list_machines(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(team): Extension<crate::ownership::RequestTeam>,
+) -> Response {
+    let inventory = match machine_inventory(&control).await {
+        Ok(inventory) => inventory,
+        Err((status, message)) => return api_error(status, message),
+    };
+    let listed: Vec<Value> = inventory
+        .machines
+        .into_iter()
+        .filter(|(_, machine)| team.sees(machine_team(machine).as_ref()))
+        .map(|(node, mut machine)| {
+            machine["nodeID"] = json!(node.id);
+            machine
+        })
+        .collect();
+    Json(listed).into_response()
+}
+
+/// `POST /machines`: on the node with the most room that offers its
+/// template, or the one `nodeID` names. Refused while any node that may hold
+/// machines is not answering, since the name may be taken there.
+async fn create_machine(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(team): Extension<crate::ownership::RequestTeam>,
+    method: Method,
+    uri: axum::http::Uri,
+    headers: HeaderMap,
+    body: Body,
+) -> Response {
+    let bytes = match axum::body::to_bytes(body, 1 << 16).await {
+        Ok(bytes) => bytes,
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+    };
+    let parsed = serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null);
+    let name = parsed["name"].as_str().unwrap_or_default();
+    let template = parsed["templateID"].as_str().unwrap_or("base");
+    let inventory = match machine_inventory(&control).await {
+        Ok(inventory) => inventory,
+        Err((status, message)) => return api_error(status, message),
+    };
+    if !inventory.complete {
+        return api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "a node is not answering; a machine of this name may exist there",
+        );
+    }
+    let taken = inventory.machines.iter().any(|(_, machine)| {
+        machine["name"].as_str() == Some(name) && machine_team(machine) == team.0
+    });
+    if taken {
+        return api_error(StatusCode::CONFLICT, format!("machine {name} exists"));
+    }
+    let pinned = parsed["nodeID"].as_str();
+    let node = inventory
+        .nodes
+        .iter()
+        .filter(|node| pinned.is_none_or(|id| node.id == id))
+        .filter(|node| node.offers_to(template, &team))
+        .max_by_key(|node| node.capacity.saturating_sub(node.running));
+    let Some(node) = node else {
+        return api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            match pinned {
+                Some(id) => format!("node {id} is not alive or does not offer template {template}"),
+                None => format!("no live node offers template {template}"),
+            },
+        );
+    };
+    let mut response = relay_with_team(
+        &control,
+        node,
+        &method,
+        &uri,
+        &headers,
+        reqwest::Body::from(bytes),
+        team.0.as_ref(),
+    )
+    .await;
+    if let Ok(value) = axum::http::HeaderValue::from_str(&node.id) {
+        response.headers_mut().insert("x-hv2-node", value);
+    }
+    response
+}
+
+/// Everything else under `/machines/{name}`, to the node holding the
+/// machine. One that is not the caller's answers as one that does not exist.
+async fn to_machine_node(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(team): Extension<crate::ownership::RequestTeam>,
+    method: Method,
+    uri: axum::http::Uri,
+    headers: HeaderMap,
+    body: Body,
+) -> Response {
+    let reference = uri.path().split('/').nth(2).unwrap_or_default();
+    let inventory = match machine_inventory(&control).await {
+        Ok(inventory) => inventory,
+        Err((status, message)) => return api_error(status, message),
+    };
+    let Some(node) = inventory.locate(&team, reference) else {
+        return if inventory.complete {
+            api_error(StatusCode::NOT_FOUND, format!("no machine {reference}"))
+        } else {
+            api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "a node is not answering; the machine may be there",
+            )
+        };
+    };
+    relay_with_team(
+        &control,
+        node,
+        &method,
+        &uri,
+        &headers,
+        reqwest::Body::wrap_stream(body.into_data_stream()),
+        team.0.as_ref(),
+    )
+    .await
 }
 
 /// `GET /templates/aliases/{alias}`: whether a live node offers a template

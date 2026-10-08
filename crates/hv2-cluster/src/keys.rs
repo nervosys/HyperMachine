@@ -42,6 +42,7 @@ pub enum ApiScope {
     Templates,
     Volumes,
     Events,
+    Machines,
 }
 
 /// A role limits capabilities independently of the resource scopes.
@@ -231,6 +232,7 @@ impl ApiKeyPolicy {
             ["v2", "sandboxes", ..] | ["sandboxes" | "sandbox-names", ..] => ApiScope::Sandboxes,
             ["v2" | "v3", "templates", ..] | ["templates" | "snapshots", ..] => ApiScope::Templates,
             ["volumes", ..] => ApiScope::Volumes,
+            ["machines", ..] => ApiScope::Machines,
             ["events", ..] => ApiScope::Events,
             _ => return false,
         };
@@ -461,6 +463,22 @@ mod tests {
         assert!(!policy.permits(&Method::POST, "/v3/templates"));
         assert!(!policy.permits(&Method::GET, "/sandboxes-other"));
         assert!(!policy.permits(&Method::GET, "/events/sandboxes"));
+        assert!(!policy.permits(&Method::GET, "/machines"));
+        assert!(!policy.permits(&Method::POST, "/machines/web-01/exec"));
+    }
+    #[test]
+    fn the_machines_scope_reaches_machines_and_nothing_else() {
+        let policy = policy("machines");
+        assert!(policy.permits(&Method::GET, "/machines"));
+        assert!(policy.permits(&Method::POST, "/machines"));
+        assert!(policy.permits(&Method::POST, "/machines/web-01/exec"));
+        assert!(policy.permits(&Method::DELETE, "/machines/web-01"));
+        assert!(!policy.permits(&Method::GET, "/machines-other"));
+        assert!(!policy.permits(&Method::GET, "/sandboxes"));
+        assert!(!policy.permits(&Method::GET, "/volumes"));
+        // An inventory key lists sandboxes and nodes, not machines: a
+        // machine's description carries its network rules.
+        assert!(!self::policy("inventory").permits(&Method::GET, "/machines"));
     }
     #[test]
     fn malformed_policy_never_silently_disables_authentication() {
