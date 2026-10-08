@@ -21,7 +21,6 @@ fips = ["rustls/aws_lc_rs", "rustls/fips"]
 rustls = { workspace = true }
 reqwest = { workspace = true }
 webpki-roots = "1"
-rustls-pemfile = { workspace = true }
 
 [lints]
 workspace = true

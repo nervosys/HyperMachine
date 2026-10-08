@@ -6,7 +6,7 @@
 //!
 //! - By default, `ring`, as the workspace has always used.
 //! - With the `fips` feature, AWS-LC's FIPS 140-3 validated module through
-//!   `aws-lc-rs`, as [`rustls::crypto::default_fips_provider`] configures it:
+//!   `aws-lc-rs`, as `rustls::crypto::default_fips_provider` configures it:
 //!   AES-GCM suites only, and the P-256, P-384 and X25519+ML-KEM-768 groups.
 //!   ChaCha20-Poly1305 and plain X25519 are not offered, so they cannot be
 //!   negotiated.
@@ -19,6 +19,8 @@
 use std::sync::Arc;
 
 use rustls::crypto::CryptoProvider;
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::CertificateDer;
 
 /// Whether this is the FIPS build.
 pub const FIPS_BUILD: bool = cfg!(feature = "fips");
@@ -77,7 +79,7 @@ pub fn client_config(extra_roots_pem: Option<&[u8]>) -> Result<rustls::ClientCon
     let mut roots = rustls::RootCertStore::empty();
     roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     if let Some(pem) = extra_roots_pem {
-        for certificate in rustls_pemfile::certs(&mut &pem[..]) {
+        for certificate in CertificateDer::pem_slice_iter(pem) {
             let certificate = certificate.map_err(|e| format!("extra root: {e}"))?;
             roots
                 .add(certificate)
