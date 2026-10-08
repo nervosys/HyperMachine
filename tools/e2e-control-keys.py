@@ -38,7 +38,10 @@ def main():
         assert invalid.returncode != 0, "empty policy must fail startup"
         assert b"API key policy needs" in invalid.stderr, "policy validation must fail before listeners"
         inventory, admin, sandboxes = (secrets.token_urlsafe(32) for _ in range(3))
-        expiry = int(time.time()) + 5
+        # Far enough out that two refused startups, a real one and the scope
+        # checks all finish first, even on a slow runner: at five seconds a
+        # Windows runner that took six saw the key expire before its first use.
+        expiry = int(time.time()) + 20
         policy_file.write_text(json.dumps([
             {"sha256": hashlib.sha256(key.encode()).hexdigest(), "expires_at": expires, "scopes": scopes}
             for key, expires, scopes in [(inventory, expiry, ["inventory"]),
