@@ -54,9 +54,10 @@ The host was WSL2 kernel 6.18.33.2 with real KVM.
 
 ## Not shown here
 
-- **More than one node.** There was one node, so placement had one choice, and
-  the 503 for a node that is not answering was not exercised. Choosing the node
-  with the most room is covered by no test yet.
+- **More than one real node.** There was one node, so placement had one choice,
+  and the 503 for a node that is not answering was not exercised here. Both are
+  covered since by `crates/hv2-cluster/tests/machine_routing.rs`, against
+  stand-in nodes that boot nothing.
 - **A control plane restart.** Finding machines by asking the nodes should
   survive one; it was not tried.
 - **Single sign-on sessions.** Only API keys were used.
