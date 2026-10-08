@@ -1183,6 +1183,46 @@ impl HypervisorBackend for KvmBackend {
                 );
                 Ok(())
             }
+
+            LoadedBoot::Pvh(_) => {
+                // PVH enters the image as Multiboot does -- 32-bit protected
+                // mode, paging off, flat segments, interrupts off -- with EBX
+                // pointing at `hvm_start_info`, which the loop above wrote
+                // along with the image. There is no magic in EAX: the image
+                // knows it was PVH-booted because that is its only entry.
+                use crate::boot::pvh::START_INFO_ADDR;
+                let entry = boot.entry_point()?;
+                let (gdt_base, _idt_base, _pt_base, stack_pointer) =
+                    BootSetup::allocate_standard_tables();
+
+                let gdt = GdtBuilder::new()
+                    .add_null()
+                    .add_code_32bit(0, 0xFFFF_FFFF, 0)
+                    .add_data_32bit(0, 0xFFFF_FFFF, 0)
+                    .build();
+                kvm_vm.write_guest_memory(gdt_base, &gdt)?;
+
+                let mut sregs = kvm_vcpu.get_sregs()?;
+                sregs.gdt.base = gdt_base;
+                sregs.gdt.limit = (gdt.len() - 1) as u16;
+                apply_flat_protected_mode(&mut sregs);
+                kvm_vcpu.set_sregs(&sregs)?;
+
+                let mut regs = kvm_vcpu.get_regs()?;
+                regs.rip = entry;
+                regs.rbx = START_INFO_ADDR;
+                regs.rsp = stack_pointer;
+                regs.rbp = 0;
+                regs.rflags = RFLAGS_RESERVED;
+                kvm_vcpu.set_regs(&regs)?;
+
+                tracing::info!(
+                    "KVM: PVH firmware entered at {:#x}, start info at {:#x}",
+                    entry,
+                    START_INFO_ADDR
+                );
+                Ok(())
+            }
         }
     }
 

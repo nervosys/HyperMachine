@@ -406,6 +406,9 @@ impl HypervisorBackend for WhpxBackend {
                 let ip = (*entry & 0xF) as u16;
                 whpx_vcpu.setup_real_mode_boot(cs, ip)
             }
+            crate::boot::source::LoadedBoot::Pvh(_) => Err(Error::NotSupported(
+                "PVH firmware boot is implemented on KVM only".into(),
+            )),
         }
     }
 

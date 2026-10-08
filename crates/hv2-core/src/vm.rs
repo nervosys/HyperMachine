@@ -683,6 +683,9 @@ pub struct VM {
     /// Held so its transport's state can be saved with a snapshot and put back
     /// on restore, as the other two devices' are.
     block: RwLock<Option<AttachedBlock>>,
+    /// A block device over PCI, for firmware that finds its disk by
+    /// enumerating the bus. Kept apart from `block`: it is not snapshotted.
+    block_pci: RwLock<Option<AttachedBlockPci>>,
     /// The raw image guest RAM is a private mapping of, when a restore mapped
     /// one. What [`Self::snapshot_layered`] records only the difference from.
     memory_base: parking_lot::Mutex<Option<std::path::PathBuf>>,
@@ -705,6 +708,12 @@ pub struct VM {
 struct AttachedBlock {
     device: Arc<parking_lot::Mutex<crate::devices::virtio_blk_mmio::VirtioBlockMmio>>,
     transport: Arc<tokio::sync::RwLock<crate::devices::VirtioMmioTransport>>,
+}
+
+struct AttachedBlockPci {
+    device: Arc<parking_lot::Mutex<crate::devices::virtio_blk_mmio::VirtioBlockMmio>>,
+    /// Kept alive with the VM; the device manager holds the other reference.
+    _transport: Arc<tokio::sync::RwLock<crate::devices::virtio_pci::VirtioPciTransport>>,
 }
 
 struct AttachedNet {
@@ -872,6 +881,7 @@ impl VM {
             vsock: RwLock::new(None),
             net: RwLock::new(None),
             block: RwLock::new(None),
+            block_pci: RwLock::new(None),
             memory_base: parking_lot::Mutex::new(None),
         })
     }
@@ -3072,6 +3082,90 @@ impl VM {
         Ok(device)
     }
 
+    /// Guest physical address of the PCI block device's BAR, by default.
+    pub const BLOCK_PCI_BAR_BASE: u64 = 0xd004_0000;
+
+    /// PCI slot of the block device on bus 0.
+    pub const BLOCK_PCI_SLOT: u8 = 4;
+
+    /// Interrupt line the PCI block device raises, by default.
+    pub const BLOCK_PCI_IRQ: u8 = 10;
+
+    /// Attach a file-backed virtio-blk device over PCI.
+    ///
+    /// The same device as [`Self::attach_block`], behind a PCI function
+    /// instead of a virtio-mmio window. A guest finds it by enumerating bus 0,
+    /// with no kernel argument naming it, which is the only way firmware and
+    /// a stock operating system look for a disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a PCI block device is already attached, if the BAR
+    /// window would overlap guest RAM, or if the image cannot be opened.
+    pub async fn attach_block_pci(
+        self: &Arc<Self>,
+        path: &std::path::Path,
+        read_only: bool,
+        serial: &str,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_blk_mmio::VirtioBlockMmio>>> {
+        use crate::devices::virtio_blk_mmio::VirtioBlockMmio;
+        use crate::devices::virtio_pci::{VirtioPciTransport, VIRTIO_PCI_BAR_SIZE};
+
+        let (bar_base, irq) = (Self::BLOCK_PCI_BAR_BASE, Self::BLOCK_PCI_IRQ);
+        if self.block_pci.read().is_some() {
+            return Err(Error::Device(
+                "this VM already has a PCI block device".to_string(),
+            ));
+        }
+        if self.memory.host_offset(bar_base).is_some() {
+            return Err(Error::Device(format!(
+                "block BAR window at {bar_base:#x} overlaps {} bytes of guest RAM",
+                self.memory.total_size()
+            )));
+        }
+        self.pci_root.write().ensure_host_bridge()?;
+
+        let device = Arc::new(parking_lot::Mutex::new(VirtioBlockMmio::open(
+            path, read_only, serial,
+        )?));
+        let capacity = device.lock().capacity_bytes();
+        let transport = Arc::new(tokio::sync::RwLock::new(
+            VirtioPciTransport::new("virtio-blk-pci", bar_base, self.memory(), device.clone())
+                .with_interrupt(self.pic(), irq),
+        ));
+        let mut config = transport.read().await.config_space();
+        config.set_interrupt_line(irq);
+        config.set_interrupt_pin(crate::pci::InterruptPin::IntA);
+        self.pci_root
+            .write()
+            .add_device(Self::BLOCK_PCI_SLOT, 0, config);
+        self.devices
+            .register_device("virtio-blk-pci", transport.clone())
+            .await?;
+        self.devices
+            .register_mmio_region("virtio-blk-pci".to_string(), bar_base, VIRTIO_PCI_BAR_SIZE)
+            .await?;
+
+        *self.block_pci.write() = Some(AttachedBlockPci {
+            device: device.clone(),
+            _transport: transport,
+        });
+        tracing::info!(
+            "VM '{}': block device attached over PCI at slot {}, BAR {bar_base:#x}              (IRQ {irq}, {capacity} bytes{})",
+            self.config.name,
+            Self::BLOCK_PCI_SLOT,
+            if read_only { ", read-only" } else { "" },
+        );
+        Ok(device)
+    }
+
+    /// The PCI block device attached to this VM, if any.
+    pub fn block_pci(
+        &self,
+    ) -> Option<Arc<parking_lot::Mutex<crate::devices::virtio_blk_mmio::VirtioBlockMmio>>> {
+        self.block_pci.read().as_ref().map(|b| b.device.clone())
+    }
+
     /// The block device attached to this VM, if any.
     pub fn block(
         &self,
@@ -5016,6 +5110,47 @@ mod tests {
             "a PCI device is found by enumeration; telling the guest where it \
              is on the command line would mean it was not"
         );
+    }
+
+    /// A PCI block device is a function a guest finds by walking bus 0, with
+    /// its register window mapped where its BAR says and no kernel argument:
+    /// firmware and a stock kernel look nowhere else.
+    #[tokio::test]
+    async fn a_pci_block_device_is_found_by_enumeration() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        crate::machine::Machine::legacy_pc_with_pci_root(vm.pci_root())
+            .attach_absent(&vm.devices())
+            .await
+            .expect("attach the legacy machine");
+        let image = tempfile::NamedTempFile::new().expect("temp image");
+        image.as_file().set_len(1 << 20).expect("size the image");
+        let device = vm
+            .attach_block_pci(image.path(), false, "disk0")
+            .await
+            .expect("attach over PCI");
+        assert_eq!(device.lock().capacity_bytes(), 1 << 20);
+        assert!(vm.block_pci().is_some() && vm.block().is_none());
+
+        let address = crate::pci::PciAddress {
+            segment: 0,
+            bus: 0,
+            device: VM::BLOCK_PCI_SLOT,
+            function: 0,
+        };
+        // Vendor 0x1af4, device 0x1042: a modern virtio block device.
+        assert_eq!(vm.pci_root().read().read_config(&address, 0), 0x1042_1af4);
+        assert!(vm
+            .devices()
+            .find_mmio_device(VM::BLOCK_PCI_BAR_BASE)
+            .await
+            .is_some());
+        assert!(vm.extra_kernel_args().is_empty());
+        assert!(vm
+            .attach_block_pci(image.path(), false, "disk1")
+            .await
+            .is_err());
     }
 
     #[tokio::test]
