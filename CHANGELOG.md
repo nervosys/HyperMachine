@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   module, chosen in one place (the new `hv2-tls` crate). `--fips` / `HV2_FIPS=1`
   refuses to start a build that is not it. See `docs/FIPS.md` for what is and is
   not covered.
+- `hm sandbox vm machine`: create, list, inspect, start, stop, restart, delete,
+  exec (with the guest command's exit code), console and network decisions,
+  against a node or the control plane.
 - Machines through the control plane: it serves `/machines`, places a new
   machine on the node with the most room (or the one `nodeID` names) and finds
   an existing one by asking the nodes. A new `machines` API key scope gates

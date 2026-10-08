@@ -32,6 +32,23 @@ curl -s localhost:3980/machines/web-01/network/decisions   # what its gateway al
 curl -s -X DELETE localhost:3980/machines/web-01     # stopped machines only
 ```
 
+The same with `hm`, against a node or the control plane (`--endpoint`, or
+`HV2_SANDBOX_URL`; `HV2_API_KEY` or a `login` session):
+
+```sh
+hm sandbox vm machine create web-01 --cpus 2 --memory-mb 2048 --disk-gib 20     --allow-out api.example.com --deny-out 10.9.0.0/16
+hm sandbox vm machine list
+hm sandbox vm machine exec web-01 -- df -h /     # exits with the command's code
+hm sandbox vm machine stop web-01                # also: start, restart, inspect
+hm sandbox vm machine console web-01
+hm sandbox vm machine decisions web-01
+hm sandbox vm machine delete web-01
+```
+
+`--network`, `--allow-out`, `--deny-out` or `--no-internet` each give the machine
+a NIC; with none of them it has no network device. `--node` picks the node when
+talking to a control plane.
+
 | Field on create | Default | |
 |---|---|---|
 | `name` | required | Letters, digits, `-` and `_`, up to 63 characters. |
@@ -125,9 +142,9 @@ without the VM exiting. Stop a machine through the API.
   second NIC. Its network cannot be changed after creation, and it does not join
   private sandbox networks.
 - **Formats.** QCOW2, and several disks per machine.
-- **Control plane.** It routes `/machines`, but there is no `hm` command for
-  them yet, no event or webhook when a machine changes state, and each request
-  asks every node where the machine is, which will not suit a large fleet.
+- **Control plane.** It routes `/machines`, but there is no event or webhook
+  when a machine changes state, and each request asks every node where the
+  machine is, which will not suit a large fleet.
 - **Migration.** Moving a machine between nodes, live migration, and HA restart
   on another host.
 
