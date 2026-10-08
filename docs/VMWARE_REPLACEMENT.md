@@ -62,9 +62,10 @@ Status is one of: not started, in progress, done (with evidence link).
 | A VM object separate from sandboxes: a definition, persistent state, no lifetime cap | **done on a node**: [machines](MACHINES.md), [verified on real KVM](benchmarks/2026-10-07/machines-kvm/README.md). Not yet routed through the control plane, and no guest networking |
 | Boot from a persistent root disk (raw), with root on `/dev/vda` | **done**: an ext4 root disk made from any template, [verified on real KVM](benchmarks/2026-10-07/machines-kvm/README.md) |
 | Restart policy and autostart; VMs come back after a host or daemon restart | **done for daemon restarts**, [verified on real KVM](benchmarks/2026-10-07/machines-kvm/README.md). A host reboot is not yet tested |
+| A network for a machine | **partial**: one NIC behind the node's egress gateway, with allow and deny rules kept with the machine, [verified on real KVM](benchmarks/2026-10-08/machine-network-kvm/README.md). Egress only: nothing can connect in, and bridged or VLAN networking is a Phase 3 item |
 | QCOW2 read/write and thin images | not started |
 | UEFI firmware boot (OVMF), so stock cloud images and ISO installers work | not started |
-| Serial console over the API, then a web console | not started |
+| Serial console over the API, then a web console | **partial**: `GET /machines/{name}/console` returns the end of the serial output. It is read-only, with no input and no web console |
 
 ### Phase 2: Gov baseline
 
