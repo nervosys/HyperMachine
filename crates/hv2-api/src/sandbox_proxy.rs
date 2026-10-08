@@ -173,6 +173,19 @@ pub trait SandboxRoutes: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Answer a request here instead of forwarding it: a sign-in redirect, or
+    /// the step that turns a sign-in handoff into a cookie for this host. Sees
+    /// the URI, which admission does not. `None`, the default, forwards.
+    async fn intercept(
+        &self,
+        _sandbox: &str,
+        _port: u16,
+        _uri: &hyper::Uri,
+        _headers: &hyper::HeaderMap,
+    ) -> Option<ProxyAnswer> {
+        None
+    }
+
     /// Complete admission before backend lookup or guest wakeup. Implementations
     /// may await durable access checks here; denial keeps the route unopened.
     /// The default preserves existing synchronous authorization policies.
@@ -229,6 +242,16 @@ pub trait SandboxRoutes: Send + Sync + 'static {
     )> {
         None
     }
+}
+
+/// A route owner's own answer to a request, sent instead of forwarding it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProxyAnswer {
+    pub status: u16,
+    /// Where to send the browser, for a redirect.
+    pub location: Option<String>,
+    /// A cookie to set on the way.
+    pub set_cookie: Option<String>,
 }
 
 /// A route owner refused authentication before backend activity.
@@ -555,6 +578,30 @@ async fn proxy(
         ));
     };
     let sandbox = sandbox.as_str();
+
+    if let Some(answer) = routes
+        .intercept(sandbox, port, req.uri(), req.headers())
+        .await
+    {
+        let mut response = Response::builder()
+            .status(StatusCode::from_u16(answer.status).unwrap_or(StatusCode::FORBIDDEN))
+            .header(hyper::header::CACHE_CONTROL, "no-store");
+        if let Some(location) = &answer.location {
+            response = response.header(hyper::header::LOCATION, location.as_str());
+        }
+        if let Some(cookie) = &answer.set_cookie {
+            response = response.header(hyper::header::SET_COOKIE, cookie.as_str());
+        }
+        return Ok(response
+            .body(
+                http_body_util::Empty::<Bytes>::new()
+                    .map_err(|never| match never {})
+                    .boxed(),
+            )
+            .unwrap_or_else(|_| {
+                refuse(grpc, StatusCode::BAD_GATEWAY, 13, "proxy answer invalid")
+            }));
+    }
 
     if let Err(denied) = routes.admit_request(sandbox, port, req.headers_mut()).await {
         let mut response = refuse(

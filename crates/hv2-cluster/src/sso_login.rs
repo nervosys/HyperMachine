@@ -225,6 +225,19 @@ impl SsoLogin {
         &self.origin
     }
 
+    pub(crate) fn key(&self) -> &SessionKey {
+        &self.key
+    }
+
+    pub(crate) fn session_ttl(&self) -> Duration {
+        self.config.session_ttl
+    }
+
+    /// The member with this verified email, as the members file says now.
+    pub(crate) fn member(&self, email: &str) -> Option<Member> {
+        self.members.read().get(email).cloned()
+    }
+
     /// Keys to check `token` with: the cached set, refetched first when the
     /// token names a `kid` it lacks and the last fetch was a while ago -- a
     /// provider rotates keys in before it signs with them.
