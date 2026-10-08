@@ -1679,7 +1679,17 @@ async fn bring_up(
 
     let network = match (network, nic) {
         (Some(spec), Some(device)) => {
-            match start_network(state, sandbox_id, &vm, device, spec, snapshot.is_none()).await {
+            match start_network(
+                state,
+                sandbox_id,
+                &vm,
+                device,
+                spec,
+                snapshot.is_none(),
+                true,
+            )
+            .await
+            {
                 Ok(network) => Some(network),
                 Err(e) => {
                     startup_cleanup.stop().await;
@@ -3876,12 +3886,17 @@ async fn start_network(
     device: Arc<parking_lot::Mutex<hv2_core::devices::virtio_net_mmio::VirtioNetMmio>>,
     spec: NetworkSpec,
     configure_guest: bool,
+    // Whether it may join private sandbox networks. A machine is not a
+    // sandbox the cluster knows, so it does not.
+    private: bool,
 ) -> Result<LiveNetwork, String> {
     let mut builder = Gateway::builder(spec.policy).config(GatewayConfig::default());
-    if let Some(private) = private_source::for_gateway(state, sandbox_id, vm)
-        .map_err(|_| "configuring private gateway failed".to_string())?
-    {
-        builder = builder.private_network(private);
+    if private {
+        if let Some(private) = private_source::for_gateway(state, sandbox_id, vm)
+            .map_err(|_| "configuring private gateway failed".to_string())?
+        {
+            builder = builder.private_network(private);
+        }
     }
 
     if let Some(authority) = &state.authority {
@@ -4963,6 +4978,11 @@ async fn network_decisions(
     let Some(gateway) = gateway else {
         return api_error(StatusCode::BAD_REQUEST, "this sandbox has no network");
     };
+    Json(gateway_decisions(&gateway)).into_response()
+}
+
+/// A gateway's audit log and counters, as the decisions routes answer.
+fn gateway_decisions(gateway: &GatewayHandle) -> serde_json::Value {
     let decisions: Vec<_> = gateway
         .decisions()
         .into_iter()
@@ -4977,7 +4997,7 @@ async fn network_decisions(
         })
         .collect();
     let stats = gateway.stats();
-    Json(json!({
+    json!({
         "decisions": decisions,
         "stats": {
             "connectionsAllowed": stats.connections_allowed,
@@ -4986,8 +5006,7 @@ async fn network_decisions(
             "dnsRefused": stats.dns_refused,
             "intercepted": stats.intercepted,
         }
-    }))
-    .into_response()
+    })
 }
 
 async fn exec(
@@ -5721,6 +5740,10 @@ async fn main() -> std::process::ExitCode {
         )
         .route("/machines/{name}/exec", post(machines::exec))
         .route("/machines/{name}/console", get(machines::console))
+        .route(
+            "/machines/{name}/network/decisions",
+            get(machines::network_decisions),
+        )
         .route("/machines/{name}/{action}", post(machines::action))
         .route("/disks/{diskID}", get(disks::get).delete(disks::delete))
         .route(

@@ -1,0 +1,60 @@
+{
+  "success": true,
+  "purpose": "functional verification of machine networking on KVM",
+  "input_sha256": {
+    "daemon": "38d7cc5f58e7a4508340bb8d52f1bc09c8ed679357eb716fabad8886c4fea792",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "driver": "5649adeacab52edc84c6c5c3a528cd6abb9229ee99529d0db81f3c4e51d9222e"
+  },
+  "cases": [
+    {
+      "name": "a machine with a network reaches what it may and not the metadata address",
+      "success": true,
+      "detail": {
+        "guest_address": "10.0.2.15/24",
+        "decisions": [
+          "allow 172.28.97.192:34947 (allowOut address)",
+          "deny 169.254.169.254:80 (reserved address)"
+        ]
+      }
+    },
+    {
+      "name": "a machine without a network has no NIC",
+      "success": true,
+      "detail": {
+        "links": [
+          "lo",
+          "sit0"
+        ]
+      }
+    },
+    {
+      "name": "a machine whose network does not allow an address is refused it",
+      "success": true,
+      "detail": {
+        "decisions": [
+          "deny 172.28.97.192:34947 (reserved address)"
+        ]
+      }
+    },
+    {
+      "name": "the network returns after stop/start and a guest reboot, the CA trusted once",
+      "success": true,
+      "detail": {
+        "ca_certificates_in_bundle_after_three_boots": 1
+      }
+    },
+    {
+      "name": "a network that cannot be decided is refused at creation",
+      "success": true,
+      "detail": {
+        "status": 400,
+        "reply": {
+          "code": 400,
+          "message": "network: 'not a host or cidr/99' is not a usable name pattern (a bare '*' is not allowed)"
+        }
+      }
+    }
+  ]
+}
