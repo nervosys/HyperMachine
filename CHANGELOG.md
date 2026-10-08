@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   module, chosen in one place (the new `hv2-tls` crate). `--fips` / `HV2_FIPS=1`
   refuses to start a build that is not it. See `docs/FIPS.md` for what is and is
   not covered.
+- Machines through the control plane: it serves `/machines`, places a new
+  machine on the node with the most room (or the one `nodeID` names) and finds
+  an existing one by asking the nodes. A new `machines` API key scope gates
+  them, and a machine belongs to its creating key's team, as a volume does.
 - Machine networking: a machine created with `network` has one NIC behind the
   node's egress gateway, with a sandbox's `allowOut`/`denyOut` rules, kept with
   the machine and applied at every boot. `GET /machines/{name}/network/decisions`
