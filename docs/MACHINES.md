@@ -92,8 +92,15 @@ hm sandbox vm machine type cloud-01 cirros            # type at its serial conso
   request body at it.
 - **Stopping** such a machine stops the VM without asking the guest, as pulling
   the plug would. Shut the guest down, or `sync`, from its console first.
-- **Limits today:** one vCPU, no network device, raw images only, and the
-  firmware is not shipped with HyperMachine. See [firmware boot](FIRMWARE_BOOT.md).
+- **A network** works as it does for any machine: give `network` on create, and
+  the machine gets one NIC behind the node's egress gateway, with the same
+  `allowOut` and `denyOut` rules. The NIC is on the PCI bus, where a stock
+  operating system looks, and the guest configures itself by DHCP: the gateway
+  answers with the guest's address, the default route and the resolver. Nothing
+  else is set up in the guest, since there is no agent to do it; the egress CA
+  for HTTPS interception is not installed.
+- **Limits today:** one vCPU, raw images only, and the firmware is not shipped
+  with HyperMachine. See [firmware boot](FIRMWARE_BOOT.md).
 
 ## Through the control plane
 
@@ -171,8 +178,7 @@ without the VM exiting. Stop a machine through the API.
 ## Not yet
 
 - **ISO installers, and more for image machines.** A machine made from an image
-  has one vCPU and no network device, and installers need a firmware that has
-  not been run here yet.
+  has one vCPU, and installers need a firmware that has not been run here yet.
 - **Networking beyond egress.** A machine cannot be reached from the network:
   there is no inbound port forwarding, no bridged or VLAN networking, and no
   second NIC. Its network cannot be changed after creation, and it does not join
@@ -190,4 +196,5 @@ Evidence:
 - [real KVM: boot from disk, stop/start, guest reboot, daemon kill, delete](benchmarks/2026-10-07/machines-kvm/README.md)
 - [real KVM: a machine's NIC, allowed and refused egress, the network after a restart and a reboot](benchmarks/2026-10-08/machine-network-kvm/README.md)
 - [real KVM: machines through the control plane, with two teams](benchmarks/2026-10-08/machines-cluster-kvm/README.md)
+- [real KVM: a networked image machine, configured by DHCP, reaching what it may](benchmarks/2026-10-09/machine-image-network-kvm/README.md)
 - [real KVM: a machine booted by firmware from a stock cloud image, driven over its console](benchmarks/2026-10-08/machine-firmware-kvm/README.md)
