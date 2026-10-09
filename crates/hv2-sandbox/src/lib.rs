@@ -217,6 +217,33 @@ pub enum FilesystemPolicy {
     },
 }
 
+/// Paths a workload must be able to reach, where its containment would
+/// otherwise hide them.
+///
+/// A floor, not a ceiling. Containment that hides part of the filesystem --
+/// a Windows AppContainer, which cannot read the user's files -- is opened
+/// for exactly these paths and what is under them. Containment that hides
+/// nothing, such as [`FilesystemPolicy::Host`] on Linux, already reaches
+/// them, and a grant there changes nothing: it does not take anything else
+/// away. To take the rest away, isolate the filesystem.
+///
+/// Each path must be absolute and exist, or the run is refused.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PathGrants {
+    /// Readable, and executable, with everything under them.
+    pub read_only: Vec<PathBuf>,
+    /// Readable and writable, with everything under them.
+    pub read_write: Vec<PathBuf>,
+}
+
+impl PathGrants {
+    /// Whether nothing is granted.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.read_only.is_empty() && self.read_write.is_empty()
+    }
+}
+
 /// Limits and policy for one sandboxed run.
 #[derive(Debug, Clone, Default)]
 pub struct SandboxSpec {
@@ -232,6 +259,8 @@ pub struct SandboxSpec {
     pub network: NetworkPolicy,
     /// Filesystem policy.
     pub filesystem: FilesystemPolicy,
+    /// Paths the workload must reach whatever its containment hides.
+    pub grants: PathGrants,
     /// Whether processes inside are hidden from the host's process table.
     pub isolate_processes: bool,
     /// Whether the workload is barred from gaining privileges.
@@ -268,6 +297,7 @@ impl SandboxSpec {
             wall_clock: Some(wall_clock),
             network: NetworkPolicy::Denied,
             filesystem: FilesystemPolicy::Host,
+            grants: PathGrants::default(),
             isolate_processes: true,
             no_new_privileges: true,
             best_effort: false,

@@ -68,9 +68,15 @@ pub struct RunArgs {
     /// Filesystem view: `host`, or `isolated:ROOT` to make ROOT the program's `/`.
     #[arg(long, default_value = "host")]
     pub fs: String,
-    /// A host path mounted read-only at the same path inside `--fs isolated:ROOT`.
+    /// A host path the program may read: mounted read-only at the same path
+    /// inside `--fs isolated:ROOT`, and opened to it where its containment
+    /// would otherwise hide it (a Windows program run with no network).
     #[arg(long = "ro", value_name = "PATH")]
     pub read_only: Vec<PathBuf>,
+    /// A host path the program may read and write, where its containment
+    /// would otherwise hide it. Not available inside `--fs isolated:ROOT`.
+    #[arg(long = "rw", value_name = "PATH")]
+    pub read_write: Vec<PathBuf>,
     /// Working directory.
     #[arg(long)]
     pub workdir: Option<PathBuf>,
@@ -131,12 +137,8 @@ pub fn parse_size(text: &str) -> Result<u64, String> {
 /// The spec `args` asks for.
 pub fn spec_of(args: &RunArgs) -> Result<SandboxSpec> {
     let filesystem = match args.fs.as_str() {
-        "host" => {
-            if !args.read_only.is_empty() {
-                bail!("--ro mounts into an isolated filesystem; use --fs isolated:ROOT");
-            }
-            FilesystemPolicy::Host
-        }
+        // `--ro` here is a grant: a path opened where containment hides it.
+        "host" => FilesystemPolicy::Host,
         other => match other.strip_prefix("isolated:") {
             Some(root) if !root.is_empty() => FilesystemPolicy::Isolated {
                 root: PathBuf::from(root),
@@ -153,6 +155,15 @@ pub fn spec_of(args: &RunArgs) -> Result<SandboxSpec> {
         network: match args.net {
             Net::Deny => NetworkPolicy::Denied,
             Net::Host => NetworkPolicy::Host,
+        },
+        // Inside an isolated root `--ro` is already one of its mounts.
+        grants: hv2_sandbox::PathGrants {
+            read_only: if matches!(filesystem, FilesystemPolicy::Host) {
+                args.read_only.clone()
+            } else {
+                Vec::new()
+            },
+            read_write: args.read_write.clone(),
         },
         filesystem,
         isolate_processes: args.isolate_processes,
@@ -418,7 +429,15 @@ mod tests {
         );
         assert!(spec_of(&parse(&["--fs", "isolated:", "--", "p"])).is_err());
         assert!(spec_of(&parse(&["--fs", "chroot", "--", "p"])).is_err());
-        assert!(spec_of(&parse(&["--ro", "/usr", "--", "p"])).is_err());
+        // Inside an isolated root `--ro` is a mount and nothing more.
+        assert!(s.grants.is_empty());
+
+        // With the host's filesystem, `--ro` and `--rw` are grants: paths
+        // opened to the program where its containment would hide them.
+        let s = spec_of(&parse(&["--ro", "/usr", "--rw", "/work", "--", "p"])).unwrap();
+        assert_eq!(s.filesystem, FilesystemPolicy::Host);
+        assert_eq!(s.grants.read_only, vec![std::path::PathBuf::from("/usr")]);
+        assert_eq!(s.grants.read_write, vec![std::path::PathBuf::from("/work")]);
     }
 
     #[test]

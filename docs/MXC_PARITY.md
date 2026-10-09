@@ -35,7 +35,7 @@ not as a difference.
 | Linux VM backend | microvm, hyperlight | microVM on HyperMachine's own VMM |
 | Windows process backend | process container (default), plus Windows Sandbox, WSL container, microVM, Hyperlight and isolation session, several marked experimental | job object for memory, process count and CPU time; **AppContainer for no-network**. Nothing else |
 | macOS backend | seatbelt | **resource limits only**, and it says so |
-| Filesystem policy | read-only, read-write and denied path lists | Linux: a root of the caller's choosing plus read-only mounts. Windows: whatever an AppContainer may read; **no way to grant a path**. No denied list anywhere |
+| Filesystem policy | read-only, read-write and denied path lists | Read-only and read-write [path grants](SANDBOXES.md#path-grants). Windows: an AppContainer denies everything else outside the system directories. Linux: a root of the caller's choosing plus read-only mounts; with the host's filesystem a grant is a no-op, since nothing is hidden. **No denied list** |
 | Network policy | outbound controls, proxy support, host filtering on some backends | process backends: none or the host's, nothing between. MicroVM sandboxes have an egress gateway with allow and deny lists |
 | UI policy | clipboard, display and GUI controls | **none** |
 | One-shot run | yes | yes |
@@ -47,10 +47,10 @@ not as a difference.
 
 In rough order of how much they matter for the same use:
 
-1. **Path grants on Windows.** A no-network workload there runs in an
-   AppContainer, which cannot read the user's files, and there is no way yet to
-   grant it a directory. Until there is, such a workload has to live where
-   every packaged application may read.
+1. **Deny-by-default paths on Linux without choosing a root.** mxc's request
+   lists what may be read and written and denies the rest. HyperMachine does
+   that on Windows; on Linux the caller has to supply an isolated root, and
+   read-write paths inside one are not supported.
 2. **macOS.** Resource limits are not containment. mxc uses seatbelt.
 3. **A request format and other languages.** mxc's request is JSON with a
    versioned schema, and its SDKs cover .NET and Node.
@@ -74,5 +74,6 @@ Neither of these is a measured win over mxc: mxc was not run.
 |---|---|
 | Linux process controls | `crates/hv2-sandbox` tests, run in CI with the capability they need |
 | Windows job-object limits | `crates/hv2-sandbox` tests on Windows |
+| Windows path grants | `process::windows::tests` on the same host: a granted file is readable inside the container and an ungranted one is not, a read-only grant refuses a write, a read-write grant's file is on the host afterwards, and the path's access-control list names no container once the run ends. `hm sandbox run --ro/--rw` was also run by hand |
 | Windows no-network | `process::windows::tests`, on a Windows 11 host: a request that reaches a loopback listener with the host's network does not reach it from the container, and the listener sees no connection. `hm sandbox run` was also run by hand: `curl` to the Internet fails by default and succeeds with `--net host` |
 | macOS | nothing beyond what the backend reports about itself |

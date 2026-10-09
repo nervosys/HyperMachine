@@ -168,8 +168,8 @@ Three things come with the container that nobody asked for by name:
   read, which is mostly the system directories, and its own container folder.
   It cannot read the user's files, or a program installed outside those places.
   This is more confinement than a spec with no filesystem policy asked for,
-  never less, but a workload that lives in a user directory will not start
-  until the backend can grant it paths, which it cannot yet.
+  never less. A workload that needs something else is [granted](#path-grants)
+  it.
 - **Its working directory** is the container's own folder unless the caller
   names one, because the host process's directory is very likely one it may not
   open.
@@ -180,8 +180,34 @@ Three things come with the container that nobody asked for by name:
 The profile is made for one run and deleted after it, with its folder.
 
 `hm sandbox run` denies the network unless told otherwise, so on Windows it now
-runs its program in a container by default. Pass `--net host` for a program
-that needs the user's files.
+runs its program in a container by default. Grant it what it needs with `--ro`
+and `--rw`, or pass `--net host` to run it uncontained as before.
+
+### Path grants
+
+A spec can name paths the workload must be able to reach where its containment
+would otherwise hide them (`SandboxSpec::grants`; `--ro PATH` and `--rw PATH` on
+`hm sandbox run`): readable, or readable and writable, with everything under
+them.
+
+```sh
+hm sandbox run --ro C:\tools\mytool --rw C:\work\out -- C:\tools\mytool\run.exe
+```
+
+- **On Windows** a grant is an entry on the path's access-control list for that
+  run's container, inherited by everything under it. The container's SID is the
+  run's alone, so the entry opens the path to nothing else, and it is removed
+  when the run ends. A process killed before it can do that leaves an entry for
+  a SID that no longer names anything.
+- **A grant is a floor, not a ceiling.** Where containment hides nothing, as
+  with the host's filesystem on Linux, the path is already reachable and a
+  grant changes nothing. It does not take other paths away; isolating the
+  filesystem does that.
+- **Inside an isolated root** a read-only grant is one more read-only mount, and
+  a read-write grant is refused, since there is nowhere to put it.
+- A path that is not absolute, or does not exist, refuses the run.
+- Granting a large tree rewrites every descriptor under it. Grant the directory
+  the workload needs, not its parent.
 
 Not claimed: filesystem isolation in the sense the Linux backend means it (a
 root of the caller's choosing), process isolation, or no-new-privileges. An

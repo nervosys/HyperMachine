@@ -19,8 +19,8 @@
 //! called at startup and the result kept.
 
 use crate::{
-    Control, Controls, OutputSink, OutputStream, RunIo, Sandbox, SandboxCommand, SandboxError,
-    SandboxOutput, SandboxSpec,
+    Control, Controls, FilesystemPolicy, OutputSink, OutputStream, RunIo, Sandbox, SandboxCommand,
+    SandboxError, SandboxOutput, SandboxSpec,
 };
 
 #[cfg(target_os = "linux")]
@@ -95,6 +95,42 @@ impl Sandbox for ProcessSandbox {
                 ));
             }
         }
+
+        for path in spec.grants.read_only.iter().chain(&spec.grants.read_write) {
+            if !path.is_absolute() || !path.exists() {
+                return Err(SandboxError::InvalidSpec(format!(
+                    "granted path {} must be absolute and exist",
+                    path.display()
+                )));
+            }
+        }
+        // A root of the caller's choosing holds what the caller mounts in it.
+        // A read-only grant is such a mount; a read-write one has nowhere to
+        // go, and running without it would be the quiet downgrade this crate
+        // refuses to make.
+        let widened;
+        let spec = match &spec.filesystem {
+            FilesystemPolicy::Isolated { root, read_only } if !spec.grants.is_empty() => {
+                if !spec.grants.read_write.is_empty() {
+                    return Err(SandboxError::InvalidSpec(
+                        "a read-write grant cannot be given inside an isolated root; make \
+                         the path part of the root"
+                            .to_string(),
+                    ));
+                }
+                let mut mounts = read_only.clone();
+                mounts.extend(spec.grants.read_only.iter().cloned());
+                widened = SandboxSpec {
+                    filesystem: FilesystemPolicy::Isolated {
+                        root: root.clone(),
+                        read_only: mounts,
+                    },
+                    ..spec.clone()
+                };
+                &widened
+            }
+            _ => spec,
+        };
 
         // Reconcile before anything is started. A workload that has already
         // begun cannot be un-started, and discovering the sandbox is weaker
@@ -407,6 +443,46 @@ mod tests {
             .env("SystemRoot", r"C:\Windows")
             .env("PATH", r"C:\Windows\System32");
         command
+    }
+
+    /// A grant that cannot be honoured refuses the run, on every platform and
+    /// before anything starts: a path that is not absolute or not there, and
+    /// a read-write grant inside a root of the caller's choosing, which has
+    /// nowhere to put it.
+    #[test]
+    fn a_grant_that_cannot_be_honoured_refuses_the_run() {
+        let here = std::env::temp_dir();
+        let run = |spec: SandboxSpec| ProcessSandbox::new().run(&SandboxCommand::new("x"), &spec);
+        let grants = |read_only: Vec<std::path::PathBuf>, read_write| crate::PathGrants {
+            read_only,
+            read_write,
+        };
+        for bad in [
+            std::path::PathBuf::from("relative"),
+            here.join("hv2-not-there"),
+        ] {
+            let refused = run(SandboxSpec {
+                grants: grants(vec![bad], Vec::new()),
+                ..SandboxSpec::unconfined()
+            });
+            assert!(
+                matches!(&refused, Err(SandboxError::InvalidSpec(why)) if why.contains("granted path")),
+                "{refused:?}"
+            );
+        }
+        let refused = run(SandboxSpec {
+            filesystem: FilesystemPolicy::Isolated {
+                root: here.clone(),
+                read_only: Vec::new(),
+            },
+            grants: grants(Vec::new(), vec![here.clone()]),
+            best_effort: true,
+            ..SandboxSpec::unconfined()
+        });
+        assert!(
+            matches!(&refused, Err(SandboxError::InvalidSpec(why)) if why.contains("read-write grant")),
+            "{refused:?}"
+        );
     }
 
     /// Output reaches the sink while the workload is still running -- the

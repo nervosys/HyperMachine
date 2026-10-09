@@ -100,6 +100,7 @@ pub fn sandbox_spec(spec: &JobSpec) -> std::result::Result<SandboxSpec, String> 
             NetworkPolicy::Denied
         },
         filesystem,
+        grants: hv2_sandbox::PathGrants::default(),
         isolate_processes: s.isolate_processes,
         no_new_privileges: s.no_new_privileges,
         best_effort: !s.strict,

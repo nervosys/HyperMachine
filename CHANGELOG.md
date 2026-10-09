@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   where firmware and a stock kernel look for one. An unmodified CirrOS cloud
   image boots to its login prompt. Not yet available to machines. See
   `docs/FIRMWARE_BOOT.md`.
+- Path grants for sandboxed programs: `SandboxSpec::grants`, and `--ro PATH` /
+  `--rw PATH` on `hm sandbox run`, open a path to a workload whose containment
+  would hide it. On Windows that is an access-control entry for the run's
+  container, removed when it ends.
 - The Windows process sandbox enforces "no network": a workload asked for none
   is started in an AppContainer with no capabilities, and cannot open a socket,
   loopback included. Such a workload also sees less of the filesystem, so
