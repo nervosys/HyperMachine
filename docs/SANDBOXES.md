@@ -56,7 +56,7 @@ caller asks for it.
 | Process count | `pids.max` | job `ActiveProcessLimit` | ✗ (`RLIMIT_NPROC` counts the user's processes, not the workload's) | the guest |
 | CPU time | `RLIMIT_CPU` | job `PerJobUserTimeLimit` | `RLIMIT_CPU` | guest agent |
 | Wall clock | kill the process group | terminate the job | kill the process group | guest agent |
-| Network isolation | `CLONE_NEWNET` + its own sysfs | ✗ | ✗ | no network device |
+| Network isolation | `CLONE_NEWNET` + its own sysfs | an AppContainer with no capabilities | ✗ | no network device |
 | Filesystem isolation | `CLONE_NEWNS` + `pivot_root` | ✗ | ✗ | the guest's own |
 | Process isolation | `CLONE_NEWPID` + `CLONE_NEWIPC` + its own `/proc` | ✗ | ✗ | a separate kernel |
 | No new privileges | `PR_SET_NO_NEW_PRIVS` | ✗ | ✗ | a separate kernel |
@@ -152,6 +152,41 @@ a process, and a sandbox with a start-up hole is not one.
 
 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` means a panic on the host side cannot leave
 a workload running.
+
+### No network, on Windows
+
+A workload asked to run with no network is started in an **AppContainer** with
+no capabilities, inside the job. The kernel then refuses it every socket:
+outbound, listening, and loopback. A request that reaches a listener on the
+same machine with the host's network does not reach it from inside, and `ping`
+reports that it cannot contact the IP driver at all.
+
+Three things come with the container that nobody asked for by name:
+
+- **It sees less of the filesystem.** An AppContainer's token is checked against
+  every file it opens. It can read what Windows lets every packaged application
+  read, which is mostly the system directories, and its own container folder.
+  It cannot read the user's files, or a program installed outside those places.
+  This is more confinement than a spec with no filesystem policy asked for,
+  never less, but a workload that lives in a user directory will not start
+  until the backend can grant it paths, which it cannot yet.
+- **Its working directory** is the container's own folder unless the caller
+  names one, because the host process's directory is very likely one it may not
+  open.
+- **`LOCALAPPDATA` is set** when the caller's environment does not name it.
+  Windows refuses to start a process in an AppContainer without it, and rewrites
+  it to the container's folder, so that is what the workload sees.
+
+The profile is made for one run and deleted after it, with its folder.
+
+`hm sandbox run` denies the network unless told otherwise, so on Windows it now
+runs its program in a container by default. Pass `--net host` for a program
+that needs the user's files.
+
+Not claimed: filesystem isolation in the sense the Linux backend means it (a
+root of the caller's choosing), process isolation, or no-new-privileges. An
+AppContainer does restrict all three in its own way, and none has been tested
+here against what those controls promise, so they stay reported as unavailable.
 
 ## The empty environment
 

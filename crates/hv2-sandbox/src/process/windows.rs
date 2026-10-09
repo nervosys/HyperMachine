@@ -1,4 +1,8 @@
-//! Windows confinement, built on job objects.
+//! Windows confinement, built on job objects and AppContainers.
+//!
+//! A job object bounds what a workload consumes. An AppContainer
+//! ([`appcontainer`]) bounds what it can reach, and is what a workload asked to
+//! run with no network is started in.
 //!
 //! # What a job object gives us, and what it does not
 //!
@@ -9,7 +13,8 @@
 //!
 //! It is not a container. A job object does not isolate the network, does not
 //! give the workload a different filesystem, does not hide the rest of the
-//! process table, and does not stop a process gaining privileges. Those four
+//! process table, and does not stop a process gaining privileges. The first
+//! is what the AppContainer is for; the other three
 //! are reported as unavailable, with a reason, so a caller asking for them is
 //! refused here rather than being quietly handed a process with none of them.
 //! A caller that needs them on Windows needs the microVM sandbox.
@@ -50,17 +55,26 @@ use crate::{
 
 use super::driver;
 
+mod appcontainer;
+
 /// What Windows job objects enforce.
 ///
 /// Probed the same way as everywhere else — a job object can be unavailable,
 /// most often because this process is already inside one that forbids nested
 /// jobs on older Windows.
 pub(super) fn probe() -> Controls {
-    let mut controls = Controls::none()
-        .without(
+    let mut controls = Controls::none();
+    // An AppContainer with no capabilities has no network. Probed by making
+    // one: profiles are refused in some sessions, and saying so here beats
+    // finding out on the first workload.
+    controls = match appcontainer::Container::create() {
+        Ok(_) => controls.with(Control::NetworkIsolation),
+        Err(e) => controls.without(
             Control::NetworkIsolation,
-            "a job object does not isolate the network; use the microVM sandbox",
-        )
+            format!("an AppContainer could not be created here: {e}"),
+        ),
+    };
+    let mut controls = controls
         .without(
             Control::FilesystemIsolation,
             "a job object does not change the filesystem view; use the microVM sandbox",
@@ -221,10 +235,24 @@ pub(super) fn run(
             "this backend cannot isolate the filesystem on Windows".to_string(),
         ));
     }
-    debug_assert!(
-        spec.network == NetworkPolicy::Host || spec.best_effort,
-        "reconcile should have refused a network-isolated spec before reaching this backend"
-    );
+    // No network means an AppContainer. Where one cannot be made, the spec
+    // was refused before it got here -- unless the caller said best effort,
+    // and then the workload runs with the host's network and the control is
+    // reported as dropped, which the probe already told them.
+    let container = if spec.network == NetworkPolicy::Denied {
+        match appcontainer::Container::create() {
+            Ok(container) => Some(container),
+            Err(_) if spec.best_effort => None,
+            Err(e) => {
+                return Err(SandboxError::ConfinementFailed {
+                    control: Control::NetworkIsolation,
+                    source: e,
+                })
+            }
+        }
+    } else {
+        None
+    };
 
     let job = Job::create().map_err(|e| SandboxError::Spawn {
         program: command.program.clone(),
@@ -239,6 +267,10 @@ pub(super) fn run(
         control: Control::Memory,
         source: e,
     })?;
+
+    if let Some(container) = container {
+        return run_contained(command, spec, io, job, container);
+    }
 
     let mut builder = Command::new(&command.program);
     builder
@@ -288,6 +320,45 @@ pub(super) fn run(
         // would otherwise leave them running past its own deadline.
         job.terminate();
     })
+}
+
+/// Run `command` in an AppContainer with no capabilities, inside `job`.
+fn run_contained(
+    command: &SandboxCommand,
+    spec: &SandboxSpec,
+    io: &RunIo,
+    job: Job,
+    container: appcontainer::Container,
+) -> Result<SandboxOutput, SandboxError> {
+    let started = appcontainer::spawn(command, &container).map_err(|e| SandboxError::Spawn {
+        program: command.program.clone(),
+        source: e,
+    })?;
+    // In the job before it runs, for the reason this file opens with. It is
+    // suspended, so killing the job is all that undoing it takes.
+    if let Err(e) = job.assign(started.process) {
+        job.terminate();
+        return Err(SandboxError::ConfinementFailed {
+            control: Control::ProcessCount,
+            source: e,
+        });
+    }
+    if let Err(e) = started.resume() {
+        job.terminate();
+        return Err(SandboxError::Runtime(format!(
+            "the workload was confined but could not be started: {e}"
+        )));
+    }
+    let output = driver::wait_with_deadline(
+        started.spawned,
+        command.stdin.as_deref(),
+        spec.wall_clock,
+        io,
+        || job.terminate(),
+    );
+    // After the workload: the profile, and the folder Windows made for it.
+    drop(container);
+    output
 }
 
 /// Kill a process we created suspended and then decided not to run.
@@ -354,4 +425,175 @@ fn resume_main_thread(pid: u32) -> std::io::Result<()> {
     // SAFETY: the snapshot handle is open and closed exactly once.
     unsafe { CloseHandle(snapshot) };
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{ProcessSandbox, Sandbox};
+    use std::io::{Read, Write};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    /// A system program, with the environment one needs to start.
+    fn system(program: &str) -> SandboxCommand {
+        SandboxCommand::new(format!(r"C:\Windows\System32\{program}"))
+            .env("SystemRoot", r"C:\Windows")
+            .env("PATH", r"C:\Windows\System32")
+    }
+
+    /// No network, and nothing else asked for.
+    fn no_network() -> SandboxSpec {
+        SandboxSpec {
+            network: NetworkPolicy::Denied,
+            wall_clock: Some(Duration::from_secs(30)),
+            ..SandboxSpec::unconfined()
+        }
+    }
+
+    /// An HTTP server on loopback that counts the connections it accepts.
+    fn listener() -> (u16, Arc<AtomicUsize>) {
+        let socket = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = socket.local_addr().expect("address").port();
+        let accepted = Arc::new(AtomicUsize::new(0));
+        let count = Arc::clone(&accepted);
+        std::thread::spawn(move || {
+            for stream in socket.incoming() {
+                let Ok(mut stream) = stream else { break };
+                count.fetch_add(1, Ordering::SeqCst);
+                let mut request = [0u8; 1024];
+                let _ = stream.read(&mut request);
+                let _ = stream.write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 7\r\nConnection: close\r\n\r\nreached",
+                );
+            }
+        });
+        (port, accepted)
+    }
+
+    /// The control this backend claims for a workload with no network is one
+    /// the kernel enforces: the same request that reaches a listener on this
+    /// machine with the host's network does not reach it without, and the
+    /// listener never sees a connection.
+    #[test]
+    fn a_workload_with_no_network_cannot_reach_even_loopback() {
+        let sandbox = ProcessSandbox::new();
+        if !sandbox.controls().enforces(Control::NetworkIsolation) {
+            eprintln!(
+                "skipping: {:?}",
+                sandbox.controls().reason(Control::NetworkIsolation)
+            );
+            return;
+        }
+        let (port, accepted) = listener();
+        let fetch = system("curl.exe").args([
+            "-s".to_string(),
+            "-m".to_string(),
+            "5".to_string(),
+            format!("http://127.0.0.1:{port}/"),
+        ]);
+
+        // With the host's network it gets through, so what follows is the
+        // sandbox's doing and not a broken request.
+        let open = sandbox
+            .run(&fetch, &SandboxSpec::unconfined())
+            .expect("run with the host's network");
+        assert_eq!(open.exit_code, Some(0), "{open:?}");
+        assert_eq!(open.stdout, b"reached");
+        assert_eq!(accepted.load(Ordering::SeqCst), 1);
+
+        let closed = sandbox
+            .run(&fetch, &no_network())
+            .expect("run with no network");
+        assert_ne!(closed.exit_code, Some(0), "{closed:?}");
+        assert!(closed.stdout.is_empty(), "{closed:?}");
+        assert!(closed.unenforced.is_empty(), "{closed:?}");
+        assert_eq!(accepted.load(Ordering::SeqCst), 1, "it connected");
+    }
+
+    /// A contained workload is still a workload: its output, its exit code
+    /// and its standard input arrive as they do outside a container.
+    #[test]
+    fn a_contained_workload_keeps_its_streams_and_exit_code() {
+        let sandbox = ProcessSandbox::new();
+        if !sandbox.controls().enforces(Control::NetworkIsolation) {
+            return;
+        }
+        let command = system("cmd.exe").args(["/c", "echo out& echo err 1>&2& exit 7"]);
+        let output = sandbox.run(&command, &no_network()).expect("run");
+        assert_eq!(output.exit_code, Some(7), "{output:?}");
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "out");
+        assert_eq!(String::from_utf8_lossy(&output.stderr).trim(), "err");
+
+        let mut echo = system("findstr.exe").args(["x"]);
+        echo.stdin = Some(b"axb\r\nnone\r\n".to_vec());
+        let output = sandbox.run(&echo, &no_network()).expect("run");
+        assert_eq!(output.exit_code, Some(0), "{output:?}");
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "axb");
+    }
+
+    /// The deadline and the job's limits hold for a contained workload too.
+    #[test]
+    fn a_contained_workload_is_killed_at_its_deadline() {
+        let sandbox = ProcessSandbox::new();
+        if !sandbox.controls().enforces(Control::NetworkIsolation) {
+            return;
+        }
+        let spec = SandboxSpec {
+            wall_clock: Some(Duration::from_millis(500)),
+            ..no_network()
+        };
+        let started = std::time::Instant::now();
+        let output = sandbox
+            // A loop that never ends by itself. Not `ping`, the usual way to
+            // wait: with no network it cannot reach even its own driver.
+            .run(
+                &system("cmd.exe").args(["/c", "for /l %i in () do @rem"]),
+                &spec,
+            )
+            .expect("run");
+        assert_eq!(output.killed_by, Some(Control::WallClock), "{output:?}");
+        assert!(started.elapsed() < Duration::from_secs(10));
+    }
+
+    /// The workload cannot read a file the user can, and can write in the
+    /// folder it is started in. More confinement than a spec with no
+    /// filesystem policy asked for, and documented as coming with the
+    /// container.
+    #[test]
+    fn a_contained_workload_sees_less_of_the_filesystem() {
+        let sandbox = ProcessSandbox::new();
+        if !sandbox.controls().enforces(Control::NetworkIsolation) {
+            return;
+        }
+        let secret =
+            std::env::temp_dir().join(format!("hv2-sandbox-secret-{}", std::process::id()));
+        std::fs::write(&secret, "user-only").expect("write");
+        let read = system("cmd.exe").args(["/c".to_string(), format!("type {}", secret.display())]);
+        let outside = sandbox.run(&read, &SandboxSpec::unconfined()).expect("run");
+        assert_eq!(String::from_utf8_lossy(&outside.stdout), "user-only");
+        let inside = sandbox.run(&read, &no_network()).expect("run");
+        assert_ne!(inside.exit_code, Some(0), "{inside:?}");
+        assert!(inside.stdout.is_empty(), "{inside:?}");
+
+        // What it is told is its local application data is its container's
+        // folder, not the user's.
+        let told = system("cmd.exe").args(["/c", "echo %LOCALAPPDATA%"]);
+        let told = sandbox.run(&told, &no_network()).expect("run");
+        let folder = String::from_utf8_lossy(&told.stdout).trim().to_string();
+        assert!(
+            folder.contains("Packages") && folder.contains("hv2.sandbox."),
+            "{folder}"
+        );
+
+        let write = system("cmd.exe").args(["/c", "echo mine> note.txt& type note.txt"]);
+        let wrote = sandbox.run(&write, &no_network()).expect("run");
+        assert_eq!(
+            String::from_utf8_lossy(&wrote.stdout).trim(),
+            "mine",
+            "{wrote:?}"
+        );
+        let _ = std::fs::remove_file(&secret);
+    }
 }

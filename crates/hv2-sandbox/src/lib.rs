@@ -43,7 +43,7 @@
 //! | Backend | Where | Enforces |
 //! | --- | --- | --- |
 //! | [`ProcessSandbox`] on Linux | this crate | user/PID/mount/net/IPC namespaces, `pivot_root` onto a named root, cgroup v2 memory and PID caps, `RLIMIT_*`, `no_new_privs` |
-//! | [`ProcessSandbox`] on Windows | this crate | job object memory, process count, and CPU-time caps, kill-on-close |
+//! | [`ProcessSandbox`] on Windows | this crate | job object memory, process count, and CPU-time caps, kill-on-close; no network, by an AppContainer |
 //! | [`ProcessSandbox`] on macOS | this crate | `RLIMIT_*` only, and it says so |
 //! | microVM | `hv2-agent` | a whole guest, reached over vsock |
 //!

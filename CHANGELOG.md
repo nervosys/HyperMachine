@@ -30,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   where firmware and a stock kernel look for one. An unmodified CirrOS cloud
   image boots to its login prompt. Not yet available to machines. See
   `docs/FIRMWARE_BOOT.md`.
+- The Windows process sandbox enforces "no network": a workload asked for none
+  is started in an AppContainer with no capabilities, and cannot open a socket,
+  loopback included. Such a workload also sees less of the filesystem, so
+  `hm sandbox run`, which denies the network by default, is stricter on Windows
+  than it was; `--net host` is the old behaviour. See `docs/SANDBOXES.md`.
 - A machine made from a disk image can have a network: a NIC on the PCI bus
   behind the egress gateway, which now answers DHCP so a stock guest configures
   itself. The gateway no longer answers ARP for the guest's own address, which
