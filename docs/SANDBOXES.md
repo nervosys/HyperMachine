@@ -81,8 +81,13 @@ something escapes.
 6. **`pivot_root`** if a root was named. It has to come after everything that
    reads a host path — `/proc/self/uid_map` at step 4, the cgroup file at step
    1 — because after it the host filesystem has no name at all.
-7. **Mount `/proc` and `/sys` last**, so they land inside the new root instead
-   of the one that is about to be discarded.
+7. **Mount `/proc` and `/sys`**, so they land inside the new root instead of the
+   one that is about to be discarded.
+8. **Drop every capability**, last. The workload is root in its user namespace
+   and holds none: not in force, not in the bounding set, not ambient. With
+   `CAP_SYS_ADMIN` there it owns the mounts made above, and a read-only mount
+   could be remounted writable. A program that expects root's powers inside
+   the sandbox, to `chown` or to bring an interface up, does not have them.
 
 Everything between `fork` and `exec` allocates nothing and calls only
 async-signal-safe functions; every string it needs is built in the parent.

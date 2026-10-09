@@ -333,7 +333,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_channelled_vm_without_networking_enforces_all_but_process_count() {
+    async fn a_channelled_vm_without_networking_enforces_all_but_what_stays_on_the_host() {
         let Some(vm) = vm(false).await else {
             return;
         };
@@ -351,6 +351,15 @@ mod tests {
                 assert!(
                     !controls.enforces(control),
                     "max_processes never leaves the host, so this must not be claimed"
+                );
+                continue;
+            }
+            // Confining a workload to granted host paths is about the host's
+            // filesystem, and a guest has none of it to be confined to.
+            if control == Control::PathConfinement {
+                assert!(
+                    !controls.enforces(control),
+                    "a guest shares no host path, so there is nothing to grant or confine"
                 );
                 continue;
             }

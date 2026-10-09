@@ -50,8 +50,13 @@
 //! 6. **`pivot_root`**, if a root was named. After this the host's filesystem
 //!    has no name, so it has to come after everything that reads a host path —
 //!    `/proc/self/uid_map` above, and the cgroup file above that.
-//! 7. **Mount `/proc` and `/sys`** last, because they must land inside the new
-//!    root rather than the old one.
+//! 7. **Mount `/proc` and `/sys`**, which must land inside the new root rather
+//!    than the old one.
+//! 8. **Drop every capability**, last, because every step above that mounts
+//!    needs them and the workload must not have them. It is root in its user
+//!    namespace, and root with `CAP_SYS_ADMIN` there owns the mounts made
+//!    above: it could remount a read-only mount writable and write through it
+//!    to the host.
 //!
 //! # Async-signal-safety
 //!
@@ -1303,6 +1308,14 @@ fn confine(plan: &Confinement) -> std::io::Result<()> {
         mount_namespaced_filesystems(plan.new_pid_ns, plan.new_net_ns)?;
     }
 
+    // 8. The capabilities the user namespace gave were for the steps above.
+    //    Left in place they are the workload's, and with them it undoes those
+    //    steps: `mount -o remount,rw,bind` on a read-only mount succeeded, and
+    //    the write that followed reached the host's file.
+    if plan.new_user_ns {
+        drop_capabilities()?;
+    }
+
     // Become a process group leader so the deadline can kill the whole group.
     // SAFETY: setpgid on self with group 0 has no preconditions.
     unsafe { libc::setpgid(0, 0) };
@@ -1318,6 +1331,87 @@ fn set_rlimit(resource: libc::__rlimit_resource_t, value: u64) -> std::io::Resul
     };
     // SAFETY: `limit` is fully initialised and outlives the call.
     if unsafe { libc::setrlimit(resource, &limit) } != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+/// The header `capset` takes (`struct __user_cap_header_struct`).
+#[repr(C)]
+struct CapHeader {
+    version: u32,
+    pid: libc::c_int,
+}
+
+/// One 32-bit word of the three capability sets
+/// (`struct __user_cap_data_struct`). Version 3 takes two.
+#[repr(C)]
+struct CapData {
+    effective: u32,
+    permitted: u32,
+    inheritable: u32,
+}
+
+/// `_LINUX_CAPABILITY_VERSION_3`.
+const CAPABILITY_VERSION_3: u32 = 0x2008_0522;
+
+/// Give up every capability, now and across the `exec` that follows.
+///
+/// Three places hold them and each has to be emptied. The bounding set is
+/// what `exec` would otherwise hand back: the workload is uid 0 in its user
+/// namespace, and a root `exec` regains everything the bounding set allows.
+/// The ambient set survives `exec` by design. The effective, permitted and
+/// inheritable sets are the ones in force until then.
+///
+/// A user namespace the workload makes for itself does not bring them back
+/// in a way that matters: the mounts it inherits there are locked by the
+/// kernel, read-only ones read-only, because they came from a namespace that
+/// one does not own.
+fn drop_capabilities() -> std::io::Result<()> {
+    // Capabilities are numbered from zero without gaps, and the kernel
+    // answers EINVAL for the first number past its last one.
+    for capability in 0..64 {
+        // SAFETY: prctl with this option takes no pointers.
+        if unsafe { libc::prctl(libc::PR_CAPBSET_DROP, capability, 0, 0, 0) } != 0 {
+            let error = std::io::Error::last_os_error();
+            if error.raw_os_error() == Some(libc::EINVAL) {
+                break;
+            }
+            return Err(error);
+        }
+    }
+    // SAFETY: as above.
+    if unsafe {
+        libc::prctl(
+            libc::PR_CAP_AMBIENT,
+            libc::PR_CAP_AMBIENT_CLEAR_ALL,
+            0,
+            0,
+            0,
+        )
+    } != 0
+    {
+        return Err(std::io::Error::last_os_error());
+    }
+    let header = CapHeader {
+        version: CAPABILITY_VERSION_3,
+        pid: 0,
+    };
+    let empty = [
+        CapData {
+            effective: 0,
+            permitted: 0,
+            inheritable: 0,
+        },
+        CapData {
+            effective: 0,
+            permitted: 0,
+            inheritable: 0,
+        },
+    ];
+    // SAFETY: both point at live values of the layout this version of the
+    // call reads, and it writes to neither.
+    if unsafe { libc::syscall(libc::SYS_capset, &header, empty.as_ptr()) } != 0 {
         return Err(std::io::Error::last_os_error());
     }
     Ok(())

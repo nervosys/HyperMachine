@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- A sandboxed Linux program could write through a read-only mount. It ran as
+  root in its user namespace with that namespace's capabilities, and
+  `mount -o remount,rw,bind` on a read-only grant, or a read-only mount of an
+  isolated root, succeeded. Where the caller could write the underlying path,
+  so then could the program. Every capability is now dropped before the
+  program starts, the bounding set included.
+
 ### Fixed
 - `reboot` hung MMIO guests. On the hardware-reduced ACPI platform, Linux
   reboots through EFI and, with no EFI, spins in a BIOS jump. Guests now boot
