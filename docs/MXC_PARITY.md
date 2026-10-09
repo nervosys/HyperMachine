@@ -29,8 +29,8 @@ not as a difference.
 | | mxc | HyperMachine |
 |---|---|---|
 | In-process SDK | Rust, .NET, Node | **Rust only** |
-| Standalone executor | `wxc-exec`, taking a JSON request | `hm sandbox run`, taking flags. **No JSON request format** |
-| Versioned request and policy schema | yes, in `schemas/stable` | **no** |
+| Standalone executor | `wxc-exec`, taking a JSON request | `hm sandbox exec`, [one JSON request in and one response out](SANDBOXES.md#one-json-request); `hm sandbox run` for flags and live output |
+| Versioned request and policy schema | yes, in `schemas/stable` | version 1, with a [JSON Schema](schemas/sandbox-request-v1.schema.json). One version so far, so nothing yet shows how a change is carried |
 | Linux process backend | bubblewrap (default), lxc | own: user, PID, mount, network and IPC namespaces, `pivot_root`, cgroup v2, `no_new_privs`. No external tool |
 | Linux VM backend | microvm, hyperlight | microVM on HyperMachine's own VMM |
 | Windows process backend | process container (default), plus Windows Sandbox, WSL container, microVM, Hyperlight and isolation session, several marked experimental | job object for memory, process count and CPU time; **AppContainer for no-network**. Nothing else |
@@ -52,8 +52,9 @@ In rough order of how much they matter for the same use:
    that on Windows; on Linux the caller has to supply an isolated root, and
    read-write paths inside one are not supported.
 2. **macOS.** Resource limits are not containment. mxc uses seatbelt.
-3. **A request format and other languages.** mxc's request is JSON with a
-   versioned schema, and its SDKs cover .NET and Node.
+3. **Other languages.** mxc ships .NET and Node SDKs. HyperMachine has a Rust
+   library and a JSON request any language can send to `hm sandbox exec`, but
+   no package for either.
 4. **Finer network policy for a process.** All or nothing today.
 5. **UI controls, and an audit mode.**
 

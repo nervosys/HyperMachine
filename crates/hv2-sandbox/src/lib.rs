@@ -59,6 +59,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 pub mod process;
+pub mod request;
 
 pub use process::ProcessSandbox;
 
