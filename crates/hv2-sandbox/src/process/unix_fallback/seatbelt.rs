@@ -398,18 +398,26 @@ mod tests {
     fn a_workload_confined_to_its_grants_reaches_them_and_not_the_users_other_files() {
         let sandbox = sandbox_enforcing(Control::PathConfinement);
         let base = scratch("confine");
-        for directory in ["readable", "readable/private", "writable"] {
+        for directory in [
+            "readable",
+            "readable/private",
+            "writable",
+            "writable/private",
+        ] {
             std::fs::create_dir_all(base.join(directory)).expect("a directory");
         }
         std::fs::write(base.join("readable/note"), "granted\n").expect("a file to read");
         std::fs::write(base.join("readable/private/key"), "private\n").expect("a file to deny");
+        std::fs::write(base.join("writable/private/key"), "private\n").expect("a file to deny");
         std::fs::write(base.join("secret"), "user-only\n").expect("a file not granted");
         let script = format!(
             "cat '{0}/readable/note'; \
              if cat '{0}/secret'; then echo VISIBLE; else echo HIDDEN; fi; \
              if cat '{0}/readable/private/key'; then echo READ; else echo CLOSED; fi; \
              if echo x > '{0}/readable/made'; then echo WROTE; else echo REFUSED; fi; \
-             if echo y > '{0}/writable/made'; then echo WROTE; else echo REFUSED; fi",
+             if echo y > '{0}/writable/made'; then echo WROTE; else echo REFUSED; fi; \
+             if cat '{0}/writable/private/key'; then echo READ; else echo CLOSED; fi; \
+             if echo z > '{0}/writable/private/made'; then echo WROTE; else echo REFUSED; fi",
             base.display()
         );
 
@@ -417,17 +425,19 @@ mod tests {
             grants: PathGrants {
                 read_only: vec![base.join("readable")],
                 read_write: vec![base.join("writable")],
-                // Under a grant, and closed all the same.
-                denied: vec![base.join("readable/private")],
+                // Each under a grant, and closed all the same: one under a
+                // read-only grant, one under a read-write one.
+                denied: vec![base.join("readable/private"), base.join("writable/private")],
             },
             confine_paths: true,
             ..host()
         };
         assert_eq!(
             said(&sandbox, &script, &spec),
-            "granted\nHIDDEN\nCLOSED\nREFUSED\nWROTE"
+            "granted\nHIDDEN\nCLOSED\nREFUSED\nWROTE\nCLOSED\nREFUSED"
         );
         assert!(!base.join("readable/made").exists());
+        assert!(!base.join("writable/private/made").exists());
         assert_eq!(
             std::fs::read_to_string(base.join("writable/made")).expect("the file it made"),
             "y\n"
@@ -444,7 +454,7 @@ mod tests {
         };
         assert_eq!(
             said(&sandbox, &script, &open),
-            "granted\nuser-only\nVISIBLE\nprivate\nREAD\nWROTE\nWROTE"
+            "granted\nuser-only\nVISIBLE\nprivate\nREAD\nWROTE\nWROTE\nprivate\nREAD\nWROTE"
         );
         let _ = std::fs::remove_dir_all(&base);
     }
