@@ -36,13 +36,22 @@ use std::os::windows::io::FromRawHandle;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+use windows_sys::Win32::Foundation::LocalFree;
 use windows_sys::Win32::Foundation::{
     CloseHandle, SetHandleInformation, HANDLE, HANDLE_FLAG_INHERIT, WAIT_OBJECT_0, WAIT_TIMEOUT,
+};
+use windows_sys::Win32::Security::Authorization::{
+    GetNamedSecurityInfoW, SetEntriesInAclW, SetNamedSecurityInfoW, ACCESS_MODE, EXPLICIT_ACCESS_W,
+    GRANT_ACCESS, NO_MULTIPLE_TRUSTEE, REVOKE_ACCESS, SE_FILE_OBJECT, TRUSTEE_IS_SID,
+    TRUSTEE_IS_UNKNOWN, TRUSTEE_W,
 };
 use windows_sys::Win32::Security::Isolation::{
     CreateAppContainerProfile, DeleteAppContainerProfile,
 };
 use windows_sys::Win32::Security::{FreeSid, PSID, SECURITY_ATTRIBUTES, SECURITY_CAPABILITIES};
+use windows_sys::Win32::Security::{
+    ACL, DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+};
 use windows_sys::Win32::System::Pipes::CreatePipe;
 use windows_sys::Win32::System::Threading::{
     CreateProcessW, DeleteProcThreadAttributeList, GetExitCodeProcess,
@@ -123,6 +132,139 @@ impl Drop for Container {
             DeleteAppContainerProfile(self.name.as_ptr());
         }
     }
+}
+
+/// Read, and run: `FILE_GENERIC_READ | FILE_GENERIC_EXECUTE`.
+const READ_ONLY: u32 = 0x0012_0089 | 0x0012_00A0;
+/// And write, and delete what is under it:
+/// `FILE_GENERIC_WRITE | DELETE | FILE_DELETE_CHILD`.
+const READ_WRITE: u32 = READ_ONLY | 0x0012_0116 | 0x0001_0000 | 0x0000_0040;
+
+/// Paths opened to one container, and closed again when this is dropped.
+///
+/// An AppContainer reaches a file only if the file's access-control list
+/// names the container, or every packaged application. So a grant is an
+/// entry for this container's SID on the path, inherited by everything under
+/// it. The SID is this run's alone, so the entry opens the path to nothing
+/// else, and it is taken off again afterwards. A process killed before it
+/// can do that leaves entries for a SID that no longer names anything, which
+/// grant nothing and cost a line in the list.
+///
+/// Adding an inherited entry to a large tree rewrites every descriptor under
+/// it, which is slow; grant the directory the workload needs, not its parent.
+///
+/// It borrows the container, so it cannot outlive the SID its entries name:
+/// taking them off again after the SID was freed removed nothing, which the
+/// first test of this found.
+pub(super) struct Grants<'a> {
+    container: &'a Container,
+    paths: Vec<Vec<u16>>,
+}
+
+impl<'a> Grants<'a> {
+    /// Open `grants` to `container`. On an error nothing stays opened.
+    pub(super) fn give(
+        container: &'a Container,
+        grants: &crate::PathGrants,
+    ) -> std::io::Result<Self> {
+        let mut given = Self {
+            container,
+            paths: Vec::new(),
+        };
+        let wanted = grants
+            .read_only
+            .iter()
+            .map(|path| (path, READ_ONLY))
+            .chain(grants.read_write.iter().map(|path| (path, READ_WRITE)));
+        for (path, access) in wanted {
+            let path = wide(path);
+            entry(&path, container.sid, access, GRANT_ACCESS)?;
+            given.paths.push(path);
+        }
+        Ok(given)
+    }
+}
+
+impl Drop for Grants<'_> {
+    fn drop(&mut self) {
+        for path in &self.paths {
+            if let Err(e) = entry(path, self.container.sid, 0, REVOKE_ACCESS) {
+                tracing::warn!(
+                    "a sandbox's access to {} could not be taken back: {e}",
+                    String::from_utf16_lossy(&path[..path.len() - 1])
+                );
+            }
+        }
+    }
+}
+
+/// Add, or with `REVOKE_ACCESS` remove, `sid`'s entry on `path`.
+fn entry(path: &[u16], sid: PSID, access: u32, mode: ACCESS_MODE) -> std::io::Result<()> {
+    let failed = |code: u32| std::io::Error::from_raw_os_error(code as i32);
+    let mut current: *mut ACL = std::ptr::null_mut();
+    let mut descriptor: PSECURITY_DESCRIPTOR = std::ptr::null_mut();
+    // SAFETY: the path is terminated; only the DACL is asked for, through
+    // out-pointers to locals; the descriptor is freed below.
+    let read = unsafe {
+        GetNamedSecurityInfoW(
+            path.as_ptr(),
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut current,
+            std::ptr::null_mut(),
+            &mut descriptor,
+        )
+    };
+    if read != 0 {
+        return Err(failed(read));
+    }
+    let change = EXPLICIT_ACCESS_W {
+        grfAccessPermissions: access,
+        grfAccessMode: mode,
+        grfInheritance: SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+        Trustee: TRUSTEE_W {
+            pMultipleTrustee: std::ptr::null_mut(),
+            MultipleTrusteeOperation: NO_MULTIPLE_TRUSTEE,
+            TrusteeForm: TRUSTEE_IS_SID,
+            TrusteeType: TRUSTEE_IS_UNKNOWN,
+            ptstrName: sid as *mut u16,
+        },
+    };
+    let mut updated: *mut ACL = std::ptr::null_mut();
+    // SAFETY: one entry is passed, with the list just read; the new list is
+    // returned through a pointer to a local and freed below.
+    let merged = unsafe { SetEntriesInAclW(1, &change, current, &mut updated) };
+    let result = if merged != 0 {
+        Err(failed(merged))
+    } else {
+        // SAFETY: the path is terminated and the new list is valid until freed.
+        let written = unsafe {
+            SetNamedSecurityInfoW(
+                path.as_ptr(),
+                SE_FILE_OBJECT,
+                DACL_SECURITY_INFORMATION,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                updated,
+                std::ptr::null_mut(),
+            )
+        };
+        if written == 0 {
+            Ok(())
+        } else {
+            Err(failed(written))
+        }
+    };
+    // SAFETY: both were allocated by the calls above and are freed once.
+    unsafe {
+        if !updated.is_null() {
+            LocalFree(updated.cast());
+        }
+        LocalFree(descriptor);
+    }
+    result
 }
 
 /// An owned handle, closed when dropped.

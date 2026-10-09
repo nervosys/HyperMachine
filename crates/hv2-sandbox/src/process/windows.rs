@@ -330,6 +330,14 @@ fn run_contained(
     job: Job,
     container: appcontainer::Container,
 ) -> Result<SandboxOutput, SandboxError> {
+    // The paths it was granted, opened to this container and no other, for
+    // as long as it runs.
+    let granted = appcontainer::Grants::give(&container, &spec.grants).map_err(|e| {
+        SandboxError::ConfinementFailed {
+            control: Control::NetworkIsolation,
+            source: e,
+        }
+    })?;
     let started = appcontainer::spawn(command, &container).map_err(|e| SandboxError::Spawn {
         program: command.program.clone(),
         source: e,
@@ -356,7 +364,10 @@ fn run_contained(
         io,
         || job.terminate(),
     );
-    // After the workload: the profile, and the folder Windows made for it.
+    // After the workload, and in this order: what was opened to it is closed
+    // while its SID still names something, then the profile goes, with the
+    // folder Windows made for it.
+    drop(granted);
     drop(container);
     output
 }
@@ -555,6 +566,108 @@ mod tests {
             .expect("run");
         assert_eq!(output.killed_by, Some(Control::WallClock), "{output:?}");
         assert!(started.elapsed() < Duration::from_secs(10));
+    }
+
+    /// A granted path is opened to the workload for the run -- to read, or to
+    /// read and write, as asked -- and closed again afterwards: the entries
+    /// that opened it are gone from its access-control list.
+    #[test]
+    fn a_granted_path_is_opened_for_the_run_and_closed_after() {
+        let sandbox = ProcessSandbox::new();
+        if !sandbox.controls().enforces(Control::NetworkIsolation) {
+            return;
+        }
+        let base = std::env::temp_dir().join(format!("hv2-sandbox-grants-{}", std::process::id()));
+        let (readable, writable) = (base.join("readable"), base.join("writable"));
+        std::fs::create_dir_all(&readable).expect("make");
+        std::fs::create_dir_all(&writable).expect("make");
+        std::fs::write(readable.join("note.txt"), "granted").expect("write");
+        let shell = |line: String| system("cmd.exe").args(["/c".to_string(), line]);
+        let text =
+            |output: &SandboxOutput| String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+        // Without a grant, neither can be touched.
+        let closed = sandbox
+            .run(
+                &shell(format!("type {}", readable.join("note.txt").display())),
+                &no_network(),
+            )
+            .expect("run");
+        assert_ne!(closed.exit_code, Some(0), "{closed:?}");
+
+        let spec = SandboxSpec {
+            grants: crate::PathGrants {
+                read_only: vec![readable.clone()],
+                read_write: vec![writable.clone()],
+            },
+            ..no_network()
+        };
+        let read = sandbox
+            .run(
+                &shell(format!("type {}", readable.join("note.txt").display())),
+                &spec,
+            )
+            .expect("run");
+        assert_eq!(text(&read), "granted", "{read:?}");
+        // Read-only means it: nothing is written there.
+        let refused = sandbox
+            .run(
+                &shell(format!("echo x> {}", readable.join("made.txt").display())),
+                &spec,
+            )
+            .expect("run");
+        assert_ne!(refused.exit_code, Some(0), "{refused:?}");
+        assert!(!readable.join("made.txt").exists());
+        // Read-write: a file made inside is on the host afterwards.
+        let wrote = sandbox
+            .run(
+                &shell(format!(
+                    "echo made> {0}& type {0}",
+                    writable.join("made.txt").display()
+                )),
+                &spec,
+            )
+            .expect("run");
+        assert_eq!(text(&wrote), "made", "{wrote:?}");
+        assert_eq!(
+            std::fs::read_to_string(writable.join("made.txt"))
+                .expect("read")
+                .trim(),
+            "made"
+        );
+
+        // Afterwards the container is named on neither: an AppContainer's
+        // SID begins S-1-15-2, and `icacls` prints one it cannot resolve.
+        for path in [&readable, &writable] {
+            let listed = sandbox
+                .run(
+                    &system("icacls.exe").args([path.display().to_string()]),
+                    &SandboxSpec::unconfined(),
+                )
+                .expect("run");
+            let listed = text(&listed);
+            assert!(
+                !listed.is_empty() && !listed.contains("S-1-15-2"),
+                "{listed}"
+            );
+        }
+
+        // A path that cannot be granted refuses the run before it starts.
+        for bad in [std::path::PathBuf::from("relative"), base.join("absent")] {
+            let spec = SandboxSpec {
+                grants: crate::PathGrants {
+                    read_only: vec![bad],
+                    read_write: Vec::new(),
+                },
+                ..no_network()
+            };
+            let refused = sandbox.run(&shell("echo ran".to_string()), &spec);
+            assert!(
+                matches!(refused, Err(SandboxError::InvalidSpec(_))),
+                "{refused:?}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     /// The workload cannot read a file the user can, and can write in the
