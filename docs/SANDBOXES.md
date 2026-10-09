@@ -198,7 +198,10 @@ keeps a workload from the desktop it was started on. It is the control `UI
 isolation`, and it is the job object's user-interface restrictions, all of
 them together:
 
-- reading the clipboard, and writing it;
+- reading the clipboard, and writing it. Emptying it is neither, and the
+  first run of the test under CI showed a restricted program allowed to: it
+  can clear what is on the clipboard, though not read it or put anything
+  there;
 - the windows and other user-interface handles of processes outside the job,
   so it cannot send them messages or read their contents;
 - the system's parameters and the display's settings;
