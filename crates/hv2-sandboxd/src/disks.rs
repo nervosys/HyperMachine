@@ -414,6 +414,99 @@ pub(crate) fn claim(
     })
 }
 
+/// Copy the disk `parent` holds into a new disk held by `child`: what a fork
+/// of a sandbox with a disk mounts.
+///
+/// Called while the parent's guest is paused, just after its memory was
+/// written, so the copy is the disk that memory describes: the same page
+/// cache, the same journal. The copy is sparse, and a reflink where the
+/// filesystem under the disk directory has them, which makes it take no time
+/// and no space until the two diverge. Elsewhere it copies every allocated
+/// block, and the parent stays paused for as long as that takes.
+///
+/// The new disk is named after its parent and its sandbox, belongs to no one
+/// when that sandbox ends, and can be attached, moved and deleted like any
+/// other.
+pub(crate) fn fork_for(state: &Arc<AppState>, parent: &str, child: &str) -> Result<Claim, String> {
+    if !held(parent) {
+        return Err(format!("sandbox {parent} holds no disk"));
+    }
+    let _lock = LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let source = all(state)
+        .into_iter()
+        .find(|m| m.attached_to.as_deref() == Some(parent))
+        .ok_or_else(|| format!("sandbox {parent} holds no disk"))?;
+    let path = source
+        .mount_path
+        .clone()
+        .ok_or("the disk has no recorded mount path")?;
+    // Unique by the child's ID, and within a name's 64 characters.
+    let tag: String = child
+        .trim_start_matches("sbx-")
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .take(10)
+        .collect();
+    let stem: String = source.name.chars().take(64 - 6 - tag.len()).collect();
+    let meta = Meta {
+        id: String::new(),
+        name: format!("{stem}-fork-{tag}"),
+        size_mib: source.size_mib,
+        attached_to: Some(child.to_string()),
+        mount_path: Some(path.clone()),
+        guest_cid: source.guest_cid,
+    };
+    let meta = Meta {
+        id: disk_id(&meta.name),
+        ..meta
+    };
+    let dir = root(state).join(&meta.id);
+    std::fs::create_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let copied = (|| {
+        let out = std::process::Command::new("cp")
+            .args(["--reflink=auto", "--sparse=always"])
+            .arg(image(state, &source.id))
+            .arg(dir.join("disk.img"))
+            .output()
+            .map_err(|e| format!("running cp: {e}"))?;
+        if !out.status.success() {
+            return Err(format!(
+                "copying disk {}: {}",
+                source.name,
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+        }
+        write_meta(state, &meta).map_err(|e| format!("recording disk {}: {e}", meta.name))
+    })();
+    if let Err(e) = copied {
+        let _ = std::fs::remove_dir_all(&dir);
+        return Err(e);
+    }
+    set_held(child, true);
+    Ok(Claim {
+        state: Arc::clone(state),
+        sandbox_id: child.to_string(),
+        image: image(state, &meta.id),
+        serial: meta.id,
+        path,
+        guest_cid: meta.guest_cid,
+        kept: false,
+    })
+}
+
+/// Remove the disk `id` if no sandbox holds it: a fork's copy whose sandbox
+/// never came to be.
+pub(crate) fn discard(state: &AppState, id: &str) {
+    let _lock = LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if by_id(state, id).is_some_and(|meta| meta.holder().is_none()) {
+        let _ = std::fs::remove_dir_all(root(state).join(id));
+    }
+}
+
 /// Record the context ID `sandbox_id`'s guest booted with, beside the disk it
 /// holds, for a resume to give it back.
 pub(crate) fn remember_guest(state: &AppState, sandbox_id: &str, cid: u64) {

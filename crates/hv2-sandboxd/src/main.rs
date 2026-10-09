@@ -3625,6 +3625,9 @@ async fn resume_route(
     }
 }
 
+/// The most forks of a sandbox with a disk in one request.
+const MAX_DISK_FORKS: u32 = 8;
+
 #[derive(Debug, Default, Deserialize)]
 struct ForkRequest {
     timeout: Option<u64>,
@@ -3657,20 +3660,22 @@ async fn fork_route(
             "forking needs sandboxes restored from a template, and this node boots them",
         );
     }
-    if disks::holds_one(&sandbox_id) {
+    // With a disk, each fork gets a copy of it, made while the source is
+    // paused. Few at a time: the source stays paused for every copy.
+    let with_disk = disks::holds_one(&sandbox_id);
+    if with_disk && count > MAX_DISK_FORKS {
         return api_error(
-            StatusCode::CONFLICT,
-            format!(
-                "sandbox {sandbox_id} holds a disk, and a sandbox with a disk cannot be forked"
-            ),
+            StatusCode::BAD_REQUEST,
+            format!("a sandbox with a disk forks into at most {MAX_DISK_FORKS} at a time"),
         );
     }
+    let fork_ids: Vec<String> = (0..count).map(|_| new_sandbox_id()).collect();
 
     let checkpoint = state.suspend_dir.join(format!(
         "{sandbox_id}-fork-{}.snap",
         uuid::Uuid::new_v4().simple()
     ));
-    let (template_id, metadata, network, source_request, volume_mounts, creator) = {
+    let (template_id, metadata, network, source_request, volume_mounts, creator, mut claims) = {
         let lock = transition_lock(&state, &sandbox_id);
         let _held = lock.lock().await;
         let source = {
@@ -3731,13 +3736,47 @@ async fn fork_route(
             creator
         };
         let started = std::time::Instant::now();
-        if let Err(e) = vm.checkpoint_to(&checkpoint).await {
-            let _ = std::fs::remove_file(&checkpoint);
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("checkpointing {sandbox_id}: {e}"),
-            );
-        }
+        // A sandbox with a disk booted, so its memory is written whole; and
+        // its disk is copied before it runs again, so each copy is the disk
+        // that memory describes.
+        let checkpointed = if with_disk {
+            let copy_state = Arc::clone(&state);
+            let (source, ids) = (sandbox_id.clone(), fork_ids.clone());
+            vm.checkpoint_whole_to(&checkpoint, move || {
+                let mut claims = Vec::with_capacity(ids.len());
+                for id in &ids {
+                    match disks::fork_for(&copy_state, &source, id) {
+                        Ok(claim) => claims.push(Some(claim)),
+                        Err(e) => {
+                            // The copies already made belong to forks that
+                            // will not exist.
+                            for claim in claims.drain(..).flatten() {
+                                let serial = claim.serial.clone();
+                                drop(claim);
+                                disks::discard(&copy_state, &serial);
+                            }
+                            return Err(e);
+                        }
+                    }
+                }
+                Ok(claims)
+            })
+            .await
+        } else {
+            vm.checkpoint_to(&checkpoint)
+                .await
+                .map(|()| (0..count).map(|_| None).collect())
+        };
+        let claims: Vec<Option<disks::Claim>> = match checkpointed {
+            Ok(claims) => claims,
+            Err(e) => {
+                let _ = std::fs::remove_file(&checkpoint);
+                return api_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("checkpointing {sandbox_id}: {e}"),
+                );
+            }
+        };
         state.metrics.checkpoint_latency.observe(started.elapsed());
         (
             template_id,
@@ -3746,6 +3785,7 @@ async fn fork_route(
             source_request,
             volume_mounts,
             creator,
+            claims,
         )
     };
 
@@ -3757,8 +3797,10 @@ async fn fork_route(
 
     // Concurrently: each fork is independent, and they are what a caller
     // fanning work out to N agents is waiting on.
-    let forks: Vec<_> = (0..count)
-        .map(|_| {
+    let forks: Vec<_> = fork_ids
+        .into_iter()
+        .zip(claims.drain(..))
+        .map(|(fork_id, claim)| {
             let state = Arc::clone(&state);
             let checkpoint = checkpoint.clone();
             let template_id = template_id.clone();
@@ -3772,9 +3814,17 @@ async fn fork_route(
                 let slot = reserve(&state, create_park(&state))
                     .await
                     .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
-                let fork_id = new_sandbox_id();
+                // A fork that does not come to be gives its copy of the disk
+                // back, and the copy is removed.
+                let serial = claim.as_ref().map(|c| c.serial.clone());
+                let abandon = |claim: Option<disks::Claim>, state: &Arc<AppState>| {
+                    drop(claim);
+                    if let Some(serial) = &serial {
+                        disks::discard(state, serial);
+                    }
+                };
                 let access_token = new_access_token();
-                let running = bring_up(
+                let running = match bring_up(
                     &state,
                     &fork_id,
                     &template_id,
@@ -3782,11 +3832,18 @@ async fn fork_route(
                     network,
                     &volume_mounts,
                     creator.1.as_ref(),
-                    None,
+                    claim.as_ref(),
                     &BTreeMap::new(),
                     &access_token,
                 )
-                .await?;
+                .await
+                {
+                    Ok(running) => running,
+                    Err(e) => {
+                        abandon(claim, &state);
+                        return Err(e);
+                    }
+                };
                 let started_at_ms = now_ms();
                 let descriptor = SandboxResponse {
                     template_id: template_id.clone(),
@@ -3823,7 +3880,7 @@ async fn fork_route(
                     lifetime_secs,
                     ..Lifecycle::default()
                 };
-                register(
+                if let Err(e) = register(
                     &state,
                     slot,
                     running,
@@ -3833,7 +3890,15 @@ async fn fork_route(
                     network_request,
                     RegistrationContext::default(),
                 )
-                .await?;
+                .await
+                {
+                    abandon(claim, &state);
+                    return Err(e);
+                }
+                // The fork exists; its end gives the disk back.
+                if let Some(claim) = claim {
+                    claim.keep();
+                }
                 env_vars::inherit(&source_id, &descriptor.sandbox_id);
                 Ok::<_, (StatusCode, String)>(descriptor)
             }

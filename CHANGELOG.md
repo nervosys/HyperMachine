@@ -30,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   where firmware and a stock kernel look for one. An unmodified CirrOS cloud
   image boots to its login prompt. Not yet available to machines. See
   `docs/FIRMWARE_BOOT.md`.
+- A sandbox holding a block disk can be forked: each fork gets a copy of the
+  disk made while the source is paused, so it matches the memory the fork is
+  restored from. Up to 8 forks a request. See `docs/DISKS.md`.
 - A sandbox holding a block disk can be paused and resumed, by request, by
   `autoPause` or when idle. The disk stays claimed while it is paused, and only
   the node holding the disk resumes it. See `docs/DISKS.md`.
