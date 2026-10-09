@@ -3115,7 +3115,6 @@ impl VM {
         irq: u8,
     ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_blk_mmio::VirtioBlockMmio>>> {
         use crate::devices::virtio_blk_mmio::VirtioBlockMmio;
-        use crate::devices::virtio_mmio::{VirtioMmioTransport, VIRTIO_MMIO_REGION_SIZE};
 
         if self.block.read().is_some() {
             return Err(Error::Device(
@@ -3129,9 +3128,96 @@ impl VM {
             )));
         }
 
-        let device = Arc::new(parking_lot::Mutex::new(VirtioBlockMmio::open(
-            path, read_only, serial,
-        )?));
+        self.attach_block_device(
+            VirtioBlockMmio::open(path, read_only, serial)?,
+            base_address,
+            irq,
+        )
+        .await
+    }
+
+    /// Attach a block device over an already-open file, at the default
+    /// address and interrupt line.
+    ///
+    /// For a disk that has no path: an anonymous file standing in for one the
+    /// guest will be given later ([`Self::swap_block`]).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::attach_block`].
+    pub async fn attach_block_file(
+        self: &Arc<Self>,
+        file: std::fs::File,
+        read_only: bool,
+        serial: &str,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_blk_mmio::VirtioBlockMmio>>> {
+        use crate::devices::virtio_blk_mmio::VirtioBlockMmio;
+        if self.block.read().is_some() {
+            return Err(Error::Device(
+                "this VM already has a block device".to_string(),
+            ));
+        }
+        if self.memory.host_offset(Self::BLOCK_MMIO_BASE).is_some() {
+            return Err(Error::Device(format!(
+                "block register window at {:#x} overlaps {} bytes of guest RAM",
+                Self::BLOCK_MMIO_BASE,
+                self.memory.total_size()
+            )));
+        }
+        self.attach_block_device(
+            VirtioBlockMmio::from_file(file, read_only, serial)?,
+            Self::BLOCK_MMIO_BASE,
+            Self::BLOCK_IRQ,
+        )
+        .await
+    }
+
+    /// Put the file at `path` behind the attached block device and tell the
+    /// guest its disk changed.
+    ///
+    /// The guest's driver stays bound; it re-reads the capacity when the
+    /// configuration-changed interrupt arrives. Blocks of the old file the
+    /// guest had cached are not invalidated by this, so the caller must have
+    /// the guest drop them before it reads the new disk.
+    ///
+    /// # Errors
+    ///
+    /// No block device attached, or the file cannot be opened.
+    pub async fn swap_block(&self, path: &std::path::Path, serial: &str) -> Result<u64> {
+        let attached = self
+            .block
+            .read()
+            .as_ref()
+            .map(|a| (a.device.clone(), a.transport.clone()))
+            .ok_or_else(|| Error::Device("this VM has no block device to swap".to_string()))?;
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path)
+            .map_err(|e| Error::Device(format!("cannot open disk {}: {e}", path.display())))?;
+        let capacity = {
+            let mut device = attached.0.lock();
+            device.replace_backing(file, serial)?;
+            device.capacity_bytes()
+        };
+        attached.1.read().await.signal_config_change()?;
+        tracing::info!(
+            "VM '{}': block device now backed by {} ({capacity} bytes)",
+            self.config.name,
+            path.display()
+        );
+        Ok(capacity)
+    }
+
+    async fn attach_block_device(
+        self: &Arc<Self>,
+        device: crate::devices::virtio_blk_mmio::VirtioBlockMmio,
+        base_address: u64,
+        irq: u8,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_blk_mmio::VirtioBlockMmio>>> {
+        use crate::devices::virtio_mmio::{VirtioMmioTransport, VIRTIO_MMIO_REGION_SIZE};
+        let read_only = device.is_read_only();
+        let device = Arc::new(parking_lot::Mutex::new(device));
         let capacity = device.lock().capacity_bytes();
         let transport = Arc::new(tokio::sync::RwLock::new(
             VirtioMmioTransport::new("virtio-blk", base_address, self.memory(), device.clone())
@@ -5213,6 +5299,36 @@ mod tests {
             "a PCI device is found by enumeration; telling the guest where it \
              is on the command line would mean it was not"
         );
+    }
+
+    /// A block device attached over an anonymous file can be given a real
+    /// disk later, and reports the new disk's size; a VM with no block device
+    /// has nothing to swap.
+    #[tokio::test]
+    async fn a_placeholder_disk_is_swapped_for_a_real_one() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        let real = tempfile::NamedTempFile::new().expect("temp image");
+        real.as_file().set_len(8 << 20).expect("size the image");
+        assert!(vm.swap_block(real.path(), "disk0").await.is_err());
+
+        let placeholder = tempfile::tempfile().expect("anonymous file");
+        placeholder.set_len(1 << 20).expect("size the placeholder");
+        let device = vm
+            .attach_block_file(placeholder, false, "placeholder")
+            .await
+            .expect("attach the placeholder");
+        assert_eq!(device.lock().capacity_bytes(), 1 << 20);
+        assert_eq!(
+            vm.swap_block(real.path(), "disk0").await.expect("swap"),
+            8 << 20
+        );
+        assert_eq!(device.lock().capacity_bytes(), 8 << 20);
+        assert!(vm
+            .attach_block_file(tempfile::tempfile().expect("file"), false, "second")
+            .await
+            .is_err());
     }
 
     /// A PCI block device is a function a guest finds by walking bus 0, with

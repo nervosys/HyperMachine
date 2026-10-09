@@ -577,6 +577,56 @@ pub(crate) fn holds_one(sandbox_id: &str) -> bool {
     held(sandbox_id)
 }
 
+/// Whether `sandbox_id` holds a disk and booted with it attached, as against
+/// being restored from a template and given it afterwards. A guest that
+/// booted has memory that is a change against no image, which decides how it
+/// is paused and forked.
+pub(crate) fn cold_booted(state: &AppState, sandbox_id: &str) -> bool {
+    if !held(sandbox_id) {
+        return false;
+    }
+    let _lock = LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    all(state)
+        .into_iter()
+        .any(|m| m.attached_to.as_deref() == Some(sandbox_id) && m.guest_cid.is_some())
+}
+
+/// Mount, at `path`, a disk of `bytes` that was just put behind a guest's
+/// block device in place of the placeholder its template booted with.
+///
+/// Three things first. The guest learns the new size from an interrupt and a
+/// piece of deferred work, so this waits until it reports it. The guest read
+/// the placeholder when it probed it, and those blocks are in its cache:
+/// they are dropped, or the mount would read the placeholder's zeros where
+/// the disk's superblock is. Only then is it mounted.
+pub(crate) async fn mount_swapped(vm: &Arc<AgentVM>, path: &str, bytes: u64) -> Result<(), String> {
+    let sectors = bytes / 512;
+    let script = format!(
+        "i=0; while [ \"$(/bin/busybox cat /sys/block/vda/size 2>/dev/null)\" != \"{sectors}\" ]; do \
+         i=$((i+1)); [ $i -gt 200 ] && exit 9; /bin/busybox sleep 0.01; done; \
+         /bin/busybox sync; echo 1 > /proc/sys/vm/drop_caches; \
+         /bin/busybox mkdir -p {path} && /bin/busybox mount -t ext4 /dev/vda {path}"
+    );
+    let out = vm
+        .exec_in_guest(
+            "/bin/busybox",
+            &["sh".to_string(), "-c".to_string(), script],
+            MOUNT_TIMEOUT,
+        )
+        .await
+        .map_err(|e| format!("mounting the disk: {e}"))?;
+    match out.exit_code {
+        Some(0) => Ok(()),
+        Some(9) => Err("the guest never saw its disk change size".to_string()),
+        code => Err(format!(
+            "mounting the disk at {path} failed ({code:?}): {}",
+            out.stderr.trim()
+        )),
+    }
+}
+
 /// Mount the attached disk in the guest at `path`.
 pub(crate) async fn mount(vm: &Arc<AgentVM>, path: &str) -> Result<(), String> {
     let script =

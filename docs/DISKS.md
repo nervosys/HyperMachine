@@ -54,6 +54,42 @@ A guest's writes go to the image on the vCPU thread that issued them, before the
 guest sees them complete. A guest flush is an `fsync` of the image. Write-back
 caching, discard and write-zeroes are not offered.
 
+## The disk slot: restoring a sandbox with a disk
+
+By default a sandbox that asks for a disk cold-boots, because the template's
+guest booted with no disk and virtio-mmio cannot add one later. That makes it
+slower to create, and its pause and fork write the whole of its memory.
+
+Start the node with `--disk-slot` and every template guest boots with a small
+empty placeholder disk instead. A sandbox that asks for a disk is then restored
+from the template like any other, or taken from the [warm pool](WARM_POOL.md),
+and the placeholder is swapped for the real disk: the guest is told its disk
+changed size, drops what it had cached of the placeholder, and mounts it. Its
+pause and fork then write only what it changed.
+
+On the host this was measured on, with a 64 MiB disk (medians, release build):
+
+| | Without the slot | With `--disk-slot` |
+|---|---:|---:|
+| Create with a disk | 262 ms | 61 ms |
+| Pause | 179 ms | 5.6 ms |
+| Resume | 53 ms | 17.6 ms |
+| Fork, one way, with its disk | 233 ms | 29 ms |
+
+What it costs and changes:
+
+- **Every sandbox on the node has a `/dev/vda`,** whether it asked for a disk or
+  not. Without one it is a 1 MiB empty disk of that sandbox's own: anonymous,
+  private, and gone with the sandbox.
+- **Templates are rebuilt.** A guest that booted with the slot is a different
+  template from one that did not, so the node makes its own on first start with
+  the flag. A named snapshot taken before the flag was set has no slot, and a
+  create from it with a disk fails at the mount.
+- **The fork's disk copy is unchanged.** It is still a block-by-block copy where
+  the filesystem has no reflinks.
+
+Evidence: [real KVM: the disk slot, with timings against the same build without it](benchmarks/2026-10-08/disk-slot-kvm/README.md).
+
 ## Pausing a sandbox with a disk
 
 A sandbox holding a disk can be paused and resumed, by request, by `autoPause`,
@@ -95,10 +131,11 @@ Evidence: [real KVM: a sandbox forked with its disk, unflushed writes included](
 
 ## What a sandbox with a disk cannot do
 
-- **Restore from a template.** virtio-mmio has no hot-plug, and a template's
-  guest booted with no disk has no driver bound to one. A sandbox with a disk
-  cold-boots instead, which is slower to create than a template restore. Sandboxes
-  without a disk are unaffected.
+- **Restore from a template, unless the node has `--disk-slot`.** virtio-mmio
+  has no hot-plug, and a template's guest booted with no disk has no driver
+  bound to one. Without the [disk slot](#the-disk-slot-restoring-a-sandbox-with-a-disk)
+  a sandbox with a disk cold-boots, which is slower to create than a template
+  restore. Sandboxes without a disk are unaffected.
 - **Snapshot or checkpoint.** Each would later run an older guest against a
   disk that has moved on. The routes answer 409.
 - **Start from a snapshot.** This is refused with 400 for the same reason.

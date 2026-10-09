@@ -308,6 +308,9 @@ struct Options {
     evict_idle_after: Option<Duration>,
     /// How many restored sandboxes to keep ready for creates to take.
     warm_pool: usize,
+    /// Boot template guests with a placeholder disk, so a sandbox that asks
+    /// for a disk can be restored from a template and given it.
+    disk_slot: bool,
     /// Pause a sandbox that has been idle this long, whether or not the node
     /// is full, unless its create set `idleTimeout` itself. See idle.rs.
     idle_pause_after: Option<Duration>,
@@ -375,6 +378,7 @@ fn parse_options() -> Result<Options, String> {
         identity_key: None,
         evict_idle_after: None,
         warm_pool: 0,
+        disk_slot: false,
         idle_pause_after: None,
         idle_standby_after: None,
     };
@@ -488,6 +492,7 @@ fn parse_options() -> Result<Options, String> {
                 idle::check_window(secs).map_err(|e| format!("--idle-standby-after: {e}"))?;
                 opts.idle_standby_after = (secs > 0).then(|| Duration::from_secs(secs));
             }
+            "--disk-slot" => opts.disk_slot = true,
             "--warm-pool" => {
                 let spares: usize = value(&mut i)?.parse().map_err(|e| format!("{e}"))?;
                 if spares > 64 {
@@ -1602,9 +1607,14 @@ async fn bring_up(
     // without one, and virtio-mmio has no hot-plug to give it one now. A
     // resume of a sandbox with a disk restores its own snapshot, which was
     // taken with the disk attached.
-    let snapshot = if disk.is_some() && plain_create {
+    //
+    // With `--disk-slot` a create with a disk is not a cold boot either: the
+    // template's guest booted with a placeholder disk, so it is restored like
+    // any other and the placeholder swapped for the real disk.
+    let swap = plain_create && disk.is_some() && state.opts.disk_slot;
+    let snapshot = if disk.is_some() && plain_create && !swap {
         None
-    } else if disk.is_some() {
+    } else if disk.is_some() && !plain_create {
         snapshot
     } else {
         snapshot.or(template.as_ref().map(|t| t.snapshot.as_path()))
@@ -1674,7 +1684,7 @@ async fn bring_up(
     // A plain create of the base template takes a guest restored before it
     // was asked for, when one is ready (see pool.rs). Everything from here to
     // the agent answering is what such a guest has already done.
-    let spare = if plain_create && disk.is_none() && snapshot.is_some() {
+    let spare = if plain_create && (disk.is_none() || swap) && snapshot.is_some() {
         pool::take(state, template_id, network.is_some()).await
     } else {
         None
@@ -1689,7 +1699,10 @@ async fn bring_up(
             sandbox_id,
             cid,
             network.is_some().then_some(mac),
-            disk.map(|d| (d.image.as_path(), d.serial.as_str())),
+            // Swapped in once the guest is up, when it is restored with a
+            // placeholder in the slot.
+            disk.filter(|_| !swap)
+                .map(|d| (d.image.as_path(), d.serial.as_str())),
         )
         .await
         .map_err(internal)?;
@@ -1781,8 +1794,16 @@ async fn bring_up(
 
     // Mounted in a guest that just booted. A resumed guest still has it
     // mounted: that is in the memory it was restored with.
-    if let Some(disk) = disk.filter(|_| snapshot.is_none()) {
-        if let Err(e) = disks::mount(&vm, &disk.path).await {
+    if let Some(disk) = disk.filter(|_| snapshot.is_none() || swap) {
+        let mounted = if swap {
+            match vm.vm().swap_block(&disk.image, &disk.serial).await {
+                Ok(bytes) => disks::mount_swapped(&vm, &disk.path, bytes).await,
+                Err(e) => Err(format!("putting the disk in its slot: {e}")),
+            }
+        } else {
+            disks::mount(&vm, &disk.path).await
+        };
+        if let Err(e) = mounted {
             if let Some(network) = network {
                 network.bridge.abort();
             }
@@ -3000,7 +3021,7 @@ async fn pause_sandbox(
     let _ = std::fs::remove_file(&snapshot);
     // A sandbox with a disk booted, where the others were restored from a
     // template: its memory is a change against no image, and is written whole.
-    let suspended = if disks::holds_one(sandbox_id) {
+    let suspended = if disks::cold_booted(state, sandbox_id) {
         live.vm.suspend_whole_to(&snapshot).await
     } else {
         live.vm.suspend_to(&snapshot).await
@@ -3625,6 +3646,9 @@ async fn resume_route(
     }
 }
 
+/// The size of the placeholder a template guest boots with in its disk slot.
+const DISK_SLOT_BYTES: u64 = 1 << 20;
+
 /// The most forks of a sandbox with a disk in one request.
 const MAX_DISK_FORKS: u32 = 8;
 
@@ -3742,7 +3766,8 @@ async fn fork_route(
         let checkpointed = if with_disk {
             let copy_state = Arc::clone(&state);
             let (source, ids) = (sandbox_id.clone(), fork_ids.clone());
-            vm.checkpoint_whole_to(&checkpoint, move || {
+            let whole = disks::cold_booted(&state, &sandbox_id);
+            vm.checkpoint_with(&checkpoint, whole, move || {
                 let mut claims = Vec::with_capacity(ids.len());
                 for id in &ids {
                     match disks::fork_for(&copy_state, &source, id) {
@@ -4260,6 +4285,10 @@ fn template_key(opts: &Options, authority: Option<&Authority>) -> Result<String,
         authority.map_or("", Authority::ca_pem)
     );
     append_template_transport(&mut config, opts.guest_transport);
+    // A guest that booted with a disk slot is not one that booted without.
+    if opts.disk_slot {
+        config.push_str("\0disk-slot");
+    }
     hash.update(config.as_bytes());
     Ok(hash
         .finalize()
@@ -4908,6 +4937,28 @@ async fn new_vm(
             .attach_block(image, false, serial)
             .await
             .map_err(|e| format!("attaching the disk: {e}"))?;
+    } else if opts.disk_slot && initrd.is_some() {
+        // A placeholder in the slot: a small empty disk of this VM's own, so
+        // the guest's driver binds to something and a real disk can be put
+        // there later. Its own, and anonymous: what a guest writes to it no
+        // other guest reads, and it is gone with the VM.
+        let path =
+            std::env::temp_dir().join(format!("hv2-disk-slot-{}", uuid::Uuid::new_v4().simple()));
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .and_then(|file| {
+                std::fs::remove_file(&path)?;
+                file.set_len(DISK_SLOT_BYTES)?;
+                Ok(file)
+            })
+            .map_err(|e| format!("making the placeholder disk: {e}"))?;
+        vm.vm()
+            .attach_block_file(file, false, "placeholder")
+            .await
+            .map_err(|e| format!("attaching the placeholder disk: {e}"))?;
     }
     // A console, on every VM alike -- template, booted sandbox, restored
     // one -- so a guest that never answers says why: its kernel's panic, its

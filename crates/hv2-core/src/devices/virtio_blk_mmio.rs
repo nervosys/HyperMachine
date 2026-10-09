@@ -141,6 +141,26 @@ impl VirtioBlockMmio {
         })
     }
 
+    /// Put a different file behind this disk, with `id` as its serial.
+    ///
+    /// For a guest whose driver is already bound: the queues, the negotiated
+    /// features and everything else the driver set up stay as they are, and
+    /// only what the sectors are changes. The caller raises the
+    /// configuration-changed interrupt, which is how the guest learns the
+    /// capacity is different, and must see to it that the guest holds no
+    /// cached blocks of the old file.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::from_file`]. Nothing changes on an error.
+    pub fn replace_backing(&mut self, file: File, id: &str) -> Result<()> {
+        let fresh = Self::from_file(file, self.read_only, id)?;
+        self.file = fresh.file;
+        self.sectors = fresh.sectors;
+        self.id = fresh.id;
+        Ok(())
+    }
+
     /// Capacity in bytes.
     pub fn capacity_bytes(&self) -> u64 {
         self.sectors * SECTOR_SIZE
@@ -528,6 +548,32 @@ mod tests {
         assert_eq!(submit(&mem, &mut dev, 1, T_GET_ID, 0, 20, true), S_OK);
         assert_eq!(&mem.read_bytes(DATA, 8).expect("id")[..], b"vol-test");
         assert_eq!(submit(&mem, &mut dev, 2, 99, 0, 0, false), S_UNSUPP);
+    }
+
+    /// A different file put behind the disk changes what its sectors are and
+    /// nothing the driver set up: the queue stays ready, and the guest reads
+    /// the new capacity where it read the old. A file that cannot be a disk
+    /// is refused and changes nothing.
+    #[test]
+    fn a_new_backing_file_changes_the_sectors_and_keeps_the_driver_state() {
+        let (_file, mut dev) = disk(32, false);
+        let bigger = tempfile::NamedTempFile::new().expect("temp file");
+        bigger.as_file().set_len(4096 * SECTOR_SIZE).expect("size");
+        dev.replace_backing(bigger.reopen().expect("reopen"), "disk-real")
+            .expect("replace");
+        assert_eq!(dev.capacity_bytes(), 4096 * SECTOR_SIZE);
+        let mut cap = [0u8; 8];
+        dev.read_config(0, &mut cap);
+        assert_eq!(u64::from_le_bytes(cap), 4096);
+        assert_eq!(&dev.id[..9], b"disk-real");
+        assert!(dev.queues()[0].is_ready() && !dev.is_read_only());
+
+        let empty = tempfile::NamedTempFile::new().expect("temp file");
+        assert!(dev
+            .replace_backing(empty.reopen().expect("reopen"), "nothing")
+            .is_err());
+        assert_eq!(dev.capacity_bytes(), 4096 * SECTOR_SIZE);
+        assert_eq!(&dev.id[..9], b"disk-real");
     }
 
     #[test]
