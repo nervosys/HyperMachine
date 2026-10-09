@@ -1235,6 +1235,102 @@ mod tests {
         );
     }
 
+    /// The workload is root in its own user namespace, and must be root with
+    /// no capabilities: the ones that namespace gives are what mounted its
+    /// filesystem, and would unmake it. This is the test that failed before
+    /// they were dropped: the remount succeeded and the write reached the host.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_workload_cannot_remount_a_read_only_grant_writable() {
+        let sandbox = ProcessSandbox::new();
+        if !sandbox.controls().enforces(Control::PathConfinement) {
+            eprintln!(
+                "skipping: {}",
+                sandbox
+                    .controls()
+                    .reason(Control::PathConfinement)
+                    .unwrap_or("path confinement unavailable")
+            );
+            return;
+        }
+
+        let scratch = ScratchRoot::new("remount");
+        let readable = scratch.base.join("readable");
+        std::fs::create_dir_all(&readable).expect("a directory to read");
+        let mut read_only: Vec<std::path::PathBuf> = ["/bin", "/usr", "/lib", "/lib64", "/sbin"]
+            .iter()
+            .map(std::path::PathBuf::from)
+            .filter(|path| path.exists())
+            .collect();
+        read_only.push(readable.clone());
+        let spec = SandboxSpec {
+            grants: crate::PathGrants {
+                read_only,
+                read_write: Vec::new(),
+            },
+            confine_paths: true,
+            network: NetworkPolicy::Host,
+            wall_clock: Some(Duration::from_secs(20)),
+            ..SandboxSpec::default()
+        };
+
+        // No redirect of mount's complaint: there is no /dev/null in there to
+        // send it to, and a redirect that fails would skip the command.
+        let script = format!(
+            "command -v mount || echo NO-MOUNT-PROGRAM; \
+             if mount -o remount,rw,bind '{readable}'; then echo REMOUNTED; else echo KEPT; fi; \
+             if echo x > '{readable}/made'; then echo WROTE; else echo REFUSED; fi",
+            readable = readable.display(),
+        );
+        let said = confined_shell(&sandbox, &script, &spec);
+        assert!(
+            !said.contains("NO-MOUNT-PROGRAM"),
+            "without a mount program inside, nothing was attempted: {said}"
+        );
+        assert!(said.ends_with("KEPT\nREFUSED"), "{said}");
+        assert!(
+            !readable.join("made").exists(),
+            "the write reached the host through a read-only grant"
+        );
+    }
+
+    /// Every capability set is empty, in any user namespace the crate makes,
+    /// and the bounding set with them, so nothing the workload runs gets one
+    /// back.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_workload_in_a_user_namespace_holds_no_capabilities() {
+        let sandbox = ProcessSandbox::new();
+        if !sandbox.controls().enforces(Control::ProcessIsolation) {
+            eprintln!(
+                "skipping: {}",
+                sandbox
+                    .controls()
+                    .reason(Control::ProcessIsolation)
+                    .unwrap_or("process isolation unavailable")
+            );
+            return;
+        }
+        // Process isolation is what gives it a /proc of its own to read.
+        let spec = SandboxSpec {
+            isolate_processes: true,
+            network: NetworkPolicy::Host,
+            wall_clock: Some(Duration::from_secs(20)),
+            ..SandboxSpec::default()
+        };
+        let said = confined_shell(
+            &sandbox,
+            "while read name value; do case $name in Cap*) echo $name $value;; esac; done \
+             < /proc/self/status",
+            &spec,
+        );
+        let sets: Vec<&str> = said.lines().collect();
+        assert_eq!(sets.len(), 5, "{said}");
+        for set in sets {
+            assert!(set.ends_with(" 0000000000000000"), "{said}");
+        }
+    }
+
     /// A read-write grant inside a root of the caller's choosing is mounted
     /// there writable, at the path it has on the host.
     #[cfg(target_os = "linux")]
