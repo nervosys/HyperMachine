@@ -138,12 +138,15 @@ pub(super) fn profile(spec: &SandboxSpec) -> Result<String, SandboxError> {
             );
         }
     }
-    // Last, so that a denial wins over anything above it.
+    // Last, so that a denial wins over anything above it. Reading data is
+    // named beside the wildcard that includes it: the first run of this on
+    // macOS showed the wildcard alone losing to the grant's rule above, which
+    // names that one operation, and the denied file under a grant was read.
     for path in &spec.grants.denied {
         let path = quoted(path)?;
         let _ = writeln!(
             text,
-            "(deny file-read* file-write* (literal {path}) (subpath {path}))"
+            "(deny file-read* file-read-data file-write* (literal {path}) (subpath {path}))"
         );
     }
     Ok(text)
@@ -289,7 +292,7 @@ mod tests {
         assert_eq!(
             *lines.last().expect("rules"),
             format!(
-                "(deny file-read* file-write* (literal \"{escaped}\") (subpath \"{escaped}\"))"
+                "(deny file-read* file-read-data file-write* (literal \"{escaped}\") (subpath \"{escaped}\"))"
             ),
             "{text}"
         );
