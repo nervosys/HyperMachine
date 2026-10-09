@@ -754,6 +754,12 @@ mod tests {
         fn CloseClipboard() -> i32;
         fn GetClipboardData(format: u32) -> *mut core::ffi::c_void;
         fn EmptyClipboard() -> i32;
+        fn SetClipboardData(format: u32, data: *mut core::ffi::c_void) -> *mut core::ffi::c_void;
+    }
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GlobalAlloc(flags: u32, bytes: usize) -> *mut core::ffi::c_void;
     }
 
     #[test]
@@ -773,18 +779,28 @@ mod tests {
         println!("set={}", if set != 0 { "allowed" } else { "refused" });
 
         if mode == "clipboard" {
-            // SAFETY: the clipboard is opened, asked for text, and closed.
-            // Emptying it is what a write begins with, and is only reached
-            // on a clipboard the caller said may be lost.
+            // SAFETY: the clipboard is opened, asked for text, emptied, given
+            // an empty string, and closed. The string is movable zeroed
+            // memory, which is what the clipboard takes; it owns it once set.
+            // Only reached on a clipboard the caller said may be lost.
             unsafe {
+                const CF_UNICODETEXT: u32 = 13;
+                const GMEM_MOVEABLE_ZEROED: u32 = 0x0002 | 0x0040;
                 let opened = OpenClipboard(std::ptr::null_mut()) != 0;
-                let text = opened && !GetClipboardData(13).is_null();
+                let text = opened && !GetClipboardData(CF_UNICODETEXT).is_null();
+                // Emptying is what a write begins with, and is reported apart
+                // from it: the first run of this under CI showed a restricted
+                // program refused the read and allowed to empty.
                 let emptied = opened && EmptyClipboard() != 0;
+                let wrote = opened
+                    && !SetClipboardData(CF_UNICODETEXT, GlobalAlloc(GMEM_MOVEABLE_ZEROED, 4))
+                        .is_null();
                 if opened {
                     CloseClipboard();
                 }
                 println!("read={}", if text { "allowed" } else { "refused" });
-                println!("write={}", if emptied { "allowed" } else { "refused" });
+                println!("write={}", if wrote { "allowed" } else { "refused" });
+                println!("empty={}", if emptied { "allowed" } else { "refused" });
             }
         }
     }
@@ -826,7 +842,7 @@ mod tests {
             let lines: Vec<String> = text
                 .lines()
                 .filter(|line| {
-                    ["set=", "read=", "write="]
+                    ["set=", "read=", "write=", "empty="]
                         .iter()
                         .any(|key| line.starts_with(key))
                 })
@@ -848,6 +864,17 @@ mod tests {
         // Inside first, so the clipboard still holds its text when the read
         // is refused.
         let inside = said(&isolated);
+        if clipboard {
+            // Whatever the run inside did to it, the one outside has text to
+            // find.
+            let refilled = sandbox
+                .run(
+                    &system("cmd.exe").args(["/c", "echo hv2-sandbox| clip"]),
+                    &SandboxSpec::unconfined(),
+                )
+                .expect("run");
+            assert_eq!(refilled.exit_code, Some(0), "{refilled:?}");
+        }
         let outside = said(&SandboxSpec {
             isolate_ui: false,
             ..isolated
@@ -855,12 +882,19 @@ mod tests {
         assert_eq!(inside[0], "set=refused", "{inside:?}");
         assert_eq!(outside[0], "set=allowed", "{outside:?}");
         if clipboard {
-            assert_eq!(inside[1..], ["read=refused", "write=refused"], "{inside:?}");
+            assert_eq!(
+                inside[1..3],
+                ["read=refused", "write=refused"],
+                "{inside:?}"
+            );
+            // Not asserted, reported: emptying the clipboard is not writing
+            // to it, and the restriction may let it through.
+            println!("clipboard: inside the restrictions, {}", inside[3]);
             // A runner with no usable clipboard refuses outside as well, and
             // then the refusal inside shows nothing. Say which it was, where
             // the log will be read, instead of failing on the runner or
             // passing as if the clipboard had been tried.
-            if outside[1..] == ["read=allowed", "write=allowed"] {
+            if outside[1..3] == ["read=allowed", "write=allowed"] {
                 println!("clipboard: refused inside the restrictions and allowed outside them");
             } else {
                 println!(
