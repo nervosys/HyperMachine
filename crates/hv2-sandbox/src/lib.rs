@@ -103,11 +103,19 @@ pub enum Control {
     /// entry for its own SID, which was tried, so a path under a grant
     /// cannot be closed to it by one.
     PathDenial,
+    /// The workload is kept from the desktop it was started on: the
+    /// clipboard, other programs' windows, the display's and the system's
+    /// settings, and logging the user off.
+    ///
+    /// On Windows this is the job object's user-interface restrictions. A
+    /// Linux process has no such boundary here: a workload that can reach a
+    /// display server's socket can use it.
+    UiIsolation,
 }
 
 impl Control {
     /// Every control, for a backend that wants to describe a full set.
-    pub const ALL: [Control; 10] = [
+    pub const ALL: [Control; 11] = [
         Control::Memory,
         Control::ProcessCount,
         Control::CpuTime,
@@ -118,6 +126,7 @@ impl Control {
         Control::NoNewPrivileges,
         Control::PathConfinement,
         Control::PathDenial,
+        Control::UiIsolation,
     ];
 }
 
@@ -134,6 +143,7 @@ impl fmt::Display for Control {
             Self::NoNewPrivileges => "no-new-privileges",
             Self::PathConfinement => "path confinement",
             Self::PathDenial => "path denial",
+            Self::UiIsolation => "UI isolation",
         };
         f.write_str(name)
     }
@@ -301,6 +311,9 @@ pub struct SandboxSpec {
     pub isolate_processes: bool,
     /// Whether the workload is barred from gaining privileges.
     pub no_new_privileges: bool,
+    /// Whether the workload is kept from the desktop it was started on.
+    /// Requires [`Control::UiIsolation`].
+    pub isolate_ui: bool,
     /// Run with whatever subset of the above this host can enforce, instead of
     /// refusing.
     ///
@@ -337,6 +350,9 @@ impl SandboxSpec {
             confine_paths: false,
             isolate_processes: true,
             no_new_privileges: true,
+            // Left off: only Windows has it, and a spec for untrusted code
+            // that Linux refused outright would not be used.
+            isolate_ui: false,
             best_effort: false,
         }
     }
@@ -380,6 +396,9 @@ impl SandboxSpec {
         if !self.grants.denied.is_empty() {
             wanted.push(Control::PathDenial);
         }
+        if self.isolate_ui {
+            wanted.push(Control::UiIsolation);
+        }
         wanted.sort();
         wanted
     }
@@ -414,6 +433,7 @@ impl SandboxSpec {
                 Control::NoNewPrivileges => spec.no_new_privileges = false,
                 Control::PathConfinement => spec.confine_paths = false,
                 Control::PathDenial => spec.grants.denied.clear(),
+                Control::UiIsolation => spec.isolate_ui = false,
             }
         }
         spec

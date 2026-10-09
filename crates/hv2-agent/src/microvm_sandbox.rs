@@ -106,6 +106,9 @@ impl MicroVmSandbox {
                 "a guest has its own filesystem and shares no host path, so there is none \
                  to close to it",
             )
+            // The host's desktop is not in the guest: no clipboard, window or
+            // setting of the host's has a name there.
+            .with(Control::UiIsolation)
             // Both are the guest agent's, which kills a program that overruns.
             .with(Control::CpuTime)
             .with(Control::WallClock);
