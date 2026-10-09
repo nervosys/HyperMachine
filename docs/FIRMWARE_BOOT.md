@@ -5,8 +5,8 @@ firmware finds a disk, reads its EFI system partition and starts the bootloader
 there, as a physical machine does. That is what lets a stock cloud image boot
 with its own bootloader and kernel, unchanged.
 
-This is in the VMM (`hv2-core`) today, on KVM. It is not yet wired into
-[machines](MACHINES.md), which still boot the node's kernel.
+This is in the VMM (`hv2-core`), on KVM, and a [machine](MACHINES.md#from-a-disk-image)
+created from a disk image uses it.
 
 ## How it works
 
@@ -31,9 +31,8 @@ Hypervisor Firmware 0.5.0 (`hypervisor-fw`, Apache-2.0), from its release page.
 
 ## Not yet
 
-- **Machines.** No machine can ask for firmware boot. That needs an image import
-  path, and a machine that is ready without the guest agent a stock image does
-  not have.
+- **Importing images.** A machine is made from a raw image an operator has put
+  in the node's `--image-dir`. There is no upload API and no format conversion.
 - **ACPI.** The firmware is given no RSDP, so the guest has no ACPI tables: one
   vCPU, no power button, and interrupts through the legacy PIC.
 - **Other firmware.** Only Rust Hypervisor Firmware has been run. edk2's
@@ -44,4 +43,6 @@ Hypervisor Firmware 0.5.0 (`hypervisor-fw`, Apache-2.0), from its release page.
 - **Other hosts.** WHPX and HVF refuse a PVH boot source.
 - **QCOW2.** The disk must be a raw image.
 
-Evidence: [real KVM: a stock CirrOS cloud image from firmware to its login prompt](benchmarks/2026-10-08/firmware-boot-kvm/README.md).
+Evidence:
+- [real KVM: a stock CirrOS cloud image from firmware to its login prompt](benchmarks/2026-10-08/firmware-boot-kvm/README.md)
+- [real KVM: a machine made from that image, logged into and restarted through the API](benchmarks/2026-10-08/machine-firmware-kvm/README.md)

@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   module, chosen in one place (the new `hv2-tls` crate). `--fips` / `HV2_FIPS=1`
   refuses to start a build that is not it. See `docs/FIPS.md` for what is and is
   not covered.
+- Machines from a disk image: `POST /machines` with `image` copies a raw image
+  from the node's `--image-dir` and boots it by `--firmware`, so a stock cloud
+  image runs with its own bootloader and kernel. Such a machine has no guest
+  agent; `GET /machines/{name}/console?tail=N` reads its serial console and
+  `POST` types at it. `hm sandbox vm machine` gains `create --image`,
+  `console --tail` and `type`.
 - Firmware boot in the VMM, on KVM: `BootSource::Pvh` enters a firmware image by
   the PVH boot protocol, and `VM::attach_block_pci` puts a disk on the PCI bus
   where firmware and a stock kernel look for one. An unmodified CirrOS cloud

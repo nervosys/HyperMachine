@@ -60,6 +60,9 @@ struct Live {
     started_ms: u64,
     /// Its gateway and the loop carrying its frames, when it has a NIC.
     network: Option<LiveNetwork>,
+    /// Whether its guest runs the agent: a machine made from a template does,
+    /// one booted by firmware from somebody else's image does not.
+    agent: bool,
 }
 
 impl Drop for Live {
@@ -124,6 +127,11 @@ pub(crate) struct Stored {
     /// Its network, as asked for. `None` is no NIC at all.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     network: Option<MachineNetwork>,
+    /// The disk image its root disk was copied from. With one, the machine
+    /// boots by firmware and runs whatever the image holds; without, it boots
+    /// the node's kernel on a disk made from its template.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    image: Option<String>,
 }
 
 /// A machine's network: one NIC behind this node's egress gateway, which
@@ -266,6 +274,8 @@ fn describe(machine: &Stored) -> Value {
         "startedAt": started,
         "createdAt": machine.created_ms,
         "network": machine.network,
+        "boot": if machine.image.is_some() { "firmware" } else { "kernel" },
+        "image": machine.image,
     })
 }
 
@@ -417,6 +427,9 @@ async fn boot(state: &Arc<AppState>, machine: &Stored) -> Result<(), String> {
         return Ok(());
     }
     let slot = reserve(state, None).await?;
+    if machine.image.is_some() {
+        return boot_firmware(state, machine, slot).await;
+    }
     let cid = {
         let mut next = state.next_cid.lock();
         let cid = *next;
@@ -485,6 +498,7 @@ async fn boot(state: &Arc<AppState>, machine: &Stored) -> Result<(), String> {
                 _slot: slot,
                 started_ms: now_ms(),
                 network,
+                agent: true,
             },
         )
     });
@@ -524,19 +538,121 @@ async fn configure_network(vm: &AgentVM, ca: Option<&str>) -> Result<(), String>
     Ok(())
 }
 
-/// Stop `id`'s VM, its filesystems synced first. The caller holds [`OPS`].
+/// Boot a machine made from a disk image: firmware, entered by PVH, finds the
+/// disk on the PCI bus and starts whatever bootloader its EFI partition
+/// holds. The caller holds [`OPS`].
+///
+/// Nothing here waits for the guest. A stock image has no agent to answer,
+/// so the machine is running once its vCPU is; its console says how far the
+/// guest got.
+async fn boot_firmware(state: &Arc<AppState>, machine: &Stored, slot: Slot) -> Result<(), String> {
+    let firmware = state
+        .opts
+        .firmware
+        .as_deref()
+        .ok_or("this node has no --firmware to boot an image with")?;
+    let image = dir_of(state, &machine.id).join("root.img");
+    let vm = AgentVM::builder()
+        .name(machine.id.clone())
+        .cpu_cores(1)
+        .memory_mb(machine.memory_mb)
+        .boot(hv2_core::BootSource::pvh(firmware))
+        .build()
+        .await
+        .map_err(|e| format!("building the VM: {e}"))?;
+    vm.vm()
+        .attach_block_pci(&image, false, &machine.id)
+        .await
+        .map_err(|e| format!("attaching the disk: {e}"))?;
+    let vm = Arc::new(vm);
+    if let Err(e) = vm.launch().await {
+        let _ = vm.stop().await;
+        return Err(format!("launching: {e}"));
+    }
+    live(|l| {
+        l.insert(
+            machine.id.clone(),
+            Live {
+                vm,
+                _slot: slot,
+                started_ms: now_ms(),
+                network: None,
+                agent: false,
+            },
+        )
+    });
+    tracing::info!("machine {} is running from firmware", machine.name);
+    Ok(())
+}
+
+/// Copy the image `name` from the node's image directory to `root`, grown to
+/// `size_gib` when that is larger. Returns the disk's size in GiB, rounded up.
+///
+/// Growing the file does not grow the partitions in it; an image that
+/// resizes itself at first boot (as cloud images do) uses the space.
+fn copy_image(source: &FsPath, root: &FsPath, size_gib: Option<u64>) -> Result<u64, String> {
+    const GIB: u64 = 1 << 30;
+    let bytes = std::fs::copy(source, root).map_err(|e| format!("copying the image: {e}"))?;
+    let wanted = size_gib.map_or(bytes, |gib| gib * GIB);
+    if wanted < bytes {
+        return Err(format!(
+            "diskGiB is smaller than the image ({} MiB)",
+            bytes.div_ceil(1 << 20)
+        ));
+    }
+    if wanted > bytes {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(root)
+            .and_then(|file| file.set_len(wanted))
+            .map_err(|e| format!("growing the disk: {e}"))?;
+    }
+    Ok(wanted.div_ceil(GIB))
+}
+
+/// The image `name` in the node's image directory, if it is a plain file name
+/// of a file that is there.
+fn image_path(state: &AppState, name: &str) -> Result<PathBuf, String> {
+    let dir = state
+        .opts
+        .image_dir
+        .as_deref()
+        .ok_or("this node has no --image-dir to create machines from")?;
+    let plain = !name.is_empty()
+        && name.len() <= 255
+        && !name.starts_with('.')
+        && name
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.'));
+    if !plain {
+        return Err(format!(
+            "image {name:?}: a file name of letters, digits, -, _ and ."
+        ));
+    }
+    let path = PathBuf::from(dir).join(name);
+    if path.is_file() {
+        Ok(path)
+    } else {
+        Err(format!("no image {name}"))
+    }
+}
+
+/// Stop `id`'s VM, its filesystems synced first when its guest has an agent
+/// to ask. The caller holds [`OPS`].
 async fn halt(id: &str) {
     let Some(running) = live(|l| l.remove(id)) else {
         return;
     };
-    let _ = running
-        .vm
-        .exec_in_guest(
-            "/bin/busybox",
-            &["sync".to_string()],
-            Duration::from_secs(15),
-        )
-        .await;
+    if running.agent {
+        let _ = running
+            .vm
+            .exec_in_guest(
+                "/bin/busybox",
+                &["sync".to_string()],
+                Duration::from_secs(15),
+            )
+            .await;
+    }
     if let Err(e) = running.vm.stop().await {
         tracing::warn!("stopping machine {id}: {e}");
     }
@@ -648,6 +764,8 @@ pub(crate) struct NewMachine {
     restart: Option<RestartPolicy>,
     start: Option<bool>,
     network: Option<MachineNetwork>,
+    /// A raw disk image in the node's image directory to boot by firmware.
+    image: Option<String>,
 }
 
 /// `POST /machines`.
@@ -669,10 +787,47 @@ pub(crate) async fn create(
             ),
         );
     }
-    let template = req.template.unwrap_or_else(|| "base".into());
-    let Some(initrd) = state.initrds.read().get(&template).cloned() else {
-        return api_error(StatusCode::NOT_FOUND, format!("no template {template}"));
+    // From a disk image, booted by firmware; or from a template, on the
+    // node's kernel.
+    let source = match &req.image {
+        Some(image) => {
+            if req.template.is_some() {
+                return api_error(
+                    StatusCode::BAD_REQUEST,
+                    "give image or templateID, not both",
+                );
+            }
+            if req.network.is_some() {
+                return api_error(
+                    StatusCode::BAD_REQUEST,
+                    "a machine booted from an image has no network device yet",
+                );
+            }
+            if state.opts.firmware.is_none() {
+                return api_error(
+                    StatusCode::BAD_REQUEST,
+                    "this node has no --firmware to boot an image with",
+                );
+            }
+            match image_path(&state, image) {
+                Ok(path) => path,
+                Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+            }
+        }
+        None => {
+            let template = req.template.clone().unwrap_or_else(|| "base".into());
+            match state.initrds.read().get(&template).cloned() {
+                Some(initrd) => PathBuf::from(initrd),
+                None => return api_error(StatusCode::NOT_FOUND, format!("no template {template}")),
+            }
+        }
     };
+    let template = match &req.image {
+        Some(_) => String::new(),
+        None => req.template.clone().unwrap_or_else(|| "base".into()),
+    };
+    let from_image = req.image.is_some();
+    let asked_gib = req.disk_gib;
     let disk_gib = req.disk_gib.unwrap_or(8);
     if !(1..=2048).contains(&disk_gib) {
         return api_error(StatusCode::BAD_REQUEST, "diskGiB is 1 to 2048");
@@ -684,12 +839,18 @@ pub(crate) async fn create(
         }
     }
     let node = Sizes::of(&state.opts);
-    let machine = Stored {
+    let mut machine = Stored {
         id: machine_id(team.as_ref(), &req.name),
         name: req.name,
         team,
         template,
-        cpus: req.cpus.unwrap_or(node.cpus).clamp(1, 64),
+        // A firmware-booted guest is given no ACPI tables yet, so it would
+        // find one processor however many it had.
+        cpus: if from_image {
+            1
+        } else {
+            req.cpus.unwrap_or(node.cpus).clamp(1, 64)
+        },
         memory_mb: req
             .memory_mb
             .unwrap_or(node.memory_mb)
@@ -700,6 +861,7 @@ pub(crate) async fn create(
         desired: Desired::Stopped,
         created_ms: now_ms(),
         network: req.network,
+        image: req.image,
     };
     let dir = dir_of(&state, &machine.id);
     if let Err(e) = std::fs::create_dir_all(root(&state)) {
@@ -716,12 +878,20 @@ pub(crate) async fn create(
         Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
     let image = dir.join("root.img");
-    let initrd = PathBuf::from(initrd);
-    let built = tokio::task::spawn_blocking(move || build_root(&initrd, &image, disk_gib))
-        .await
-        .map_err(|e| e.to_string())
-        .and_then(|r| r)
-        .and_then(|()| save(&state, &machine));
+    let built = tokio::task::spawn_blocking(move || {
+        if from_image {
+            copy_image(&source, &image, asked_gib)
+        } else {
+            build_root(&source, &image, disk_gib).map(|()| disk_gib)
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())
+    .and_then(|r| r)
+    .and_then(|gib| {
+        machine.disk_gib = gib;
+        save(&state, &machine)
+    });
     if let Err(e) = built {
         let _ = std::fs::remove_dir_all(&dir);
         return api_error(
@@ -851,8 +1021,19 @@ pub(crate) struct ExecRequest {
 // The error is the reply, returned by the handler at once.
 #[allow(clippy::result_large_err)]
 fn running_vm(state: &AppState, headers: &HeaderMap, name: &str) -> Result<Arc<AgentVM>, Response> {
+    running(state, headers, name).map(|(vm, _)| vm)
+}
+
+/// A running machine's VM, and whether its guest runs the agent.
+// The error is the reply, returned by the handler at once.
+#[allow(clippy::result_large_err)]
+fn running(
+    state: &AppState,
+    headers: &HeaderMap,
+    name: &str,
+) -> Result<(Arc<AgentVM>, bool), Response> {
     let machine = named(state, headers, name)?;
-    live(|l| l.get(&machine.id).map(|m| Arc::clone(&m.vm))).ok_or_else(|| {
+    live(|l| l.get(&machine.id).map(|m| (Arc::clone(&m.vm), m.agent))).ok_or_else(|| {
         api_error(
             StatusCode::CONFLICT,
             format!("machine {name} is not running"),
@@ -867,8 +1048,16 @@ pub(crate) async fn exec(
     Path(name): Path<String>,
     Json(req): Json<ExecRequest>,
 ) -> Response {
-    let vm = match running_vm(&state, &headers, &name) {
-        Ok(vm) => vm,
+    let vm = match running(&state, &headers, &name) {
+        Ok((vm, true)) => vm,
+        Ok((_, false)) => {
+            return api_error(
+                StatusCode::CONFLICT,
+                format!(
+                "machine {name} was booted from an image and runs no guest agent; use its console"
+            ),
+            )
+        }
         Err(response) => return response,
     };
     let timeout = Duration::from_secs(req.timeout_secs.unwrap_or(30).clamp(1, 3600));
@@ -912,15 +1101,58 @@ pub(crate) async fn network_decisions(
     }
 }
 
-/// `GET /machines/{name}/console`: the end of its serial console.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ConsoleQuery {
+    /// Return this many of the console's last bytes, as the guest wrote them.
+    tail: Option<usize>,
+}
+
+/// `GET /machines/{name}/console`: the end of its serial console. With
+/// `?tail=N`, its last N bytes exactly as written (up to 1 MiB, which is all
+/// the console keeps); without, a
+/// one-line summary with what its vCPUs are doing.
 pub(crate) async fn console(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Path(name): Path<String>,
+    axum::extract::Query(query): axum::extract::Query<ConsoleQuery>,
 ) -> Response {
-    match running_vm(&state, &headers, &name) {
-        Ok(vm) => super::guest_report(&vm).await.into_response(),
-        Err(response) => response,
+    let vm = match running_vm(&state, &headers, &name) {
+        Ok(vm) => vm,
+        Err(response) => return response,
+    };
+    let Some(tail) = query.tail else {
+        return super::guest_report(&vm).await.into_response();
+    };
+    let output = vm.console_output().await.unwrap_or_default();
+    let mut start = output.len().saturating_sub(tail.min(1 << 20));
+    while !output.is_char_boundary(start) {
+        start += 1;
+    }
+    output[start..].to_string().into_response()
+}
+
+/// `POST /machines/{name}/console`: type the request body at its serial
+/// console, as a terminal would send it. Up to 4 KiB a request.
+pub(crate) async fn console_input(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(name): Path<String>,
+    body: axum::body::Bytes,
+) -> Response {
+    let vm = match running_vm(&state, &headers, &name) {
+        Ok(vm) => vm,
+        Err(response) => return response,
+    };
+    if body.is_empty() || body.len() > 4096 {
+        return api_error(StatusCode::BAD_REQUEST, "console input is 1 to 4096 bytes");
+    }
+    let Some(serial) = vm.vm().devices().find_io_device(0x3F8).await else {
+        return api_error(StatusCode::CONFLICT, "this machine has no serial console");
+    };
+    match serial.console_input(&body).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => api_error(StatusCode::BAD_GATEWAY, format!("console input: {e}")),
     }
 }
 
@@ -988,6 +1220,42 @@ mod tests {
         let network = machine.network.unwrap();
         assert_eq!(network.allow_out, ["10.0.0.0/8"]);
         assert!(network.deny_out.is_empty() && network.allow_internet_access.is_none());
+    }
+
+    /// An image becomes a root disk of its own size, or a larger one when
+    /// asked; never a smaller one, which would cut the image short.
+    #[test]
+    fn an_image_is_copied_whole_and_only_ever_grown() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("image.raw");
+        std::fs::write(&source, vec![7u8; 3 << 20]).unwrap();
+
+        let same = dir.path().join("same.img");
+        assert_eq!(copy_image(&source, &same, None).unwrap(), 1);
+        assert_eq!(std::fs::metadata(&same).unwrap().len(), 3 << 20);
+
+        let grown = dir.path().join("grown.img");
+        assert_eq!(copy_image(&source, &grown, Some(2)).unwrap(), 2);
+        assert_eq!(std::fs::metadata(&grown).unwrap().len(), 2 << 30);
+        let head = std::fs::read(&grown).unwrap();
+        assert!(head[..3 << 20].iter().all(|b| *b == 7));
+        assert!(head[3 << 20..(3 << 20) + 4096].iter().all(|b| *b == 0));
+
+        let big = dir.path().join("big.raw");
+        std::fs::File::create(&big)
+            .unwrap()
+            .set_len((1 << 30) + 1)
+            .unwrap();
+        let error = copy_image(&big, &dir.path().join("cut.img"), Some(1)).unwrap_err();
+        assert!(error.contains("smaller than the image"), "{error}");
+
+        // A machine written before images still loads, booting the kernel.
+        let old = r#"{"machineID":"vm-a","name":"a","templateID":"base","cpuCount":1,
+            "memoryMB":512,"diskGiB":1,"autostart":true,"restartPolicy":"always",
+            "desired":"running","createdAt":1}"#;
+        let machine: Stored = serde_json::from_str(old).unwrap();
+        assert!(machine.image.is_none());
+        assert_eq!(describe(&machine)["boot"], "kernel");
     }
 
     #[test]
