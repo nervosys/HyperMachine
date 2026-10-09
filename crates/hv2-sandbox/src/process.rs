@@ -104,6 +104,34 @@ impl Sandbox for ProcessSandbox {
                 )));
             }
         }
+        let mounted: &[std::path::PathBuf] = match &spec.filesystem {
+            FilesystemPolicy::Isolated { read_only, .. } => read_only,
+            FilesystemPolicy::Host => &[],
+        };
+        for denied in &spec.grants.denied {
+            if !denied.is_absolute() || !denied.exists() {
+                return Err(SandboxError::InvalidSpec(format!(
+                    "denied path {} must be absolute and exist",
+                    denied.display()
+                )));
+            }
+            // A denial covers everything under it. Which of the two a caller
+            // meant by naming both is not something to guess.
+            let granted = spec
+                .grants
+                .read_only
+                .iter()
+                .chain(&spec.grants.read_write)
+                .chain(mounted)
+                .find(|path| path.starts_with(denied));
+            if let Some(path) = granted {
+                return Err(SandboxError::InvalidSpec(format!(
+                    "granted path {} is under denied path {}, which closes everything under it",
+                    path.display(),
+                    denied.display()
+                )));
+            }
+        }
         // A root of the caller's choosing holds what the caller mounts in it.
         // A read-only grant is such a mount. A read-write one is too where
         // the backend can mount one writable, which is Linux; elsewhere it
@@ -129,6 +157,7 @@ impl Sandbox for ProcessSandbox {
                     grants: crate::PathGrants {
                         read_only: Vec::new(),
                         read_write: spec.grants.read_write.clone(),
+                        denied: spec.grants.denied.clone(),
                     },
                     ..spec.clone()
                 };
@@ -461,6 +490,7 @@ mod tests {
         let grants = |read_only: Vec<std::path::PathBuf>, read_write| crate::PathGrants {
             read_only,
             read_write,
+            denied: Vec::new(),
         };
         for bad in [
             std::path::PathBuf::from("relative"),
@@ -491,6 +521,66 @@ mod tests {
                 "{refused:?}"
             );
         }
+    }
+
+    /// A denied path that cannot be honoured refuses the run, on every
+    /// platform and before anything starts: one that is not absolute or not
+    /// there, and one with a granted path under it.
+    #[test]
+    fn a_denial_that_cannot_be_honoured_refuses_the_run() {
+        let here = std::env::temp_dir();
+        let run = |grants: crate::PathGrants| {
+            ProcessSandbox::new().run(
+                &SandboxCommand::new("x"),
+                &SandboxSpec {
+                    grants,
+                    best_effort: true,
+                    ..SandboxSpec::unconfined()
+                },
+            )
+        };
+        for bad in [
+            std::path::PathBuf::from("relative"),
+            here.join("hv2-not-there"),
+        ] {
+            let refused = run(crate::PathGrants {
+                denied: vec![bad],
+                ..crate::PathGrants::default()
+            });
+            assert!(
+                matches!(&refused, Err(SandboxError::InvalidSpec(why)) if why.contains("denied path")),
+                "{refused:?}"
+            );
+        }
+        // The same path both ways, and a grant beneath a denial.
+        let parent = here.parent().expect("the temporary directory has a parent");
+        for denied in [here.clone(), parent.to_path_buf()] {
+            let refused = run(crate::PathGrants {
+                read_only: vec![here.clone()],
+                read_write: Vec::new(),
+                denied: vec![denied],
+            });
+            assert!(
+                matches!(&refused, Err(SandboxError::InvalidSpec(why)) if why.contains("is under denied path")),
+                "{refused:?}"
+            );
+        }
+
+        // Asking for one is asking for the control that enforces it, and
+        // giving that control up gives the denial up where it can be seen.
+        let spec = SandboxSpec {
+            grants: crate::PathGrants {
+                denied: vec![here],
+                ..crate::PathGrants::default()
+            },
+            ..SandboxSpec::unconfined()
+        };
+        assert_eq!(spec.required(), vec![Control::PathDenial]);
+        assert!(spec
+            .without_controls(&[Control::PathDenial])
+            .grants
+            .denied
+            .is_empty());
     }
 
     /// Output reaches the sink while the workload is still running -- the
@@ -1267,6 +1357,7 @@ mod tests {
             grants: crate::PathGrants {
                 read_only,
                 read_write: Vec::new(),
+                denied: Vec::new(),
             },
             confine_paths: true,
             network: NetworkPolicy::Host,
@@ -1331,6 +1422,124 @@ mod tests {
         }
     }
 
+    /// A denied path is closed on the host's own filesystem, with nothing
+    /// else taken away: the directory cannot be entered, the file reads as
+    /// empty, a write to it goes nowhere, and what is beside them is as it
+    /// was.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_denied_path_is_closed_on_the_hosts_filesystem() {
+        let sandbox = ProcessSandbox::new();
+        if !sandbox.controls().enforces(Control::PathDenial) {
+            eprintln!(
+                "skipping: {}",
+                sandbox
+                    .controls()
+                    .reason(Control::PathDenial)
+                    .unwrap_or("path denial unavailable")
+            );
+            return;
+        }
+
+        let scratch = ScratchRoot::new("deny-host");
+        let secrets = scratch.base.join("secrets");
+        std::fs::create_dir_all(&secrets).expect("a directory to deny");
+        std::fs::write(secrets.join("key"), b"private\n").expect("a file under it");
+        let token = scratch.base.join("token");
+        std::fs::write(&token, b"private\n").expect("a file to deny");
+
+        let spec = SandboxSpec {
+            grants: crate::PathGrants {
+                denied: vec![secrets.clone(), token.clone()],
+                ..crate::PathGrants::default()
+            },
+            network: NetworkPolicy::Host,
+            wall_clock: Some(Duration::from_secs(20)),
+            ..SandboxSpec::default()
+        };
+        let script = format!(
+            "if cat '{secrets}/key'; then echo READ; else echo CLOSED; fi; \
+             if ls '{secrets}'; then echo LISTED; else echo CLOSED; fi; \
+             echo \"[$(cat '{token}')]\"; \
+             echo overwritten > '{token}'; \
+             cat '{outside}'",
+            secrets = secrets.display(),
+            token = token.display(),
+            outside = scratch.outside().display(),
+        );
+        assert_eq!(
+            confined_shell(&sandbox, &script, &spec),
+            "CLOSED\nCLOSED\n[]\nhost-only",
+            "the denied directory and file should be closed and their neighbour open"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&token).expect("the host's file"),
+            "private\n",
+            "a write to a denied file reached the host"
+        );
+        assert_eq!(
+            std::fs::read_to_string(secrets.join("key")).expect("the host's file"),
+            "private\n"
+        );
+    }
+
+    /// A denied path under a grant is closed inside a workload confined to
+    /// its grants, and the rest of the grant is not.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_denied_path_is_carved_out_of_a_grant() {
+        let sandbox = ProcessSandbox::new();
+        if !sandbox.controls().enforces(Control::PathDenial) {
+            eprintln!(
+                "skipping: {}",
+                sandbox
+                    .controls()
+                    .reason(Control::PathDenial)
+                    .unwrap_or("path denial unavailable")
+            );
+            return;
+        }
+
+        let scratch = ScratchRoot::new("deny-grant");
+        let work = scratch.root();
+        std::fs::create_dir_all(work.join("private")).expect("a directory to deny");
+        std::fs::write(work.join("private/key"), b"private\n").expect("a file under it");
+        std::fs::write(work.join("notes"), b"open\n").expect("a file beside it");
+        let mut read_only: Vec<std::path::PathBuf> = ["/bin", "/usr", "/lib", "/lib64", "/sbin"]
+            .iter()
+            .map(std::path::PathBuf::from)
+            .filter(|path| path.exists())
+            .collect();
+        read_only.sort();
+
+        let spec = SandboxSpec {
+            grants: crate::PathGrants {
+                read_only,
+                read_write: vec![work.clone()],
+                // The second is not under any grant, so is closed already and
+                // must not stop the run.
+                denied: vec![work.join("private"), scratch.outside()],
+            },
+            confine_paths: true,
+            network: NetworkPolicy::Host,
+            wall_clock: Some(Duration::from_secs(20)),
+            ..SandboxSpec::default()
+        };
+        let script = format!(
+            "cat '{work}/notes'; \
+             if cat '{work}/private/key'; then echo READ; else echo CLOSED; fi; \
+             if echo x > '{work}/private/made'; then echo WROTE; else echo CLOSED; fi; \
+             if echo y > '{work}/made'; then echo WROTE; else echo CLOSED; fi",
+            work = work.display(),
+        );
+        assert_eq!(
+            confined_shell(&sandbox, &script, &spec),
+            "open\nCLOSED\nCLOSED\nWROTE"
+        );
+        assert!(!work.join("private/made").exists());
+        assert!(work.join("made").exists());
+    }
+
     /// A read-write grant inside a root of the caller's choosing is mounted
     /// there writable, at the path it has on the host.
     #[cfg(target_os = "linux")]
@@ -1344,19 +1553,31 @@ mod tests {
 
         let scratch = ScratchRoot::new("rw-grant");
         let shared = scratch.base.join("shared");
-        std::fs::create_dir_all(&shared).expect("a directory to share");
+        std::fs::create_dir_all(shared.join("private")).expect("a directory to share");
+        std::fs::write(
+            shared.join("private/key"),
+            b"private
+",
+        )
+        .expect("a file to deny");
+        // A denied path under it is closed here as anywhere else.
         let spec = SandboxSpec {
             grants: crate::PathGrants {
                 read_only: Vec::new(),
                 read_write: vec![shared.clone()],
+                denied: vec![shared.join("private")],
             },
             ..scratch.spec()
         };
         let script = format!(
-            "if echo z > '{}/made'; then echo WROTE; else echo REFUSED; fi",
+            "if echo z > '{0}/made'; then echo WROTE; else echo REFUSED; fi;              if cat '{0}/private/key'; then echo READ; else echo CLOSED; fi",
             shared.display()
         );
-        assert_eq!(confined_shell(&sandbox, &script, &spec), "WROTE");
+        assert_eq!(
+            confined_shell(&sandbox, &script, &spec),
+            "WROTE
+CLOSED"
+        );
         assert_eq!(
             std::fs::read_to_string(shared.join("made")).expect("the file it made"),
             "z\n"
@@ -1403,6 +1624,7 @@ mod tests {
             grants: crate::PathGrants {
                 read_only,
                 read_write: vec![writable.clone()],
+                denied: Vec::new(),
             },
             confine_paths: true,
             network: NetworkPolicy::Host,
@@ -1438,16 +1660,6 @@ mod tests {
             "y\n",
             "a file made in a read-write grant should be on the host"
         );
-
-        // The root made for the run is gone. Its name carries this process's
-        // ID, and no other test here asks for confinement.
-        let prefix = format!("hv2-sandbox-root-{}-", std::process::id());
-        let left: Vec<_> = std::fs::read_dir(std::env::temp_dir())
-            .expect("list the temporary directory")
-            .flatten()
-            .filter(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
-            .collect();
-        assert!(left.is_empty(), "{left:?}");
 
         // Without the flag the same grants open and close nothing: the host's
         // filesystem is the workload's.

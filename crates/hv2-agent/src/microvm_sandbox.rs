@@ -101,6 +101,11 @@ impl MicroVmSandbox {
                 "a guest has its own filesystem and shares no host path; the grants a \
                  process sandbox takes name nothing inside it",
             )
+            .without(
+                Control::PathDenial,
+                "a guest has its own filesystem and shares no host path, so there is none \
+                 to close to it",
+            )
             // Both are the guest agent's, which kills a program that overruns.
             .with(Control::CpuTime)
             .with(Control::WallClock);
@@ -356,10 +361,10 @@ mod tests {
             }
             // Confining a workload to granted host paths is about the host's
             // filesystem, and a guest has none of it to be confined to.
-            if control == Control::PathConfinement {
+            if control == Control::PathConfinement || control == Control::PathDenial {
                 assert!(
                     !controls.enforces(control),
-                    "a guest shares no host path, so there is nothing to grant or confine"
+                    "a guest shares no host path, so there is nothing to grant, confine or close"
                 );
                 continue;
             }

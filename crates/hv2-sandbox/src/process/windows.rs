@@ -82,6 +82,11 @@ pub(super) fn probe() -> Controls {
     };
     let mut controls = controls
         .without(
+            Control::PathDenial,
+            "an AppContainer is not refused by an access-denied entry for its own SID, so a \
+             path under a grant cannot be closed to it; grant the paths beside it instead",
+        )
+        .without(
             Control::FilesystemIsolation,
             "a job object does not change the filesystem view; use the microVM sandbox",
         )
@@ -611,6 +616,7 @@ mod tests {
             grants: crate::PathGrants {
                 read_only: vec![readable.clone()],
                 read_write: vec![writable.clone()],
+                denied: Vec::new(),
             },
             ..no_network()
         };
@@ -670,6 +676,7 @@ mod tests {
                 grants: crate::PathGrants {
                     read_only: vec![bad],
                     read_write: Vec::new(),
+                    denied: Vec::new(),
                 },
                 ..no_network()
             };
@@ -680,6 +687,37 @@ mod tests {
             );
         }
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// A denied path is refused, with the reason, and not run without it.
+    /// An access-denied entry for the container's SID was tried: the file
+    /// under it was read all the same.
+    #[test]
+    fn a_denied_path_refuses_the_run() {
+        let sandbox = ProcessSandbox::new();
+        assert!(!sandbox.controls().enforces(Control::PathDenial));
+        let spec = SandboxSpec {
+            grants: crate::PathGrants {
+                denied: vec![std::env::temp_dir()],
+                ..crate::PathGrants::default()
+            },
+            ..SandboxSpec::unconfined()
+        };
+        let command = system("cmd.exe").args(["/c", "echo ran"]);
+        let refused = sandbox.run(&command, &spec);
+        assert!(
+            matches!(
+                &refused,
+                Err(SandboxError::Unsupported { controls })
+                    if controls.len() == 1
+                        && controls[0].starts_with("path denial")
+                        && controls[0].contains("AppContainer")
+            ),
+            "{refused:?}"
+        );
+        // Best effort runs it and says what was dropped.
+        let ran = sandbox.run(&command, &spec.best_effort()).expect("run");
+        assert_eq!(ran.unenforced, vec![Control::PathDenial], "{ran:?}");
     }
 
     /// Confinement asked for by itself: the network stays, and the user's
@@ -703,6 +741,7 @@ mod tests {
             grants: crate::PathGrants {
                 read_only: vec![granted.clone()],
                 read_write: Vec::new(),
+                denied: Vec::new(),
             },
             confine_paths: true,
             wall_clock: Some(Duration::from_secs(30)),

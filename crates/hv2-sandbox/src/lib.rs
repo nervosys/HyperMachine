@@ -95,11 +95,19 @@ pub enum Control {
     /// visible. On Windows it is an AppContainer, which also reads what
     /// Windows lets every packaged application read: the system directories.
     PathConfinement,
+    /// A path the caller names is closed to the workload, whatever else
+    /// would let it in.
+    ///
+    /// Linux covers the path with a mount of its own. Windows has no such
+    /// control here: an AppContainer is not refused by an access-denied
+    /// entry for its own SID, which was tried, so a path under a grant
+    /// cannot be closed to it by one.
+    PathDenial,
 }
 
 impl Control {
     /// Every control, for a backend that wants to describe a full set.
-    pub const ALL: [Control; 9] = [
+    pub const ALL: [Control; 10] = [
         Control::Memory,
         Control::ProcessCount,
         Control::CpuTime,
@@ -109,6 +117,7 @@ impl Control {
         Control::ProcessIsolation,
         Control::NoNewPrivileges,
         Control::PathConfinement,
+        Control::PathDenial,
     ];
 }
 
@@ -124,6 +133,7 @@ impl fmt::Display for Control {
             Self::ProcessIsolation => "process isolation",
             Self::NoNewPrivileges => "no-new-privileges",
             Self::PathConfinement => "path confinement",
+            Self::PathDenial => "path denial",
         };
         f.write_str(name)
     }
@@ -246,6 +256,13 @@ pub struct PathGrants {
     pub read_only: Vec<PathBuf>,
     /// Readable and writable, with everything under them.
     pub read_write: Vec<PathBuf>,
+    /// Closed to the workload, with everything under them, whatever else
+    /// would let it in: a grant above them, or the host's filesystem.
+    /// Requires [`Control::PathDenial`].
+    ///
+    /// A denial covers everything under it, so a granted path under a denied
+    /// one refuses the run rather than picking a winner.
+    pub denied: Vec<PathBuf>,
 }
 
 impl PathGrants {
@@ -360,6 +377,9 @@ impl SandboxSpec {
         if self.confine_paths && matches!(self.filesystem, FilesystemPolicy::Host) {
             wanted.push(Control::PathConfinement);
         }
+        if !self.grants.denied.is_empty() {
+            wanted.push(Control::PathDenial);
+        }
         wanted.sort();
         wanted
     }
@@ -393,6 +413,7 @@ impl SandboxSpec {
                 Control::ProcessIsolation => spec.isolate_processes = false,
                 Control::NoNewPrivileges => spec.no_new_privileges = false,
                 Control::PathConfinement => spec.confine_paths = false,
+                Control::PathDenial => spec.grants.denied.clear(),
             }
         }
         spec
