@@ -65,6 +65,7 @@ pub(super) fn probe() -> Controls {
             Control::NoNewPrivileges,
             unsupported("a no-new-privileges bit"),
         )
+        .without(Control::PathConfinement, unsupported("path confinement"))
 }
 
 /// Run `command` under `spec`.

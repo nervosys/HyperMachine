@@ -94,6 +94,13 @@ impl MicroVmSandbox {
                  to bound how many processes it starts; the guest kernel's own limits are all \
                  that apply",
             )
+            // A guest shares no path with the host, so there is none to
+            // grant it and none to confine it to.
+            .without(
+                Control::PathConfinement,
+                "a guest has its own filesystem and shares no host path; the grants a \
+                 process sandbox takes name nothing inside it",
+            )
             // Both are the guest agent's, which kills a program that overruns.
             .with(Control::CpuTime)
             .with(Control::WallClock);

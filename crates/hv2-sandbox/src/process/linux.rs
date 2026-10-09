@@ -112,12 +112,18 @@ pub(super) fn probe() -> Controls {
         .with(Control::CpuTime)
         .with(Control::WallClock);
 
+    // Path confinement is the same mechanism with a root made for the run,
+    // so it is there exactly when filesystem isolation is.
     controls = match can_isolate_filesystem() {
-        Ok(()) => controls.with(Control::FilesystemIsolation),
-        Err(e) => controls.without(
-            Control::FilesystemIsolation,
-            format!("the filesystem could not be isolated: {e}{restricted}"),
-        ),
+        Ok(()) => controls
+            .with(Control::FilesystemIsolation)
+            .with(Control::PathConfinement),
+        Err(e) => {
+            let why = format!("the filesystem could not be isolated: {e}{restricted}");
+            controls
+                .without(Control::FilesystemIsolation, why.clone())
+                .without(Control::PathConfinement, why)
+        }
     };
 
     controls = match can_isolate_network() {
@@ -372,13 +378,50 @@ fn can_isolate_network() -> std::io::Result<()> {
 struct BindMount {
     source: CString,
     target: CString,
+    /// Left writable, where the others are made read-only.
+    writable: bool,
+}
+
+/// An empty directory made to be one run's root, and removed after it.
+///
+/// What a workload confined to its granted paths is rooted in. The mounts
+/// that fill it exist only in the workload's own mount namespace, so on the
+/// host it holds nothing but the empty mount points, and removing it removes
+/// only those.
+struct PrivateRoot(PathBuf);
+
+impl PrivateRoot {
+    fn create() -> std::io::Result<Self> {
+        use std::os::unix::fs::DirBuilderExt;
+        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let path = std::env::temp_dir().join(format!(
+            "hv2-sandbox-root-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        // Not left over from a process that had this ID before.
+        match std::fs::remove_dir_all(&path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
+        }
+        std::fs::DirBuilder::new().mode(0o700).create(&path)?;
+        Ok(Self(path))
+    }
+}
+
+impl Drop for PrivateRoot {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 /// Everything the child needs to build and enter the new root.
 struct FilesystemPlan {
     /// The directory that becomes `/`, as a host path.
     new_root: CString,
-    /// Read-only binds to place inside it, in the order the caller gave.
+    /// Binds to place inside it, in the order the caller gave: the
+    /// read-only ones, then the writable ones.
     binds: Vec<BindMount>,
     /// Where to `chdir` once inside, interpreted in the *new* root.
     ///
@@ -500,7 +543,9 @@ fn pivot_into(plan: &FilesystemPlan) -> std::io::Result<()> {
         // every submount, and a kernel too old to have it (pre-5.12) is
         // reported as unable to isolate the filesystem rather than quietly
         // given the weaker version.
-        set_subtree_read_only(&bind.target)?;
+        if !bind.writable {
+            set_subtree_read_only(&bind.target)?;
+        }
     }
 
     // The new /proc and /sys go in now, inside the new root, and not after the
@@ -583,6 +628,7 @@ fn run_filesystem_probe(root: &Path, outside: &Path, read_only: &Path) -> std::i
         binds: vec![BindMount {
             source: path_to_cstring(read_only)?,
             target: path_to_cstring(&root.join("ro"))?,
+            writable: false,
         }],
         working_dir: None,
         proc_target: None,
@@ -698,6 +744,7 @@ fn filesystem_probe_child(
 fn plan_filesystem(
     root: &Path,
     read_only: &[PathBuf],
+    read_write: &[PathBuf],
     working_dir: Option<&Path>,
     need_proc: bool,
     need_sys: bool,
@@ -718,17 +765,21 @@ fn plan_filesystem(
         )));
     }
 
-    let mut binds = Vec::with_capacity(read_only.len());
-    for source in read_only {
+    let mut binds = Vec::with_capacity(read_only.len() + read_write.len());
+    let mounts = read_only
+        .iter()
+        .map(|path| (path, false))
+        .chain(read_write.iter().map(|path| (path, true)));
+    for (source, writable) in mounts {
         if !source.is_absolute() {
             return Err(invalid(format!(
-                "the read-only path {} must be absolute",
+                "the mounted path {} must be absolute",
                 source.display()
             )));
         }
         let metadata = std::fs::metadata(source).map_err(|e| {
             invalid(format!(
-                "the read-only path {} cannot be mounted: {e}",
+                "the path {} cannot be mounted: {e}",
                 source.display()
             ))
         })?;
@@ -763,6 +814,7 @@ fn plan_filesystem(
         binds.push(BindMount {
             source: cstring_or_invalid(source)?,
             target: cstring_or_invalid(&target)?,
+            writable,
         });
     }
 
@@ -1015,7 +1067,7 @@ pub(super) fn run(
         .map_err(|e| SandboxError::Runtime(format!("cgroup path is not usable: {e}")))?;
 
     let mut clone_flags = 0;
-    if matches!(spec.filesystem, FilesystemPolicy::Isolated { .. }) {
+    if matches!(spec.filesystem, FilesystemPolicy::Isolated { .. }) || spec.confine_paths {
         // A mount namespace of our own, and the user namespace that grants the
         // CAP_SYS_ADMIN inside it that mount and pivot_root require.
         clone_flags |= libc::CLONE_NEWUSER | libc::CLONE_NEWNS;
@@ -1041,11 +1093,32 @@ pub(super) fn run(
     let uid_map = format!("0 {uid} 1\n").into_bytes();
     let gid_map = format!("0 {gid} 1\n").into_bytes();
 
+    // Kept until the workload has ended, then removed.
+    let mut private_root = None;
     let filesystem = match &spec.filesystem {
+        // Confined to its grants: an empty root made for this run, holding
+        // them and nothing else.
+        FilesystemPolicy::Host if spec.confine_paths => {
+            let root = PrivateRoot::create().map_err(|e| SandboxError::ConfinementFailed {
+                control: Control::PathConfinement,
+                source: e,
+            })?;
+            let plan = plan_filesystem(
+                &root.0,
+                &spec.grants.read_only,
+                &spec.grants.read_write,
+                command.working_dir.as_deref(),
+                new_pid_ns,
+                new_net_ns,
+            )?;
+            private_root = Some(root);
+            Some(plan)
+        }
         FilesystemPolicy::Host => None,
         FilesystemPolicy::Isolated { root, read_only } => Some(plan_filesystem(
             root,
             read_only,
+            &spec.grants.read_write,
             command.working_dir.as_deref(),
             new_pid_ns,
             new_net_ns,
@@ -1108,6 +1181,8 @@ pub(super) fn run(
         });
 
     drop(cgroup);
+    // The workload is gone; so is the root that was made for it.
+    drop(private_root);
     output
 }
 

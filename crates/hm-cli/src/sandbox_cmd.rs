@@ -77,9 +77,13 @@ pub struct RunArgs {
     #[arg(long = "ro", value_name = "PATH")]
     pub read_only: Vec<PathBuf>,
     /// A host path the program may read and write, where its containment
-    /// would otherwise hide it. Not available inside `--fs isolated:ROOT`.
+    /// would otherwise hide it. Inside `--fs isolated:ROOT`, Linux only.
     #[arg(long = "rw", value_name = "PATH")]
     pub read_write: Vec<PathBuf>,
+    /// Let the program reach only the `--ro` and `--rw` paths, and nothing
+    /// else of yours.
+    #[arg(long)]
+    pub confine_paths: bool,
     /// Working directory.
     #[arg(long)]
     pub workdir: Option<PathBuf>,
@@ -168,6 +172,7 @@ pub fn spec_of(args: &RunArgs) -> Result<SandboxSpec> {
             },
             read_write: args.read_write.clone(),
         },
+        confine_paths: args.confine_paths,
         filesystem,
         isolate_processes: args.isolate_processes,
         no_new_privileges: args.no_new_privileges,

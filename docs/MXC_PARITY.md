@@ -33,9 +33,9 @@ not as a difference.
 | Versioned request and policy schema | yes, in `schemas/stable` | version 1, with a [JSON Schema](schemas/sandbox-request-v1.schema.json). One version so far, so nothing yet shows how a change is carried |
 | Linux process backend | bubblewrap (default), lxc | own: user, PID, mount, network and IPC namespaces, `pivot_root`, cgroup v2, `no_new_privs`. No external tool |
 | Linux VM backend | microvm, hyperlight | microVM on HyperMachine's own VMM |
-| Windows process backend | process container (default), plus Windows Sandbox, WSL container, microVM, Hyperlight and isolation session, several marked experimental | job object for memory, process count and CPU time; **AppContainer for no-network**. Nothing else |
+| Windows process backend | process container (default), plus Windows Sandbox, WSL container, microVM, Hyperlight and isolation session, several marked experimental | job object for memory, process count and CPU time; AppContainer for no-network and for path confinement. Nothing else |
 | macOS backend | seatbelt | **resource limits only**, and it says so |
-| Filesystem policy | read-only, read-write and denied path lists | Read-only and read-write [path grants](SANDBOXES.md#path-grants). Windows: an AppContainer denies everything else outside the system directories. Linux: a root of the caller's choosing plus read-only mounts; with the host's filesystem a grant is a no-op, since nothing is hidden. **No denied list** |
+| Filesystem policy | read-only, read-write and denied path lists | Read-only and read-write [path grants](SANDBOXES.md#path-grants), and [`confine`](SANDBOXES.md#only-the-granted-paths) to make them the whole list. Linux: an empty root made for the run holds the grants and nothing else. Windows: an AppContainer denies everything else outside the system directories. **No denied list**, so a path under a grant cannot be carved back out |
 | Network policy | outbound controls, proxy support, host filtering on some backends | process backends: none or the host's, nothing between. MicroVM sandboxes have an egress gateway with allow and deny lists |
 | UI policy | clipboard, display and GUI controls | **none** |
 | One-shot run | yes | yes |
@@ -47,15 +47,13 @@ not as a difference.
 
 In rough order of how much they matter for the same use:
 
-1. **Deny-by-default paths on Linux without choosing a root.** mxc's request
-   lists what may be read and written and denies the rest. HyperMachine does
-   that on Windows; on Linux the caller has to supply an isolated root, and
-   read-write paths inside one are not supported.
-2. **macOS.** Resource limits are not containment. mxc uses seatbelt.
-3. **Other languages.** mxc ships .NET and Node SDKs. HyperMachine has a Rust
+1. **macOS.** Resource limits are not containment. mxc uses seatbelt.
+2. **Other languages.** mxc ships .NET and Node SDKs. HyperMachine has a Rust
    library and a JSON request any language can send to `hm sandbox exec`, but
    no package for either.
-4. **Finer network policy for a process.** All or nothing today.
+3. **Finer network policy for a process.** All or nothing today.
+4. **A denied path list.** A request can say "only these paths" but not "this
+   tree except that part of it".
 5. **UI controls, and an audit mode.**
 
 ## Where HyperMachine has something mxc's README does not claim
@@ -76,5 +74,7 @@ Neither of these is a measured win over mxc: mxc was not run.
 | Linux process controls | `crates/hv2-sandbox` tests, run in CI with the capability they need |
 | Windows job-object limits | `crates/hv2-sandbox` tests on Windows |
 | Windows path grants | `process::windows::tests` on the same host: a granted file is readable inside the container and an ungranted one is not, a read-only grant refuses a write, a read-write grant's file is on the host afterwards, and the path's access-control list names no container once the run ends. `hm sandbox run --ro/--rw` was also run by hand |
+| Only the granted paths, Linux | `process::tests::a_workload_confined_to_its_grants_reaches_them_and_nothing_else`, run as root under WSL2: `/etc/passwd` and an ungranted file are absent, a read-only grant refuses a write, a read-write grant's file is on the host afterwards, and the run's root is gone. Not yet seen in CI |
+| Only the granted paths, Windows | `process::windows::tests::a_workload_confined_to_its_grants_cannot_read_the_users_other_files` on a Windows 11 host. `hm sandbox run --confine-paths --net host` was also run by hand: `curl` to the Internet answers 200, a granted file is read, and a file beside it is refused |
 | Windows no-network | `process::windows::tests`, on a Windows 11 host: a request that reaches a loopback listener with the host's network does not reach it from the container, and the listener sees no connection. `hm sandbox run` was also run by hand: `curl` to the Internet fails by default and succeeds with `--net host` |
 | macOS | nothing beyond what the backend reports about itself |

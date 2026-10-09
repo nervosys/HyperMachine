@@ -104,7 +104,7 @@ jobs:
     # made them vacuous here: ubuntu-latest restricts unprivileged user
     # namespaces through AppArmor and gives the runner no writable cgroup, so
     # every namespace and cgroup test "passed" by skipping. This job grants
-    # both, then fails if the probe falls short of all eight controls or if
+    # both, then fails if the probe falls short of all nine controls or if
     # any test still skips.
     # The two searches rustc cannot do on `pub` items, run on every change so a
     # hollow control cannot reach master unread: a state a guard demands that
@@ -203,7 +203,7 @@ jobs:
 
                   cargo run -q -p hv2-sandbox --example what_this_host_enforces | tee report.txt
                   { echo '### hv2-sandbox with every control granted'; echo '```'; cat report.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-                  grep -q '^enforced here (8)' report.txt || { echo "::error::the probe did not report all 8 controls"; exit 1; }
+                  grep -q '^enforced here (9)' report.txt || { echo "::error::the probe did not report all 9 controls"; exit 1; }
 
                   cargo test -p hv2-sandbox -- --nocapture 2>&1 | tee test.log
                   test "${PIPESTATUS[0]}" -eq 0

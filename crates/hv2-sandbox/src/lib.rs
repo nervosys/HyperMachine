@@ -86,11 +86,20 @@ pub enum Control {
     ProcessIsolation,
     /// The workload cannot gain privileges it did not start with.
     NoNewPrivileges,
+    /// The workload reaches the paths it was granted and no others of the
+    /// caller's, without the caller building a root for it.
+    ///
+    /// Weaker than [`Control::FilesystemIsolation`] in one way that differs by
+    /// platform, and so a control of its own. On Linux it is the same
+    /// mechanism with an empty root made for the run, and nothing else is
+    /// visible. On Windows it is an AppContainer, which also reads what
+    /// Windows lets every packaged application read: the system directories.
+    PathConfinement,
 }
 
 impl Control {
     /// Every control, for a backend that wants to describe a full set.
-    pub const ALL: [Control; 8] = [
+    pub const ALL: [Control; 9] = [
         Control::Memory,
         Control::ProcessCount,
         Control::CpuTime,
@@ -99,6 +108,7 @@ impl Control {
         Control::FilesystemIsolation,
         Control::ProcessIsolation,
         Control::NoNewPrivileges,
+        Control::PathConfinement,
     ];
 }
 
@@ -113,6 +123,7 @@ impl fmt::Display for Control {
             Self::FilesystemIsolation => "filesystem isolation",
             Self::ProcessIsolation => "process isolation",
             Self::NoNewPrivileges => "no-new-privileges",
+            Self::PathConfinement => "path confinement",
         };
         f.write_str(name)
     }
@@ -262,6 +273,13 @@ pub struct SandboxSpec {
     pub filesystem: FilesystemPolicy,
     /// Paths the workload must reach whatever its containment hides.
     pub grants: PathGrants,
+    /// Whether [`Self::grants`] is all of the caller's filesystem the
+    /// workload reaches. Requires [`Control::PathConfinement`].
+    ///
+    /// Without this a grant only opens; with it, what is not granted is
+    /// closed. Has no effect on top of [`FilesystemPolicy::Isolated`], whose
+    /// root already decides what is there.
+    pub confine_paths: bool,
     /// Whether processes inside are hidden from the host's process table.
     pub isolate_processes: bool,
     /// Whether the workload is barred from gaining privileges.
@@ -299,6 +317,7 @@ impl SandboxSpec {
             network: NetworkPolicy::Denied,
             filesystem: FilesystemPolicy::Host,
             grants: PathGrants::default(),
+            confine_paths: false,
             isolate_processes: true,
             no_new_privileges: true,
             best_effort: false,
@@ -338,6 +357,9 @@ impl SandboxSpec {
         if self.no_new_privileges {
             wanted.push(Control::NoNewPrivileges);
         }
+        if self.confine_paths && matches!(self.filesystem, FilesystemPolicy::Host) {
+            wanted.push(Control::PathConfinement);
+        }
         wanted.sort();
         wanted
     }
@@ -370,6 +392,7 @@ impl SandboxSpec {
                 Control::FilesystemIsolation => spec.filesystem = FilesystemPolicy::Host,
                 Control::ProcessIsolation => spec.isolate_processes = false,
                 Control::NoNewPrivileges => spec.no_new_privileges = false,
+                Control::PathConfinement => spec.confine_paths = false,
             }
         }
         spec
