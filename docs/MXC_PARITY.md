@@ -28,7 +28,7 @@ not as a difference.
 
 | | mxc | HyperMachine |
 |---|---|---|
-| In-process SDK | Rust, .NET, Node | **Rust only** |
+| In-process SDK | Rust, .NET, Node | Rust in-process. For Node, [a client of the executor](../sdk/node/README.md), not an in-process binding, and not on npm. **No .NET** |
 | Standalone executor | `wxc-exec`, taking a JSON request | `hm sandbox exec`, [one JSON request in and one response out](SANDBOXES.md#one-json-request); `hm sandbox run` for flags and live output |
 | Versioned request and policy schema | yes, in `schemas/stable` | version 1, with a [JSON Schema](schemas/sandbox-request-v1.schema.json). One version so far, so nothing yet shows how a change is carried |
 | Linux process backend | bubblewrap (default), lxc | own: user, PID, mount, network and IPC namespaces, `pivot_root`, cgroup v2, `no_new_privs`. No external tool |
@@ -49,8 +49,10 @@ In rough order of how much they matter for the same use:
 
 1. **macOS.** Resource limits are not containment. mxc uses seatbelt.
 2. **Other languages.** mxc ships .NET and Node SDKs. HyperMachine has a Rust
-   library and a JSON request any language can send to `hm sandbox exec`, but
-   no package for either.
+   library, a JSON request any language can send to `hm sandbox exec`, and a
+   Node package that sends it. That package starts the `hm` binary for each
+   run, is not published to npm, and does not stream. There is no .NET
+   package.
 3. **Finer network policy for a process.** All or nothing today.
 4. **A denied path list on Windows.** Linux has one. On Windows a request can
    say "only these paths" but not "this tree except that part of it": a deny
@@ -79,5 +81,6 @@ Neither of these is a measured win over mxc: mxc was not run.
 | Only the granted paths, Windows | `process::windows::tests::a_workload_confined_to_its_grants_cannot_read_the_users_other_files` on a Windows 11 host. `hm sandbox run --confine-paths --net host` was also run by hand: `curl` to the Internet answers 200, a granted file is read, and a file beside it is refused |
 | Denied paths, Linux | `process::tests::a_denied_path_is_closed_on_the_hosts_filesystem` and `a_denied_path_is_carved_out_of_a_grant`, run as root under WSL2: a denied directory cannot be listed or read into, a denied file reads empty and a write to it leaves the host's file alone, and what is beside them is open. `hm sandbox run --deny` was also run by hand. Not yet seen in CI |
 | Denied paths, Windows | not available. `process::windows::tests::a_denied_path_refuses_the_run`: refused by default, and dropped and reported under best effort. The first implementation, a deny entry for the container's SID, failed its own test: the file was read |
+| Node client | `sdk/node` tests against the real binary: Windows 11 with Node 22 and WSL2 with Node 20, 8 of 8. CI runs them on Linux, Windows and macOS after building `hm`. Not yet seen in CI |
 | Windows no-network | `process::windows::tests`, on a Windows 11 host: a request that reaches a loopback listener with the host's network does not reach it from the container, and the listener sees no connection. `hm sandbox run` was also run by hand: `curl` to the Internet fails by default and succeeds with `--net host` |
 | macOS | nothing beyond what the backend reports about itself |
