@@ -39,8 +39,9 @@ use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Thread32First, Thread32Next, TH32CS_SNAPTHREAD, THREADENTRY32,
 };
 use windows_sys::Win32::System::JobObjects::{
-    AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
-    SetInformationJobObject, TerminateJobObject, JOBOBJECT_BASIC_LIMIT_INFORMATION,
+    AssignProcessToJobObject, CreateJobObjectW, JobObjectBasicUIRestrictions,
+    JobObjectExtendedLimitInformation, SetInformationJobObject, TerminateJobObject,
+    JOBOBJECT_BASIC_LIMIT_INFORMATION, JOBOBJECT_BASIC_UI_RESTRICTIONS,
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_ACTIVE_PROCESS,
     JOB_OBJECT_LIMIT_JOB_MEMORY, JOB_OBJECT_LIMIT_JOB_TIME, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
 };
@@ -105,6 +106,13 @@ pub(super) fn probe() -> Controls {
     // first workload.
     match Job::create() {
         Ok(job) => {
+            controls = match job.restrict_ui() {
+                Ok(()) => controls.with(Control::UiIsolation),
+                Err(e) => controls.without(
+                    Control::UiIsolation,
+                    format!("a job object's user-interface restrictions could not be set: {e}"),
+                ),
+            };
             let limits = JobLimits {
                 memory_bytes: Some(64 * 1024 * 1024),
                 max_processes: Some(8),
@@ -137,6 +145,7 @@ pub(super) fn probe() -> Controls {
                 Control::ProcessCount,
                 Control::CpuTime,
                 Control::WallClock,
+                Control::UiIsolation,
             ] {
                 controls = controls.clone().without(control, reason.clone());
             }
@@ -145,6 +154,11 @@ pub(super) fn probe() -> Controls {
 
     controls
 }
+
+/// Every `JOB_OBJECT_UILIMIT_*` bit: handles, reading and writing the
+/// clipboard, system parameters, display settings, global atoms, desktops,
+/// and exiting Windows.
+const UI_LIMIT_ALL: u32 = 0xFF;
 
 /// Limits a job object can carry.
 struct JobLimits {
@@ -201,6 +215,33 @@ impl Job {
                 JobObjectExtendedLimitInformation,
                 &info as *const _ as *const core::ffi::c_void,
                 std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            )
+        };
+        if ok == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(())
+    }
+
+    /// Keep everything in the job from the desktop it runs on.
+    ///
+    /// Every restriction a job has, together: the clipboard both ways, the
+    /// windows and other user-interface handles of processes outside the
+    /// job, the system's parameters and the display's settings, the global
+    /// atom table, making or switching desktops, and logging off or shutting
+    /// down.
+    fn restrict_ui(&self) -> std::io::Result<()> {
+        let restrictions = JOBOBJECT_BASIC_UI_RESTRICTIONS {
+            UIRestrictionsClass: UI_LIMIT_ALL,
+        };
+        // SAFETY: `restrictions` outlives the call and its size is passed
+        // exactly.
+        let ok: BOOL = unsafe {
+            SetInformationJobObject(
+                self.0,
+                JobObjectBasicUIRestrictions,
+                &restrictions as *const _ as *const core::ffi::c_void,
+                std::mem::size_of::<JOBOBJECT_BASIC_UI_RESTRICTIONS>() as u32,
             )
         };
         if ok == 0 {
@@ -284,6 +325,13 @@ pub(super) fn run(
         control: Control::Memory,
         source: e,
     })?;
+    if spec.isolate_ui {
+        job.restrict_ui()
+            .map_err(|e| SandboxError::ConfinementFailed {
+                control: Control::UiIsolation,
+                source: e,
+            })?;
+    }
 
     if let Some(container) = container {
         return run_contained(command, spec, io, job, container);
@@ -687,6 +735,139 @@ mod tests {
             );
         }
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// Under this variable, [`ui_helper`] is the workload: it reads a system
+    /// parameter and sets it to the value it read, which changes nothing and
+    /// is still a change the job may refuse.
+    const UI_HELPER: &str = "HV2_SANDBOX_UI_HELPER";
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn SystemParametersInfoW(
+            action: u32,
+            param: u32,
+            value: *mut core::ffi::c_void,
+            update: u32,
+        ) -> i32;
+        fn OpenClipboard(owner: *mut core::ffi::c_void) -> i32;
+        fn CloseClipboard() -> i32;
+        fn GetClipboardData(format: u32) -> *mut core::ffi::c_void;
+        fn EmptyClipboard() -> i32;
+    }
+
+    #[test]
+    fn ui_helper() {
+        let Ok(mode) = std::env::var(UI_HELPER) else {
+            return;
+        };
+        const SPI_GETMOUSESPEED: u32 = 0x0070;
+        const SPI_SETMOUSESPEED: u32 = 0x0071;
+        let mut speed: i32 = 0;
+        // SAFETY: the get writes one int through the pointer; the set takes
+        // the value itself in the pointer argument, as documented.
+        let read =
+            unsafe { SystemParametersInfoW(SPI_GETMOUSESPEED, 0, (&raw mut speed).cast(), 0) };
+        assert_ne!(read, 0, "the mouse speed could not be read");
+        let set = unsafe { SystemParametersInfoW(SPI_SETMOUSESPEED, 0, speed as usize as _, 0) };
+        println!("set={}", if set != 0 { "allowed" } else { "refused" });
+
+        if mode == "clipboard" {
+            // SAFETY: the clipboard is opened, asked for text, and closed.
+            // Emptying it is what a write begins with, and is only reached
+            // on a clipboard the caller said may be lost.
+            unsafe {
+                let opened = OpenClipboard(std::ptr::null_mut()) != 0;
+                let text = opened && !GetClipboardData(13).is_null();
+                let emptied = opened && EmptyClipboard() != 0;
+                if opened {
+                    CloseClipboard();
+                }
+                println!("read={}", if text { "allowed" } else { "refused" });
+                println!("write={}", if emptied { "allowed" } else { "refused" });
+            }
+        }
+    }
+
+    /// The same program is allowed to change a system parameter outside the
+    /// restrictions and refused inside them. Where the clipboard may be lost
+    /// -- under CI, never on a desk -- reading and writing it are tried too.
+    #[test]
+    fn a_ui_isolated_workload_cannot_change_the_desktop_it_runs_on() {
+        let sandbox = ProcessSandbox::new();
+        assert!(sandbox.controls().enforces(Control::UiIsolation));
+        let clipboard = std::env::var_os("CI").is_some();
+        if clipboard {
+            // Something for a read to find.
+            let filled = sandbox
+                .run(
+                    &system("cmd.exe").args(["/c", "echo hv2-sandbox| clip"]),
+                    &SandboxSpec::unconfined(),
+                )
+                .expect("run");
+            assert_eq!(filled.exit_code, Some(0), "{filled:?}");
+        }
+        let exe = std::env::current_exe().expect("this test binary's own path");
+        let helper = SandboxCommand::new(exe.to_string_lossy())
+            .args([
+                "--exact",
+                "process::windows::tests::ui_helper",
+                "--nocapture",
+            ])
+            .env("SystemRoot", r"C:\Windows")
+            .env("PATH", r"C:\Windows\System32")
+            .env(
+                UI_HELPER,
+                if clipboard { "clipboard" } else { "parameters" },
+            );
+        let said = |spec: &SandboxSpec| {
+            let output = sandbox.run(&helper, spec).expect("run");
+            let text = String::from_utf8_lossy(&output.stdout).to_string();
+            let lines: Vec<String> = text
+                .lines()
+                .filter(|line| {
+                    ["set=", "read=", "write="]
+                        .iter()
+                        .any(|key| line.starts_with(key))
+                })
+                .map(str::to_string)
+                .collect();
+            assert!(!lines.is_empty(), "{output:?}");
+            lines
+        };
+
+        let isolated = SandboxSpec {
+            isolate_ui: true,
+            wall_clock: Some(Duration::from_secs(30)),
+            ..SandboxSpec::unconfined()
+        };
+        assert_eq!(
+            isolated.required(),
+            vec![Control::WallClock, Control::UiIsolation]
+        );
+        // Inside first, so the clipboard still holds its text when the read
+        // is refused.
+        let inside = said(&isolated);
+        let outside = said(&SandboxSpec {
+            isolate_ui: false,
+            ..isolated
+        });
+        assert_eq!(inside[0], "set=refused", "{inside:?}");
+        assert_eq!(outside[0], "set=allowed", "{outside:?}");
+        if clipboard {
+            assert_eq!(inside[1..], ["read=refused", "write=refused"], "{inside:?}");
+            // A runner with no usable clipboard refuses outside as well, and
+            // then the refusal inside shows nothing. Say which it was, where
+            // the log will be read, instead of failing on the runner or
+            // passing as if the clipboard had been tried.
+            if outside[1..] == ["read=allowed", "write=allowed"] {
+                println!("clipboard: refused inside the restrictions and allowed outside them");
+            } else {
+                println!(
+                    "clipboard: NOT VERIFIED, unusable outside the restrictions too: {outside:?}"
+                );
+            }
+        }
     }
 
     /// A denied path is refused, with the reason, and not run without it.

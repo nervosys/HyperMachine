@@ -67,6 +67,7 @@ pub(super) fn probe() -> Controls {
         )
         .without(Control::PathConfinement, unsupported("path confinement"))
         .without(Control::PathDenial, unsupported("path denial"))
+        .without(Control::UiIsolation, unsupported("UI isolation"))
 }
 
 /// Run `command` under `spec`.

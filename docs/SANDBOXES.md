@@ -61,6 +61,7 @@ caller asks for it.
 | Process isolation | `CLONE_NEWPID` + `CLONE_NEWIPC` + its own `/proc` | ✗ | ✗ | a separate kernel |
 | No new privileges | `PR_SET_NO_NEW_PRIVS` | ✗ | ✗ | a separate kernel |
 | Path confinement | an empty root made for the run, holding the grants | an AppContainer | ✗ | ✗ (a guest shares no host path) |
+| UI isolation | ✗ (no boundary around a display server) | job object user-interface restrictions | ✗ | the host's desktop is not in the guest |
 | Path denial | a mount over the path | ✗ (an AppContainer is not refused by a deny entry for its own SID) | ✗ | ✗ (a guest shares no host path) |
 
 Every ✗ is reported at runtime with a reason, not discovered by a caller when
@@ -189,6 +190,28 @@ The profile is made for one run and deleted after it, with its folder.
 `hm sandbox run` denies the network unless told otherwise, so on Windows it now
 runs its program in a container by default. Grant it what it needs with `--ro`
 and `--rw`, or pass `--net host` to run it uncontained as before.
+
+### UI isolation, on Windows
+
+`SandboxSpec::isolate_ui` (`--isolate-ui`; `"isolateUi": true` in a request)
+keeps a workload from the desktop it was started on. It is the control `UI
+isolation`, and it is the job object's user-interface restrictions, all of
+them together:
+
+- reading the clipboard, and writing it;
+- the windows and other user-interface handles of processes outside the job,
+  so it cannot send them messages or read their contents;
+- the system's parameters and the display's settings;
+- the global atom table;
+- making or switching desktops;
+- logging the user off or shutting the machine down.
+
+It is set on the job, which a workload in an AppContainer is in too; the two
+together have not been tested. It is off unless asked for, and `SandboxSpec::untrusted` leaves it off, because only Windows has
+it and a spec Linux refused outright would not be used. A Linux process has no
+such boundary in this backend: a workload that can reach a display server's
+socket can use it, and denying the network and confining its paths is what
+keeps it from one.
 
 ### Path grants
 
@@ -362,8 +385,8 @@ environment, which is not a limit anyone asked to remove. A workload that needs
   carries `what_this_host_enforces`'s report for each runner.
 - **Linux with every control granted**: the *Sandbox Containment* CI job
   lifts Ubuntu's AppArmor user-namespace restriction and runs the tests in a
-  delegated cgroup, and fails if the probe reports fewer than all ten
-  controls or if any test skips. Before it existed, every containment test on
+  delegated cgroup, and fails if the probe reports fewer than the ten
+  controls Linux has or if any test skips. Before it existed, every containment test on
   `ubuntu-latest` passed by skipping.
 
 Running it on a kernel found two defects that type-checking could not, both of
@@ -412,7 +435,7 @@ hm sandbox run [--memory 4G] [--cpu-time SECS] [--wall-clock SECS] [--max-proces
                [--net deny|host] [--fs host|isolated:ROOT] [--ro PATH]... [--rw PATH]...
                [--deny PATH]... [--confine-paths]
                [--workdir DIR] [--env K=V]... [--pass-env NAME]... [--clean-env]
-               [--isolate-processes] [--no-new-privileges]
+               [--isolate-processes] [--no-new-privileges] [--isolate-ui]
                [--strict] [--report text|json|none] -- CMD [ARGS...]
 ```
 

@@ -37,7 +37,7 @@ not as a difference.
 | macOS backend | seatbelt | **resource limits only**, and it says so |
 | Filesystem policy | read-only, read-write and denied path lists | Read-only and read-write [path grants](SANDBOXES.md#path-grants), and [`confine`](SANDBOXES.md#only-the-granted-paths) to make them the whole list. Linux: an empty root made for the run holds the grants and nothing else. Windows: an AppContainer denies everything else outside the system directories. A [denied list](SANDBOXES.md#denied-paths) on Linux, which closes a path under a grant or on the host's filesystem. **No denied list on Windows**: refused, with the reason |
 | Network policy | outbound controls, proxy support, host filtering on some backends | process backends: none or the host's, nothing between. MicroVM sandboxes have an egress gateway with allow and deny lists |
-| UI policy | clipboard, display and GUI controls | **none** |
+| UI policy | clipboard, display and GUI controls | Windows: [all of a job object's user-interface restrictions](SANDBOXES.md#ui-isolation-on-windows), as one switch. **Not selectable one by one, and nothing on Linux or macOS** |
 | One-shot run | yes | yes |
 | Stateful lifecycle (provision, start, exec, stop, deprovision) | yes, in the SDK | through the node daemon's API, not in-process |
 | Access-denied diagnostics | yes, and an audit mode that records accesses to help write a policy | a refusal names the control and why; **no audit mode** |
@@ -57,7 +57,9 @@ In rough order of how much they matter for the same use:
 4. **A denied path list on Windows.** Linux has one. On Windows a request can
    say "only these paths" but not "this tree except that part of it": a deny
    entry for an AppContainer's own SID was tried and is not enforced.
-5. **UI controls, and an audit mode.**
+5. **UI controls one by one, and off Windows.** Windows has one switch for
+   all of them; mxc's policy names clipboard, display and GUI separately.
+6. **An audit mode.**
 
 ## Where HyperMachine has something mxc's README does not claim
 
@@ -82,5 +84,6 @@ Neither of these is a measured win over mxc: mxc was not run.
 | Denied paths, Linux | `process::tests::a_denied_path_is_closed_on_the_hosts_filesystem` and `a_denied_path_is_carved_out_of_a_grant`, run as root under WSL2: a denied directory cannot be listed or read into, a denied file reads empty and a write to it leaves the host's file alone, and what is beside them is open. `hm sandbox run --deny` was also run by hand. Not yet seen in CI |
 | Denied paths, Windows | not available. `process::windows::tests::a_denied_path_refuses_the_run`: refused by default, and dropped and reported under best effort. The first implementation, a deny entry for the container's SID, failed its own test: the file was read |
 | Node client | `sdk/node` tests against the real binary: Windows 11 with Node 22 and WSL2 with Node 20, 8 of 8. CI runs them on Linux, Windows and macOS after building `hm`. Not yet seen in CI |
+| Windows UI isolation | `process::windows::tests::a_ui_isolated_workload_cannot_change_the_desktop_it_runs_on` on a Windows 11 host: the same program sets a system parameter outside the restrictions and is refused inside them. By hand, `hm sandbox run --isolate-ui` running `clip` got "Access is denied". The test tries reading and emptying the clipboard only under CI, where losing its contents costs nothing; the other restrictions are set by the same call and not tried one by one |
 | Windows no-network | `process::windows::tests`, on a Windows 11 host: a request that reaches a loopback listener with the host's network does not reach it from the container, and the listener sees no connection. `hm sandbox run` was also run by hand: `curl` to the Internet fails by default and succeeds with `--net host` |
 | macOS | nothing beyond what the backend reports about itself |

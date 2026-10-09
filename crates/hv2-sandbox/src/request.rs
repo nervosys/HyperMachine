@@ -76,6 +76,9 @@ pub struct Request {
     /// Bar it from gaining privileges.
     #[serde(default)]
     pub no_new_privileges: bool,
+    /// Keep it from the desktop it was started on.
+    #[serde(default)]
+    pub isolate_ui: bool,
     /// Run with whatever of this the host can enforce, and say what was
     /// dropped, where the default is to refuse.
     #[serde(default)]
@@ -225,6 +228,7 @@ impl Request {
             confine_paths: self.filesystem.confine,
             isolate_processes: self.isolate_processes,
             no_new_privileges: self.no_new_privileges,
+            isolate_ui: self.isolate_ui,
             best_effort: self.best_effort,
         };
         (command, spec)
@@ -339,6 +343,7 @@ mod tests {
                 "env",
                 "filesystem",
                 "isolateProcesses",
+                "isolateUi",
                 "limits",
                 "network",
                 "noNewPrivileges",
@@ -364,7 +369,7 @@ mod tests {
                 "limits":{"memoryBytes":1,"maxProcesses":1,"cpuTimeMs":1,"timeoutMs":1},
                 "network":{"egress":"deny"},
                 "filesystem":{"root":"/r","readOnly":[],"readWrite":[],"denied":[],"confine":false},
-                "isolateProcesses":false,"noNewPrivileges":false,"bestEffort":false}"#,
+                "isolateProcesses":false,"noNewPrivileges":false,"isolateUi":false,"bestEffort":false}"#,
         )
         .unwrap();
     }

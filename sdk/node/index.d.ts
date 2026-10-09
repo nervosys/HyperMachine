@@ -44,6 +44,8 @@ export interface Request {
   isolateProcesses?: boolean;
   /** Bar it from gaining privileges. */
   noNewPrivileges?: boolean;
+  /** Keep it from the desktop it was started on. Windows only. */
+  isolateUi?: boolean;
   /**
    * Run with whatever of this the host can enforce and report what was
    * dropped in `unenforced`. The default refuses.

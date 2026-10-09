@@ -134,6 +134,13 @@ pub(super) fn probe() -> Controls {
         }
     };
 
+    controls = controls.without(
+        Control::UiIsolation,
+        "this backend puts no boundary around a display server: a workload that can reach \
+         its socket can use it. Deny the network and confine its paths, or use the microVM \
+         sandbox",
+    );
+
     controls = match can_isolate_network() {
         Ok(()) => controls.with(Control::NetworkIsolation),
         Err(e) => controls.without(

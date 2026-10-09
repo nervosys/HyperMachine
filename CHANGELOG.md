@@ -41,6 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `hm sandbox exec`: one versioned JSON request in, one JSON response out, for a
   caller that is a program (`hv2_sandbox::request`). The schema is
   `docs/schemas/sandbox-request-v1.schema.json`.
+- UI isolation for sandboxed programs on Windows: `SandboxSpec::isolate_ui`,
+  `--isolate-ui` and `isolateUi` in a request keep a workload from the
+  clipboard, other programs' windows, system and display settings, and logging
+  off, through the job object's user-interface restrictions. A new control,
+  `UI isolation`; Linux and macOS refuse it.
 - A Node client for the process sandbox, in `sdk/node`: `run(request)` sends
   one request to `hm sandbox exec` and resolves with the result, or rejects
   with why the run did not happen. No dependencies; not on npm.

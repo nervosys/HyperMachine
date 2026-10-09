@@ -107,6 +107,10 @@ pub struct RunArgs {
     /// Bar the program from gaining privileges.
     #[arg(long)]
     pub no_new_privileges: bool,
+    /// Keep the program from the desktop: the clipboard, other programs'
+    /// windows, system and display settings, logging off.
+    #[arg(long)]
+    pub isolate_ui: bool,
     /// Refuse to run if any asked-for control cannot be enforced here.
     #[arg(long)]
     pub strict: bool,
@@ -181,6 +185,7 @@ pub fn spec_of(args: &RunArgs) -> Result<SandboxSpec> {
         filesystem,
         isolate_processes: args.isolate_processes,
         no_new_privileges: args.no_new_privileges,
+        isolate_ui: args.isolate_ui,
         best_effort: !args.strict,
     })
 }
