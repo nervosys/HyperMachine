@@ -895,11 +895,15 @@ mod tests {
     fn a_live_worker_keeps_its_job() {
         let dir = tempfile::tempdir().unwrap();
         let mut store = Store::open(dir.path()).unwrap();
-        store.lease = Duration::from_millis(200);
+        // Longer in all than the lease, so a worker that did not renew would
+        // be reaped; and each gap a small part of it, so a slow machine does
+        // not reap one that did. At 200 ms and 60 ms a loaded CI runner took
+        // longer than the lease between two renewals, and failed this.
+        store.lease = Duration::from_secs(2);
         let id = store.submit(&spec(&["x"])).unwrap();
         let c = store.claim("alive", &[]).unwrap().unwrap();
-        for _ in 0..5 {
-            std::thread::sleep(Duration::from_millis(60));
+        for _ in 0..6 {
+            std::thread::sleep(Duration::from_millis(400));
             store.heartbeat(&id, &c.token).unwrap();
             assert!(store.reap_lost().is_empty());
         }
