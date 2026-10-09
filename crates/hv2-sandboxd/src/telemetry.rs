@@ -76,7 +76,8 @@ pub(crate) fn forget(state: &AppState, sandbox_id: &str) {
 }
 
 /// Sample every running sandbox, every [`INTERVAL`], for as long as the
-/// node runs. Paused ones have nothing to report and are not woken.
+/// node runs. Paused ones have nothing to report and are not woken; nor are
+/// ones in standby, which a sample would resume.
 pub(crate) async fn sample(state: Arc<AppState>) {
     loop {
         tokio::time::sleep(INTERVAL).await;
@@ -84,6 +85,7 @@ pub(crate) async fn sample(state: Arc<AppState>) {
             .sandboxes
             .lock()
             .iter()
+            .filter(|(_, live)| !live.vm.in_standby())
             .map(|(id, live)| (id.clone(), Arc::clone(&live.vm), live.record.cpu_count))
             .collect();
         let asks = running.into_iter().map(|(id, vm, cpus)| async move {

@@ -308,6 +308,8 @@ struct Options {
     /// Pause a sandbox that has been idle this long, whether or not the node
     /// is full, unless its create set `idleTimeout` itself. See idle.rs.
     idle_pause_after: Option<Duration>,
+    /// Put a sandbox idle this long in standby: vCPUs stopped, memory kept.
+    idle_standby_after: Option<Duration>,
 }
 
 fn parse_options() -> Result<Options, String> {
@@ -370,6 +372,7 @@ fn parse_options() -> Result<Options, String> {
         identity_key: None,
         evict_idle_after: None,
         idle_pause_after: None,
+        idle_standby_after: None,
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -475,6 +478,11 @@ fn parse_options() -> Result<Options, String> {
                 let secs: u64 = value(&mut i)?.parse().map_err(|e| format!("{e}"))?;
                 idle::check_window(secs).map_err(|e| format!("--idle-pause-after: {e}"))?;
                 opts.idle_pause_after = (secs > 0).then(|| Duration::from_secs(secs));
+            }
+            "--idle-standby-after" => {
+                let secs: u64 = value(&mut i)?.parse().map_err(|e| format!("{e}"))?;
+                idle::check_window(secs).map_err(|e| format!("--idle-standby-after: {e}"))?;
+                opts.idle_standby_after = (secs > 0).then(|| Duration::from_secs(secs));
             }
             "--evict-idle-after" => {
                 opts.evict_idle_after = Some(Duration::from_secs(
@@ -3444,6 +3452,70 @@ async fn adopt_owner_route(
     }
 }
 
+/// `POST /sandboxes/{id}/standby`: stop its vCPUs and keep its memory. The
+/// next request to it -- a command, a file, a connection to one of its ports
+/// -- resumes it, so no route resumes a standby by name.
+async fn standby_route(
+    State(state): State<Arc<AppState>>,
+    Path(sandbox_id): Path<String>,
+) -> Response {
+    // Under the sandbox's lock, as a pause is: not halfway through a
+    // snapshot or a fork.
+    let lock = transition_lock(&state, &sandbox_id);
+    let _held = lock.lock().await;
+    let vm = state
+        .sandboxes
+        .lock()
+        .get(&sandbox_id)
+        .map(|live| Arc::clone(&live.vm));
+    let Some(vm) = vm else {
+        return api_error(
+            StatusCode::NOT_FOUND,
+            format!("no running sandbox {sandbox_id}"),
+        );
+    };
+    if vm.in_standby() {
+        return Json(standby_status(&vm)).into_response();
+    }
+    match vm.standby().await {
+        Ok(()) => Json(standby_status(&vm)).into_response(),
+        Err(e) => api_error(StatusCode::CONFLICT, format!("standby: {e}")),
+    }
+}
+
+/// `GET /sandboxes/{id}/standby`: whether it is in standby, how often traffic
+/// has woken it, and how long the last wake took.
+async fn standby_status_route(
+    State(state): State<Arc<AppState>>,
+    Path(sandbox_id): Path<String>,
+) -> Response {
+    let vm = state
+        .sandboxes
+        .lock()
+        .get(&sandbox_id)
+        .map(|live| Arc::clone(&live.vm));
+    match vm {
+        Some(vm) => Json(standby_status(&vm)).into_response(),
+        None => api_error(
+            StatusCode::NOT_FOUND,
+            format!("no running sandbox {sandbox_id}"),
+        ),
+    }
+}
+
+fn standby_status(vm: &AgentVM) -> serde_json::Value {
+    let (wakes, last) = vm.vm().standby_wakes();
+    let exits: u64 = vm.vm().all_vcpu_stats().iter().map(|s| s.exits()).sum();
+    json!({
+        "standby": vm.in_standby(),
+        "wakes": wakes,
+        // Every exit its vCPUs have taken. A guest in standby takes none.
+        "vcpuExits": exits,
+        // The vCPUs being told to run again, not the guest answering.
+        "lastWakeMicros": last.as_secs_f64() * 1e6,
+    })
+}
+
 async fn pause_route(
     State(state): State<Arc<AppState>>,
     Path(sandbox_id): Path<String>,
@@ -5192,6 +5264,7 @@ async fn expire(state: Arc<AppState>) {
             }
         }
         reboot::reboot_stopped(&state).await;
+        idle::standby_idle(&state, now).await;
         idle::pause_idle(&state, now).await;
     }
 }
@@ -5702,6 +5775,10 @@ async fn main() -> std::process::ExitCode {
         )
         .route("/templates", get(list_templates).post(build_template_route))
         .route("/sandboxes/{sandboxID}/pause", post(pause_route))
+        .route(
+            "/sandboxes/{sandboxID}/standby",
+            post(standby_route).get(standby_status_route),
+        )
         .route("/sandboxes/{sandboxID}/resume", post(resume_route))
         .route("/sandboxes/{sandboxID}/fork", post(fork_route))
         .route("/sandboxes/{sandboxID}/reboot", post(reboot::route))

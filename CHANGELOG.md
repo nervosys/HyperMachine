@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   where firmware and a stock kernel look for one. An unmodified CirrOS cloud
   image boots to its login prompt. Not yet available to machines. See
   `docs/FIRMWARE_BOOT.md`.
+- Standby for sandboxes: `POST /sandboxes/{id}/standby` (and `hm sandbox vm
+  standby`) stops a sandbox's vCPUs and keeps its memory; the next command,
+  file or port request resumes it without being asked. `--idle-standby-after`
+  does it to idle sandboxes. See `docs/STANDBY.md`.
 - `hm sandbox vm machine`: create, list, inspect, start, stop, restart, delete,
   exec (with the guest command's exit code), console and network decisions,
   against a node or the control plane.

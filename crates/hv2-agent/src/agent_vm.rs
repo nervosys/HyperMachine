@@ -327,6 +327,18 @@ impl AgentVM {
         Ok(())
     }
 
+    /// Stop the guest's vCPUs and keep its memory resident; the next thing
+    /// sent to it resumes it. See [`hv2_core::VM::standby`].
+    pub async fn standby(&self) -> Result<()> {
+        self.vm.standby().await?;
+        Ok(())
+    }
+
+    /// Whether the guest is stopped in standby, waiting for traffic.
+    pub fn in_standby(&self) -> bool {
+        self.vm.in_standby()
+    }
+
     /// Pause the VM
     pub async fn pause(&self) -> Result<()> {
         self.vm.pause().await?;
