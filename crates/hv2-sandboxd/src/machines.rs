@@ -564,8 +564,35 @@ async fn boot_firmware(state: &Arc<AppState>, machine: &Stored, slot: Slot) -> R
         .attach_block_pci(&image, false, &machine.id)
         .await
         .map_err(|e| format!("attaching the disk: {e}"))?;
+    // Its network, when it has one: a NIC on the PCI bus, where a stock
+    // operating system looks, behind the same gateway a template machine's
+    // is. The guest is not configured from here -- there is no agent to do
+    // it -- and asks the gateway for its address by DHCP.
+    let spec = match &machine.network {
+        Some(network) => Some(network.decide(state).await?),
+        None => None,
+    };
+    let nic = match &spec {
+        Some(_) => Some(
+            vm.vm()
+                .attach_net_pci(MACHINE_MAC)
+                .await
+                .map_err(|e| format!("attaching the network device: {e}"))?,
+        ),
+        None => None,
+    };
     let vm = Arc::new(vm);
+    let network = match (spec, nic) {
+        (Some(spec), Some(device)) => {
+            device.lock().set_host_offloads(!state.opts.no_net_offload);
+            Some(start_network(state, &machine.id, &vm, device, spec, false, false).await?)
+        }
+        _ => None,
+    };
     if let Err(e) = vm.launch().await {
+        if let Some(network) = &network {
+            network.bridge.abort();
+        }
         let _ = vm.stop().await;
         return Err(format!("launching: {e}"));
     }
@@ -576,7 +603,7 @@ async fn boot_firmware(state: &Arc<AppState>, machine: &Stored, slot: Slot) -> R
                 vm,
                 _slot: slot,
                 started_ms: now_ms(),
-                network: None,
+                network,
                 agent: false,
             },
         )
@@ -795,12 +822,6 @@ pub(crate) async fn create(
                 return api_error(
                     StatusCode::BAD_REQUEST,
                     "give image or templateID, not both",
-                );
-            }
-            if req.network.is_some() {
-                return api_error(
-                    StatusCode::BAD_REQUEST,
-                    "a machine booted from an image has no network device yet",
                 );
             }
             if state.opts.firmware.is_none() {
