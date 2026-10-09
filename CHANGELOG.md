@@ -30,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   where firmware and a stock kernel look for one. An unmodified CirrOS cloud
   image boots to its login prompt. Not yet available to machines. See
   `docs/FIRMWARE_BOOT.md`.
+- `hm sandbox exec`: one versioned JSON request in, one JSON response out, for a
+  caller that is a program (`hv2_sandbox::request`). The schema is
+  `docs/schemas/sandbox-request-v1.schema.json`.
 - Path grants for sandboxed programs: `SandboxSpec::grants`, and `--ro PATH` /
   `--rw PATH` on `hm sandbox run`, open a path to a workload whose containment
   would hide it. On Windows that is an access-control entry for the run's

@@ -214,6 +214,51 @@ root of the caller's choosing), process isolation, or no-new-privileges. An
 AppContainer does restrict all three in its own way, and none has been tested
 here against what those controls promise, so they stay reported as unavailable.
 
+## One JSON request
+
+A caller that is a program, in any language, can hand `hm` one document and get
+one back:
+
+```sh
+hm sandbox exec request.json      # or on standard input
+```
+
+```json
+{
+  "version": 1,
+  "command": ["python3", "-c", "print(6 * 7)"],
+  "env": { "PATH": "/usr/bin" },
+  "limits": { "memoryBytes": 268435456, "timeoutMs": 10000 },
+  "network": { "egress": "deny" },
+  "filesystem": { "readOnly": ["/usr"], "readWrite": ["/work"] }
+}
+```
+
+```json
+{ "version": 1, "exitCode": 0, "signal": null, "killedBy": null,
+  "stdout": "42\n", "stderr": "", "unenforced": [],
+  "backend": "process", "os": "linux",
+  "controls": [ { "control": "network isolation", "enforced": true } ] }
+```
+
+- **The format is versioned**, and its schema is
+  [`schemas/sandbox-request-v1.schema.json`](schemas/sandbox-request-v1.schema.json).
+  A document with a version this build does not read is told so.
+- **What is left out is the careful choice.** No `network` means no network. No
+  `bestEffort` means a request this host cannot enforce is refused.
+- **An unknown field is an error**, not something skipped. A misspelt `network`
+  would otherwise run with the default the caller did not mean.
+- **The environment is exactly `env`.** Nothing is inherited, so a request with
+  no `PATH` has none.
+- **The exit code is `hm`'s, not the workload's.** 0 means the run happened and
+  the response has `exitCode`, `stdout` and `stderr`; 2 means it did not, and
+  the response has `error.kind` (`invalid`, `unsupported`, `spawn`,
+  `confinement` or `runtime`) and `error.message`.
+- Output that is not UTF-8 is given as text with the bad bytes replaced, and
+  whole in `stdoutBase64` or `stderrBase64`.
+
+In Rust the same document is `hv2_sandbox::request::Request`.
+
 ## The empty environment
 
 `SandboxCommand` starts with **no** environment variables, not the host's.

@@ -108,6 +108,8 @@ enum Commands {
 enum SandboxCommands {
     /// Run a program under limits, streaming its output; exits with its code
     Run(hm_cli::sandbox_cmd::RunArgs),
+    /// Run one JSON request and print one JSON response
+    Exec(hm_cli::sandbox_cmd::ExecArgs),
     /// Manage VM sandboxes on a sandboxd node or control plane
     Vm(hm_cli::sandbox_vm::VmArgs),
 }
@@ -328,6 +330,12 @@ async fn main() -> Result<()> {
             command: SandboxCommands::Run(args),
         } => {
             let code = hm_cli::sandbox_cmd::run(args).await?;
+            std::process::exit(code);
+        }
+        Commands::Sandbox {
+            command: SandboxCommands::Exec(args),
+        } => {
+            let code = hm_cli::sandbox_cmd::exec(args).await?;
             std::process::exit(code);
         }
         Commands::Sandbox {

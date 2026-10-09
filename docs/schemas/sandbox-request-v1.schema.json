@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nervosys/HyperMachine/blob/master/docs/schemas/sandbox-request-v1.schema.json",
+  "title": "HyperMachine sandbox request, version 1",
+  "description": "One sandboxed run: a command and what contains it. Read by `hm sandbox exec` and by hv2_sandbox::request::Request. A field not listed here is an error.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "command"],
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "The format's version."
+    },
+    "command": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" },
+      "description": "The program, then its arguments. Run directly, never through a shell."
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "default": {},
+      "description": "The workload's whole environment. Nothing is inherited."
+    },
+    "workingDir": {
+      "type": ["string", "null"],
+      "description": "Where it starts. Absent, the backend chooses."
+    },
+    "stdin": {
+      "type": ["string", "null"],
+      "description": "Text written to its standard input."
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Ceilings on what it consumes. Each is unlimited when absent.",
+      "properties": {
+        "memoryBytes": { "type": ["integer", "null"], "minimum": 1 },
+        "maxProcesses": { "type": ["integer", "null"], "minimum": 1 },
+        "cpuTimeMs": { "type": ["integer", "null"], "minimum": 0 },
+        "timeoutMs": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Wall-clock time before it is killed."
+        }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "egress": {
+          "enum": ["deny", "host"],
+          "default": "deny",
+          "description": "deny: no network at all. host: the host's network, unrestricted."
+        }
+      }
+    },
+    "filesystem": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "root": {
+          "type": ["string", "null"],
+          "description": "A directory that becomes its root, hiding the host's. With one, readOnly paths are mounted in it and readWrite is refused."
+        },
+        "readOnly": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Absolute, existing paths it may read, with everything under them."
+        },
+        "readWrite": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Absolute, existing paths it may read and write, with everything under them."
+        }
+      }
+    },
+    "isolateProcesses": {
+      "type": "boolean",
+      "default": false,
+      "description": "Hide the host's processes from it."
+    },
+    "noNewPrivileges": {
+      "type": "boolean",
+      "default": false,
+      "description": "Bar it from gaining privileges."
+    },
+    "bestEffort": {
+      "type": "boolean",
+      "default": false,
+      "description": "Run with whatever of this the host can enforce and report what was dropped. The default refuses."
+    }
+  }
+}

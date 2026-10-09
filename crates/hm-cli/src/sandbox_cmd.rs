@@ -6,6 +6,9 @@
 //! control this host cannot enforce is dropped and reported (best effort);
 //! `--strict` refuses the run instead.
 //!
+//! `hm sandbox exec` is the same run as one JSON document in and one out
+//! ([`hv2_sandbox::request`]), for a caller that is a program.
+//!
 //! Exit codes follow `timeout(1)` and the shells: the program's own code;
 //! 124 when the wall-clock deadline killed it; 128+N for a signal; 125 when
 //! the run was refused or could not be confined; 127 when the program could
@@ -258,6 +261,105 @@ fn print_report(report: &serde_json::Value, how: Report) {
             }
         }
     }
+}
+
+/// `hm sandbox exec` arguments.
+#[derive(Debug, Args)]
+pub struct ExecArgs {
+    /// A file holding the JSON request; standard input when absent or `-`.
+    #[arg(value_name = "REQUEST")]
+    pub request: Option<PathBuf>,
+}
+
+/// The exit code of `hm sandbox exec` when the request did not run: it was
+/// not a request, asked for something this host cannot enforce, or its
+/// program could not be started. The response says which.
+pub const EXEC_REFUSED: i32 = 2;
+
+/// Bytes as a response carries them: as text, and when they are not UTF-8,
+/// as base64 beside a lossy copy, so nothing is lost and text stays readable.
+fn stream_of(response: &mut serde_json::Value, name: &str, bytes: Vec<u8>) {
+    match String::from_utf8(bytes) {
+        Ok(text) => response[name] = json!(text),
+        Err(e) => {
+            use base64::Engine;
+            let bytes = e.into_bytes();
+            response[name] = json!(String::from_utf8_lossy(&bytes));
+            response[format!("{name}Base64")] =
+                json!(base64::engine::general_purpose::STANDARD.encode(&bytes));
+        }
+    }
+}
+
+/// The response to a request, and the exit code to leave with.
+///
+/// `report` is what the host enforces of what was asked ([`report_of`]). A
+/// run that happened answers with the workload's exit, output and anything
+/// dropped, and exit code zero whatever the workload's own was: the response
+/// is where a caller reads that. A run that did not happen answers with an
+/// error and [`EXEC_REFUSED`].
+pub fn response_of(
+    report: Option<serde_json::Value>,
+    result: Result<hv2_sandbox::SandboxOutput, SandboxError>,
+) -> (serde_json::Value, i32) {
+    let mut response = json!({ "version": hv2_sandbox::request::VERSION });
+    if let Some(report) = report {
+        for key in ["backend", "os", "controls"] {
+            response[key] = report[key].clone();
+        }
+    }
+    match result {
+        Ok(output) => {
+            response["exitCode"] = json!(output.exit_code);
+            response["signal"] = json!(output.signal);
+            response["killedBy"] = json!(output.killed_by.map(|c| c.to_string()));
+            response["unenforced"] = json!(output
+                .unenforced
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>());
+            stream_of(&mut response, "stdout", output.stdout);
+            stream_of(&mut response, "stderr", output.stderr);
+            (response, 0)
+        }
+        Err(error) => {
+            let kind = match &error {
+                SandboxError::InvalidSpec(_) => "invalid",
+                SandboxError::Unsupported { .. } => "unsupported",
+                SandboxError::Spawn { .. } => "spawn",
+                SandboxError::ConfinementFailed { .. } => "confinement",
+                _ => "runtime",
+            };
+            response["error"] = json!({ "kind": kind, "message": error.to_string() });
+            (response, EXEC_REFUSED)
+        }
+    }
+}
+
+/// Run one request: read it, run it, print the response.
+pub async fn exec(args: ExecArgs) -> Result<i32> {
+    let text = match args.request.as_deref() {
+        Some(path) if path != std::path::Path::new("-") => {
+            std::fs::read_to_string(path).map_err(|e| anyhow!("reading {}: {e}", path.display()))?
+        }
+        _ => {
+            let mut text = String::new();
+            std::io::Read::read_to_string(&mut std::io::stdin().lock(), &mut text)?;
+            text
+        }
+    };
+    let (response, code) = match hv2_sandbox::request::Request::from_json(&text) {
+        Err(refused) => response_of(None, Err(refused)),
+        Ok(request) => {
+            let (command, spec) = request.into_parts();
+            let sandbox = ProcessSandbox::new();
+            let report = report_of(&sandbox, &spec);
+            let result = tokio::task::spawn_blocking(move || sandbox.run(&command, &spec)).await?;
+            response_of(Some(report), result)
+        }
+    };
+    println!("{response}");
+    Ok(code)
 }
 
 /// Run it: report, stream, and return the exit code to leave with.
