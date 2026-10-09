@@ -73,20 +73,17 @@ pub(super) fn probe() -> Controls {
     controls = match appcontainer::Container::create(false) {
         Ok(_) => controls
             .with(Control::NetworkIsolation)
-            .with(Control::PathConfinement),
+            .with(Control::PathConfinement)
+            .with(Control::PathDenial),
         Err(e) => {
             let why = format!("an AppContainer could not be created here: {e}");
             controls
                 .without(Control::NetworkIsolation, why.clone())
-                .without(Control::PathConfinement, why)
+                .without(Control::PathConfinement, why.clone())
+                .without(Control::PathDenial, why)
         }
     };
     let mut controls = controls
-        .without(
-            Control::PathDenial,
-            "an AppContainer is not refused by an access-denied entry for its own SID, so a \
-             path under a grant cannot be closed to it; grant the paths beside it instead",
-        )
         .without(
             Control::FilesystemIsolation,
             "a job object does not change the filesystem view; use the microVM sandbox",
@@ -293,7 +290,13 @@ pub(super) fn run(
     // reported as dropped, which the probe already told them.
     // Confined to its granted paths means a container too, and one that
     // keeps the network when the network was not what was asked to go.
-    let container = if spec.network == NetworkPolicy::Denied || spec.confine_paths {
+    // A path is closed to a container, so a denied path means one too: with
+    // the network kept, and with everything else of the user's closed as it
+    // is to any container. More than was asked, never less.
+    let container = if spec.network == NetworkPolicy::Denied
+        || spec.confine_paths
+        || !spec.grants.denied.is_empty()
+    {
         match appcontainer::Container::create(spec.network == NetworkPolicy::Host) {
             Ok(container) => Some(container),
             Err(_) if spec.best_effort => None,
@@ -301,8 +304,10 @@ pub(super) fn run(
                 return Err(SandboxError::ConfinementFailed {
                     control: if spec.network == NetworkPolicy::Denied {
                         Control::NetworkIsolation
-                    } else {
+                    } else if spec.confine_paths {
                         Control::PathConfinement
+                    } else {
+                        Control::PathDenial
                     },
                     source: e,
                 })
@@ -399,7 +404,11 @@ fn run_contained(
     // as long as it runs.
     let granted = appcontainer::Grants::give(&container, &spec.grants).map_err(|e| {
         SandboxError::ConfinementFailed {
-            control: Control::NetworkIsolation,
+            control: if spec.grants.denied.is_empty() {
+                Control::NetworkIsolation
+            } else {
+                Control::PathDenial
+            },
             source: e,
         }
     })?;
@@ -870,35 +879,122 @@ mod tests {
         }
     }
 
-    /// A denied path is refused, with the reason, and not run without it.
-    /// An access-denied entry for the container's SID was tried: the file
-    /// under it was read all the same.
+    /// A denied path under a grant is closed, the rest of the grant is open,
+    /// and afterwards the path inherits its access-control list again and
+    /// names no container. An access-denied entry for the container's SID was
+    /// tried first, and failed the same assertions: the file was read.
     #[test]
-    fn a_denied_path_refuses_the_run() {
+    fn a_denied_path_is_carved_out_of_a_grant() {
         let sandbox = ProcessSandbox::new();
-        assert!(!sandbox.controls().enforces(Control::PathDenial));
-        let spec = SandboxSpec {
+        assert!(sandbox.controls().enforces(Control::PathDenial));
+        let base = std::env::temp_dir().join(format!("hv2-sandbox-deny-{}", std::process::id()));
+        let private = base.join("private");
+        std::fs::create_dir_all(&private).expect("make");
+        std::fs::write(base.join("notes.txt"), "open").expect("write");
+        std::fs::write(private.join("key.txt"), "private").expect("write");
+        let read = |path: std::path::PathBuf| {
+            system("cmd.exe").args(["/c".to_string(), format!("type {}", path.display())])
+        };
+        let text = |output: &SandboxOutput| String::from_utf8_lossy(&output.stdout).to_string();
+        let listed = |path: &std::path::Path| {
+            let output = sandbox
+                .run(
+                    &system("icacls.exe").args([path.display().to_string()]),
+                    &SandboxSpec::unconfined(),
+                )
+                .expect("run");
+            text(&output)
+        };
+        let before = listed(&private);
+        assert!(before.contains("(I)"), "the path should inherit: {before}");
+
+        let granted = SandboxSpec {
             grants: crate::PathGrants {
-                denied: vec![std::env::temp_dir()],
-                ..crate::PathGrants::default()
+                read_only: Vec::new(),
+                read_write: vec![base.clone()],
+                denied: Vec::new(),
             },
+            wall_clock: Some(Duration::from_secs(30)),
             ..SandboxSpec::unconfined()
         };
-        let command = system("cmd.exe").args(["/c", "echo ran"]);
-        let refused = sandbox.run(&command, &spec);
-        assert!(
-            matches!(
-                &refused,
-                Err(SandboxError::Unsupported { controls })
-                    if controls.len() == 1
-                        && controls[0].starts_with("path denial")
-                        && controls[0].contains("AppContainer")
-            ),
-            "{refused:?}"
+        // Without the denial there is no container, and the file is read.
+        let reached = sandbox
+            .run(&read(private.join("key.txt")), &granted)
+            .expect("run");
+        assert_eq!(text(&reached), "private", "{reached:?}");
+        // In a container with the grant above it, it is read too: so its
+        // being closed below is the denial and not the container.
+        let contained = SandboxSpec {
+            confine_paths: true,
+            ..granted.clone()
+        };
+        let reached = sandbox
+            .run(&read(private.join("key.txt")), &contained)
+            .expect("run");
+        assert_eq!(text(&reached), "private", "{reached:?}");
+
+        // A denial by itself is what brings the container.
+        let spec = SandboxSpec {
+            grants: crate::PathGrants {
+                denied: vec![private.clone()],
+                ..granted.grants.clone()
+            },
+            ..granted
+        };
+        assert_eq!(
+            spec.required(),
+            vec![Control::WallClock, Control::PathDenial]
         );
-        // Best effort runs it and says what was dropped.
-        let ran = sandbox.run(&command, &spec.best_effort()).expect("run");
-        assert_eq!(ran.unenforced, vec![Control::PathDenial], "{ran:?}");
+        let open = sandbox
+            .run(&read(base.join("notes.txt")), &spec)
+            .expect("run");
+        assert_eq!(text(&open), "open", "{open:?}");
+        let closed = sandbox
+            .run(&read(private.join("key.txt")), &spec)
+            .expect("run");
+        assert_ne!(closed.exit_code, Some(0), "{closed:?}");
+        assert!(closed.stdout.is_empty(), "{closed:?}");
+        let write = system("cmd.exe").args([
+            "/c".to_string(),
+            format!("echo x> {}", private.join("made.txt").display()),
+        ]);
+        let refused = sandbox.run(&write, &spec).expect("run");
+        assert_ne!(refused.exit_code, Some(0), "{refused:?}");
+        assert!(!private.join("made.txt").exists());
+
+        // A path with a list of its own that lets every container in, which
+        // the caller may not rewrite, is not skipped: the run is refused.
+        // Where the caller may rewrite it, as an administrator, it is closed.
+        let hosts = std::path::PathBuf::from(r"C:\Windows\System32\drivers\etc");
+        let system = SandboxSpec {
+            grants: crate::PathGrants {
+                denied: vec![hosts.clone()],
+                ..crate::PathGrants::default()
+            },
+            wall_clock: Some(Duration::from_secs(30)),
+            ..SandboxSpec::unconfined()
+        };
+        match sandbox.run(&read(hosts.join("hosts")), &system) {
+            Err(SandboxError::ConfinementFailed {
+                control: Control::PathDenial,
+                ..
+            }) => {}
+            Ok(output) => {
+                assert_ne!(output.exit_code, Some(0), "{output:?}");
+                assert!(output.stdout.is_empty(), "{output:?}");
+            }
+            other => panic!("{other:?}"),
+        }
+
+        // Afterwards it is as it was: the same list, entry for entry.
+        assert_eq!(listed(&private), before);
+        let after = listed(&base);
+        assert!(!after.is_empty() && !after.contains("S-1-15-"), "{after}");
+        assert_eq!(
+            std::fs::read_to_string(private.join("key.txt")).expect("read"),
+            "private"
+        );
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     /// Confinement asked for by itself: the network stays, and the user's

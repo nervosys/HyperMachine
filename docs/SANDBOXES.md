@@ -62,7 +62,7 @@ caller asks for it.
 | No new privileges | `PR_SET_NO_NEW_PRIVS` | ✗ | ✗ | a separate kernel |
 | Path confinement | an empty root made for the run, holding the grants | an AppContainer | ✗ | ✗ (a guest shares no host path) |
 | UI isolation | ✗ (no boundary around a display server) | job object user-interface restrictions | ✗ | the host's desktop is not in the guest |
-| Path denial | a mount over the path | ✗ (an AppContainer is not refused by a deny entry for its own SID) | ✗ | ✗ (a guest shares no host path) |
+| Path denial | a mount over the path | an AppContainer, and the path cut off from inheriting a container's access | ✗ | ✗ (a guest shares no host path) |
 
 Every ✗ is reported at runtime with a reason, not discovered by a caller when
 something escapes.
@@ -290,10 +290,26 @@ hm sandbox run --confine-paths --ro /usr --ro /lib --rw /work --deny /work/.git 
   under a grant, and under a mount of an isolated root.
 - **The cover stays on.** The workload holds no capabilities, so it cannot
   unmount it, and in a user namespace of its own the kernel locks it.
-- **On Windows and macOS it is refused.** On Windows this was tried and did
-  not hold: an AppContainer is not refused by an access-denied entry for its
-  own SID, and the file under one was read all the same. Grant the paths
-  beside the one to keep closed instead.
+- **On Windows** the workload runs in an AppContainer, which reaches a file
+  only through an entry that allows it, and under a granted directory that
+  entry is inherited. So for the length of the run the denied path stops
+  inheriting, and keeps a list of its own: what it had, without the entries
+  that allow a container. Afterwards it inherits again and its list is what
+  it was, entry for entry. Four things follow:
+  - **A denial brings the container.** There is nothing to close a path to
+    otherwise. So on Windows `--deny` alone also closes the rest of the user's
+    files, as any container does: more than was asked, never less.
+  - **It is closed to every AppContainer** while the run lasts, not only this
+    one, since the entries removed are the ones for any of them.
+  - **A run killed before it can put the path back** leaves it not inheriting.
+    Everyone who had access keeps it; the path no longer follows its parent
+    until inheritance is turned back on.
+  - **The caller must be allowed to change the path's access-control list.**
+    Where it is not, a system directory for one, the run is refused.
+
+  An access-denied entry for the container's SID was tried first and did not
+  hold: the file under one was read all the same.
+- **On macOS it is refused.**
 - **A granted path under a denied one refuses the run.** A denial covers
   everything under it, and which of the two was meant is not guessed.
 - A denied path must be absolute and exist. One that would not be reachable

@@ -49,7 +49,8 @@ use windows_sys::Win32::Security::Isolation::{
     CreateAppContainerProfile, DeleteAppContainerProfile,
 };
 use windows_sys::Win32::Security::{
-    CreateWellKnownSid, WinCapabilityInternetClientServerSid, WinCapabilityInternetClientSid,
+    AddAce, CreateWellKnownSid, GetAce, GetSecurityDescriptorControl, InitializeAcl,
+    WinCapabilityInternetClientServerSid, WinCapabilityInternetClientSid,
     WinCapabilityPrivateNetworkClientServerSid, ACL, DACL_SECURITY_INFORMATION,
     PSECURITY_DESCRIPTOR, SID_AND_ATTRIBUTES, SUB_CONTAINERS_AND_OBJECTS_INHERIT,
 };
@@ -199,6 +200,16 @@ const READ_WRITE: u32 = READ_ONLY | 0x0012_0116 | 0x0001_0000 | 0x0000_0040;
 pub(super) struct Grants<'a> {
     container: &'a Container,
     paths: Vec<Vec<u16>>,
+    /// Denied paths, each with the access-control list to give it back.
+    closed: Vec<(Vec<u16>, Restore)>,
+}
+
+/// What puts a denied path's access-control list back: the entries that were
+/// its own, and whether it inherited (`UNPROTECTED_DACL`) or did not
+/// (`PROTECTED_DACL`).
+struct Restore {
+    list: Vec<u32>,
+    inheritance: u32,
 }
 
 impl<'a> Grants<'a> {
@@ -210,6 +221,7 @@ impl<'a> Grants<'a> {
         let mut given = Self {
             container,
             paths: Vec::new(),
+            closed: Vec::new(),
         };
         let wanted = grants
             .read_only
@@ -221,12 +233,31 @@ impl<'a> Grants<'a> {
             entry(&path, container.sid, access, GRANT_ACCESS)?;
             given.paths.push(path);
         }
+        // After the grants, so that each denied path is cut off from one
+        // already made above it.
+        for path in &grants.denied {
+            let path = wide(path);
+            if let Some(restore) = close(&path)? {
+                given.closed.push((path, restore));
+            }
+        }
         Ok(given)
     }
 }
 
 impl Drop for Grants<'_> {
     fn drop(&mut self) {
+        // Denied paths first: each goes back to inheriting, and only then
+        // are the grants it would inherit taken off.
+        for (path, restore) in self.closed.iter().rev() {
+            if let Err(e) = reopen(path, restore) {
+                tracing::warn!(
+                    "{} was closed to a sandbox and could not be put back to inheriting its \
+                     access-control list: {e}",
+                    String::from_utf16_lossy(&path[..path.len() - 1])
+                );
+            }
+        }
         for path in &self.paths {
             if let Err(e) = entry(path, self.container.sid, 0, REVOKE_ACCESS) {
                 tracing::warn!(
@@ -236,6 +267,200 @@ impl Drop for Grants<'_> {
             }
         }
     }
+}
+
+/// `PROTECTED_DACL_SECURITY_INFORMATION`: the list stops inheriting.
+const PROTECTED_DACL: u32 = 0x8000_0000;
+/// `UNPROTECTED_DACL_SECURITY_INFORMATION`: the list inherits again.
+const UNPROTECTED_DACL: u32 = 0x2000_0000;
+/// `SE_DACL_PROTECTED`, in a descriptor's control bits.
+const SE_DACL_PROTECTED: u16 = 0x1000;
+/// `INHERITED_ACE`, in an entry's flags.
+const INHERITED_ACE: u8 = 0x10;
+/// `ACCESS_ALLOWED_ACE_TYPE`.
+const ACCESS_ALLOWED: u8 = 0;
+
+/// Whether the entry at `ace` allows something to an AppContainer: to one
+/// package, to every package, or to a capability. Those SIDs are the ones
+/// under the app package authority, `S-1-15`.
+///
+/// # Safety
+/// `ace` points at a whole entry of an access-control list.
+unsafe fn allows_a_container(ace: *const u8) -> bool {
+    // An entry is a four-byte header, a four-byte mask, then the SID: its
+    // revision, its sub-authority count, and six bytes of authority.
+    if *ace != ACCESS_ALLOWED {
+        return false;
+    }
+    let size = u16::from_le_bytes([*ace.add(2), *ace.add(3)]) as usize;
+    size >= 16 && std::slice::from_raw_parts(ace.add(10), 6) == [0, 0, 0, 0, 0, 15]
+}
+
+/// An empty access-control list of `revision` with room for `bytes`.
+fn empty_list(revision: u8, bytes: usize) -> std::io::Result<Vec<u32>> {
+    let mut list = vec![0u32; bytes.div_ceil(4).max(2)];
+    // SAFETY: the buffer is aligned for an ACL and its size is passed.
+    if unsafe {
+        InitializeAcl(
+            list.as_mut_ptr().cast(),
+            (list.len() * 4) as u32,
+            u32::from(revision),
+        )
+    } == 0
+    {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(list)
+}
+
+/// Close `path` to every AppContainer, whatever is granted above it.
+///
+/// An AppContainer reaches a file through an entry that allows it, and under
+/// a granted directory that entry is inherited. An access-denied entry does
+/// not stop it: that was tried first, and the file was read. So the path is
+/// made to stop inheriting, and given a list of its own holding what it had
+/// without the entries that allow a container.
+///
+/// A path that already had a list of its own, a system directory for one,
+/// is rewritten the same way if that list lets a container in. Where the
+/// caller may not rewrite it this fails, and the run is refused: skipping
+/// such a path ran the workload with the path still open, which the first
+/// run of this by hand showed.
+///
+/// Returns what [`reopen`] needs to put it back. `None` when nothing on the
+/// path lets a container in, and so there is nothing to take off.
+///
+/// Until [`reopen`] runs the path does not inherit. A process killed in
+/// between leaves it that way, with the same access for everyone who had it
+/// and no longer following its parent.
+fn close(path: &[u16]) -> std::io::Result<Option<Restore>> {
+    let failed = |code: u32| std::io::Error::from_raw_os_error(code as i32);
+    let mut current: *mut ACL = std::ptr::null_mut();
+    let mut descriptor: PSECURITY_DESCRIPTOR = std::ptr::null_mut();
+    // SAFETY: as in `entry`.
+    let read = unsafe {
+        GetNamedSecurityInfoW(
+            path.as_ptr(),
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut current,
+            std::ptr::null_mut(),
+            &mut descriptor,
+        )
+    };
+    if read != 0 {
+        return Err(failed(read));
+    }
+    // SAFETY: the descriptor and the list in it are valid until freed at
+    // the end; every entry read lies within the list's stated size, and
+    // each copy is added to a list with room for the whole original.
+    let result = unsafe {
+        (|| {
+            let (mut control, mut revision) = (0u16, 0u32);
+            if GetSecurityDescriptorControl(descriptor, &mut control, &mut revision) == 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            if current.is_null() {
+                // No list at all is access for everyone, containers too, and
+                // there are no entries to take off.
+                return Err(std::io::Error::other(
+                    "the path has no access-control list, so it is open to everything",
+                ));
+            }
+            let protected = control & SE_DACL_PROTECTED != 0;
+            let mut found = false;
+            let (revision, bytes, count) = (
+                (*current).AclRevision,
+                (*current).AclSize as usize,
+                (*current).AceCount,
+            );
+            let mut kept = empty_list(revision, bytes)?;
+            let mut original = empty_list(revision, bytes)?;
+            for index in 0..u32::from(count) {
+                let mut ace: *mut core::ffi::c_void = std::ptr::null_mut();
+                if GetAce(current, index, &mut ace) == 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                let ace = ace.cast::<u8>();
+                let size = u16::from_le_bytes([*ace.add(2), *ace.add(3)]) as usize;
+                let inherited = *ace.add(1) & INHERITED_ACE != 0;
+                let add = |list: &mut Vec<u32>, bytes: &[u8]| {
+                    if AddAce(
+                        list.as_mut_ptr().cast(),
+                        u32::from(revision),
+                        u32::MAX,
+                        bytes.as_ptr().cast(),
+                        bytes.len() as u32,
+                    ) == 0
+                    {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    Ok(())
+                };
+                let entry = std::slice::from_raw_parts(ace, size);
+                if !inherited {
+                    add(&mut original, entry)?;
+                }
+                if allows_a_container(ace) {
+                    found = true;
+                } else {
+                    // Its own now, not its parent's.
+                    let mut own = entry.to_vec();
+                    own[1] &= !INHERITED_ACE;
+                    add(&mut kept, &own)?;
+                }
+            }
+            if !found {
+                return Ok(None);
+            }
+            let written = SetNamedSecurityInfoW(
+                path.as_ptr(),
+                SE_FILE_OBJECT,
+                DACL_SECURITY_INFORMATION | PROTECTED_DACL,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                kept.as_ptr().cast(),
+                std::ptr::null_mut(),
+            );
+            if written != 0 {
+                return Err(failed(written));
+            }
+            Ok(Some(Restore {
+                list: original,
+                inheritance: if protected {
+                    PROTECTED_DACL
+                } else {
+                    UNPROTECTED_DACL
+                },
+            }))
+        })()
+    };
+    // SAFETY: allocated by the read above and freed once.
+    unsafe { LocalFree(descriptor) };
+    result
+}
+
+/// Put `path`'s access-control list back as [`close`] found it.
+fn reopen(path: &[u16], restore: &Restore) -> std::io::Result<()> {
+    // SAFETY: the path is terminated and the list is a valid ACL built by
+    // `close`.
+    let written = unsafe {
+        SetNamedSecurityInfoW(
+            path.as_ptr(),
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION | restore.inheritance,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            restore.list.as_ptr().cast(),
+            std::ptr::null_mut(),
+        )
+    };
+    if written != 0 {
+        return Err(std::io::Error::from_raw_os_error(written as i32));
+    }
+    Ok(())
 }
 
 /// Add, or with `REVOKE_ACCESS` remove, `sid`'s entry on `path`.

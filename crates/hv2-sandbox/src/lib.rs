@@ -98,10 +98,11 @@ pub enum Control {
     /// A path the caller names is closed to the workload, whatever else
     /// would let it in.
     ///
-    /// Linux covers the path with a mount of its own. Windows has no such
-    /// control here: an AppContainer is not refused by an access-denied
-    /// entry for its own SID, which was tried, so a path under a grant
-    /// cannot be closed to it by one.
+    /// Linux covers the path with a mount of its own. Windows runs the
+    /// workload in an AppContainer and makes the path stop inheriting the
+    /// entries that let a container in, for the length of the run. An
+    /// access-denied entry for the container's SID was tried first and does
+    /// not refuse it.
     PathDenial,
     /// The workload is kept from the desktop it was started on: the
     /// clipboard, other programs' windows, the display's and the system's

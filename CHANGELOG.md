@@ -46,6 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clipboard, other programs' windows, system and display settings, and logging
   off, through the job object's user-interface restrictions. A new control,
   `UI isolation`; Linux and macOS refuse it.
+- Denied paths on Windows: a denied path stops inheriting the entries that let
+  an AppContainer in for the length of the run, and inherits again afterwards.
+  Path denial was Linux-only.
 - A Node client for the process sandbox, in `sdk/node`: `run(request)` sends
   one request to `hm sandbox exec` and resolves with the result, or rejects
   with why the run did not happen. No dependencies; not on npm.
