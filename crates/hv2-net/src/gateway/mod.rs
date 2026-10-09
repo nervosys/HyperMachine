@@ -58,6 +58,7 @@
 //! - **Inbound**: nothing from outside can open a connection to a guest
 //!   through this. (`hv2-api`'s sandbox proxy is the inbound path, over vsock.)
 
+pub mod dhcp;
 pub mod dns;
 pub mod mitm;
 pub mod private_udp;
@@ -798,6 +799,19 @@ impl Stack {
     /// Queue a frame for the stack, creating a listening socket first if it
     /// is the SYN of a connection this policy may allow.
     fn ingest(&mut self, frame: Vec<u8>, events: &mpsc::UnboundedSender<Event>) {
+        // A guest asking for its address is answered here, ahead of the
+        // stack: it has no address to be answered at yet (see dhcp.rs).
+        if let Some(reply) = dhcp::reply(&frame, &self.shared.config) {
+            self.device.tx.push_back(reply);
+            return;
+        }
+        // A guest asking who has its own address is checking that nobody
+        // does, before it uses it. The stack answers for every address, as a
+        // router for all of them must, and would answer for this one too --
+        // which the guest reads as a conflict, and never takes the address.
+        if dhcp::asks_for(&frame, self.shared.config.guest) {
+            return;
+        }
         if let Some((source, destination)) = syn_of(&frame) {
             self.on_syn(source, destination, events);
         }

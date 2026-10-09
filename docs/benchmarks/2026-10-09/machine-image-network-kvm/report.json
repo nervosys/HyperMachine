@@ -1,0 +1,43 @@
+{
+  "success": true,
+  "purpose": "functional verification of a networked image machine on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "13da67d03bc19f8daceb931b6c27456653aad72bd3cf5a6990b4a47c7311f015",
+    "firmware": "4a0a1e977368f6b15d2198a216bdedf9a350bf5e5ae07e29e695373ec16ad958",
+    "image": "800f530322907ababfe948271255107959ea780ac118a1d47109e3adaf484e96",
+    "driver": "7c6bc2b6f2ccfa07efcb1ac3b87ac4dc397481cfa7f57837a75116c1233c1be4"
+  },
+  "cases": [
+    {
+      "name": "the guest of a networked image machine configures itself by DHCP",
+      "success": true,
+      "detail": {
+        "address": "10.0.2.15/24",
+        "default_route": "10.0.2.2",
+        "resolver": "10.0.2.3"
+      }
+    },
+    {
+      "name": "it reaches the address its allowOut names and is refused one its denyOut names",
+      "success": true,
+      "detail": {
+        "saw": [
+          "got-2 SERVICE-REACHED"
+        ],
+        "decisions": [
+          "allow 172.28.97.192:49737 (allowOut address)",
+          "deny 192.0.2.7:80 (denyOut address)"
+        ]
+      }
+    },
+    {
+      "name": "after a stop and a start it configures itself and reaches the service again",
+      "success": true,
+      "detail": {
+        "address": "10.0.2.15/24",
+        "default_route": "10.0.2.2",
+        "resolver": "10.0.2.3"
+      }
+    }
+  ]
+}
