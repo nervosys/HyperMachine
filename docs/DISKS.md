@@ -54,16 +54,31 @@ A guest's writes go to the image on the vCPU thread that issued them, before the
 guest sees them complete. A guest flush is an `fsync` of the image. Write-back
 caching, discard and write-zeroes are not offered.
 
+## Pausing a sandbox with a disk
+
+A sandbox holding a disk can be paused and resumed, by request, by `autoPause`,
+or when idle. Its memory goes to the node's disk as any pause does, and it comes
+back as the same guest: its processes running, the disk still mounted, and
+anything it had written but not yet flushed still in its page cache.
+
+- **The disk stays claimed** while the sandbox is paused, so no other sandbox
+  can attach it and change it underneath. Ending the paused sandbox gives the
+  disk back.
+- **Only this node resumes it.** The disk is on this node, so the pause is not
+  published to a shared snapshot store, and a paused sandbox with a disk does
+  not survive the daemon restarting.
+
+Evidence: [real KVM: a sandbox with a disk paused and resumed, with unflushed writes](benchmarks/2026-10-08/disk-pause-kvm/README.md).
+
 ## What a sandbox with a disk cannot do
 
 - **Restore from a template.** virtio-mmio has no hot-plug, and a template's
   guest booted with no disk has no driver bound to one. A sandbox with a disk
   cold-boots instead, which is slower to create than a template restore. Sandboxes
   without a disk are unaffected.
-- **Pause, fork, snapshot or checkpoint.** Each would restore the guest's memory
-  (its page cache and ext4 journal state) against a disk that may have changed
-  since. The routes answer 409, and `autoPause` with a `diskMount` is refused
-  with 400 before anything boots.
+- **Fork, snapshot or checkpoint.** Each would run a second guest, or an older
+  one, against the one disk: two page caches and two ext4 journals over the same
+  blocks. The routes answer 409.
 - **Start from a snapshot.** This is refused with 400 for the same reason.
 
 ## Limits

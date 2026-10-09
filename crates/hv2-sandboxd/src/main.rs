@@ -1598,23 +1598,39 @@ async fn bring_up(
     // A create, as against a resume or a fork, which name the snapshot they
     // restore.
     let plain_create = snapshot.is_none();
-    // With a disk, a cold boot: the template's guest booted without one, and
-    // virtio-mmio has no hot-plug to give it one now.
-    let snapshot = if disk.is_some() {
+    // A create with a disk is a cold boot: the template's guest booted
+    // without one, and virtio-mmio has no hot-plug to give it one now. A
+    // resume of a sandbox with a disk restores its own snapshot, which was
+    // taken with the disk attached.
+    let snapshot = if disk.is_some() && plain_create {
         None
+    } else if disk.is_some() {
+        snapshot
     } else {
         snapshot.or(template.as_ref().map(|t| t.snapshot.as_path()))
     };
-    let (cid, mac) = match snapshot {
-        Some(_) => (TEMPLATE_CID, TEMPLATE_MAC),
-        None => {
+    // A guest that cold-booted has a context ID and a MAC of its own, and is
+    // given them back when it is resumed; one restored from a template has
+    // the template's.
+    let own = |cid: u64| {
+        let [_, b, c, d] = u32::try_from(cid - GUEST_CID_BASE)
+            .unwrap_or(u32::MAX)
+            .to_be_bytes();
+        (cid, [0x52, 0x54, 0x00, b, c, d])
+    };
+    let (cid, mac) = match (snapshot, disk.and_then(|d| d.guest_cid)) {
+        (Some(_), Some(cid)) => own(cid),
+        (Some(_), None) => (TEMPLATE_CID, TEMPLATE_MAC),
+        (None, _) => {
             let mut next = state.next_cid.lock();
             let cid = *next;
             *next += 1;
-            let [_, b, c, d] = u32::try_from(cid).unwrap_or(u32::MAX).to_be_bytes();
-            (GUEST_CID_BASE + cid, [0x52, 0x54, 0x00, b, c, d])
+            own(GUEST_CID_BASE + cid)
         }
     };
+    if snapshot.is_none() && disk.is_some() {
+        disks::remember_guest(state, sandbox_id, cid);
+    }
 
     let t0 = std::time::Instant::now();
     let cold_boot_permit = if snapshot.is_none() {
@@ -1763,7 +1779,9 @@ async fn bring_up(
         }
     }
 
-    if let Some(disk) = disk {
+    // Mounted in a guest that just booted. A resumed guest still has it
+    // mounted: that is in the memory it was restored with.
+    if let Some(disk) = disk.filter(|_| snapshot.is_none()) {
         if let Err(e) = disks::mount(&vm, &disk.path).await {
             if let Some(network) = network {
                 network.bridge.abort();
@@ -2508,21 +2526,14 @@ async fn create_sandbox(
     if let Err(e) = env_vars::validate(&req.env_vars) {
         return api_error(StatusCode::BAD_REQUEST, e);
     }
-    // A disk rules out what would restore its guest's memory against a disk
-    // that has moved on: starting from a snapshot, and pausing.
-    if req.disk_mount.is_some() {
-        if from_snapshot.is_some() {
-            return api_error(
-                StatusCode::BAD_REQUEST,
-                "a sandbox with a diskMount cannot start from a snapshot",
-            );
-        }
-        if req.auto_pause == Some(true) {
-            return api_error(
-                StatusCode::BAD_REQUEST,
-                "a sandbox with a diskMount cannot pause; autoPause must be off",
-            );
-        }
+    // A disk rules out starting from a snapshot, which would restore a
+    // guest's memory against a disk it never had. It can pause: its own
+    // snapshot is taken with the disk attached, and the disk stays claimed.
+    if req.disk_mount.is_some() && from_snapshot.is_some() {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "a sandbox with a diskMount cannot start from a snapshot",
+        );
     }
     // Room first, before anything is parsed or booted: a full node should
     // answer at once so a control plane can try the next one.
@@ -2955,12 +2966,6 @@ async fn pause_sandbox(
             "pausing needs sandboxes restored from a template, and this node boots them".into(),
         ));
     }
-    if disks::holds_one(sandbox_id) {
-        return Err((
-            StatusCode::CONFLICT,
-            format!("sandbox {sandbox_id} holds a disk, and a sandbox with a disk cannot pause"),
-        ));
-    }
     let live = {
         let mut sandboxes = state.sandboxes.lock();
         match sandboxes.get(sandbox_id) {
@@ -2993,7 +2998,14 @@ async fn pause_sandbox(
     state.routes.remove_sandbox(sandbox_id);
     let snapshot = state.suspend_dir.join(format!("{sandbox_id}.snap"));
     let _ = std::fs::remove_file(&snapshot);
-    if let Err(e) = live.vm.suspend_to(&snapshot).await {
+    // A sandbox with a disk booted, where the others were restored from a
+    // template: its memory is a change against no image, and is written whole.
+    let suspended = if disks::holds_one(sandbox_id) {
+        live.vm.suspend_whole_to(&snapshot).await
+    } else {
+        live.vm.suspend_to(&snapshot).await
+    };
+    if let Err(e) = suspended {
         // Still running -- `suspend_to` resumes it on failure -- so put it
         // back as it was.
         let _ = std::fs::remove_file(&snapshot);
@@ -3034,7 +3046,12 @@ async fn pause_sandbox(
     record.paused = true;
     // In a shared store, described there too -- after the snapshot, so a
     // node that finds the description finds a whole snapshot beside it.
-    if let Some(store) = &state.store {
+    // Not with a disk: the disk is on this node, so only this node resumes it.
+    if let Some(store) = state
+        .store
+        .as_ref()
+        .filter(|_| !disks::holds_one(sandbox_id))
+    {
         record.portable = true;
         let meta = PausedMeta {
             descriptor: live.descriptor.clone(),
@@ -3223,7 +3240,8 @@ async fn resume_sandbox(
         network,
         &paused.record.volume_mounts,
         paused.record.team_id.as_ref(),
-        None,
+        // The disk it held when it was paused, still claimed for it.
+        disks::reattach(state, sandbox_id).as_ref(),
         &BTreeMap::new(),
         &paused.descriptor.envd_access_token,
     )
