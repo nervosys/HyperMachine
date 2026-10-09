@@ -67,12 +67,18 @@ pub(super) fn probe() -> Controls {
     // An AppContainer with no capabilities has no network. Probed by making
     // one: profiles are refused in some sessions, and saying so here beats
     // finding out on the first workload.
-    controls = match appcontainer::Container::create() {
-        Ok(_) => controls.with(Control::NetworkIsolation),
-        Err(e) => controls.without(
-            Control::NetworkIsolation,
-            format!("an AppContainer could not be created here: {e}"),
-        ),
+    // The same container confines a workload to the paths it was granted,
+    // beyond what Windows lets every packaged application read.
+    controls = match appcontainer::Container::create(false) {
+        Ok(_) => controls
+            .with(Control::NetworkIsolation)
+            .with(Control::PathConfinement),
+        Err(e) => {
+            let why = format!("an AppContainer could not be created here: {e}");
+            controls
+                .without(Control::NetworkIsolation, why.clone())
+                .without(Control::PathConfinement, why)
+        }
     };
     let mut controls = controls
         .without(
@@ -239,13 +245,19 @@ pub(super) fn run(
     // was refused before it got here -- unless the caller said best effort,
     // and then the workload runs with the host's network and the control is
     // reported as dropped, which the probe already told them.
-    let container = if spec.network == NetworkPolicy::Denied {
-        match appcontainer::Container::create() {
+    // Confined to its granted paths means a container too, and one that
+    // keeps the network when the network was not what was asked to go.
+    let container = if spec.network == NetworkPolicy::Denied || spec.confine_paths {
+        match appcontainer::Container::create(spec.network == NetworkPolicy::Host) {
             Ok(container) => Some(container),
             Err(_) if spec.best_effort => None,
             Err(e) => {
                 return Err(SandboxError::ConfinementFailed {
-                    control: Control::NetworkIsolation,
+                    control: if spec.network == NetworkPolicy::Denied {
+                        Control::NetworkIsolation
+                    } else {
+                        Control::PathConfinement
+                    },
                     source: e,
                 })
             }
@@ -667,6 +679,68 @@ mod tests {
                 "{refused:?}"
             );
         }
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// Confinement asked for by itself: the network stays, and the user's
+    /// files go all the same, short of the ones granted.
+    #[test]
+    fn a_workload_confined_to_its_grants_cannot_read_the_users_other_files() {
+        let sandbox = ProcessSandbox::new();
+        if !sandbox.controls().enforces(Control::PathConfinement) {
+            return;
+        }
+        let base = std::env::temp_dir().join(format!("hv2-sandbox-confine-{}", std::process::id()));
+        let granted = base.join("granted");
+        std::fs::create_dir_all(&granted).expect("make");
+        std::fs::write(granted.join("note.txt"), "granted").expect("write");
+        std::fs::write(base.join("secret.txt"), "user-only").expect("write");
+        let read = |path: std::path::PathBuf| {
+            system("cmd.exe").args(["/c".to_string(), format!("type {}", path.display())])
+        };
+
+        let spec = SandboxSpec {
+            grants: crate::PathGrants {
+                read_only: vec![granted.clone()],
+                read_write: Vec::new(),
+            },
+            confine_paths: true,
+            wall_clock: Some(Duration::from_secs(30)),
+            ..SandboxSpec::unconfined()
+        };
+        assert_eq!(spec.network, NetworkPolicy::Host);
+        assert_eq!(
+            spec.required(),
+            vec![Control::WallClock, Control::PathConfinement]
+        );
+
+        let inside = sandbox
+            .run(&read(granted.join("note.txt")), &spec)
+            .expect("run");
+        assert_eq!(
+            String::from_utf8_lossy(&inside.stdout),
+            "granted",
+            "{inside:?}"
+        );
+        let hidden = sandbox
+            .run(&read(base.join("secret.txt")), &spec)
+            .expect("run");
+        assert_ne!(hidden.exit_code, Some(0), "{hidden:?}");
+        assert!(hidden.stdout.is_empty(), "{hidden:?}");
+
+        // The same spec without the flag is not contained at all, and reads it.
+        let open = SandboxSpec {
+            confine_paths: false,
+            ..spec
+        };
+        let seen = sandbox
+            .run(&read(base.join("secret.txt")), &open)
+            .expect("run");
+        assert_eq!(
+            String::from_utf8_lossy(&seen.stdout),
+            "user-only",
+            "{seen:?}"
+        );
         let _ = std::fs::remove_dir_all(&base);
     }
 

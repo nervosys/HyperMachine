@@ -203,11 +203,43 @@ hm sandbox run --ro C:\tools\mytool --rw C:\work\out -- C:\tools\mytool\run.exe
   with the host's filesystem on Linux, the path is already reachable and a
   grant changes nothing. It does not take other paths away; isolating the
   filesystem does that.
-- **Inside an isolated root** a read-only grant is one more read-only mount, and
-  a read-write grant is refused, since there is nowhere to put it.
+- **Inside an isolated root** a read-only grant is one more read-only mount. A
+  read-write grant is a writable mount at the same path on Linux, and refused
+  elsewhere, since there is nowhere to put it.
 - A path that is not absolute, or does not exist, refuses the run.
 - Granting a large tree rewrites every descriptor under it. Grant the directory
   the workload needs, not its parent.
+
+### Only the granted paths
+
+`SandboxSpec::confine_paths` (`--confine-paths`; `"confine": true` in a
+request's `filesystem`) turns the grants from a floor into the whole list: the
+workload reaches the paths it was granted and no others of the caller's, with
+no root for the caller to build. It is a control of its own, `path
+confinement`, reported and refused like the rest.
+
+```sh
+hm sandbox run --confine-paths --ro /usr --ro /lib --ro /lib64 --ro /bin \
+               --rw /work --net host -- /usr/bin/python3 /work/job.py
+```
+
+- **On Linux** the workload is rooted in an empty directory made for the run,
+  holding the granted paths at the places they have on the host: read-only
+  ones read-only, read-write ones writable. Nothing else is there. Not `/etc`,
+  not `/tmp`, not `/dev`, and not the program's own libraries unless they are
+  granted, which is why the example grants `/usr` and `/lib`. The directory is
+  removed when the run ends. It is available wherever filesystem isolation is.
+- **On Windows** the workload runs in an AppContainer, with the network
+  capabilities kept if the network was. It reaches its grants, its container's
+  folder, and what Windows lets every packaged application read, which is
+  mostly the system directories. That last part is why this is not called
+  filesystem isolation: the list is the caller's plus the system's. Loopback
+  is closed to an AppContainer whatever its capabilities, so a confined
+  workload with the host's network reaches the Internet and the local network
+  but not a server on the same machine.
+- **On macOS** it is not available, and a request for it is refused.
+- On top of `--fs isolated:ROOT` it adds nothing: that root already decides
+  what is there.
 
 Not claimed: filesystem isolation in the sense the Linux backend means it (a
 root of the caller's choosing), process isolation, or no-new-privileges. An
@@ -291,7 +323,7 @@ environment, which is not a limit anyone asked to remove. A workload that needs
   carries `what_this_host_enforces`'s report for each runner.
 - **Linux with every control granted**: the *Sandbox Containment* CI job
   lifts Ubuntu's AppArmor user-namespace restriction and runs the tests in a
-  delegated cgroup, and fails if the probe reports fewer than all eight
+  delegated cgroup, and fails if the probe reports fewer than all nine
   controls or if any test skips. Before it existed, every containment test on
   `ubuntu-latest` passed by skipping.
 
@@ -338,7 +370,8 @@ before trusting a limit there.
 
 ```
 hm sandbox run [--memory 4G] [--cpu-time SECS] [--wall-clock SECS] [--max-processes N]
-               [--net deny|host] [--fs host|isolated:ROOT [--ro PATH]...]
+               [--net deny|host] [--fs host|isolated:ROOT] [--ro PATH]... [--rw PATH]...
+               [--confine-paths]
                [--workdir DIR] [--env K=V]... [--pass-env NAME]... [--clean-env]
                [--isolate-processes] [--no-new-privileges]
                [--strict] [--report text|json|none] -- CMD [ARGS...]

@@ -63,7 +63,7 @@
       "properties": {
         "root": {
           "type": ["string", "null"],
-          "description": "A directory that becomes its root, hiding the host's. With one, readOnly paths are mounted in it and readWrite is refused."
+          "description": "A directory that becomes its root, hiding the host's. With one, readOnly and readWrite paths are mounted in it; readWrite is refused where that cannot be done, which is everywhere but Linux."
         },
         "readOnly": {
           "type": "array",
@@ -76,6 +76,11 @@
           "items": { "type": "string" },
           "default": [],
           "description": "Absolute, existing paths it may read and write, with everything under them."
+        },
+        "confine": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether readOnly and readWrite are all of the caller's filesystem it reaches. False, they only open paths its containment would hide."
         }
       }
     },

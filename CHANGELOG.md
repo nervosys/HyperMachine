@@ -33,6 +33,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `hm sandbox exec`: one versioned JSON request in, one JSON response out, for a
   caller that is a program (`hv2_sandbox::request`). The schema is
   `docs/schemas/sandbox-request-v1.schema.json`.
+- "Only these paths" for sandboxed programs: `SandboxSpec::confine_paths`,
+  `--confine-paths` on `hm sandbox run` and `filesystem.confine` in a request
+  make the granted paths all of the caller's filesystem a workload reaches,
+  with no root to build. Linux roots it in an empty directory holding the
+  grants; Windows uses an AppContainer that keeps the network when asked. A new
+  control, `path confinement`, reports where it holds. A read-write grant
+  inside an isolated root is now a writable mount on Linux.
 - Path grants for sandboxed programs: `SandboxSpec::grants`, and `--ro PATH` /
   `--rw PATH` on `hm sandbox run`, open a path to a workload whose containment
   would hide it. On Windows that is an access-control entry for the run's

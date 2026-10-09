@@ -105,16 +105,17 @@ impl Sandbox for ProcessSandbox {
             }
         }
         // A root of the caller's choosing holds what the caller mounts in it.
-        // A read-only grant is such a mount; a read-write one has nowhere to
-        // go, and running without it would be the quiet downgrade this crate
-        // refuses to make.
+        // A read-only grant is such a mount. A read-write one is too where
+        // the backend can mount one writable, which is Linux; elsewhere it
+        // has nowhere to go, and running without it would be the quiet
+        // downgrade this crate refuses to make.
         let widened;
         let spec = match &spec.filesystem {
             FilesystemPolicy::Isolated { root, read_only } if !spec.grants.is_empty() => {
-                if !spec.grants.read_write.is_empty() {
+                if !spec.grants.read_write.is_empty() && !cfg!(target_os = "linux") {
                     return Err(SandboxError::InvalidSpec(
-                        "a read-write grant cannot be given inside an isolated root; make \
-                         the path part of the root"
+                        "a read-write grant cannot be given inside an isolated root on this \
+                         platform; make the path part of the root"
                             .to_string(),
                     ));
                 }
@@ -124,6 +125,10 @@ impl Sandbox for ProcessSandbox {
                     filesystem: FilesystemPolicy::Isolated {
                         root: root.clone(),
                         read_only: mounts,
+                    },
+                    grants: crate::PathGrants {
+                        read_only: Vec::new(),
+                        read_write: spec.grants.read_write.clone(),
                     },
                     ..spec.clone()
                 };
@@ -447,8 +452,8 @@ mod tests {
 
     /// A grant that cannot be honoured refuses the run, on every platform and
     /// before anything starts: a path that is not absolute or not there, and
-    /// a read-write grant inside a root of the caller's choosing, which has
-    /// nowhere to put it.
+    /// a read-write grant inside a root of the caller's choosing where the
+    /// platform has nowhere to put it, which is everywhere but Linux.
     #[test]
     fn a_grant_that_cannot_be_honoured_refuses_the_run() {
         let here = std::env::temp_dir();
@@ -470,19 +475,22 @@ mod tests {
                 "{refused:?}"
             );
         }
-        let refused = run(SandboxSpec {
-            filesystem: FilesystemPolicy::Isolated {
-                root: here.clone(),
-                read_only: Vec::new(),
-            },
-            grants: grants(Vec::new(), vec![here.clone()]),
-            best_effort: true,
-            ..SandboxSpec::unconfined()
-        });
-        assert!(
-            matches!(&refused, Err(SandboxError::InvalidSpec(why)) if why.contains("read-write grant")),
-            "{refused:?}"
-        );
+        #[cfg(not(target_os = "linux"))]
+        {
+            let refused = run(SandboxSpec {
+                filesystem: FilesystemPolicy::Isolated {
+                    root: here.clone(),
+                    read_only: Vec::new(),
+                },
+                grants: grants(Vec::new(), vec![here.clone()]),
+                best_effort: true,
+                ..SandboxSpec::unconfined()
+            });
+            assert!(
+                matches!(&refused, Err(SandboxError::InvalidSpec(why)) if why.contains("read-write grant")),
+                "{refused:?}"
+            );
+        }
     }
 
     /// Output reaches the sink while the workload is still running -- the
@@ -1224,6 +1232,140 @@ mod tests {
             confined_shell(&sandbox, "cat /inside-marker", &scratch.spec()),
             "sandbox",
             "the directory the spec named should be the workload's root"
+        );
+    }
+
+    /// A read-write grant inside a root of the caller's choosing is mounted
+    /// there writable, at the path it has on the host.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_read_write_grant_is_writable_inside_an_isolated_root() {
+        let sandbox = ProcessSandbox::new();
+        if let Some(why) = filesystem_isolation_unavailable(&sandbox) {
+            eprintln!("skipping: {why}");
+            return;
+        }
+
+        let scratch = ScratchRoot::new("rw-grant");
+        let shared = scratch.base.join("shared");
+        std::fs::create_dir_all(&shared).expect("a directory to share");
+        let spec = SandboxSpec {
+            grants: crate::PathGrants {
+                read_only: Vec::new(),
+                read_write: vec![shared.clone()],
+            },
+            ..scratch.spec()
+        };
+        let script = format!(
+            "if echo z > '{}/made'; then echo WROTE; else echo REFUSED; fi",
+            shared.display()
+        );
+        assert_eq!(confined_shell(&sandbox, &script, &spec), "WROTE");
+        assert_eq!(
+            std::fs::read_to_string(shared.join("made")).expect("the file it made"),
+            "z\n"
+        );
+    }
+
+    /// Confined to its grants with no root of the caller's making: what was
+    /// granted is there, read-only or writable as it was granted, and nothing
+    /// else of the host is.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_workload_confined_to_its_grants_reaches_them_and_nothing_else() {
+        let sandbox = ProcessSandbox::new();
+        if !sandbox.controls().enforces(Control::PathConfinement) {
+            eprintln!(
+                "skipping: {}",
+                sandbox
+                    .controls()
+                    .reason(Control::PathConfinement)
+                    .unwrap_or("path confinement unavailable")
+            );
+            return;
+        }
+
+        // The scratch root is not used as a root here: it is a directory to
+        // grant, beside a file that is not granted.
+        let scratch = ScratchRoot::new("confine");
+        let writable = scratch.root();
+        let mut read_only: Vec<std::path::PathBuf> = ["/bin", "/usr", "/lib", "/lib64", "/sbin"]
+            .iter()
+            .map(std::path::PathBuf::from)
+            .filter(|path| path.exists())
+            .collect();
+        let readable = scratch.base.join("readable");
+        std::fs::create_dir_all(&readable).expect("a directory to read");
+        std::fs::write(readable.join("note"), b"granted\n").expect("a file to read");
+        read_only.push(readable.clone());
+        assert!(
+            std::path::Path::new("/etc/passwd").exists(),
+            "the file has to exist on the host, or its absence inside proves nothing"
+        );
+
+        let spec = SandboxSpec {
+            grants: crate::PathGrants {
+                read_only,
+                read_write: vec![writable.clone()],
+            },
+            confine_paths: true,
+            network: NetworkPolicy::Host,
+            wall_clock: Some(Duration::from_secs(20)),
+            ..SandboxSpec::default()
+        };
+        assert_eq!(
+            spec.required(),
+            vec![Control::WallClock, Control::PathConfinement]
+        );
+
+        let script = format!(
+            "if [ -e /etc/passwd ]; then echo VISIBLE; else echo HIDDEN; fi; \
+             if [ -e '{outside}' ]; then echo VISIBLE; else echo HIDDEN; fi; \
+             cat '{readable}/note'; \
+             if echo x > '{readable}/made'; then echo WROTE; else echo REFUSED; fi; \
+             if echo y > '{writable}/made'; then echo WROTE; else echo REFUSED; fi",
+            outside = scratch.outside().display(),
+            readable = readable.display(),
+            writable = writable.display(),
+        );
+        assert_eq!(
+            confined_shell(&sandbox, &script, &spec),
+            "HIDDEN\nHIDDEN\ngranted\nREFUSED\nWROTE",
+            "ungranted paths should be absent, and each grant what it was granted as"
+        );
+        assert!(
+            !readable.join("made").exists(),
+            "a read-only grant was written"
+        );
+        assert_eq!(
+            std::fs::read_to_string(writable.join("made")).expect("the file it made"),
+            "y\n",
+            "a file made in a read-write grant should be on the host"
+        );
+
+        // The root made for the run is gone. Its name carries this process's
+        // ID, and no other test here asks for confinement.
+        let prefix = format!("hv2-sandbox-root-{}-", std::process::id());
+        let left: Vec<_> = std::fs::read_dir(std::env::temp_dir())
+            .expect("list the temporary directory")
+            .flatten()
+            .filter(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
+            .collect();
+        assert!(left.is_empty(), "{left:?}");
+
+        // Without the flag the same grants open and close nothing: the host's
+        // filesystem is the workload's.
+        let open = SandboxSpec {
+            confine_paths: false,
+            ..spec
+        };
+        assert_eq!(
+            confined_shell(
+                &sandbox,
+                "if [ -e /etc/passwd ]; then echo VISIBLE; else echo HIDDEN; fi",
+                &open
+            ),
+            "VISIBLE"
         );
     }
 

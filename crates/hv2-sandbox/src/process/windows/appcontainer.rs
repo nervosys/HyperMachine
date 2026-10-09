@@ -48,10 +48,17 @@ use windows_sys::Win32::Security::Authorization::{
 use windows_sys::Win32::Security::Isolation::{
     CreateAppContainerProfile, DeleteAppContainerProfile,
 };
-use windows_sys::Win32::Security::{FreeSid, PSID, SECURITY_ATTRIBUTES, SECURITY_CAPABILITIES};
 use windows_sys::Win32::Security::{
-    ACL, DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+    CreateWellKnownSid, WinCapabilityInternetClientServerSid, WinCapabilityInternetClientSid,
+    WinCapabilityPrivateNetworkClientServerSid, ACL, DACL_SECURITY_INFORMATION,
+    PSECURITY_DESCRIPTOR, SID_AND_ATTRIBUTES, SUB_CONTAINERS_AND_OBJECTS_INHERIT,
 };
+use windows_sys::Win32::Security::{FreeSid, PSID, SECURITY_ATTRIBUTES, SECURITY_CAPABILITIES};
+
+/// The most bytes a SID takes (`SECURITY_MAX_SID_SIZE`).
+const SID_BYTES: usize = 68;
+/// A capability that is in force (`SE_GROUP_ENABLED`).
+const SE_GROUP_ENABLED: u32 = 4;
 use windows_sys::Win32::System::Pipes::CreatePipe;
 use windows_sys::Win32::System::Threading::{
     CreateProcessW, DeleteProcThreadAttributeList, GetExitCodeProcess,
@@ -74,13 +81,45 @@ fn wide(text: impl AsRef<std::ffi::OsStr>) -> Vec<u16> {
 pub(super) struct Container {
     name: Vec<u16>,
     sid: PSID,
+    /// The capability SIDs its workload is started with: none, or the three
+    /// that give it the network.
+    capabilities: Vec<[u8; SID_BYTES]>,
     /// The folder Windows made for it, which the workload can read and write.
     pub(super) folder: Option<PathBuf>,
 }
 
 impl Container {
-    /// Create a profile no other run shares, with no capabilities.
-    pub(super) fn create() -> std::io::Result<Self> {
+    /// Create a profile no other run shares. Without `network` it has no
+    /// capabilities, and so no network at all. With it, it has the three
+    /// that let a packaged application connect out, listen, and use the
+    /// private network -- which is the network short of loopback, which
+    /// Windows gives no AppContainer without a separate exemption.
+    pub(super) fn create(network: bool) -> std::io::Result<Self> {
+        let mut capabilities = Vec::new();
+        if network {
+            for kind in [
+                WinCapabilityInternetClientSid,
+                WinCapabilityInternetClientServerSid,
+                WinCapabilityPrivateNetworkClientServerSid,
+            ] {
+                let mut sid = [0u8; SID_BYTES];
+                let mut size = SID_BYTES as u32;
+                // SAFETY: the buffer is the largest a SID can be and its size
+                // is passed; no domain SID is needed for a capability.
+                if unsafe {
+                    CreateWellKnownSid(
+                        kind,
+                        std::ptr::null_mut(),
+                        sid.as_mut_ptr().cast(),
+                        &mut size,
+                    )
+                } == 0
+                {
+                    return Err(std::io::Error::last_os_error());
+                }
+                capabilities.push(sid);
+            }
+        }
         static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let nonce = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -117,6 +156,7 @@ impl Container {
         Ok(Self {
             name: wide_name,
             sid,
+            capabilities,
             folder,
         })
     }
@@ -401,10 +441,24 @@ pub(super) fn spawn(command: &SandboxCommand, container: &Container) -> std::io:
     let (stdout_theirs, stdout_ours) = pipe(false)?;
     let (stderr_theirs, stderr_ours) = pipe(false)?;
 
+    // Each capability, enabled. The SIDs live in the container, which
+    // outlives this call.
+    let mut granted: Vec<SID_AND_ATTRIBUTES> = container
+        .capabilities
+        .iter()
+        .map(|sid| SID_AND_ATTRIBUTES {
+            Sid: sid.as_ptr() as PSID,
+            Attributes: SE_GROUP_ENABLED,
+        })
+        .collect();
     let capabilities = SECURITY_CAPABILITIES {
         AppContainerSid: container.sid,
-        Capabilities: std::ptr::null_mut(),
-        CapabilityCount: 0,
+        Capabilities: if granted.is_empty() {
+            std::ptr::null_mut()
+        } else {
+            granted.as_mut_ptr()
+        },
+        CapabilityCount: granted.len() as u32,
         Reserved: 0,
     };
     // Exactly these three handles are inherited, whatever else in this
