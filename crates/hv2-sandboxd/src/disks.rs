@@ -91,6 +91,10 @@ pub(crate) struct Meta {
     /// Where that sandbox mounts it, so a reboot can mount it there again.
     #[serde(rename = "mountPath", default, skip_serializing_if = "Option::is_none")]
     mount_path: Option<String>,
+    /// The vsock context ID that sandbox's guest booted with. A guest resumed
+    /// from a pause is the same guest, and must find the address it had.
+    #[serde(rename = "guestCID", default, skip_serializing_if = "Option::is_none")]
+    guest_cid: Option<u64>,
 }
 
 impl Meta {
@@ -214,6 +218,7 @@ pub(crate) async fn create(
         size_mib: req.size_mib,
         attached_to: None,
         mount_path: None,
+        guest_cid: None,
     };
     let state2 = Arc::clone(&state);
     let made = tokio::task::spawn_blocking(move || make(&state2, &meta).map(|()| meta))
@@ -336,6 +341,8 @@ pub(crate) struct Claim {
     pub image: PathBuf,
     pub serial: String,
     pub path: String,
+    /// The context ID its guest booted with, once it has booted.
+    pub guest_cid: Option<u64>,
     kept: bool,
 }
 
@@ -388,6 +395,7 @@ pub(crate) fn claim(
     }
     meta.attached_to = Some(sandbox_id.to_string());
     meta.mount_path = Some(mount.path.clone());
+    meta.guest_cid = None;
     write_meta(state, &meta).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -401,8 +409,28 @@ pub(crate) fn claim(
         image: image(state, &meta.id),
         serial: meta.id,
         path: mount.path.clone(),
+        guest_cid: None,
         kept: false,
     })
+}
+
+/// Record the context ID `sandbox_id`'s guest booted with, beside the disk it
+/// holds, for a resume to give it back.
+pub(crate) fn remember_guest(state: &AppState, sandbox_id: &str, cid: u64) {
+    if !held(sandbox_id) {
+        return;
+    }
+    let _lock = LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    for mut meta in all(state) {
+        if meta.attached_to.as_deref() == Some(sandbox_id) {
+            meta.guest_cid = Some(cid);
+            if let Err(e) = write_meta(state, &meta) {
+                tracing::warn!("recording disk {}'s guest: {e}", meta.name);
+            }
+        }
+    }
 }
 
 /// Give back every disk `sandbox_id` holds. Called when a sandbox ends; a
@@ -418,6 +446,7 @@ pub(crate) fn release(state: &AppState, sandbox_id: &str) {
         if meta.attached_to.as_deref() == Some(sandbox_id) {
             meta.attached_to = None;
             meta.mount_path = None;
+            meta.guest_cid = None;
             if let Err(e) = write_meta(state, &meta) {
                 // Still free: the claim is believed only while held.
                 tracing::warn!("releasing disk {}: {e}", meta.name);
@@ -444,6 +473,7 @@ pub(crate) fn reattach(state: &Arc<AppState>, sandbox_id: &str) -> Option<Claim>
         sandbox_id: sandbox_id.to_string(),
         image: image(state, &meta.id),
         path: meta.mount_path.clone()?,
+        guest_cid: meta.guest_cid,
         serial: meta.id,
         kept: true,
     })
@@ -508,6 +538,7 @@ mod tests {
             size_mib: 16,
             attached_to: Some("sbx-from-a-dead-daemon".into()),
             mount_path: Some("/data".into()),
+            guest_cid: None,
         };
         assert_eq!(meta.holder(), None, "a claim nobody holds is stale");
         set_held("sbx-from-a-dead-daemon", true);

@@ -283,6 +283,22 @@ impl AgentVM {
         self.stop().await
     }
 
+    /// Pause, write this VM to `snapshot` whole, and stop it.
+    ///
+    /// [`Self::suspend_to`] for a guest that was not restored from an image:
+    /// one that booted has no image its memory is a change against, so all of
+    /// it is written. Larger and slower to write than a layered suspend, and
+    /// the only kind such a guest can have. On failure the VM is resumed
+    /// rather than left paused.
+    pub async fn suspend_whole_to(&self, snapshot: &std::path::Path) -> Result<()> {
+        self.vm.pause().await?;
+        if let Err(e) = self.vm.snapshot_with(snapshot, false).await {
+            self.vm.resume().await?;
+            return Err(e.into());
+        }
+        self.stop().await
+    }
+
     /// Pause, write this VM to `snapshot` as only what it changed since the
     /// image it was restored from, and resume it: a checkpoint to fork from,
     /// which the guest sees as a pause of a few milliseconds.

@@ -30,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   where firmware and a stock kernel look for one. An unmodified CirrOS cloud
   image boots to its login prompt. Not yet available to machines. See
   `docs/FIRMWARE_BOOT.md`.
+- A sandbox holding a block disk can be paused and resumed, by request, by
+  `autoPause` or when idle. The disk stays claimed while it is paused, and only
+  the node holding the disk resumes it. See `docs/DISKS.md`.
 - A warm pool: `--warm-pool N` keeps N sandboxes of the base template restored
   and in standby, and a plain create takes one. `GET /pool` reports it. See
   `docs/WARM_POOL.md`.
