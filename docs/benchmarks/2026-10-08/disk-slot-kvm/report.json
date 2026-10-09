@@ -1,0 +1,126 @@
+{
+  "success": true,
+  "purpose": "functional verification of the disk slot on KVM, with same-build timings; no comparison with another product",
+  "input_sha256": {
+    "daemon": "8a5e9cef801b26c7b3d202ead25ecbce12e9889662b98b11fc36b5b83308c18f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "driver": "520881fbf9cf92c40f587f8474d783342a60249f5e16edacb02beef08692f6d9"
+  },
+  "host_load_1m_at_start": 2.64697265625,
+  "cases": [
+    {
+      "name": "a sandbox created with a disk is restored from the template and given the disk",
+      "success": true,
+      "detail": {
+        "kernel_log": "[    0.383614] virtio_blk virtio1: [vda] new size: 131072 512-byte logical blocks (67.1 MB/64.0 MiB)",
+        "disk_bytes": 67108864,
+        "mount": "/dev/vda /data ext4 rw,relatime 0 0"
+      }
+    },
+    {
+      "name": "a sandbox with no disk sees only an empty placeholder of its own",
+      "success": true,
+      "detail": {
+        "placeholder_bytes": 1048576
+      }
+    },
+    {
+      "name": "it pauses and resumes, an unsynced write whole afterwards",
+      "success": true,
+      "detail": {
+        "guest_dirty_before_pause": "Dirty: 4088 kB",
+        "sha256": "6200de6f3915796d10bbc4261ed4f313c9362b8d348ff3be3b4b55ab109bb43b"
+      }
+    },
+    {
+      "name": "it forks, each fork with its own copy of the disk",
+      "success": true,
+      "detail": {
+        "forks": 2
+      }
+    },
+    {
+      "name": "a create with a disk takes a spare from the warm pool",
+      "success": true,
+      "detail": {
+        "handed_out": 5
+      }
+    },
+    {
+      "name": "it reboots onto the same disk",
+      "success": true,
+      "detail": {
+        "reboot": 200
+      }
+    },
+    {
+      "name": "timings: create, pause, resume and fork of a sandbox with a disk, without and with the slot",
+      "success": true,
+      "detail": {
+        "order": [
+          "without-slot",
+          "with-slot",
+          "with-slot",
+          "without-slot"
+        ],
+        "rounds_per_block": 10,
+        "milliseconds": {
+          "without-slot": {
+            "create": {
+              "n": 20,
+              "min": 228.3,
+              "p50": 262.1,
+              "max": 714.4
+            },
+            "pause": {
+              "n": 20,
+              "min": 155.4,
+              "p50": 178.8,
+              "max": 298.7
+            },
+            "resume": {
+              "n": 20,
+              "min": 41.4,
+              "p50": 53.1,
+              "max": 95.8
+            },
+            "fork": {
+              "n": 20,
+              "min": 203.7,
+              "p50": 233.4,
+              "max": 327.4
+            }
+          },
+          "with-slot": {
+            "create": {
+              "n": 20,
+              "min": 53.4,
+              "p50": 61.0,
+              "max": 166.4
+            },
+            "pause": {
+              "n": 20,
+              "min": 5.1,
+              "p50": 5.6,
+              "max": 60.0
+            },
+            "resume": {
+              "n": 20,
+              "min": 15.5,
+              "p50": 17.6,
+              "max": 33.7
+            },
+            "fork": {
+              "n": 20,
+              "min": 24.2,
+              "p50": 29.1,
+              "max": 43.3
+            }
+          }
+        },
+        "host_load_1m": 3.27783203125
+      }
+    }
+  ]
+}

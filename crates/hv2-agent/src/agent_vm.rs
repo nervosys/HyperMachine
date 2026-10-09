@@ -302,21 +302,29 @@ impl AgentVM {
     /// Pause, write this VM to `snapshot` whole, run `while_paused`, and
     /// resume it.
     ///
-    /// A checkpoint of a guest that was not restored from an image, with a
-    /// chance to copy whatever else must match the memory just written -- its
-    /// disk -- before the guest runs again and changes it. `while_paused` runs
-    /// on a thread that may block. The VM is resumed whatever happens.
+    /// A checkpoint with a chance to copy whatever else must match the memory
+    /// just written -- the guest's disk -- before the guest runs again and
+    /// changes it. `whole` writes all of the guest's memory, which a guest
+    /// that was not restored from an image needs; otherwise only what it
+    /// changed since that image is written, as [`Self::checkpoint_to`] does.
+    /// `while_paused` runs on a thread that may block. The VM is resumed
+    /// whatever happens.
     ///
     /// # Errors
     ///
     /// The snapshot could not be written, or `while_paused` failed.
-    pub async fn checkpoint_whole_to<T>(
+    pub async fn checkpoint_with<T>(
         &self,
         snapshot: &std::path::Path,
+        whole: bool,
         while_paused: impl FnOnce() -> std::result::Result<T, String>,
     ) -> Result<T> {
         self.vm.pause().await?;
-        let written = self.vm.snapshot_with(snapshot, false).await;
+        let written = if whole {
+            self.vm.snapshot_with(snapshot, false).await
+        } else {
+            self.vm.snapshot_layered(snapshot).await
+        };
         let copied = match &written {
             Ok(()) => Some(tokio::task::block_in_place(while_paused)),
             Err(_) => None,

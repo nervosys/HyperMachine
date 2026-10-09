@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   where firmware and a stock kernel look for one. An unmodified CirrOS cloud
   image boots to its login prompt. Not yet available to machines. See
   `docs/FIRMWARE_BOOT.md`.
+- `--disk-slot`: template guests boot with a placeholder disk, so a sandbox that
+  asks for a disk is restored from the template (or taken from the warm pool)
+  and given the real one, where it used to cold-boot. Its pause and fork then
+  write only what changed. See `docs/DISKS.md`.
 - A sandbox holding a block disk can be forked: each fork gets a copy of the
   disk made while the source is paused, so it matches the memory the fork is
   restored from. Up to 8 forks a request. See `docs/DISKS.md`.
