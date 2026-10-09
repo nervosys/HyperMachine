@@ -30,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   where firmware and a stock kernel look for one. An unmodified CirrOS cloud
   image boots to its login prompt. Not yet available to machines. See
   `docs/FIRMWARE_BOOT.md`.
+- The Windows process sandbox enforces "no network": a workload asked for none
+  is started in an AppContainer with no capabilities, and cannot open a socket,
+  loopback included. Such a workload also sees less of the filesystem, so
+  `hm sandbox run`, which denies the network by default, is stricter on Windows
+  than it was; `--net host` is the old behaviour. See `docs/SANDBOXES.md`.
 - `--disk-slot`: template guests boot with a placeholder disk, so a sandbox that
   asks for a disk is restored from the template (or taken from the warm pool)
   and given the real one, where it used to cold-boot. Its pause and fork then

@@ -174,18 +174,72 @@ pub(crate) mod driver {
     use std::sync::mpsc;
     use std::time::Duration;
 
+    /// How a workload ended.
+    #[derive(Debug, Clone, Copy)]
+    pub(crate) struct Exit {
+        pub(crate) code: Option<i32>,
+        pub(crate) signal: Option<i32>,
+    }
+
+    /// A started workload: its three pipes and how to wait for it.
+    ///
+    /// What [`wait_with_deadline`] needs of a process, and no more, so a
+    /// backend that cannot start its workload through `std::process` -- one
+    /// that needs a process attribute the standard library has no way to
+    /// pass -- can still hand it one.
+    pub(crate) struct Spawned {
+        pub(crate) stdin: Option<Box<dyn Write + Send>>,
+        pub(crate) stdout: Option<Box<dyn Read + Send>>,
+        pub(crate) stderr: Option<Box<dyn Read + Send>>,
+        /// The exit, if the workload has ended.
+        pub(crate) try_wait: Box<dyn FnMut() -> std::io::Result<Option<Exit>>>,
+        /// Block until it ends.
+        pub(crate) wait: Box<dyn FnMut() -> std::io::Result<Exit>>,
+    }
+
+    impl From<Child> for Spawned {
+        fn from(mut child: Child) -> Self {
+            let exit = |status: std::process::ExitStatus| Exit {
+                code: status.code(),
+                signal: signal_of(&status),
+            };
+            let stdin = child
+                .stdin
+                .take()
+                .map(|p| Box::new(p) as Box<dyn Write + Send>);
+            let stdout = child
+                .stdout
+                .take()
+                .map(|p| Box::new(p) as Box<dyn Read + Send>);
+            let stderr = child
+                .stderr
+                .take()
+                .map(|p| Box::new(p) as Box<dyn Read + Send>);
+            let child = std::rc::Rc::new(std::cell::RefCell::new(child));
+            let polled = std::rc::Rc::clone(&child);
+            Self {
+                stdin,
+                stdout,
+                stderr,
+                try_wait: Box::new(move || Ok(polled.borrow_mut().try_wait()?.map(exit))),
+                wait: Box::new(move || child.borrow_mut().wait().map(exit)),
+            }
+        }
+    }
+
     /// Feed stdin, wait for the child, and enforce the wall-clock deadline.
     ///
     /// `kill` is how this platform stops the whole workload — for a job object
     /// that is terminating the job, not the one process, so a child that
     /// spawned grandchildren does not leave them running.
     pub(crate) fn wait_with_deadline(
-        mut child: Child,
+        child: impl Into<Spawned>,
         stdin: Option<&[u8]>,
         deadline: Option<Duration>,
         io: &RunIo,
         kill: impl FnOnce(),
     ) -> Result<SandboxOutput, SandboxError> {
+        let mut child: Spawned = child.into();
         if let Some(data) = stdin {
             if let Some(mut pipe) = child.stdin.take() {
                 // A workload that never reads stdin would otherwise block this
@@ -230,8 +284,7 @@ pub(crate) mod driver {
         };
         let (status, killed) = if deadline.is_none() && io.cancel.is_none() {
             (
-                child
-                    .wait()
+                (child.wait)()
                     .map_err(|e| SandboxError::Runtime(format!("waiting for workload: {e}")))?,
                 false,
             )
@@ -239,7 +292,7 @@ pub(crate) mod driver {
             let start = std::time::Instant::now();
             let mut kill = Some(kill);
             loop {
-                match child.try_wait() {
+                match (child.try_wait)() {
                     Ok(Some(status)) => break (status, false),
                     Ok(None) => {}
                     Err(e) => {
@@ -253,7 +306,7 @@ pub(crate) mod driver {
                     }
                     // Reap it, so a kill does not leave a zombie behind every
                     // time it fires.
-                    let status = child.wait().map_err(|e| {
+                    let status = (child.wait)().map_err(|e| {
                         SandboxError::Runtime(format!("reaping killed workload: {e}"))
                     })?;
                     break (status, expired);
@@ -266,8 +319,8 @@ pub(crate) mod driver {
         let stderr = err_rx.recv().unwrap_or_default();
 
         Ok(SandboxOutput {
-            exit_code: status.code(),
-            signal: signal_of(&status),
+            exit_code: status.code,
+            signal: status.signal,
             stdout,
             stderr,
             killed_by: killed.then_some(Control::WallClock),
