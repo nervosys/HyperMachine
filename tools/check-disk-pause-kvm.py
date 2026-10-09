@@ -17,7 +17,8 @@ through its API:
 5. It pauses and resumes a second time.
 6. A sandbox created with autoPause and a disk is accepted, and ending a
    paused sandbox gives its disk back.
-7. Forking a sandbox with a disk is still refused.
+7. Snapshotting or checkpointing a sandbox with a disk is still refused.
+   (Forking one is allowed, and has its own check: check-disk-fork-kvm.py.)
 
 Writes report.json and the daemon's log into --output.
 """
@@ -173,11 +174,15 @@ def main():
             return {"pauses": 3}
         case("it pauses and resumes again", again)
 
-        def fork_is_still_refused():
-            status, value = request("POST", f"/sandboxes/{sandbox}/fork", {"count": 1})
-            assert status == 409, (status, value)
-            return {"status": status, "message": value["message"]}
-        case("forking a sandbox with a disk is still refused", fork_is_still_refused)
+        def snapshot_and_checkpoint_are_still_refused():
+            refusals = {}
+            for name in ("snapshots", "checkpoints"):
+                status, value = request("POST", f"/sandboxes/{sandbox}/{name}", {})
+                assert status == 409, (name, status, value)
+                refusals[name] = value["message"]
+            return refusals
+        case("snapshotting or checkpointing a sandbox with a disk is still refused",
+             snapshot_and_checkpoint_are_still_refused)
 
         def reached_the_disk():
             execute(sandbox, "sync")

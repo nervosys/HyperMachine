@@ -70,15 +70,37 @@ anything it had written but not yet flushed still in its page cache.
 
 Evidence: [real KVM: a sandbox with a disk paused and resumed, with unflushed writes](benchmarks/2026-10-08/disk-pause-kvm/README.md).
 
+## Forking a sandbox with a disk
+
+`POST /sandboxes/{id}/fork` works for a sandbox holding a disk. Each fork is the
+source as it was at that moment, memory and disk: its processes running, the
+disk mounted, and writes it had not yet flushed still in its page cache.
+
+- **Each fork gets its own disk,** a copy of the source's made while the source
+  is paused, just after its memory is written. So the copy is exactly the disk
+  that memory describes. Source and forks are independent from then on.
+- **The copies are ordinary disks,** named `<source disk>-fork-<fork ID>`. A
+  fork's disk outlives the fork, and can be attached to another sandbox by that
+  name, or deleted.
+- **How long the source is paused** depends on the filesystem under
+  `--disk-dir`. Where it has reflinks (XFS, Btrfs) a copy shares the source's
+  blocks until they diverge and takes no time. Elsewhere (ext4) every allocated
+  block is copied, once per fork, and the source waits for all of them.
+- **At most 8 forks in one request,** for that reason. A larger count is refused
+  before anything is paused.
+- **The whole of the source's memory is written,** as for a pause, since a
+  sandbox with a disk booted and was not restored from a template.
+
+Evidence: [real KVM: a sandbox forked with its disk, unflushed writes included](benchmarks/2026-10-08/disk-fork-kvm/README.md).
+
 ## What a sandbox with a disk cannot do
 
 - **Restore from a template.** virtio-mmio has no hot-plug, and a template's
   guest booted with no disk has no driver bound to one. A sandbox with a disk
   cold-boots instead, which is slower to create than a template restore. Sandboxes
   without a disk are unaffected.
-- **Fork, snapshot or checkpoint.** Each would run a second guest, or an older
-  one, against the one disk: two page caches and two ext4 journals over the same
-  blocks. The routes answer 409.
+- **Snapshot or checkpoint.** Each would later run an older guest against a
+  disk that has moved on. The routes answer 409.
 - **Start from a snapshot.** This is refused with 400 for the same reason.
 
 ## Limits

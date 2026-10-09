@@ -11,8 +11,9 @@ unless they ask for a disk, and checks:
 4. A daemon killed while a sandbox holds a disk leaves no claim that
    outlives it: a restarted daemon attaches the disk to a new sandbox, and
    the file is still there.
-5. A sandbox holding a disk refuses to fork, snapshot or checkpoint.
-   (Pausing one is allowed, and has its own check: check-disk-pause-kvm.py.)
+5. A sandbox holding a disk refuses to snapshot or checkpoint. (Pausing and
+   forking one are allowed, and have their own checks: check-disk-pause-kvm.py
+   and check-disk-fork-kvm.py.)
 
 Writes a JSON report to --output.
 """
@@ -150,8 +151,7 @@ def main():
               delete=deleted["message"])
 
         refusals = {}
-        for name, method, path in [("fork", "POST", f"/sandboxes/{a}/fork"),
-                                   ("snapshot", "POST", f"/sandboxes/{a}/snapshots"),
+        for name, method, path in [("snapshot", "POST", f"/sandboxes/{a}/snapshots"),
                                    ("checkpoint", "POST", f"/sandboxes/{a}/checkpoints")]:
             status, value = request(base, method, path, {})
             require(status in (409, 404), f"{name} of a disk sandbox answered {status}: {value}")

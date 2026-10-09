@@ -31,6 +31,10 @@ times a second.
    accepted. It is paused and then deleted; the disk reports no holder, and a
    further sandbox attaches it.
 
+Case 5 records what was true of this build. Forking a sandbox with a disk has
+since been made to work; see the [fork record](../disk-fork-kvm/README.md). The
+tool's case 5 now checks that snapshots and checkpoints are still refused.
+
 ## Result: all seven pass
 
 The full record is in [`report.json`](report.json). The daemon's log has no
