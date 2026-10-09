@@ -19,6 +19,7 @@ container. The comparison is about what surrounds the VM.
 | Fork a running VM, memory included | yes; ~160 ms provider example | `cp` exists; live-memory copying not established | **Real**: `POST /sandboxes/{id}/fork`, 1-100 copies |
 | Named snapshots, and new VMs from them | yes | not documented | **Real**: snapshots become templates |
 | Checkpoint and restore in place | yes, 10 per VM | not documented | **Real**: 10 per sandbox; memory and disk; same ID, token and URL; a failed restore changes nothing |
+| Create from a pool of ready VMs | "a full computer in <10ms" (published claim; method not stated) | not documented | **Real**: [`--warm-pool`](WARM_POOL.md) keeps restored sandboxes in standby for creates to take. On real KVM `POST /sandboxes` took [0.65 ms at the median with the pool and 18.9 ms without](benchmarks/2026-10-08/warm-pool-kvm/README.md), 100 creates each. Base template only; spares hold memory beyond capacity. Own-host measurement; boxd's endpoint was not measured |
 | Standby: memory kept, resumed by the next request | yes; "resume is sub-millisecond" (published claim) | not documented | **Real**: [standby](STANDBY.md) stops a sandbox's vCPUs and keeps its memory; any command, file or port request wakes it. On real KVM the node's part of a wake took [under a quarter of a millisecond in every one of 40 rounds](benchmarks/2026-10-08/standby-kvm/README.md), and a command to a sandbox in standby took as long as one to an awake sandbox. Own-host measurement; boxd's endpoint was not measured |
 | Pause and resume | yes | not documented | **Real**: to disk; any node resumes |
 | Suspend when idle, wake on traffic | yes | not documented | **Real**: `idleTimeout` or `--idle-pause-after`, plus `autoResume`. Idle means no traffic *and* a quiet guest CPU, so unwatched work is never frozen |
@@ -94,10 +95,12 @@ A 2026-10-08 recheck of boxd's site and docs found its published figures to be:
 a machine "in <10ms", a fork of memory and disk "in about 160 ms", and "resume is
 sub-millisecond" from a pause that keeps memory. None states how it was measured.
 HyperMachine's own figures for the same operations, on its own nested-KVM host,
-are a 59 ms SDK create (12.9 ms template restore to an answering agent), a
-127 ms median fork, and a [standby wake of 57 µs median on the node](benchmarks/2026-10-08/standby-kvm/README.md).
-So create is the one of the three where HyperMachine's own number is behind
-boxd's claim. These are documentation findings, not independent runtime tests. “Not documented”
+are a create of [0.65 ms at the median from the warm pool](benchmarks/2026-10-08/warm-pool-kvm/README.md)
+(18.9 ms without it), a 127 ms median fork, and a [standby wake of 57 µs median on the node](benchmarks/2026-10-08/standby-kvm/README.md).
+On its own host HyperMachine's numbers are now inside all three of boxd's
+claims. That is not a measured win: boxd's service has not been measured, its
+guest is a full Ubuntu machine with a disk where these are a small initramfs
+guest, and the fork figure predates this week's changes. These are documentation findings, not independent runtime tests. “Not documented”
 and “not checked” do not establish that a competitor lacks a capability.
 
 ## Current measured performance scope
@@ -110,6 +113,7 @@ and “not checked” do not establish that a competitor lacks a capability.
 | [Recorded optimized cold VM creation, 50 concurrent](benchmarks/2026-10-03/current-release-cold-sweep/README.md) | HM/Firecracker P50 3114.63/2743.81 ms; P99 3318.44/4284.52 ms; held PSS 4305.52/4180.28 MiB | 100/100 per engine passed; same eight-CPU affinity and guest; owned WSL, short cohort, managed endpoints unmeasured |
 | [Recorded optimized cold VM creation, 100 concurrent](benchmarks/2026-10-03/current-release-cold-sweep/README.md) | HM/Firecracker P50 6871.04/5673.70 ms; P99 7238.33/5943.06 ms; held PSS 8586.02/8360.31 MiB | 200/200 per engine passed; same eight-CPU affinity and guest; owned WSL, short cohort, managed endpoints unmeasured |
 | [MMIO guests boot with `pci=off`](benchmarks/2026-10-05/mmio-pci-off/README.md), cold creation | Per boot: 26,319 → 23,958 VM exits (Firecracker ~23,450), the ~2,080 PCI config-space exits gone. One guest: HM p50 457 → 432 ms; gap to Firecracker 42 → 19 ms across four interleaved blocks (80/80 passed) | C8 gap 105 → 78 ms (noisy); C50 inconclusive on the shared host; HyperMachine still slower than Firecracker |
+| [Create from the warm pool](benchmarks/2026-10-08/warm-pool-kvm/README.md), one at a time | `POST /sandboxes` with/without the pool: median 0.65/18.89 ms, 90th percentile 0.83/29.88 ms, maximum 11.61/44.08 ms; 100 creates each in alternating blocks | Best case for the pool (full, one create at a time). Release build, nested KVM, base template, no network. boxd publishes "<10ms" with no method; its endpoint is unmeasured |
 | [Standby wake](benchmarks/2026-10-08/standby-kvm/README.md), one sandbox | Node's part of a wake: median 57 µs, maximum 133 µs over 40 rounds. A command to a sandbox in standby: median 3.30 ms, against 3.33 ms to an awake one | Release build, nested KVM, host not quiet, 40 rounds. boxd publishes "sub-millisecond" for the same state with no method; its endpoint is unmeasured |
 | [Guest RAM on huge pages](benchmarks/2026-10-06/guest-thp/README.md) (#143), cold creation | Per boot: 24,159–24,624 → 2,809–2,991 VM exits; nested page faults 22,100 → 659 (Firecracker 23,536–25,061 exits). Daemon RSS +~6 MB per guest | Exit counts only: latency not measured (host at 100% CPU). Sparse-touch guests and fragmented hosts not tested |
 | [MMIO guests on hardware-reduced ACPI](benchmarks/2026-10-06/acpi-hw-reduced/README.md) (#144), cold creation | Per boot: 2,809–2,991 → 2,250–2,303 VM exits; I/O APIC accesses 439 → 30, PIC port I/O 38 → 0 (Firecracker 50 and 0). 3/3 boots ready | Exit counts only: latency not measured. No networked guest traced; PCI guests unchanged |
