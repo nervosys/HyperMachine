@@ -97,6 +97,16 @@ pub struct VmManager {
     active_vms: RwLock<HashMap<String, Arc<AgentVM>>>,
 }
 
+/// Make `path` an empty directory, whatever was there.
+fn empty_dir(path: &std::path::Path) -> std::io::Result<()> {
+    match std::fs::remove_dir_all(path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e),
+    }
+    std::fs::create_dir_all(path)
+}
+
 impl VmManager {
     /// Create a new VM manager
     pub fn new() -> Result<Self> {
@@ -117,7 +127,11 @@ impl VmManager {
             std::process::id(),
             unique_id
         ));
-        std::fs::create_dir_all(&tmp)?;
+        // Empty, whatever was there: the name is this process's ID and a
+        // counter, and nothing removes the directory afterwards, so a later
+        // process given the same ID would otherwise start with another's VMs.
+        // Windows reuses process IDs quickly, and a CI run there found one.
+        empty_dir(&tmp)?;
         Self::with_state_dir(tmp)
     }
 
@@ -649,6 +663,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_new_in_memory_isolation() {
+        // A directory left by an earlier process is emptied, not inherited.
+        let stale = tempfile::tempdir().unwrap();
+        let dir = stale.path().join("state");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("registry.json"), "left by another process").unwrap();
+        empty_dir(&dir).unwrap();
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
+        empty_dir(&stale.path().join("not-there-yet")).unwrap();
+
         // Create two managers - they should have separate state
         let manager1 = VmManager::new_in_memory().unwrap();
         let manager2 = VmManager::new_in_memory().unwrap();
