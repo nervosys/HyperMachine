@@ -686,6 +686,9 @@ pub struct VM {
     /// A block device over PCI, for firmware that finds its disk by
     /// enumerating the bus. Kept apart from `block`: it is not snapshotted.
     block_pci: RwLock<Option<AttachedBlockPci>>,
+    /// A network device over PCI, for a guest that finds its hardware by
+    /// enumerating the bus. Kept apart from `net`: it is not snapshotted.
+    net_pci: RwLock<Option<AttachedNetPci>>,
     /// Paused by [`VM::standby`], to be resumed by the next thing sent to the
     /// guest. Clear for an ordinary pause, which only its caller ends.
     standby: AtomicBool,
@@ -722,6 +725,12 @@ struct AttachedBlockPci {
     device: Arc<parking_lot::Mutex<crate::devices::virtio_blk_mmio::VirtioBlockMmio>>,
     /// Kept alive with the VM; the device manager holds the other reference.
     _transport: Arc<tokio::sync::RwLock<crate::devices::virtio_pci::VirtioPciTransport>>,
+}
+
+struct AttachedNetPci {
+    device: Arc<parking_lot::Mutex<crate::devices::virtio_net_mmio::VirtioNetMmio>>,
+    /// Kept so the host side can signal the used queue after it publishes.
+    transport: Arc<tokio::sync::RwLock<crate::devices::virtio_pci::VirtioPciTransport>>,
 }
 
 struct AttachedNet {
@@ -890,6 +899,7 @@ impl VM {
             net: RwLock::new(None),
             block: RwLock::new(None),
             block_pci: RwLock::new(None),
+            net_pci: RwLock::new(None),
             standby: AtomicBool::new(false),
             standby_wakes: AtomicU64::new(0),
             standby_last_wake_ns: AtomicU64::new(0),
@@ -3247,6 +3257,127 @@ impl VM {
         Ok(device)
     }
 
+    /// Guest physical address of the PCI network device's BAR, by default.
+    pub const NET_PCI_BAR_BASE: u64 = 0xd005_0000;
+
+    /// PCI slot of the network device on bus 0.
+    pub const NET_PCI_SLOT: u8 = 5;
+
+    /// Interrupt line the PCI network device raises, by default. Not the
+    /// block device's, for the reason [`Self::NET_IRQ`] gives.
+    pub const NET_PCI_IRQ: u8 = 11;
+
+    /// Attach a virtio-net device with MAC address `mac` over PCI.
+    ///
+    /// The same device as [`Self::attach_net`], behind a PCI function instead
+    /// of a virtio-mmio window, so a stock operating system finds it by
+    /// enumerating bus 0. As there, this attaches a device and not a network:
+    /// the caller connects it to something.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a PCI network device is already attached, or if
+    /// the BAR window would overlap guest RAM.
+    pub async fn attach_net_pci(
+        self: &Arc<Self>,
+        mac: [u8; 6],
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_net_mmio::VirtioNetMmio>>> {
+        use crate::devices::virtio_net_mmio::VirtioNetMmio;
+        use crate::devices::virtio_pci::{VirtioPciTransport, VIRTIO_PCI_BAR_SIZE};
+
+        let (bar_base, irq) = (Self::NET_PCI_BAR_BASE, Self::NET_PCI_IRQ);
+        if self.net_pci.read().is_some() {
+            return Err(Error::Device(
+                "this VM already has a PCI network device".to_string(),
+            ));
+        }
+        if self.memory.host_offset(bar_base).is_some() {
+            return Err(Error::Device(format!(
+                "network BAR window at {bar_base:#x} overlaps {} bytes of guest RAM",
+                self.memory.total_size()
+            )));
+        }
+        self.pci_root.write().ensure_host_bridge()?;
+
+        let device = Arc::new(parking_lot::Mutex::new(VirtioNetMmio::new(mac)));
+        let transport = Arc::new(tokio::sync::RwLock::new(
+            VirtioPciTransport::new("virtio-net-pci", bar_base, self.memory(), device.clone())
+                .with_interrupt(self.pic(), irq),
+        ));
+        let mut config = transport.read().await.config_space();
+        config.set_interrupt_line(irq);
+        config.set_interrupt_pin(crate::pci::InterruptPin::IntA);
+        self.pci_root
+            .write()
+            .add_device(Self::NET_PCI_SLOT, 0, config);
+        self.devices
+            .register_device("virtio-net-pci", transport.clone())
+            .await?;
+        self.devices
+            .register_mmio_region("virtio-net-pci".to_string(), bar_base, VIRTIO_PCI_BAR_SIZE)
+            .await?;
+
+        // Frames delivered as they arrive, on a thread of their own, for the
+        // reasons `attach_net_at` gives.
+        let (frame_tx, frame_rx) = std::sync::mpsc::channel();
+        device
+            .lock()
+            .set_frame_wake(Arc::new(QueuedFrames { sender: frame_tx }));
+        let pump_vm = Arc::downgrade(self);
+        let handle = tokio::runtime::Handle::current();
+        std::thread::Builder::new()
+            .name(format!("hv2-net-pci-{}", self.config.name))
+            .spawn(move || {
+                while frame_rx.recv().is_ok() {
+                    while frame_rx.try_recv().is_ok() {}
+                    let Some(pump_vm) = pump_vm.upgrade() else {
+                        break;
+                    };
+                    handle.block_on(async {
+                        if let Err(e) = pump_vm.notify_net_pci().await {
+                            tracing::debug!(
+                                "virtio-net: a queued frame could not be delivered: {e}"
+                            );
+                        }
+                    });
+                }
+            })
+            .map_err(|e| Error::Config(format!("could not start the net delivery thread: {e}")))?;
+
+        *self.net_pci.write() = Some(AttachedNetPci {
+            device: device.clone(),
+            transport,
+        });
+        tracing::info!(
+            "VM '{}': network device attached over PCI at slot {}, BAR {bar_base:#x} (IRQ {irq})",
+            self.config.name,
+            Self::NET_PCI_SLOT,
+        );
+        Ok(device)
+    }
+
+    /// Move frames queued for the guest on its PCI network device into its
+    /// receive ring, and interrupt it. Returns whether anything was published.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a queue error, or a failure to raise the interrupt.
+    pub async fn notify_net_pci(&self) -> Result<bool> {
+        self.wake().await?;
+        let attached = {
+            let guard = self.net_pci.read();
+            match guard.as_ref() {
+                Some(net) => (net.device.clone(), Arc::clone(&net.transport)),
+                None => return Ok(false),
+            }
+        };
+        let published = attached.0.lock().deliver_pending(&self.memory)?;
+        if published {
+            attached.1.read().await.signal_used_queue()?;
+        }
+        Ok(published)
+    }
+
     /// Guest physical address of the PCI block device's BAR, by default.
     pub const BLOCK_PCI_BAR_BASE: u64 = 0xd004_0000;
 
@@ -5299,6 +5430,38 @@ mod tests {
             "a PCI device is found by enumeration; telling the guest where it \
              is on the command line would mean it was not"
         );
+    }
+
+    /// A PCI network device is a function a guest finds by walking bus 0,
+    /// with its register window mapped and no kernel argument.
+    #[tokio::test]
+    async fn a_pci_network_device_is_found_by_enumeration() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        crate::machine::Machine::legacy_pc_with_pci_root(vm.pci_root())
+            .attach_absent(&vm.devices())
+            .await
+            .expect("attach the legacy machine");
+        vm.attach_net_pci(TEST_MAC).await.expect("attach over PCI");
+        let address = crate::pci::PciAddress {
+            segment: 0,
+            bus: 0,
+            device: VM::NET_PCI_SLOT,
+            function: 0,
+        };
+        // Vendor 0x1af4, device 0x1041: a modern virtio network device.
+        assert_eq!(vm.pci_root().read().read_config(&address, 0), 0x1041_1af4);
+        assert!(vm
+            .devices()
+            .find_mmio_device(VM::NET_PCI_BAR_BASE)
+            .await
+            .is_some());
+        assert!(vm.extra_kernel_args().is_empty());
+        assert!(vm.net().is_none(), "it is not the MMIO device");
+        assert!(vm.attach_net_pci(TEST_MAC).await.is_err());
+        // Nothing queued, nothing published.
+        assert!(!vm.notify_net_pci().await.expect("notify"));
     }
 
     /// A block device attached over an anonymous file can be given a real

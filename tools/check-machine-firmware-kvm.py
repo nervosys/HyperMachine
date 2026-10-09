@@ -11,8 +11,9 @@ and a --machine-dir, then checks, through its API:
 3. The file survives stop and start.
 4. The file survives the guest rebooting itself, which the daemon answers by
    booting the machine again.
-5. What cannot work is refused at creation: a network, an image that is not
-   there, a path instead of a file name, an image together with a template.
+5. What cannot work is refused at creation: an image that is not there, a
+   path instead of a file name, an image together with a template. (A network
+   is allowed, and has its own check: check-machine-image-network-kvm.py.)
 
 The image is CirrOS, used as downloaded, so the login is its documented
 default. Writes report.json, the daemon's log and the console into --output.
@@ -194,7 +195,6 @@ def main():
         def refusals():
             results = {}
             for label, body in [
-                ("network", {"name": "bad-01", "image": "cirros.raw", "network": {}}),
                 ("missing", {"name": "bad-02", "image": "absent.raw"}),
                 ("path", {"name": "bad-03", "image": "../cirros.raw"}),
                 ("both", {"name": "bad-04", "image": "cirros.raw", "templateID": "base"}),

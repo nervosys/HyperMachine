@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   loopback included. Such a workload also sees less of the filesystem, so
   `hm sandbox run`, which denies the network by default, is stricter on Windows
   than it was; `--net host` is the old behaviour. See `docs/SANDBOXES.md`.
+- A machine made from a disk image can have a network: a NIC on the PCI bus
+  behind the egress gateway, which now answers DHCP so a stock guest configures
+  itself. The gateway no longer answers ARP for the guest's own address, which
+  a DHCP client reads as a conflict.
 - `--disk-slot`: template guests boot with a placeholder disk, so a sandbox that
   asks for a disk is restored from the template (or taken from the warm pool)
   and given the real one, where it used to cold-boot. Its pause and fork then
