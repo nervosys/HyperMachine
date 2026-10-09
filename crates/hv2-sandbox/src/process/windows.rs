@@ -939,8 +939,15 @@ mod tests {
                 .expect("run");
             text(&output)
         };
+        // Whether its entries are inherited is the host's doing: under a
+        // temporary directory with nothing to hand down, as on CI's runner,
+        // they are the creator's defaults and its own. Either way the list
+        // must come back as it is here.
         let before = listed(&private);
-        assert!(before.contains("(I)"), "the path should inherit: {before}");
+        assert!(
+            before.contains("Successfully processed 1 files"),
+            "the path's list could not be read: {before}"
+        );
 
         let granted = SandboxSpec {
             grants: crate::PathGrants {
