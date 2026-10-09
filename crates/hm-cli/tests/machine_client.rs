@@ -19,11 +19,23 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
                 return StatusCode::UNAUTHORIZED.into_response();
             }
             let method = request.method().to_string();
-            let path = request.uri().path().to_string();
+            // The query too, where there is one, so a flag that becomes one
+            // is seen.
+            let path = match request.uri().query() {
+                Some(query) => format!("{}?{query}", request.uri().path()),
+                None => request.uri().path().to_string(),
+            };
             let body = axum::body::to_bytes(request.into_body(), 65536)
                 .await
                 .unwrap();
-            let body = serde_json::from_slice(&body).unwrap_or(Value::Null);
+            // JSON where it is JSON; typed console input as the text it is.
+            let body = serde_json::from_slice(&body).unwrap_or_else(|_| {
+                if body.is_empty() {
+                    Value::Null
+                } else {
+                    Value::String(String::from_utf8_lossy(&body).into_owned())
+                }
+            });
             seen.lock()
                 .unwrap()
                 .push((method.clone(), path.clone(), body));
@@ -38,6 +50,8 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
                 }))
                 .into_response(),
                 ("GET", "/machines/web-01/console") => "[    0.1] booted\n".into_response(),
+                ("GET", "/machines/web-01/console?tail=64") => "login: ".into_response(),
+                ("POST", "/machines/web-01/console") => StatusCode::NO_CONTENT.into_response(),
                 ("GET", "/machines/missing") => StatusCode::NOT_FOUND.into_response(),
                 _ => Json(machine).into_response(),
             }
@@ -126,7 +140,7 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
         // The defaults: no NIC, and nothing the node should decide.
         assert_eq!(
             requests[0].2,
-            json!({"name":"web-01","templateID":"base","diskGiB":8,"autostart":true,
+            json!({"name":"web-01","templateID":"base","autostart":true,
                    "restartPolicy":"always","start":true})
         );
         assert_eq!(
@@ -162,6 +176,46 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
     assert!(output.status.success());
     assert_eq!(output.stdout, b"[    0.1] booted\n");
 
+    // With --tail, the console's last bytes as the guest wrote them.
+    let output = hm(
+        vec!["console", "web-01", "--tail", "64"],
+        "owned-machine-key",
+    )
+    .await;
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"login: ");
+    // Typing sends the text and Enter, or the text alone.
+    for (arguments, typed) in [
+        (vec!["type", "web-01", "sudo reboot"], "sudo reboot\n"),
+        (vec!["type", "web-01", "y", "--no-enter"], "y"),
+    ] {
+        let output = hm(arguments.clone(), "owned-machine-key").await;
+        assert!(
+            output.status.success(),
+            "{arguments:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let requests = observed.lock().unwrap();
+        let (method, path, body) = requests.last().unwrap();
+        assert_eq!(
+            (method.as_str(), path.as_str()),
+            ("POST", "/machines/web-01/console")
+        );
+        assert_eq!(body, &Value::String(typed.to_owned()));
+    }
+    // From an image: no template is sent, and no disk size unless asked.
+    let output = hm(
+        vec!["create", "cloud-01", "--image", "cirros.raw"],
+        "owned-machine-key",
+    )
+    .await;
+    assert!(output.status.success());
+    assert_eq!(
+        observed.lock().unwrap().last().unwrap().2,
+        json!({"name":"cloud-01","image":"cirros.raw","autostart":true,
+               "restartPolicy":"always","start":true})
+    );
+
     // Refusals fail, and a bad name never reaches the API.
     let before = observed.lock().unwrap().len();
     for (arguments, key) in [
@@ -178,6 +232,8 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
         vec!["inspect", "../etc"],
         vec!["create", "has space"],
         vec!["create", "web-04", "--disk-gib", "0"],
+        vec!["create", "web-05", "--image", "a.raw", "--template", "base"],
+        vec!["type", "web-01", "--no-enter", ""],
         vec!["exec", "web-01"],
     ] {
         let output = hm(arguments.clone(), "owned-machine-key").await;

@@ -293,7 +293,10 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
             get(to_machine_node).delete(to_machine_node),
         )
         .route("/machines/{name}/exec", post(to_machine_node))
-        .route("/machines/{name}/console", get(to_machine_node))
+        .route(
+            "/machines/{name}/console",
+            get(to_machine_node).post(to_machine_node),
+        )
         .route("/machines/{name}/network/decisions", get(to_machine_node))
         .route("/machines/{name}/{action}", post(to_machine_node))
         .route("/sandboxes/{id}/refreshes", post(forward))

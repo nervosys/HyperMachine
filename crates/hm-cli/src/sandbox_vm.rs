@@ -435,16 +435,20 @@ pub enum MachineCommand {
     Create {
         #[arg(value_parser = machine_name)]
         name: String,
-        /// Template whose file tree becomes the root disk
-        #[arg(long, default_value = "base")]
-        template: String,
+        /// Template whose file tree becomes the root disk [default: base]
+        #[arg(long, conflicts_with = "image")]
+        template: Option<String>,
+        /// Boot by firmware from this raw disk image in the node's image
+        /// directory, in place of a template
+        #[arg(long)]
+        image: Option<String>,
         #[arg(long, value_parser = clap::value_parser!(u32).range(1..=64))]
         cpus: Option<u32>,
         #[arg(long, value_parser = clap::value_parser!(u64).range(128..=1_048_576))]
         memory_mb: Option<u64>,
-        /// Root disk size; the image is sparse
-        #[arg(long, default_value_t = 8, value_parser = clap::value_parser!(u64).range(1..=2048))]
-        disk_gib: u64,
+        /// Root disk size; the image is sparse [default: 8, or the image's size]
+        #[arg(long, value_parser = clap::value_parser!(u64).range(1..=2048))]
+        disk_gib: Option<u64>,
         /// Control plane only: the node to place it on
         #[arg(long)]
         node: Option<String>,
@@ -509,6 +513,19 @@ pub enum MachineCommand {
     Console {
         #[arg(value_parser = machine_name)]
         name: String,
+        /// Print this many of its last bytes exactly as the guest wrote them,
+        /// in place of the summary
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..=1_048_576))]
+        tail: Option<u32>,
+    },
+    /// Type text at a machine's serial console, followed by Enter
+    Type {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        text: String,
+        /// Do not send Enter after the text
+        #[arg(long)]
+        no_enter: bool,
     },
     /// Show what a machine's egress gateway allowed and refused since it booted
     Decisions {
@@ -1346,6 +1363,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             MachineCommand::Create {
                 name,
                 template,
+                image,
                 cpus,
                 memory_mb,
                 disk_gib,
@@ -1360,8 +1378,6 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             } => {
                 let mut body = json!({
                     "name": name,
-                    "templateID": template,
-                    "diskGiB": disk_gib,
                     "autostart": !no_autostart,
                     "restartPolicy": match restart {
                         MachineRestart::Always => "always",
@@ -1369,6 +1385,16 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                     },
                     "start": !no_start,
                 });
+                // One or the other; a template unless an image is named.
+                match image {
+                    Some(image) => body["image"] = json!(image),
+                    None => {
+                        body["templateID"] = json!(template.unwrap_or_else(|| "base".into()));
+                    }
+                }
+                if let Some(disk_gib) = disk_gib {
+                    body["diskGiB"] = json!(disk_gib);
+                }
                 if let Some(cpus) = cpus {
                     body["cpuCount"] = json!(cpus);
                 }
@@ -1450,14 +1476,37 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 std::io::stderr().write_all(stderr.as_bytes())?;
                 return Ok(code);
             }
-            MachineCommand::Console { name } => {
-                // Text, not JSON: the guest's own serial output.
-                let mut response = api
+            MachineCommand::Type {
+                name,
+                text,
+                no_enter,
+            } => {
+                let mut typed = text.into_bytes();
+                if !no_enter {
+                    typed.push(b'\n');
+                }
+                if typed.is_empty() || typed.len() > 4096 {
+                    bail!("console input is 1 to 4096 bytes");
+                }
+                let response = api
                     .client
-                    .get(api.url(&["machines", &name, "console"])?)
+                    .post(api.url(&["machines", &name, "console"])?)
+                    .body(typed)
                     .send()
                     .await
                     .context("sandbox API request failed")?;
+                if !response.status().is_success() {
+                    bail!("sandbox API returned {}", response.status());
+                }
+                return Ok(0);
+            }
+            MachineCommand::Console { name, tail } => {
+                // Text, not JSON: the guest's own serial output.
+                let mut request = api.client.get(api.url(&["machines", &name, "console"])?);
+                if let Some(tail) = tail {
+                    request = request.query(&[("tail", tail.to_string())]);
+                }
+                let mut response = request.send().await.context("sandbox API request failed")?;
                 if !response.status().is_success() {
                     bail!("sandbox API returned {}", response.status());
                 }

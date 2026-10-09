@@ -290,6 +290,10 @@ struct Options {
     disk_dir: Option<String>,
     /// Where machines -- long-lived VMs -- are kept: this node's own.
     machine_dir: Option<String>,
+    /// PVH firmware that machines created from a disk image boot.
+    firmware: Option<String>,
+    /// Where the raw disk images machines may be created from are.
+    image_dir: Option<String>,
     /// Let webhooks reach loopback, private and link-local addresses.
     allow_private_webhooks: bool,
     /// Prefault a restored guest's working set. Off by default: it halves
@@ -354,6 +358,8 @@ fn parse_options() -> Result<Options, String> {
         volume_dir: None,
         disk_dir: None,
         machine_dir: None,
+        firmware: None,
+        image_dir: None,
         allow_private_webhooks: false,
         snapshot_store: None,
         mtls_ca: None,
@@ -407,6 +413,8 @@ fn parse_options() -> Result<Options, String> {
             "--volume-dir" => opts.volume_dir = Some(value(&mut i)?),
             "--disk-dir" => opts.disk_dir = Some(value(&mut i)?),
             "--machine-dir" => opts.machine_dir = Some(value(&mut i)?),
+            "--firmware" => opts.firmware = Some(value(&mut i)?),
+            "--image-dir" => opts.image_dir = Some(value(&mut i)?),
             "--allow-private-webhooks" => opts.allow_private_webhooks = true,
             "--template" => {
                 let spec = value(&mut i)?;
@@ -5739,7 +5747,10 @@ async fn main() -> std::process::ExitCode {
             get(machines::get).delete(machines::delete),
         )
         .route("/machines/{name}/exec", post(machines::exec))
-        .route("/machines/{name}/console", get(machines::console))
+        .route(
+            "/machines/{name}/console",
+            get(machines::console).post(machines::console_input),
+        )
         .route(
             "/machines/{name}/network/decisions",
             get(machines::network_decisions),

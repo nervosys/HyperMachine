@@ -1,0 +1,58 @@
+{
+  "success": true,
+  "purpose": "functional verification of firmware-booted machines on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "c086164cb61e46e0177c4aaddc62bbccc10643c5fdb9855fe77dc48987f34673",
+    "firmware": "4a0a1e977368f6b15d2198a216bdedf9a350bf5e5ae07e29e695373ec16ad958",
+    "image": "800f530322907ababfe948271255107959ea780ac118a1d47109e3adaf484e96",
+    "driver": "a29b06c2c6010dcd6ee2861b8f2adb56aba7cc01eb1387e7f978bdcace227f54"
+  },
+  "cases": [
+    {
+      "name": "a machine created from the image boots by firmware to the image's login prompt",
+      "success": true,
+      "detail": {
+        "machineID": "vm-7eea058809befe15",
+        "diskGiB": 1,
+        "prompt": "cirros login:"
+      }
+    },
+    {
+      "name": "the console takes input: a login, commands, and a file written",
+      "success": true,
+      "detail": {
+        "kernel": "5.15.0-71-generic",
+        "exec": 409,
+        "saw": [
+          "wrote-kept-42",
+          "$ "
+        ]
+      }
+    },
+    {
+      "name": "the file survives stop and start",
+      "success": true,
+      "detail": {
+        "note": "kept-42"
+      }
+    },
+    {
+      "name": "the file survives the guest rebooting itself",
+      "success": true,
+      "detail": {
+        "note": "kept-42"
+      }
+    },
+    {
+      "name": "what cannot work is refused at creation",
+      "success": true,
+      "detail": {
+        "network": "a machine booted from an image has no network device yet",
+        "missing": "no image absent.raw",
+        "path": "image \"../cirros.raw\": a file name of letters, digits, -, _ and .",
+        "both": "give image or templateID, not both",
+        "too small": "diskGiB is 1 to 2048"
+      }
+    }
+  ]
+}
