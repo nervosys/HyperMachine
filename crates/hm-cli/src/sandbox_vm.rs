@@ -194,6 +194,8 @@ pub enum VmCommand {
     },
     /// Pause a VM to disk
     Pause { id: String },
+    /// Stop a VM's vCPUs and keep its memory; the next request resumes it
+    Standby { id: String },
     /// Resume a paused VM with a new lifetime
     Resume {
         id: String,
@@ -1626,6 +1628,10 @@ pub async fn run(args: VmArgs) -> Result<i32> {
         }
         VmCommand::Pause { id } => {
             api.request(Method::POST, &["sandboxes", &id, "pause"], None)
+                .await?
+        }
+        VmCommand::Standby { id } => {
+            api.request(Method::POST, &["sandboxes", &id, "standby"], None)
                 .await?
         }
         VmCommand::Resume { id, lifetime } => {

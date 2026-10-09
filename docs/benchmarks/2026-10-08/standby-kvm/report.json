@@ -1,0 +1,82 @@
+{
+  "success": true,
+  "purpose": "functional verification of standby on KVM, with same-build timings; no comparison with another product",
+  "input_sha256": {
+    "daemon": "4ce27684de2a3f1352a9e38a1ee90159e2676755b032d532219a7bae4a020e6f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "driver": "7a49fbd710b725ed788b335ec78ca4cde01cc8c3b275b14a7b942e15e741d4ec"
+  },
+  "host_load_1m_at_start": 0.7880859375,
+  "cases": [
+    {
+      "name": "standby stops the guest: no vCPU exits while it is left alone",
+      "success": true,
+      "detail": {
+        "seconds_in_standby": 12,
+        "vcpu_exits_before": 52,
+        "vcpu_exits_after": 52
+      }
+    },
+    {
+      "name": "the next command wakes it, and the guest carries on from where it stopped",
+      "success": true,
+      "detail": {
+        "counter_before": 9,
+        "counter_on_wake": 10,
+        "counter_a_second_later": 19,
+        "node_wake_micros": 146.2
+      }
+    },
+    {
+      "name": "a request to one of its ports through the proxy wakes it too",
+      "success": true,
+      "detail": {
+        "node_wake_micros": 49.1
+      }
+    },
+    {
+      "name": "a sandbox in standby can be paused to disk and resumed",
+      "success": true,
+      "detail": {
+        "pause": 204,
+        "resume": 201
+      }
+    },
+    {
+      "name": "timings: a command to an awake sandbox and to one in standby, alternately",
+      "success": true,
+      "detail": {
+        "command_ms_awake": {
+          "n": 40,
+          "min": 1.6,
+          "p50": 3.325,
+          "p90": 5.452,
+          "max": 7.874
+        },
+        "command_ms_from_standby": {
+          "n": 40,
+          "min": 1.669,
+          "p50": 3.3,
+          "p90": 7.144,
+          "max": 10.135
+        },
+        "node_wake_micros": {
+          "n": 40,
+          "min": 28.666,
+          "p50": 56.692,
+          "p90": 99.427,
+          "max": 132.833
+        },
+        "host_load_1m": 0.61279296875
+      }
+    },
+    {
+      "name": "a sandbox left idle goes into standby by itself, and wakes the same way",
+      "success": true,
+      "detail": {
+        "window_seconds": 30
+      }
+    }
+  ]
+}

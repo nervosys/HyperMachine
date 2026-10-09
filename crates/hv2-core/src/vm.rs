@@ -686,6 +686,14 @@ pub struct VM {
     /// A block device over PCI, for firmware that finds its disk by
     /// enumerating the bus. Kept apart from `block`: it is not snapshotted.
     block_pci: RwLock<Option<AttachedBlockPci>>,
+    /// Paused by [`VM::standby`], to be resumed by the next thing sent to the
+    /// guest. Clear for an ordinary pause, which only its caller ends.
+    standby: AtomicBool,
+    /// How many times traffic has woken this VM from standby.
+    standby_wakes: AtomicU64,
+    /// How long the last wake took, in nanoseconds: from finding the guest in
+    /// standby to its vCPUs being told to run.
+    standby_last_wake_ns: AtomicU64,
     /// The raw image guest RAM is a private mapping of, when a restore mapped
     /// one. What [`Self::snapshot_layered`] records only the difference from.
     memory_base: parking_lot::Mutex<Option<std::path::PathBuf>>,
@@ -882,6 +890,9 @@ impl VM {
             net: RwLock::new(None),
             block: RwLock::new(None),
             block_pci: RwLock::new(None),
+            standby: AtomicBool::new(false),
+            standby_wakes: AtomicU64::new(0),
+            standby_last_wake_ns: AtomicU64::new(0),
             memory_base: parking_lot::Mutex::new(None),
         })
     }
@@ -2302,6 +2313,12 @@ impl VM {
     }
 
     pub async fn pause(&self) -> Result<()> {
+        // Already stopped, in standby: it becomes an ordinary pause, which
+        // traffic does not end. A caller pausing to snapshot must not have the
+        // guest start running under it because a packet arrived.
+        if self.standby.swap(false, Ordering::SeqCst) && *self.state.read() == VMState::Paused {
+            return Ok(());
+        }
         {
             let state = self.state.read();
             if *state != VMState::Running {
@@ -2363,9 +2380,70 @@ impl VM {
             }
         }
 
+        self.standby.store(false, Ordering::SeqCst);
         *self.state.write() = VMState::Running;
         tracing::info!("VM '{}' resumed", self.config.name);
         Ok(())
+    }
+
+    /// Stop the guest's vCPUs and keep everything else: its memory stays
+    /// resident, its devices attached, its connections open. The next thing
+    /// sent to the guest -- a vsock packet, a network frame -- resumes it
+    /// ([`Self::wake`]), so a caller need not know it was stopped.
+    ///
+    /// This is what an idle guest costs nothing to be in, in CPU: a stopped
+    /// vCPU takes no timer interrupts and runs no idle loop. It still holds
+    /// its memory, which is the difference from a pause to disk.
+    ///
+    /// The guest's clock does not stop. When it runs again it finds that time
+    /// has passed, as after any long preemption.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::pause`].
+    pub async fn standby(&self) -> Result<()> {
+        self.pause().await?;
+        self.standby.store(true, Ordering::SeqCst);
+        tracing::info!("VM '{}' is in standby", self.config.name);
+        Ok(())
+    }
+
+    /// Whether the guest is stopped in standby, waiting for traffic.
+    pub fn in_standby(&self) -> bool {
+        self.standby.load(Ordering::SeqCst)
+    }
+
+    /// Resume a guest in standby. Returns whether it was.
+    ///
+    /// Called by every path that hands the guest something, so it costs one
+    /// atomic load when the guest is running.
+    ///
+    /// # Errors
+    ///
+    /// Only if the vCPUs cannot be told to run.
+    pub async fn wake(&self) -> Result<bool> {
+        if !self.standby.swap(false, Ordering::SeqCst) {
+            return Ok(false);
+        }
+        // Stopped by something else in the meantime: that caller ends it.
+        if *self.state.read() != VMState::Paused {
+            return Ok(false);
+        }
+        let started = std::time::Instant::now();
+        self.resume().await?;
+        let took = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
+        self.standby_last_wake_ns.store(took, Ordering::Relaxed);
+        self.standby_wakes.fetch_add(1, Ordering::Relaxed);
+        Ok(true)
+    }
+
+    /// How many times traffic has woken this VM from standby, and how long the
+    /// last wake took.
+    pub fn standby_wakes(&self) -> (u64, std::time::Duration) {
+        (
+            self.standby_wakes.load(Ordering::Relaxed),
+            std::time::Duration::from_nanos(self.standby_last_wake_ns.load(Ordering::Relaxed)),
+        )
     }
 
     /// Stop the VM
@@ -2945,6 +3023,7 @@ impl VM {
     ///
     /// Propagates a queue error, or a failure to raise the interrupt.
     pub async fn notify_net(&self) -> Result<bool> {
+        self.wake().await?;
         let attached = {
             let guard = self.net.read();
             match guard.as_ref() {
@@ -3293,6 +3372,9 @@ impl VM {
     ///
     /// Propagates a queue error, or a failure to raise the interrupt.
     pub async fn notify_vsock(&self) -> Result<bool> {
+        // A guest in standby is resumed by being sent something. Before the
+        // packet is published, so the interrupt that follows finds a vCPU.
+        self.wake().await?;
         let attached = {
             let guard = self.vsock.read();
             match guard.as_ref() {
@@ -4757,6 +4839,27 @@ mod tests {
                 None
             }
         }
+    }
+
+    /// Standby is entered only by [`VM::standby`], which needs running vCPUs:
+    /// a VM that is not running is not in it, cannot be put in it, and a wake
+    /// finds nothing to do. So the check every delivery path makes costs a
+    /// VM that never used standby nothing but the load.
+    #[tokio::test]
+    async fn a_vm_that_never_entered_standby_is_not_woken() {
+        let Some(vm) = vm_or_skip(VMConfig {
+            name: "standby-vm".to_string(),
+            vcpu_count: 1,
+            memory_size: 16 * 1024 * 1024,
+            ..Default::default()
+        }) else {
+            return;
+        };
+        assert!(!vm.in_standby());
+        assert!(vm.standby().await.is_err(), "nothing is running to stop");
+        assert!(!vm.in_standby());
+        assert!(!vm.wake().await.expect("a wake with nothing to do"));
+        assert_eq!(vm.standby_wakes().0, 0);
     }
 
     /// A forbidden shared region is refused before anything else is checked.

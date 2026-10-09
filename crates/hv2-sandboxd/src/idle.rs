@@ -73,6 +73,50 @@ pub(crate) async fn pause_idle(state: &Arc<AppState>, now: u64) {
     }
 }
 
+/// Put every running sandbox that has been idle for `--idle-standby-after`
+/// into standby, as of `now`: its vCPUs stopped, its memory kept, and the next
+/// request resuming it. The same meaning of idle as [`pause_idle`].
+///
+/// Cheaper to come back from than a pause to disk, and dearer to hold: a
+/// sandbox in standby still has its memory and its slot.
+pub(crate) async fn standby_idle(state: &Arc<AppState>, now: u64) {
+    let Some(window) = state.opts.idle_standby_after else {
+        return;
+    };
+    let since = now.saturating_sub(u64::try_from(window.as_millis()).unwrap_or(u64::MAX));
+    let candidates: Vec<(String, Arc<hv2_agent::AgentVM>)> = state
+        .sandboxes
+        .lock()
+        .iter()
+        .filter(|(_, live)| {
+            !live.vm.in_standby()
+                && !live.activity.busy()
+                && live.activity.last_active_ms() <= since
+        })
+        .map(|(id, live)| (id.clone(), Arc::clone(&live.vm)))
+        .collect();
+    for (id, vm) in candidates {
+        if !quiet(telemetry::busiest_since(state, &id, since)) {
+            continue;
+        }
+        // Under the sandbox's lock, as a pause is, so it is not stopped
+        // halfway through a snapshot or a fork.
+        let lock = crate::transition_lock(state, &id);
+        let _held = lock.lock().await;
+        let still_idle =
+            state.sandboxes.lock().get(&id).is_some_and(|live| {
+                !live.activity.busy() && live.activity.last_active_ms() <= since
+            });
+        if !still_idle {
+            continue;
+        }
+        match vm.standby().await {
+            Ok(()) => tracing::info!("sandbox {id} was idle and is in standby"),
+            Err(e) => tracing::warn!("putting idle sandbox {id} in standby: {e}"),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

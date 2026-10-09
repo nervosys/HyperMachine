@@ -19,6 +19,7 @@ container. The comparison is about what surrounds the VM.
 | Fork a running VM, memory included | yes; ~160 ms provider example | `cp` exists; live-memory copying not established | **Real**: `POST /sandboxes/{id}/fork`, 1-100 copies |
 | Named snapshots, and new VMs from them | yes | not documented | **Real**: snapshots become templates |
 | Checkpoint and restore in place | yes, 10 per VM | not documented | **Real**: 10 per sandbox; memory and disk; same ID, token and URL; a failed restore changes nothing |
+| Standby: memory kept, resumed by the next request | yes; "resume is sub-millisecond" (published claim) | not documented | **Real**: [standby](STANDBY.md) stops a sandbox's vCPUs and keeps its memory; any command, file or port request wakes it. On real KVM the node's part of a wake took [under a quarter of a millisecond in every one of 40 rounds](benchmarks/2026-10-08/standby-kvm/README.md), and a command to a sandbox in standby took as long as one to an awake sandbox. Own-host measurement; boxd's endpoint was not measured |
 | Pause and resume | yes | not documented | **Real**: to disk; any node resumes |
 | Suspend when idle, wake on traffic | yes | not documented | **Real**: `idleTimeout` or `--idle-pause-after`, plus `autoResume`. Idle means no traffic *and* a quiet guest CPU, so unwatched work is never frozen |
 | HTTPS URL per VM | yes | yes | **Partial**: `{port}-{id}.{domain}` over TLS; operator-supplied wildcard or [hostname certificate bundles](CUSTOM_DOMAINS.md), with [built-in Certbot renewal scheduling and deployment recovery through real KVM traffic](benchmarks/2026-10-03/tls-renewal-worker/README.md); [automatic custom-domain discovery and initial issuance](benchmarks/2026-10-03/discovery-tls-kvm/README.md) verified with owned ACME/KVM; public CA operation remains unverified |
@@ -89,7 +90,14 @@ The [Boxd documentation](https://docs.boxd.sh/llms-full.txt) distinguishes publi
 web access from team shell sharing, describes platform-held integration credentials,
 automatic domain TLS, and forked egress allowlists. The [exe.dev documentation](https://exe.dev/docs/all)
 describes remote MCP and VM copying, but does not establish live-memory copying.
-These are documentation findings, not independent runtime tests. “Not documented”
+A 2026-10-08 recheck of boxd's site and docs found its published figures to be:
+a machine "in <10ms", a fork of memory and disk "in about 160 ms", and "resume is
+sub-millisecond" from a pause that keeps memory. None states how it was measured.
+HyperMachine's own figures for the same operations, on its own nested-KVM host,
+are a 59 ms SDK create (12.9 ms template restore to an answering agent), a
+127 ms median fork, and a [standby wake of 57 µs median on the node](benchmarks/2026-10-08/standby-kvm/README.md).
+So create is the one of the three where HyperMachine's own number is behind
+boxd's claim. These are documentation findings, not independent runtime tests. “Not documented”
 and “not checked” do not establish that a competitor lacks a capability.
 
 ## Current measured performance scope
@@ -102,6 +110,7 @@ and “not checked” do not establish that a competitor lacks a capability.
 | [Recorded optimized cold VM creation, 50 concurrent](benchmarks/2026-10-03/current-release-cold-sweep/README.md) | HM/Firecracker P50 3114.63/2743.81 ms; P99 3318.44/4284.52 ms; held PSS 4305.52/4180.28 MiB | 100/100 per engine passed; same eight-CPU affinity and guest; owned WSL, short cohort, managed endpoints unmeasured |
 | [Recorded optimized cold VM creation, 100 concurrent](benchmarks/2026-10-03/current-release-cold-sweep/README.md) | HM/Firecracker P50 6871.04/5673.70 ms; P99 7238.33/5943.06 ms; held PSS 8586.02/8360.31 MiB | 200/200 per engine passed; same eight-CPU affinity and guest; owned WSL, short cohort, managed endpoints unmeasured |
 | [MMIO guests boot with `pci=off`](benchmarks/2026-10-05/mmio-pci-off/README.md), cold creation | Per boot: 26,319 → 23,958 VM exits (Firecracker ~23,450), the ~2,080 PCI config-space exits gone. One guest: HM p50 457 → 432 ms; gap to Firecracker 42 → 19 ms across four interleaved blocks (80/80 passed) | C8 gap 105 → 78 ms (noisy); C50 inconclusive on the shared host; HyperMachine still slower than Firecracker |
+| [Standby wake](benchmarks/2026-10-08/standby-kvm/README.md), one sandbox | Node's part of a wake: median 57 µs, maximum 133 µs over 40 rounds. A command to a sandbox in standby: median 3.30 ms, against 3.33 ms to an awake one | Release build, nested KVM, host not quiet, 40 rounds. boxd publishes "sub-millisecond" for the same state with no method; its endpoint is unmeasured |
 | [Guest RAM on huge pages](benchmarks/2026-10-06/guest-thp/README.md) (#143), cold creation | Per boot: 24,159–24,624 → 2,809–2,991 VM exits; nested page faults 22,100 → 659 (Firecracker 23,536–25,061 exits). Daemon RSS +~6 MB per guest | Exit counts only: latency not measured (host at 100% CPU). Sparse-touch guests and fragmented hosts not tested |
 | [MMIO guests on hardware-reduced ACPI](benchmarks/2026-10-06/acpi-hw-reduced/README.md) (#144), cold creation | Per boot: 2,809–2,991 → 2,250–2,303 VM exits; I/O APIC accesses 439 → 30, PIC port I/O 38 → 0 (Firecracker 50 and 0). 3/3 boots ready | Exit counts only: latency not measured. No networked guest traced; PCI guests unchanged |
 | Secret HTTPS, one client/one guest vCPU | Original → optimized 17.340 → 14.844 ms | Large synthetic raw body, new TLS connection, local WSL |
