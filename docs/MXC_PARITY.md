@@ -35,7 +35,7 @@ not as a difference.
 | Linux VM backend | microvm, hyperlight | microVM on HyperMachine's own VMM |
 | Windows process backend | process container (default), plus Windows Sandbox, WSL container, microVM, Hyperlight and isolation session, several marked experimental | job object for memory, process count and CPU time; AppContainer for no-network and for path confinement. Nothing else |
 | macOS backend | seatbelt | **resource limits only**, and it says so |
-| Filesystem policy | read-only, read-write and denied path lists | Read-only and read-write [path grants](SANDBOXES.md#path-grants), and [`confine`](SANDBOXES.md#only-the-granted-paths) to make them the whole list. Linux: an empty root made for the run holds the grants and nothing else. Windows: an AppContainer denies everything else outside the system directories. **No denied list**, so a path under a grant cannot be carved back out |
+| Filesystem policy | read-only, read-write and denied path lists | Read-only and read-write [path grants](SANDBOXES.md#path-grants), and [`confine`](SANDBOXES.md#only-the-granted-paths) to make them the whole list. Linux: an empty root made for the run holds the grants and nothing else. Windows: an AppContainer denies everything else outside the system directories. A [denied list](SANDBOXES.md#denied-paths) on Linux, which closes a path under a grant or on the host's filesystem. **No denied list on Windows**: refused, with the reason |
 | Network policy | outbound controls, proxy support, host filtering on some backends | process backends: none or the host's, nothing between. MicroVM sandboxes have an egress gateway with allow and deny lists |
 | UI policy | clipboard, display and GUI controls | **none** |
 | One-shot run | yes | yes |
@@ -52,8 +52,9 @@ In rough order of how much they matter for the same use:
    library and a JSON request any language can send to `hm sandbox exec`, but
    no package for either.
 3. **Finer network policy for a process.** All or nothing today.
-4. **A denied path list.** A request can say "only these paths" but not "this
-   tree except that part of it".
+4. **A denied path list on Windows.** Linux has one. On Windows a request can
+   say "only these paths" but not "this tree except that part of it": a deny
+   entry for an AppContainer's own SID was tried and is not enforced.
 5. **UI controls, and an audit mode.**
 
 ## Where HyperMachine has something mxc's README does not claim
@@ -76,5 +77,7 @@ Neither of these is a measured win over mxc: mxc was not run.
 | Windows path grants | `process::windows::tests` on the same host: a granted file is readable inside the container and an ungranted one is not, a read-only grant refuses a write, a read-write grant's file is on the host afterwards, and the path's access-control list names no container once the run ends. `hm sandbox run --ro/--rw` was also run by hand |
 | Only the granted paths, Linux | `process::tests::a_workload_confined_to_its_grants_reaches_them_and_nothing_else`, run as root under WSL2: `/etc/passwd` and an ungranted file are absent, a read-only grant refuses a write, a read-write grant's file is on the host afterwards, and the run's root is gone. Not yet seen in CI |
 | Only the granted paths, Windows | `process::windows::tests::a_workload_confined_to_its_grants_cannot_read_the_users_other_files` on a Windows 11 host. `hm sandbox run --confine-paths --net host` was also run by hand: `curl` to the Internet answers 200, a granted file is read, and a file beside it is refused |
+| Denied paths, Linux | `process::tests::a_denied_path_is_closed_on_the_hosts_filesystem` and `a_denied_path_is_carved_out_of_a_grant`, run as root under WSL2: a denied directory cannot be listed or read into, a denied file reads empty and a write to it leaves the host's file alone, and what is beside them is open. `hm sandbox run --deny` was also run by hand. Not yet seen in CI |
+| Denied paths, Windows | not available. `process::windows::tests::a_denied_path_refuses_the_run`: refused by default, and dropped and reported under best effort. The first implementation, a deny entry for the container's SID, failed its own test: the file was read |
 | Windows no-network | `process::windows::tests`, on a Windows 11 host: a request that reaches a loopback listener with the host's network does not reach it from the container, and the listener sees no connection. `hm sandbox run` was also run by hand: `curl` to the Internet fails by default and succeeds with `--net host` |
 | macOS | nothing beyond what the backend reports about itself |

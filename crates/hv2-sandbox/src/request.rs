@@ -134,6 +134,9 @@ pub struct Filesystem {
     /// Paths it may read and write.
     #[serde(default)]
     pub read_write: Vec<PathBuf>,
+    /// Paths closed to it, whatever else would let it in.
+    #[serde(default)]
+    pub denied: Vec<PathBuf>,
     /// Whether those two lists are all of the caller's filesystem it
     /// reaches. Without this they only open paths its containment would
     /// hide; with it, what is not listed is closed.
@@ -217,6 +220,7 @@ impl Request {
             grants: PathGrants {
                 read_only,
                 read_write: self.filesystem.read_write,
+                denied: self.filesystem.denied,
             },
             confine_paths: self.filesystem.confine,
             isolate_processes: self.isolate_processes,
@@ -351,7 +355,7 @@ mod tests {
         assert_eq!(names(&properties["network"]), ["egress"]);
         assert_eq!(
             names(&properties["filesystem"]),
-            ["confine", "readOnly", "readWrite", "root"]
+            ["confine", "denied", "readOnly", "readWrite", "root"]
         );
         assert_eq!(properties["version"]["const"], VERSION);
         // Every one of those names, in one document this reads.
@@ -359,7 +363,7 @@ mod tests {
             r#"{"version":1,"command":["x"],"env":{},"workingDir":"/w","stdin":"",
                 "limits":{"memoryBytes":1,"maxProcesses":1,"cpuTimeMs":1,"timeoutMs":1},
                 "network":{"egress":"deny"},
-                "filesystem":{"root":"/r","readOnly":[],"readWrite":[],"confine":false},
+                "filesystem":{"root":"/r","readOnly":[],"readWrite":[],"denied":[],"confine":false},
                 "isolateProcesses":false,"noNewPrivileges":false,"bestEffort":false}"#,
         )
         .unwrap();

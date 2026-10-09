@@ -118,16 +118,19 @@ pub(super) fn probe() -> Controls {
         .with(Control::WallClock);
 
     // Path confinement is the same mechanism with a root made for the run,
-    // so it is there exactly when filesystem isolation is.
+    // and path denial is a mount in the same namespace, so both are there
+    // exactly when filesystem isolation is.
     controls = match can_isolate_filesystem() {
         Ok(()) => controls
             .with(Control::FilesystemIsolation)
-            .with(Control::PathConfinement),
+            .with(Control::PathConfinement)
+            .with(Control::PathDenial),
         Err(e) => {
             let why = format!("the filesystem could not be isolated: {e}{restricted}");
             controls
                 .without(Control::FilesystemIsolation, why.clone())
-                .without(Control::PathConfinement, why)
+                .without(Control::PathConfinement, why.clone())
+                .without(Control::PathDenial, why)
         }
     };
 
@@ -387,6 +390,78 @@ struct BindMount {
     writable: bool,
 }
 
+/// A path covered so the workload does not reach what is there.
+///
+/// A directory gets an empty filesystem over it that nobody may enter; a
+/// file gets the null device over it, since nothing but a file can be
+/// mounted on one, and reads as empty. Either way the path is still there:
+/// covered, not removed.
+struct Mask {
+    target: CString,
+    directory: bool,
+}
+
+/// Cover `mask`'s path. After [`drop_capabilities`] the workload cannot take
+/// the cover off, and in a user namespace of its own the kernel locks it.
+fn cover(mask: &Mask) -> std::io::Result<()> {
+    // SAFETY: every pointer is a NUL-terminated string that outlives the call.
+    let mounted = unsafe {
+        if mask.directory {
+            libc::mount(
+                c"tmpfs".as_ptr(),
+                mask.target.as_ptr(),
+                c"tmpfs".as_ptr(),
+                libc::MS_RDONLY | libc::MS_NOSUID | libc::MS_NODEV | libc::MS_NOEXEC,
+                c"size=4k,mode=000".as_ptr().cast(),
+            )
+        } else {
+            libc::mount(
+                c"/dev/null".as_ptr(),
+                mask.target.as_ptr(),
+                std::ptr::null(),
+                libc::MS_BIND,
+                std::ptr::null(),
+            )
+        }
+    };
+    if mounted != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+/// The covers for `denied`, as paths the child can mount on before any
+/// pivot.
+///
+/// With no `root` the workload keeps the host's filesystem and each path is
+/// covered where it is. With one, a path is covered where it will appear
+/// inside, which is under one of its mounts. One under none of them does
+/// not appear there at all, is already closed, and needs nothing.
+fn plan_masks(
+    denied: &[PathBuf],
+    root: Option<&Path>,
+    mounted: &[&PathBuf],
+) -> Result<Vec<Mask>, SandboxError> {
+    let mut masks = Vec::with_capacity(denied.len());
+    for path in denied {
+        let (target, directory) = match root {
+            None => (path.clone(), path.is_dir()),
+            Some(root) => {
+                let inside = root.join(path.strip_prefix("/").unwrap_or(path));
+                if !mounted.iter().any(|source| path.starts_with(source)) {
+                    continue;
+                }
+                (inside, path.is_dir())
+            }
+        };
+        masks.push(Mask {
+            target: cstring_or_invalid(&target)?,
+            directory,
+        });
+    }
+    Ok(masks)
+}
+
 /// An empty directory made to be one run's root, and removed after it.
 ///
 /// What a workload confined to its granted paths is rooted in. The mounts
@@ -428,6 +503,8 @@ struct FilesystemPlan {
     /// Binds to place inside it, in the order the caller gave: the
     /// read-only ones, then the writable ones.
     binds: Vec<BindMount>,
+    /// Denied paths, covered once the binds they may be under are in place.
+    masks: Vec<Mask>,
     /// Where to `chdir` once inside, interpreted in the *new* root.
     ///
     /// The caller's working directory cannot be handed to `Command::current_dir`
@@ -553,6 +630,10 @@ fn pivot_into(plan: &FilesystemPlan) -> std::io::Result<()> {
         }
     }
 
+    for mask in &plan.masks {
+        cover(mask)?;
+    }
+
     // The new /proc and /sys go in now, inside the new root, and not after the
     // pivot. A user namespace may mount proc or sysfs only while one that is
     // fully visible already exists in its mount namespace (the kernel's
@@ -611,6 +692,12 @@ fn can_isolate_filesystem() -> std::io::Result<()> {
     // named by its absolute host path, that must have become unreachable.
     std::fs::create_dir_all(&root)?;
     std::fs::create_dir_all(root.join("ro"))?;
+    std::fs::create_dir_all(root.join("covered"))?;
+    std::fs::write(
+        root.join("covered-file"),
+        b"host
+",
+    )?;
     let outside = base.join("outside");
     let read_only = base.join("read-only");
     std::fs::create_dir_all(&read_only)?;
@@ -635,6 +722,19 @@ fn run_filesystem_probe(root: &Path, outside: &Path, read_only: &Path) -> std::i
             target: path_to_cstring(&root.join("ro"))?,
             writable: false,
         }],
+        // Both covers a denied path can get are rehearsed with the rest: path
+        // denial is reported with this control, so a host that refused either
+        // mount must not report it.
+        masks: vec![
+            Mask {
+                target: path_to_cstring(&root.join("covered"))?,
+                directory: true,
+            },
+            Mask {
+                target: path_to_cstring(&root.join("covered-file"))?,
+                directory: false,
+            },
+        ],
         working_dir: None,
         proc_target: None,
         sys_target: None,
@@ -750,6 +850,7 @@ fn plan_filesystem(
     root: &Path,
     read_only: &[PathBuf],
     read_write: &[PathBuf],
+    denied: &[PathBuf],
     working_dir: Option<&Path>,
     need_proc: bool,
     need_sys: bool,
@@ -837,9 +938,11 @@ fn plan_filesystem(
         }
     }
 
+    let mounted: Vec<&PathBuf> = read_only.iter().chain(read_write).collect();
     Ok(FilesystemPlan {
         new_root: cstring_or_invalid(root)?,
         binds,
+        masks: plan_masks(denied, Some(root), &mounted)?,
         working_dir: working_dir.map(cstring_or_invalid).transpose()?,
         proc_target: need_proc
             .then(|| cstring_or_invalid(&root.join("proc")))
@@ -1072,7 +1175,10 @@ pub(super) fn run(
         .map_err(|e| SandboxError::Runtime(format!("cgroup path is not usable: {e}")))?;
 
     let mut clone_flags = 0;
-    if matches!(spec.filesystem, FilesystemPolicy::Isolated { .. }) || spec.confine_paths {
+    if matches!(spec.filesystem, FilesystemPolicy::Isolated { .. })
+        || spec.confine_paths
+        || !spec.grants.denied.is_empty()
+    {
         // A mount namespace of our own, and the user namespace that grants the
         // CAP_SYS_ADMIN inside it that mount and pivot_root require.
         clone_flags |= libc::CLONE_NEWUSER | libc::CLONE_NEWNS;
@@ -1112,6 +1218,7 @@ pub(super) fn run(
                 &root.0,
                 &spec.grants.read_only,
                 &spec.grants.read_write,
+                &spec.grants.denied,
                 command.working_dir.as_deref(),
                 new_pid_ns,
                 new_net_ns,
@@ -1124,6 +1231,7 @@ pub(super) fn run(
             root,
             read_only,
             &spec.grants.read_write,
+            &spec.grants.denied,
             command.working_dir.as_deref(),
             new_pid_ns,
             new_net_ns,
@@ -1140,6 +1248,12 @@ pub(super) fn run(
         new_net_ns,
         uid_map,
         gid_map,
+        // With a root of its own the plan carries them instead.
+        host_masks: if filesystem.is_none() {
+            plan_masks(&spec.grants.denied, None, &[])?
+        } else {
+            Vec::new()
+        },
         filesystem,
     };
 
@@ -1213,6 +1327,9 @@ struct Confinement {
     new_net_ns: bool,
     uid_map: Vec<u8>,
     gid_map: Vec<u8>,
+    /// Denied paths to cover on the host's filesystem, when the workload
+    /// keeps it.
+    host_masks: Vec<Mask>,
     filesystem: Option<FilesystemPlan>,
 }
 
@@ -1296,6 +1413,9 @@ fn confine(plan: &Confinement) -> std::io::Result<()> {
     }
     if let Some(filesystem) = plan.filesystem.as_ref() {
         pivot_into(filesystem)?;
+    }
+    for mask in &plan.host_masks {
+        cover(mask)?;
     }
 
     // 7. Now that this process really is in the new PID namespace, give it a
@@ -1455,4 +1575,28 @@ fn path_to_cstring(path: &Path) -> std::io::Result<CString> {
     use std::os::unix::ffi::OsStrExt;
     CString::new(path.as_os_str().as_bytes())
         .map_err(|_| std::io::Error::other("path contains an interior NUL"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The root made for a confined run is the run's alone and goes with it,
+    /// mount points and all. Asked of the type and not of a run, because
+    /// several tests run confined workloads at once in one process and none
+    /// can tell which directory was its own: a scan of the temporary
+    /// directory for leftovers failed whenever another was mid-run.
+    #[test]
+    fn a_private_root_is_its_runs_alone_and_is_removed_with_it() {
+        let (first, second) = (
+            PrivateRoot::create().expect("a root"),
+            PrivateRoot::create().expect("another"),
+        );
+        assert_ne!(first.0, second.0);
+        std::fs::create_dir_all(first.0.join("usr/lib")).expect("a mount point");
+        let path = first.0.clone();
+        drop(first);
+        assert!(!path.exists());
+        assert!(second.0.is_dir());
+    }
 }

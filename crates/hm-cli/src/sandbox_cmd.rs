@@ -80,6 +80,10 @@ pub struct RunArgs {
     /// would otherwise hide it. Inside `--fs isolated:ROOT`, Linux only.
     #[arg(long = "rw", value_name = "PATH")]
     pub read_write: Vec<PathBuf>,
+    /// A host path closed to the program, with everything under it, even
+    /// under a `--ro` or `--rw` path.
+    #[arg(long = "deny", value_name = "PATH")]
+    pub denied: Vec<PathBuf>,
     /// Let the program reach only the `--ro` and `--rw` paths, and nothing
     /// else of yours.
     #[arg(long)]
@@ -171,6 +175,7 @@ pub fn spec_of(args: &RunArgs) -> Result<SandboxSpec> {
                 Vec::new()
             },
             read_write: args.read_write.clone(),
+            denied: args.denied.clone(),
         },
         confine_paths: args.confine_paths,
         filesystem,

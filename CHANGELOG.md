@@ -41,6 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `hm sandbox exec`: one versioned JSON request in, one JSON response out, for a
   caller that is a program (`hv2_sandbox::request`). The schema is
   `docs/schemas/sandbox-request-v1.schema.json`.
+- Denied paths for sandboxed programs on Linux: `PathGrants::denied`, `--deny
+  PATH` on `hm sandbox run` and `filesystem.denied` in a request close a path
+  and everything under it, on the host's filesystem or under a grant. A new
+  control, `path denial`, reports where it holds; Windows and macOS refuse it.
 - "Only these paths" for sandboxed programs: `SandboxSpec::confine_paths`,
   `--confine-paths` on `hm sandbox run` and `filesystem.confine` in a request
   make the granted paths all of the caller's filesystem a workload reaches,

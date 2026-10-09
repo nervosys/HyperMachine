@@ -77,6 +77,12 @@
           "default": [],
           "description": "Absolute, existing paths it may read and write, with everything under them."
         },
+        "denied": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Absolute, existing paths closed to it, with everything under them, whatever else would let it in. A readOnly or readWrite path under one is an error."
+        },
         "confine": {
           "type": "boolean",
           "default": false,

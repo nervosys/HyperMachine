@@ -60,6 +60,8 @@ caller asks for it.
 | Filesystem isolation | `CLONE_NEWNS` + `pivot_root` | ✗ | ✗ | the guest's own |
 | Process isolation | `CLONE_NEWPID` + `CLONE_NEWIPC` + its own `/proc` | ✗ | ✗ | a separate kernel |
 | No new privileges | `PR_SET_NO_NEW_PRIVS` | ✗ | ✗ | a separate kernel |
+| Path confinement | an empty root made for the run, holding the grants | an AppContainer | ✗ | ✗ (a guest shares no host path) |
+| Path denial | a mount over the path | ✗ (an AppContainer is not refused by a deny entry for its own SID) | ✗ | ✗ (a guest shares no host path) |
 
 Every ✗ is reported at runtime with a reason, not discovered by a caller when
 something escapes.
@@ -246,6 +248,37 @@ hm sandbox run --confine-paths --ro /usr --ro /lib --ro /lib64 --ro /bin \
 - On top of `--fs isolated:ROOT` it adds nothing: that root already decides
   what is there.
 
+### Denied paths
+
+`PathGrants::denied` (`--deny PATH`; `"denied"` in a request's `filesystem`)
+closes a path to the workload, with everything under it, whatever else would
+let it in. It is the control `path denial`.
+
+```sh
+hm sandbox run --deny ~/.ssh --deny ~/.aws -- ./build.sh
+hm sandbox run --confine-paths --ro /usr --ro /lib --rw /work --deny /work/.git -- /usr/bin/make -C /work
+```
+
+- **On Linux** the path is covered by a mount in the workload's own mount
+  namespace. A directory gets an empty one that nobody may enter; a file gets
+  the null device, since only a file can be mounted on a file, so it reads as
+  empty and a write to it goes nowhere. The path is still there, covered, not
+  removed. It works on the host's filesystem with nothing else taken away,
+  under a grant, and under a mount of an isolated root.
+- **The cover stays on.** The workload holds no capabilities, so it cannot
+  unmount it, and in a user namespace of its own the kernel locks it.
+- **On Windows and macOS it is refused.** On Windows this was tried and did
+  not hold: an AppContainer is not refused by an access-denied entry for its
+  own SID, and the file under one was read all the same. Grant the paths
+  beside the one to keep closed instead.
+- **A granted path under a denied one refuses the run.** A denial covers
+  everything under it, and which of the two was meant is not guessed.
+- A denied path must be absolute and exist. One that would not be reachable
+  anyway, outside every grant of a confined workload, needs nothing and is
+  accepted.
+- The path is matched by name. A second name for the same file, a hard link or
+  another mount of it, is not covered by denying the first.
+
 Not claimed: filesystem isolation in the sense the Linux backend means it (a
 root of the caller's choosing), process isolation, or no-new-privileges. An
 AppContainer does restrict all three in its own way, and none has been tested
@@ -328,7 +361,7 @@ environment, which is not a limit anyone asked to remove. A workload that needs
   carries `what_this_host_enforces`'s report for each runner.
 - **Linux with every control granted**: the *Sandbox Containment* CI job
   lifts Ubuntu's AppArmor user-namespace restriction and runs the tests in a
-  delegated cgroup, and fails if the probe reports fewer than all nine
+  delegated cgroup, and fails if the probe reports fewer than all ten
   controls or if any test skips. Before it existed, every containment test on
   `ubuntu-latest` passed by skipping.
 
@@ -376,7 +409,7 @@ before trusting a limit there.
 ```
 hm sandbox run [--memory 4G] [--cpu-time SECS] [--wall-clock SECS] [--max-processes N]
                [--net deny|host] [--fs host|isolated:ROOT] [--ro PATH]... [--rw PATH]...
-               [--confine-paths]
+               [--deny PATH]... [--confine-paths]
                [--workdir DIR] [--env K=V]... [--pass-env NAME]... [--clean-env]
                [--isolate-processes] [--no-new-privileges]
                [--strict] [--report text|json|none] -- CMD [ARGS...]
