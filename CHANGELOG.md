@@ -30,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   where firmware and a stock kernel look for one. An unmodified CirrOS cloud
   image boots to its login prompt. Not yet available to machines. See
   `docs/FIRMWARE_BOOT.md`.
+- A warm pool: `--warm-pool N` keeps N sandboxes of the base template restored
+  and in standby, and a plain create takes one. `GET /pool` reports it. See
+  `docs/WARM_POOL.md`.
 - Standby for sandboxes: `POST /sandboxes/{id}/standby` (and `hm sandbox vm
   standby`) stops a sandbox's vCPUs and keeps its memory; the next command,
   file or port request resumes it without being asked. `--idle-standby-after`

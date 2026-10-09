@@ -1,0 +1,91 @@
+{
+  "success": true,
+  "purpose": "functional verification of the warm pool on KVM, with same-build timings; no comparison with another product",
+  "input_sha256": {
+    "daemon": "62c4227ae83ca1f04678fa878b3431b454a657ea4b380929e229e5d57afe6e67",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "driver": "79a40118a3f63063c8e6957532c6658cec10a9990a36de7f7f35da35fe6419e8"
+  },
+  "host_load_1m_at_start": 0.1953125,
+  "cases": [
+    {
+      "name": "the pool fills, and its spares are not listed as sandboxes",
+      "success": true,
+      "detail": {
+        "handedOut": 0,
+        "missed": 0,
+        "ready": 4,
+        "target": 4
+      }
+    },
+    {
+      "name": "a create takes a spare, and the sandbox is a working one of its own",
+      "success": true,
+      "detail": {
+        "first": "sbx-1b550d6c17c24b44a100",
+        "clock_skew_seconds": 0.66,
+        "random_differs": true,
+        "kept": "sbx-1b550d6c17c24b44a100"
+      }
+    },
+    {
+      "name": "the pool refills after creates",
+      "success": true,
+      "detail": {
+        "handedOut": 2,
+        "missed": 0,
+        "ready": 4,
+        "target": 4
+      }
+    },
+    {
+      "name": "more creates at once than spares all succeed",
+      "success": true,
+      "detail": {
+        "creates_at_once": 7,
+        "from_the_pool": 4,
+        "restored_as_before": 3
+      }
+    },
+    {
+      "name": "a sandbox from the pool pauses, resumes and forks like any other",
+      "success": true,
+      "detail": {
+        "pause": 204,
+        "resume": 201,
+        "fork": 201
+      }
+    },
+    {
+      "name": "timings: POST /sandboxes without and with the pool, in alternating blocks",
+      "success": true,
+      "detail": {
+        "order": [
+          "without",
+          "with",
+          "with",
+          "without"
+        ],
+        "creates_per_block": 50,
+        "create_ms_without_pool": {
+          "n": 100,
+          "min": 16.421,
+          "p50": 18.885,
+          "p90": 29.882,
+          "p99": 44.076,
+          "max": 44.076
+        },
+        "create_ms_with_pool": {
+          "n": 100,
+          "min": 0.48,
+          "p50": 0.651,
+          "p90": 0.825,
+          "p99": 11.605,
+          "max": 11.605
+        },
+        "host_load_1m": 0.44775390625
+      }
+    }
+  ]
+}

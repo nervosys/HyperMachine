@@ -134,6 +134,7 @@ mod machines;
 #[cfg(not(target_os = "linux"))]
 #[path = "machines_unsupported.rs"]
 mod machines;
+mod pool;
 mod private_source;
 mod reboot;
 // Volumes are served with openat2 and O_PATH, which only Linux has; see
@@ -305,6 +306,8 @@ struct Options {
     /// When full, pause a sandbox that resumes on traffic and has been idle
     /// this long, to make room.
     evict_idle_after: Option<Duration>,
+    /// How many restored sandboxes to keep ready for creates to take.
+    warm_pool: usize,
     /// Pause a sandbox that has been idle this long, whether or not the node
     /// is full, unless its create set `idleTimeout` itself. See idle.rs.
     idle_pause_after: Option<Duration>,
@@ -371,6 +374,7 @@ fn parse_options() -> Result<Options, String> {
         trust_domain: "hv2.local".to_string(),
         identity_key: None,
         evict_idle_after: None,
+        warm_pool: 0,
         idle_pause_after: None,
         idle_standby_after: None,
     };
@@ -483,6 +487,13 @@ fn parse_options() -> Result<Options, String> {
                 let secs: u64 = value(&mut i)?.parse().map_err(|e| format!("{e}"))?;
                 idle::check_window(secs).map_err(|e| format!("--idle-standby-after: {e}"))?;
                 opts.idle_standby_after = (secs > 0).then(|| Duration::from_secs(secs));
+            }
+            "--warm-pool" => {
+                let spares: usize = value(&mut i)?.parse().map_err(|e| format!("{e}"))?;
+                if spares > 64 {
+                    return Err("--warm-pool is at most 64".into());
+                }
+                opts.warm_pool = spares;
             }
             "--evict-idle-after" => {
                 opts.evict_idle_after = Some(Duration::from_secs(
@@ -721,6 +732,8 @@ struct AppState {
     forwards: forwards::Forwards,
     /// Each sandbox's metric samples and log, by sandbox ID.
     telemetry: telemetry::Telemetry,
+    /// Sandboxes restored ahead of the creates that will take them.
+    pool: pool::Pool,
     /// Templates' sandboxes' sizes, where they are not the node's.
     sizes: parking_lot::RwLock<BTreeMap<String, Sizes>>,
     /// Sandboxes' snapshots, by name: templates too, to a create.
@@ -1582,6 +1595,9 @@ async fn bring_up(
     // each has its own vsock device and its own gateway, and nothing outside
     // this VM ever sees either.
     let template = state.templates.read().get(template_id).cloned();
+    // A create, as against a resume or a fork, which name the snapshot they
+    // restore.
+    let plain_create = snapshot.is_none();
     // With a disk, a cold boot: the template's guest booted without one, and
     // virtio-mmio has no hot-plug to give it one now.
     let snapshot = if disk.is_some() {
@@ -1639,59 +1655,73 @@ async fn bring_up(
         sized = sizes.applied(&state.opts);
         &sized
     };
-    let (vm, nic) = new_vm(
-        opts,
-        Some(&initrd),
-        sandbox_id,
-        cid,
-        network.is_some().then_some(mac),
-        disk.map(|d| (d.image.as_path(), d.serial.as_str())),
-    )
-    .await
-    .map_err(internal)?;
-    let vm = Arc::new(vm);
-    let mut startup_cleanup = StartupVmCleanup::new(Arc::clone(&vm));
-    let built = t0.elapsed();
-    let launched = match snapshot {
-        Some(snapshot) => {
-            let working_set = template
-                .as_ref()
-                .map_or(&[][..], |t| t.working_set.as_slice());
-            vm.launch_from_snapshot_prefaulted(snapshot, working_set)
-                .await
+    // A plain create of the base template takes a guest restored before it
+    // was asked for, when one is ready (see pool.rs). Everything from here to
+    // the agent answering is what such a guest has already done.
+    let spare = if plain_create && disk.is_none() && snapshot.is_some() {
+        pool::take(state, template_id, network.is_some()).await
+    } else {
+        None
+    };
+    let (vm, nic, mut startup_cleanup, built, launched_at, answered) = if let Some(spare) = spare {
+        let taken = t0.elapsed();
+        (spare.vm, spare.nic, spare.cleanup, taken, taken, taken)
+    } else {
+        let (vm, nic) = new_vm(
+            opts,
+            Some(&initrd),
+            sandbox_id,
+            cid,
+            network.is_some().then_some(mac),
+            disk.map(|d| (d.image.as_path(), d.serial.as_str())),
+        )
+        .await
+        .map_err(internal)?;
+        let vm = Arc::new(vm);
+        let mut startup_cleanup = StartupVmCleanup::new(Arc::clone(&vm));
+        let built = t0.elapsed();
+        let launched = match snapshot {
+            Some(snapshot) => {
+                let working_set = template
+                    .as_ref()
+                    .map_or(&[][..], |t| t.working_set.as_slice());
+                vm.launch_from_snapshot_prefaulted(snapshot, working_set)
+                    .await
+            }
+            None => vm.launch().await,
+        };
+        if let Err(e) = launched {
+            startup_cleanup.stop().await;
+            return Err(internal(format!("launching: {e}")));
         }
-        None => vm.launch().await,
+        let launched_at = t0.elapsed();
+        // A caller creating a sandbox waits for one it can actually use --
+        // returning before the guest agent answers would hand back a
+        // sandboxID that fails the first real request against it.
+        //
+        // A restored guest has its snapshot's clock and RNG, which the agent
+        // resets in one round trip -- and that round trip is also the proof it
+        // answers, so a restore makes one call, not a ping and then another.
+        // Half of what a create waited on was that second trip. Refused rather
+        // than served if the reseed fails: a sandbox sharing random state with
+        // its siblings -- or with the fork it came from -- is not one to hand out.
+        let ready = match snapshot {
+            Some(_) => vm.after_restore(state.opts.ready_timeout).await,
+            None => vm.ping_guest(state.opts.ready_timeout).await.map(|_| ()),
+        };
+        if let Err(e) = ready {
+            let tail = guest_report(&vm).await;
+            tracing::warn!("{sandbox_id}: guest never became ready: {e}; {tail}");
+            startup_cleanup.stop().await;
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!("guest never became ready: {e}; {tail}"),
+            ));
+        }
+        drop(cold_boot_permit);
+        let answered = t0.elapsed();
+        (vm, nic, startup_cleanup, built, launched_at, answered)
     };
-    if let Err(e) = launched {
-        startup_cleanup.stop().await;
-        return Err(internal(format!("launching: {e}")));
-    }
-    let launched_at = t0.elapsed();
-    // A caller creating a sandbox waits for one it can actually use --
-    // returning before the guest agent answers would hand back a
-    // sandboxID that fails the first real request against it.
-    //
-    // A restored guest has its snapshot's clock and RNG, which the agent
-    // resets in one round trip -- and that round trip is also the proof it
-    // answers, so a restore makes one call, not a ping and then another.
-    // Half of what a create waited on was that second trip. Refused rather
-    // than served if the reseed fails: a sandbox sharing random state with
-    // its siblings -- or with the fork it came from -- is not one to hand out.
-    let ready = match snapshot {
-        Some(_) => vm.after_restore(state.opts.ready_timeout).await,
-        None => vm.ping_guest(state.opts.ready_timeout).await.map(|_| ()),
-    };
-    if let Err(e) = ready {
-        let tail = guest_report(&vm).await;
-        tracing::warn!("{sandbox_id}: guest never became ready: {e}; {tail}");
-        startup_cleanup.stop().await;
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            format!("guest never became ready: {e}; {tail}"),
-        ));
-    }
-    drop(cold_boot_permit);
-    let answered = t0.elapsed();
 
     let network = match (network, nic) {
         (Some(spec), Some(device)) => {
@@ -3450,6 +3480,20 @@ async fn adopt_owner_route(
             "owner adoption store unavailable; outcome may be committed; retry same adoption",
         ),
     }
+}
+
+/// `GET /pool`: the warm pool's size and how it has served creates.
+async fn pool_route(State(state): State<Arc<AppState>>) -> Response {
+    let (ready, handed_out, missed) = state.pool.counts();
+    Json(json!({
+        "target": state.opts.warm_pool,
+        "ready": ready,
+        // Creates that took a spare, and creates one would have served had
+        // one been ready.
+        "handedOut": handed_out,
+        "missed": missed,
+    }))
+    .into_response()
 }
 
 /// `POST /sandboxes/{id}/standby`: stop its vCPUs and keep its memory. The
@@ -5594,6 +5638,7 @@ async fn main() -> std::process::ExitCode {
         builds: Mutex::new(BTreeMap::new()),
         sizes: parking_lot::RwLock::new(BTreeMap::new()),
         telemetry: parking_lot::Mutex::new(HashMap::new()),
+        pool: pool::Pool::default(),
         forwards: forwards::Forwards::default(),
         snapshots: parking_lot::RwLock::new(BTreeMap::new()),
         step_builds: parking_lot::Mutex::new(HashMap::new()),
@@ -5661,6 +5706,7 @@ async fn main() -> std::process::ExitCode {
     tokio::spawn(adopt_built(Arc::clone(&state)));
     tokio::spawn(snapshots::follow_store(Arc::clone(&state)));
     tokio::spawn(machines::supervise(Arc::clone(&state)));
+    tokio::spawn(pool::keep_full(Arc::clone(&state)));
     tokio::spawn(telemetry::sample(Arc::clone(&state)));
 
     // The proxy, on its own port beside the control plane.
@@ -5774,6 +5820,7 @@ async fn main() -> std::process::ExitCode {
             post(reconcile_registration),
         )
         .route("/templates", get(list_templates).post(build_template_route))
+        .route("/pool", get(pool_route))
         .route("/sandboxes/{sandboxID}/pause", post(pause_route))
         .route(
             "/sandboxes/{sandboxID}/standby",
