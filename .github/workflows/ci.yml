@@ -539,6 +539,15 @@ jobs:
                   cargo build --release --package hm-cli
                   cargo build --release --package hv2-cli
 
+            # The Node client of `hm sandbox exec`, against the binary just
+            # built, on each of the three systems. It has no dependencies, so
+            # there is nothing to install.
+            - name: Node sandbox client
+              shell: bash
+              run: |
+                  cd sdk/node
+                  HM_BIN="$GITHUB_WORKSPACE/target/release/${{ matrix.artifact }}" node --test
+
             - name: Upload hm artifact
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:

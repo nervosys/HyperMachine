@@ -327,7 +327,8 @@ hm sandbox exec request.json      # or on standard input
 - Output that is not UTF-8 is given as text with the bad bytes replaced, and
   whole in `stdoutBase64` or `stderrBase64`.
 
-In Rust the same document is `hv2_sandbox::request::Request`.
+In Rust the same document is `hv2_sandbox::request::Request`. From Node,
+[`sdk/node`](../sdk/node/README.md) sends it and types it.
 
 ## The empty environment
 

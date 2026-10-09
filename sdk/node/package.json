@@ -1,0 +1,31 @@
+{
+  "name": "@nervosys/hypermachine-sandbox",
+  "version": "0.1.0",
+  "description": "Run a program in HyperMachine's process sandbox from Node, through `hm sandbox exec`.",
+  "license": "AGPL-3.0-only OR LicenseRef-Commercial",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nervosys/HyperMachine.git",
+    "directory": "sdk/node"
+  },
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}
