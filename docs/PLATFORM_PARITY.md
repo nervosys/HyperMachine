@@ -8,7 +8,8 @@ not its docs. **Real** means wired to a checked binary; it does not imply a publ
 release or managed production validation. **Partial** says what is missing.
 
 All three products give each user a real Linux VM behind a hardware boundary, rather than a
-container. The comparison is about what surrounds the VM.
+container. The comparison is about what surrounds the VM. [boat](BOAT_PARITY.md), a fourth of
+the same kind, has a page of its own, written from the code on 2026-10-10.
 
 ## The matrix
 
