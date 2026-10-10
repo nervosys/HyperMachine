@@ -360,7 +360,15 @@ mod tests {
         // The UDP port is ephemeral but its TCP twin is not reserved, so a
         // concurrent test binding TCP port 0 can be handed it. A leaked
         // partial socket fails every attempt; that race fails one at random.
-        let mut attempts = 0;
+        //
+        // A host can also refuse the TCP twin outright: Windows keeps ranges
+        // of TCP ports back, a hundred or so at a time, and answers a bind
+        // in one with "access forbidden". Ephemeral UDP ports come out next
+        // to each other, so five tries once landed in one such range on a
+        // CI runner and failed for a reason that was not a leak. Each UDP
+        // socket tried is therefore kept, so the next try gets another port,
+        // and there are enough tries to walk out of a range.
+        let mut passed_over = Vec::new();
         let (_occupied, address, _tcp) = loop {
             let occupied = crate::udp_socket::bind("127.0.0.1:0").await.unwrap();
             let address = occupied.local_addr().unwrap();
@@ -371,13 +379,17 @@ mod tests {
             );
             match TcpListener::bind(address).await {
                 Ok(tcp) => break (occupied, address, tcp),
-                Err(error) if attempts < 4 => {
-                    attempts += 1;
-                    eprintln!("TCP {address} unavailable ({error}); retrying");
+                Err(error) if passed_over.len() < 256 => {
+                    eprintln!("TCP {address} unavailable ({error}); trying another port");
+                    passed_over.push(occupied);
                 }
-                Err(error) => panic!("TCP {address} still held after a failed dual bind: {error}"),
+                Err(error) => panic!(
+                    "TCP {address} still held after a failed dual bind, as were {} before it: {error}",
+                    passed_over.len()
+                ),
             }
         };
+        drop(passed_over);
         assert!(
             NativePortBinding::bind(address.ip(), row(0, PortProtocol::Tcp))
                 .await
