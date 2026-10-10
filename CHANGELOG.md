@@ -41,6 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `hm sandbox exec`: one versioned JSON request in, one JSON response out, for a
   caller that is a program (`hv2_sandbox::request`). The schema is
   `docs/schemas/sandbox-request-v1.schema.json`.
+- Containment on macOS: a sandboxed program asked for no network, for
+  confinement to its granted paths, or for denied paths runs under a sandbox
+  profile applied by `sandbox-exec`. The backend reported resource limits
+  only before. See `docs/SANDBOXES.md` for what that interface is.
 - UI isolation for sandboxed programs on Windows: `SandboxSpec::isolate_ui`,
   `--isolate-ui` and `isolateUi` in a request keep a workload from the
   clipboard, other programs' windows, system and display settings, and logging
