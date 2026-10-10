@@ -32,7 +32,7 @@ reason, and are listed once at the end rather than counted as gaps.
 | Creating one | "usually under a second on a ready machine"; `--fail-fast` answers within about 1.5 s whether one was ready | From a template: 18.9 ms at the median on this project's own host, and 0.65 ms from the [warm pool](WARM_POOL.md). A full node answers 503 at once by default; there is no request option that says so when the node queues |
 | What stopping keeps | **Files only.** "Snapshots capture your sandbox's files, not its running processes or memory"; processes run by hand are restarted by the user | **Memory and processes.** Pause to disk and resume on any node; [standby](STANDBY.md) keeps memory and wakes on the next request |
 | Fork | A new sandbox from the latest disk snapshot; the source's processes are not in it | A running sandbox with its memory, 1 to 100 copies, a block disk included |
-| Automatic snapshots | Every minute while running, and on stop; incremental; free | **None.** A checkpoint is taken when asked for, ten to a sandbox |
+| Automatic snapshots | Every minute while running, and on stop; incremental; free; files only | **Yes, with memory**: `autoCheckpoint` seconds on create (`hm sandbox vm create --auto-checkpoint`), or `--auto-checkpoint-every` for a whole node, keeps one checkpoint named `auto`, replaced on the interval and rolled back to like any other. At least 60 seconds apart; skipped when nothing has happened in the sandbox since the last. Not for a sandbox holding a disk, and kept on the node that took it |
 | Named snapshots, and new sandboxes from them | Yes; ten free | Yes: a snapshot becomes a template |
 | Reading a snapshot from outside | A file tree, and download of all or part of it, with the sandbox stopped | **No.** A snapshot is memory pages; there is no tree to list without restoring it |
 | Sharing a snapshot with another account | Share codes; secrets and logins removed first | **No.** A snapshot belongs to its team, or to everyone when an operator made it |
@@ -78,7 +78,9 @@ In rough order of how much each matters to someone choosing between them:
    back it is not attached to anything.
 4. **A size per sandbox, and changing it.** A caller here cannot ask for four
    processors and eight gigabytes on one create.
-5. **Automatic snapshots, and reading one from outside.**
+5. **Reading a snapshot from outside.** Automatic checkpoints exist now, and
+   keep memory where boat's keep files; but there is one, on one node, and
+   nothing lists or downloads what is in it.
 6. **Stored command output**, the guest's process list, and a port back to
    the caller's machine.
 7. **Environments**: variables, files and repositories applied to every new

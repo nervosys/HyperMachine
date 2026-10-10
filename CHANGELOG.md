@@ -54,6 +54,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clipboard, other programs' windows, system and display settings, and logging
   off, through the job object's user-interface restrictions. A new control,
   `UI isolation`; Linux and macOS refuse it.
+- Automatic checkpoints: a sandbox created with `autoCheckpoint` (seconds;
+  `hm sandbox vm create --auto-checkpoint`), or any sandbox on a node run
+  with `--auto-checkpoint-every`, is checkpointed on that interval without
+  being asked, memory included. One is kept, named `auto`, each replacing
+  the last only once it is whole, and it is rolled back to like any other.
+  None is taken when nothing has happened in the sandbox since the last.
 - A network between none and the host's for a sandboxed process:
   `NetworkPolicy::Proxy { port }` and `hm sandbox run --net proxy:PORT` give a
   program one port on the host's loopback, where the caller's proxy listens,
