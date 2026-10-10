@@ -34,7 +34,7 @@ not as a difference.
 | Linux process backend | bubblewrap (default), lxc | own: user, PID, mount, network and IPC namespaces, `pivot_root`, cgroup v2, `no_new_privs`. No external tool |
 | Linux VM backend | microvm, hyperlight | microVM on HyperMachine's own VMM |
 | Windows process backend | process container (default), plus Windows Sandbox, WSL container, microVM, Hyperlight and isolation session, several marked experimental | job object for memory, process count and CPU time; AppContainer for no-network and for path confinement. Nothing else |
-| macOS backend | seatbelt | **resource limits only**, and it says so |
+| macOS backend | seatbelt | seatbelt too, [through `sandbox-exec`](SANDBOXES.md#containment-on-macos): no network, confinement to granted paths, denied paths. CPU time and deadline besides. No memory or process-count limit |
 | Filesystem policy | read-only, read-write and denied path lists | Read-only and read-write [path grants](SANDBOXES.md#path-grants), and [`confine`](SANDBOXES.md#only-the-granted-paths) to make them the whole list. Linux: an empty root made for the run holds the grants and nothing else. Windows: an AppContainer denies everything else outside the system directories. A [denied list](SANDBOXES.md#denied-paths) on Linux, which closes a path under a grant or on the host's filesystem. **No denied list on Windows**: refused, with the reason |
 | Network policy | outbound controls, proxy support, host filtering on some backends | process backends: none or the host's, nothing between. MicroVM sandboxes have an egress gateway with allow and deny lists |
 | UI policy | clipboard, display and GUI controls | Windows: [all of a job object's user-interface restrictions](SANDBOXES.md#ui-isolation-on-windows), as one switch. **Not selectable one by one, and nothing on Linux or macOS** |
@@ -47,19 +47,20 @@ not as a difference.
 
 In rough order of how much they matter for the same use:
 
-1. **macOS.** Resource limits are not containment. mxc uses seatbelt.
-2. **Other languages.** mxc ships .NET and Node SDKs. HyperMachine has a Rust
+1. **Other languages.** mxc ships .NET and Node SDKs. HyperMachine has a Rust
    library, a JSON request any language can send to `hm sandbox exec`, and a
    Node package that sends it. That package starts the `hm` binary for each
    run, is not published to npm, and does not stream. There is no .NET
    package.
-3. **Finer network policy for a process.** All or nothing today.
-4. **A denied path list on Windows.** Linux has one. On Windows a request can
+2. **Finer network policy for a process.** All or nothing today.
+3. **A denied path list on Windows.** Linux has one. On Windows a request can
    say "only these paths" but not "this tree except that part of it": a deny
    entry for an AppContainer's own SID was tried and is not enforced.
-5. **UI controls one by one, and off Windows.** Windows has one switch for
+4. **UI controls one by one, and off Windows.** Windows has one switch for
    all of them; mxc's policy names clipboard, display and GUI separately.
-6. **An audit mode.**
+5. **An audit mode.**
+6. **macOS limits.** No memory or process-count limit there, and no test on
+   more than the one macOS version CI runs.
 
 ## Where HyperMachine has something mxc's README does not claim
 
@@ -86,4 +87,4 @@ Neither of these is a measured win over mxc: mxc was not run.
 | Node client | `sdk/node` tests against the real binary: Windows 11 with Node 22 and WSL2 with Node 20, 8 of 8. CI runs them on Linux, Windows and macOS after building `hm`. Not yet seen in CI |
 | Windows UI isolation | `process::windows::tests::a_ui_isolated_workload_cannot_change_the_desktop_it_runs_on` on a Windows 11 host: the same program sets a system parameter outside the restrictions and is refused inside them. By hand, `hm sandbox run --isolate-ui` running `clip` got "Access is denied". The test tries reading and emptying the clipboard only under CI, where losing its contents costs nothing; the other restrictions are set by the same call and not tried one by one |
 | Windows no-network | `process::windows::tests`, on a Windows 11 host: a request that reaches a loopback listener with the host's network does not reach it from the container, and the listener sees no connection. `hm sandbox run` was also run by hand: `curl` to the Internet fails by default and succeeds with `--net host` |
-| macOS | nothing beyond what the backend reports about itself |
+| macOS | `process::unix_fallback::seatbelt::tests`, which can run only on CI's `macos-latest`; there is no Mac among the development hosts. They fail, not skip, where a profile cannot be applied. First run, on `macos-latest`: no network, a denied path, a missing program and the profile text passed; confinement held (an ungranted file hidden, a read-only grant not written, a read-write one written) but a denied path under a grant was read. The denial rule was changed to name reading a file's data, and on the second run (`macos-26-arm64`) all five passed, the denied path under a read-only grant closed. A denied path under a read-write grant, closed to reading and to writing, was added to the confinement test after that run |

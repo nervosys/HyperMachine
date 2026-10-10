@@ -56,13 +56,13 @@ caller asks for it.
 | Process count | `pids.max` | job `ActiveProcessLimit` | ✗ (`RLIMIT_NPROC` counts the user's processes, not the workload's) | the guest |
 | CPU time | `RLIMIT_CPU` | job `PerJobUserTimeLimit` | `RLIMIT_CPU` | guest agent |
 | Wall clock | kill the process group | terminate the job | kill the process group | guest agent |
-| Network isolation | `CLONE_NEWNET` + its own sysfs | an AppContainer with no capabilities | ✗ | no network device |
+| Network isolation | `CLONE_NEWNET` + its own sysfs | an AppContainer with no capabilities | a sandbox profile denying `network*` | no network device |
 | Filesystem isolation | `CLONE_NEWNS` + `pivot_root` | ✗ | ✗ | the guest's own |
 | Process isolation | `CLONE_NEWPID` + `CLONE_NEWIPC` + its own `/proc` | ✗ | ✗ | a separate kernel |
 | No new privileges | `PR_SET_NO_NEW_PRIVS` | ✗ | ✗ | a separate kernel |
-| Path confinement | an empty root made for the run, holding the grants | an AppContainer | ✗ | ✗ (a guest shares no host path) |
+| Path confinement | an empty root made for the run, holding the grants | an AppContainer | a sandbox profile allowing the grants and the system | ✗ (a guest shares no host path) |
 | UI isolation | ✗ (no boundary around a display server) | job object user-interface restrictions | ✗ | the host's desktop is not in the guest |
-| Path denial | a mount over the path | ✗ (an AppContainer is not refused by a deny entry for its own SID) | ✗ | ✗ (a guest shares no host path) |
+| Path denial | a mount over the path | ✗ (an AppContainer is not refused by a deny entry for its own SID) | a sandbox profile's last rule | ✗ (a guest shares no host path) |
 
 Every ✗ is reported at runtime with a reason, not discovered by a caller when
 something escapes.
@@ -191,6 +191,42 @@ The profile is made for one run and deleted after it, with its folder.
 runs its program in a container by default. Grant it what it needs with `--ro`
 and `--rw`, or pass `--net host` to run it uncontained as before.
 
+### Containment on macOS
+
+A macOS workload asked for no network, for confinement to its grants, or for
+denied paths is started by `/usr/bin/sandbox-exec` under a profile written for
+that run. A workload asked for none of them is started directly, as before.
+
+**What this is built on.** The kernel's sandbox extension is the only sandbox
+macOS gives one program to put another in. Apple has marked the interface
+deprecated since 10.8 and names no replacement for third parties. It is also
+what Apple's own tools and every other project that contains a process on
+macOS use, and it has kept working. This backend used to decline it for that
+reason and report resource limits only; it now uses it, probes it at startup,
+and reports the three controls unavailable, with what `sandbox-exec` said,
+where a profile cannot be applied. A process already inside a sandbox, for
+one, may not apply another.
+
+**What a profile holds.** It starts from "allow everything" and takes away, in
+this order, with the last matching rule deciding:
+
+1. the network, all of it: loopback and local sockets included;
+2. under confinement, reading file contents and writing anything, anywhere;
+   then back the system (`/System`, `/usr`, `/bin`, `/sbin`, `/Library`,
+   `/Applications`, `/opt`, `/dev`, `/private/etc`, `/private/var/db`) for
+   reading, the null devices for writing, and the grants;
+3. each denied path.
+
+A sandboxed process cannot take its sandbox off, and what it starts inherits
+it.
+
+**What it does not do.** No filesystem isolation in the Linux sense, no
+process isolation, no memory or process-count limit: those stay reported as
+unavailable. Paths are named by their real location, so `/tmp/x` is granted
+as `/private/tmp/x`; the backend resolves them, and a path that is not UTF-8
+is refused. A confined workload can still look a path up (its name, size and
+dates) anywhere; it cannot read what is in it.
+
 ### UI isolation, on Windows
 
 `SandboxSpec::isolate_ui` (`--isolate-ui`; `"isolateUi": true` in a request)
@@ -270,7 +306,10 @@ hm sandbox run --confine-paths --ro /usr --ro /lib --ro /lib64 --ro /bin \
   is closed to an AppContainer whatever its capabilities, so a confined
   workload with the host's network reaches the Internet and the local network
   but not a server on the same machine.
-- **On macOS** it is not available, and a request for it is refused.
+- **On macOS** the workload runs under a [sandbox profile](#containment-on-macos)
+  that lets it read its grants and the places the system and installed
+  software live, and write only to its read-write grants. Like Windows, and
+  for the same reason, that is the caller's list plus the system's.
 - On top of `--fs isolated:ROOT` it adds nothing: that root already decides
   what is there.
 
@@ -293,10 +332,13 @@ hm sandbox run --confine-paths --ro /usr --ro /lib --rw /work --deny /work/.git 
   under a grant, and under a mount of an isolated root.
 - **The cover stays on.** The workload holds no capabilities, so it cannot
   unmount it, and in a user namespace of its own the kernel locks it.
-- **On Windows and macOS it is refused.** On Windows this was tried and did
-  not hold: an AppContainer is not refused by an access-denied entry for its
-  own SID, and the file under one was read all the same. Grant the paths
-  beside the one to keep closed instead.
+- **On macOS** it is the last rule of the workload's
+  [sandbox profile](#containment-on-macos), so it wins over a grant above it.
+  The path is refused, not covered: reading it fails.
+- **On Windows it is refused.** This was tried and did not hold: an
+  AppContainer is not refused by an access-denied entry for its own SID, and
+  the file under one was read all the same. Grant the paths beside the one to
+  keep closed instead.
 - **A granted path under a denied one refuses the run.** A denial covers
   everything under it, and which of the two was meant is not guessed.
 - A denied path must be absolute and exist. One that would not be reachable

@@ -3,7 +3,8 @@
 //! One type, [`ProcessSandbox`], with a different implementation behind it per
 //! platform. What differs between platforms is not just the mechanism but *how
 //! much is enforced*, and that difference is reported rather than smoothed
-//! over: on Linux this is namespaces and cgroups, on Windows a job object, on
+//! over: on Linux this is namespaces and cgroups, on Windows a job object and
+//! an AppContainer, on macOS resource limits and the system's sandbox, and on
 //! other Unixes resource limits and nothing else.
 //!
 //! # Probing, not assuming

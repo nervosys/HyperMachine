@@ -1,17 +1,16 @@
 //! Confinement on Unixes that are not Linux — macOS, the BSDs.
 //!
 //! There is no namespace or cgroup equivalent here that this crate implements,
-//! so what is left is `setrlimit` and a wall-clock deadline. That is a real but
-//! small set, and the point of this file is that it says so: every control it
-//! cannot provide is reported as unavailable with a reason, so a caller asking
-//! for network isolation on macOS is refused rather than handed a process with
-//! full network access and a sandbox-shaped API around it.
+//! so what every one of these systems gets is `setrlimit` and a wall-clock
+//! deadline. That is a real but small set, and the point of this file is that
+//! it says so: every control it cannot provide is reported as unavailable with
+//! a reason, so a caller asking for network isolation on a BSD is refused
+//! rather than handed a process with full network access and a sandbox-shaped
+//! API around it.
 //!
-//! macOS has `sandbox_init`, which would cover more of this. It has been
-//! deprecated since 10.8 with no supported replacement for third-party use,
-//! and building on it would mean claiming isolation from an interface Apple
-//! does not support. A caller needing more than resource limits here uses the
-//! microVM sandbox.
+//! macOS gets more, from the system's own sandbox: no network, confinement to
+//! granted paths, and denied paths. That is the `seatbelt` module, which also
+//! says what it is built on and why that was once a reason not to.
 
 use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
@@ -23,7 +22,10 @@ use crate::{
 
 use super::driver;
 
-/// What resource limits give us here.
+#[cfg(target_os = "macos")]
+mod seatbelt;
+
+/// What resource limits give us here, and on macOS the system's sandbox.
 pub(super) fn probe() -> Controls {
     let unsupported = |what: &str| {
         format!(
@@ -32,7 +34,7 @@ pub(super) fn probe() -> Controls {
         )
     };
 
-    Controls::none()
+    let controls = Controls::none()
         .with(Control::CpuTime)
         .with(Control::WallClock)
         // RLIMIT_AS is an address-space limit rather than a resident-memory
@@ -55,7 +57,6 @@ pub(super) fn probe() -> Controls {
                 std::env::consts::OS
             ),
         )
-        .without(Control::NetworkIsolation, unsupported("network isolation"))
         .without(
             Control::FilesystemIsolation,
             unsupported("filesystem isolation"),
@@ -65,9 +66,30 @@ pub(super) fn probe() -> Controls {
             Control::NoNewPrivileges,
             unsupported("a no-new-privileges bit"),
         )
-        .without(Control::PathConfinement, unsupported("path confinement"))
-        .without(Control::PathDenial, unsupported("path denial"))
-        .without(Control::UiIsolation, unsupported("UI isolation"))
+        .without(Control::UiIsolation, unsupported("UI isolation"));
+
+    // The three a sandbox profile provides, where there is one to apply.
+    let profiled = [
+        (Control::NetworkIsolation, "network isolation"),
+        (Control::PathConfinement, "path confinement"),
+        (Control::PathDenial, "path denial"),
+    ];
+    #[cfg(target_os = "macos")]
+    let refused = seatbelt::probe().err();
+    #[cfg(not(target_os = "macos"))]
+    let refused: Option<String> = None;
+    profiled
+        .into_iter()
+        .fold(controls, |controls, (control, name)| {
+            if cfg!(target_os = "macos") {
+                match &refused {
+                    None => controls.with(control),
+                    Some(why) => controls.without(control, why.clone()),
+                }
+            } else {
+                controls.without(control, unsupported(name))
+            }
+        })
 }
 
 /// Run `command` under `spec`.
@@ -85,6 +107,27 @@ pub(super) fn run(
 
     let cpu_seconds = spec.cpu_time.map(|d| d.as_secs().max(1));
 
+    // On macOS a spec that asks for what a profile provides is started by the
+    // program that applies one. A spec this host could not honour was refused
+    // before it got here, or had those parts dropped and reported.
+    #[cfg(target_os = "macos")]
+    let mut builder = if seatbelt::wanted(spec) {
+        let profile = seatbelt::profile(spec)?;
+        let program = seatbelt::resolve(
+            &command.program,
+            command.env.get("PATH").map(String::as_str),
+        )
+        .map_err(|e| SandboxError::Spawn {
+            program: command.program.clone(),
+            source: e,
+        })?;
+        let mut builder = Command::new(seatbelt::SANDBOX_EXEC);
+        builder.arg("-p").arg(profile).arg(program);
+        builder
+    } else {
+        Command::new(&command.program)
+    };
+    #[cfg(not(target_os = "macos"))]
     let mut builder = Command::new(&command.program);
     builder
         .args(&command.args)
