@@ -297,8 +297,11 @@ hm sandbox run --confine-paths --ro /usr --ro /lib --rw /work --deny /work/.git 
   only through an entry that allows it, and under a granted directory that
   entry is inherited. So for the length of the run the denied path stops
   inheriting, and keeps a list of its own: what it had, without the entries
-  that allow a container. Afterwards it inherits again and its list is what
-  it was, entry for entry. Four things follow:
+  that allow a container. Afterwards it inherits again, and the same accounts
+  have the access they had. Where its entries were inherited to begin with,
+  the list is what it was, entry for entry. On CI's runner they began as the
+  path's own copies of its parent's, and came back marked inherited: the same
+  access, now following the parent. Four things follow:
   - **A denial brings the container.** There is nothing to close a path to
     otherwise. So on Windows `--deny` alone also closes the rest of the user's
     files, as any container does: more than was asked, never less.

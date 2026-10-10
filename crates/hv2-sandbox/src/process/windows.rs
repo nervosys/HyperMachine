@@ -973,6 +973,8 @@ mod tests {
             .run(&read(private.join("key.txt")), &contained)
             .expect("run");
         assert_eq!(text(&reached), "private", "{reached:?}");
+        // What a grant above it, made and taken back, leaves on the path.
+        let after_a_grant = listed(&private);
 
         // A denial by itself is what brings the container.
         let spec = SandboxSpec {
@@ -1027,8 +1029,15 @@ mod tests {
             other => panic!("{other:?}"),
         }
 
-        // Afterwards it is as it was: the same list, entry for entry.
-        assert_eq!(listed(&private), before);
+        // Afterwards the denial has left nothing a grant alone does not:
+        // the same list, entry for entry.
+        assert_eq!(listed(&private), after_a_grant, "before: {before}");
+        // And that is who it was before anything ran, with the access each
+        // had. Only the mark that says an entry is inherited is set aside:
+        // on CI's runner the entries began as the path's own, and came back
+        // from a run marked as its parent's.
+        let unmarked = |list: &str| list.replace("(I)", "");
+        assert_eq!(unmarked(&after_a_grant), unmarked(&before));
         let after = listed(&base);
         assert!(!after.is_empty() && !after.contains("S-1-15-"), "{after}");
         assert_eq!(
