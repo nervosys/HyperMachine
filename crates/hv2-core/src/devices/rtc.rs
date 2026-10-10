@@ -492,13 +492,23 @@ mod tests {
         rtc.write_index(RTC_STATUS_B);
         rtc.write_data(STATUS_B_AIE | STATUS_B_24H);
 
-        // Read current time to know what to set the alarm to
-        rtc.write_index(RTC_SECONDS);
-        let current_seconds = rtc.read_data();
-        rtc.write_index(RTC_MINUTES);
-        let current_minutes = rtc.read_data();
-        rtc.write_index(RTC_HOURS);
-        let current_hours = rtc.read_data();
+        // Read current time to know what to set the alarm to. Every read
+        // of a time register takes the clock again, so a second that turns
+        // over between them leaves the registers ahead of what was read and
+        // the alarm set for a time already gone. Reading the seconds again
+        // last shows whether that happened; this failed on CI once.
+        let (current_seconds, current_minutes, current_hours) = loop {
+            rtc.write_index(RTC_SECONDS);
+            let seconds = rtc.read_data();
+            rtc.write_index(RTC_MINUTES);
+            let minutes = rtc.read_data();
+            rtc.write_index(RTC_HOURS);
+            let hours = rtc.read_data();
+            rtc.write_index(RTC_SECONDS);
+            if rtc.read_data() == seconds {
+                break (seconds, minutes, hours);
+            }
+        };
 
         // Set alarm to match current time
         rtc.write_index(RTC_SECONDS_ALARM);
