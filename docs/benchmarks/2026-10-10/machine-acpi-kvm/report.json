@@ -1,0 +1,77 @@
+{
+  "success": true,
+  "purpose": "functional verification of firmware-booted machines on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "d19284ef73c88ef549aa51dc6ecbc9cd0a04d16a46b243a8b8b8b3261c81ff82",
+    "firmware": "4a0a1e977368f6b15d2198a216bdedf9a350bf5e5ae07e29e695373ec16ad958",
+    "image": "800f530322907ababfe948271255107959ea780ac118a1d47109e3adaf484e96",
+    "driver": "fd37b8d570488c35ae3fb8a969ccfb8828c9e98a60ae697eb8eac0e298e7c5df"
+  },
+  "cases": [
+    {
+      "name": "a machine created from the image boots by firmware to the image's login prompt",
+      "success": true,
+      "detail": {
+        "machineID": "vm-7eea058809befe15",
+        "diskGiB": 1,
+        "prompt": "cirros login:"
+      }
+    },
+    {
+      "name": "the console takes input: a login, commands, and a file written",
+      "success": true,
+      "detail": {
+        "kernel": "5.15.0-71-generic",
+        "exec": 409,
+        "saw": [
+          "wrote-kept-42",
+          "$ "
+        ]
+      }
+    },
+    {
+      "name": "the file survives stop and start",
+      "success": true,
+      "detail": {
+        "note": "kept-42"
+      }
+    },
+    {
+      "name": "the file survives the guest rebooting itself",
+      "success": true,
+      "detail": {
+        "note": "kept-42"
+      }
+    },
+    {
+      "name": "a machine asked for two processors has two, by its own kernel's count",
+      "success": true,
+      "detail": {
+        "nproc": 2,
+        "tables": "3",
+        "acpi_faults": "0",
+        "virtio_lines_on_the_io_apic": 1,
+        "saw": [
+          "$ "
+        ]
+      }
+    },
+    {
+      "name": "a guest that turns itself off is left off, and starts when asked",
+      "success": true,
+      "detail": {
+        "seconds_left_off": 8
+      }
+    },
+    {
+      "name": "what cannot work is refused at creation",
+      "success": true,
+      "detail": {
+        "missing": "no image absent.raw",
+        "path": "image \"../cirros.raw\": a file name of letters, digits, -, _ and .",
+        "both": "give image or templateID, not both",
+        "too small": "diskGiB is 1 to 2048"
+      }
+    }
+  ]
+}

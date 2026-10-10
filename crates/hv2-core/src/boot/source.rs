@@ -435,6 +435,18 @@ impl LoadedBoot {
         }
     }
 
+    /// Give PVH firmware these ACPI tables, whose first bytes are the RSDP,
+    /// and tell it where they are, for it to hand to the operating system it
+    /// starts. See [`acpi_tables::build_pc`](crate::boot::acpi_tables::build_pc).
+    ///
+    /// Does nothing for other protocols.
+    pub fn set_acpi_tables(&mut self, tables: Vec<u8>) {
+        if let Self::Pvh(boot) = self {
+            boot.rsdp_addr = crate::boot::acpi_tables::ACPI_ADDR;
+            boot.acpi_tables = Some(tables);
+        }
+    }
+
     /// Describe a Linux guest's platform with hardware-reduced ACPI tables
     /// naming these virtio-mmio windows. See [`LinuxBootParams::hw_reduced_acpi`].
     ///

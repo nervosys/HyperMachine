@@ -630,6 +630,12 @@ pub struct VM {
     virtio_mmio_windows: parking_lot::Mutex<Vec<crate::boot::acpi_tables::MmioDevice>>,
     /// Set by [`VM::use_hw_reduced_acpi`].
     hw_reduced_acpi: std::sync::atomic::AtomicBool,
+    /// Each PCI device attached and the interrupt input it raises, for the
+    /// routing table a firmware-booted guest is given.
+    pci_intx: parking_lot::Mutex<Vec<crate::boot::acpi_tables::PciIntx>>,
+    /// Set when the guest turned itself off, as distinct from restarting or
+    /// being stopped. See [`VM::powered_off`].
+    powered_off: Arc<AtomicBool>,
     /// Interrupts devices raised on their own, waiting to be delivered.
     ///
     /// Taken by [`VM::launch`], which spawns the task that drains it, and
@@ -882,6 +888,8 @@ impl VM {
             extra_cmdline: parking_lot::Mutex::new(Vec::new()),
             virtio_mmio_windows: parking_lot::Mutex::new(Vec::new()),
             hw_reduced_acpi: std::sync::atomic::AtomicBool::new(false),
+            pci_intx: parking_lot::Mutex::new(Vec::new()),
+            powered_off: Arc::new(AtomicBool::new(false)),
             pci_root: Arc::new(parking_lot::RwLock::new(crate::pci::PciRootComplex::new())),
             interrupt_queue: parking_lot::Mutex::new(Some(interrupt_rx)),
             pic,
@@ -915,6 +923,17 @@ impl VM {
     /// Get VM state
     pub fn state(&self) -> VMState {
         *self.state.read()
+    }
+
+    /// Whether the guest turned itself off: it entered ACPI S5 by writing
+    /// its power control register.
+    ///
+    /// A guest that stops for any other reason -- a reset pulse, a triple
+    /// fault, a stop from outside -- leaves this false. A caller that
+    /// restarts stopped guests reads it to tell "turn me off" from "restart
+    /// me". Cleared when the VM is started again.
+    pub fn powered_off(&self) -> bool {
+        self.powered_off.load(Ordering::SeqCst)
     }
 
     /// Provision this VM on its hypervisor backend and load its boot source.
@@ -973,6 +992,17 @@ impl VM {
                 // virtio-mmio windows instead: the command-line form gives the
                 // guest an IRQ number that nothing maps once there is no legacy
                 // PIC, and naming a window in both places would probe it twice.
+                // Firmware that boots a disk image starts a kernel that is
+                // not this project's and takes no command line from here. It
+                // learns its processors, its PCI interrupt routing and how to
+                // turn itself off from ACPI tables, which the firmware is
+                // pointed at and passes on.
+                if loaded.protocol() == "pvh" {
+                    loaded.set_acpi_tables(crate::boot::acpi_tables::build_pc(
+                        self.config.vcpu_count,
+                        &self.pci_intx.lock(),
+                    ));
+                }
                 let acpi = self
                     .hw_reduced_acpi
                     .load(std::sync::atomic::Ordering::Relaxed)
@@ -1024,10 +1054,22 @@ impl VM {
         // `attach_absent` rather than `attach`: a caller who installed their
         // own machine model before provisioning keeps it, and is not refused
         // for having done the thing this is a default for.
-        if self.config.boot.is_some() {
-            crate::machine::Machine::legacy_pc_with_pci_root(Arc::clone(&self.pci_root))
-                .attach_absent(&self.devices)
-                .await?;
+        if let Some(boot) = &self.config.boot {
+            let mut machine =
+                crate::machine::Machine::legacy_pc_with_pci_root(Arc::clone(&self.pci_root));
+            // Only where the tables name them: see the PVH branch above.
+            if boot.protocol() == "pvh" {
+                use crate::devices::acpi_pm::{AcpiPm, ACPI_PM_BASE, ACPI_PM_LAST};
+                machine = machine.with_device(crate::machine::MachineDevice::new(
+                    "ACPI PM",
+                    Arc::new(tokio::sync::RwLock::new(AcpiPm::new())),
+                    ACPI_PM_BASE,
+                    ACPI_PM_LAST,
+                    "a guest told by its tables that these registers exist reads an absent \
+                     control port as every bit set, sleep-enable included",
+                ));
+            }
+            machine.attach_absent(&self.devices).await?;
         }
 
         // A boot source on a backend that cannot execute is the one case where
@@ -1317,6 +1359,7 @@ impl VM {
 
         // Set running flag
         self.running.store(true, Ordering::SeqCst);
+        self.powered_off.store(false, Ordering::SeqCst);
 
         tracing::info!(
             "Starting VM '{}' with {} vCPUs and {} GB memory (parallel={})",
@@ -2817,6 +2860,12 @@ impl VM {
         self.pci_root
             .write()
             .add_device(Self::VSOCK_PCI_SLOT, 0, config);
+        self.pci_intx
+            .lock()
+            .push(crate::boot::acpi_tables::PciIntx {
+                slot: Self::VSOCK_PCI_SLOT,
+                gsi: irq,
+            });
 
         self.devices
             .register_device("virtio-vsock-pci", transport.clone())
@@ -3310,6 +3359,12 @@ impl VM {
         self.pci_root
             .write()
             .add_device(Self::NET_PCI_SLOT, 0, config);
+        self.pci_intx
+            .lock()
+            .push(crate::boot::acpi_tables::PciIntx {
+                slot: Self::NET_PCI_SLOT,
+                gsi: irq,
+            });
         self.devices
             .register_device("virtio-net-pci", transport.clone())
             .await?;
@@ -3435,6 +3490,12 @@ impl VM {
         self.pci_root
             .write()
             .add_device(Self::BLOCK_PCI_SLOT, 0, config);
+        self.pci_intx
+            .lock()
+            .push(crate::boot::acpi_tables::PciIntx {
+                slot: Self::BLOCK_PCI_SLOT,
+                gsi: irq,
+            });
         self.devices
             .register_device("virtio-blk-pci", transport.clone())
             .await?;
@@ -3447,7 +3508,7 @@ impl VM {
             _transport: transport,
         });
         tracing::info!(
-            "VM '{}': block device attached over PCI at slot {}, BAR {bar_base:#x}              (IRQ {irq}, {capacity} bytes{})",
+            "VM '{}': block device attached over PCI at slot {}, BAR {bar_base:#x} (IRQ {irq}, {capacity} bytes{})",
             self.config.name,
             Self::BLOCK_PCI_SLOT,
             if read_only { ", read-only" } else { "" },
@@ -3881,6 +3942,7 @@ impl VM {
         let running = self.running.clone();
         let state = self.state.clone();
         let exit_notify = self.exit_notify.clone();
+        let powered_off = self.powered_off.clone();
         let devices = self.devices.clone();
         let pic = self.pic.clone();
         let memory = self.memory.clone();
@@ -3961,6 +4023,7 @@ impl VM {
                     running,
                     state,
                     exit_notify,
+                    powered_off,
                     devices,
                     pic,
                     memory,
@@ -3990,6 +4053,7 @@ impl VM {
         running: Arc<AtomicBool>,
         state: Arc<RwLock<VMState>>,
         exit_notify: Arc<Notify>,
+        powered_off: Arc<AtomicBool>,
         devices: Arc<DeviceManager>,
         pic: Arc<Pic8259>,
         memory: Arc<GuestMemory>,
@@ -4147,6 +4211,7 @@ impl VM {
                 &event_bus,
                 &state,
                 &exit_notify,
+                &powered_off,
             )
             .await?;
 
@@ -4170,7 +4235,26 @@ impl VM {
     /// memory and never exits. Firecracker treats it the same way. What
     /// happens after the stop -- a fresh guest, or none -- is the caller's.
     fn i8042_reset_as_shutdown(exit: VmExit) -> VmExit {
+        Self::guest_stop_as_shutdown(exit, &AtomicBool::new(false))
+    }
+
+    /// [`Self::i8042_reset_as_shutdown`], and the write that enters ACPI S5:
+    /// a guest whose tables name fixed power hardware turns itself off by
+    /// writing its PM1a control register. That stops the VM as a reset does,
+    /// and sets `powered_off` so that whoever restarts stopped guests can
+    /// tell the two apart.
+    fn guest_stop_as_shutdown(exit: VmExit, powered_off: &AtomicBool) -> VmExit {
         match exit {
+            VmExit::Io {
+                port: crate::boot::acpi_tables::PM1A_CNT_PORT,
+                direction: IoDirection::Out,
+                data,
+                ..
+            } if crate::boot::acpi_tables::is_power_off(data as u16) => {
+                tracing::info!("Guest turned itself off through ACPI");
+                powered_off.store(true, Ordering::SeqCst);
+                VmExit::Shutdown
+            }
             VmExit::Io {
                 port: crate::machine::I8042_LAST,
                 direction: IoDirection::Out,
@@ -4197,8 +4281,9 @@ impl VM {
         event_bus: &EventBus,
         state: &RwLock<VMState>,
         exit_notify: &Notify,
+        powered_off: &AtomicBool,
     ) -> Result<bool> {
-        match Self::i8042_reset_as_shutdown(exit) {
+        match Self::guest_stop_as_shutdown(exit, powered_off) {
             VmExit::Mmio {
                 phys_addr,
                 mut data,
@@ -4592,7 +4677,7 @@ impl VM {
     ///
     /// Returns Ok(true) if execution should continue, Ok(false) if VM should stop.
     async fn handle_exit(&self, vcpu: &VCpu, stats: &VCpuStats, exit: VmExit) -> Result<bool> {
-        match Self::i8042_reset_as_shutdown(exit) {
+        match Self::guest_stop_as_shutdown(exit, &self.powered_off) {
             VmExit::Mmio {
                 phys_addr,
                 mut data,
@@ -4991,6 +5076,24 @@ mod tests {
         assert!(!VM::i8042_reset_as_shutdown(io(0x64, IoDirection::Out, 0xd1)).is_shutdown());
         assert!(!VM::i8042_reset_as_shutdown(io(0x60, IoDirection::Out, 0xfe)).is_shutdown());
         assert!(!VM::i8042_reset_as_shutdown(io(0x64, IoDirection::In, 0xfe)).is_shutdown());
+
+        // The write that enters S5 stops the VM too, and says it was that.
+        let off = AtomicBool::new(false);
+        let reset = VM::guest_stop_as_shutdown(io(0x64, IoDirection::Out, 0xfe), &off);
+        assert!(reset.is_shutdown() && !off.load(Ordering::SeqCst));
+        // Another sleep state, or the sleep type without the enable: neither.
+        for value in [0x2400, 0x1400, 0x0001] {
+            let other = VM::guest_stop_as_shutdown(io(0x604, IoDirection::Out, value), &off);
+            assert!(
+                !other.is_shutdown() && !off.load(Ordering::SeqCst),
+                "{value:#x}"
+            );
+        }
+        // A read of the register is not a write to it.
+        let read = VM::guest_stop_as_shutdown(io(0x604, IoDirection::In, 0x3400), &off);
+        assert!(!read.is_shutdown() && !off.load(Ordering::SeqCst));
+        let s5 = VM::guest_stop_as_shutdown(io(0x604, IoDirection::Out, 0x3401), &off);
+        assert!(s5.is_shutdown() && off.load(Ordering::SeqCst));
     }
 
     #[tokio::test]

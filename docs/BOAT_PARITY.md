@@ -27,7 +27,7 @@ reason, and are listed once at the end rather than counted as gaps.
 | | boat | HyperMachine |
 |---|---|---|
 | What a sandbox is | An Ubuntu 24.04 VM, x86-64, with root | A Linux microVM on its own VMM, from a template whose root filesystem is in memory; or a [machine](MACHINES.md) with a disk |
-| Sizes | Four, chosen at creation: 2 to 16 vCPUs, 4 to 32 GB, 12 to 251 GB of disk | **A sandbox has no size of its own.** Size is fixed when its template is built (up to 32 vCPUs and 64 GiB), or node-wide. A machine from a template takes `cpuCount`, `memoryMB` and `diskGiB`. A machine from a disk image has one vCPU |
+| Sizes | Four, chosen at creation: 2 to 16 vCPUs, 4 to 32 GB, 12 to 251 GB of disk | **A sandbox has no size of its own.** Size is fixed when its template is built (up to 32 vCPUs and 64 GiB), or node-wide. A machine takes `cpuCount` (to 32), `memoryMB` and `diskGiB`, whether from a template or [from a disk image](FIRMWARE_BOOT.md#acpi-tables) |
 | Changing size later | On resume and on fork | **No.** Nothing resizes an existing sandbox or machine |
 | Creating one | "usually under a second on a ready machine"; `--fail-fast` answers within about 1.5 s whether one was ready | From a template: 18.9 ms at the median on this project's own host, and 0.65 ms from the [warm pool](WARM_POOL.md). A full node answers 503 at once by default; there is no request option that says so when the node queues |
 | What stopping keeps | **Files only.** "Snapshots capture your sandbox's files, not its running processes or memory"; processes run by hand are restarted by the user | **Memory and processes.** Pause to disk and resume on any node; [standby](STANDBY.md) keeps memory and wakes on the next request |
@@ -68,10 +68,11 @@ In rough order of how much each matters to someone choosing between them:
 
 1. **A guest that is a whole distribution.** boat's sandbox runs systemd,
    Docker and anything `apt` installs, on several processors. HyperMachine's
-   sandbox is a small guest in memory, and its machine from a disk image has
-   one processor, no ACPI tables and no agent inside. Most of the rows below
-   stand on this one: an agent, a browser and a desktop are all things a
-   distribution installs.
+   sandbox is a small guest in memory. Its machine from a disk image now has
+   the processors it asks for and ACPI tables, and turns itself off, but has
+   only ever booted one small image without systemd, and has no agent
+   inside. Most of the rows below stand on this one: an agent, a browser and
+   a desktop are all things a distribution installs.
 2. **Coding agents run for the caller.** Nothing here starts an agent in a
    sandbox, carries a prompt to it or reports what it did.
 3. **A desktop, and computer use.** Absent, and the device code that would

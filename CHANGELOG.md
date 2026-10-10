@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   was stored and failed at the machine's first boot, and a machine from a
   disk image was given one processor whatever it asked for, without being
   told. `hm sandbox vm machine create --cpus` takes 1 to 32.
+- Two messages with a run of spaces in the middle of a sentence, left by a
+  lost line continuation: the reason the machine model gives for its PCI
+  configuration device, and a block device's attach log line.
 - `reboot` hung MMIO guests. On the hardware-reduced ACPI platform, Linux
   reboots through EFI and, with no EFI, spins in a BIOS jump. Guests now boot
   with `reboot=k`, and the VM stops on the i8042 reset pulse. Sandbox guests
@@ -54,6 +57,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clipboard, other programs' windows, system and display settings, and logging
   off, through the job object's user-interface restrictions. A new control,
   `UI isolation`; Linux and macOS refuse it.
+- A machine booted from a disk image has ACPI tables: the processors it was
+  created with (`cpuCount`, to 32, where it had one whatever was asked),
+  interrupt routing for its PCI devices through the I/O APIC, and power
+  registers. `poweroff` in such a guest now stops the machine, and it is left
+  stopped whatever its restart policy. `VM::powered_off` says a guest turned
+  itself off, as distinct from restarting.
 - A network between none and the host's for a sandboxed process:
   `NetworkPolicy::Proxy { port }` and `hm sandbox run --net proxy:PORT` give a
   program one port on the host's loopback, where the caller's proxy listens,

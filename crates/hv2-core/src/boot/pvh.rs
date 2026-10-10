@@ -57,6 +57,10 @@ pub struct PvhBoot {
     pub memory_size: u64,
     /// Guest physical address of the ACPI RSDP, or zero for none.
     pub rsdp_addr: u64,
+    /// ACPI tables to place at [`acpi_tables::ACPI_ADDR`](crate::boot::acpi_tables::ACPI_ADDR),
+    /// which the memory map already keeps out of RAM. The RSDP is their
+    /// first bytes.
+    pub acpi_tables: Option<Vec<u8>>,
 }
 
 /// Where an image's bytes go and where it is entered.
@@ -114,6 +118,7 @@ impl PvhBoot {
             image,
             memory_size: 0,
             rsdp_addr: 0,
+            acpi_tables: None,
         }
     }
 
@@ -293,7 +298,11 @@ impl PvhBoot {
         info.extend_from_slice(&(map.len() as u32).to_le_bytes());
         info.extend_from_slice(&0u32.to_le_bytes()); // reserved
         debug_assert_eq!(info.len(), START_INFO_SIZE);
-        vec![(START_INFO_ADDR, info), (MEMMAP_ADDR, table)]
+        let mut regions = vec![(START_INFO_ADDR, info), (MEMMAP_ADDR, table)];
+        if let Some(tables) = &self.acpi_tables {
+            regions.push((crate::boot::acpi_tables::ACPI_ADDR, tables.clone()));
+        }
+        regions
     }
 
     /// Check the image can be entered in a guest of this size.

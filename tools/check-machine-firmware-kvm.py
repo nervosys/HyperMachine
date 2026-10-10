@@ -91,8 +91,12 @@ def main():
             except ValueError:
                 return response.status, payload.decode(errors="replace")
 
+    # The machine the console helpers talk to: the first one, except while
+    # the processor and power cases have theirs up.
+    nonlocal_name = ["cloud-01"]
+
     def console(tail=6000):
-        status, text = request("GET", f"/machines/cloud-01/console?tail={tail}")
+        status, text = request("GET", f"/machines/{nonlocal_name[0]}/console?tail={tail}")
         assert status == 200, (status, text)
         return re.sub(r"\x1b\[[0-9;?]*[a-zA-Z]", "", text if isinstance(text, str) else json.dumps(text))
 
@@ -109,7 +113,7 @@ def main():
             time.sleep(1)
 
     def type_line(text):
-        status, value = request("POST", "/machines/cloud-01/console", raw=(text + "\n").encode())
+        status, value = request("POST", f"/machines/{nonlocal_name[0]}/console", raw=(text + "\n").encode())
         assert status == 204, (status, value)
 
     def log_in():
@@ -191,6 +195,61 @@ def main():
             shell("echo third-$(cat ~/note)", "third-kept-42")
             return {"note": "kept-42"}
         case("the file survives the guest rebooting itself", survives_reboot)
+
+        def several_processors():
+            # A second machine from the same image, asked for two processors.
+            # What the guest's own kernel counts is the evidence, not what the
+            # machine's record says it was given.
+            nonlocal_name[0] = "cloud-smp"
+            status, created = request("POST", "/machines",
+                                      {"name": "cloud-smp", "image": "cirros.raw", "cpuCount": 2})
+            assert status == 201 and created["cpuCount"] == 2, (status, created)
+            log_in()
+            seen = shell("echo counted-$(nproc)-of-$(grep -c ^processor /proc/cpuinfo)", "counted-2-of-2")
+            # The kernel took its tables from the firmware and found no fault in them.
+            tables = shell("echo tables-$(sudo dmesg | grep -c 'ACPI: \\(FACP\\|APIC\\|DSDT\\) ')", "tables-3")
+            faults = shell("echo faults-$(sudo dmesg | grep -ci 'ACPI.*\\(Error\\|AE_\\)')", "faults-0")
+            # Its disk interrupts through the I/O APIC, by the routing table.
+            # The marker is a sum the guest's shell does, so the count beside it
+            # is the guest's and not the command as the terminal echoed it.
+            routed = shell("echo ioapic-$(grep -c 'IO-APIC.*virtio' /proc/interrupts)-lines-$((40+2))", "-lines-42")
+            lines = int(re.findall(r"ioapic-(\d+)-lines-42", routed)[-1])
+            assert lines >= 1, "no virtio device interrupts through the I/O APIC"
+            return {"nproc": 2, "tables": re.findall(r"tables-(\d+)", tables)[-1],
+                    "acpi_faults": re.findall(r"faults-(\d+)", faults)[-1],
+                    "virtio_lines_on_the_io_apic": lines,
+                    "saw": [line for line in seen.replace("\r", "\n").split("\n") if line.strip()][-1:]}
+        case("a machine asked for two processors has two, by its own kernel's count", several_processors)
+
+        def turns_itself_off():
+            # Its restart policy is the default, the one the reboot case above
+            # shows restarting a guest that stops by itself.
+            type_line("sudo poweroff")
+            deadline = time.monotonic() + 90
+            while True:
+                status, now = request("GET", "/machines/cloud-smp")
+                assert status == 200, (status, now)
+                if now["state"] == "stopped":
+                    break
+                assert time.monotonic() < deadline, f"still {now['state']} after poweroff"
+                time.sleep(1)
+            # Off, and left off: its policy restarts a guest that stops by
+            # itself, and a guest that turned itself off did not do that.
+            time.sleep(8)
+            status, later = request("GET", "/machines/cloud-smp")
+            assert status == 200 and later["state"] == "stopped", later
+            # And it starts again when asked, as any stopped machine does.
+            status, started = request("POST", "/machines/cloud-smp/start")
+            assert status == 200 and started["state"] == "running", (status, started)
+            log_in()
+            shell("echo back-$(nproc)", "back-2")
+            status, value = request("POST", "/machines/cloud-smp/stop")
+            assert status == 200 and value["state"] == "stopped", (status, value)
+            status, value = request("DELETE", "/machines/cloud-smp")
+            assert status in (200, 204), (status, value)
+            nonlocal_name[0] = "cloud-01"
+            return {"seconds_left_off": 8}
+        case("a guest that turns itself off is left off, and starts when asked", turns_itself_off)
 
         def refusals():
             results = {}
