@@ -444,7 +444,8 @@ pub enum MachineCommand {
         /// directory, in place of a template
         #[arg(long)]
         image: Option<String>,
-        #[arg(long, value_parser = clap::value_parser!(u32).range(1..=64))]
+        /// Processors, up to 32. A machine from an image has one
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..=32))]
         cpus: Option<u32>,
         #[arg(long, value_parser = clap::value_parser!(u64).range(128..=1_048_576))]
         memory_mb: Option<u64>,
