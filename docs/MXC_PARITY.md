@@ -36,7 +36,7 @@ not as a difference.
 | Windows process backend | process container (default), plus Windows Sandbox, WSL container, microVM, Hyperlight and isolation session, several marked experimental | job object for memory, process count and CPU time; AppContainer for no-network and for path confinement. Nothing else |
 | macOS backend | seatbelt | seatbelt too, [through `sandbox-exec`](SANDBOXES.md#containment-on-macos): no network, confinement to granted paths, denied paths. CPU time and deadline besides. No memory or process-count limit |
 | Filesystem policy | read-only, read-write and denied path lists | Read-only and read-write [path grants](SANDBOXES.md#path-grants), and [`confine`](SANDBOXES.md#only-the-granted-paths) to make them the whole list. Linux: an empty root made for the run holds the grants and nothing else. Windows: an AppContainer denies everything else outside the system directories. A [denied list](SANDBOXES.md#denied-paths) on Linux, Windows and macOS, which closes a path under a grant; on Linux and macOS also on the host's filesystem with nothing else taken away, where on Windows a denial brings the container with it |
-| Network policy | outbound controls, proxy support, host filtering on some backends | process backends: none, the host's, or [one port where the caller's proxy listens](SANDBOXES.md#one-port-and-a-proxy) on Linux and macOS, so that the proxy decides which hosts are reached. **`hm` does not ship that proxy for a process sandbox**, and Windows has only none or the host's. MicroVM sandboxes have an egress gateway with allow and deny lists |
+| Network policy | outbound controls, proxy support, host filtering on some backends | process backends: none, the host's, or [one port where the caller's proxy listens](SANDBOXES.md#one-port-and-a-proxy) on Linux and macOS, so that the proxy decides which hosts are reached; and [a list of allowed hosts](SANDBOXES.md#allowed-hosts), for which `hm` is that proxy. **Windows has only none or the host's**, and only what a program sends through a proxy is carried: HTTPS and HTTP, not other protocols. MicroVM sandboxes have an egress gateway with allow and deny lists |
 | UI policy | clipboard, display and GUI controls | Windows: [all of a job object's user-interface restrictions](SANDBOXES.md#ui-isolation-on-windows), as one switch. **Not selectable one by one, and nothing on Linux or macOS** |
 | One-shot run | yes | yes |
 | Stateful lifecycle (provision, start, exec, stop, deprovision) | yes, in the SDK | through the node daemon's API, not in-process |
@@ -52,10 +52,12 @@ In rough order of how much they matter for the same use:
    Node package that sends it. That package starts the `hm` binary for each
    run, is not published to npm, and does not stream. There is no .NET
    package.
-2. **Finer network policy for a process.** A process can be kept to one
-   port and a proxy of the caller's on Linux and macOS. There is no proxy of
-   HyperMachine's own to put there with a list of allowed hosts, nothing in a
-   request for it, and nothing on Windows.
+2. **Finer network policy for a process, on Windows and past HTTP.** Linux
+   and macOS have a list of allowed hosts. Windows has none or the host's.
+   The list is enforced by a proxy, so a program that does not use one, or a
+   protocol that is not HTTP or carried over `CONNECT`, gets nothing rather
+   than a filtered connection; and there is no deny list beside the allow
+   list, and no record of refusals in an `exec` response.
 3. **A denied path on Windows without the container.** A denial there runs
    the workload in an AppContainer, so it cannot mean "everything of mine
    except this".
@@ -90,6 +92,7 @@ Neither of these is a measured win over mxc: mxc was not run.
 | Node client | `sdk/node` tests against the real binary: Windows 11 with Node 22 and WSL2 with Node 20, 8 of 8. CI runs them on Linux, Windows and macOS after building `hm`. Not yet seen in CI |
 | Windows UI isolation | `process::windows::tests::a_ui_isolated_workload_cannot_change_the_desktop_it_runs_on` on a Windows 11 host: the same program sets a system parameter outside the restrictions and is refused inside them. By hand, `hm sandbox run --isolate-ui` running `clip` got "Access is denied". The test tries reading and emptying the clipboard only under CI, where losing its contents costs nothing; the other restrictions are set by the same call and not tried one by one |
 | Network through a proxy, Linux | `process::tests::a_proxied_workload_reaches_its_one_port_and_no_other` in WSL2 and in CI's containment job: the workload talks to a listener on the port, does not reach a second listener on the host's loopback, and sees one interface; by itself, with processes isolated, and confined to granted paths. By hand with `hm sandbox run --net proxy:PORT`, `curl` and a proxy allowing one name: see [`hm sandbox run`](SANDBOXES.md#from-the-command-line-hm-sandbox-run) |
+| Allowed hosts, Linux | `hv2_net::forward_proxy::tests` for the proxy's decisions against local listeners, on Linux and Windows. `sandbox_exec::allowed_hosts_are_a_proxy_that_refuses_the_rest` for the whole path in WSL2: a workload under `hm sandbox exec` finds the proxy from its environment, is told 403 for a name not listed, and cannot reach another port. An allowed name reaching a real host was checked by hand only, with `curl`; no test reaches the Internet |
 | Network through a proxy, macOS | `seatbelt::tests::a_proxied_workload_reaches_its_one_port_and_no_other`, which can run only on CI's `macos-latest` |
 | Windows no-network | `process::windows::tests`, on a Windows 11 host: a request that reaches a loopback listener with the host's network does not reach it from the container, and the listener sees no connection. `hm sandbox run` was also run by hand: `curl` to the Internet fails by default and succeeds with `--net host` |
 | macOS | `process::unix_fallback::seatbelt::tests`, which can run only on CI's `macos-latest`; there is no Mac among the development hosts. They fail, not skip, where a profile cannot be applied. First run, on `macos-latest`: no network, a denied path, a missing program and the profile text passed; confinement held (an ungranted file hidden, a read-only grant not written, a read-write one written) but a denied path under a grant was read. The denial rule was changed to name reading a file's data, and on the second run (`macos-26-arm64`) all five passed, the denied path under a read-only grant closed. A denied path under a read-write grant, closed to reading and to writing, was added to the confinement test after that run |

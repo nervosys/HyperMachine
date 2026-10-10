@@ -109,6 +109,11 @@ for path, text in sources:
 # one place a real finding could hide, so an entry that does not say why is an
 # entry nobody can check.
 ACCEPTED = {
+    ('Egress', 'Host'): (
+        'hv2-sandbox request: serde builds it from `"egress": "host"` in a JSON '
+        'request, which this script cannot see. Its guard refuses a request that '
+        'also lists allowed hosts, and a test sends one and reads the refusal.'
+    ),
     ('ApiRole', 'Operator'): (
         'The #[default] role: serde builds it for every key policy that names no '
         'role, which this script cannot see. Its guard (operator admin) is reachable.'

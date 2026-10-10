@@ -56,7 +56,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and nothing else, so the proxy decides which hosts are reached. Linux relays
   the port out of the program's empty network namespace; macOS allows it in
   the sandbox profile. A new control, `network through a proxy`; Windows and
-  the microVM backend refuse it. `hm` does not run a proxy itself.
+  the microVM backend refuse it.
+- Allowed hosts for a sandboxed process: `hm sandbox run --allow-host HOST`
+  and `network.allow` in a request list the only hosts a program may reach,
+  by name, `*.` wildcard, address or range. `hm` runs a proxy for the run
+  (`hv2_net::forward_proxy`) that asks the egress policy the microVM gateway
+  uses, keeps the program to that proxy's port, and sets the proxy variables.
+  Reserved addresses stay closed whatever is listed. Linux and macOS.
 - Denied paths on Windows: a denied path stops inheriting the entries that let
   an AppContainer in for the length of the run, and inherits again afterwards.
   Path denial was Linux-only.

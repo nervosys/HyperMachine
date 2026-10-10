@@ -27,6 +27,13 @@ export interface Request {
   network?: {
     /** `deny` (the default): no network at all. `host`: the host's, unrestricted. */
     egress?: 'deny' | 'host';
+    /**
+     * Hosts it may reach and no others: `example.com`, `*.example.com`, an
+     * address or a CIDR range. Only with `egress` left at `deny`. The
+     * workload is given a proxy and `HTTPS_PROXY` and its like pointing at
+     * it; a program that ignores them reaches nothing. Linux and macOS.
+     */
+    allow?: string[];
   };
   filesystem?: {
     /** A directory that becomes its root, hiding the host's. */

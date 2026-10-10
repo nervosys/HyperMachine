@@ -110,6 +110,17 @@ pub struct Network {
     /// Outbound traffic: none unless this says otherwise.
     #[serde(default)]
     pub egress: Egress,
+    /// Hosts it may reach and no others, each a name (`example.com`,
+    /// `*.example.com`), an address or a range of them. Only with `egress`
+    /// left at `deny`: this is what is let through an otherwise closed
+    /// network, not a list laid over an open one.
+    ///
+    /// A [`SandboxSpec`] cannot carry this. It is for whoever runs the
+    /// request, which listens as a proxy for the workload and hands the spec
+    /// that proxy's port; [`Request::into_parts`] alone gives a spec with no
+    /// network, never one with all of it.
+    #[serde(default)]
+    pub allow: Vec<String>,
 }
 
 /// Whether a workload may make outbound connections.
@@ -184,6 +195,23 @@ impl Request {
         if request.command.first().is_none_or(|p| p.trim().is_empty()) {
             return Err(SandboxError::InvalidSpec(
                 "request has no command to run".to_string(),
+            ));
+        }
+        if request.network.egress == Egress::Host && !request.network.allow.is_empty() {
+            return Err(SandboxError::InvalidSpec(
+                "network.allow lists what is let through a closed network; with egress \"host\" \
+                 everything already is"
+                    .to_string(),
+            ));
+        }
+        if request
+            .network
+            .allow
+            .iter()
+            .any(|host| host.trim().is_empty())
+        {
+            return Err(SandboxError::InvalidSpec(
+                "network.allow has an empty entry".to_string(),
             ));
         }
         Ok(request)
@@ -357,7 +385,7 @@ mod tests {
             names(&properties["limits"]),
             ["cpuTimeMs", "maxProcesses", "memoryBytes", "timeoutMs"]
         );
-        assert_eq!(names(&properties["network"]), ["egress"]);
+        assert_eq!(names(&properties["network"]), ["allow", "egress"]);
         assert_eq!(
             names(&properties["filesystem"]),
             ["confine", "denied", "readOnly", "readWrite", "root"]
@@ -367,11 +395,34 @@ mod tests {
         Request::from_json(
             r#"{"version":1,"command":["x"],"env":{},"workingDir":"/w","stdin":"",
                 "limits":{"memoryBytes":1,"maxProcesses":1,"cpuTimeMs":1,"timeoutMs":1},
-                "network":{"egress":"deny"},
+                "network":{"egress":"deny","allow":["example.com"]},
                 "filesystem":{"root":"/r","readOnly":[],"readWrite":[],"denied":[],"confine":false},
                 "isolateProcesses":false,"noNewPrivileges":false,"isolateUi":false,"bestEffort":false}"#,
         )
         .unwrap();
+    }
+
+    /// A list of allowed hosts is kept for whoever runs the request, and
+    /// the spec made without them has no network: the list never widens what
+    /// a caller that ignores it gets.
+    #[test]
+    fn allowed_hosts_are_carried_and_the_spec_alone_has_no_network() {
+        let request = Request::from_json(
+            r#"{"version":1,"command":["curl"],"network":{"allow":["example.com","*.pypi.org"]}}"#,
+        )
+        .unwrap();
+        assert_eq!(request.network.allow, ["example.com", "*.pypi.org"]);
+        assert_eq!(request.network.egress, Egress::Deny);
+        let (_, spec) = request.into_parts();
+        assert_eq!(spec.network, NetworkPolicy::Denied);
+
+        let both = refusal(
+            r#"{"version":1,"command":["curl"],"network":{"egress":"host","allow":["example.com"]}}"#,
+        );
+        assert!(both.contains("network.allow"), "{both}");
+        let empty =
+            refusal(r#"{"version":1,"command":["curl"],"network":{"allow":["example.com"," "]}}"#);
+        assert!(empty.contains("empty entry"), "{empty}");
     }
 
     /// What is not a request is refused, each with what was wrong.

@@ -53,7 +53,13 @@
         "egress": {
           "enum": ["deny", "host"],
           "default": "deny",
-          "description": "deny: no network at all. host: the host's network, unrestricted."
+          "description": "deny: no network at all, or with allow only what it lists. host: the host's network, unrestricted."
+        },
+        "allow": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": [],
+          "description": "Hosts it may reach and no others: a name (example.com), every name under one (*.example.com), an address or a CIDR range. Only with egress deny. The run is given one port on the host's loopback where a proxy decides each request, and HTTP_PROXY, HTTPS_PROXY and their lower-case forms pointing at it unless env already sets them. A program that does not use a proxy reaches nothing. Refused where the host cannot keep a process to one port, which is everywhere but Linux and macOS."
         }
       }
     },

@@ -238,6 +238,54 @@ hm sandbox run --strict --net proxy:3128 \
                --env HTTPS_PROXY=http://127.0.0.1:3128 -- curl https://example.com
 ```
 
+### Allowed hosts
+
+`hm` can be that proxy. `--allow-host HOST`, repeatable, or `"allow"` in a
+request's `network`, lists the hosts a workload may reach, and with any
+listed they are the only ones:
+
+```sh
+hm sandbox run --strict --allow-host pypi.org --allow-host '*.pythonhosted.org' \
+               -- pip download requests
+```
+
+`hm` listens on a port of the system's choosing on loopback for the length of
+the run, keeps the workload to that port as above, and sets `HTTP_PROXY`,
+`HTTPS_PROXY` and their lower-case forms to it unless the workload's
+environment already sets them. Each request the workload makes of the proxy
+is put to the same egress policy the microVM gateway asks
+(`hv2_net::network_policy`), by `hv2_net::forward_proxy`.
+
+- **An entry** is a name (`example.com`), every name under one
+  (`*.example.com`, which is not `example.com` itself), an address, or a CIDR
+  range.
+- **A name is checked before it is looked up.** A name not on the list is
+  refused without a query, since the question would itself leave the machine.
+- **The connection goes to the address that was checked**, not to the name a
+  second time.
+- **Reserved addresses stay closed, whatever is listed**: loopback,
+  link-local with every cloud's metadata service on it, the private ranges.
+  An allowed name that resolves to one is refused, and so is listing the
+  address itself. That is what keeps a workload from using the proxy to reach
+  the host's own services.
+- **What is refused is said.** The workload gets a 403 with the reason, and
+  `hm sandbox run` prints `refused HOST:PORT (reason)` on its standard error
+  unless `--report none`. A response from `hm sandbox exec` does not list
+  refusals.
+- **Only what goes through a proxy works.** `CONNECT`, which is how HTTPS is
+  sent through one, and plain HTTP. A program that does not read the proxy
+  variables, and anything that is not HTTP or carried over `CONNECT`, reaches
+  nothing.
+- **Inside a `CONNECT` nothing is read.** The name decided on is the one the
+  workload asked the proxy for. A workload that asks for an allowed name and
+  then speaks to another site at the same address, which a shared front end
+  makes possible, is not noticed.
+- **Not with `--net` or `"egress": "host"`.** The list is what is let through
+  a closed network, and both together are refused.
+- **Linux and macOS**, where a process can be kept to one port. Elsewhere a
+  strict run is refused; a best-effort one runs with the host's network, says
+  so, and still has the proxy variables set.
+
 ### Containment on macOS
 
 A macOS workload asked for no network, for confinement to its grants, or for
@@ -543,7 +591,8 @@ before trusting a limit there.
 
 ```
 hm sandbox run [--memory 4G] [--cpu-time SECS] [--wall-clock SECS] [--max-processes N]
-               [--net deny|host|proxy:PORT] [--fs host|isolated:ROOT] [--ro PATH]... [--rw PATH]...
+               [--net deny|host|proxy:PORT] [--allow-host HOST]...
+               [--fs host|isolated:ROOT] [--ro PATH]... [--rw PATH]...
                [--deny PATH]... [--confine-paths]
                [--workdir DIR] [--env K=V]... [--pass-env NAME]... [--clean-env]
                [--isolate-processes] [--no-new-privileges] [--isolate-ui]
@@ -588,6 +637,11 @@ Checked by hand on this repo's hosts:
     proxy it cannot resolve the name, reach an address, or reach another port of the host's
     loopback; the same with `--isolate-processes --confine-paths`; no process is left after
     the run, or after `hm` is killed during one;
+  - under `--allow-host example.com`: `curl` gets it over HTTPS and over plain HTTP (200),
+    and another name is refused with `hm`'s 403 and a `refused` line; `*.wikipedia.org`
+    lets `www.wikipedia.org` through and not `wikipedia.org`; a listener on the host's
+    loopback and `169.254.169.254` are refused as reserved, the first even when `127.0.0.1`
+    or `localhost` is listed; the same list in a request to `hm sandbox exec` runs;
   - the program is PID 1 under `--isolate-processes`;
   - `--cpu-time 1` kills a spin loop (137);
   - a variable in the caller's environment does not reach the program;
