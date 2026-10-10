@@ -61,7 +61,9 @@ restarted.
 Rust Hypervisor Firmware and CirrOS: a machine asked for two processors has
 two by its kernel's count, the kernel reports the three tables and no ACPI
 error, its disk interrupts through the I/O APIC, and `poweroff` in the guest
-stops the machine.
+stops the machine. [With Ubuntu 24.04](benchmarks/2026-10-10/machine-ubuntu-kvm/README.md),
+whose kernel is 6.8: four processors, systemd as the first process with every
+unit started, and `systemctl poweroff` stopping the machine.
 
 ## Not yet
 
@@ -72,8 +74,13 @@ stops the machine.
   machine from the API still stops the VM without asking the guest.
 - **Other firmware.** Only Rust Hypervisor Firmware has been run. edk2's
   `CloudHv` build, which ISO installers and Windows need, has not.
-- **Other images.** Only CirrOS 0.6.2 has been booted. Ubuntu, Debian and others
-  have not been tried.
+- **A user, a key or a hostname at creation.** A cloud image has no account
+  until cloud-init is given one, and this node offers no datasource. The
+  Ubuntu image below had a password set in it by hand.
+- **Other images.** CirrOS 0.6.2 and
+  [Ubuntu 24.04](benchmarks/2026-10-10/machine-ubuntu-kvm/README.md) have been
+  booted, the second to a fully started systemd on four processors. Debian
+  and others have not been tried.
 - **More than a NIC and a disk on the PCI bus.** A [machine made from an image](MACHINES.md#from-a-disk-image)
   can have a network device there, configured by DHCP. There is no second disk
   or NIC.

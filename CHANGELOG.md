@@ -62,7 +62,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   interrupt routing for its PCI devices through the I/O APIC, and power
   registers. `poweroff` in such a guest now stops the machine, and it is left
   stopped whatever its restart policy. `VM::powered_off` says a guest turned
-  itself off, as distinct from restarting.
+  itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
+  such a machine: its own 6.8 kernel on four processors, systemd started in
+  full.
 - A network between none and the host's for a sandboxed process:
   `NetworkPolicy::Proxy { port }` and `hm sandbox run --net proxy:PORT` give a
   program one port on the host's loopback, where the caller's proxy listens,

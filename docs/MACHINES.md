@@ -105,8 +105,9 @@ hm sandbox vm machine type cloud-01 cirros            # type at its serial conso
   answers with the guest's address, the default route and the resolver. Nothing
   else is set up in the guest, since there is no agent to do it; the egress CA
   for HTTPS interception is not installed.
-- **Limits today:** raw images only, and the firmware is not shipped with
-  HyperMachine. See [firmware boot](FIRMWARE_BOOT.md).
+- **Limits today:** raw images only, no way to give the guest a user or a
+  key at creation, and the firmware is not shipped with HyperMachine. See
+  [firmware boot](FIRMWARE_BOOT.md).
 
 ## Through the control plane
 

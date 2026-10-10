@@ -57,8 +57,8 @@ run recorded here is the next one.
 
 ## What this does not show
 
-- **Another image.** CirrOS is small and has no systemd. Ubuntu, Debian and
-  others have not been booted, and they are what a machine like this is for.
+- **A full distribution.** CirrOS is small and has no systemd. That is
+  [a check of its own](../machine-ubuntu-kvm/README.md), with Ubuntu 24.04.
 - **Another firmware.** That the RSDP reaches the guest depends on the
   firmware passing it on. Rust Hypervisor Firmware does. edk2's `CloudHv`
   has not been run.
