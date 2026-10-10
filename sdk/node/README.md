@@ -54,7 +54,9 @@ It rejects in two ways:
 
 They are `hm`'s, not this package's:
 
-- No `network` means no network.
+- No `network` means no network. `network: { allow: ['example.com'] }` lets
+  the workload reach those hosts and no others, through a proxy `hm` runs for
+  it; Linux and macOS.
 - No `bestEffort` means a request this host cannot enforce is refused. With it,
   the run goes ahead and `unenforced` lists what was dropped.
 - The workload's environment is exactly `env`. Nothing of Node's is inherited,

@@ -90,6 +90,13 @@ pub struct RunArgs {
     /// the program at it yourself, with `--env HTTPS_PROXY=...` or its like.
     #[arg(long, default_value = "deny")]
     pub net: Net,
+    /// A host the program may reach, and with any given, the only ones:
+    /// `example.com`, `*.example.com`, an address or a range. Repeatable.
+    /// `hm` listens as a proxy for the run, points the program at it with
+    /// `HTTPS_PROXY` and its like, and refuses what is not listed. A program
+    /// that ignores those variables reaches nothing. Not with `--net`.
+    #[arg(long = "allow-host", value_name = "HOST")]
+    pub allow_host: Vec<String>,
     /// Filesystem view: `host`, or `isolated:ROOT` to make ROOT the program's `/`.
     #[arg(long, default_value = "host")]
     pub fs: String,
@@ -301,6 +308,44 @@ fn print_report(report: &serde_json::Value, how: Report) {
     }
 }
 
+/// The variables a program reads to find its proxy. Both cases, because
+/// programs differ on which they read: curl takes only the lower-case
+/// `http_proxy`.
+const PROXY_ENV: [&str; 4] = ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"];
+
+/// Make `hosts` the run's whole network.
+///
+/// Starts a proxy on this machine's loopback that lets `hosts` through and
+/// refuses the rest, keeps the run to that proxy's port, and points the
+/// program at it wherever `env` does not already say otherwise. The proxy
+/// stops when what is returned is dropped, so it is held for the run.
+///
+/// # Errors
+///
+/// [`SandboxError::InvalidSpec`] for an entry that is neither a name nor an
+/// address, and [`SandboxError::Runtime`] when nothing can listen.
+pub async fn allow_only(
+    hosts: &[String],
+    spec: &mut SandboxSpec,
+    env: &mut BTreeMap<String, String>,
+    observer: Option<hv2_net::forward_proxy::Observer>,
+) -> Result<hv2_net::forward_proxy::ForwardProxy, SandboxError> {
+    use hv2_net::network_policy::{NetworkPolicy as Egress, Verdict};
+    // No internet but what is listed: the list is the whole of it.
+    let policy = Egress::from_e2b(Some(false), hosts, &[], &[], Verdict::Deny)
+        .map_err(|e| SandboxError::InvalidSpec(format!("allowed host: {e}")))?;
+    let proxy = hv2_net::forward_proxy::ForwardProxy::start(policy, observer)
+        .await
+        .map_err(|e| SandboxError::Runtime(format!("the proxy could not listen: {e}")))?;
+    spec.network = NetworkPolicy::Proxy { port: proxy.port() };
+    let address = format!("http://127.0.0.1:{}", proxy.port());
+    for name in PROXY_ENV {
+        env.entry(name.to_string())
+            .or_insert_with(|| address.clone());
+    }
+    Ok(proxy)
+}
+
 /// `hm sandbox exec` arguments.
 #[derive(Debug, Args)]
 pub struct ExecArgs {
@@ -389,11 +434,26 @@ pub async fn exec(args: ExecArgs) -> Result<i32> {
     let (response, code) = match hv2_sandbox::request::Request::from_json(&text) {
         Err(refused) => response_of(None, Err(refused)),
         Ok(request) => {
-            let (command, spec) = request.into_parts();
-            let sandbox = ProcessSandbox::new();
-            let report = report_of(&sandbox, &spec);
-            let result = tokio::task::spawn_blocking(move || sandbox.run(&command, &spec)).await?;
-            response_of(Some(report), result)
+            let hosts = request.network.allow.clone();
+            let (mut command, mut spec) = request.into_parts();
+            // Held until the run is over: dropping it stops the proxy.
+            let proxy = if hosts.is_empty() {
+                Ok(None)
+            } else {
+                allow_only(&hosts, &mut spec, &mut command.env, None)
+                    .await
+                    .map(Some)
+            };
+            match proxy {
+                Err(refused) => response_of(None, Err(refused)),
+                Ok(_proxy) => {
+                    let sandbox = ProcessSandbox::new();
+                    let report = report_of(&sandbox, &spec);
+                    let result =
+                        tokio::task::spawn_blocking(move || sandbox.run(&command, &spec)).await?;
+                    response_of(Some(report), result)
+                }
+            }
         }
     };
     println!("{response}");
@@ -402,8 +462,35 @@ pub async fn exec(args: ExecArgs) -> Result<i32> {
 
 /// Run it: report, stream, and return the exit code to leave with.
 pub async fn run(args: RunArgs) -> Result<i32> {
-    let spec = spec_of(&args)?;
-    let env = env_of(&args, |k| std::env::var(k).ok())?;
+    let mut spec = spec_of(&args)?;
+    let mut env = env_of(&args, |k| std::env::var(k).ok())?;
+    // Held until the run is over: dropping it stops the proxy.
+    let _proxy = if args.allow_host.is_empty() {
+        None
+    } else {
+        if args.net != Net::Deny {
+            bail!(
+                "--allow-host is a network of its own, everything closed but the hosts \
+                 named; it does not go with --net"
+            );
+        }
+        let refusals: Option<hv2_net::forward_proxy::Observer> = (args.report != Report::None)
+            .then(|| {
+                Arc::new(|decision: &hv2_net::forward_proxy::Decision| {
+                    if !decision.allowed {
+                        eprintln!(
+                            "hm sandbox: refused {}:{} ({})",
+                            decision.host, decision.port, decision.reason
+                        );
+                    }
+                }) as hv2_net::forward_proxy::Observer
+            });
+        Some(
+            allow_only(&args.allow_host, &mut spec, &mut env, refusals)
+                .await
+                .map_err(|e| anyhow!("{e}"))?,
+        )
+    };
     let (program, rest) = args
         .command
         .split_first()
@@ -558,6 +645,41 @@ mod tests {
                 "{wrong} was taken for a network"
             );
         }
+    }
+
+    /// Allowed hosts become a proxy's port as the whole network, with the
+    /// program pointed at it and a caller's own setting left alone.
+    #[tokio::test]
+    async fn allowed_hosts_become_a_proxy_the_program_is_pointed_at() {
+        let args = parse(&["--allow-host", "example.com", "--", "prog"]);
+        assert_eq!(args.allow_host, ["example.com"]);
+        let mut spec = spec_of(&args).unwrap();
+        assert_eq!(spec.network, NetworkPolicy::Denied);
+        let mut env = BTreeMap::from([("https_proxy".to_string(), "http://mine:1".to_string())]);
+
+        let proxy = allow_only(&args.allow_host, &mut spec, &mut env, None)
+            .await
+            .unwrap();
+        assert_ne!(proxy.port(), 0);
+        assert_eq!(spec.network, NetworkPolicy::Proxy { port: proxy.port() });
+        assert!(spec.required().contains(&Control::NetworkProxy));
+        let address = format!("http://127.0.0.1:{}", proxy.port());
+        for name in ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy"] {
+            assert_eq!(env.get(name), Some(&address), "{name}");
+        }
+        assert_eq!(env["https_proxy"], "http://mine:1");
+
+        // What is neither a name nor an address is refused, not skipped.
+        let mut untouched = spec_of(&args).unwrap();
+        let refused = allow_only(
+            &["exa*mple.com".to_string()],
+            &mut untouched,
+            &mut BTreeMap::new(),
+            None,
+        )
+        .await;
+        assert!(matches!(refused, Err(SandboxError::InvalidSpec(_))));
+        assert_eq!(untouched.network, NetworkPolicy::Denied);
     }
 
     #[test]

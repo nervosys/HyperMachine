@@ -145,6 +145,62 @@ fn a_request_that_does_not_run_answers_with_why_and_exits_two() {
 /// A request that asks for no network and does not say best effort is run
 /// with none or refused, never run with the host's: whichever this machine
 /// does, the response says so.
+/// A request with allowed hosts gives its workload `hm`'s proxy and
+/// nothing else. The workload finds the proxy from its environment, asks it
+/// for a host that is not on the list, and is told no by the proxy itself;
+/// and a port of the host's loopback that is not the proxy's is not there.
+///
+/// Where the host cannot keep a process to one port the request is refused,
+/// which is checked instead: it must not run with the host's network.
+#[cfg(unix)]
+#[test]
+fn allowed_hosts_are_a_proxy_that_refuses_the_rest() {
+    let other = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let elsewhere = other.local_addr().expect("address").port();
+    other.set_nonblocking(true).expect("nonblocking");
+    let line = format!(
+        "port=${{HTTPS_PROXY##*:}}; exec 3<>/dev/tcp/127.0.0.1/$port || exit 9; \
+         printf 'CONNECT not-allowed.invalid:443 HTTP/1.1\\r\\n\\r\\n' >&3; head -n1 <&3; \
+         if (echo > /dev/tcp/127.0.0.1/{elsewhere}) 2>/dev/null; then echo OPEN; else echo CLOSED; fi"
+    );
+    let request = json!({
+        "version": 1,
+        "command": ["/bin/bash", "-c", line],
+        "env": { "PATH": "/usr/bin:/bin" },
+        "limits": { "timeoutMs": 30000 },
+        "network": { "allow": ["example.com"] },
+    });
+    let (code, response, raw) = exec(&request.to_string());
+    let proxied = response["controls"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|c| c["control"] == "network through a proxy")
+        .unwrap_or_else(|| panic!("the request did not ask for a proxied network: {raw}"));
+    if proxied["enforced"] == true {
+        assert_eq!(code, Some(0), "{raw}");
+        let said = response["stdout"].as_str().unwrap_or_default();
+        let mut lines = said.lines().map(str::trim);
+        assert_eq!(lines.next(), Some("HTTP/1.1 403 Forbidden"), "{raw}");
+        assert_eq!(lines.next(), Some("CLOSED"), "{raw}");
+        assert!(other.accept().is_err(), "the workload reached another port");
+    } else {
+        eprintln!("NOT VERIFIED here: {}", proxied["reason"]);
+        assert_eq!(code, Some(2), "{raw}");
+        assert_eq!(response["error"]["kind"], "unsupported", "{raw}");
+    }
+
+    // A list on top of the host's network is a contradiction, and says so.
+    let both = json!({
+        "version": 1,
+        "command": ["/bin/true"],
+        "network": { "egress": "host", "allow": ["example.com"] },
+    });
+    let (code, response, raw) = exec(&both.to_string());
+    assert_eq!(code, Some(2), "{raw}");
+    assert_eq!(response["error"]["kind"], "invalid", "{raw}");
+}
+
 #[test]
 fn no_network_is_enforced_or_refused_never_dropped_quietly() {
     let mut request = shell("echo ran");

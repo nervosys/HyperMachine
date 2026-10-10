@@ -4,6 +4,7 @@
 
 pub mod bridge;
 pub mod egress;
+pub mod forward_proxy;
 pub mod gateway;
 pub mod nat;
 pub mod network_policy;
