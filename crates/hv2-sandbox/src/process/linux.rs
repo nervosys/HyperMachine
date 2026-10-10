@@ -9,6 +9,7 @@
 //! | [`Control::CpuTime`] | `RLIMIT_CPU`, which the kernel turns into `SIGKILL` |
 //! | [`Control::WallClock`] | this crate, killing the process group |
 //! | [`Control::NetworkIsolation`] | `CLONE_NEWNET`: an empty network namespace with only loopback, down |
+//! | [`Control::NetworkProxy`] | the same empty network namespace, with loopback up and one port on it relayed to the host's (see the `relay` module) |
 //! | [`Control::FilesystemIsolation`] | `CLONE_NEWNS` plus `pivot_root` onto the root the spec names |
 //! | [`Control::ProcessIsolation`] | `CLONE_NEWPID` and `CLONE_NEWIPC`: the workload is PID 1 in its own namespace and cannot see or signal anything outside |
 //! | [`Control::NoNewPrivileges`] | `prctl(PR_SET_NO_NEW_PRIVS)` |
@@ -79,6 +80,8 @@ use crate::{
 
 use super::driver;
 
+mod relay;
+
 /// Distinguishes the scratch directories this process creates — cgroups for a
 /// run, and the throwaway roots the filesystem probe pivots into — from each
 /// other and from another process's.
@@ -146,6 +149,16 @@ pub(super) fn probe() -> Controls {
         Err(e) => controls.without(
             Control::NetworkIsolation,
             format!("the network could not be isolated: {e}{restricted}"),
+        ),
+    };
+
+    // The same namespace with one port let through, so it is there only
+    // where the namespace is, and where the port can be put in it.
+    controls = match can_isolate_network().and_then(|()| relay::probe()) {
+        Ok(()) => controls.with(Control::NetworkProxy),
+        Err(e) => controls.without(
+            Control::NetworkProxy,
+            format!("the network could not be kept to one port: {e}{restricted}"),
         ),
     };
 
@@ -1190,11 +1203,25 @@ pub(super) fn run(
         // CAP_SYS_ADMIN inside it that mount and pivot_root require.
         clone_flags |= libc::CLONE_NEWUSER | libc::CLONE_NEWNS;
     }
-    if spec.network == NetworkPolicy::Denied {
+    if spec.network != NetworkPolicy::Host {
         // CLONE_NEWNS so the workload can be given a sysfs that belongs to its
         // own network namespace rather than the host one.
         clone_flags |= libc::CLONE_NEWUSER | libc::CLONE_NEWNET | libc::CLONE_NEWNS;
     }
+    // With a proxy the namespace is the same empty one, and the one port is
+    // carried out of it. Dropped after the workload has ended, which is what
+    // tells the process holding the port inside to leave.
+    let (relay, doorway) = match spec.network {
+        NetworkPolicy::Proxy { port } => {
+            let (relay, doorway) =
+                relay::open(port).map_err(|e| SandboxError::ConfinementFailed {
+                    control: Control::NetworkProxy,
+                    source: e,
+                })?;
+            (Some(relay), Some(doorway))
+        }
+        NetworkPolicy::Denied | NetworkPolicy::Host => (None, None),
+    };
     if spec.isolate_processes {
         // CLONE_NEWNS comes along so the workload can be given its own /proc.
         // Without it the process table of the whole host stays readable through
@@ -1262,6 +1289,7 @@ pub(super) fn run(
             Vec::new()
         },
         filesystem,
+        doorway,
     };
 
     let mut builder = Command::new(&command.program);
@@ -1307,7 +1335,9 @@ pub(super) fn run(
         });
 
     drop(cgroup);
-    // The workload is gone; so is the root that was made for it.
+    // The workload is gone; so is its way out, and the root that was made
+    // for it.
+    drop(relay);
     drop(private_root);
     output
 }
@@ -1338,6 +1368,9 @@ struct Confinement {
     /// keeps it.
     host_masks: Vec<Mask>,
     filesystem: Option<FilesystemPlan>,
+    /// The one port a proxied workload reaches, to be put in its network
+    /// namespace.
+    doorway: Option<relay::Doorway>,
 }
 
 /// Everything the child does between `fork` and `exec`.
@@ -1367,9 +1400,19 @@ fn confine(plan: &Confinement) -> std::io::Result<()> {
 
     // 3. One unshare for every namespace: the kernel creates the user
     //    namespace first and grants the capabilities the rest need.
+    //
+    //    All but the PID namespace when a port is to be relayed. The first
+    //    process forked after that one is unshared becomes its PID 1, and
+    //    the relay forks: it would take the place meant for the workload,
+    //    exit, and leave a namespace nothing more can be started in.
+    let pid_later = if plan.doorway.is_some() {
+        plan.clone_flags & libc::CLONE_NEWPID
+    } else {
+        0
+    };
     if plan.clone_flags != 0 {
         // SAFETY: unshare takes only flags.
-        if unsafe { libc::unshare(plan.clone_flags) } != 0 {
+        if unsafe { libc::unshare(plan.clone_flags & !pid_later) } != 0 {
             return Err(std::io::Error::last_os_error());
         }
     }
@@ -1381,6 +1424,20 @@ fn confine(plan: &Confinement) -> std::io::Result<()> {
         let _ = write_path(c"/proc/self/setgroups", b"deny");
         write_path(c"/proc/self/uid_map", plan.uid_map.as_slice())?;
         write_path(c"/proc/self/gid_map", plan.gid_map.as_slice())?;
+    }
+
+    //    The port, while this process is alone in the network namespace and
+    //    not yet in a PID namespace: the process left holding it stays
+    //    outside the workload's, where one is asked for, and the workload
+    //    cannot signal it there.
+    if let Some(doorway) = plan.doorway.as_ref() {
+        doorway.start()?;
+        if pid_later != 0 {
+            // SAFETY: unshare takes only flags.
+            if unsafe { libc::unshare(pid_later) } != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+        }
     }
 
     // 5. unshare(CLONE_NEWPID) puts the *next* child in the new namespace, not

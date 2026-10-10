@@ -8,8 +8,8 @@
 //! rather than handed a process with full network access and a sandbox-shaped
 //! API around it.
 //!
-//! macOS gets more, from the system's own sandbox: no network, confinement to
-//! granted paths, and denied paths. That is the `seatbelt` module, which also
+//! macOS gets more, from the system's own sandbox: no network or one port of
+//! it, confinement to granted paths, and denied paths. That is the `seatbelt` module, which also
 //! says what it is built on and why that was once a reason not to.
 
 use std::os::unix::process::CommandExt;
@@ -68,9 +68,10 @@ pub(super) fn probe() -> Controls {
         )
         .without(Control::UiIsolation, unsupported("UI isolation"));
 
-    // The three a sandbox profile provides, where there is one to apply.
+    // The four a sandbox profile provides, where there is one to apply.
     let profiled = [
         (Control::NetworkIsolation, "network isolation"),
+        (Control::NetworkProxy, "a network kept to one port"),
         (Control::PathConfinement, "path confinement"),
         (Control::PathDenial, "path denial"),
     ];

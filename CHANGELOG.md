@@ -50,6 +50,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   clipboard, other programs' windows, system and display settings, and logging
   off, through the job object's user-interface restrictions. A new control,
   `UI isolation`; Linux and macOS refuse it.
+- A network between none and the host's for a sandboxed process:
+  `NetworkPolicy::Proxy { port }` and `hm sandbox run --net proxy:PORT` give a
+  program one port on the host's loopback, where the caller's proxy listens,
+  and nothing else, so the proxy decides which hosts are reached. Linux relays
+  the port out of the program's empty network namespace; macOS allows it in
+  the sandbox profile. A new control, `network through a proxy`; Windows and
+  the microVM backend refuse it. `hm` does not run a proxy itself.
 - Denied paths on Windows: a denied path stops inheriting the entries that let
   an AppContainer in for the length of the run, and inherits again afterwards.
   Path denial was Linux-only.

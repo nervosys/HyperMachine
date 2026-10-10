@@ -96,6 +96,16 @@ pub(super) fn probe() -> Controls {
             Control::NoNewPrivileges,
             "Windows has no no-new-privileges bit; a restricted token would be a different \
              mechanism with different semantics",
+        )
+        // An AppContainer with no network is refused the host's loopback
+        // with the rest, and one with the network has all of it. Letting one
+        // port through is a per-package exemption or a filter, and both are
+        // an administrator's to set.
+        .without(
+            Control::NetworkProxy,
+            "an AppContainer cannot be kept to one port without an administrator: with no \
+             network it is refused loopback too, and with one it has all of it; use the \
+             process sandbox on Linux or macOS",
         );
 
     // Try to create and configure a job. If that fails, this host enforces

@@ -97,6 +97,12 @@ impl Sandbox for ProcessSandbox {
             }
         }
 
+        if spec.network == (crate::NetworkPolicy::Proxy { port: 0 }) {
+            return Err(SandboxError::InvalidSpec(
+                "a proxy's port cannot be zero: that names nothing listening".to_string(),
+            ));
+        }
+
         for path in spec.grants.read_only.iter().chain(&spec.grants.read_write) {
             if !path.is_absolute() || !path.exists() {
                 return Err(SandboxError::InvalidSpec(format!(
@@ -827,6 +833,21 @@ mod tests {
         ));
     }
 
+    /// Before the host is asked anything: a port of zero names no listener
+    /// on any platform.
+    #[test]
+    fn a_proxy_at_port_zero_is_refused() {
+        let sandbox = ProcessSandbox::new();
+        let spec = SandboxSpec {
+            network: NetworkPolicy::Proxy { port: 0 },
+            ..SandboxSpec::unconfined()
+        };
+        assert!(matches!(
+            sandbox.run(&echo(), &spec.best_effort()),
+            Err(SandboxError::InvalidSpec(_))
+        ));
+    }
+
     /// Turns this test binary into an allocator when the memory-limit test
     /// re-executes it.
     ///
@@ -1162,6 +1183,115 @@ mod tests {
         assert!(
             on_host > visible,
             "the host should have more processes than the sandbox, or this proves nothing"
+        );
+    }
+
+    /// A proxied workload has one address: the port its caller listens on.
+    /// It talks to what is there, reaches no other port of the host's
+    /// loopback, and has no interface but its own loopback.
+    ///
+    /// Three ways, because each sets the namespace up differently: the
+    /// network by itself; with the processes isolated, where the relay must
+    /// be started before the PID namespace exists; and confined to granted
+    /// paths, where the root made for the run is removed afterwards.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_proxied_workload_reaches_its_one_port_and_no_other() {
+        use std::io::{BufRead, BufReader, Write};
+
+        let sandbox = ProcessSandbox::new();
+        if !sandbox.controls().enforces(Control::NetworkProxy) {
+            eprintln!(
+                "skipping: {}",
+                sandbox
+                    .controls()
+                    .reason(Control::NetworkProxy)
+                    .unwrap_or("a network kept to one port is unavailable")
+            );
+            return;
+        }
+
+        // What stands in for the caller's proxy: it answers each line it is
+        // sent, so reaching it is shown by the answer and not by a connect.
+        let proxy = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = proxy.local_addr().expect("address").port();
+        std::thread::spawn(move || {
+            for stream in proxy.incoming().flatten() {
+                let mut line = String::new();
+                let mut reader = BufReader::new(stream.try_clone().expect("clone"));
+                if reader.read_line(&mut line).is_ok() {
+                    let mut stream = stream;
+                    let _ = write!(stream, "heard {line}");
+                }
+            }
+        });
+        // And a port that is not the proxy's, on the same loopback.
+        let other = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let elsewhere = other.local_addr().expect("address").port();
+        other.set_nonblocking(true).expect("nonblocking");
+
+        let script = format!(
+            "exec 3<>/dev/tcp/127.0.0.1/{port} && echo ping >&3 && head -n1 <&3; exec 3>&-; \
+             if (echo > /dev/tcp/127.0.0.1/{elsewhere}) 2>/dev/null; then echo OPEN; else echo CLOSED; fi; \
+             ls /sys/class/net | wc -l; \
+             wait; echo waited"
+        );
+        let said = |spec: &SandboxSpec| {
+            let command = SandboxCommand::new("/bin/bash")
+                .args(["-c", script.as_str()])
+                .env("PATH", "/usr/bin:/bin");
+            let output = sandbox.run(&command, spec).expect("run");
+            assert_eq!(output.killed_by, None, "{output:?}");
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        };
+
+        // With the host's network both ports answer, so CLOSED below is the
+        // sandbox and not a listener nobody could reach.
+        let host = SandboxSpec {
+            wall_clock: Some(Duration::from_secs(20)),
+            ..SandboxSpec::unconfined()
+        };
+        let open = said(&host);
+        assert!(open.starts_with("heard ping\nOPEN\n"), "{open}");
+        assert!(other.accept().is_ok(), "the other listener saw nothing");
+
+        let alone = SandboxSpec {
+            network: NetworkPolicy::Proxy { port },
+            ..host.clone()
+        };
+        assert_eq!(
+            alone.required(),
+            vec![Control::WallClock, Control::NetworkProxy]
+        );
+        // `wait` returns: the process relaying the port is not the
+        // workload's child, and a workload that waits is not kept by it.
+        let expected = "heard ping\nCLOSED\n1\nwaited";
+        assert_eq!(said(&alone), expected);
+
+        let mut isolated = SandboxSpec::untrusted(64 * 1024 * 1024, Duration::from_secs(20));
+        isolated.network = NetworkPolicy::Proxy { port };
+        isolated.best_effort = true;
+        assert_eq!(said(&isolated), expected);
+
+        if sandbox.controls().enforces(Control::PathConfinement) {
+            let confined = SandboxSpec {
+                confine_paths: true,
+                grants: crate::PathGrants {
+                    read_only: ["/bin", "/usr", "/lib", "/lib64", "/sbin"]
+                        .iter()
+                        .map(std::path::PathBuf::from)
+                        .filter(|path| path.exists())
+                        .collect(),
+                    ..crate::PathGrants::default()
+                },
+                ..alone
+            };
+            assert_eq!(said(&confined), expected);
+        }
+
+        assert!(
+            other.accept().is_err(),
+            "a proxied workload reached a port that was not its proxy's"
         );
     }
 

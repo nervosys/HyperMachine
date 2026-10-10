@@ -63,6 +63,7 @@ caller asks for it.
 | Path confinement | an empty root made for the run, holding the grants | an AppContainer | a sandbox profile allowing the grants and the system | ✗ (a guest shares no host path) |
 | UI isolation | ✗ (no boundary around a display server) | job object user-interface restrictions | ✗ | the host's desktop is not in the guest |
 | Path denial | a mount over the path | an AppContainer, and the path cut off from inheriting a container's access | a sandbox profile's last rule | ✗ (a guest shares no host path) |
+| Network through a proxy | the empty network namespace, with one port of its loopback relayed to the host's | ✗ (an AppContainer cannot be kept to one port without an administrator) | a sandbox profile allowing that one address | ✗ (a guest cannot name the host's loopback; its egress gateway decides) |
 
 Every ✗ is reported at runtime with a reason, not discovered by a caller when
 something escapes.
@@ -190,6 +191,52 @@ The profile is made for one run and deleted after it, with its folder.
 `hm sandbox run` denies the network unless told otherwise, so on Windows it now
 runs its program in a container by default. Grant it what it needs with `--ro`
 and `--rw`, or pass `--net host` to run it uncontained as before.
+
+### One port and a proxy
+
+Between no network and the host's there is `NetworkPolicy::Proxy { port }`
+(`--net proxy:PORT`): the workload reaches `127.0.0.1` at that port, where the
+caller has a proxy listening, and nothing else. It is the control
+`network through a proxy`.
+
+This crate keeps the workload to the port. What the proxy lets through is the
+proxy's to decide, and that is where a list of allowed names lives: a
+workload with no resolver and no route can only ask the proxy for a name, and
+the proxy says yes or no.
+
+- **Nothing tells the workload to use it.** Set `HTTPS_PROXY` and its like in
+  the workload's environment. A program that ignores them reaches nothing:
+  names do not resolve, addresses are unreachable, and the other ports of the
+  host's loopback are not there.
+- **On Linux** the workload is in the same empty network namespace as with no
+  network, with its loopback up and one listener on it. A small process holds
+  the listener and hands each connection the workload makes, the socket
+  itself, to the sandbox on the host, which connects to the real port and
+  copies bytes both ways. That process reads nothing the workload sends, is
+  not the workload's child, and is outside its PID namespace when it has one.
+  It leaves when the run ends, and when the sandbox's own process dies.
+- **On macOS** the profile denies the network and allows outbound connections
+  to `localhost` at the port. Looking a name up goes through a local socket,
+  which stays denied.
+- **On Windows it is refused.** An AppContainer with no network is refused
+  loopback with the rest, and one with the network has all of it. Letting one
+  port through takes a loopback exemption or a filter, and both need an
+  administrator.
+- **At most 256 connections at once** are relayed on Linux. More are closed
+  unanswered, since the workload decides how many it opens and each costs the
+  sandbox two threads.
+- **On Linux a socket that is a file is not the network.** As with no network
+  there, a Unix socket at a path the workload can open is still reachable, a
+  container runtime's or a display server's among them. Confine its paths to
+  close those.
+- **The port is open to the host's other programs too.** It is an ordinary
+  listener on loopback; nothing here keeps another local program from using
+  the proxy.
+
+```sh
+hm sandbox run --strict --net proxy:3128 \
+               --env HTTPS_PROXY=http://127.0.0.1:3128 -- curl https://example.com
+```
 
 ### Containment on macOS
 
@@ -449,7 +496,7 @@ environment, which is not a limit anyone asked to remove. A workload that needs
   carries `what_this_host_enforces`'s report for each runner.
 - **Linux with every control granted**: the *Sandbox Containment* CI job
   lifts Ubuntu's AppArmor user-namespace restriction and runs the tests in a
-  delegated cgroup, and fails if the probe reports fewer than the ten
+  delegated cgroup, and fails if the probe reports fewer than the eleven
   controls Linux has or if any test skips. Before it existed, every containment test on
   `ubuntu-latest` passed by skipping.
 
@@ -496,7 +543,7 @@ before trusting a limit there.
 
 ```
 hm sandbox run [--memory 4G] [--cpu-time SECS] [--wall-clock SECS] [--max-processes N]
-               [--net deny|host] [--fs host|isolated:ROOT] [--ro PATH]... [--rw PATH]...
+               [--net deny|host|proxy:PORT] [--fs host|isolated:ROOT] [--ro PATH]... [--rw PATH]...
                [--deny PATH]... [--confine-paths]
                [--workdir DIR] [--env K=V]... [--pass-env NAME]... [--clean-env]
                [--isolate-processes] [--no-new-privileges] [--isolate-ui]
@@ -536,6 +583,11 @@ Checked by hand on this repo's hosts:
   - output lines arrive live, 3.4 s apart, as the program prints them.
 - **Linux, as an unprivileged user:**
   - the network is loopback only, and `--net host` sees the host's interfaces;
+  - under `--net proxy:PORT`, with a proxy on that port that allows one name: `curl` through
+    it gets that name (200) and is refused another (the proxy's 403); told to ignore the
+    proxy it cannot resolve the name, reach an address, or reach another port of the host's
+    loopback; the same with `--isolate-processes --confine-paths`; no process is left after
+    the run, or after `hm` is killed during one;
   - the program is PID 1 under `--isolate-processes`;
   - `--cpu-time 1` kills a spin loop (137);
   - a variable in the caller's environment does not reach the program;

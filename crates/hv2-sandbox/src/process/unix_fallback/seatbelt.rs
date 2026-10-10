@@ -17,7 +17,8 @@
 //! decides it. Each one written here starts from "allow everything", so a
 //! workload asked for nothing extra is not disturbed, and then takes away:
 //!
-//! - **the network**, all of it, loopback and local sockets included;
+//! - **the network**, all of it, loopback and local sockets included, or
+//!   all of it but one port on loopback where the caller's proxy listens;
 //! - **the filesystem outside what was granted**, when the workload is to be
 //!   confined to its grants;
 //! - **each denied path**, last, so it wins over a grant above it.
@@ -67,7 +68,7 @@ const SYSTEM_WRITABLE_EXACT: &[&str] = &["/dev/null", "/dev/zero", "/dev/tty", "
 
 /// Whether `spec` asks for anything a profile provides.
 pub(super) fn wanted(spec: &SandboxSpec) -> bool {
-    spec.network == NetworkPolicy::Denied || spec.confine_paths || !spec.grants.denied.is_empty()
+    spec.network != NetworkPolicy::Host || spec.confine_paths || !spec.grants.denied.is_empty()
 }
 
 /// A path as a profile names it: resolved, because the sandbox matches the
@@ -102,8 +103,18 @@ fn quoted(path: &Path) -> Result<String, SandboxError> {
 /// denied paths.
 pub(super) fn profile(spec: &SandboxSpec) -> Result<String, SandboxError> {
     let mut text = String::from("(version 1)\n(allow default)\n");
-    if spec.network == NetworkPolicy::Denied {
+    if spec.network != NetworkPolicy::Host {
         text.push_str("(deny network*)\n");
+    }
+    if let NetworkPolicy::Proxy { port } = spec.network {
+        // The one operation, named, so it is not the wildcard above that
+        // decides it; and outbound only, so the workload listens on nothing.
+        // Resolving a name goes through a local socket and stays refused:
+        // the proxy is what resolves.
+        let _ = writeln!(
+            text,
+            "(allow network-outbound (remote ip \"localhost:{port}\"))"
+        );
     }
     if spec.confine_paths {
         // Reading a file's contents and writing anything, everywhere; then
@@ -159,7 +170,8 @@ pub(super) fn profile(spec: &SandboxSpec) -> Result<String, SandboxError> {
 /// `sandbox-exec` fails here as it would for a workload.
 pub(super) fn probe() -> Result<(), String> {
     let spec = SandboxSpec {
-        network: NetworkPolicy::Denied,
+        // Any port: the rule for one is what is being tried, not the port.
+        network: NetworkPolicy::Proxy { port: 9 },
         confine_paths: true,
         grants: crate::PathGrants {
             read_only: vec![PathBuf::from("/usr")],
@@ -354,6 +366,44 @@ mod tests {
         assert!(
             listener.accept().is_err(),
             "a workload with no network reached the listener"
+        );
+    }
+
+    /// NOT VERIFIED off CI: this can run only on `macos-latest`.
+    #[test]
+    fn a_proxied_workload_reaches_its_one_port_and_no_other() {
+        let sandbox = sandbox_enforcing(Control::NetworkProxy);
+        let proxy = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let other = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let (port, elsewhere) = (
+            proxy.local_addr().expect("address").port(),
+            other.local_addr().expect("address").port(),
+        );
+        proxy.set_nonblocking(true).expect("nonblocking");
+        other.set_nonblocking(true).expect("nonblocking");
+        let script = format!(
+            "if (echo > /dev/tcp/127.0.0.1/{port}) 2>/dev/null; then echo OPEN; else echo CLOSED; fi; \
+             if (echo > /dev/tcp/127.0.0.1/{elsewhere}) 2>/dev/null; then echo OPEN; else echo CLOSED; fi"
+        );
+
+        // With the host's network both are reached, so CLOSED below is the
+        // sandbox and not a listener nobody could reach.
+        assert_eq!(said(&sandbox, &script, &host()), "OPEN\nOPEN");
+        assert!(proxy.accept().is_ok() && other.accept().is_ok());
+
+        let spec = SandboxSpec {
+            network: NetworkPolicy::Proxy { port },
+            ..host()
+        };
+        assert_eq!(
+            spec.required(),
+            vec![Control::WallClock, Control::NetworkProxy]
+        );
+        assert_eq!(said(&sandbox, &script, &spec), "OPEN\nCLOSED");
+        assert!(proxy.accept().is_ok(), "the proxy saw no connection");
+        assert!(
+            other.accept().is_err(),
+            "a proxied workload reached a port that was not its proxy's"
         );
     }
 
