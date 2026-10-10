@@ -42,9 +42,9 @@
 //!
 //! | Backend | Where | Enforces |
 //! | --- | --- | --- |
-//! | [`ProcessSandbox`] on Linux | this crate | user/PID/mount/net/IPC namespaces, `pivot_root` onto a named root, cgroup v2 memory and PID caps, `RLIMIT_*`, `no_new_privs` |
+//! | [`ProcessSandbox`] on Linux | this crate | user/PID/mount/net/IPC namespaces, `pivot_root` onto a named root, cgroup v2 memory and PID caps, `RLIMIT_*`, `no_new_privs`; a network of one relayed port |
 //! | [`ProcessSandbox`] on Windows | this crate | job object memory, process count, and CPU-time caps, kill-on-close; no network, by an AppContainer |
-//! | [`ProcessSandbox`] on macOS | this crate | `RLIMIT_*` only, and it says so |
+//! | [`ProcessSandbox`] on macOS | this crate | `RLIMIT_CPU`; no network or one port of it, confinement to granted paths and denied paths, by the system's sandbox |
 //! | microVM | `hv2-agent` | a whole guest, reached over vsock |
 //!
 //! The microVM backend lives in `hv2-agent` because it needs a VM and a guest
@@ -112,11 +112,20 @@ pub enum Control {
     /// Linux process has no such boundary here: a workload that can reach a
     /// display server's socket can use it.
     UiIsolation,
+    /// The workload's whole network is one port on the host's loopback,
+    /// where the caller has a proxy listening, and the proxy decides what
+    /// is reached beyond it.
+    ///
+    /// This crate keeps the workload to that port; it does not decide what
+    /// the proxy lets through. On Linux the workload has a network namespace
+    /// of its own in which connections to the port are handed to the host;
+    /// on macOS the sandbox profile allows that one address.
+    NetworkProxy,
 }
 
 impl Control {
     /// Every control, for a backend that wants to describe a full set.
-    pub const ALL: [Control; 11] = [
+    pub const ALL: [Control; 12] = [
         Control::Memory,
         Control::ProcessCount,
         Control::CpuTime,
@@ -128,6 +137,7 @@ impl Control {
         Control::PathConfinement,
         Control::PathDenial,
         Control::UiIsolation,
+        Control::NetworkProxy,
     ];
 }
 
@@ -145,6 +155,7 @@ impl fmt::Display for Control {
             Self::PathConfinement => "path confinement",
             Self::PathDenial => "path denial",
             Self::UiIsolation => "UI isolation",
+            Self::NetworkProxy => "network through a proxy",
         };
         f.write_str(name)
     }
@@ -213,6 +224,18 @@ pub enum NetworkPolicy {
     /// The host's network, unrestricted. Requires no control, and is a
     /// deliberate choice a caller has to write down.
     Host,
+    /// Nothing but `port` on the host's loopback, at `127.0.0.1`. Requires
+    /// [`Control::NetworkProxy`].
+    ///
+    /// The caller listens there, and what it lets through is the workload's
+    /// network: a proxy that allows some names and refuses the rest, for
+    /// one. Nothing tells the workload to use it; a caller sets `HTTP_PROXY`
+    /// and its like in [`SandboxCommand::env`]. A workload that ignores them
+    /// reaches nothing, names included: there is no resolver to ask.
+    Proxy {
+        /// The port the caller's proxy listens on. Not zero.
+        port: u16,
+    },
 }
 
 /// What the workload may see of the filesystem.
@@ -379,8 +402,10 @@ impl SandboxSpec {
         if self.wall_clock.is_some() {
             wanted.push(Control::WallClock);
         }
-        if self.network == NetworkPolicy::Denied {
-            wanted.push(Control::NetworkIsolation);
+        match self.network {
+            NetworkPolicy::Denied => wanted.push(Control::NetworkIsolation),
+            NetworkPolicy::Proxy { .. } => wanted.push(Control::NetworkProxy),
+            NetworkPolicy::Host => {}
         }
         if matches!(self.filesystem, FilesystemPolicy::Isolated { .. }) {
             wanted.push(Control::FilesystemIsolation);
@@ -428,13 +453,24 @@ impl SandboxSpec {
                 Control::ProcessCount => spec.max_processes = None,
                 Control::CpuTime => spec.cpu_time = None,
                 Control::WallClock => spec.wall_clock = None,
-                Control::NetworkIsolation => spec.network = NetworkPolicy::Host,
+                Control::NetworkIsolation => {
+                    if spec.network == NetworkPolicy::Denied {
+                        spec.network = NetworkPolicy::Host;
+                    }
+                }
                 Control::FilesystemIsolation => spec.filesystem = FilesystemPolicy::Host,
                 Control::ProcessIsolation => spec.isolate_processes = false,
                 Control::NoNewPrivileges => spec.no_new_privileges = false,
                 Control::PathConfinement => spec.confine_paths = false,
                 Control::PathDenial => spec.grants.denied.clear(),
                 Control::UiIsolation => spec.isolate_ui = false,
+                // Without it the port is one among everything else on the
+                // host's network, which is the host's network.
+                Control::NetworkProxy => {
+                    if matches!(spec.network, NetworkPolicy::Proxy { .. }) {
+                        spec.network = NetworkPolicy::Host;
+                    }
+                }
             }
         }
         spec
@@ -733,6 +769,38 @@ mod tests {
         // Not asked for: isolating the filesystem needs a root only the caller
         // can choose, so `untrusted` does not pretend to have chosen one.
         assert!(!required.contains(&Control::FilesystemIsolation));
+    }
+
+    /// A proxied network is a control of its own. Asking for it is not
+    /// asking for no network, and a host without it gives the host's
+    /// network when told to make do, never a quiet nothing.
+    #[test]
+    fn a_proxied_network_asks_for_its_own_control() {
+        let spec = SandboxSpec {
+            network: NetworkPolicy::Proxy { port: 3128 },
+            ..SandboxSpec::unconfined()
+        };
+        assert_eq!(spec.required(), vec![Control::NetworkProxy]);
+        assert_eq!(
+            spec.without_controls(&[Control::NetworkProxy]).network,
+            NetworkPolicy::Host
+        );
+        // Each network control drops only the policy that asked for it.
+        assert_eq!(
+            spec.without_controls(&[Control::NetworkIsolation]).network,
+            NetworkPolicy::Proxy { port: 3128 }
+        );
+        let denied = SandboxSpec::default();
+        assert_eq!(
+            denied.without_controls(&[Control::NetworkProxy]).network,
+            NetworkPolicy::Denied
+        );
+        let without = full_controls().without(Control::NetworkProxy, "not here");
+        assert!(matches!(
+            spec.reconcile(&without),
+            Err(SandboxError::Unsupported { .. })
+        ));
+        assert_eq!(denied.reconcile(&without).expect("no proxy asked for"), []);
     }
 
     #[test]

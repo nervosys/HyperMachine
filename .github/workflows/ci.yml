@@ -203,7 +203,7 @@ jobs:
 
                   cargo run -q -p hv2-sandbox --example what_this_host_enforces | tee report.txt
                   { echo '### hv2-sandbox with every control granted'; echo '```'; cat report.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-                  grep -q '^enforced here (10)' report.txt || { echo "::error::the probe did not report the 10 controls Linux has"; exit 1; }
+                  grep -q '^enforced here (11)' report.txt || { echo "::error::the probe did not report the 11 controls Linux has"; exit 1; }
 
                   cargo test -p hv2-sandbox -- --nocapture 2>&1 | tee test.log
                   test "${PIPESTATUS[0]}" -eq 0

@@ -109,6 +109,14 @@ impl MicroVmSandbox {
             // The host's desktop is not in the guest: no clipboard, window or
             // setting of the host's has a name there.
             .with(Control::UiIsolation)
+            // A guest's network is its own device, and what it may reach is
+            // decided where that device is served, not by a port on the
+            // host's loopback, which a guest cannot name.
+            .without(
+                Control::NetworkProxy,
+                "a guest has no path to the host's loopback; what a networked VM may reach \
+                 is the egress gateway's to decide",
+            )
             // Both are the guest agent's, which kills a program that overruns.
             .with(Control::CpuTime)
             .with(Control::WallClock);
@@ -368,6 +376,13 @@ mod tests {
                 assert!(
                     !controls.enforces(control),
                     "a guest shares no host path, so there is nothing to grant, confine or close"
+                );
+                continue;
+            }
+            if control == Control::NetworkProxy {
+                assert!(
+                    !controls.enforces(control),
+                    "a guest cannot name a port on the host's loopback"
                 );
                 continue;
             }

@@ -42,12 +42,32 @@ pub enum Report {
 }
 
 /// What the program may reach on the network.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Net {
     /// No network (loopback only, where the host can isolate it).
     Deny,
     /// The host's network.
     Host,
+    /// One port on the host's loopback, where a proxy listens, and nothing
+    /// else.
+    Proxy(u16),
+}
+
+impl std::str::FromStr for Net {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        match text {
+            "deny" => Ok(Self::Deny),
+            "host" => Ok(Self::Host),
+            other => match other.strip_prefix("proxy:").map(str::parse::<u16>) {
+                Some(Ok(port)) if port != 0 => Ok(Self::Proxy(port)),
+                _ => Err(format!(
+                    "`deny`, `host`, or `proxy:PORT` with a port from 1 to 65535, not {other:?}"
+                )),
+            },
+        }
+    }
 }
 
 /// `hm sandbox run` arguments.
@@ -65,8 +85,10 @@ pub struct RunArgs {
     /// Ceiling on processes and threads.
     #[arg(long)]
     pub max_processes: Option<u32>,
-    /// Network access.
-    #[arg(long, value_enum, default_value = "deny")]
+    /// Network access: `deny`, `host`, or `proxy:PORT` for nothing but that
+    /// port on this machine's loopback, where a proxy of yours listens. Point
+    /// the program at it yourself, with `--env HTTPS_PROXY=...` or its like.
+    #[arg(long, default_value = "deny")]
     pub net: Net,
     /// Filesystem view: `host`, or `isolated:ROOT` to make ROOT the program's `/`.
     #[arg(long, default_value = "host")]
@@ -170,6 +192,7 @@ pub fn spec_of(args: &RunArgs) -> Result<SandboxSpec> {
         network: match args.net {
             Net::Deny => NetworkPolicy::Denied,
             Net::Host => NetworkPolicy::Host,
+            Net::Proxy(port) => NetworkPolicy::Proxy { port },
         },
         // Inside an isolated root `--ro` is already one of its mounts.
         grants: hv2_sandbox::PathGrants {
@@ -449,7 +472,7 @@ pub async fn run(args: RunArgs) -> Result<i32> {
         }
         Err(SandboxError::Unsupported { controls }) => {
             eprintln!(
-                "hm sandbox: --strict, and this host cannot enforce: {}. Drop --strict to run                  without them, or drop the flags that ask for them.",
+                "hm sandbox: --strict, and this host cannot enforce: {}. Drop --strict to run without them, or drop the flags that ask for them.",
                 controls.join("; ")
             );
             125
@@ -516,6 +539,25 @@ mod tests {
         assert_eq!(s.network, NetworkPolicy::Host);
         assert!(!s.best_effort);
         assert_eq!(a.command, ["prog", "arg"]);
+    }
+
+    #[test]
+    fn a_proxy_is_named_by_its_port_and_nothing_else_is_a_network() {
+        let s = spec_of(&parse(&["--net", "proxy:3128", "--", "prog"])).unwrap();
+        assert_eq!(s.network, NetworkPolicy::Proxy { port: 3128 });
+        for wrong in [
+            "proxy",
+            "proxy:",
+            "proxy:0",
+            "proxy:70000",
+            "proxy:http",
+            "none",
+        ] {
+            assert!(
+                T::try_parse_from(["t", "--net", wrong, "--", "prog"]).is_err(),
+                "{wrong} was taken for a network"
+            );
+        }
     }
 
     #[test]
