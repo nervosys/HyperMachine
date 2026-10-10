@@ -966,7 +966,7 @@ mod tests {
             let key = |w: &Waiting, step: usize| (w.effective_urgency(step, PATIENCE), w.ticket);
             assert!(
                 key(&old, bound) <= key(&fresh, bound),
-                "a request at urgency {urgency} was still behind newer urgent work                  after {bound} steps"
+                "a request at urgency {urgency} was still behind newer urgent work after {bound} steps"
             );
         }
     }

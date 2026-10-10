@@ -219,7 +219,7 @@ impl Machine {
                     Arc::new(RwLock::new(PciConfigIo::with_root("PCI", pci_root))),
                     PCI_CONFIG_IO_BASE,
                     PCI_CONFIG_IO_LAST,
-                    "without the configuration mechanism a guest cannot enumerate PCI at all, and                      reports no bus rather than an empty one",
+                    "without the configuration mechanism a guest cannot enumerate PCI at all, and reports no bus rather than an empty one",
                 ),
             ],
         }

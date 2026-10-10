@@ -314,7 +314,7 @@ impl Default for EncryptionConfig {
 pub enum EncryptionError {
     /// No backend is attached, so nothing can encrypt.
     #[error(
-        "no memory-encryption backend is attached: this build models {0:?} state          but cannot drive it, so guest memory would not be encrypted"
+        "no memory-encryption backend is attached: this build models {0:?} state but cannot drive it, so guest memory would not be encrypted"
     )]
     NoBackend(EncryptionTechnology),
     /// Technology not supported
