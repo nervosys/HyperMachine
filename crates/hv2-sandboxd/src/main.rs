@@ -137,6 +137,8 @@ mod machines;
 mod pool;
 mod private_source;
 mod reboot;
+#[cfg(target_os = "linux")]
+mod seed;
 // Volumes are served with openat2 and O_PATH, which only Linux has; see
 // volumes_unsupported.rs for what other hosts answer.
 #[cfg(target_os = "linux")]

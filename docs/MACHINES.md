@@ -54,6 +54,7 @@ talking to a control plane.
 | `name` | required | Letters, digits, `-` and `_`, up to 63 characters. |
 | `templateID` | `base` | Any template this node has, including one built from an OCI image. Its file tree becomes the root disk. |
 | `image` | none | In place of `templateID`: a raw disk image in the node's `--image-dir`, booted by firmware. See [From a disk image](#from-a-disk-image). |
+| `userData` | none | With `image` only: cloud-init user data for the guest, a `#cloud-config` document or a script, up to about 1 MiB. See [firmware boot](FIRMWARE_BOOT.md#a-user-at-creation-the-cloud-init-seed). Refused for a machine from a template. Not returned afterwards; the machine's record carries `cloudInit: true`. |
 | `cpuCount`, `memoryMB` | the node's defaults | `cpuCount` is 1 to 32, and refused otherwise. From an image it is 1 unless given |
 | `diskGiB` | 8 | 1–2048. The image is sparse, so it costs only what is written. |
 | `autostart` | true | Start it again when the daemon starts, if it was running. |
@@ -105,9 +106,10 @@ hm sandbox vm machine type cloud-01 cirros            # type at its serial conso
   answers with the guest's address, the default route and the resolver. Nothing
   else is set up in the guest, since there is no agent to do it; the egress CA
   for HTTPS interception is not installed.
-- **Limits today:** raw images only, no way to give the guest a user or a
-  key at creation, and the firmware is not shipped with HyperMachine. See
-  [firmware boot](FIRMWARE_BOOT.md).
+- **A user, a key, a hostname:** give `userData`, and the image's cloud-init
+  applies it at first boot with the machine's name as the hostname.
+- **Limits today:** raw images only, and the firmware is not shipped with
+  HyperMachine. See [firmware boot](FIRMWARE_BOOT.md).
 
 ## Through the control plane
 

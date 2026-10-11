@@ -77,9 +77,9 @@ the run recorded here is the next one.
 
 - **A network.** The machine has a disk and no NIC, so nothing was installed
   in it: no `apt`, and no Docker, which this image does not ship.
-- **cloud-init.** It was switched off. A machine cannot yet be given a user,
-  a key or a hostname at creation; that needs a datasource, which is not
-  built.
+- **cloud-init.** It was switched off here. A machine is given a user at
+  creation in [the check after this one](../machine-cloud-init-kvm/README.md),
+  on the image as published.
 - **A guest agent.** `exec` still answers 409 for a machine from an image;
   the console is the way in.
 - **How fast it boots.** The time above is one guest on a busy development

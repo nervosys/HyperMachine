@@ -449,6 +449,11 @@ pub enum MachineCommand {
         /// directory, in place of a template
         #[arg(long)]
         image: Option<String>,
+        /// cloud-init user data for a machine from an image: a file holding
+        /// a `#cloud-config` document or a script. The image's cloud-init
+        /// reads it at first boot, with the machine's name as its hostname
+        #[arg(long, value_name = "FILE", requires = "image")]
+        user_data: Option<std::path::PathBuf>,
         /// Processors, up to 32. A machine from an image has one unless told
         #[arg(long, value_parser = clap::value_parser!(u32).range(1..=32))]
         cpus: Option<u32>,
@@ -1372,6 +1377,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 name,
                 template,
                 image,
+                user_data,
                 cpus,
                 memory_mb,
                 disk_gib,
@@ -1399,6 +1405,11 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                     None => {
                         body["templateID"] = json!(template.unwrap_or_else(|| "base".into()));
                     }
+                }
+                if let Some(path) = user_data {
+                    let data = std::fs::read_to_string(&path)
+                        .map_err(|e| anyhow::anyhow!("reading {}: {e}", path.display()))?;
+                    body["userData"] = json!(data);
                 }
                 if let Some(disk_gib) = disk_gib {
                     body["diskGiB"] = json!(disk_gib);

@@ -70,10 +70,11 @@ In rough order of how much each matters to someone choosing between them:
    Docker and anything `apt` installs, on several processors. HyperMachine's
    sandbox is a small guest in memory. Its machine from a disk image now
    boots Ubuntu 24.04 with systemd on the processors it asks for, and turns
-   itself off. What it still lacks is everything around that: a user or key
-   given at creation, an agent inside, so `exec` and files do not work, a
-   network shown installing anything, Docker shown running, and an image
-   with tools already in it. A sandbox, as distinct from a machine, is
+   itself off. It is [given a user at creation](FIRMWARE_BOOT.md#a-user-at-creation-the-cloud-init-seed)
+   through cloud-init, on the distribution's image as published. What it
+   still lacks is everything around that: an agent inside, so `exec` and
+   files do not work, a network shown installing anything, Docker shown
+   running, and an image with tools already in it. A sandbox, as distinct from a machine, is
    unchanged. Most of the rows below stand on this one: an agent, a browser
    and a desktop are all things a distribution installs.
 2. **Coding agents run for the caller.** Nothing here starts an agent in a

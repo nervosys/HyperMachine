@@ -692,6 +692,8 @@ pub struct VM {
     /// A block device over PCI, for firmware that finds its disk by
     /// enumerating the bus. Kept apart from `block`: it is not snapshotted.
     block_pci: RwLock<Option<AttachedBlockPci>>,
+    /// A second, read-only disk on the PCI bus. See [`VM::attach_seed_pci`].
+    seed_pci: RwLock<Option<AttachedBlockPci>>,
     /// A network device over PCI, for a guest that finds its hardware by
     /// enumerating the bus. Kept apart from `net`: it is not snapshotted.
     net_pci: RwLock<Option<AttachedNetPci>>,
@@ -907,6 +909,7 @@ impl VM {
             net: RwLock::new(None),
             block: RwLock::new(None),
             block_pci: RwLock::new(None),
+            seed_pci: RwLock::new(None),
             net_pci: RwLock::new(None),
             standby: AtomicBool::new(false),
             standby_wakes: AtomicU64::new(0),
@@ -3512,6 +3515,84 @@ impl VM {
             self.config.name,
             Self::BLOCK_PCI_SLOT,
             if read_only { ", read-only" } else { "" },
+        );
+        Ok(device)
+    }
+
+    /// Guest physical address of the seed disk's BAR.
+    pub const SEED_PCI_BAR_BASE: u64 = 0xd006_0000;
+
+    /// PCI slot of the seed disk on bus 0: after the root disk's, so
+    /// firmware that boots the first disk it finds boots the root disk.
+    pub const SEED_PCI_SLOT: u8 = 6;
+
+    /// Interrupt line the seed disk raises. One of its own: the root disk
+    /// and the network device have the other two lines PCI uses here.
+    pub const SEED_PCI_IRQ: u8 = 5;
+
+    /// Attach a second, read-only virtio-blk device over PCI: the small
+    /// disk a guest reads its first-boot instructions from.
+    ///
+    /// Beside [`Self::attach_block_pci`], not in place of it. A guest sees
+    /// two disks, the root disk first.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a seed disk is already attached, if the BAR
+    /// window would overlap guest RAM, or if the image cannot be opened.
+    pub async fn attach_seed_pci(
+        self: &Arc<Self>,
+        path: &std::path::Path,
+        serial: &str,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_blk_mmio::VirtioBlockMmio>>> {
+        use crate::devices::virtio_blk_mmio::VirtioBlockMmio;
+        use crate::devices::virtio_pci::{VirtioPciTransport, VIRTIO_PCI_BAR_SIZE};
+
+        let (bar_base, irq) = (Self::SEED_PCI_BAR_BASE, Self::SEED_PCI_IRQ);
+        if self.seed_pci.read().is_some() {
+            return Err(Error::Device("this VM already has a seed disk".to_string()));
+        }
+        if self.memory.host_offset(bar_base).is_some() {
+            return Err(Error::Device(format!(
+                "seed disk BAR window at {bar_base:#x} overlaps {} bytes of guest RAM",
+                self.memory.total_size()
+            )));
+        }
+        self.pci_root.write().ensure_host_bridge()?;
+
+        let device = Arc::new(parking_lot::Mutex::new(VirtioBlockMmio::open(
+            path, true, serial,
+        )?));
+        let transport = Arc::new(tokio::sync::RwLock::new(
+            VirtioPciTransport::new("virtio-seed-pci", bar_base, self.memory(), device.clone())
+                .with_interrupt(self.pic(), irq),
+        ));
+        let mut config = transport.read().await.config_space();
+        config.set_interrupt_line(irq);
+        config.set_interrupt_pin(crate::pci::InterruptPin::IntA);
+        self.pci_root
+            .write()
+            .add_device(Self::SEED_PCI_SLOT, 0, config);
+        self.pci_intx
+            .lock()
+            .push(crate::boot::acpi_tables::PciIntx {
+                slot: Self::SEED_PCI_SLOT,
+                gsi: irq,
+            });
+        self.devices
+            .register_device("virtio-seed-pci", transport.clone())
+            .await?;
+        self.devices
+            .register_mmio_region("virtio-seed-pci".to_string(), bar_base, VIRTIO_PCI_BAR_SIZE)
+            .await?;
+        *self.seed_pci.write() = Some(AttachedBlockPci {
+            device: device.clone(),
+            _transport: transport,
+        });
+        tracing::info!(
+            "VM '{}': seed disk attached over PCI at slot {}, BAR {bar_base:#x} (IRQ {irq}, read-only)",
+            self.config.name,
+            Self::SEED_PCI_SLOT,
         );
         Ok(device)
     }
