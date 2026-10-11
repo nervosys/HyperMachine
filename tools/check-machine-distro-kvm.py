@@ -28,6 +28,13 @@ ways to run this:
 `--sudo` is for a user that is not root: it is put in front of what needs to
 be.
 
+With `--network` the machine is created with a NIC behind the node's egress
+gateway and the Internet allowed, and three more cases run: the guest
+configured itself by DHCP and resolves a name; `apt-get` installs Docker from
+the distribution's archive; and Docker pulls an image and runs a container.
+Those reach the Internet, so they are for a run by hand and say what they
+reached. `--disk-gib` grows the root disk, which an install needs.
+
 Writes report.json, the node's log and the console into --output.
 """
 import argparse, hashlib, json, os, re, shutil, signal, socket, subprocess, tempfile, time
@@ -61,6 +68,9 @@ def main():
     parser.add_argument("--cpus", type=int, default=4)
     parser.add_argument("--user-data", type=Path, help="cloud-init user data to create the machine with")
     parser.add_argument("--sudo", action="store_true", help="the user is not root; use sudo where root is needed")
+    parser.add_argument("--network", action="store_true",
+                        help="give the machine a NIC with the Internet allowed, and install and run Docker")
+    parser.add_argument("--disk-gib", type=int, help="the root disk's size, when larger than the image")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     report = {"success": False,
@@ -71,6 +81,7 @@ def main():
     sudo = "sudo " if args.sudo else ""
     user_data = args.user_data.read_text() if args.user_data else None
     report["cloud_init_user_data_given"] = user_data is not None
+    report["network_given"] = args.network
     work = Path(tempfile.mkdtemp(prefix="hm-machine-distro-check-", dir="/var/tmp"))
     images = work / "images"
     images.mkdir()
@@ -160,7 +171,7 @@ def main():
 
     asked = [0]
 
-    def ask(command, key):
+    def ask(command, key, seconds=60):
         """What the guest's shell answers to `command`, between two markers it computes."""
         # The sums are done by the guest's shell, so the markers appear only
         # in its output and never in the command as the terminal echoed it.
@@ -169,7 +180,7 @@ def main():
         asked[0] += 1
         tag = f"{key}{asked[0]}"
         type_line(f"echo {tag}-$((20+1))-[$({command})]-$((30+3))-{tag}")
-        seen = wait_for(f"]-33-{tag}", 60, tail=2000)
+        seen = wait_for(f"]-33-{tag}", seconds, tail=4000)
         return re.findall(re.escape(tag) + r"-21-\[(.*?)\]-33-" + re.escape(tag), seen, re.S)[-1].strip()
 
     machine = {}
@@ -195,6 +206,10 @@ def main():
             body = {"name": NAME, "image": "distro.raw", "cpuCount": args.cpus, "memoryMB": 2048}
             if user_data is not None:
                 body["userData"] = user_data
+            if args.network:
+                body["network"] = {"allowInternetAccess": True}
+            if args.disk_gib:
+                body["diskGiB"] = args.disk_gib
             status, created = request("POST", "/machines", body)
             assert status == 201, (status, created)
             assert created["cloudInit"] is (user_data is not None), created
@@ -278,6 +293,56 @@ def main():
             assert jobs == 0, (running, jobs)
             return {"is_system_running": running, "queued_jobs": jobs, "failed_units": failed}
         case("systemd finished starting, and what failed is named", finished_starting)
+
+        def has_a_network():
+            found = {
+                "address": ask("ip -4 -o addr show scope global | awk '{print $4}' | head -n1", "addr"),
+                "default_route": ask("ip route show default | awk '{print $3}' | head -n1", "route"),
+                "resolves_archive_ubuntu_com": ask(
+                    "getent ahostsv4 archive.ubuntu.com | awk '{print $1}' | head -n1", "dns"),
+                "root_filesystem": ask("df -h --output=size,avail / | tail -n1 | tr -s ' '", "df"),
+            }
+            assert found["address"] and found["default_route"], found
+            assert found["resolves_archive_ubuntu_com"], found
+            return found
+        if args.network:
+            case("with a NIC the guest configured itself by DHCP and resolves a name", has_a_network)
+
+        def installs_docker():
+            started = time.monotonic()
+            updated = ask(sudo + "apt-get update -qq >/tmp/apt-update.log 2>&1; echo $?", "aptupdate", 600)
+            assert updated == "0", (updated, ask("tail -n 5 /tmp/apt-update.log | tr '\\n' '|'", "aptlog"))
+            installed = ask(
+                sudo + "env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io "
+                ">/tmp/apt-install.log 2>&1; echo $?", "aptinstall", 1500)
+            assert installed == "0", (installed, ask("tail -n 8 /tmp/apt-install.log | tr '\\n' '|'", "aptlog2"))
+            found = {
+                "seconds": round(time.monotonic() - started),
+                "package": ask("dpkg-query -W -f '${Package} ${Version}' docker.io", "dpkg"),
+                "docker_service": ask("systemctl is-active docker", "dockeractive", 120),
+            }
+            assert found["docker_service"] == "active", found
+            return found
+        if args.network:
+            case("apt-get installs Docker from the distribution's archive, and its service starts",
+                 installs_docker)
+
+        def runs_a_container():
+            started = time.monotonic()
+            info = ask(sudo + "docker info --format '{{.ServerVersion}} {{.Driver}} cgroup-v{{.CgroupVersion}}'",
+                       "dockerinfo", 120)
+            hello = ask(sudo + "docker run --rm hello-world 2>/tmp/docker-run.log | grep -c 'Hello from Docker'",
+                        "hello", 600)
+            assert hello == "1", (hello, ask("tail -n 5 /tmp/docker-run.log | tr '\\n' '|'", "dockerlog"))
+            # A container that is not a single static binary: a shell in a
+            # distribution's image, with a namespace of its own.
+            inside = ask(sudo + "docker run --rm alpine:3 sh -c 'echo $(cat /etc/alpine-release | cut -d. -f1)-pid-$$'",
+                         "alpine", 600)
+            assert inside.endswith("-pid-1"), inside
+            return {"docker": info, "hello_world": "Hello from Docker", "alpine_said": inside,
+                    "seconds": round(time.monotonic() - started)}
+        if args.network:
+            case("Docker pulls an image and runs a container", runs_a_container)
 
         def turns_itself_off():
             ask("echo kept-$((6*7)) > ~/note; sync; cat ~/note", "note")

@@ -77,7 +77,9 @@ machine having no network:
 - **It took 145.5 seconds to reach the login prompt**, against 40 to 48 with
   cloud-init switched off. Most of that is the same wait.
 
-A machine with a NIC should have neither. That has not been run.
+A machine with a NIC has neither:
+[the check after this one](../../2026-10-11/machine-docker-kvm/README.md)
+ends `running`, 36 seconds to the prompt.
 
 ## What this does not show
 

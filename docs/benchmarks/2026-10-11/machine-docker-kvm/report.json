@@ -1,0 +1,111 @@
+{
+  "success": true,
+  "purpose": "functional verification of a distribution image as a machine on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "b0a39f0b65c3bd8c930aa5b272c01719279eadcd2a73e0c06eb5dda7b2c0fcd8",
+    "firmware": "4a0a1e977368f6b15d2198a216bdedf9a350bf5e5ae07e29e695373ec16ad958",
+    "image": "8f598f38474570f5422796c3d0863ead381cd72a232b28654955b14842ddf720",
+    "driver": "1597973cf822e0ad6c8401a00bb1cf6b411e9d3fac5508dfdc7d67fd5d774993"
+  },
+  "cases": [
+    {
+      "name": "a machine from a distribution's image boots by firmware to its login prompt",
+      "success": true,
+      "detail": {
+        "cpuCount": 4,
+        "memoryMB": 2048,
+        "diskGiB": 10,
+        "seconds_to_login_prompt": 36.0,
+        "prompt": "distro-01 login: "
+      }
+    },
+    {
+      "name": "the guest counts its processors, runs systemd as its first process, and took the ACPI tables",
+      "success": true,
+      "detail": {
+        "logins_tried": 1,
+        "os": "Ubuntu 24.04.5 LTS",
+        "kernel": "6.8.0-146-generic",
+        "nproc": 4,
+        "processors_in_cpuinfo": 4,
+        "pid_1": "systemd",
+        "systemd": "systemd 255 (255.4-1ubuntu8.17)",
+        "acpi_tables_in_kernel_log": 3,
+        "acpi_errors_in_kernel_log": 0,
+        "virtio_on_the_io_apic": 3,
+        "memory_mb": 1966
+      }
+    },
+    {
+      "name": "cloud-init read the machine's seed: its name, its ID, and the user data that let this log in",
+      "success": true,
+      "detail": {
+        "cloud_init_status": "status: done",
+        "hostname": "distro-01",
+        "instance_id": "vm-5a9e5d395ce76950",
+        "datasource": "nocloud",
+        "seed_disk_label": "CIDATA",
+        "seed_disk_read_only": "1",
+        "disks": "vda 10G vdb 1M"
+      }
+    },
+    {
+      "name": "systemd finished starting, and what failed is named",
+      "success": true,
+      "detail": {
+        "is_system_running": "running",
+        "queued_jobs": 0,
+        "failed_units": []
+      }
+    },
+    {
+      "name": "with a NIC the guest configured itself by DHCP and resolves a name",
+      "success": true,
+      "detail": {
+        "address": "10.0.2.15/24",
+        "default_route": "10.0.2.2",
+        "resolves_archive_ubuntu_com": "185.125.190.83",
+        "root_filesystem": "8.7G 8.2G"
+      }
+    },
+    {
+      "name": "apt-get installs Docker from the distribution's archive, and its service starts",
+      "success": true,
+      "detail": {
+        "seconds": 45,
+        "package": "docker.io 29.1.3-0ubuntu3~24.04.2",
+        "docker_service": "active"
+      }
+    },
+    {
+      "name": "Docker pulls an image and runs a container",
+      "success": true,
+      "detail": {
+        "docker": "29.1.3 overlayfs cgroup-v2",
+        "hello_world": "Hello from Docker",
+        "alpine_said": "3-pid-1",
+        "seconds": 20
+      }
+    },
+    {
+      "name": "`systemctl poweroff` stops the machine, and it is left stopped",
+      "success": true,
+      "detail": {
+        "restartPolicy": "always",
+        "seconds_left_off": 8
+      }
+    },
+    {
+      "name": "started again, it has what was written to its disk and the same processors",
+      "success": true,
+      "detail": {
+        "note": "kept-42",
+        "nproc": 4,
+        "instance_id": "vm-5a9e5d395ce76950",
+        "boots_recorded": "1"
+      }
+    }
+  ],
+  "cloud_init_user_data_given": true,
+  "network_given": true
+}
