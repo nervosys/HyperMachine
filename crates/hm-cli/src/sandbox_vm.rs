@@ -174,6 +174,11 @@ pub enum VmCommand {
         /// Attach a disk, held by this VM until it ends: NAME:/guest/path
         #[arg(long, value_parser = disk_mount)]
         disk: Option<(String, String)>,
+        /// Checkpoint it every this many seconds without being asked, memory
+        /// included, each replacing the last; roll back with
+        /// `checkpoint restore ID auto`. At least 60
+        #[arg(long, value_name = "SECS", value_parser = clap::value_parser!(u64).range(60..))]
+        auto_checkpoint: Option<u64>,
     },
     /// Assign or inspect a reserved alias for an existing VM
     Alias {
@@ -1618,8 +1623,12 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             lifetime,
             name,
             disk,
+            auto_checkpoint,
         } => {
             let mut body = json!({"templateID": template, "timeout": lifetime});
+            if let Some(secs) = auto_checkpoint {
+                body["autoCheckpoint"] = json!(secs);
+            }
             if let Some(name) = name {
                 body["metadata"] = json!({"hm.name": name});
             }
