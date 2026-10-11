@@ -51,7 +51,12 @@ const STATUS_A_UIP: u8 = 0x80; // Update in progress
 /// Status Register B flags
 const STATUS_B_DSE: u8 = 0x01; // Daylight Savings Enable
 const STATUS_B_24H: u8 = 0x02; // 24-hour mode
-const STATUS_B_BCD: u8 = 0x04; // BCD mode (0=binary, 1=BCD)
+/// Data mode: set, the time and date registers are binary; clear, BCD.
+///
+/// This device once had it the other way round. A PC leaves the bit clear,
+/// so every guest was handed binary numbers it read as BCD: Linux took the
+/// year 26 (0x1A) for 20 and set its clock to 2020.
+const STATUS_B_DM: u8 = 0x04;
 const STATUS_B_SQWE: u8 = 0x08; // Square Wave Enable
 const STATUS_B_UIE: u8 = 0x10; // Update-ended Interrupt Enable
 const STATUS_B_AIE: u8 = 0x20; // Alarm Interrupt Enable
@@ -89,7 +94,7 @@ impl RtcState {
             index: 0,
             cmos_ram: [0; 128],
             status_a: 0x26,         // Default: 32kHz rate, no UIP
-            status_b: STATUS_B_24H, // 24-hour binary mode
+            status_b: STATUS_B_24H, // 24-hour, BCD: as a PC's firmware leaves it
             status_c: 0,
             status_d: STATUS_D_VRT, // Battery good
             nmi_disabled: false,
@@ -115,7 +120,7 @@ impl RtcState {
         let year_offset = year % 100;
 
         // Store in BCD or binary depending on mode
-        if self.status_b & STATUS_B_BCD != 0 {
+        if self.status_b & STATUS_B_DM == 0 {
             // BCD mode
             self.cmos_ram[RTC_SECONDS as usize] = to_bcd(seconds);
             self.cmos_ram[RTC_MINUTES as usize] = to_bcd(minutes);
@@ -526,7 +531,7 @@ mod tests {
         rtc.init().await.unwrap();
         // Binary and 24-hour, so the registers are the numbers themselves.
         rtc.write_index(RTC_STATUS_B);
-        rtc.write_data(STATUS_B_24H);
+        rtc.write_data(STATUS_B_24H | STATUS_B_DM);
         // Read twice around the host's clock, and accept either: the day can
         // turn over between the two.
         let before = Calendar::at(
@@ -553,6 +558,63 @@ mod tests {
         );
     }
 
+    /// A BCD byte as the number it stands for, as a guest decodes it.
+    fn from_bcd(value: u8) -> u8 {
+        (value >> 4) * 10 + (value & 0x0F)
+    }
+
+    /// As a guest finds it, the clock is in BCD, which is what the data-mode
+    /// bit being clear says; set, the same registers are binary. Read the
+    /// way Linux reads them, both give the same date.
+    #[tokio::test]
+    async fn the_registers_are_in_the_mode_the_data_mode_bit_says() {
+        let mut rtc = RtcDevice::new();
+        rtc.init().await.unwrap();
+        let read = |rtc: &mut RtcDevice, register| {
+            rtc.write_index(register);
+            rtc.read_data()
+        };
+        // Midnight could turn a day over between the two readings; an hour's
+        // registers are not compared, only the date, and it is read again if
+        // the day changed.
+        for _ in 0..2 {
+            assert_eq!(
+                read(&mut rtc, RTC_STATUS_B) & STATUS_B_DM,
+                0,
+                "BCD at first"
+            );
+            let bcd = (
+                read(&mut rtc, RTC_YEAR),
+                read(&mut rtc, RTC_MONTH),
+                read(&mut rtc, RTC_DAY_OF_MONTH),
+            );
+            rtc.write_index(RTC_STATUS_B);
+            rtc.write_data(STATUS_B_24H | STATUS_B_DM);
+            let binary = (
+                read(&mut rtc, RTC_YEAR),
+                read(&mut rtc, RTC_MONTH),
+                read(&mut rtc, RTC_DAY_OF_MONTH),
+            );
+            rtc.write_index(RTC_STATUS_B);
+            rtc.write_data(STATUS_B_24H);
+            let decoded = (from_bcd(bcd.0), from_bcd(bcd.1), from_bcd(bcd.2));
+            if decoded != binary {
+                continue;
+            }
+            // Each BCD digit is a digit: no nibble past nine.
+            for value in [bcd.0, bcd.1, bcd.2] {
+                assert!(
+                    value & 0x0F <= 9 && value >> 4 <= 9,
+                    "{value:#04x} is not BCD"
+                );
+            }
+            // And the year a guest computes is this century's, not 2020.
+            assert!(decoded.0 >= 26, "year {} from {:#04x}", decoded.0, bcd.0);
+            return;
+        }
+        panic!("the BCD and binary readings never agreed");
+    }
+
     #[tokio::test]
     async fn test_rtc_creation() {
         let rtc = RtcDevice::new();
@@ -569,8 +631,14 @@ mod tests {
         rtc.write_index(RTC_SECONDS);
         let seconds = rtc.read_data();
 
-        // Should be in range 0-59
-        assert!(seconds < 60);
+        // In BCD, as the clock is at first: two digits, making 0 to 59. Read
+        // as a plain number this passed until the seconds reached 40, whose
+        // BCD is 0x40, and then did not.
+        assert!(
+            seconds & 0x0F <= 9 && seconds >> 4 <= 5,
+            "{seconds:#04x} is not seconds in BCD"
+        );
+        assert!(from_bcd(seconds) < 60);
     }
 
     #[tokio::test]
