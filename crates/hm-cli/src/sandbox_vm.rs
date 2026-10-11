@@ -454,6 +454,10 @@ pub enum MachineCommand {
         /// reads it at first boot, with the machine's name as its hostname
         #[arg(long, value_name = "FILE", requires = "image")]
         user_data: Option<std::path::PathBuf>,
+        /// Run the guest agent in a machine from an image, so that `exec`
+        /// works in it. The node installs it through the image's cloud-init
+        #[arg(long, requires = "image")]
+        guest_agent: bool,
         /// Processors, up to 32. A machine from an image has one unless told
         #[arg(long, value_parser = clap::value_parser!(u32).range(1..=32))]
         cpus: Option<u32>,
@@ -1378,6 +1382,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 template,
                 image,
                 user_data,
+                guest_agent,
                 cpus,
                 memory_mb,
                 disk_gib,
@@ -1410,6 +1415,9 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                     let data = std::fs::read_to_string(&path)
                         .map_err(|e| anyhow::anyhow!("reading {}: {e}", path.display()))?;
                     body["userData"] = json!(data);
+                }
+                if guest_agent {
+                    body["guestAgent"] = json!(true);
                 }
                 if let Some(disk_gib) = disk_gib {
                     body["diskGiB"] = json!(disk_gib);

@@ -36,7 +36,7 @@ reason, and are listed once at the end rather than counted as gaps.
 | Named snapshots, and new sandboxes from them | Yes; ten free | Yes: a snapshot becomes a template |
 | Reading a snapshot from outside | A file tree, and download of all or part of it, with the sandbox stopped | **No.** A snapshot is memory pages; there is no tree to list without restoring it |
 | Sharing a snapshot with another account | Share codes; secrets and logins removed first | **No.** A snapshot belongs to its team, or to everyone when an operator made it |
-| systemd, and Docker, in the guest | Both | **Both, in a machine from a disk image**: [Ubuntu 24.04's image as published](benchmarks/2026-10-11/machine-docker-kvm/README.md) boots on its own 6.8 kernel with systemd started in full, installs Docker with `apt`, and runs containers. Typed at its serial console: there is no agent in it. **Neither in a sandbox**, whose first process is the project's own and whose kernel is built without what Docker needs |
+| systemd, and Docker, in the guest | Both | **Both, in a machine from a disk image**: [Ubuntu 24.04's image as published](benchmarks/2026-10-11/machine-docker-kvm/README.md) boots on its own 6.8 kernel with systemd started in full, installs Docker with `apt`, and runs containers. That run was typed at its serial console; such a machine can also [take `exec`](benchmarks/2026-10-11/machine-agent-kvm/README.md). **Neither in a sandbox**, whose first process is the project's own and whose kernel is built without what Docker needs |
 | `/dev/kvm` in the guest | Yes on its standard hosts, and said to be absent on its fallback hosts | **Not offered.** Not masked either, and never tested |
 | Installed for you | Docker, Chrome, VS Code, some twenty languages and runtimes, a dozen agent programs | What the template's image holds. No image is shipped with more than the guest agent needs |
 | Commands and files from outside | `exec`, with detach, attach and kill; `scp`; SSH | `exec`, processes with a terminal and standard input, files in and out; SSH by name is partial |
@@ -73,10 +73,10 @@ In rough order of how much each matters to someone choosing between them:
    itself off. It is [given a user at creation](FIRMWARE_BOOT.md#a-user-at-creation-the-cloud-init-seed)
    through cloud-init, on the distribution's image as published. With a NIC it
    [installs Docker and runs containers](benchmarks/2026-10-11/machine-docker-kvm/README.md).
-   What it still lacks is what makes that usable from outside: an agent
-   inside, so `exec` and files do not work and everything is typed at a
-   serial console; a way in from the network; and an image with tools
-   already in it. A sandbox, as distinct from a machine, is
+   With `guestAgent` it [runs this project's agent](benchmarks/2026-10-11/machine-agent-kvm/README.md),
+   installed by cloud-init, and takes `exec`. What it still lacks: file
+   routes, which no machine has; a way in from the network; and an image
+   with tools already in it. A sandbox, as distinct from a machine, is
    unchanged. Most of the rows below stand on this one: an agent, a browser
    and a desktop are all things a distribution installs.
 2. **Coding agents run for the caller.** Nothing here starts an agent in a

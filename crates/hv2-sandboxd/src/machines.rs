@@ -139,6 +139,11 @@ pub(crate) struct Stored {
     /// and a machine's record is returned to whoever asks about the machine.
     #[serde(rename = "cloudInit", default)]
     cloud_init: bool,
+    /// Whether a machine from an image was asked to run this project's guest
+    /// agent, which its seed then carries and installs. A machine from a
+    /// template always runs it and does not say so here.
+    #[serde(rename = "guestAgent", default)]
+    guest_agent: bool,
 }
 
 /// A machine's network: one NIC behind this node's egress gateway, which
@@ -284,6 +289,7 @@ fn describe(machine: &Stored) -> Value {
         "boot": if machine.image.is_some() { "firmware" } else { "kernel" },
         "image": machine.image,
         "cloudInit": machine.cloud_init,
+        "guestAgent": machine.guest_agent,
     })
 }
 
@@ -560,10 +566,19 @@ async fn boot_firmware(state: &Arc<AppState>, machine: &Stored, slot: Slot) -> R
         .as_deref()
         .ok_or("this node has no --firmware to boot an image with")?;
     let image = dir_of(state, &machine.id).join("root.img");
+    // What lets the node talk to an agent in the guest. Without it every
+    // ping and exec is refused on this side, whatever the guest is running:
+    // the first machine given an agent had it installed, started and
+    // listening, and was never heard from.
+    let mut capabilities = hv2_agent::CapabilitySet::default();
+    if machine.guest_agent {
+        capabilities.add(hv2_agent::Capability::GuestExec);
+    }
     let vm = AgentVM::builder()
         .name(machine.id.clone())
         .cpu_cores(machine.cpus)
         .memory_mb(machine.memory_mb)
+        .capabilities(capabilities)
         .boot(hv2_core::BootSource::pvh(firmware))
         .build()
         .await
@@ -572,9 +587,25 @@ async fn boot_firmware(state: &Arc<AppState>, machine: &Stored, slot: Slot) -> R
         .attach_block_pci(&image, false, &machine.id)
         .await
         .map_err(|e| format!("attaching the disk: {e}"))?;
+    // The channel its agent answers on, when it is to run one: vsock over
+    // PCI, which a distribution's kernel has a driver for and finds by
+    // walking the bus. On an interrupt line of its own, not the network
+    // device's.
+    if machine.guest_agent {
+        let cid = {
+            let mut next = state.next_cid.lock();
+            let cid = *next;
+            *next += 1;
+            super::GUEST_CID_BASE + cid
+        };
+        vm.vm()
+            .attach_vsock_pci_at(cid, hv2_core::VM::VSOCK_PCI_BAR_BASE, AGENT_PCI_IRQ)
+            .await
+            .map_err(|e| format!("attaching the agent's channel: {e}"))?;
+    }
     // Its first-boot instructions, when it was given any: a second disk,
     // read-only, that cloud-init in the image finds by its label.
-    if machine.cloud_init {
+    if machine.cloud_init || machine.guest_agent {
         vm.vm()
             .attach_seed_pci(&dir_of(state, &machine.id).join("seed.img"), "cidata")
             .await
@@ -612,20 +643,88 @@ async fn boot_firmware(state: &Arc<AppState>, machine: &Stored, slot: Slot) -> R
         let _ = vm.stop().await;
         return Err(format!("launching: {e}"));
     }
+    let started_ms = now_ms();
     live(|l| {
         l.insert(
             machine.id.clone(),
             Live {
                 vm,
                 _slot: slot,
-                started_ms: now_ms(),
+                started_ms,
                 network,
                 agent: false,
             },
         )
     });
     tracing::info!("machine {} is running from firmware", machine.name);
+    if machine.guest_agent {
+        tokio::spawn(await_agent(
+            machine.id.clone(),
+            machine.name.clone(),
+            started_ms,
+        ));
+    }
     Ok(())
+}
+
+/// The interrupt line an image machine's agent channel raises. The disk, the
+/// network device and the seed have the other three PCI uses here.
+const AGENT_PCI_IRQ: u8 = 7;
+
+/// How long a machine's agent has to answer after the machine starts. A
+/// first boot installs it at the end of cloud-init, which is tens of seconds
+/// in and can be minutes on a slow host.
+const AGENT_WAIT: Duration = Duration::from_secs(600);
+
+/// Wait for the guest agent of the machine `id`, started at `started_ms`, to
+/// answer, and mark the machine as running one when it does.
+///
+/// The machine is running before its agent is: a distribution starts the
+/// agent late, and on a first boot has to install it first. Until then
+/// `exec` says there is no agent yet, and after then it works. A machine
+/// that was stopped or started again in the meantime is another boot, and
+/// this one's wait ends.
+async fn await_agent(id: String, name: String, started_ms: u64) {
+    let deadline = Instant::now() + AGENT_WAIT;
+    loop {
+        let Some(vm) = live(|l| {
+            l.get(&id)
+                .filter(|m| m.started_ms == started_ms)
+                .map(|m| Arc::clone(&m.vm))
+        }) else {
+            return;
+        };
+        match vm.ping_guest(Duration::from_secs(5)).await {
+            Ok(_) => {
+                let marked = live(|l| match l.get_mut(&id) {
+                    Some(m) if m.started_ms == started_ms => {
+                        m.agent = true;
+                        true
+                    }
+                    _ => false,
+                });
+                if marked {
+                    tracing::info!("machine {name}: its guest agent answered");
+                }
+                return;
+            }
+            // Not a guest that has not started its agent yet: the node is
+            // not allowed to ask, and waiting will not change that.
+            Err(hv2_agent::AgentError::PermissionDenied(why)) => {
+                tracing::error!("machine {name}: cannot reach its guest agent: {why}");
+                return;
+            }
+            Err(_) => {}
+        }
+        if Instant::now() >= deadline {
+            tracing::warn!(
+                "machine {name}: its guest agent did not answer in {AGENT_WAIT:?}; exec stays \
+                 unavailable until it is started again"
+            );
+            return;
+        }
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
 }
 
 /// Copy the image `name` from the node's image directory to `root`, grown to
@@ -690,8 +789,8 @@ async fn halt(id: &str) {
         let _ = running
             .vm
             .exec_in_guest(
-                "/bin/busybox",
-                &["sync".to_string()],
+                "/bin/sh",
+                &["-c".to_string(), "sync".to_string()],
                 Duration::from_secs(15),
             )
             .await;
@@ -828,6 +927,12 @@ pub(crate) struct NewMachine {
     /// machine's name as its hostname.
     #[serde(rename = "userData")]
     user_data: Option<String>,
+    /// Run this project's guest agent in a machine from an image, so that
+    /// `exec` works in it. The node installs it through cloud-init, so the
+    /// image must run cloud-init and systemd, and the node must have been
+    /// given the agent's binary.
+    #[serde(rename = "guestAgent")]
+    guest_agent: Option<bool>,
 }
 
 /// How many processors a new machine has, or why what was asked cannot be.
@@ -917,16 +1022,55 @@ pub(crate) async fn create(
     if req
         .user_data
         .as_ref()
-        .is_some_and(|data| data.len() > seed::MAX_BYTES - 4096)
+        .is_some_and(|data| data.len() > seed::MAX_USER_DATA)
     {
         return api_error(
             StatusCode::BAD_REQUEST,
-            format!(
-                "userData is at most {} KiB",
-                (seed::MAX_BYTES - 4096) / 1024
-            ),
+            format!("userData is at most {} KiB", seed::MAX_USER_DATA / 1024),
         );
     }
+    // The agent's binary, read now: a machine that asks for an agent this
+    // node cannot give is refused, not created without one.
+    let wants_agent = req.guest_agent.unwrap_or(false);
+    if wants_agent && !from_image {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "guestAgent is for a machine from an image; a machine from a template always \
+             runs the agent",
+        );
+    }
+    let agent = if wants_agent {
+        let Some(path) = state.opts.guest_agent.as_deref() else {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                "this node has no --guest-agent to put in a machine from an image",
+            );
+        };
+        match std::fs::read(path) {
+            Ok(binary) if binary.len() <= seed::MAX_AGENT && binary.starts_with(b"\x7fELF") => {
+                Some(binary)
+            }
+            Ok(binary) => {
+                return api_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!(
+                        "this node's --guest-agent is not a usable binary: {} bytes, and an \
+                         ELF of at most {} MiB is needed",
+                        binary.len(),
+                        seed::MAX_AGENT >> 20
+                    ),
+                )
+            }
+            Err(e) => {
+                return api_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("reading this node's --guest-agent: {e}"),
+                )
+            }
+        }
+    } else {
+        None
+    };
     let asked_gib = req.disk_gib;
     let disk_gib = req.disk_gib.unwrap_or(8);
     if !(1..=2048).contains(&disk_gib) {
@@ -961,6 +1105,7 @@ pub(crate) async fn create(
         network: req.network,
         image: req.image,
         cloud_init: req.user_data.is_some(),
+        guest_agent: wants_agent,
     };
     let dir = dir_of(&state, &machine.id);
     if let Err(e) = std::fs::create_dir_all(root(&state)) {
@@ -977,19 +1122,20 @@ pub(crate) async fn create(
         Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
     let image = dir.join("root.img");
-    let seed = req.user_data.take().map(|data| {
-        (
-            dir.join("seed.img"),
-            machine.id.clone(),
-            machine.name.clone(),
-            data,
-        )
-    });
+    let seed_path = dir.join("seed.img");
+    let (seed_id, seed_name) = (machine.id.clone(), machine.name.clone());
+    let user_data = req.user_data.take();
     let built = tokio::task::spawn_blocking(move || {
         // The instance ID is the machine's own, so cloud-init does its
         // first-boot steps once in the machine's life and not at each start.
-        if let Some((path, id, name, data)) = seed {
-            seed::write_nocloud(&path, &id, &name, &data)?;
+        if user_data.is_some() || agent.is_some() {
+            seed::Seed {
+                instance_id: &seed_id,
+                hostname: &seed_name,
+                user_data: user_data.as_deref(),
+                agent: agent.as_deref(),
+            }
+            .write(&seed_path)?;
         }
         if from_image {
             copy_image(&source, &image, asked_gib)
@@ -1166,8 +1312,10 @@ pub(crate) async fn exec(
             return api_error(
                 StatusCode::CONFLICT,
                 format!(
-                "machine {name} was booted from an image and runs no guest agent; use its console"
-            ),
+                    "machine {name} has no guest agent answering: it was booted from an image, \
+                     and either was not created with guestAgent or its agent has not started \
+                     yet; use its console"
+                ),
             )
         }
         Err(response) => return response,

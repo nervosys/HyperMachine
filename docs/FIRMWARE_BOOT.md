@@ -92,6 +92,37 @@ with Ubuntu 24.04's image as published and user data that sets a password.
 [Given a network as well](benchmarks/2026-10-11/machine-docker-kvm/README.md),
 that machine installs Docker with `apt` and runs containers.
 
+## A guest agent in the image
+
+A machine from a template runs this project's agent because its root disk is
+this project's. A distribution's image does not, and until it does the only
+way into the machine is its serial console.
+
+`guestAgent: true` on `POST /machines` puts the agent there, on a node
+started with `--guest-agent FILE`, the agent built for the guest's own
+userspace. Nothing in the image is changed beforehand:
+
+- The node adds two files to the machine's seed: the agent's binary, and
+  `vendor-data`, a shell script that installs the binary, writes a systemd
+  unit for it, and enables and starts it. cloud-init runs it once.
+- It is `vendor-data` and a script, not part of `user-data` and not a
+  `#cloud-config`. A caller's user data replaces a vendor's configuration
+  key for key, so a caller who wrote `runcmd` would have switched the agent
+  off without knowing; a script runs whatever the user data says.
+- The machine gets a vsock device on the PCI bus, on an interrupt line of its
+  own. A distribution's kernel has the driver and finds the device by
+  walking the bus.
+- The node waits for the agent to answer, for up to ten minutes, and `exec`
+  works from then. Until then it answers 409 and says why.
+
+A seed that carries the binary is 15 MiB where one of text is 1 MiB, when the
+binary does not fit the smaller.
+
+[Checked on real KVM](benchmarks/2026-10-11/machine-agent-kvm/README.md) with
+Ubuntu 24.04's image as published: `exec` runs as root in the guest, returns
+exit codes and standard error, and works again after the machine is turned
+off and started.
+
 ## Not yet
 
 - **Importing images.** A machine is made from a raw image an operator has put
