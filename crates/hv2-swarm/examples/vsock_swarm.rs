@@ -386,7 +386,7 @@ async fn main() -> std::process::ExitCode {
                 }
                 None => {
                     println!(
-                        "down          : FAILED — the graph admitted it and w-a's guest never                          saw it"
+                        "down          : FAILED — the graph admitted it and w-a's guest never saw it"
                     );
                     ok = false;
                 }

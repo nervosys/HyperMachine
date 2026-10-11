@@ -423,7 +423,7 @@ async fn list_tools() -> Json<Vec<ToolDefinition>> {
         },
         ToolDefinition {
             name: "vm.execute_script".to_string(),
-            description: "Evaluate a Rhai script on the host against a read-only view of the VM. \n                          Does NOT run commands inside the guest OS."
+            description: "Evaluate a Rhai script on the host against a read-only view of the VM. Does NOT run commands inside the guest OS."
                 .to_string(),
             parameters: serde_json::json!({
                 "type": "object",

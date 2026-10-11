@@ -267,7 +267,7 @@ async fn a_grpc_client_is_refused_in_grpc_terms() {
     );
     assert_eq!(
         body_len, 0,
-        "a gRPC error carries no body: a client decodes one as a length-prefixed          message and reports a nonsense length"
+        "a gRPC error carries no body: a client decodes one as a length-prefixed message and reports a nonsense length"
     );
 
     // A name that is not a sandbox at all: INVALID_ARGUMENT is 3.

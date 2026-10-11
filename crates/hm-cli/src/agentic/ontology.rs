@@ -999,7 +999,7 @@ impl HyperMachineOntology {
             vec![Operation {
                 id: "vm.execute_script".to_string(),
                 name: "Execute Script".to_string(),
-                description: "Evaluate a Rhai script on the host against a read-only view of \n                     the VM. Does NOT run commands inside the guest OS."
+                description: "Evaluate a Rhai script on the host against a read-only view of the VM. Does NOT run commands inside the guest OS."
                     .to_string(),
                 parameters: vec![
                     Parameter {

@@ -751,7 +751,7 @@ mod tests {
         let first_two = &ids[0][..2];
         assert!(
             ids.iter().any(|id| &id[..2] != first_two),
-            "every id starts with {first_two:?}, so they are derived from              something shared -- a clock reading rather than entropy"
+            "every id starts with {first_two:?}, so they are derived from something shared -- a clock reading rather than entropy"
         );
 
         let unique: std::collections::HashSet<&String> = ids.iter().collect();

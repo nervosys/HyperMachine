@@ -457,7 +457,7 @@ impl VsockDevice {
             }
         }
         Err(Error::Device(format!(
-            "no free host port for a connection to guest port {guest_port}: all {} in the              ephemeral range are in use",
+            "no free host port for a connection to guest port {guest_port}: all {} in the ephemeral range are in use",
             EPHEMERAL_HOST_PORTS.len()
         )))
     }

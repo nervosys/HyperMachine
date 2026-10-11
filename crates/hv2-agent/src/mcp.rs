@@ -1014,7 +1014,7 @@ impl McpServer {
             "vm.console".to_string(),
             McpTool {
                 name: "vm.console".to_string(),
-                description: "Read what a VM's guest has written to its serial console.                               Does not consume the buffer, so repeated calls return the                               whole log rather than only what is new. Reports                               `attached: false` when the VM has no console device, which                               is different from a guest that has printed nothing."
+                description: "Read what a VM's guest has written to its serial console.                               Does not consume the buffer, so repeated calls return the whole log rather than only what is new. Reports                               `attached: false` when the VM has no console device, which is different from a guest that has printed nothing."
                     .to_string(),
                 parameters: json!({
                     "type": "object",
@@ -1036,7 +1036,7 @@ impl McpServer {
             "vm.exec".to_string(),
             McpTool {
                 name: "vm.exec".to_string(),
-                description: "Run a program inside a VM's guest operating system and                               return what it printed. Requires a guest channel attached                               before boot and hv2-guest-agentd running in the guest;                               without both this reports why rather than timing out. The                               program runs directly, not through a shell, so shell syntax                               such as redirection is not interpreted. A non-zero exit code                               is a result, not an error. Unlike vm.execute_script, which                               evaluates a Rhai script on the host, this runs in the guest."
+                description: "Run a program inside a VM's guest operating system and return what it printed. Requires a guest channel attached before boot and hv2-guest-agentd running in the guest; without both this reports why rather than timing out. The program runs directly, not through a shell, so shell syntax such as redirection is not interpreted. A non-zero exit code is a result, not an error. Unlike vm.execute_script, which evaluates a Rhai script on the host, this runs in the guest."
                     .to_string(),
                 parameters: json!({
                     "type": "object",
@@ -1071,7 +1071,7 @@ impl McpServer {
             "sandbox.capabilities".to_string(),
             McpTool {
                 name: "sandbox.capabilities".to_string(),
-                description: "Report what confinement this host can actually enforce, and                               why it cannot enforce the rest. Ask before sandbox.run if you                               need to know whether a limit will be honoured: a request for                               confinement this host cannot provide is refused, not quietly                               downgraded."
+                description: "Report what confinement this host can actually enforce, and why it cannot enforce the rest. Ask before sandbox.run if you need to know whether a limit will be honoured: a request for confinement this host cannot provide is refused, not quietly downgraded."
                     .to_string(),
                 parameters: json!({ "type": "object", "properties": {} }),
                 category: ToolCategory::Security,
@@ -1084,7 +1084,7 @@ impl McpServer {
             "sandbox.run".to_string(),
             McpTool {
                 name: "sandbox.run".to_string(),
-                description: "Run a program on the host under operating-system confinement                               and return what it printed. The program runs directly, not                               through a shell, with an empty environment and no network                               unless asked for. Limits default to strict: 512 MiB, 30                               seconds, no network, no new privileges. A request this host                               cannot confine as asked is refused; set best_effort to run                               anyway and read `unenforced` for what was dropped. A non-zero                               exit code is a result, not an error. This runs on the host,                               not in a guest: use vm.exec for that."
+                description: "Run a program on the host under operating-system confinement and return what it printed. The program runs directly, not through a shell, with an empty environment and no network unless asked for. Limits default to strict: 512 MiB, 30                               seconds, no network, no new privileges. A request this host cannot confine as asked is refused; set best_effort to run anyway and read `unenforced` for what was dropped. A non-zero exit code is a result, not an error. This runs on the host, not in a guest: use vm.exec for that."
                     .to_string(),
                 parameters: json!({
                     "type": "object",
@@ -2694,7 +2694,7 @@ impl McpServer {
 
         let Some(host) = self.sandbox_host() else {
             return Some(Err(
-                "no sandbox host is installed, so there is nothing that could confine a                  workload. Install one with McpServer::set_sandbox_host; running the program                  unconfined is not the fallback"
+                "no sandbox host is installed, so there is nothing that could confine a workload. Install one with McpServer::set_sandbox_host; running the program unconfined is not the fallback"
                     .to_string(),
             ));
         };
@@ -3666,7 +3666,7 @@ impl McpServer {
                 match params.get("encoding").and_then(|v| v.as_str()) {
                     None | Some("text") => {}
                     Some("base64") => {
-                        return Err("base64 content is not supported by this server: it has no                                     decoder, and forwarding the encoded text would write the                                     characters of the encoding rather than the bytes they                                     stand for. Send the content as text"
+                        return Err("base64 content is not supported by this server: it has no decoder, and forwarding the encoded text would write the characters of the encoding rather than the bytes they stand for. Send the content as text"
                             .to_string())
                     }
                     Some(other) => {
