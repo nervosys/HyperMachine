@@ -795,6 +795,29 @@ pub(crate) struct NewMachine {
     image: Option<String>,
 }
 
+/// How many processors a new machine has, or why what was asked cannot be.
+///
+/// Decided when the machine is created. A count the hypervisor will not
+/// start was once stored and found out at the machine's first boot, and a
+/// machine from an image was given one processor whatever it asked for and
+/// not told.
+fn decide_cpus(asked: Option<u32>, from_image: bool, node: u32) -> Result<u32, String> {
+    let most = hv2_core::boot::mptable::MAX_CPUS;
+    match asked {
+        // A firmware-booted guest is given no ACPI tables yet, so it would
+        // find one processor however many it had.
+        Some(cpus) if from_image && cpus != 1 => Err(format!(
+            "cpuCount {cpus}: a machine from an image has one processor; leave cpuCount out"
+        )),
+        Some(cpus) if !(1..=most).contains(&cpus) => {
+            Err(format!("cpuCount is 1 to {most}, not {cpus}"))
+        }
+        Some(cpus) => Ok(cpus),
+        None if from_image => Ok(1),
+        None => Ok(node.clamp(1, most)),
+    }
+}
+
 /// `POST /machines`.
 pub(crate) async fn create(
     State(state): State<Arc<AppState>>,
@@ -860,18 +883,16 @@ pub(crate) async fn create(
         }
     }
     let node = Sizes::of(&state.opts);
+    let cpus = match decide_cpus(req.cpus, from_image, node.cpus) {
+        Ok(cpus) => cpus,
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+    };
     let mut machine = Stored {
         id: machine_id(team.as_ref(), &req.name),
         name: req.name,
         team,
         template,
-        // A firmware-booted guest is given no ACPI tables yet, so it would
-        // find one processor however many it had.
-        cpus: if from_image {
-            1
-        } else {
-            req.cpus.unwrap_or(node.cpus).clamp(1, 64)
-        },
+        cpus,
         memory_mb: req
             .memory_mb
             .unwrap_or(node.memory_mb)
@@ -1224,6 +1245,28 @@ mod tests {
     }
 
     /// A machine written before networks existed still loads, with none.
+    /// A processor count that cannot be honoured is refused at creation,
+    /// with what is possible, and never changed quietly.
+    #[test]
+    fn a_processor_count_that_cannot_be_given_is_refused() {
+        let most = hv2_core::boot::mptable::MAX_CPUS;
+        assert_eq!(decide_cpus(Some(4), false, 2), Ok(4));
+        assert_eq!(decide_cpus(Some(most), false, 2), Ok(most));
+        assert_eq!(decide_cpus(None, false, 2), Ok(2));
+        // The node's own default is not a request, and is brought in range.
+        assert_eq!(decide_cpus(None, false, most + 8), Ok(most));
+        assert_eq!(decide_cpus(None, false, 0), Ok(1));
+        // More than the hypervisor starts: once stored, and found at boot.
+        let refused = decide_cpus(Some(most + 1), false, 2).unwrap_err();
+        assert!(refused.contains(&format!("1 to {most}")), "{refused}");
+        assert!(decide_cpus(Some(0), false, 2).is_err());
+        // From an image: one, and a request for more is told so.
+        assert_eq!(decide_cpus(None, true, 8), Ok(1));
+        assert_eq!(decide_cpus(Some(1), true, 8), Ok(1));
+        let refused = decide_cpus(Some(4), true, 8).unwrap_err();
+        assert!(refused.contains("one processor"), "{refused}");
+    }
+
     #[test]
     fn a_machine_without_a_network_still_loads() {
         let old = r#"{"machineID":"vm-a","name":"a","templateID":"base","cpuCount":1,

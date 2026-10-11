@@ -54,7 +54,7 @@ talking to a control plane.
 | `name` | required | Letters, digits, `-` and `_`, up to 63 characters. |
 | `templateID` | `base` | Any template this node has, including one built from an OCI image. Its file tree becomes the root disk. |
 | `image` | none | In place of `templateID`: a raw disk image in the node's `--image-dir`, booted by firmware. See [From a disk image](#from-a-disk-image). |
-| `cpuCount`, `memoryMB` | the node's defaults | |
+| `cpuCount`, `memoryMB` | the node's defaults | `cpuCount` is 1 to 32, and refused otherwise. From an image it is 1, and asking for more is refused |
 | `diskGiB` | 8 | 1–2048. The image is sparse, so it costs only what is written. |
 | `autostart` | true | Start it again when the daemon starts, if it was running. |
 | `restartPolicy` | `always` | `always` boots it again when its guest reboots or crashes, at most 5 times in 5 minutes; `never` leaves it stopped. |

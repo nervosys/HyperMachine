@@ -9,7 +9,9 @@ containment rules, and mxc picks a backend and runs it.
 HyperMachine's part that plays the same game is [`hv2-sandbox`](SANDBOXES.md): a
 Rust library, in the caller's process, that runs a program under limits the
 operating system enforces, with `hm sandbox run` as its command-line executor.
-This page tracks one against the other.
+This page tracks one against the other. [boat](BOAT_PARITY.md), and
+[boxd and exe.dev](PLATFORM_PARITY.md), are tracked apart: they are hosted
+services of whole virtual machines, a different game.
 
 mxc's column is from its README, read on 2026-10-09. It is a reading of what the
 project says, not a test of it. HyperMachine's column is from its code and its

@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   program starts, the bounding set included.
 
 ### Fixed
+- `POST /machines` refuses a processor count it cannot give. More than 32
+  was stored and failed at the machine's first boot, and a machine from a
+  disk image was given one processor whatever it asked for, without being
+  told. `hm sandbox vm machine create --cpus` takes 1 to 32.
 - `reboot` hung MMIO guests. On the hardware-reduced ACPI platform, Linux
   reboots through EFI and, with no EFI, spins in a BIOS jump. Guests now boot
   with `reboot=k`, and the VM stops on the i8042 reset pulse. Sandbox guests
