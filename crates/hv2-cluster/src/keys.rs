@@ -144,7 +144,7 @@ impl ApiKeyPolicy {
             })
         {
             return Err(
-                "once any API key names a team_id, every non-administrator key needs both                  team_id and principal_id"
+                "once any API key names a team_id, every non-administrator key needs both team_id and principal_id"
                     .into(),
             );
         }

@@ -1701,7 +1701,7 @@ mod tests {
             ..scratch.spec()
         };
         let script = format!(
-            "if echo z > '{0}/made'; then echo WROTE; else echo REFUSED; fi;              if cat '{0}/private/key'; then echo READ; else echo CLOSED; fi",
+            "if echo z > '{0}/made'; then echo WROTE; else echo REFUSED; fi; if cat '{0}/private/key'; then echo READ; else echo CLOSED; fi",
             shared.display()
         );
         assert_eq!(

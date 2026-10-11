@@ -3291,7 +3291,7 @@ async fn ui() -> Response {
             // The page talks only to this origin and loads nothing else.
             (
                 "content-security-policy",
-                "default-src 'none'; script-src 'self' 'unsafe-inline';                  style-src 'unsafe-inline'; connect-src 'self'; img-src data:",
+                "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src data:",
             ),
         ],
         include_str!("ui.html"),

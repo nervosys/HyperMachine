@@ -1101,7 +1101,7 @@ mod tests {
         assert_ne!(
             bank.read(0).expect("pcr 0"),
             target.as_slice(),
-            "the XOR trick must not land on the target: a PCR an attacker can              choose measures nothing"
+            "the XOR trick must not land on the target: a PCR an attacker can choose measures nothing"
         );
     }
 
