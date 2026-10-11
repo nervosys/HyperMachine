@@ -65,6 +65,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- cloud-init for a machine from a disk image: `userData` on `POST /machines`
+  and `hm sandbox vm machine create --user-data FILE` reach the image's
+  cloud-init on a seed disk the node writes itself, with the machine's name
+  as its hostname. A distribution's cloud image needs no editing to be
+  logged in to. The data is not returned with the machine's record.
 - Automatic checkpoints: a sandbox created with `autoCheckpoint` (seconds;
   `hm sandbox vm create --auto-checkpoint`), or any sandbox on a node run
   with `--auto-checkpoint-every`, is checkpointed on that interval without

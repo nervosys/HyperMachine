@@ -65,6 +65,31 @@ stops the machine. [With Ubuntu 24.04](benchmarks/2026-10-10/machine-ubuntu-kvm/
 whose kernel is 6.8: four processors, systemd as the first process with every
 unit started, and `systemctl poweroff` stopping the machine.
 
+## A user at creation: the cloud-init seed
+
+A cloud image has no account and no name until cloud-init gives it them.
+`userData` on `POST /machines` (`hm sandbox vm machine create --user-data
+FILE`) is a `#cloud-config` document or a script for it. The node writes a
+1 MiB FAT volume labelled `cidata` holding that as `user-data`, and a
+`meta-data` naming the machine's ID as the instance and its name as the
+hostname, and gives it to the machine as a second disk, read-only, after the
+root disk on the PCI bus. cloud-init's NoCloud datasource finds it by the
+label.
+
+The volume is written by the node itself (`hv2-sandboxd`'s `seed` module),
+not by `mkfs.vfat` or `genisoimage`, so creating a machine needs no tool
+installed. The instance ID is the machine's own for its life, so cloud-init
+does its first-boot steps once and not at each start.
+
+The user data is not kept in the machine's record, which says only that
+some was given: it commonly holds a password or a key, and the record is
+returned to whoever asks about the machine. It is in `seed.img` in the
+machine's directory on the node, readable there by whoever can read the
+root disk.
+
+[Checked on real KVM](benchmarks/2026-10-10/machine-cloud-init-kvm/README.md)
+with Ubuntu 24.04's image as published and user data that sets a password.
+
 ## Not yet
 
 - **Importing images.** A machine is made from a raw image an operator has put
@@ -74,13 +99,11 @@ unit started, and `systemctl poweroff` stopping the machine.
   machine from the API still stops the VM without asking the guest.
 - **Other firmware.** Only Rust Hypervisor Firmware has been run. edk2's
   `CloudHv` build, which ISO installers and Windows need, has not.
-- **A user, a key or a hostname at creation.** A cloud image has no account
-  until cloud-init is given one, and this node offers no datasource. The
-  Ubuntu image below had a password set in it by hand.
 - **Other images.** CirrOS 0.6.2 and
   [Ubuntu 24.04](benchmarks/2026-10-10/machine-ubuntu-kvm/README.md) have been
-  booted, the second to a fully started systemd on four processors. Debian
-  and others have not been tried.
+  booted, the second to a fully started systemd on four processors, and
+  [as published](benchmarks/2026-10-10/machine-cloud-init-kvm/README.md) with
+  its account given by cloud-init. Debian and others have not been tried.
 - **More than a NIC and a disk on the PCI bus.** A [machine made from an image](MACHINES.md#from-a-disk-image)
   can have a network device there, configured by DHCP. There is no second disk
   or NIC.

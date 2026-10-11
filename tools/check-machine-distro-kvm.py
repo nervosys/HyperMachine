@@ -14,10 +14,19 @@ disk image is for, and asks the guest what it is running on:
 4. `systemctl poweroff` stops the machine, and it is left stopped.
 5. Started again, it comes back with what was written to its disk.
 
-The image must already let `--user` log in on the serial console with
-`--password`: a cloud image has no account until something gives it one, and
-this node offers it no cloud-init datasource. How the image used for a
-recorded run was prepared is in that run's README.
+`--user` must be able to log in on the serial console with `--password`. A
+cloud image has no account until cloud-init gives it one, so there are two
+ways to run this:
+
+- With `--user-data FILE`, on the distribution's image as published. The
+  file is given to the machine as its cloud-init user data and must set that
+  password. Two more cases then check that the guest read it: the machine's
+  name is its hostname, its ID is cloud-init's instance ID, and cloud-init
+  finished.
+- Without it, on an image that was given the account by hand.
+
+`--sudo` is for a user that is not root: it is put in front of what needs to
+be.
 
 Writes report.json, the node's log and the console into --output.
 """
@@ -50,6 +59,8 @@ def main():
     parser.add_argument("--password", required=True)
     parser.add_argument("--prompt", default="# ", help="what the shell prompt ends with")
     parser.add_argument("--cpus", type=int, default=4)
+    parser.add_argument("--user-data", type=Path, help="cloud-init user data to create the machine with")
+    parser.add_argument("--sudo", action="store_true", help="the user is not root; use sudo where root is needed")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     report = {"success": False,
@@ -57,6 +68,9 @@ def main():
               "input_sha256": {k: digest(getattr(args, k)) for k in ["daemon", "firmware", "image"]},
               "cases": []}
     report["input_sha256"]["driver"] = digest(__file__)
+    sudo = "sudo " if args.sudo else ""
+    user_data = args.user_data.read_text() if args.user_data else None
+    report["cloud_init_user_data_given"] = user_data is not None
     work = Path(tempfile.mkdtemp(prefix="hm-machine-distro-check-", dir="/var/tmp"))
     images = work / "images"
     images.mkdir()
@@ -117,12 +131,32 @@ def main():
 
     def log_in():
         wait_for("login:", 300, tail=600)
-        # systemd goes on printing after the prompt; let it finish its line.
-        time.sleep(3)
-        type_line(args.user)
-        wait_for("Password:", 30, tail=300)
-        type_line(args.password)
-        wait_for(args.prompt, 60, tail=300)
+        # The prompt can be there before the account is: cloud-init sets the
+        # password while the system finishes starting. A refused login is
+        # tried again, for up to four minutes, and each try is counted.
+        deadline = time.monotonic() + 240
+        tries = 0
+        while True:
+            # systemd goes on printing after the prompt; let it finish its line.
+            time.sleep(3)
+            tries += 1
+            type_line(args.user)
+            wait_for("Password:", 30, tail=300)
+            type_line(args.password)
+            answered = time.monotonic() + 30
+            while time.monotonic() < answered:
+                seen = console(300)
+                # After the password: the shell's prompt, or a refusal and
+                # the login prompt again.
+                after = seen.rsplit("Password:", 1)[-1]
+                if "incorrect" in after or after.rstrip().endswith(args.prompt.rstrip()):
+                    break
+                time.sleep(1)
+            if "incorrect" not in after and after.rstrip().endswith(args.prompt.rstrip()):
+                return tries
+            assert time.monotonic() < deadline, f"could not log in after {tries} tries; console ends: {seen[-300:]!r}"
+            time.sleep(10)
+            wait_for("login:", 60, tail=200)
 
     asked = [0]
 
@@ -137,6 +171,8 @@ def main():
         type_line(f"echo {tag}-$((20+1))-[$({command})]-$((30+3))-{tag}")
         seen = wait_for(f"]-33-{tag}", 60, tail=2000)
         return re.findall(re.escape(tag) + r"-21-\[(.*?)\]-33-" + re.escape(tag), seen, re.S)[-1].strip()
+
+    machine = {}
 
     def state():
         status, value = request("GET", f"/machines/{NAME}")
@@ -156,9 +192,15 @@ def main():
             time.sleep(0.1)
 
         def boots():
-            status, created = request("POST", "/machines", {
-                "name": NAME, "image": "distro.raw", "cpuCount": args.cpus, "memoryMB": 2048})
+            body = {"name": NAME, "image": "distro.raw", "cpuCount": args.cpus, "memoryMB": 2048}
+            if user_data is not None:
+                body["userData"] = user_data
+            status, created = request("POST", "/machines", body)
             assert status == 201, (status, created)
+            assert created["cloudInit"] is (user_data is not None), created
+            # What was given is not handed back with the machine's record.
+            assert "userData" not in created and (user_data is None or user_data not in json.dumps(created))
+            machine["id"] = created["machineID"]
             assert created["state"] == "running" and created["boot"] == "firmware", created
             assert created["cpuCount"] == args.cpus, created
             started = time.monotonic()
@@ -169,16 +211,17 @@ def main():
         case("a machine from a distribution's image boots by firmware to its login prompt", boots)
 
         def what_it_runs_on():
-            log_in()
+            tries = log_in()
             found = {
+                "logins_tried": tries,
                 "os": ask(". /etc/os-release; echo $PRETTY_NAME", "os"),
                 "kernel": ask("uname -r", "kernel"),
                 "nproc": int(ask("nproc", "nproc")),
                 "processors_in_cpuinfo": int(ask("grep -c ^processor /proc/cpuinfo", "cpuinfo")),
                 "pid_1": ask("cat /proc/1/comm", "init"),
                 "systemd": ask("systemctl --version | head -n1", "sdver"),
-                "acpi_tables_in_kernel_log": int(ask("dmesg | grep -c 'ACPI: \\(FACP\\|APIC\\|DSDT\\) '", "tables")),
-                "acpi_errors_in_kernel_log": int(ask("dmesg | grep -ci 'ACPI.*\\(Error\\|AE_\\)'", "faults")),
+                "acpi_tables_in_kernel_log": int(ask(sudo + "dmesg | grep -c 'ACPI: \\(FACP\\|APIC\\|DSDT\\) '", "tables")),
+                "acpi_errors_in_kernel_log": int(ask(sudo + "dmesg | grep -ci 'ACPI.*\\(Error\\|AE_\\)'", "faults")),
                 "virtio_on_the_io_apic": int(ask("grep -c 'IO-APIC.*virtio' /proc/interrupts", "ioapic")),
                 "memory_mb": int(ask("awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo", "mem")),
             }
@@ -190,6 +233,34 @@ def main():
             return found
         case("the guest counts its processors, runs systemd as its first process, and took the ACPI tables",
              what_it_runs_on)
+
+        def read_its_seed():
+            # cloud-init goes on after the login prompt; wait for it to say
+            # it is done, and take "error" as an answer too rather than wait.
+            deadline = time.monotonic() + 240
+            while True:
+                status_line = ask("cloud-init status 2>/dev/null | head -n1", "cistatus")
+                if "done" in status_line or "error" in status_line or time.monotonic() > deadline:
+                    break
+                time.sleep(5)
+            found = {
+                "cloud_init_status": status_line,
+                "hostname": ask("hostname", "hostname"),
+                "instance_id": ask("cat /var/lib/cloud/data/instance-id", "iid"),
+                "datasource": ask("cloud-id 2>/dev/null || true", "cloudid"),
+                "seed_disk_label": ask("lsblk -ndo LABEL /dev/vdb 2>/dev/null || true", "label"),
+                "seed_disk_read_only": ask("cat /sys/block/vdb/ro 2>/dev/null || true", "ro"),
+                "disks": ask("lsblk -ndo NAME,SIZE | tr '\\n' ' '", "disks"),
+            }
+            assert "done" in found["cloud_init_status"], found
+            assert found["hostname"] == NAME, found
+            assert found["instance_id"] == machine["id"], (found, machine)
+            assert found["datasource"] == "nocloud", found
+            assert found["seed_disk_label"].lower() == "cidata" and found["seed_disk_read_only"] == "1", found
+            return found
+        if user_data is not None:
+            case("cloud-init read the machine's seed: its name, its ID, and the user data that let this log in",
+                 read_its_seed)
 
         def finished_starting():
             # Up to three minutes for the last jobs; a state that is neither
@@ -209,9 +280,9 @@ def main():
         case("systemd finished starting, and what failed is named", finished_starting)
 
         def turns_itself_off():
-            ask("echo kept-$((6*7)) > /root/note; sync; cat /root/note", "note")
+            ask("echo kept-$((6*7)) > ~/note; sync; cat ~/note", "note")
             before = state()
-            type_line("systemctl poweroff")
+            type_line(sudo + "systemctl poweroff")
             deadline = time.monotonic() + 120
             while state()["state"] != "stopped":
                 assert time.monotonic() < deadline, "still running after systemctl poweroff"
@@ -226,11 +297,19 @@ def main():
             status, started = request("POST", f"/machines/{NAME}/start")
             assert status == 200 and started["state"] == "running", (status, started)
             log_in()
-            note = ask("cat /root/note", "back")
+            note = ask("cat ~/note", "back")
             assert note == "kept-42", note
             again = int(ask("nproc", "again"))
             assert again == args.cpus, again
-            return {"note": note, "nproc": again}
+            found = {"note": note, "nproc": again}
+            if user_data is not None:
+                # The same instance: cloud-init's once-per-instance steps did
+                # not run a second time, so the same ID is still recorded.
+                found["instance_id"] = ask("cat /var/lib/cloud/data/instance-id", "iid2")
+                found["boots_recorded"] = ask(
+                    sudo + "sh -c 'ls /var/lib/cloud/instances | wc -l'", "instances")
+                assert found["instance_id"] == machine["id"] and found["boots_recorded"] == "1", found
+            return found
         case("started again, it has what was written to its disk and the same processors", comes_back)
 
         (args.output / "console.txt").write_text(

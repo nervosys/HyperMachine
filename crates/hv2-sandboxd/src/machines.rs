@@ -36,6 +36,7 @@ use axum::http::HeaderMap;
 use hv2_agent::AgentVM;
 use hv2_cluster::ownership::TeamId;
 
+use super::seed;
 use super::{
     api_error, new_vm, now_ms, reserve, start_network, AppState, Arc, Deserialize, IntoResponse,
     Json, LiveNetwork, NetworkRequest, NetworkSpec, Path, Response, SandboxNetworkConfig,
@@ -132,6 +133,12 @@ pub(crate) struct Stored {
     /// the node's kernel on a disk made from its template.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     image: Option<String>,
+    /// Whether it was given cloud-init user data, which is then in
+    /// `seed.img` beside its root disk and attached as a second disk. The
+    /// data itself is not kept here: it commonly holds a password or a key,
+    /// and a machine's record is returned to whoever asks about the machine.
+    #[serde(rename = "cloudInit", default)]
+    cloud_init: bool,
 }
 
 /// A machine's network: one NIC behind this node's egress gateway, which
@@ -276,6 +283,7 @@ fn describe(machine: &Stored) -> Value {
         "network": machine.network,
         "boot": if machine.image.is_some() { "firmware" } else { "kernel" },
         "image": machine.image,
+        "cloudInit": machine.cloud_init,
     })
 }
 
@@ -564,6 +572,14 @@ async fn boot_firmware(state: &Arc<AppState>, machine: &Stored, slot: Slot) -> R
         .attach_block_pci(&image, false, &machine.id)
         .await
         .map_err(|e| format!("attaching the disk: {e}"))?;
+    // Its first-boot instructions, when it was given any: a second disk,
+    // read-only, that cloud-init in the image finds by its label.
+    if machine.cloud_init {
+        vm.vm()
+            .attach_seed_pci(&dir_of(state, &machine.id).join("seed.img"), "cidata")
+            .await
+            .map_err(|e| format!("attaching the cloud-init seed: {e}"))?;
+    }
     // Its network, when it has one: a NIC on the PCI bus, where a stock
     // operating system looks, behind the same gateway a template machine's
     // is. The guest is not configured from here -- there is no agent to do
@@ -807,6 +823,11 @@ pub(crate) struct NewMachine {
     network: Option<MachineNetwork>,
     /// A raw disk image in the node's image directory to boot by firmware.
     image: Option<String>,
+    /// cloud-init user data for a machine from an image: a `#cloud-config`
+    /// document or a script, given to the guest on a seed disk with the
+    /// machine's name as its hostname.
+    #[serde(rename = "userData")]
+    user_data: Option<String>,
 }
 
 /// How many processors a new machine has, or why what was asked cannot be.
@@ -834,7 +855,7 @@ fn decide_cpus(asked: Option<u32>, from_image: bool, node: u32) -> Result<u32, S
 pub(crate) async fn create(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(req): Json<NewMachine>,
+    Json(mut req): Json<NewMachine>,
 ) -> Response {
     let team = match caller_team(&state, &headers) {
         Ok(team) => team,
@@ -883,6 +904,29 @@ pub(crate) async fn create(
         None => req.template.clone().unwrap_or_else(|| "base".into()),
     };
     let from_image = req.image.is_some();
+    // Only an image has a cloud-init to read it. A template machine's root
+    // disk is this project's guest, configured by its agent; taking the
+    // field and doing nothing with it would be a setting that reads as
+    // applied.
+    if req.user_data.is_some() && !from_image {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "userData is for a machine from an image, whose cloud-init reads it",
+        );
+    }
+    if req
+        .user_data
+        .as_ref()
+        .is_some_and(|data| data.len() > seed::MAX_BYTES - 4096)
+    {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            format!(
+                "userData is at most {} KiB",
+                (seed::MAX_BYTES - 4096) / 1024
+            ),
+        );
+    }
     let asked_gib = req.disk_gib;
     let disk_gib = req.disk_gib.unwrap_or(8);
     if !(1..=2048).contains(&disk_gib) {
@@ -916,6 +960,7 @@ pub(crate) async fn create(
         created_ms: now_ms(),
         network: req.network,
         image: req.image,
+        cloud_init: req.user_data.is_some(),
     };
     let dir = dir_of(&state, &machine.id);
     if let Err(e) = std::fs::create_dir_all(root(&state)) {
@@ -932,7 +977,20 @@ pub(crate) async fn create(
         Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
     let image = dir.join("root.img");
+    let seed = req.user_data.take().map(|data| {
+        (
+            dir.join("seed.img"),
+            machine.id.clone(),
+            machine.name.clone(),
+            data,
+        )
+    });
     let built = tokio::task::spawn_blocking(move || {
+        // The instance ID is the machine's own, so cloud-init does its
+        // first-boot steps once in the machine's life and not at each start.
+        if let Some((path, id, name, data)) = seed {
+            seed::write_nocloud(&path, &id, &name, &data)?;
+        }
         if from_image {
             copy_image(&source, &image, asked_gib)
         } else {
