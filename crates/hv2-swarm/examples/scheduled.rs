@@ -566,7 +566,7 @@ async fn main() -> std::process::ExitCode {
         // lockstep. Worth saying, because the gap between this and `possible`
         // is exactly what continuous batching is for.
         println!(
-            "               (they did not all overlap — {} of {possible} is what the timing              allowed)",
+            "               (they did not all overlap — {} of {possible} is what the timing allowed)",
             stats.largest_batch
         );
     }

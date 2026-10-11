@@ -164,7 +164,7 @@ async fn main() -> std::process::ExitCode {
         }
         println!();
         println!(
-            "result        : the guest did not reach its last line within {:?}. That is not a              failed claim -- it is no answer. Everything above is however far it got.",
+            "result        : the guest did not reach its last line within {:?}. That is not a failed claim -- it is no answer. Everything above is however far it got.",
             deadline.saturating_duration_since(started)
         );
         return std::process::ExitCode::FAILURE;

@@ -2504,7 +2504,7 @@ impl VM {
                 Ok(Ok(_)) => {}
                 Ok(Err(e)) => tracing::warn!("vCPU task join error: {:?}", e),
                 Err(_) => tracing::error!(
-                    "VM '{}': a vCPU thread did not leave the guest within {:?} of being                      kicked; abandoning it. The thread is leaked and the process will not                      exit cleanly.",
+                    "VM '{}': a vCPU thread did not leave the guest within {:?} of being kicked; abandoning it. The thread is leaked and the process will not exit cleanly.",
                     self.config.name,
                     VCPU_REAP_TIMEOUT
                 ),
@@ -2670,7 +2670,7 @@ impl VM {
     ) -> Result<()> {
         if self.config.forbid_shared_memory {
             return Err(Error::PermissionDenied(format!(
-                "VM '{}': shared memory is forbidden by its configuration, and a                  shared region is a timing channel between every guest that holds it",
+                "VM '{}': shared memory is forbidden by its configuration, and a shared region is a timing channel between every guest that holds it",
                 self.config.name
             )));
         }

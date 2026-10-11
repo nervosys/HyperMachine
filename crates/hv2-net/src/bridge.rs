@@ -118,7 +118,7 @@ impl TapLink {
     pub async fn open(config: crate::tap::TapConfig) -> Result<Self> {
         if config.vnet_hdr {
             return Err(crate::NetError::Config(
-                "a bridge carries bare Ethernet frames, so this TAP device must be opened                  without a vnet header: TapConfig::with_vnet_hdr(false)"
+                "a bridge carries bare Ethernet frames, so this TAP device must be opened without a vnet header: TapConfig::with_vnet_hdr(false)"
                     .to_string(),
             ));
         }

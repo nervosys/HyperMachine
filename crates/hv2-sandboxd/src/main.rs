@@ -1881,7 +1881,7 @@ async fn bring_up(
     });
 
     tracing::debug!(
-        "{sandbox_id} up in {:?}: build {built:?}, launch {:?}, agent answering {:?},          network and envd {:?}",
+        "{sandbox_id} up in {:?}: build {built:?}, launch {:?}, agent answering {:?}, network and envd {:?}",
         t0.elapsed(),
         launched_at - built,
         answered - launched_at,
@@ -6156,7 +6156,7 @@ async fn main() -> std::process::ExitCode {
     println!("  DELETE /sandboxes/{{id}}          -- stop the VM and its process.Process listener");
     println!("  PUT    /sandboxes/{{id}}/network  -- replace a running sandbox's egress rules");
     println!(
-        "  POST   /sandboxes/{{id}}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy"
+        "  POST   /sandboxes/{{id}}/pause    -- suspend to disk; connect or resume brings it back, and with autoResume so does a request through the proxy"
     );
     println!("  POST   /sandboxes/{{id}}/fork     -- checkpoint in place, start `count` copies");
     println!("  GET    /sandboxes/{{id}}/network/decisions -- NOT E2B's; the gateway's audit log");
