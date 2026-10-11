@@ -316,6 +316,9 @@ struct Options {
     idle_pause_after: Option<Duration>,
     /// Put a sandbox idle this long in standby: vCPUs stopped, memory kept.
     idle_standby_after: Option<Duration>,
+    /// Checkpoint every sandbox this often without being asked, unless its
+    /// create set `autoCheckpoint` itself. See checkpoints.rs.
+    auto_checkpoint_every: Option<Duration>,
 }
 
 fn parse_options() -> Result<Options, String> {
@@ -380,6 +383,7 @@ fn parse_options() -> Result<Options, String> {
         warm_pool: 0,
         disk_slot: false,
         idle_pause_after: None,
+        auto_checkpoint_every: None,
         idle_standby_after: None,
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -486,6 +490,12 @@ fn parse_options() -> Result<Options, String> {
                 let secs: u64 = value(&mut i)?.parse().map_err(|e| format!("{e}"))?;
                 idle::check_window(secs).map_err(|e| format!("--idle-pause-after: {e}"))?;
                 opts.idle_pause_after = (secs > 0).then(|| Duration::from_secs(secs));
+            }
+            "--auto-checkpoint-every" => {
+                let secs: u64 = value(&mut i)?.parse().map_err(|e| format!("{e}"))?;
+                checkpoints::check_interval(secs)
+                    .map_err(|e| format!("--auto-checkpoint-every: {e}"))?;
+                opts.auto_checkpoint_every = (secs > 0).then(|| Duration::from_secs(secs));
             }
             "--idle-standby-after" => {
                 let secs: u64 = value(&mut i)?.parse().map_err(|e| format!("{e}"))?;
@@ -837,6 +847,11 @@ struct NewSandbox {
     /// node's `--idle-pause-after`. Not E2B's: see idle.rs.
     #[serde(rename = "idleTimeout")]
     idle_timeout: Option<u64>,
+    /// Seconds between checkpoints the node takes of the sandbox by itself,
+    /// each replacing the last. 0 turns off a node's
+    /// `--auto-checkpoint-every`. Not E2B's: see checkpoints.rs.
+    #[serde(rename = "autoCheckpoint")]
+    auto_checkpoint: Option<u64>,
 }
 
 /// `SandboxIam`: a non-empty `tokens` map turns workload identity on.
@@ -2565,8 +2580,12 @@ async fn create_sandbox(
     let lifetime_secs = req.timeout.unwrap_or(default_timeout).min(MAX_TIMEOUT_SECS);
     let started_at_ms = now_ms();
 
-    let lifecycle = match Lifecycle::from_request(&req, lifetime_secs, state.opts.idle_pause_after)
-    {
+    let lifecycle = match Lifecycle::from_request(
+        &req,
+        lifetime_secs,
+        state.opts.idle_pause_after,
+        state.opts.auto_checkpoint_every,
+    ) {
         Ok(lifecycle) => lifecycle,
         Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
     };
@@ -2578,6 +2597,24 @@ async fn create_sandbox(
             "autoPause and idleTimeout need sandboxes restored from a template, and this node \
              boots them (--no-template, or the template failed to build)",
         );
+    }
+    // Asked for by this request and impossible: refused. A node's own
+    // default on a sandbox that cannot be checkpointed is not a request, and
+    // the timer says why each time it passes that sandbox over.
+    if req.auto_checkpoint.is_some_and(|secs| secs > 0) {
+        if !state.templates.read().contains_key(&template_id) {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                "autoCheckpoint needs sandboxes restored from a template, and this node boots \
+                 them (--no-template, or the template failed to build)",
+            );
+        }
+        if req.disk_mount.is_some() {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                "autoCheckpoint and diskMount: a sandbox with a disk cannot be checkpointed",
+            );
+        }
     }
 
     // Decided before anything boots, so a policy that does not parse costs a
@@ -2726,6 +2763,10 @@ struct Lifecycle {
     /// Pause after this many seconds unused; 0 never. See idle.rs.
     #[serde(default)]
     idle_pause_secs: u64,
+    /// Checkpoint this often without being asked; 0 never. See
+    /// checkpoints.rs.
+    #[serde(default)]
+    auto_checkpoint_secs: u64,
 }
 
 impl Lifecycle {
@@ -2733,6 +2774,7 @@ impl Lifecycle {
         req: &NewSandbox,
         lifetime_secs: u64,
         node_idle: Option<Duration>,
+        node_checkpoint: Option<Duration>,
     ) -> Result<Self, String> {
         // A filesystem-only pause keeps the disk and drops memory. The root
         // filesystem here *is* memory -- an initramfs -- so there is nothing
@@ -2752,11 +2794,19 @@ impl Lifecycle {
             }
             None => node_idle.map_or(0, |d| d.as_secs()),
         };
+        let auto_checkpoint_secs = match req.auto_checkpoint {
+            Some(secs) => {
+                checkpoints::check_interval(secs).map_err(|e| format!("autoCheckpoint: {e}"))?;
+                secs
+            }
+            None => node_checkpoint.map_or(0, |d| d.as_secs()),
+        };
         Ok(Self {
             pause_on_timeout: req.auto_pause.unwrap_or(false),
             auto_resume: req.auto_resume.as_ref().is_some_and(|a| a.enabled),
             lifetime_secs,
             idle_pause_secs,
+            auto_checkpoint_secs,
         })
     }
 }
@@ -5444,6 +5494,7 @@ async fn expire(state: Arc<AppState>) {
         reboot::reboot_stopped(&state).await;
         idle::standby_idle(&state, now).await;
         idle::pause_idle(&state, now).await;
+        checkpoints::take_due(&state, now).await;
     }
 }
 
