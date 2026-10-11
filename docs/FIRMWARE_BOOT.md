@@ -89,6 +89,8 @@ root disk.
 
 [Checked on real KVM](benchmarks/2026-10-10/machine-cloud-init-kvm/README.md)
 with Ubuntu 24.04's image as published and user data that sets a password.
+[Given a network as well](benchmarks/2026-10-11/machine-docker-kvm/README.md),
+that machine installs Docker with `apt` and runs containers.
 
 ## Not yet
 
