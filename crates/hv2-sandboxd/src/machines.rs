@@ -554,7 +554,7 @@ async fn boot_firmware(state: &Arc<AppState>, machine: &Stored, slot: Slot) -> R
     let image = dir_of(state, &machine.id).join("root.img");
     let vm = AgentVM::builder()
         .name(machine.id.clone())
-        .cpu_cores(1)
+        .cpu_cores(machine.cpus)
         .memory_mb(machine.memory_mb)
         .boot(hv2_core::BootSource::pvh(firmware))
         .build()
@@ -716,18 +716,32 @@ pub(crate) async fn supervise(state: Arc<AppState>) {
         for id in stopped {
             let _ops = OPS.lock().await;
             // Rechecked under the lock: a stop or restart may have run.
-            let still = live(|l| {
+            // Whether the guest turned itself off, where it stopped at all.
+            let stopped = live(|l| {
                 l.get(&id)
-                    .is_some_and(|m| m.vm.state() == hv2_core::VMState::Stopped)
+                    .filter(|m| m.vm.state() == hv2_core::VMState::Stopped)
+                    .map(|m| m.vm.vm().powered_off())
             });
-            if !still {
+            let Some(powered_off) = stopped else {
                 continue;
-            }
+            };
             live(|l| l.remove(&id));
             let Some(mut machine) = load(&state, &id) else {
                 continue;
             };
             if machine.desired != Desired::Running {
+                continue;
+            }
+            // A guest that turned itself off asked to be off. Restarting it
+            // because its policy says "always" would make `poweroff` inside
+            // a machine a way to reboot it, and nothing else.
+            if powered_off {
+                tracing::info!(
+                    "machine {}: its guest turned itself off; leaving it off",
+                    machine.name
+                );
+                machine.desired = Desired::Stopped;
+                let _ = save(&state, &machine);
                 continue;
             }
             let allowed = machine.restart == RestartPolicy::Always && admit_restart(&id);
@@ -798,17 +812,15 @@ pub(crate) struct NewMachine {
 /// How many processors a new machine has, or why what was asked cannot be.
 ///
 /// Decided when the machine is created. A count the hypervisor will not
-/// start was once stored and found out at the machine's first boot, and a
-/// machine from an image was given one processor whatever it asked for and
-/// not told.
+/// start was once stored and found out at the machine's first boot.
+///
+/// A machine from an image that does not say has one, not the node's
+/// default: its image was made for some machine, and one processor is the
+/// one every image runs on. It is given as many as it asks for; its kernel
+/// finds them through the ACPI tables its firmware hands on.
 fn decide_cpus(asked: Option<u32>, from_image: bool, node: u32) -> Result<u32, String> {
     let most = hv2_core::boot::mptable::MAX_CPUS;
     match asked {
-        // A firmware-booted guest is given no ACPI tables yet, so it would
-        // find one processor however many it had.
-        Some(cpus) if from_image && cpus != 1 => Err(format!(
-            "cpuCount {cpus}: a machine from an image has one processor; leave cpuCount out"
-        )),
         Some(cpus) if !(1..=most).contains(&cpus) => {
             Err(format!("cpuCount is 1 to {most}, not {cpus}"))
         }
@@ -1260,11 +1272,11 @@ mod tests {
         let refused = decide_cpus(Some(most + 1), false, 2).unwrap_err();
         assert!(refused.contains(&format!("1 to {most}")), "{refused}");
         assert!(decide_cpus(Some(0), false, 2).is_err());
-        // From an image: one, and a request for more is told so.
+        // From an image: one unless it says, and then what it says.
         assert_eq!(decide_cpus(None, true, 8), Ok(1));
         assert_eq!(decide_cpus(Some(1), true, 8), Ok(1));
-        let refused = decide_cpus(Some(4), true, 8).unwrap_err();
-        assert!(refused.contains("one processor"), "{refused}");
+        assert_eq!(decide_cpus(Some(4), true, 8), Ok(4));
+        assert!(decide_cpus(Some(most + 1), true, 8).is_err());
     }
 
     #[test]

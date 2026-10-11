@@ -1,0 +1,64 @@
+{
+  "success": true,
+  "purpose": "functional verification of a distribution image as a machine on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "d19284ef73c88ef549aa51dc6ecbc9cd0a04d16a46b243a8b8b8b3261c81ff82",
+    "firmware": "4a0a1e977368f6b15d2198a216bdedf9a350bf5e5ae07e29e695373ec16ad958",
+    "image": "baa8ff8dcfc259b63bb90864371b7cd8feb65544f2bfca60dc7e24a6bd516f05",
+    "driver": "f0c4a58ec4b33bccc31271d5d1a238de07167d6efaf2375a8657ce805daad54b"
+  },
+  "cases": [
+    {
+      "name": "a machine from a distribution's image boots by firmware to its login prompt",
+      "success": true,
+      "detail": {
+        "cpuCount": 4,
+        "memoryMB": 2048,
+        "diskGiB": 4,
+        "seconds_to_login_prompt": 39.7,
+        "prompt": "ubuntu login: "
+      }
+    },
+    {
+      "name": "the guest counts its processors, runs systemd as its first process, and took the ACPI tables",
+      "success": true,
+      "detail": {
+        "os": "Ubuntu 24.04.5 LTS",
+        "kernel": "6.8.0-146-generic",
+        "nproc": 4,
+        "processors_in_cpuinfo": 4,
+        "pid_1": "systemd",
+        "systemd": "systemd 255 (255.4-1ubuntu8.17)",
+        "acpi_tables_in_kernel_log": 3,
+        "acpi_errors_in_kernel_log": 0,
+        "virtio_on_the_io_apic": 1,
+        "memory_mb": 1966
+      }
+    },
+    {
+      "name": "systemd finished starting, and what failed is named",
+      "success": true,
+      "detail": {
+        "is_system_running": "running",
+        "queued_jobs": 0,
+        "failed_units": []
+      }
+    },
+    {
+      "name": "`systemctl poweroff` stops the machine, and it is left stopped",
+      "success": true,
+      "detail": {
+        "restartPolicy": "always",
+        "seconds_left_off": 8
+      }
+    },
+    {
+      "name": "started again, it has what was written to its disk and the same processors",
+      "success": true,
+      "detail": {
+        "note": "kept-42",
+        "nproc": 4
+      }
+    }
+  ]
+}

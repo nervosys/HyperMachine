@@ -27,7 +27,7 @@ reason, and are listed once at the end rather than counted as gaps.
 | | boat | HyperMachine |
 |---|---|---|
 | What a sandbox is | An Ubuntu 24.04 VM, x86-64, with root | A Linux microVM on its own VMM, from a template whose root filesystem is in memory; or a [machine](MACHINES.md) with a disk |
-| Sizes | Four, chosen at creation: 2 to 16 vCPUs, 4 to 32 GB, 12 to 251 GB of disk | **A sandbox has no size of its own.** Size is fixed when its template is built (up to 32 vCPUs and 64 GiB), or node-wide. A machine from a template takes `cpuCount`, `memoryMB` and `diskGiB`. A machine from a disk image has one vCPU |
+| Sizes | Four, chosen at creation: 2 to 16 vCPUs, 4 to 32 GB, 12 to 251 GB of disk | **A sandbox has no size of its own.** Size is fixed when its template is built (up to 32 vCPUs and 64 GiB), or node-wide. A machine takes `cpuCount` (to 32), `memoryMB` and `diskGiB`, whether from a template or [from a disk image](FIRMWARE_BOOT.md#acpi-tables) |
 | Changing size later | On resume and on fork | **No.** Nothing resizes an existing sandbox or machine |
 | Creating one | "usually under a second on a ready machine"; `--fail-fast` answers within about 1.5 s whether one was ready | From a template: 18.9 ms at the median on this project's own host, and 0.65 ms from the [warm pool](WARM_POOL.md). A full node answers 503 at once by default; there is no request option that says so when the node queues |
 | What stopping keeps | **Files only.** "Snapshots capture your sandbox's files, not its running processes or memory"; processes run by hand are restarted by the user | **Memory and processes.** Pause to disk and resume on any node; [standby](STANDBY.md) keeps memory and wakes on the next request |
@@ -36,7 +36,7 @@ reason, and are listed once at the end rather than counted as gaps.
 | Named snapshots, and new sandboxes from them | Yes; ten free | Yes: a snapshot becomes a template |
 | Reading a snapshot from outside | A file tree, and download of all or part of it, with the sandbox stopped | **No.** A snapshot is memory pages; there is no tree to list without restoring it |
 | Sharing a snapshot with another account | Share codes; secrets and logins removed first | **No.** A snapshot belongs to its team, or to everyone when an operator made it |
-| systemd, and Docker, in the guest | Both | **Neither in a sandbox.** Its first process is the project's own, and its kernel is built without what Docker needs. A machine from a disk image runs the image's own init, and only one small image without systemd has been booted |
+| systemd, and Docker, in the guest | Both | **systemd in a machine from a disk image**: [Ubuntu 24.04 boots](benchmarks/2026-10-10/machine-ubuntu-kvm/README.md) on its own 6.8 kernel with systemd as its first process and every unit started. **Docker not shown**: that image ships none and the machine in the check had no network to install it over. **Neither in a sandbox**, whose first process is the project's own and whose kernel is built without what Docker needs |
 | `/dev/kvm` in the guest | Yes on its standard hosts, and said to be absent on its fallback hosts | **Not offered.** Not masked either, and never tested |
 | Installed for you | Docker, Chrome, VS Code, some twenty languages and runtimes, a dozen agent programs | What the template's image holds. No image is shipped with more than the guest agent needs |
 | Commands and files from outside | `exec`, with detach, attach and kill; `scp`; SSH | `exec`, processes with a terminal and standard input, files in and out; SSH by name is partial |
@@ -68,10 +68,14 @@ In rough order of how much each matters to someone choosing between them:
 
 1. **A guest that is a whole distribution.** boat's sandbox runs systemd,
    Docker and anything `apt` installs, on several processors. HyperMachine's
-   sandbox is a small guest in memory, and its machine from a disk image has
-   one processor, no ACPI tables and no agent inside. Most of the rows below
-   stand on this one: an agent, a browser and a desktop are all things a
-   distribution installs.
+   sandbox is a small guest in memory. Its machine from a disk image now
+   boots Ubuntu 24.04 with systemd on the processors it asks for, and turns
+   itself off. What it still lacks is everything around that: a user or key
+   given at creation, an agent inside, so `exec` and files do not work, a
+   network shown installing anything, Docker shown running, and an image
+   with tools already in it. A sandbox, as distinct from a machine, is
+   unchanged. Most of the rows below stand on this one: an agent, a browser
+   and a desktop are all things a distribution installs.
 2. **Coding agents run for the caller.** Nothing here starts an agent in a
    sandbox, carries a prompt to it or reports what it did.
 3. **A desktop, and computer use.** Absent, and the device code that would

@@ -14,13 +14,13 @@
 //!
 //! `HV2_DISK=<raw image>` attaches a disk over PCI, which the firmware boots
 //! from if it holds an EFI system partition. `HV2_DISK_RO=1` makes it
-//! read-only. `HV2_SETTLE_SECS` is how long to let the guest run, and
+//! read-only. `HV2_CPUS` is how many processors the guest has (one unless
+//! set). `HV2_SETTLE_SECS` is how long to let the guest run, and
 //! `HV2_UNTIL=<text>` stops as soon as the console contains that text.
 
 use std::sync::Arc;
 use std::time::Duration;
 
-use hv2_core::machine::Machine;
 use hv2_core::{BootSource, HypervisorPlatform, VMConfig, VM};
 
 /// Long enough for firmware to print its banner and give up on booting.
@@ -53,7 +53,10 @@ async fn main() {
         .unwrap_or(512);
     let config = VMConfig {
         name: "pvh-firmware-probe".to_string(),
-        vcpu_count: 1,
+        vcpu_count: std::env::var("HV2_CPUS")
+            .ok()
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(1),
         memory_size: memory_mib * 1024 * 1024,
         boot: Some(BootSource::pvh(&firmware)),
         ..Default::default()
@@ -65,13 +68,9 @@ async fn main() {
             std::process::exit(1);
         }
     };
-    if let Err(e) = Machine::legacy_pc_with_pci_root(vm.pci_root())
-        .attach(&vm.devices())
-        .await
-    {
-        println!("devices       : FAILED — {e}");
-        std::process::exit(1);
-    }
+    // No machine model is attached here: provisioning attaches the legacy PC
+    // on the VM's own PCI root, and for firmware the ACPI power registers
+    // the tables name. Attaching one first would keep those out.
     // A disk over PCI, when given one: firmware finds its disk by walking the
     // bus, so this is what turns "it started" into "it found something".
     if let Ok(disk) = std::env::var("HV2_DISK") {

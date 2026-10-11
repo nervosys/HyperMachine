@@ -54,7 +54,7 @@ talking to a control plane.
 | `name` | required | Letters, digits, `-` and `_`, up to 63 characters. |
 | `templateID` | `base` | Any template this node has, including one built from an OCI image. Its file tree becomes the root disk. |
 | `image` | none | In place of `templateID`: a raw disk image in the node's `--image-dir`, booted by firmware. See [From a disk image](#from-a-disk-image). |
-| `cpuCount`, `memoryMB` | the node's defaults | `cpuCount` is 1 to 32, and refused otherwise. From an image it is 1, and asking for more is refused |
+| `cpuCount`, `memoryMB` | the node's defaults | `cpuCount` is 1 to 32, and refused otherwise. From an image it is 1 unless given |
 | `diskGiB` | 8 | 1–2048. The image is sparse, so it costs only what is written. |
 | `autostart` | true | Start it again when the daemon starts, if it was running. |
 | `restartPolicy` | `always` | `always` boots it again when its guest reboots or crashes, at most 5 times in 5 minutes; `never` leaves it stopped. |
@@ -90,8 +90,14 @@ hm sandbox vm machine type cloud-01 cirros            # type at its serial conso
   serial console is the way in: `GET /machines/{name}/console?tail=N` returns
   its last N bytes (up to 1 MiB), and `POST /machines/{name}/console` types the
   request body at it.
-- **Stopping** such a machine stops the VM without asking the guest, as pulling
-  the plug would. Shut the guest down, or `sync`, from its console first.
+- **Stopping** such a machine from the API stops the VM without asking the
+  guest, as pulling the plug would. Shut the guest down, or `sync`, from its
+  console first.
+- **A guest that turns itself off stays off.** `poweroff` in the guest stops
+  the machine, and it is left stopped whatever its `restartPolicy`: that
+  policy restarts a guest that stopped by itself, a crash or a `reboot`, and
+  a guest that turned itself off asked for the opposite. Start it again
+  through the API.
 - **A network** works as it does for any machine: give `network` on create, and
   the machine gets one NIC behind the node's egress gateway, with the same
   `allowOut` and `denyOut` rules. The NIC is on the PCI bus, where a stock
@@ -99,8 +105,9 @@ hm sandbox vm machine type cloud-01 cirros            # type at its serial conso
   answers with the guest's address, the default route and the resolver. Nothing
   else is set up in the guest, since there is no agent to do it; the egress CA
   for HTTPS interception is not installed.
-- **Limits today:** one vCPU, raw images only, and the firmware is not shipped
-  with HyperMachine. See [firmware boot](FIRMWARE_BOOT.md).
+- **Limits today:** raw images only, no way to give the guest a user or a
+  key at creation, and the firmware is not shipped with HyperMachine. See
+  [firmware boot](FIRMWARE_BOOT.md).
 
 ## Through the control plane
 
@@ -177,8 +184,10 @@ without the VM exiting. Stop a machine through the API.
 
 ## Not yet
 
-- **ISO installers, and more for image machines.** A machine made from an image
-  has one vCPU, and installers need a firmware that has not been run here yet.
+- **ISO installers.** They need a firmware that has not been run here yet.
+- **A machine from a template that turns itself off.** Its kernel is this
+  project's, with no power registers named in its tables, so `poweroff`
+  there still halts the guest without the VM exiting.
 - **Networking beyond egress.** A machine cannot be reached from the network:
   there is no inbound port forwarding, no bridged or VLAN networking, and no
   second NIC. Its network cannot be changed after creation, and it does not join

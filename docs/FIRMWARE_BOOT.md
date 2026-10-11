@@ -29,19 +29,61 @@ HV2_DISK=cirros.raw HV2_UNTIL=login: HV2_SETTLE_SECS=180 \
 The firmware is not shipped in this repository. The check below used Rust
 Hypervisor Firmware 0.5.0 (`hypervisor-fw`, Apache-2.0), from its release page.
 
+## ACPI tables
+
+A kernel started by firmware is a distribution's, and takes no command line
+from here. What it knows of the machine it reads from ACPI tables. The VMM
+writes a set at `0xE0000`, in the part of low memory the map it gives the
+firmware already keeps out of RAM, and puts the RSDP's address in the
+`hvm_start_info` it hands the firmware. The firmware passes that address to
+the system it starts as an EFI configuration table.
+
+The tables (`acpi_tables::build_pc`) describe:
+
+- **Each processor**, and the I/O APIC. This is how the guest finds more than
+  one: with no tables it found one, however many the VM had.
+- **The PCI host bridge**, the window its devices' BARs are in, and which I/O
+  APIC input each device's interrupt pin raises. A kernel that has moved from
+  the legacy PIC to the I/O APIC has no interrupt for a PCI device without it.
+- **Fixed power hardware**: PM1 event and control registers at ports `0x600`
+  and `0x604`, and `\_S5`. The guest turns itself off by writing the control
+  register, which the VMM sees as it sees the keyboard controller's reset
+  pulse. The tables are deliberately not the hardware-reduced kind this
+  project gives its own kernel: a guest booted through EFI on a
+  hardware-reduced platform turns off and restarts by asking the firmware,
+  and what a firmware then does is not the VMM's to know.
+
+A guest that turns itself off stops the VM and is marked as having done so
+(`VM::powered_off`), which is what lets a caller tell it from a guest that
+restarted.
+
+[Checked on real KVM](benchmarks/2026-10-10/machine-acpi-kvm/README.md) with
+Rust Hypervisor Firmware and CirrOS: a machine asked for two processors has
+two by its kernel's count, the kernel reports the three tables and no ACPI
+error, its disk interrupts through the I/O APIC, and `poweroff` in the guest
+stops the machine. [With Ubuntu 24.04](benchmarks/2026-10-10/machine-ubuntu-kvm/README.md),
+whose kernel is 6.8: four processors, systemd as the first process with every
+unit started, and `systemctl poweroff` stopping the machine.
+
 ## Not yet
 
 - **Importing images.** A machine is made from a raw image an operator has put
   in the node's `--image-dir`. There is no upload API and no format conversion.
-- **ACPI.** The firmware is given no RSDP, so the guest has no ACPI tables: one
-  vCPU, no power button, and interrupts through the legacy PIC.
+- **A power button.** The guest has ACPI tables now (see below), and turns
+  itself off through them. Nothing outside presses a button: stopping a
+  machine from the API still stops the VM without asking the guest.
 - **Other firmware.** Only Rust Hypervisor Firmware has been run. edk2's
   `CloudHv` build, which ISO installers and Windows need, has not.
-- **Other images.** Only CirrOS 0.6.2 has been booted. Ubuntu, Debian and others
-  have not been tried.
+- **A user, a key or a hostname at creation.** A cloud image has no account
+  until cloud-init is given one, and this node offers no datasource. The
+  Ubuntu image below had a password set in it by hand.
+- **Other images.** CirrOS 0.6.2 and
+  [Ubuntu 24.04](benchmarks/2026-10-10/machine-ubuntu-kvm/README.md) have been
+  booted, the second to a fully started systemd on four processors. Debian
+  and others have not been tried.
 - **More than a NIC and a disk on the PCI bus.** A [machine made from an image](MACHINES.md#from-a-disk-image)
   can have a network device there, configured by DHCP. There is no second disk
-  or NIC, and no interrupt routing beyond the legacy lines.
+  or NIC.
 - **Other hosts.** WHPX and HVF refuse a PVH boot source.
 - **QCOW2.** The disk must be a raw image.
 
