@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   program starts, the bounding set included.
 
 ### Fixed
+- A guest's hardware clock gave the wrong date, for two reasons. The
+  emulated RTC had its data-mode bit the wrong way round, so a guest that
+  left it clear, as every PC does, was handed binary numbers and read them as
+  BCD: Linux took 2026 for 2020. And it worked the date out as days over 365
+  with thirty-day months, which by October 2026 was seventeen days ahead. A
+  guest running this project's agent has its clock set by the agent and
+  showed neither; a guest booted from a disk image has only the RTC, and
+  Ubuntu refused its package archive as signed in the future. The registers
+  are now BCD unless the guest asks for binary, and the date is the
+  Gregorian calendar's.
 - `POST /machines` refuses a processor count it cannot give. More than 32
   was stored and failed at the machine's first boot, and a machine from a
   disk image was given one processor whatever it asked for, without being

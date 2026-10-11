@@ -51,7 +51,12 @@ const STATUS_A_UIP: u8 = 0x80; // Update in progress
 /// Status Register B flags
 const STATUS_B_DSE: u8 = 0x01; // Daylight Savings Enable
 const STATUS_B_24H: u8 = 0x02; // 24-hour mode
-const STATUS_B_BCD: u8 = 0x04; // BCD mode (0=binary, 1=BCD)
+/// Data mode: set, the time and date registers are binary; clear, BCD.
+///
+/// This device once had it the other way round. A PC leaves the bit clear,
+/// so every guest was handed binary numbers it read as BCD: Linux took the
+/// year 26 (0x1A) for 20 and set its clock to 2020.
+const STATUS_B_DM: u8 = 0x04;
 const STATUS_B_SQWE: u8 = 0x08; // Square Wave Enable
 const STATUS_B_UIE: u8 = 0x10; // Update-ended Interrupt Enable
 const STATUS_B_AIE: u8 = 0x20; // Alarm Interrupt Enable
@@ -89,7 +94,7 @@ impl RtcState {
             index: 0,
             cmos_ram: [0; 128],
             status_a: 0x26,         // Default: 32kHz rate, no UIP
-            status_b: STATUS_B_24H, // 24-hour binary mode
+            status_b: STATUS_B_24H, // 24-hour, BCD: as a PC's firmware leaves it
             status_c: 0,
             status_d: STATUS_D_VRT, // Battery good
             nmi_disabled: false,
@@ -102,26 +107,20 @@ impl RtcState {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default();
 
-        // Calculate time components
-        let total_seconds = now.as_secs();
-        let seconds = (total_seconds % 60) as u8;
-        let minutes = ((total_seconds / 60) % 60) as u8;
-        let hours = ((total_seconds / 3600) % 24) as u8;
-
-        // Calculate date components
-        // Simplified: Unix epoch is Jan 1, 1970 (Thursday)
-        let days_since_epoch = total_seconds / 86400;
-        let day_of_week = ((days_since_epoch + 4) % 7 + 1) as u8; // 1=Sunday
-
-        // Simplified date calculation (doesn't account for leap years properly)
-        let year = 1970 + (days_since_epoch / 365) as u16;
-        let year_offset = year - 2000; // RTC stores 2-digit year
-        let day_of_year = days_since_epoch % 365;
-        let month = ((day_of_year / 30) + 1).min(12) as u8;
-        let day = ((day_of_year % 30) + 1).min(31) as u8;
+        let Calendar {
+            seconds,
+            minutes,
+            hours,
+            day_of_week,
+            day,
+            month,
+            year,
+        } = Calendar::at(now.as_secs());
+        // The clock holds the year's last two digits.
+        let year_offset = year % 100;
 
         // Store in BCD or binary depending on mode
-        if self.status_b & STATUS_B_BCD != 0 {
+        if self.status_b & STATUS_B_DM == 0 {
             // BCD mode
             self.cmos_ram[RTC_SECONDS as usize] = to_bcd(seconds);
             self.cmos_ram[RTC_MINUTES as usize] = to_bcd(minutes);
@@ -228,6 +227,70 @@ impl RtcState {
     fn has_pending_interrupt(&self) -> bool {
         (self.status_c & STATUS_C_IRQF) != 0
     }
+}
+
+/// A moment as the clock's registers hold it: UTC, by the Gregorian
+/// calendar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Calendar {
+    seconds: u8,
+    minutes: u8,
+    hours: u8,
+    /// 1 is Sunday.
+    day_of_week: u8,
+    day: u8,
+    month: u8,
+    year: u16,
+}
+
+impl Calendar {
+    /// The calendar date and time `unix_seconds` after 1970-01-01 00:00 UTC.
+    ///
+    /// This was once `days / 365` for the year and thirty-day months, which
+    /// is weeks out by now: a guest read 28 July on 10 October 2026, and
+    /// refused a package archive whose signature was "not valid yet". A
+    /// guest that runs this project's agent has its clock set by the agent
+    /// and never showed it; a guest from a disk image has only this.
+    fn at(unix_seconds: u64) -> Self {
+        let days = unix_seconds / 86_400;
+        let (year, month, day) = civil_from_days(days);
+        Self {
+            seconds: (unix_seconds % 60) as u8,
+            minutes: ((unix_seconds / 60) % 60) as u8,
+            hours: ((unix_seconds / 3600) % 24) as u8,
+            // 1970-01-01 was a Thursday, the fifth day counting Sunday as 1.
+            day_of_week: ((days + 4) % 7 + 1) as u8,
+            day,
+            month,
+            year,
+        }
+    }
+}
+
+/// The Gregorian year, month and day `days` after 1970-01-01.
+///
+/// Howard Hinnant's `civil_from_days`, for days at or after the epoch: the
+/// calendar repeats every 400 years (146,097 days), and within one such era
+/// a year counted from 1 March puts the leap day last, where it disturbs
+/// nothing before it.
+fn civil_from_days(days: u64) -> (u16, u8, u8) {
+    // Days from 0000-03-01 to 1970-01-01.
+    let shifted = days + 719_468;
+    let era = shifted / 146_097;
+    let day_of_era = shifted % 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    // Months counted from March: 0 is March, 11 is February.
+    let shifted_month = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * shifted_month + 2) / 5 + 1;
+    let month = if shifted_month < 10 {
+        shifted_month + 3
+    } else {
+        shifted_month - 9
+    };
+    let year = year_of_era + era * 400 + u64::from(month <= 2);
+    (year as u16, month as u8, day as u8)
 }
 
 /// Convert binary to BCD
@@ -374,6 +437,184 @@ impl Device for RtcDevice {
 mod tests {
     use super::*;
 
+    /// Seconds from the epoch to midnight UTC on a date, counted the long
+    /// way: every year and month before it, one at a time.
+    fn seconds_to(year: u16, month: u8, day: u8) -> u64 {
+        let leap =
+            |y: u16| (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400);
+        let mut days = 0u64;
+        for y in 1970..year {
+            days += if leap(y) { 366 } else { 365 };
+        }
+        for m in 1..month {
+            days += match m {
+                4 | 6 | 9 | 11 => 30,
+                2 if leap(year) => 29,
+                2 => 28,
+                _ => 31,
+            };
+        }
+        (days + u64::from(day) - 1) * 86_400
+    }
+
+    #[test]
+    fn the_calendar_date_is_the_real_one() {
+        // The epoch itself, a Thursday.
+        let epoch = Calendar::at(0);
+        assert_eq!((epoch.year, epoch.month, epoch.day), (1970, 1, 1));
+        assert_eq!(epoch.day_of_week, 5);
+        // The day this was found wrong: a Saturday, read then as 28 July.
+        let found = Calendar::at(seconds_to(2026, 10, 10) + 15 * 3600 + 5 * 60 + 8);
+        assert_eq!((found.year, found.month, found.day), (2026, 10, 10));
+        assert_eq!((found.hours, found.minutes, found.seconds), (15, 5, 8));
+        assert_eq!(found.day_of_week, 7);
+        // Around a leap day, in a leap year and in a century year that is
+        // one and a century year that is not.
+        for (year, month, day) in [
+            (2024, 2, 28),
+            (2024, 2, 29),
+            (2024, 3, 1),
+            (2000, 2, 29),
+            (2000, 3, 1),
+            (2100, 2, 28),
+            (2100, 3, 1),
+            (2023, 12, 31),
+            (2024, 1, 1),
+            (2024, 12, 31),
+            (2025, 1, 1),
+            (2038, 1, 19),
+            (2099, 12, 31),
+        ] {
+            let at = Calendar::at(seconds_to(year, month, day));
+            assert_eq!((at.year, at.month, at.day), (year, month, day));
+            // And the last second of the day is still that day.
+            let late = Calendar::at(seconds_to(year, month, day) + 86_399);
+            assert_eq!((late.year, late.month, late.day), (year, month, day));
+            assert_eq!((late.hours, late.minutes, late.seconds), (23, 59, 59));
+        }
+    }
+
+    /// Every day from the epoch to the end of 2100 is the day after the one
+    /// before it: no date skipped and none repeated, through every month
+    /// end and every leap day.
+    #[test]
+    fn every_day_follows_the_one_before() {
+        let leap =
+            |y: u16| (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400);
+        let (mut year, mut month, mut day) = (1970u16, 1u8, 1u8);
+        let last = seconds_to(2101, 1, 1) / 86_400;
+        for days in 0..last {
+            assert_eq!(civil_from_days(days), (year, month, day), "day {days}");
+            let in_month = match month {
+                4 | 6 | 9 | 11 => 30,
+                2 if leap(year) => 29,
+                2 => 28,
+                _ => 31,
+            };
+            day += 1;
+            if day > in_month {
+                day = 1;
+                month += 1;
+                if month > 12 {
+                    month = 1;
+                    year += 1;
+                }
+            }
+        }
+        assert_eq!((year, month, day), (2101, 1, 1));
+    }
+
+    /// The registers a guest reads hold today's date, not one weeks off.
+    #[tokio::test]
+    async fn the_registers_hold_todays_date() {
+        let mut rtc = RtcDevice::new();
+        rtc.init().await.unwrap();
+        // Binary and 24-hour, so the registers are the numbers themselves.
+        rtc.write_index(RTC_STATUS_B);
+        rtc.write_data(STATUS_B_24H | STATUS_B_DM);
+        // Read twice around the host's clock, and accept either: the day can
+        // turn over between the two.
+        let before = Calendar::at(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        );
+        let read = |register| {
+            rtc.write_index(register);
+            rtc.read_data()
+        };
+        let date = (read(RTC_YEAR), read(RTC_MONTH), read(RTC_DAY_OF_MONTH));
+        let after = Calendar::at(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        );
+        let as_registers = |c: Calendar| ((c.year % 100) as u8, c.month, c.day);
+        assert!(
+            date == as_registers(before) || date == as_registers(after),
+            "the clock says {date:?}; it is {before:?}"
+        );
+    }
+
+    /// A BCD byte as the number it stands for, as a guest decodes it.
+    fn from_bcd(value: u8) -> u8 {
+        (value >> 4) * 10 + (value & 0x0F)
+    }
+
+    /// As a guest finds it, the clock is in BCD, which is what the data-mode
+    /// bit being clear says; set, the same registers are binary. Read the
+    /// way Linux reads them, both give the same date.
+    #[tokio::test]
+    async fn the_registers_are_in_the_mode_the_data_mode_bit_says() {
+        let mut rtc = RtcDevice::new();
+        rtc.init().await.unwrap();
+        let read = |rtc: &mut RtcDevice, register| {
+            rtc.write_index(register);
+            rtc.read_data()
+        };
+        // Midnight could turn a day over between the two readings; an hour's
+        // registers are not compared, only the date, and it is read again if
+        // the day changed.
+        for _ in 0..2 {
+            assert_eq!(
+                read(&mut rtc, RTC_STATUS_B) & STATUS_B_DM,
+                0,
+                "BCD at first"
+            );
+            let bcd = (
+                read(&mut rtc, RTC_YEAR),
+                read(&mut rtc, RTC_MONTH),
+                read(&mut rtc, RTC_DAY_OF_MONTH),
+            );
+            rtc.write_index(RTC_STATUS_B);
+            rtc.write_data(STATUS_B_24H | STATUS_B_DM);
+            let binary = (
+                read(&mut rtc, RTC_YEAR),
+                read(&mut rtc, RTC_MONTH),
+                read(&mut rtc, RTC_DAY_OF_MONTH),
+            );
+            rtc.write_index(RTC_STATUS_B);
+            rtc.write_data(STATUS_B_24H);
+            let decoded = (from_bcd(bcd.0), from_bcd(bcd.1), from_bcd(bcd.2));
+            if decoded != binary {
+                continue;
+            }
+            // Each BCD digit is a digit: no nibble past nine.
+            for value in [bcd.0, bcd.1, bcd.2] {
+                assert!(
+                    value & 0x0F <= 9 && value >> 4 <= 9,
+                    "{value:#04x} is not BCD"
+                );
+            }
+            // And the year a guest computes is this century's, not 2020.
+            assert!(decoded.0 >= 26, "year {} from {:#04x}", decoded.0, bcd.0);
+            return;
+        }
+        panic!("the BCD and binary readings never agreed");
+    }
+
     #[tokio::test]
     async fn test_rtc_creation() {
         let rtc = RtcDevice::new();
@@ -390,8 +631,14 @@ mod tests {
         rtc.write_index(RTC_SECONDS);
         let seconds = rtc.read_data();
 
-        // Should be in range 0-59
-        assert!(seconds < 60);
+        // In BCD, as the clock is at first: two digits, making 0 to 59. Read
+        // as a plain number this passed until the seconds reached 40, whose
+        // BCD is 0x40, and then did not.
+        assert!(
+            seconds & 0x0F <= 9 && seconds >> 4 <= 5,
+            "{seconds:#04x} is not seconds in BCD"
+        );
+        assert!(from_bcd(seconds) < 60);
     }
 
     #[tokio::test]
