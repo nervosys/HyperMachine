@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   program starts, the bounding set included.
 
 ### Fixed
+- A guest's hardware clock gave the wrong date. The emulated RTC took the
+  year as days over 365 and every month as thirty days, so by October 2026
+  it read 74 days behind. A guest running this project's agent has its clock
+  set by the agent and did not show it; a guest booted from a disk image has
+  only the RTC, and Ubuntu refused its package archive as signed in the
+  future. The date is now the Gregorian calendar's.
 - `POST /machines` refuses a processor count it cannot give. More than 32
   was stored and failed at the machine's first boot, and a machine from a
   disk image was given one processor whatever it asked for, without being
