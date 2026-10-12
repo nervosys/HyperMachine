@@ -75,6 +75,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- Runs for machines: `POST /machines/{name}/runs` starts a command and
+  answers at once; its output is kept on the node and read from any offset
+  (`GET .../runs/{id}?stdout=N&stderr=N`), it can be written to
+  (`.../stdin`) and signalled (`.../signal`), and what it printed is still
+  there after it ends. `GET .../runs` lists them. The control plane forwards
+  all five. A run's environment is not kept.
 - A guest agent in a machine from a disk image: `guestAgent` on
   `POST /machines` (`hm sandbox vm machine create --guest-agent`), on a node
   started with `--guest-agent FILE`, installs the agent through the image's

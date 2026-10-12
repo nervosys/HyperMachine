@@ -37,6 +37,8 @@ use hv2_agent::AgentVM;
 use hv2_cluster::ownership::TeamId;
 
 use super::seed;
+
+pub(crate) mod runs;
 use super::{
     api_error, new_vm, now_ms, reserve, start_network, AppState, Arc, Deserialize, IntoResponse,
     Json, LiveNetwork, NetworkRequest, NetworkSpec, Path, Response, SandboxNetworkConfig,
@@ -1264,6 +1266,7 @@ pub(crate) async fn delete(
             format!("machine {name} is running; stop it first"),
         );
     }
+    runs::forget(&machine.id);
     match std::fs::remove_dir_all(dir_of(&state, &machine.id)) {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),

@@ -295,6 +295,16 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         )
         .route("/machines/{name}/exec", post(to_machine_node))
         .route(
+            "/machines/{name}/runs",
+            get(to_machine_node).post(to_machine_node),
+        )
+        .route("/machines/{name}/runs/{runID}", get(to_machine_node))
+        .route("/machines/{name}/runs/{runID}/stdin", post(to_machine_node))
+        .route(
+            "/machines/{name}/runs/{runID}/signal",
+            post(to_machine_node),
+        )
+        .route(
             "/machines/{name}/console",
             get(to_machine_node).post(to_machine_node),
         )
