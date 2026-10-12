@@ -489,6 +489,12 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
             json!({"guestPort": 443, "hostPort": 20443}),
         ),
         (
+            vec!["publish", "web-01", "8080", "--proxy"],
+            "POST",
+            "/machines/web-01/ports",
+            json!({"guestPort": 8080, "proxy": true}),
+        ),
+        (
             vec!["ports", "web-01"],
             "GET",
             "/machines/web-01/ports",

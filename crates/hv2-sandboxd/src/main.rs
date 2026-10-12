@@ -4180,6 +4180,10 @@ impl sandbox_proxy::SandboxRoutes for ResumingRoutes {
         port: u16,
     ) -> Option<(std::net::SocketAddr, sandbox_proxy::InFlight)> {
         tracing::debug!("proxy: request for {sandbox} port {port}");
+        // A machine's port, when it was published to be routed here.
+        if let Some(addr) = machines::ports::proxied(&self.state, sandbox, port) {
+            return Some((addr, sandbox_proxy::InFlight::none()));
+        }
         if let Some(open) = self.running(sandbox, port).await {
             return Some(open);
         }

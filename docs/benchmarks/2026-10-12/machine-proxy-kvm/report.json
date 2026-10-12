@@ -1,0 +1,44 @@
+{
+  "success": true,
+  "purpose": "functional verification of a machine port through the node's TLS proxy on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "728d1f3c2510026054141204f50c7b25c7417fdd3ec11933fbacc438799e92fb",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d0cb1ca9e27fcf5c28669ef11c6c4cd9f8d2b220319dff4e5d1e454e6b6bdceb",
+    "driver": "a074015601082414ef6b6828ad2da096263640930743b8bc1d962ccce50a2f4e"
+  },
+  "cases": [
+    {
+      "name": "a port published with proxy is reached over HTTPS by name, and by E2B's headers",
+      "success": true,
+      "detail": {
+        "label": "8080-vm-4fdb792117677a5d"
+      }
+    },
+    {
+      "name": "a port published without proxy, or not at all, is not reached through it",
+      "success": true,
+      "detail": {
+        "9000-vm-4fdb792117677a5d": 404,
+        "22-vm-4fdb792117677a5d": 404,
+        "8080-vm-0000000000000000": 404,
+        "8080-proxied-01": 404
+      }
+    },
+    {
+      "name": "a stopped machine answers nothing through it; started again, it does",
+      "success": true,
+      "detail": {
+        "while_stopped": 502
+      }
+    },
+    {
+      "name": "a port taken back is no longer reached",
+      "success": true,
+      "detail": {
+        "after": 404
+      }
+    }
+  ],
+  "api_scheme": "http"
+}

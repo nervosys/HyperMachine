@@ -75,6 +75,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- A machine's published port can be routed through the node's sandbox
+  proxy too: `"proxy": true` on `POST /machines/{name}/ports` (`hm ...
+  publish --proxy`) makes it reachable at `{guestPort}-{machineID}.{domain}`
+  and by E2B's routing headers, over the proxy's TLS. Off unless asked.
 - Environments: `PUT /environments/{name}` keeps a team's named set of
   variables and files; a sandbox created with `"environment": NAME` starts
   with them, its own `envVars` over the environment's and the files written
