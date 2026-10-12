@@ -70,6 +70,10 @@ fn label(kind: &str) -> &'static str {
 /// `timeout` for one that ran out its time, `lost` for one whose node died.
 fn event_data(event: &ClusterEvent) -> Value {
     let mut data = event.data.clone().unwrap_or_else(|| json!({}));
+    // The usage ledger's, for `/usage`; not a sandbox's event data.
+    if let Some(map) = data.as_object_mut() {
+        map.remove("hm_usage");
+    }
     let reason = match event.kind.as_str() {
         "sandbox-deleted" => Some("request"),
         "sandbox-expired" => Some("timeout"),
@@ -163,7 +167,55 @@ pub fn router<S: Clone + Send + Sync + 'static>(store: Arc<dyn ClusterStore>) ->
         )
         .route("/events/webhooks/{id}/deliveries", get(deliveries))
         .route("/events/webhooks/{id}/stats", get(stats))
+        .route("/usage", get(usage))
         .with_state(store)
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct UsageQuery {
+    /// RFC 3339 or milliseconds; a day before `to` unless given.
+    from: Option<String>,
+    /// RFC 3339 or milliseconds; now unless given.
+    to: Option<String>,
+    #[serde(default)]
+    by: crate::usage::By,
+}
+
+/// `GET /usage`: what the caller's sandboxes used in a window. See usage.rs.
+async fn usage(
+    State(store): Store,
+    team: Option<Extension<RequestTeam>>,
+    Query(q): Query<UsageQuery>,
+) -> Response {
+    const DAY_MS: u64 = 24 * 60 * 60 * 1000;
+    let now = now_ms();
+    let to = match q.to.as_deref().map(crate::usage::parse_time).transpose() {
+        Ok(to) => to.unwrap_or(now),
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, format!("to: {e}")),
+    };
+    let from = match q.from.as_deref().map(crate::usage::parse_time).transpose() {
+        Ok(from) => from.unwrap_or(to.saturating_sub(DAY_MS)),
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, format!("from: {e}")),
+    };
+    if from > to {
+        return api_error(StatusCode::BAD_REQUEST, "from is after to");
+    }
+    let events = match store.events(crate::store::EVENT_TAIL).await {
+        Ok(events) => events,
+        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+    };
+    let truncated = events.len() >= crate::store::EVENT_TAIL;
+    let team = team_of(team);
+    Json(crate::usage::report(
+        &events,
+        truncated,
+        from,
+        to,
+        now,
+        q.by,
+        |owner| team.sees(owner),
+    ))
+    .into_response()
 }
 
 type Store = State<Arc<dyn ClusterStore>>;

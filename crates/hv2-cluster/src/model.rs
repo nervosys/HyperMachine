@@ -296,6 +296,11 @@ impl ClusterEvent {
                 "execution_time": self.at_ms.saturating_sub(record.started_at_ms),
             });
         }
+        // What usage is added up from; not E2B's, and taken out of what an
+        // E2B client or a webhook is given. See usage.rs.
+        if let Some(entry) = crate::usage::entry(&self.kind, record) {
+            data["hm_usage"] = entry;
+        }
         self.data = Some(data);
         self
     }

@@ -1,0 +1,80 @@
+{
+  "success": true,
+  "purpose": "functional verification of usage figures on KVM; durations are the check's own stopwatch and are not a timing claim",
+  "input_sha256": {
+    "daemon": "9bf0557b82893a731986bffb75a3cb114673d2545d728c90c1780f1f047ed9d8",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d0cb1ca9e27fcf5c28669ef11c6c4cd9f8d2b220319dff4e5d1e454e6b6bdceb",
+    "driver": "4b0f5f14230eeff6ca8fa690e2d58745a93fd661acd2d0ec6c59e4ac9bbda53b"
+  },
+  "cases": [
+    {
+      "name": "run, pause, resume, delete: the time it ran, not the time it was paused",
+      "success": true,
+      "detail": {
+        "sandbox": "sbx-a90f27f07be142029f0a",
+        "runningSeconds": 7.013,
+        "stopwatch": [
+          6.998,
+          7.316
+        ],
+        "paused_for": 4.0
+      }
+    },
+    {
+      "name": "vCPU-seconds and GiB-seconds are its size times its running time",
+      "success": true,
+      "detail": {
+        "vcpus": 1,
+        "memoryMB": 256,
+        "vcpuSeconds": 7.013,
+        "memoryGiBSeconds": 1.75325
+      }
+    },
+    {
+      "name": "a sandbox still running is counted to the moment asked",
+      "success": true,
+      "detail": {
+        "first": 3.005,
+        "second": 5.009
+      }
+    },
+    {
+      "name": "a sandbox deleted while paused adds nothing after its pause",
+      "success": true,
+      "detail": {
+        "runningSeconds": 2.013
+      }
+    },
+    {
+      "name": "a window cuts what it covers, and groups add up to the total",
+      "success": true,
+      "detail": {
+        "total": {
+          "memoryGiBSeconds": 5.042,
+          "partial": false,
+          "runningSeconds": 20.168,
+          "sandboxes": 3,
+          "vcpuSeconds": 20.168
+        },
+        "coveredFrom": "2026-10-12T15:36:12.137Z"
+      }
+    },
+    {
+      "name": "the usage ledger is not in what an E2B client is given",
+      "success": true,
+      "detail": {
+        "events": 8
+      }
+    },
+    {
+      "name": "what cannot be asked is refused",
+      "success": true,
+      "detail": {
+        "a time that is not one": "from: \"yesterday\": RFC 3339 or milliseconds since the epoch (premature end of input)",
+        "from after to": "from is after to",
+        "a grouping that is not one": "Failed to deserialize query string: by: unknown variant `colour`, expected one of `sandbox`, `team`, `template`, `owner`"
+      }
+    }
+  ]
+}

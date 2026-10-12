@@ -47,6 +47,17 @@ fn parse_owner_label(value: &str) -> std::result::Result<String, String> {
 /// VM sandbox lifecycle commands. Responses are JSON for shell automation.
 #[derive(Debug, Subcommand)]
 pub enum VmCommand {
+    /// How long the caller's sandboxes ran, and with how much, in a window
+    Usage {
+        /// RFC 3339 or milliseconds; a day before --to unless given
+        #[arg(long)]
+        from: Option<String>,
+        /// RFC 3339 or milliseconds; now unless given
+        #[arg(long)]
+        to: Option<String>,
+        #[arg(long, value_enum, default_value_t = UsageBy::Sandbox)]
+        by: UsageBy,
+    },
     /// Administrator discovery of uncertain registrations on a node
     PendingRegistrations {
         #[arg(long)]
@@ -1392,6 +1403,23 @@ pub async fn run(args: VmArgs) -> Result<i32> {
         args.api_ca_cert.as_deref(),
     )?;
     let value = match args.command {
+        VmCommand::Usage { from, to, by } => {
+            let by = match by {
+                UsageBy::Sandbox => "sandbox",
+                UsageBy::Team => "team",
+                UsageBy::Template => "template",
+                UsageBy::Owner => "owner",
+            };
+            let mut query = vec![("by", by)];
+            if let Some(from) = from.as_deref() {
+                query.push(("from", from));
+            }
+            if let Some(to) = to.as_deref() {
+                query.push(("to", to));
+            }
+            api.request_bounded_query(Method::GET, &["usage"], None, 4 << 20, &query)
+                .await?
+        }
         VmCommand::PendingRegistrations { node_id, after } => {
             let query = after
                 .as_deref()
@@ -2468,6 +2496,15 @@ async fn public_ports(api: &Api, command: PublicPortCommand) -> Result<Value> {
             .await
         }
     }
+}
+
+/// How `usage` groups what it adds up.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum UsageBy {
+    Sandbox,
+    Team,
+    Template,
+    Owner,
 }
 
 /// The most a file into or out of a machine may be: the node's own limit.
