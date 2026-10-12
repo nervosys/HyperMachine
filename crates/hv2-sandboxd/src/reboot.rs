@@ -202,6 +202,10 @@ pub(crate) async fn reboot(
         &env,
         &files,
         &token,
+        Some(super::Sizes {
+            cpus: record.cpu_count,
+            memory_mb: record.memory_mb,
+        }),
     )
     .await
     .map_err(|(status, e)| (status, format!("rebooting {sandbox_id}: {e}")))?;

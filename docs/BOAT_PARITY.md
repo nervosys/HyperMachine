@@ -27,7 +27,7 @@ reason, and are listed once at the end rather than counted as gaps.
 | | boat | HyperMachine |
 |---|---|---|
 | What a sandbox is | An Ubuntu 24.04 VM, x86-64, with root | A Linux microVM on its own VMM, from a template whose root filesystem is in memory; or a [machine](MACHINES.md) with a disk |
-| Sizes | Four, chosen at creation: 2 to 16 vCPUs, 4 to 32 GB, 12 to 251 GB of disk | **A sandbox has no size of its own.** Size is fixed when its template is built (up to 32 vCPUs and 64 GiB), or node-wide. A machine takes `cpuCount` (to 32), `memoryMB` and `diskGiB`, whether from a template or [from a disk image](FIRMWARE_BOOT.md#acpi-tables) |
+| Sizes | Four, chosen at creation: 2 to 16 vCPUs, 4 to 32 GB, 12 to 251 GB of disk | **Chosen at creation**, any number of vCPUs the host has (to 32) and 256 MiB to 64 GiB: `cpuCount` and `memoryMB` on a create (`hm sandbox vm create --cpus --memory-mb`), [checked on KVM](benchmarks/2026-10-12/sandbox-sizes-kvm/README.md). A sandbox not its template's size boots rather than being restored, and cannot be checkpointed or made a template; no disk size for a sandbox. Before this: **a sandbox had no size of its own.** Size is fixed when its template is built (up to 32 vCPUs and 64 GiB), or node-wide. A machine takes `cpuCount` (to 32), `memoryMB` and `diskGiB`, whether from a template or [from a disk image](FIRMWARE_BOOT.md#acpi-tables) |
 | Changing size later | On resume and on fork | **A machine, while stopped**: [processors, memory and a larger disk](MACHINES.md#resizing), there at its next start. Not a sandbox, and not on a fork |
 | Creating one | "usually under a second on a ready machine"; `--fail-fast` answers within about 1.5 s whether one was ready | From a template: 18.9 ms at the median on this project's own host, and 0.65 ms from the [warm pool](WARM_POOL.md). A full node answers 503 at once by default; there is no request option that says so when the node queues |
 | What stopping keeps | **Files only.** "Snapshots capture your sandbox's files, not its running processes or memory"; processes run by hand are restarted by the user | **Memory and processes.** Pause to disk and resume on any node; [standby](STANDBY.md) keeps memory and wakes on the next request |
@@ -87,10 +87,11 @@ In rough order of how much each matters to someone choosing between them:
    does not hold.
 3. **A desktop, and computer use.** Absent, and the device code that would
    back it is not attached to anything.
-4. **A size per sandbox, and changing it.** A caller here cannot ask for four
-   processors and eight gigabytes on one sandbox create, nor change a
-   sandbox's size. A machine takes a size when created and
-   [another while stopped](MACHINES.md#resizing).
+4. **Changing a sandbox's size, and a fast start at any size.** A sandbox
+   takes [a size of its own](benchmarks/2026-10-12/sandbox-sizes-kvm/README.md)
+   at creation now, by booting instead of being restored; it cannot change
+   it after, nor be checkpointed at it. A machine takes a size when created
+   and [another while stopped](MACHINES.md#resizing).
 5. **Reading a sandbox's snapshot from outside.** A machine's disk
    snapshot is [listed and read file by file](MACHINES.md#snapshots) now; a
    sandbox's checkpoint is memory, one per sandbox, and nothing reads it

@@ -75,6 +75,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- A sandbox's own size: `cpuCount` and `memoryMB` on a create (`hm sandbox vm
+  create --cpus --memory-mb`). One its template is not is booted at that
+  size rather than restored, kept through pause and resume, inherited by a
+  fork, and counted in usage at that size. Such a sandbox is written whole
+  when paused or forked, and refused, as one with a disk is, for
+  checkpoints and named snapshots. Refused, with nothing made, for a size
+  the host cannot give.
 - A login in front of a machine's port: the control plane's proxy routes
   `{port}-{machineID}` to the node that has the machine, asking nodes only
   for an ID of a machine's shape, so a port published with `proxy` is

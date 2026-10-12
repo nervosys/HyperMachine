@@ -167,6 +167,15 @@ async fn save(state: &Arc<AppState>, sandbox_id: &str, name: &str) -> Result<u64
             ),
         ));
     }
+    if super::resized_sandbox(state, sandbox_id) {
+        return Err(Refused::Because(
+            StatusCode::CONFLICT,
+            format!(
+                "sandbox {sandbox_id} is a size of its own and was booted, and such a sandbox \
+                 cannot be checkpointed; it can be paused"
+            ),
+        ));
+    }
 
     let lock = transition_lock(state, sandbox_id);
     let _held = lock.lock().await;
@@ -393,6 +402,10 @@ pub(crate) async fn restore(
         &BTreeMap::new(),
         &[],
         &descriptor.envd_access_token,
+        Some(super::Sizes {
+            cpus: record.cpu_count,
+            memory_mb: record.memory_mb,
+        }),
     )
     .await
     {
