@@ -75,6 +75,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- A machine snapshot's files, read without booting it:
+  `GET /machines/{name}/snapshots/{id}/files?path=` lists a directory and
+  `.../file?path=` reads one file, from an ext filesystem on the whole disk
+  or in a partition (`partition=N`, else the largest ext one). Paths are
+  walked by inode, so no name is ever part of a `debugfs` request.
+  `hm sandbox vm machine snapshot ls|cat`.
 - A machine's published port can be routed through the node's sandbox
   proxy too: `"proxy": true` on `POST /machines/{name}/ports` (`hm ...
   publish --proxy`) makes it reachable at `{guestPort}-{machineID}.{domain}`

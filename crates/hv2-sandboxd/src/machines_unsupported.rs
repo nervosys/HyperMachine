@@ -68,6 +68,18 @@ pub(crate) mod runs {
     }
 }
 
+/// The files in a machine's snapshots: the same answer.
+pub(crate) mod snapshot_files {
+    use super::{refused, Response};
+
+    pub(crate) async fn list() -> Response {
+        refused()
+    }
+    pub(crate) async fn file() -> Response {
+        refused()
+    }
+}
+
 /// A machine's snapshots: the same answer.
 pub(crate) mod snapshots {
     use super::{refused, Response};

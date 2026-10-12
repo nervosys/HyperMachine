@@ -108,6 +108,11 @@ fn all(state: &AppState, machine: &Stored) -> Vec<Meta> {
     found
 }
 
+/// Where the disk of `machine`'s snapshot `id` is, if it has that one.
+pub(super) fn disk_path(state: &AppState, machine: &Stored, id: &str) -> Option<PathBuf> {
+    one(state, machine, id).map(|meta| root_of(state, machine).join(meta.id).join("root.img"))
+}
+
 fn one(state: &AppState, machine: &Stored, id: &str) -> Option<Meta> {
     if !valid_id(id) {
         return None;

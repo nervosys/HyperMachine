@@ -6242,6 +6242,14 @@ async fn main() -> std::process::ExitCode {
             get(machines::snapshots::disk),
         )
         .route(
+            "/machines/{name}/snapshots/{snapshotID}/files",
+            get(machines::snapshot_files::list),
+        )
+        .route(
+            "/machines/{name}/snapshots/{snapshotID}/file",
+            get(machines::snapshot_files::file),
+        )
+        .route(
             "/machines/{name}/ports/{hostPort}",
             axum::routing::delete(machines::ports::unpublish),
         )

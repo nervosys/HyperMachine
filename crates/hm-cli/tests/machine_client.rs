@@ -94,6 +94,9 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
                     disk[(2 << 20) + 7] = 9;
                     disk.into_response()
                 }
+                ("GET", "/machines/web-01/snapshots/snap-0123456789abcde/file?path=%2Fetc%2Fhostname&partition=1") => {
+                    b"web-01\n".to_vec().into_response()
+                }
                 ("GET", "/machines/web-01/console") => "[    0.1] booted\n".into_response(),
                 ("GET", "/machines/web-01/console?tail=64") => "login: ".into_response(),
                 ("POST", "/machines/web-01/console") => StatusCode::NO_CONTENT.into_response(),
@@ -563,6 +566,42 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
         assert_eq!((seen_method.as_str(), seen_path.as_str()), (method, path));
         assert_eq!(sent, &body);
     }
+    // A snapshot's files, without booting it.
+    let output = hm(
+        vec![
+            "snapshot",
+            "ls",
+            "web-01",
+            "snap-0123456789abcde",
+            "/etc dir",
+        ],
+        "owned-machine-key",
+    )
+    .await;
+    assert!(output.status.success());
+    assert_eq!(
+        observed.lock().unwrap().last().unwrap().1,
+        "/machines/web-01/snapshots/snap-0123456789abcde/files?path=%2Fetc+dir"
+    );
+    let output = hm(
+        vec![
+            "snapshot",
+            "cat",
+            "web-01",
+            "snap-0123456789abcde",
+            "/etc/hostname",
+            "--partition",
+            "1",
+        ],
+        "owned-machine-key",
+    )
+    .await;
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"web-01\n");
     // A download is the disk, byte for byte, and never over a file.
     let scratch = std::env::temp_dir().join(format!("hm-machine-disk-{}", std::process::id()));
     std::fs::create_dir_all(&scratch).unwrap();
