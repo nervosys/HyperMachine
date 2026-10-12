@@ -839,7 +839,7 @@ pub(crate) async fn read_file(
         Err(e) => return io_error(&e),
     };
     let file = tokio::fs::File::from_std(std::fs::File::from(fd));
-    let stream = tokio_util_stream(file);
+    let stream = file_stream(file);
     Response::builder()
         .status(StatusCode::OK)
         .header("content-type", "application/octet-stream")
@@ -848,7 +848,7 @@ pub(crate) async fn read_file(
 }
 
 /// A file as a stream of chunks, so a large one is not held in memory.
-fn tokio_util_stream(
+pub(crate) fn file_stream(
     mut file: tokio::fs::File,
 ) -> impl tokio_stream::Stream<Item = std::io::Result<Vec<u8>>> {
     async_stream(move |tx| async move {

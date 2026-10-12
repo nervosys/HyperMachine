@@ -605,6 +605,11 @@ pub enum MachineCommand {
         detach: bool,
         prompt: String,
     },
+    /// Snapshots of a stopped machine's disk
+    Snapshot {
+        #[command(subcommand)]
+        command: MachineSnapshotCommand,
+    },
     /// Give a port of a machine's guest one of the node's, to connect to
     Publish {
         #[arg(value_parser = machine_name)]
@@ -1776,6 +1781,45 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 }
                 return Ok(0);
             }
+            MachineCommand::Snapshot { command } => match command {
+                MachineSnapshotCommand::Take { name, label } => {
+                    let body = match label {
+                        Some(label) => json!({"name": label}),
+                        None => json!({}),
+                    };
+                    api.request(Method::POST, &["machines", &name, "snapshots"], Some(body))
+                        .await?
+                }
+                MachineSnapshotCommand::List { name } => {
+                    api.request_bounded(
+                        Method::GET,
+                        &["machines", &name, "snapshots"],
+                        None,
+                        1024 * 1024,
+                    )
+                    .await?
+                }
+                MachineSnapshotCommand::Restore { name, id } => {
+                    api.request(
+                        Method::POST,
+                        &["machines", &name, "snapshots", &id, "restore"],
+                        Some(json!({})),
+                    )
+                    .await?
+                }
+                MachineSnapshotCommand::Delete { name, id } => {
+                    api.request(Method::DELETE, &["machines", &name, "snapshots", &id], None)
+                        .await?
+                }
+                MachineSnapshotCommand::Download {
+                    name,
+                    id,
+                    destination,
+                } => {
+                    download_disk(&api, &name, &id, &destination).await?;
+                    return Ok(0);
+                }
+            },
             MachineCommand::Publish {
                 name,
                 guest_port,
@@ -2496,6 +2540,97 @@ async fn public_ports(api: &Api, command: PublicPortCommand) -> Result<Value> {
             .await
         }
     }
+}
+
+/// Snapshots of a machine's disk.
+#[derive(Debug, Subcommand)]
+pub enum MachineSnapshotCommand {
+    /// Copy a stopped machine's disk, to restore later
+    Take {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        /// A name for it; when it was taken unless given
+        #[arg(long = "name", value_name = "LABEL")]
+        label: Option<String>,
+    },
+    /// List a machine's snapshots, oldest first
+    List {
+        #[arg(value_parser = machine_name)]
+        name: String,
+    },
+    /// Put a snapshot's disk back in place of a stopped machine's
+    Restore {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        id: String,
+    },
+    /// Delete a snapshot
+    Delete {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        id: String,
+    },
+    /// Download a snapshot's disk as a raw image; refuses to overwrite
+    Download {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        id: String,
+        destination: std::path::PathBuf,
+    },
+}
+
+/// A snapshot's disk into `destination`, which must not be there, a piece at
+/// a time and with its holes left as holes. A download that fails part way
+/// leaves no file.
+async fn download_disk(
+    api: &Api,
+    name: &str,
+    id: &str,
+    destination: &std::path::Path,
+) -> Result<()> {
+    use std::io::{Seek, SeekFrom, Write};
+    let mut response = api
+        .client
+        .get(api.url(&["machines", name, "snapshots", id, "disk"])?)
+        .send()
+        .await
+        .context("sandbox API request failed")?;
+    let status = response.status();
+    if !status.is_success() {
+        let why = response.text().await.unwrap_or_default();
+        bail!("sandbox API returned {status}: {why}");
+    }
+    // Read before the body is: what is left of it is all it says after.
+    let expected = response.content_length();
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(destination)
+        .with_context(|| format!("creating {}", destination.display()))?;
+    let written = async {
+        let mut length = 0u64;
+        while let Some(chunk) = response.chunk().await? {
+            if chunk.iter().all(|byte| *byte == 0) {
+                file.seek(SeekFrom::Current(chunk.len() as i64))?;
+            } else {
+                file.write_all(&chunk)?;
+            }
+            length += chunk.len() as u64;
+        }
+        file.set_len(length)?;
+        file.sync_all()?;
+        if let Some(expected) = expected {
+            if expected != length {
+                bail!("the disk was cut short: {length} of {expected} bytes");
+            }
+        }
+        Ok::<_, anyhow::Error>(())
+    }
+    .await;
+    if written.is_err() {
+        let _ = std::fs::remove_file(destination);
+    }
+    written
 }
 
 /// How `usage` groups what it adds up.

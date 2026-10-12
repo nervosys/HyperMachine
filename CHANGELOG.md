@@ -75,6 +75,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- Snapshots of a machine's disk: `POST /machines/{name}/snapshots` copies a
+  stopped machine's disk (sparse, and sharing blocks where the filesystem
+  can); `.../snapshots/{id}/restore` puts it back with its disk size,
+  replacing the disk in one rename; `.../snapshots/{id}/disk` downloads it
+  raw; list, get and delete. `hm sandbox vm machine snapshot take|list|
+  restore|download|delete`; the control plane forwards them.
 - Usage: `GET /usage?from=&to=&by=sandbox|team|template|owner` adds up how
   long the caller's sandboxes ran, with vCPU-seconds and memory
   GiB-seconds, from the lifecycle events: time paused is not counted, a

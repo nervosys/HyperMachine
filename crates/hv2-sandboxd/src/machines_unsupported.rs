@@ -68,6 +68,30 @@ pub(crate) mod runs {
     }
 }
 
+/// A machine's snapshots: the same answer.
+pub(crate) mod snapshots {
+    use super::{refused, Response};
+
+    pub(crate) async fn take() -> Response {
+        refused()
+    }
+    pub(crate) async fn list() -> Response {
+        refused()
+    }
+    pub(crate) async fn get() -> Response {
+        refused()
+    }
+    pub(crate) async fn delete() -> Response {
+        refused()
+    }
+    pub(crate) async fn restore() -> Response {
+        refused()
+    }
+    pub(crate) async fn disk() -> Response {
+        refused()
+    }
+}
+
 /// A machine's published ports: the same answer.
 pub(crate) mod ports {
     use super::{refused, Response};

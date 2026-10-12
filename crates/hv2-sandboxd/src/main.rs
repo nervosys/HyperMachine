@@ -6182,6 +6182,22 @@ async fn main() -> std::process::ExitCode {
             get(machines::ports::list).post(machines::ports::publish),
         )
         .route(
+            "/machines/{name}/snapshots",
+            get(machines::snapshots::list).post(machines::snapshots::take),
+        )
+        .route(
+            "/machines/{name}/snapshots/{snapshotID}",
+            get(machines::snapshots::get).delete(machines::snapshots::delete),
+        )
+        .route(
+            "/machines/{name}/snapshots/{snapshotID}/restore",
+            post(machines::snapshots::restore),
+        )
+        .route(
+            "/machines/{name}/snapshots/{snapshotID}/disk",
+            get(machines::snapshots::disk),
+        )
+        .route(
             "/machines/{name}/ports/{hostPort}",
             axum::routing::delete(machines::ports::unpublish),
         )
