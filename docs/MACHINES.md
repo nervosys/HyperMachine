@@ -270,8 +270,12 @@ hm sandbox vm machine unpublish web-01 20000
   sandbox's ports are, over TLS when the node has `--tls-cert`; and by E2B's
   `e2b-sandbox-id` and `e2b-sandbox-port` headers. The answer gives the
   name's first label as `proxyLabel`. Off unless asked, since the proxy is
-  commonly on a public address. The proxy adds no login for it: a private
-  URL with a login is a sandbox's, not yet a machine's.
+  commonly on a public address. A node's own proxy adds no login.
+- **With a login, through the control plane.** The control plane's proxy
+  reaches a machine's proxied port too, at the same name, and puts its
+  [operator-provisioned login](PRIVATE_GUEST_URLS.md) in front of it: grant
+  the machine's ID (`machineID`) in the web access file as a sandbox's would
+  be. [Checked on KVM](benchmarks/2026-10-12/machine-port-login-kvm/README.md).
 - **Through the control plane** the routes are forwarded, and the port is
   on the machine's node, at that node's address.
 
