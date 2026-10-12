@@ -75,6 +75,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- A Python client, `sdk/python` (`hypermachine`), with no dependencies:
+  machines, runs, prompts, files, ports, snapshots, usage and environments,
+  refusals raised as `ApiError`. Tested against an HTTP fixture on every CI
+  run, and against a node on KVM.
 - A machine snapshot's files, read without booting it:
   `GET /machines/{name}/snapshots/{id}/files?path=` lists a directory and
   `.../file?path=` reads one file, from an ext filesystem on the whole disk

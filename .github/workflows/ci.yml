@@ -132,6 +132,8 @@ jobs:
               run: python3 tools/test-install-firecracker-benchmark.py
             - name: Verify protoc checksum and platform selection gates
               run: python3 tools/test-ci-install-protoc.py
+            - name: Python SDK against its HTTP fixture
+              run: python3 -I -m unittest discover -s sdk/python/tests
             - name: Install pinned Helm
               uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
               with:
