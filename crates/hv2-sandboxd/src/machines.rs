@@ -40,6 +40,7 @@ use super::seed;
 
 pub(crate) mod files;
 pub(crate) mod prompts;
+pub(crate) mod resize;
 pub(crate) mod runs;
 use super::{
     api_error, new_vm, now_ms, reserve, start_network, AppState, Arc, Deserialize, IntoResponse,

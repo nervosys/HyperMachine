@@ -68,6 +68,15 @@ pub(crate) mod runs {
     }
 }
 
+/// Resizing a machine: the same answer.
+pub(crate) mod resize {
+    use super::{refused, Response};
+
+    pub(crate) async fn patch() -> Response {
+        refused()
+    }
+}
+
 /// A machine's files: the same answer.
 pub(crate) mod files {
     use super::{refused, Response};

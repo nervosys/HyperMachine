@@ -75,6 +75,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- Resizing a machine: `PATCH /machines/{name}` with any of `cpuCount`,
+  `memoryMB` and `diskGiB` changes a stopped machine's size, which it has at
+  its next start. A disk only grows; a template machine's filesystem is
+  checked and grown with it, and an image's partitions are left to the
+  guest. `hm sandbox vm machine resize`, and the control plane forwards it.
 - Files for machines: `PUT /machines/{name}/files?path=` writes the request's
   body to a path in the guest, making the directories above it, for a guest
   `user` when one is given; `GET` answers with a file's bytes. Up to 64 MiB

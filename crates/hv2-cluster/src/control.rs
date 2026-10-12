@@ -291,7 +291,9 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/machines", get(list_machines).post(create_machine))
         .route(
             "/machines/{name}",
-            get(to_machine_node).delete(to_machine_node),
+            get(to_machine_node)
+                .delete(to_machine_node)
+                .patch(to_machine_node),
         )
         .route("/machines/{name}/exec", post(to_machine_node))
         .route(

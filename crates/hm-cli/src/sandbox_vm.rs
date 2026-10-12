@@ -512,6 +512,18 @@ pub enum MachineCommand {
         #[arg(value_parser = machine_name)]
         name: String,
     },
+    /// Give a stopped machine other processors, other memory or a larger disk
+    Resize {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        #[arg(long)]
+        cpus: Option<u32>,
+        #[arg(long)]
+        memory_mb: Option<u64>,
+        /// A disk only grows
+        #[arg(long)]
+        disk_gib: Option<u64>,
+    },
     /// Delete a stopped machine and its disk
     Delete {
         #[arg(value_parser = machine_name)]
@@ -1535,6 +1547,29 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             }
             MachineCommand::Restart { name } => {
                 api.request_bounded(Method::POST, &["machines", &name, "restart"], None, 65536)
+                    .await?
+            }
+            MachineCommand::Resize {
+                name,
+                cpus,
+                memory_mb,
+                disk_gib,
+            } => {
+                let mut body = json!({});
+                if let Some(cpus) = cpus {
+                    body["cpuCount"] = json!(cpus);
+                }
+                if let Some(memory_mb) = memory_mb {
+                    body["memoryMB"] = json!(memory_mb);
+                }
+                if let Some(disk_gib) = disk_gib {
+                    body["diskGiB"] = json!(disk_gib);
+                }
+                if body == json!({}) {
+                    bail!("give --cpus, --memory-mb or --disk-gib");
+                }
+                // The node's reason with a refusal: which size, and why.
+                api.request(Method::PATCH, &["machines", &name], Some(body))
                     .await?
             }
             MachineCommand::Delete { name } => {

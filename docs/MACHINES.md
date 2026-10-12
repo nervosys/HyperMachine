@@ -226,6 +226,35 @@ curl -sS $NODE/machines/web-01/runs          # every run kept, oldest first
 `hm sandbox vm machine run web-01 --cwd /srv/app --pass-env CI -- make test`
 starts one, and `... machine runs web-01 [ID]` lists them or shows one.
 
+## Resizing
+
+A stopped machine can be given other processors, other memory, or a larger
+disk. It has them the next time it starts.
+
+```sh
+curl -sS -X POST  $NODE/machines/web-01/stop
+curl -sS -X PATCH $NODE/machines/web-01 -H 'content-type: application/json' \
+  -d '{"cpuCount":4,"memoryMB":8192,"diskGiB":40}'
+curl -sS -X POST  $NODE/machines/web-01/start
+
+hm sandbox vm machine resize web-01 --cpus 4 --memory-mb 8192 --disk-gib 40
+```
+
+- **Any of the three, alone or together.** What is not given is left.
+- **The machine is stopped.** A running one is refused with 409: nothing
+  here changes a size under a running guest.
+- **A disk only grows.** A smaller one is refused, since making it would
+  mean choosing what on it to lose.
+- **A machine from a template finds the space.** Its disk is one ext4
+  filesystem the node made, and the node checks it and grows it with the
+  disk.
+- **A machine from an image has a longer disk** and its own partitions as
+  they were. A cloud image grows its root partition itself when it boots;
+  any other is grown from inside.
+- **A size that cannot be is refused**, not rounded to one that can.
+
+[Checked on real KVM](benchmarks/2026-10-11/machine-resize-kvm/README.md).
+
 ## Files
 
 Bytes go into a machine's guest and come out of it by path.

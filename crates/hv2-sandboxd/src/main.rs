@@ -6061,7 +6061,9 @@ async fn main() -> std::process::ExitCode {
         .route("/machines", get(machines::list).post(machines::create))
         .route(
             "/machines/{name}",
-            get(machines::get).delete(machines::delete),
+            get(machines::get)
+                .delete(machines::delete)
+                .patch(machines::resize::patch),
         )
         .route("/machines/{name}/exec", post(machines::exec))
         .route(
