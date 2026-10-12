@@ -76,6 +76,18 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
                     ],
                 }))
                 .into_response(),
+                ("PUT", "/machines/web-01/files?path=%2Fsrv%2Fapp%2Fa+file.bin&user=dev")
+                | ("PUT", "/machines/web-01/files?path=%2Ftmp%2Fplain") => {
+                    StatusCode::NO_CONTENT.into_response()
+                }
+                ("GET", "/machines/web-01/files?path=%2Fetc%2Fhostname") => {
+                    b"web-01\n\x00\xff".to_vec().into_response()
+                }
+                ("GET", "/machines/web-01/files?path=%2Fnope") => (
+                    StatusCode::NOT_FOUND,
+                    Json(json!({"code": 404, "message": "reading /nope: No such file"})),
+                )
+                    .into_response(),
                 ("GET", "/machines/web-01/console") => "[    0.1] booted\n".into_response(),
                 ("GET", "/machines/web-01/console?tail=64") => "login: ".into_response(),
                 ("POST", "/machines/web-01/console") => StatusCode::NO_CONTENT.into_response(),
@@ -366,6 +378,95 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
             &json!({"provider": "custom", "prompt": "hello", "command": "my-agent"})
         );
     }
+
+    // A file goes in as the bytes it is, to the path and for the user asked;
+    // and comes out as the bytes it is, never over a file that is there.
+    let scratch = std::env::temp_dir().join(format!("hm-machine-files-{}", std::process::id()));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let local = scratch.join("in.bin");
+    std::fs::write(&local, b"bytes \x00\xff in").unwrap();
+    let local_arg: &'static str = Box::leak(local.to_str().unwrap().to_owned().into_boxed_str());
+    for (arguments, path) in [
+        (
+            vec![
+                "upload",
+                "web-01",
+                local_arg,
+                "/srv/app/a file.bin",
+                "--user",
+                "dev",
+            ],
+            "/machines/web-01/files?path=%2Fsrv%2Fapp%2Fa+file.bin&user=dev",
+        ),
+        (
+            vec!["upload", "web-01", local_arg, "/tmp/plain"],
+            "/machines/web-01/files?path=%2Ftmp%2Fplain",
+        ),
+    ] {
+        let output = hm(arguments.clone(), "owned-machine-key").await;
+        assert!(
+            output.status.success(),
+            "{arguments:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let requests = observed.lock().unwrap();
+        let (method, seen, body) = requests.last().unwrap();
+        assert_eq!((method.as_str(), seen.as_str()), ("PUT", path));
+        // The fixture keeps a body that is not JSON as lossy text.
+        assert_eq!(body, &Value::String("bytes \0\u{fffd} in".to_owned()));
+    }
+    let fetched = scratch.join("out.bin");
+    let fetched_arg: &'static str =
+        Box::leak(fetched.to_str().unwrap().to_owned().into_boxed_str());
+    let output = hm(
+        vec!["download", "web-01", "/etc/hostname", fetched_arg],
+        "owned-machine-key",
+    )
+    .await;
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(std::fs::read(&fetched).unwrap(), b"web-01\n\x00\xff");
+    // Again, onto the file that is now there: refused, and it is unchanged.
+    std::fs::write(&fetched, b"mine").unwrap();
+    let output = hm(
+        vec!["download", "web-01", "/etc/hostname", fetched_arg],
+        "owned-machine-key",
+    )
+    .await;
+    assert!(!output.status.success());
+    assert_eq!(std::fs::read(&fetched).unwrap(), b"mine");
+    let output = hm(
+        vec!["download", "web-01", "/etc/hostname", "-"],
+        "owned-machine-key",
+    )
+    .await;
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"web-01\n\x00\xff");
+    // What the node refuses is said, and nothing is written for it.
+    let missing = scratch.join("missing.bin");
+    let missing_arg: &'static str =
+        Box::leak(missing.to_str().unwrap().to_owned().into_boxed_str());
+    let output = hm(
+        vec!["download", "web-01", "/nope", missing_arg],
+        "owned-machine-key",
+    )
+    .await;
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("No such file"));
+    assert!(!missing.exists());
+    // A local file that is not there never reaches the API.
+    let sent = observed.lock().unwrap().len();
+    let output = hm(
+        vec!["upload", "web-01", missing_arg, "/tmp/x"],
+        "owned-machine-key",
+    )
+    .await;
+    assert!(!output.status.success());
+    assert_eq!(observed.lock().unwrap().len(), sent);
+    std::fs::remove_dir_all(&scratch).unwrap();
 
     // Refusals fail, and a bad name never reaches the API.
     let before = observed.lock().unwrap().len();

@@ -75,6 +75,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- Files for machines: `PUT /machines/{name}/files?path=` writes the request's
+  body to a path in the guest, making the directories above it, for a guest
+  `user` when one is given; `GET` answers with a file's bytes. Up to 64 MiB
+  each way. The control plane forwards both, and `hm sandbox vm machine
+  upload` / `download` use them.
 - Prompts for machines: `POST /machines/{name}/prompts` runs a coding agent
   that is in the machine (`claude`, `codex`, or any by its own `command`) on
   a prompt, as a run. Its events are read from any offset

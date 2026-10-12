@@ -38,6 +38,7 @@ use hv2_cluster::ownership::TeamId;
 
 use super::seed;
 
+pub(crate) mod files;
 pub(crate) mod prompts;
 pub(crate) mod runs;
 use super::{

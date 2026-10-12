@@ -226,6 +226,36 @@ curl -sS $NODE/machines/web-01/runs          # every run kept, oldest first
 `hm sandbox vm machine run web-01 --cwd /srv/app --pass-env CI -- make test`
 starts one, and `... machine runs web-01 [ID]` lists them or shows one.
 
+## Files
+
+Bytes go into a machine's guest and come out of it by path.
+
+```sh
+curl -sS -X PUT "$NODE/machines/web-01/files?path=/srv/app/config.toml&user=dev" \
+  --data-binary @config.toml
+curl -sS "$NODE/machines/web-01/files?path=/var/log/app.log" -o app.log
+
+hm sandbox vm machine upload web-01 config.toml /srv/app/config.toml --user dev
+hm sandbox vm machine download web-01 /var/log/app.log app.log    # or `-` to print it
+```
+
+- **A write makes the directories above the file.** With `user`, the file
+  and the directories it made are that guest user's; root's otherwise. A
+  read is as root.
+- **A path is absolute and names the file itself.**
+- **A file is at most 64 MiB**, either way: it is held whole in the node's
+  memory on its way through. Something larger belongs on a disk or comes
+  over the machine's network.
+- **A write is in place.** One that fails part way leaves what it had
+  written; the file is not swapped in whole at the end.
+- **It needs the guest agent**, as `exec` does.
+- `download` does not write over a local file that is there.
+- A refusal says whose it is: 404 for a file that is not there, 400 for a
+  path or a user that cannot be, 403 where the guest forbids it, 413 over
+  the limit, 409 when the machine is not running.
+
+[Checked on real KVM](benchmarks/2026-10-11/machine-files-kvm/README.md).
+
 ## Prompts
 
 A coding agent is a program with a command-line form: it takes one prompt,
