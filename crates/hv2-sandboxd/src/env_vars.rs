@@ -71,6 +71,20 @@ pub(crate) async fn write_files(vm: &AgentVM, files: &[GuestFile]) -> Result<(),
         )
         .await
         .map_err(|e| format!("writing the environment's {}: {e}", file.path))?;
+        // A cloned repository: unpacked into its place, then removed.
+        if let Some(into) = &file.unpack_into {
+            let line = crate::lit_repos::unpack_command(&file.path, into);
+            let done = vm
+                .exec_in_guest("/bin/sh", &["-c".to_string(), line], AGENT_TIMEOUT * 6)
+                .await
+                .map_err(|e| format!("unpacking the repository into {into}: {e}"))?;
+            if done.exit_code != Some(0) {
+                return Err(format!(
+                    "unpacking the repository into {into}: {}",
+                    done.stderr.trim()
+                ));
+            }
+        }
     }
     Ok(())
 }
