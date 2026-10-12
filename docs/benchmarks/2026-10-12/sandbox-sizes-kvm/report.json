@@ -1,0 +1,78 @@
+{
+  "success": true,
+  "purpose": "functional verification of per-sandbox sizes on KVM; the start times are the check's own stopwatch and not a benchmark",
+  "input_sha256": {
+    "daemon": "e043ca226f060cba813f42fb745eb5075e055d71699c6cb5a7246256d755965d",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d0cb1ca9e27fcf5c28669ef11c6c4cd9f8d2b220319dff4e5d1e454e6b6bdceb",
+    "driver": "94e69ae790a7bb84fe4fc322b5a3173d0a16edc382c11ddd63e5ff0f087ff8fe"
+  },
+  "host_cpus": 24,
+  "cases": [
+    {
+      "name": "without a size, a sandbox is the template's",
+      "success": true,
+      "detail": {
+        "processors": 1,
+        "memory_kb": 221732,
+        "start_seconds": 0.054
+      }
+    },
+    {
+      "name": "with cpuCount 2 and memoryMB 1024 it has them, and its record says so",
+      "success": true,
+      "detail": {
+        "processors": 2,
+        "memory_kb": 994508,
+        "start_seconds": 0.253
+      }
+    },
+    {
+      "name": "paused and resumed it keeps its size, and a fork of it has it too",
+      "success": true,
+      "detail": {
+        "after_resume": [
+          2,
+          994508
+        ],
+        "fork": [
+          2,
+          994508
+        ],
+        "snapshot_refused": "sandbox sbx-efc448e78f4c4bd6b742 is a size of its own and was booted, and such a sandbox cannot be checkpointed; it can be paused"
+      }
+    },
+    {
+      "name": "its usage counts its own vCPUs and memory",
+      "success": true,
+      "detail": {
+        "usage": {
+          "key": "sbx-efc448e78f4c4bd6b742",
+          "memoryGiBSeconds": 5.038,
+          "partial": false,
+          "runningSeconds": 5.038,
+          "sandboxes": 1,
+          "vcpuSeconds": 10.076
+        }
+      }
+    },
+    {
+      "name": "asking for the template's own size is no change",
+      "success": true,
+      "detail": {
+        "start_seconds": 0.039
+      }
+    },
+    {
+      "name": "a size that cannot be is refused, and nothing is made",
+      "success": true,
+      "detail": {
+        "no processors": "cpuCount 0: between 1 and 24, this host's CPUs",
+        "more processors than the host has": "cpuCount 4096: between 1 and 24, this host's CPUs",
+        "too little memory": "memoryMB 128: an even number from 256 to 65536",
+        "an odd amount of memory": "memoryMB 1025: an even number from 256 to 65536",
+        "too much memory": "memoryMB 1048576: an even number from 256 to 65536"
+      }
+    }
+  ]
+}

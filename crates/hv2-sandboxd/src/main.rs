@@ -928,6 +928,14 @@ struct NewSandbox {
     /// returned: see env_vars.rs.
     #[serde(rename = "envVars", default)]
     env_vars: BTreeMap<String, String>,
+    /// Processors and memory of its own, where the template's are not what
+    /// is wanted. A sandbox of a size its template was not snapshotted at
+    /// is booted rather than restored, which takes longer than a restore,
+    /// and cannot be checkpointed or made a template. Not E2B's.
+    #[serde(rename = "cpuCount")]
+    cpu_count: Option<u32>,
+    #[serde(rename = "memoryMB")]
+    memory_mb: Option<u64>,
     /// A named set of variables and files of the caller's team to start
     /// with, under `envVars`. See hv2_cluster::environments.
     environment: Option<String>,
@@ -1714,8 +1722,16 @@ async fn bring_up(
     env: &BTreeMap<String, String>,
     files: &[hv2_cluster::environments::GuestFile],
     access_token: &str,
+    size: Option<Sizes>,
 ) -> Result<Running, (StatusCode, String)> {
     let internal = |e: String| (StatusCode::INTERNAL_SERVER_ERROR, e);
+    // The size this guest has: what a create asked for, or what a sandbox
+    // already is; its template's unless either says otherwise. A template's
+    // snapshot is of a guest the template's size, and cannot be restored as
+    // another; so a create of another size boots.
+    let template_size = sizes_of(state, template_id);
+    let sizes = size.unwrap_or(template_size);
+    let resized_create = snapshot.is_none() && sizes != template_size;
     // From a snapshot, every sandbox is the template's guest, restored, with
     // the same CID and MAC it was snapshotted with -- which is fine, because
     // each has its own vsock device and its own gateway, and nothing outside
@@ -1737,6 +1753,8 @@ async fn bring_up(
         None
     } else if disk.is_some() && !plain_create {
         snapshot
+    } else if resized_create {
+        None
     } else {
         snapshot.or(template.as_ref().map(|t| t.snapshot.as_path()))
     };
@@ -1791,10 +1809,9 @@ async fn bring_up(
         .get(template_id)
         .cloned()
         .unwrap_or_else(|| state.opts.initrd.clone());
-    // The template's size, when it has its own: a restore is of a guest
-    // that size, and must be given the memory and vCPUs it was snapshotted
-    // with.
-    let sizes = sizes_of(state, template_id);
+    // A restore is of a guest the size it was snapshotted at, and must be
+    // given those vCPUs and that memory: the template's, or the sandbox's
+    // own when it was made another size.
     let sized;
     let opts = if sizes == Sizes::of(&state.opts) {
         &state.opts
@@ -2710,6 +2727,24 @@ async fn create_sandbox(
     if let Err(e) = env_vars::validate(&env) {
         return api_error(StatusCode::BAD_REQUEST, e);
     }
+    // A size of its own, when one is asked for that is not the template's:
+    // the sandbox boots that size rather than being restored.
+    let size = if req.cpu_count.is_some() || req.memory_mb.is_some() {
+        let template_size = sizes_of(&state, &template_id);
+        match Sizes::requested(req.cpu_count, req.memory_mb, template_size) {
+            Ok(asked) if asked == template_size => None,
+            Ok(_) if from_snapshot.is_some() => {
+                return api_error(
+                    StatusCode::BAD_REQUEST,
+                    "a sandbox started from a snapshot is the snapshot's size; leave out cpuCount and memoryMB",
+                )
+            }
+            Ok(asked) => Some(asked),
+            Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+        }
+    } else {
+        None
+    };
     // A disk rules out starting from a snapshot, which would restore a
     // guest's memory against a disk it never had. It can pause: its own
     // snapshot is taken with the disk attached, and the disk stays claimed.
@@ -2826,6 +2861,7 @@ async fn create_sandbox(
         &env,
         &files,
         &access_token,
+        size,
     )
     .await
     {
@@ -2848,7 +2884,7 @@ async fn create_sandbox(
         proxy_port: state.opts.proxy_port,
         envd_access_token: access_token,
     };
-    let sizes = sizes_of(&state, &template_id);
+    let sizes = size.unwrap_or_else(|| sizes_of(&state, &template_id));
     let record = SandboxRecord {
         owner_id,
         team_id,
@@ -3219,9 +3255,10 @@ async fn pause_sandbox(
     state.routes.remove_sandbox(sandbox_id);
     let snapshot = state.suspend_dir.join(format!("{sandbox_id}.snap"));
     let _ = std::fs::remove_file(&snapshot);
-    // A sandbox with a disk booted, where the others were restored from a
-    // template: its memory is a change against no image, and is written whole.
-    let suspended = if disks::cold_booted(state, sandbox_id) {
+    // A sandbox with a disk, or of a size of its own, booted, where the
+    // others were restored from a template: its memory is a change against
+    // no image, and is written whole.
+    let suspended = if disks::cold_booted(state, sandbox_id) || resized(state, &live.record) {
         live.vm.suspend_whole_to(&snapshot).await
     } else {
         live.vm.suspend_to(&snapshot).await
@@ -3466,6 +3503,10 @@ async fn resume_sandbox(
         &BTreeMap::new(),
         &[],
         &paused.descriptor.envd_access_token,
+        Some(Sizes {
+            cpus: paused.record.cpu_count,
+            memory_mb: paused.record.memory_mb,
+        }),
     )
     .await
     {
@@ -3900,7 +3941,7 @@ async fn fork_route(
         "{sandbox_id}-fork-{}.snap",
         uuid::Uuid::new_v4().simple()
     ));
-    let (template_id, metadata, network, source_request, volume_mounts, creator, mut claims) = {
+    let (template_id, metadata, network, source_request, volume_mounts, creator, mut claims, size) = {
         let lock = transition_lock(&state, &sandbox_id);
         let _held = lock.lock().await;
         let source = {
@@ -3931,11 +3972,23 @@ async fn fork_route(
                     live.network_request.clone(),
                     live.record.volume_mounts.clone(),
                     (live.record.owner_id.clone(), live.record.team_id.clone()),
+                    Sizes {
+                        cpus: live.record.cpu_count,
+                        memory_mb: live.record.memory_mb,
+                    },
                 )
             })
         };
-        let Some((vm, template_id, metadata, network, source_request, volume_mounts, creator)) =
-            source
+        let Some((
+            vm,
+            template_id,
+            metadata,
+            network,
+            source_request,
+            volume_mounts,
+            creator,
+            size,
+        )) = source
         else {
             return if state.paused.lock().contains_key(&sandbox_id) {
                 api_error(
@@ -3964,10 +4017,11 @@ async fn fork_route(
         // A sandbox with a disk booted, so its memory is written whole; and
         // its disk is copied before it runs again, so each copy is the disk
         // that memory describes.
+        let booted_size = size != sizes_of(&state, &template_id);
         let checkpointed = if with_disk {
             let copy_state = Arc::clone(&state);
             let (source, ids) = (sandbox_id.clone(), fork_ids.clone());
-            let whole = disks::cold_booted(&state, &sandbox_id);
+            let whole = disks::cold_booted(&state, &sandbox_id) || booted_size;
             vm.checkpoint_with(&checkpoint, whole, move || {
                 let mut claims = Vec::with_capacity(ids.len());
                 for id in &ids {
@@ -3988,6 +4042,10 @@ async fn fork_route(
                 Ok(claims)
             })
             .await
+        } else if booted_size {
+            // Booted its own size: written whole, as a sandbox with a disk is.
+            vm.checkpoint_with(&checkpoint, true, || Ok((0..count).map(|_| None).collect()))
+                .await
         } else {
             vm.checkpoint_to(&checkpoint)
                 .await
@@ -4012,6 +4070,7 @@ async fn fork_route(
             volume_mounts,
             creator,
             claims,
+            size,
         )
     };
 
@@ -4062,6 +4121,7 @@ async fn fork_route(
                     &BTreeMap::new(),
                     &[],
                     &access_token,
+                    Some(size),
                 )
                 .await
                 {
@@ -4082,7 +4142,8 @@ async fn fork_route(
                     proxy_port: state.opts.proxy_port,
                     envd_access_token: access_token,
                 };
-                let sizes = sizes_of(&state, &template_id);
+                // A fork is its source's size, whatever its template's is.
+                let sizes = size;
                 let record = SandboxRecord {
                     owner_id: creator.0,
                     team_id: creator.1,
@@ -4773,6 +4834,25 @@ impl Sizes {
 
 /// The most memory one sandbox may have.
 const MAX_MEMORY_MB: u64 = 64 * 1024;
+
+/// Whether a sandbox of this record is a size its template is not: it was
+/// booted that size rather than restored, so its memory is a change against
+/// no image, and is written whole when it is paused or forked.
+fn resized(state: &AppState, record: &SandboxRecord) -> bool {
+    Sizes {
+        cpus: record.cpu_count,
+        memory_mb: record.memory_mb,
+    } != sizes_of(state, &record.template_id)
+}
+
+/// Whether the running sandbox `sandbox_id` is a size of its own.
+fn resized_sandbox(state: &AppState, sandbox_id: &str) -> bool {
+    state
+        .sandboxes
+        .lock()
+        .get(sandbox_id)
+        .is_some_and(|live| resized(state, &live.record))
+}
 
 /// The size of `template`'s sandboxes: its own, or the node's.
 fn sizes_of(state: &AppState, template: &str) -> Sizes {

@@ -103,6 +103,15 @@ pub(crate) async fn create(
             format!("sandbox {sandbox_id} holds a disk, and a sandbox with a disk cannot be snapshotted"),
         );
     }
+    if super::resized_sandbox(&state, &sandbox_id) {
+        return api_error(
+            StatusCode::CONFLICT,
+            format!(
+                "sandbox {sandbox_id} is a size of its own and was booted, and such a sandbox \
+                 cannot be snapshotted into a template"
+            ),
+        );
+    }
     let file = match new_file(&state, &name) {
         Ok(file) => file,
         Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, e),

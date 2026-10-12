@@ -190,6 +190,13 @@ pub enum VmCommand {
         /// `checkpoint restore ID auto`. At least 60
         #[arg(long, value_name = "SECS", value_parser = clap::value_parser!(u64).range(60..))]
         auto_checkpoint: Option<u64>,
+        /// Processors of its own, where the template's are not wanted; it
+        /// boots rather than being restored
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
+        cpus: Option<u32>,
+        /// Memory of its own, in MiB
+        #[arg(long, value_parser = clap::value_parser!(u64).range(256..))]
+        memory_mb: Option<u64>,
     },
     /// Assign or inspect a reserved alias for an existing VM
     Alias {
@@ -2085,8 +2092,16 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             name,
             disk,
             auto_checkpoint,
+            cpus,
+            memory_mb,
         } => {
             let mut body = json!({"templateID": template, "timeout": lifetime});
+            if let Some(cpus) = cpus {
+                body["cpuCount"] = json!(cpus);
+            }
+            if let Some(memory_mb) = memory_mb {
+                body["memoryMB"] = json!(memory_mb);
+            }
             if let Some(secs) = auto_checkpoint {
                 body["autoCheckpoint"] = json!(secs);
             }
