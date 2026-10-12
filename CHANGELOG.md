@@ -75,6 +75,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- OTLP export from a node: `hv2-sandboxd --otlp-endpoint URL` (or
+  OpenTelemetry's `OTEL_EXPORTER_OTLP_*` variables) pushes the metrics it
+  serves at `/metrics` to an OpenTelemetry collector over OTLP/HTTP with
+  JSON, every `--otlp-interval` seconds, with `--otlp-header` for a token.
+  Pushes are counted in `hv2_node_otlp_pushes_total`. Any other OTLP
+  protocol is refused at start. See docs/TELEMETRY.md.
 - Published ports for machines: `POST /machines/{name}/ports` gives a port
   of the guest one of the node's, and connections to it are carried in
   through the guest agent, with no NIC needed. The node gives out ports from

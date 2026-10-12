@@ -1,0 +1,24 @@
+extensions:
+  bearertokenauth:
+    token: "<token>"
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 127.0.0.1:55817
+        auth:
+          authenticator: bearertokenauth
+exporters:
+  file:
+    path: /var/tmp/hm-otlp-check-lanteex8/received.jsonl
+  prometheus:
+    endpoint: 127.0.0.1:42187
+service:
+  extensions: [bearertokenauth]
+  telemetry:
+    metrics:
+      level: none
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      exporters: [file, prometheus]

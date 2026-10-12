@@ -24,6 +24,7 @@ pub mod native_ports;
 pub mod native_tcp;
 pub mod native_udp;
 pub mod node;
+pub mod otlp;
 pub mod ports;
 pub mod private_addresses;
 pub mod private_networks;

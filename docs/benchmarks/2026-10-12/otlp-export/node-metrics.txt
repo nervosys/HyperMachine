@@ -1,0 +1,98 @@
+# HELP hv2_node_sandboxes_running Sandboxes running on this node.
+# TYPE hv2_node_sandboxes_running gauge
+hv2_node_sandboxes_running 0
+# HELP hv2_node_sandboxes_paused Sandboxes suspended to this node's disk.
+# TYPE hv2_node_sandboxes_paused gauge
+hv2_node_sandboxes_paused 0
+# HELP hv2_node_sandboxes_booting Creations in flight.
+# TYPE hv2_node_sandboxes_booting gauge
+hv2_node_sandboxes_booting 0
+# HELP hv2_node_capacity Sandboxes this node will run at once.
+# TYPE hv2_node_capacity gauge
+hv2_node_capacity 4
+# HELP hv2_node_template Templates sandboxes are restored from; 0 if they are booted.
+# TYPE hv2_node_template gauge
+hv2_node_template 1
+# HELP hv2_node_creates_total Creations on this node, by outcome.
+# TYPE hv2_node_creates_total counter
+hv2_node_creates_total{result="ok"} 3
+hv2_node_creates_total{result="full"} 0
+hv2_node_creates_total{result="rejected"} 0
+hv2_node_creates_total{result="error"} 0
+# HELP hv2_node_create_seconds Time from request to a sandbox whose agent answers.
+# TYPE hv2_node_create_seconds histogram
+hv2_node_create_seconds_bucket{le="0.005"} 0
+hv2_node_create_seconds_bucket{le="0.01"} 0
+hv2_node_create_seconds_bucket{le="0.025"} 0
+hv2_node_create_seconds_bucket{le="0.05"} 3
+hv2_node_create_seconds_bucket{le="0.1"} 3
+hv2_node_create_seconds_bucket{le="0.25"} 3
+hv2_node_create_seconds_bucket{le="0.5"} 3
+hv2_node_create_seconds_bucket{le="1"} 3
+hv2_node_create_seconds_bucket{le="2.5"} 3
+hv2_node_create_seconds_bucket{le="5"} 3
+hv2_node_create_seconds_bucket{le="+Inf"} 3
+hv2_node_create_seconds_sum 0.089184
+hv2_node_create_seconds_count 3
+# HELP hv2_node_sandbox_ends_total Sandboxes that ended, by why.
+# TYPE hv2_node_sandbox_ends_total counter
+hv2_node_sandbox_ends_total{reason="deleted"} 3
+hv2_node_sandbox_ends_total{reason="expired"} 0
+# HELP hv2_node_transitions_total Pauses, resumes (and those a request triggered), evictions to make room, forks, and reboots.
+# TYPE hv2_node_transitions_total counter
+hv2_node_transitions_total{kind="pause"} 0
+hv2_node_transitions_total{kind="resume"} 0
+hv2_node_transitions_total{kind="auto_resume"} 0
+hv2_node_transitions_total{kind="evict"} 0
+hv2_node_transitions_total{kind="fork_ok"} 0
+hv2_node_transitions_total{kind="fork_failed"} 0
+hv2_node_transitions_total{kind="reboot"} 0
+# HELP hv2_node_pause_seconds Time to suspend a running sandbox to disk.
+# TYPE hv2_node_pause_seconds histogram
+hv2_node_pause_seconds_bucket{le="0.005"} 0
+hv2_node_pause_seconds_bucket{le="0.01"} 0
+hv2_node_pause_seconds_bucket{le="0.025"} 0
+hv2_node_pause_seconds_bucket{le="0.05"} 0
+hv2_node_pause_seconds_bucket{le="0.1"} 0
+hv2_node_pause_seconds_bucket{le="0.25"} 0
+hv2_node_pause_seconds_bucket{le="0.5"} 0
+hv2_node_pause_seconds_bucket{le="1"} 0
+hv2_node_pause_seconds_bucket{le="2.5"} 0
+hv2_node_pause_seconds_bucket{le="5"} 0
+hv2_node_pause_seconds_bucket{le="+Inf"} 0
+hv2_node_pause_seconds_sum 0
+hv2_node_pause_seconds_count 0
+# HELP hv2_node_resume_seconds Time from a resume request to a sandbox whose agent answers.
+# TYPE hv2_node_resume_seconds histogram
+hv2_node_resume_seconds_bucket{le="0.005"} 0
+hv2_node_resume_seconds_bucket{le="0.01"} 0
+hv2_node_resume_seconds_bucket{le="0.025"} 0
+hv2_node_resume_seconds_bucket{le="0.05"} 0
+hv2_node_resume_seconds_bucket{le="0.1"} 0
+hv2_node_resume_seconds_bucket{le="0.25"} 0
+hv2_node_resume_seconds_bucket{le="0.5"} 0
+hv2_node_resume_seconds_bucket{le="1"} 0
+hv2_node_resume_seconds_bucket{le="2.5"} 0
+hv2_node_resume_seconds_bucket{le="5"} 0
+hv2_node_resume_seconds_bucket{le="+Inf"} 0
+hv2_node_resume_seconds_sum 0
+hv2_node_resume_seconds_count 0
+# HELP hv2_node_checkpoint_seconds Time a fork's source is paused to be checkpointed.
+# TYPE hv2_node_checkpoint_seconds histogram
+hv2_node_checkpoint_seconds_bucket{le="0.005"} 0
+hv2_node_checkpoint_seconds_bucket{le="0.01"} 0
+hv2_node_checkpoint_seconds_bucket{le="0.025"} 0
+hv2_node_checkpoint_seconds_bucket{le="0.05"} 0
+hv2_node_checkpoint_seconds_bucket{le="0.1"} 0
+hv2_node_checkpoint_seconds_bucket{le="0.25"} 0
+hv2_node_checkpoint_seconds_bucket{le="0.5"} 0
+hv2_node_checkpoint_seconds_bucket{le="1"} 0
+hv2_node_checkpoint_seconds_bucket{le="2.5"} 0
+hv2_node_checkpoint_seconds_bucket{le="5"} 0
+hv2_node_checkpoint_seconds_bucket{le="+Inf"} 0
+hv2_node_checkpoint_seconds_sum 0
+hv2_node_checkpoint_seconds_count 0
+# HELP hv2_node_otlp_pushes_total Pushes of these metrics over OTLP, by how each went.
+# TYPE hv2_node_otlp_pushes_total counter
+hv2_node_otlp_pushes_total{result="ok"} 3
+hv2_node_otlp_pushes_total{result="failed"} 0
