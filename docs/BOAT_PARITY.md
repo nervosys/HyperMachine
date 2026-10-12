@@ -56,7 +56,7 @@ reason, and are listed once at the end rather than counted as gaps.
 | Webhooks | Signed, with a rotated secret; a `degraded` event | Signed and team-scoped, for sandboxes. The signature is a hash of the secret and the body, not an HMAC; the secret is replaced in one step with no overlap; machines send none |
 | Telemetry sent where the user says | OTLP over HTTP, set per account | **Per node, set by its operator.** A node [pushes its metrics over OTLP/HTTP](TELEMETRY.md) with JSON, configured by flags or OpenTelemetry's own variables, [checked against the OpenTelemetry Collector](benchmarks/2026-10-12/otlp-export/README.md); and serves them at `/metrics`. Metrics only, and only the node's: nothing per sandbox, nothing from the control plane, no logs or traces, and not set per team |
 | Teams | Organizations, members, a shared wallet | [Teams](TEAMS.md), partial: keys and sandboxes belong to one, with roles |
-| How much was used | Per sandbox and per key | **No.** Lifecycle events with times are kept; nothing adds them up |
+| How much was used | Per sandbox and per key | **Per sandbox, team, template or key, for sandboxes.** [`GET /usage`](USAGE.md) adds up running time, vCPU-seconds and GiB-seconds in a window, paused time not counted, [checked on KVM against a stopwatch](benchmarks/2026-10-12/usage-kvm/README.md). It goes back only as far as the last 10,000 lifecycle events, which a lone node keeps in memory; machines, storage and network are not counted |
 | Client libraries | Python and TypeScript | E2B's own, unmodified, against E2B's API. None of HyperMachine's for the VM API; `sdk/node` is for the [process sandbox](SANDBOXES.md) |
 | A command line | `boat`, with JSON output on every command | `hm sandbox vm` |
 | GPU | None | Partial: passthrough code, not wired to sandboxes |
@@ -99,9 +99,10 @@ In rough order of how much each matters to someone choosing between them:
    all; the guest's process list; and a port back to the caller's machine.
 7. **Environments**: variables, files and repositories applied to every new
    sandbox.
-8. **Usage figures**, and telemetry a team sets for itself. A node's
-   operator can [push its metrics over OTLP](TELEMETRY.md) now; nothing
-   counts use per sandbox, key or team.
+8. **Usage kept for good, and telemetry a team sets for itself.**
+   [Usage](USAGE.md) is added up per sandbox, team and key now, from the
+   events a cluster keeps, so only as far back as they go; and a node's
+   operator can [push its metrics over OTLP](TELEMETRY.md).
 9. **Client libraries of its own** in Python and TypeScript.
 10. **An image with the tools already in it.**
 

@@ -36,6 +36,7 @@ pub mod sso_guest;
 pub mod sso_login;
 pub mod store;
 pub mod udp_socket;
+pub mod usage;
 pub mod web_access;
 pub mod web_sharing;
 

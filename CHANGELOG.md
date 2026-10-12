@@ -75,6 +75,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- Usage: `GET /usage?from=&to=&by=sandbox|team|template|owner` adds up how
+  long the caller's sandboxes ran, with vCPU-seconds and memory
+  GiB-seconds, from the lifecycle events: time paused is not counted, a
+  sandbox still running counts to the moment asked, and the answer says how
+  far back the events go. Each start and stop event carries a ledger entry
+  (`hm_usage`) for it, kept out of what E2B clients and webhooks receive.
+  Served by a node and by the control plane; `hm sandbox vm usage`. See
+  docs/USAGE.md.
 - OTLP export from a node: `hv2-sandboxd --otlp-endpoint URL` (or
   OpenTelemetry's `OTEL_EXPORTER_OTLP_*` variables) pushes the metrics it
   serves at `/metrics` to an OpenTelemetry collector over OTLP/HTTP with
