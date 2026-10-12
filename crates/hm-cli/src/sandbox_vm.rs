@@ -526,6 +526,62 @@ pub enum MachineCommand {
         #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
         command: Vec<String>,
     },
+    /// Start a command in a machine and leave it running; prints the run
+    Run {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        /// The directory it starts in
+        #[arg(long)]
+        cwd: Option<String>,
+        /// The guest user it runs as; root unless given
+        #[arg(long)]
+        user: Option<String>,
+        /// Give the command this variable of your own environment
+        #[arg(long = "pass-env", value_name = "NAME")]
+        pass_env: Vec<String>,
+        #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<String>,
+    },
+    /// List a machine's runs, or show one with what it has printed
+    Runs {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        id: Option<u64>,
+    },
+    /// Run a coding agent in a machine on a prompt; prints its events and
+    /// exits with its code
+    Prompt {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        /// claude, codex, or custom with --command
+        #[arg(long)]
+        provider: String,
+        #[arg(long)]
+        model: Option<String>,
+        /// A session of the agent's to carry on from: an earlier prompt's
+        /// `session`
+        #[arg(long)]
+        resume: Option<String>,
+        /// Let the agent act without asking for approval
+        #[arg(long)]
+        unattended: bool,
+        /// For --provider custom: a shell line that reads $HM_PROMPT
+        #[arg(long)]
+        command: Option<String>,
+        /// The directory the agent works in
+        #[arg(long)]
+        cwd: Option<String>,
+        /// The guest user it runs as; root unless given
+        #[arg(long)]
+        user: Option<String>,
+        /// Give the agent this variable of your own environment: its key
+        #[arg(long = "pass-env", value_name = "NAME")]
+        pass_env: Vec<String>,
+        /// Print the prompt as it was started and do not wait for it
+        #[arg(long)]
+        detach: bool,
+        prompt: String,
+    },
     /// Print the end of a machine's serial console
     Console {
         #[arg(value_parser = machine_name)]
@@ -1503,6 +1559,93 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 std::io::stderr().write_all(stderr.as_bytes())?;
                 return Ok(code);
             }
+            MachineCommand::Run {
+                name,
+                cwd,
+                user,
+                pass_env,
+                command,
+            } => {
+                let mut body = json!({"cmd": shell_exec(&command)?});
+                if let Some(cwd) = cwd {
+                    body["cwd"] = json!(cwd);
+                }
+                if let Some(user) = user {
+                    body["user"] = json!(user);
+                }
+                let env = passed_env(&pass_env)?;
+                if !env.is_empty() {
+                    body["env"] = Value::Object(env);
+                }
+                api.request(Method::POST, &["machines", &name, "runs"], Some(body))
+                    .await?
+            }
+            MachineCommand::Runs { name, id } => match id {
+                Some(id) => {
+                    api.request_bounded_query(
+                        Method::GET,
+                        &["machines", &name, "runs", &id.to_string()],
+                        None,
+                        FOLLOW_LIMIT,
+                        &[("stdout", "0"), ("stderr", "0")],
+                    )
+                    .await?
+                }
+                None => {
+                    api.request_bounded(
+                        Method::GET,
+                        &["machines", &name, "runs"],
+                        None,
+                        1024 * 1024,
+                    )
+                    .await?
+                }
+            },
+            MachineCommand::Prompt {
+                name,
+                provider,
+                model,
+                resume,
+                unattended,
+                command,
+                cwd,
+                user,
+                pass_env,
+                detach,
+                prompt,
+            } => {
+                let mut body = json!({"provider": provider, "prompt": prompt});
+                for (key, value) in [
+                    ("model", model),
+                    ("resume", resume),
+                    ("command", command),
+                    ("cwd", cwd),
+                    ("user", user),
+                ] {
+                    if let Some(value) = value {
+                        body[key] = json!(value);
+                    }
+                }
+                if unattended {
+                    body["unattended"] = json!(true);
+                }
+                let env = passed_env(&pass_env)?;
+                if !env.is_empty() {
+                    body["env"] = Value::Object(env);
+                }
+                let started = api
+                    .request(Method::POST, &["machines", &name, "prompts"], Some(body))
+                    .await?;
+                if detach {
+                    started
+                } else {
+                    let id = started["promptID"]
+                        .as_u64()
+                        .context("prompt response missing promptID")?
+                        .to_string();
+                    return follow_prompt(&api, &name, &id).await;
+                }
+            }
             MachineCommand::Type {
                 name,
                 text,
@@ -2148,6 +2291,74 @@ async fn public_ports(api: &Api, command: PublicPortCommand) -> Result<Value> {
             )
             .await
         }
+    }
+}
+
+/// The most one read of a run or a prompt may be: what a node keeps of a
+/// stream, with room for how it is wrapped.
+const FOLLOW_LIMIT: usize = 32 << 20;
+
+/// The caller's own variables named by `--pass-env`, for a guest command.
+fn passed_env(names: &[String]) -> Result<serde_json::Map<String, Value>> {
+    names
+        .iter()
+        .map(|name| {
+            let value = std::env::var(name)
+                .with_context(|| format!("--pass-env {name}: not set here, or not text"))?;
+            Ok((name.clone(), Value::String(value)))
+        })
+        .collect()
+}
+
+/// Print a prompt's events as its agent prints them, one to a line, until
+/// the agent ends; its exit code is the answer.
+async fn follow_prompt(api: &Api, name: &str, id: &str) -> Result<i32> {
+    let mut after = 0u64;
+    loop {
+        let from = after.to_string();
+        let read = api
+            .request_bounded_query(
+                Method::GET,
+                &["machines", name, "prompts", id],
+                None,
+                FOLLOW_LIMIT,
+                &[("after", &from)],
+            )
+            .await?;
+        {
+            use std::io::Write;
+            let mut out = std::io::stdout().lock();
+            for entry in read["events"].as_array().into_iter().flatten() {
+                match (entry.get("event"), entry["text"].as_str()) {
+                    (Some(event), _) => writeln!(out, "{event}")?,
+                    (None, Some(text)) => writeln!(out, "{text}")?,
+                    (None, None) => {}
+                }
+            }
+            out.flush()?;
+        }
+        after = read["next"]
+            .as_u64()
+            .context("prompt response missing next")?;
+        let state = read["state"]
+            .as_str()
+            .context("prompt response missing state")?;
+        if state == "running" {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            continue;
+        }
+        return Ok(match read["exitCode"].as_i64() {
+            Some(code) => i32::try_from(code).unwrap_or(1),
+            None => {
+                let why = match (read["signal"].as_i64(), read["reason"].as_str()) {
+                    (Some(signal), _) => format!("signal {signal}"),
+                    (None, Some(reason)) => reason.to_string(),
+                    (None, None) => "no exit code".to_string(),
+                };
+                eprintln!("prompt {id} {state}: {why}");
+                1
+            }
+        });
     }
 }
 

@@ -75,6 +75,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- Prompts for machines: `POST /machines/{name}/prompts` runs a coding agent
+  that is in the machine (`claude`, `codex`, or any by its own `command`) on
+  a prompt, as a run. Its events are read from any offset
+  (`GET .../prompts/{id}?after=N`), it is interrupted
+  (`.../interrupt`), and `GET .../prompts` lists them. The prompt reaches the
+  agent in its environment and is never part of a shell line; `env`, where
+  its key goes, is not kept. `hm sandbox vm machine prompt` follows one to
+  its end, and `machine run` / `machine runs` start and read runs.
+- The guest agent starts programs with SIGINT, SIGQUIT, SIGTERM and SIGHUP
+  at their defaults. The sandbox guest's init starts the agent with `&`,
+  which leaves SIGINT and SIGQUIT ignored in it and in everything it
+  starts: an interrupt sent to a program was accepted and did nothing, and
+  a shell could not trap it. A guest image has the fix once it is rebuilt
+  with this agent.
 - Runs for machines: `POST /machines/{name}/runs` starts a command and
   answers at once; its output is kept on the node and read from any offset
   (`GET .../runs/{id}?stdout=N&stderr=N`), it can be written to

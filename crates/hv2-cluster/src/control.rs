@@ -305,6 +305,15 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
             post(to_machine_node),
         )
         .route(
+            "/machines/{name}/prompts",
+            get(to_machine_node).post(to_machine_node),
+        )
+        .route("/machines/{name}/prompts/{promptID}", get(to_machine_node))
+        .route(
+            "/machines/{name}/prompts/{promptID}/interrupt",
+            post(to_machine_node),
+        )
+        .route(
             "/machines/{name}/console",
             get(to_machine_node).post(to_machine_node),
         )

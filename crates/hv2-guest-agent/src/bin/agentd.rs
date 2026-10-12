@@ -1023,6 +1023,29 @@ mod linux {
             .unwrap_or_default()
     }
 
+    /// Give a program the signals a program expects to start with.
+    ///
+    /// This agent may have been started with some of them ignored: a shell
+    /// without job control ignores SIGINT and SIGQUIT in whatever it starts
+    /// with `&`, which is how an init script starts a daemon and how the
+    /// sandbox guest's starts this one. What is ignored stays ignored across
+    /// `exec`, and a shell cannot trap a signal that was ignored when it
+    /// started. So an interrupt sent to a program started here was accepted
+    /// and did nothing, and a Ctrl-C at a terminal did nothing to a program
+    /// with no handler of its own.
+    fn default_signals(command: &mut Command) {
+        // SAFETY: runs in the child between fork and exec, and calls only
+        // `signal`, which is async-signal-safe.
+        unsafe {
+            command.pre_exec(|| {
+                for signal in [libc::SIGINT, libc::SIGQUIT, libc::SIGTERM, libc::SIGHUP] {
+                    libc::signal(signal, libc::SIG_DFL);
+                }
+                Ok(())
+            });
+        }
+    }
+
     fn start(
         program: &str,
         args: &[String],
@@ -1033,6 +1056,7 @@ mod linux {
     ) -> OpResult {
         let mut command = Command::new(program);
         command.args(args);
+        default_signals(&mut command);
         // Added to the agent's own environment rather than replacing it:
         // `env_clear` would leave the program without a `PATH`, and the first
         // thing most of them do is look something up in it. The template's
@@ -1394,6 +1418,7 @@ mod linux {
         timeout_ms: u64,
     ) -> OpResult {
         let mut command = Command::new(program);
+        default_signals(&mut command);
         command
             .args(args)
             .stdin(Stdio::piped())
@@ -1524,6 +1549,92 @@ mod linux {
                 assert_eq!(out, "final-out");
                 assert_eq!(err, "final-err");
             }
+        }
+
+        /// Poll until the program has printed `until`, or ended; what it
+        /// printed, and how it ended if it did.
+        fn follow(pid: u32, until: Option<&str>) -> (String, Option<(Option<i32>, Option<i32>)>) {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            let mut out = String::new();
+            loop {
+                let OpResult::Output {
+                    stdout,
+                    running,
+                    exit_code,
+                    signal,
+                    ..
+                } = poll(pid)
+                else {
+                    panic!("could not poll test process")
+                };
+                out.push_str(&stdout);
+                if !running {
+                    return (out, Some((exit_code, signal)));
+                }
+                if until.is_some_and(|text| out.contains(text)) {
+                    return (out, None);
+                }
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "process neither printed nor finished: {out:?}"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        }
+
+        #[test]
+        fn an_interrupt_reaches_a_program_though_this_agent_was_started_ignoring_it() {
+            // As an init script's `agentd &` leaves this process.
+            // SAFETY: `signal` with a valid signal and disposition.
+            let before = unsafe { libc::signal(libc::SIGINT, libc::SIG_IGN) };
+            let begin = |script: &str| {
+                let OpResult::Started { pid } = start(
+                    "/bin/sh",
+                    &["-c".into(), script.into()],
+                    None,
+                    &BTreeMap::new(),
+                    None,
+                    None,
+                ) else {
+                    panic!("could not start test process")
+                };
+                assert_eq!(follow(pid, Some("ready")).1, None, "it ended early");
+                pid
+            };
+
+            // A shell that traps it: its handler runs, and it ends as it chose.
+            let trapping =
+                begin("trap 'echo caught; exit 42' INT; echo ready; while :; do sleep 0.05; done");
+            // A program with no handler: ended by the signal.
+            let plain = begin("echo ready; exec sleep 30");
+            for pid in [trapping, plain] {
+                assert_eq!(signal(pid, libc::SIGINT), OpResult::Acknowledged);
+            }
+            let (out, ended) = follow(trapping, None);
+            assert_eq!(ended, Some((Some(42), None)), "{out:?}");
+            assert!(out.contains("caught"), "{out:?}");
+            assert_eq!(follow(plain, None).1, Some((None, Some(libc::SIGINT))));
+
+            // And one run to its end sees the same.
+            let OpResult::Exited { stdout, .. } = exec(
+                "/bin/sh",
+                &[
+                    "-c".into(),
+                    "trap 'echo caught' INT; kill -INT $$; echo after".into(),
+                ],
+                None,
+                None,
+                5_000,
+            ) else {
+                panic!("could not run test process")
+            };
+            assert_eq!(stdout, "caught\nafter\n");
+
+            for pid in [trapping, plain] {
+                procs().lock().unwrap().remove(&pid);
+            }
+            // SAFETY: restores what was there.
+            unsafe { libc::signal(libc::SIGINT, before) };
         }
     }
 }

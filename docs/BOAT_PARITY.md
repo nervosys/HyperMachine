@@ -47,7 +47,7 @@ reason, and are listed once at the end rather than counted as gaps.
 | A public address of its own | IPv4 or IPv6 per sandbox | Managed public TCP and UDP ports per VM, partial; no address per VM |
 | A desktop in a browser | 1920x1080 at 60 frames a second over WebRTC, with sound and a clipboard; VNC over HTTPS as a fallback; a stream of the browser alone; recording to a file | **Absent.** No shipped binary gives a guest a display. About ten thousand lines of display and input devices sit in `hv2-core` attached to nothing |
 | Computer use for agents | Screenshots, clicks, typing and browser actions as a tool server every installed agent is given | **Absent**, for want of a display |
-| Coding agents run for you | Seven of them. `boat prompt`, conversations, a stream of their events, `steer` into a running turn, `interrupt`, a move from one agent to another with the transcript | **Absent.** HyperMachine offers tools for an agent outside to call ([MCP](AGENTIC_INTERFACE.md)); it runs no agent inside a sandbox and has nothing to prompt |
+| Coding agents run for you | Seven of them. `boat prompt`, conversations, a stream of their events, `steer` into a running turn, `interrupt`, a move from one agent to another with the transcript | **Two of them, in a machine, and not yet with a model behind them.** [`prompts`](MACHINES.md#prompts) runs Claude Code or Codex, or any agent by its own command, on a prompt; gives its events from any offset; interrupts it; and carries Claude Code's session to the next prompt. The agent has to be in the machine already, with the caller's key. No `steer`, no conversations, no move between agents; nothing for a sandbox. Checked with a stand-in for the agent, and each real agent took its command line with no key; none has answered a prompt here |
 | A named set of variables, files and repositories for new sandboxes | Environments | **No.** Variables are per sandbox. Setup steps run when a template is built, not when a sandbox is created |
 | Secrets | The account's, given to every sandbox unless one is made without them | Per-sandbox variables, and [secrets held off the VM and put in at the edge](EGRESS_SECRETS.md), partial, which boat does not describe |
 | What a sandbox may reach on the network | Outbound Internet. No policy is described; the user may run a firewall inside | Allow and deny lists per VM, changed while it runs, with a log of decisions, and reserved ranges refused |
@@ -79,8 +79,12 @@ In rough order of how much each matters to someone choosing between them:
    with tools already in it. A sandbox, as distinct from a machine, is
    unchanged. Most of the rows below stand on this one: an agent, a browser
    and a desktop are all things a distribution installs.
-2. **Coding agents run for the caller.** Nothing here starts an agent in a
-   sandbox, carries a prompt to it or reports what it did.
+2. **Coding agents that are already there, and proven.** A machine now
+   [runs one on a prompt](MACHINES.md#prompts) and reports what it did, but
+   the caller installs it and brings the key, where boat has seven installed;
+   there is no steering, no conversation and no move between agents; and no
+   prompt has been answered by a model here, which needs a key this project
+   does not hold.
 3. **A desktop, and computer use.** Absent, and the device code that would
    back it is not attached to anything.
 4. **A size per sandbox, and changing it.** A caller here cannot ask for four

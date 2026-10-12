@@ -1,0 +1,114 @@
+{
+  "success": true,
+  "purpose": "functional verification of machine prompts on KVM with a stand-in for the coding agent; no agent, no key, no timing claim",
+  "input_sha256": {
+    "daemon": "51ad6e3c28725b8c121703c23b8198d9fec3112f521d0f126f2c55cbefd3fde1",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d0cb1ca9e27fcf5c28669ef11c6c4cd9f8d2b220319dff4e5d1e454e6b6bdceb",
+    "driver": "2334b1ae9795576ec4d912bc8c2ea39bea77e9a78dffbe4d23134994f5a27abb"
+  },
+  "cases": [
+    {
+      "name": "a prompt for a harness that is not in the machine ends, saying so",
+      "success": true,
+      "detail": {
+        "exitCode": 127,
+        "stderr": "/bin/sh: exec: line 0: claude: not found"
+      }
+    },
+    {
+      "name": "each provider's command line reaches its program, the prompt one argument and never shell",
+      "success": true,
+      "detail": {
+        "arguments": {
+          "claude": 5,
+          "claude, all of it": 10,
+          "codex": 4,
+          "codex, all of it": 7
+        },
+        "prompt_bytes": 140
+      }
+    },
+    {
+      "name": "events are read as the agent prints them, from where the last read stopped",
+      "success": true,
+      "detail": {
+        "promptID": 7,
+        "events": 6,
+        "reads": 12,
+        "reads_with_events": 4,
+        "session": "stand-in-308"
+      }
+    },
+    {
+      "name": "half a line is not an event until the rest of it arrives",
+      "success": true,
+      "detail": {
+        "reads_while_half_written": 10
+      }
+    },
+    {
+      "name": "an interrupt reaches the agent itself, which ends as it chooses to",
+      "success": true,
+      "detail": {
+        "promptID": 9,
+        "exitCode": 130
+      }
+    },
+    {
+      "name": "a key in env reaches the agent and is in nothing returned or logged",
+      "success": true,
+      "detail": {
+        "key_length_seen_by_agent": 28,
+        "daemon_log_bytes": 1286520
+      }
+    },
+    {
+      "name": "prompts are listed in order without events; a prompt is a run, a run is not a prompt",
+      "success": true,
+      "detail": {
+        "prompts": 9,
+        "run_cmd": "exec claude -p \"$HM_PROMPT\" --output-format stream-json --verbose"
+      }
+    },
+    {
+      "name": "a custom command is run as it is, with the prompt in its environment",
+      "success": true,
+      "detail": {
+        "event": {
+          "length": 12,
+          "model": "any-model",
+          "type": "echo"
+        }
+      }
+    },
+    {
+      "name": "what cannot be done is refused, each with why",
+      "success": true,
+      "detail": {
+        "empty prompt": "prompt is empty",
+        "a prompt too long": "prompt is at most 128 KiB",
+        "no such provider": "no provider \"hal\": claude, codex, or custom with a command",
+        "custom without a command": "provider \"custom\" needs `command`: a shell line that reads $HM_PROMPT",
+        "a command for a provider that has one": "`command` is for provider \"custom\"; claude has its own",
+        "resume for codex": "resume is not offered for codex: its way of carrying a session on has not been checked here",
+        "claude unattended as root": "claude will not run unattended as root: give `user`, a user of the guest that is not",
+        "an empty model": "model is empty",
+        "no such prompt": "machine agent-01 has no prompt 99999",
+        "interrupting one that has ended": "run 7 has ended",
+        "no such machine": "no machine absent-99"
+      }
+    },
+    {
+      "name": "nothing is prompted in a stopped machine, and what was is still read",
+      "success": true,
+      "detail": {
+        "refused": "machine agent-01 is not running"
+      }
+    }
+  ],
+  "stand_in_installed_as": [
+    "/sbin/claude",
+    "/sbin/codex"
+  ]
+}
