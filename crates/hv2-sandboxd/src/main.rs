@@ -914,6 +914,9 @@ struct NewSandbox {
     /// returned: see env_vars.rs.
     #[serde(rename = "envVars", default)]
     env_vars: BTreeMap<String, String>,
+    /// A named set of variables and files of the caller's team to start
+    /// with, under `envVars`. See hv2_cluster::environments.
+    environment: Option<String>,
     /// Seconds without use after which the sandbox pauses -- to disk, and
     /// resumed by the next request when `autoResume` is on. 0 turns off a
     /// node's `--idle-pause-after`. Not E2B's: see idle.rs.
@@ -1682,6 +1685,9 @@ impl Drop for ColdBootAdmission {
 
 /// Bring up a sandbox's VM: from `snapshot` when given, else from the
 /// template, else by booting; then its network and its envd listener.
+// Each is a distinct part of what a sandbox is brought up with, and every
+// caller names each one.
+#[allow(clippy::too_many_arguments)]
 async fn bring_up(
     state: &Arc<AppState>,
     sandbox_id: &str,
@@ -1692,6 +1698,7 @@ async fn bring_up(
     team: Option<&hv2_cluster::ownership::TeamId>,
     disk: Option<&disks::Claim>,
     env: &BTreeMap<String, String>,
+    files: &[hv2_cluster::environments::GuestFile],
     access_token: &str,
 ) -> Result<Running, (StatusCode, String)> {
     let internal = |e: String| (StatusCode::INTERNAL_SERVER_ERROR, e);
@@ -1916,6 +1923,15 @@ async fn bring_up(
     // create passes any: a resume, a fork and a build restore a guest that
     // already holds its own.
     if let Err(e) = env_vars::apply(&vm, env).await {
+        if let Some(network) = network {
+            network.bridge.abort();
+        }
+        startup_cleanup.stop().await;
+        return Err(internal(e));
+    }
+    // And its environment's files, as the variables are: before anyone can
+    // start a command, and only for a create or a reboot.
+    if let Err(e) = env_vars::write_files(&vm, files).await {
         if let Some(network) = network {
             network.bridge.abort();
         }
@@ -2644,7 +2660,26 @@ async fn create_sandbox(
     if let Err(e) = volumes::check(&state, team_id.as_ref(), &mounts) {
         return api_error(StatusCode::BAD_REQUEST, e);
     }
-    if let Err(e) = env_vars::validate(&req.env_vars) {
+    // An environment's variables under the request's own, and its files.
+    let (env, files) = match &req.environment {
+        Some(name) => match hv2_cluster::environments::find(
+            state.events.store().as_ref(),
+            team_id.as_ref(),
+            name,
+        )
+        .await
+        {
+            Ok(Some(environment)) => {
+                let mut env = environment.env_vars;
+                env.extend(req.env_vars.clone());
+                (env, environment.files)
+            }
+            Ok(None) => return api_error(StatusCode::NOT_FOUND, format!("no environment {name}")),
+            Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        },
+        None => (req.env_vars.clone(), Vec::new()),
+    };
+    if let Err(e) = env_vars::validate(&env) {
         return api_error(StatusCode::BAD_REQUEST, e);
     }
     // A disk rules out starting from a snapshot, which would restore a
@@ -2760,7 +2795,8 @@ async fn create_sandbox(
         &mounts,
         team_id.as_ref(),
         disk.as_ref(),
-        &req.env_vars,
+        &env,
+        &files,
         &access_token,
     )
     .await
@@ -2828,7 +2864,8 @@ async fn create_sandbox(
     if let Some(disk) = disk {
         disk.keep();
     }
-    env_vars::keep(&sandbox_id, &req.env_vars);
+    env_vars::keep(&sandbox_id, &env);
+    env_vars::keep_files(&sandbox_id, &files);
 
     (StatusCode::CREATED, Json(descriptor)).into_response()
 }
@@ -3399,6 +3436,7 @@ async fn resume_sandbox(
         // The disk it held when it was paused, still claimed for it.
         disks::reattach(state, sandbox_id).as_ref(),
         &BTreeMap::new(),
+        &[],
         &paused.descriptor.envd_access_token,
     )
     .await
@@ -3994,6 +4032,7 @@ async fn fork_route(
                     creator.1.as_ref(),
                     claim.as_ref(),
                     &BTreeMap::new(),
+                    &[],
                     &access_token,
                 )
                 .await
@@ -6141,6 +6180,7 @@ async fn main() -> std::process::ExitCode {
             get(builds::status),
         )
         .route("/templates/aliases/{alias}", get(builds::alias))
+        .merge(hv2_cluster::environments::router(Arc::clone(&event_store)))
         .merge(hv2_cluster::events::router(event_store))
         .route("/volumes", get(volumes::list).post(volumes::create))
         .route("/disks", get(disks::list).post(disks::create))

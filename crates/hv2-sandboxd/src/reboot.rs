@@ -189,6 +189,7 @@ pub(crate) async fn reboot(
 
     let disk = disks::reattach(state, sandbox_id);
     let env = env_vars::kept(sandbox_id);
+    let files = env_vars::kept_files(sandbox_id);
     let running = bring_up(
         state,
         sandbox_id,
@@ -199,6 +200,7 @@ pub(crate) async fn reboot(
         record.team_id.as_ref(),
         disk.as_ref(),
         &env,
+        &files,
         &token,
     )
     .await

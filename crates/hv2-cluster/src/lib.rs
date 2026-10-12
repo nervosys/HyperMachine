@@ -11,6 +11,7 @@ pub mod audit;
 pub mod control;
 pub mod domain_verification;
 pub mod domains;
+pub mod environments;
 pub mod events;
 pub mod keys;
 pub mod metrics;

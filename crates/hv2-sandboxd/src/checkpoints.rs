@@ -391,6 +391,7 @@ pub(crate) async fn restore(
         record.team_id.as_ref(),
         None,
         &BTreeMap::new(),
+        &[],
         &descriptor.envd_access_token,
     )
     .await

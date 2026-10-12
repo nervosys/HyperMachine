@@ -48,7 +48,7 @@ reason, and are listed once at the end rather than counted as gaps.
 | A desktop in a browser | 1920x1080 at 60 frames a second over WebRTC, with sound and a clipboard; VNC over HTTPS as a fallback; a stream of the browser alone; recording to a file | **Absent.** No shipped binary gives a guest a display. About ten thousand lines of display and input devices sit in `hv2-core` attached to nothing |
 | Computer use for agents | Screenshots, clicks, typing and browser actions as a tool server every installed agent is given | **Absent**, for want of a display |
 | Coding agents run for you | Seven of them. `boat prompt`, conversations, a stream of their events, `steer` into a running turn, `interrupt`, a move from one agent to another with the transcript | **Two of them, in a machine, and not yet with a model behind them.** [`prompts`](MACHINES.md#prompts) runs Claude Code or Codex, or any agent by its own command, on a prompt; gives its events from any offset; interrupts it; and carries Claude Code's session to the next prompt. The agent has to be in the machine already, with the caller's key. No `steer`, no conversations, no move between agents; nothing for a sandbox. Checked with a stand-in for the agent, and each real agent took its command line with no key; none has answered a prompt here |
-| A named set of variables, files and repositories for new sandboxes | Environments | **No.** Variables are per sandbox. Setup steps run when a template is built, not when a sandbox is created |
+| A named set of variables, files and repositories for new sandboxes | Environments | **Variables and files.** A team's [environments](ENVIRONMENTS.md) are named sets of variables and files a sandbox starts with, kept across a reboot and into a fork, [checked on KVM](benchmarks/2026-10-12/environments-kvm/README.md). No repositories are cloned, and setup steps run when a template is built, not when a sandbox is created |
 | Secrets | The account's, given to every sandbox unless one is made without them | Per-sandbox variables, and [secrets held off the VM and put in at the edge](EGRESS_SECRETS.md), partial, which boat does not describe |
 | What a sandbox may reach on the network | Outbound Internet. No policy is described; the user may run a firewall inside | Allow and deny lists per VM, changed while it runs, with a log of decisions, and reserved ranges refused |
 | Networks between sandboxes | Not described | By tag, partial: [same node and across two nodes](PRIVATE_VM_NETWORKS.md) |
@@ -98,8 +98,8 @@ In rough order of how much each matters to someone choosing between them:
    sandbox, and nothing reads it from outside.
 6. **Stored command output that survives the node**, and for sandboxes at
    all; the guest's process list; and a port back to the caller's machine.
-7. **Environments**: variables, files and repositories applied to every new
-   sandbox.
+7. **Repositories in an environment.** [Environments](ENVIRONMENTS.md)
+   give a sandbox variables and files now; boat's clone repositories too.
 8. **Usage kept for good, and telemetry a team sets for itself.**
    [Usage](USAGE.md) is added up per sandbox, team and key now, from the
    events a cluster keeps, so only as far back as they go; and a node's
