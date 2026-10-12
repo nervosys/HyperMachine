@@ -57,7 +57,7 @@ reason, and are listed once at the end rather than counted as gaps.
 | Telemetry sent where the user says | OTLP over HTTP, set per account | **Per node, set by its operator.** A node [pushes its metrics over OTLP/HTTP](TELEMETRY.md) with JSON, configured by flags or OpenTelemetry's own variables, [checked against the OpenTelemetry Collector](benchmarks/2026-10-12/otlp-export/README.md); and serves them at `/metrics`. Metrics only, and only the node's: nothing per sandbox, nothing from the control plane, no logs or traces, and not set per team |
 | Teams | Organizations, members, a shared wallet | [Teams](TEAMS.md), partial: keys and sandboxes belong to one, with roles |
 | How much was used | Per sandbox and per key | **Per sandbox, team, template or key, for sandboxes.** [`GET /usage`](USAGE.md) adds up running time, vCPU-seconds and GiB-seconds in a window, paused time not counted, [checked on KVM against a stopwatch](benchmarks/2026-10-12/usage-kvm/README.md). It goes back only as far as the last 10,000 lifecycle events, which a lone node keeps in memory; machines, storage and network are not counted |
-| Client libraries | Python and TypeScript | E2B's own, unmodified, against E2B's API. [Python](../sdk/python/README.md) for machines, runs, prompts, files, ports, snapshots, usage and environments, with no dependencies, [checked against a node on KVM](benchmarks/2026-10-12/python-sdk-kvm/README.md). No TypeScript one for the VM API; `sdk/node` is for the [process sandbox](SANDBOXES.md) |
+| Client libraries | Python and TypeScript | E2B's own, unmodified, against E2B's API. [Python](../sdk/python/README.md) for machines, runs, prompts, files, ports, snapshots, usage and environments, with no dependencies, [checked against a node on KVM](benchmarks/2026-10-12/python-sdk-kvm/README.md). And [TypeScript](../sdk/typescript/README.md), the same in camelCase, [checked the same way](benchmarks/2026-10-12/typescript-sdk-kvm/README.md); `sdk/node` is for the [process sandbox](SANDBOXES.md). Neither is on PyPI or npm |
 | A command line | `boat`, with JSON output on every command | `hm sandbox vm` |
 | GPU | None | Partial: passthrough code, not wired to sandboxes |
 | Who runs it | ASCII, in Germany, Finland and France | Whoever installs it: one node or [several](DEPLOYMENT_GUIDE.md), with the source |
@@ -104,9 +104,9 @@ In rough order of how much each matters to someone choosing between them:
    [Usage](USAGE.md) is added up per sandbox, team and key now, from the
    events a cluster keeps, so only as far back as they go; and a node's
    operator can [push its metrics over OTLP](TELEMETRY.md).
-9. **A TypeScript client of its own.** [Python's](../sdk/python/README.md)
-   is here; for TypeScript, E2B's SDK reaches sandboxes and nothing reaches
-   machines.
+9. **Clients published to a registry.** [Python](../sdk/python/README.md)
+   and [TypeScript](../sdk/typescript/README.md) clients are here, installed
+   from a checkout, not from PyPI or npm.
 10. **An image with the tools already in it.**
 
 ## Where HyperMachine has something boat's documentation does not claim

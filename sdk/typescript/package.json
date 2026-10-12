@@ -1,0 +1,31 @@
+{
+  "name": "@nervosys/hypermachine",
+  "version": "0.1.0",
+  "description": "A client for HyperMachine's machine API, with no dependencies.",
+  "license": "AGPL-3.0-only OR LicenseRef-Commercial",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nervosys/HyperMachine.git",
+    "directory": "sdk/typescript"
+  },
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}
