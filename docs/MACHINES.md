@@ -180,6 +180,49 @@ the guest needs no DHCP client. On a node run with `--network`, the egress CA is
 added to the guest's trust bundle at each boot, once: a boot that finds it there
 leaves the bundle alone.
 
+## Runs
+
+`exec` waits for a command and answers with what it printed. A run is for a
+command that takes longer than anyone wants to wait: it is started and left,
+and the node keeps what it prints.
+
+```sh
+# Start one. The answer comes at once, with its ID.
+curl -sS -X POST $NODE/machines/web-01/runs -H 'content-type: application/json' \
+  -d '{"cmd":"make -C /srv/app test","cwd":"/srv/app","env":{"CI":"1"}}'
+# → {"runID":1,"state":"running","pid":412,...}
+
+# Read it. `next` is where to read from the next time.
+curl -sS "$NODE/machines/web-01/runs/1?stdout=0&stderr=0"
+# → {"state":"running","stdout":{"offset":0,"text":"...","next":2048,"dropped":0},"stderr":{...}}
+
+curl -sS -X POST $NODE/machines/web-01/runs/1/stdin  -d '{"data":"yes\n"}'
+curl -sS -X POST $NODE/machines/web-01/runs/1/signal -d '{"signal":"INT"}'
+curl -sS $NODE/machines/web-01/runs          # every run kept, oldest first
+```
+
+| | |
+|---|---|
+| `cmd` | A shell command line, run by the guest's `/bin/sh -c`. |
+| `cwd`, `user` | Where it starts, and as whom; the agent's own directory and root unless given. |
+| `env` | Set for the command. Not kept and not returned: it is where a key goes. |
+| `stdin` | Written to its standard input, which is then closed. Leave it out to keep it open for `.../stdin`. |
+
+- **A run ends** as `exited`, with an exit code or the signal that ended it,
+  or as `lost` with the reason when the node can no longer reach it. A
+  machine that stops takes its programs with it, and their runs are `lost`.
+- **Output is kept on the node, in memory**: the newest 4 MiB of each stream,
+  with `dropped` counting what went before. It outlives the run and the
+  machine being stopped, and is gone when the node restarts or the machine is
+  deleted. 256 runs are kept for a machine; the oldest finished one makes
+  room, and with 256 still running a new one is refused.
+- **It needs the guest agent**, as `exec` does: a machine from a template
+  always has it, and one from an image has it when created with
+  `guestAgent`.
+- **It has pipes, not a terminal.**
+
+[Checked on real KVM](benchmarks/2026-10-11/machine-runs-kvm/README.md).
+
 ## How it boots
 
 At creation, the template's initramfs is unpacked into a fresh sparse ext4 image

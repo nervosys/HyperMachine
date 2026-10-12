@@ -39,8 +39,8 @@ reason, and are listed once at the end rather than counted as gaps.
 | systemd, and Docker, in the guest | Both | **Both, in a machine from a disk image**: [Ubuntu 24.04's image as published](benchmarks/2026-10-11/machine-docker-kvm/README.md) boots on its own 6.8 kernel with systemd started in full, installs Docker with `apt`, and runs containers. That run was typed at its serial console; such a machine can also [take `exec`](benchmarks/2026-10-11/machine-agent-kvm/README.md). **Neither in a sandbox**, whose first process is the project's own and whose kernel is built without what Docker needs |
 | `/dev/kvm` in the guest | Yes on its standard hosts, and said to be absent on its fallback hosts | **Not offered.** Not masked either, and never tested |
 | Installed for you | Docker, Chrome, VS Code, some twenty languages and runtimes, a dozen agent programs | What the template's image holds. No image is shipped with more than the guest agent needs |
-| Commands and files from outside | `exec`, with detach, attach and kill; `scp`; SSH | `exec`, processes with a terminal and standard input, files in and out; SSH by name is partial |
-| Output of past commands | Stored, listed and replayed (`boat history`) | **No.** Output is streamed once and not kept |
+| Commands and files from outside | `exec`, with detach, attach and kill; `scp`; SSH | A sandbox: `exec`, processes with a terminal and standard input, files in and out; SSH by name is partial. A machine: `exec`, and [runs](MACHINES.md#runs), started and left, read from any offset, written to and signalled; no file routes |
+| Output of past commands | Stored, listed and replayed (`boat history`) | **For a machine's [runs](MACHINES.md#runs)**: listed, and each one's output kept and read again, in the node's memory, so not across a node restart. Not for `exec`, and not for a sandbox, whose output is streamed once |
 | The guest's processes, listed from outside | `boat ps` | Only the processes started through the API and still running |
 | An HTTPS address for a port | `https://NAME-PORT.on.boat.dev`, behind a token unless made public; fifty ports | `{port}-{id}.{domain}` over TLS, with [custom domains](CUSTOM_DOMAINS.md) and [private URLs with a login](PRIVATE_GUEST_URLS.md). The operator supplies DNS and certificates |
 | A port from the caller's machine into the sandbox, and back | `boat forward`, and `--reverse` | Into the sandbox, TCP and UDP. **Not back**: nothing makes a port of the caller's reachable from the guest |
@@ -88,8 +88,8 @@ In rough order of how much each matters to someone choosing between them:
 5. **Reading a snapshot from outside.** Automatic checkpoints exist now, and
    keep memory where boat's keep files; but there is one, on one node, and
    nothing lists or downloads what is in it.
-6. **Stored command output**, the guest's process list, and a port back to
-   the caller's machine.
+6. **Stored command output that survives the node**, and for sandboxes at
+   all; the guest's process list; and a port back to the caller's machine.
 7. **Environments**: variables, files and repositories applied to every new
    sandbox.
 8. **Usage figures and telemetry export.**

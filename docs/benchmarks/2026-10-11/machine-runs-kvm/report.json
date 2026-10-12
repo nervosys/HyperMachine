@@ -1,0 +1,97 @@
+{
+  "success": true,
+  "purpose": "functional verification of machine runs on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "4674dfd1a1235913595129b0331ef1d5a65d51262f4052c7dca940db1204153d",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "driver": "94f2d536bf4255969c371d552d81eb5e7f867c7e940105621c39d35557d4fd62"
+  },
+  "cases": [
+    {
+      "name": "a run answers at once, is read a piece at a time, and ends with its exit code",
+      "success": true,
+      "detail": {
+        "runID": 1,
+        "start_answered_in_seconds": 0.0,
+        "pieces": 4,
+        "reads": 15,
+        "exitCode": 3
+      }
+    },
+    {
+      "name": "a run is told something on its standard input while it runs, and answers",
+      "success": true,
+      "detail": {
+        "runID": 2
+      }
+    },
+    {
+      "name": "a run is signalled, and ends by that signal",
+      "success": true,
+      "detail": {
+        "runID": 4,
+        "signal": 15
+      }
+    },
+    {
+      "name": "two runs go at once, each with its own output",
+      "success": true,
+      "detail": {
+        "runs": [
+          5,
+          6
+        ]
+      }
+    },
+    {
+      "name": "a finished run's output is still there, and the runs are listed in order",
+      "success": true,
+      "detail": {
+        "listed": 6
+      }
+    },
+    {
+      "name": "a run's environment reaches its command and is in nothing returned about it",
+      "success": true,
+      "detail": {
+        "runID": 7,
+        "record_keys": [
+          "cmd",
+          "endedAt",
+          "exitCode",
+          "pid",
+          "reason",
+          "runID",
+          "signal",
+          "startedAt",
+          "state",
+          "stderr",
+          "stderrBytes",
+          "stdout",
+          "stdoutBytes"
+        ]
+      }
+    },
+    {
+      "name": "a run still going when the machine stops ends as lost, with what it printed",
+      "success": true,
+      "detail": {
+        "lost": 8,
+        "reason": "its machine stopped"
+      }
+    },
+    {
+      "name": "what cannot be done is refused, each with why",
+      "success": true,
+      "detail": {
+        "empty command": "cmd is empty",
+        "no such run": "machine runner-01 has no run 99999",
+        "input to an ended run": "run 1 has ended",
+        "signal to an ended run": "run 1 has ended",
+        "not a signal": "\"NOPE\" is not a signal: a name such as INT, TERM or KILL, or a number",
+        "no such machine": "no machine absent-99"
+      }
+    }
+  ]
+}

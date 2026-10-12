@@ -46,3 +46,24 @@ pub(crate) async fn network_decisions() -> Response {
 pub(crate) async fn console_input() -> Response {
     refused()
 }
+
+/// A machine's runs: the same answer.
+pub(crate) mod runs {
+    use super::{refused, Response};
+
+    pub(crate) async fn start() -> Response {
+        refused()
+    }
+    pub(crate) async fn list() -> Response {
+        refused()
+    }
+    pub(crate) async fn get() -> Response {
+        refused()
+    }
+    pub(crate) async fn stdin() -> Response {
+        refused()
+    }
+    pub(crate) async fn signal() -> Response {
+        refused()
+    }
+}

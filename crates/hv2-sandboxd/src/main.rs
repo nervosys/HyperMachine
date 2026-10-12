@@ -6065,6 +6065,19 @@ async fn main() -> std::process::ExitCode {
         )
         .route("/machines/{name}/exec", post(machines::exec))
         .route(
+            "/machines/{name}/runs",
+            get(machines::runs::list).post(machines::runs::start),
+        )
+        .route("/machines/{name}/runs/{runID}", get(machines::runs::get))
+        .route(
+            "/machines/{name}/runs/{runID}/stdin",
+            post(machines::runs::stdin),
+        )
+        .route(
+            "/machines/{name}/runs/{runID}/signal",
+            post(machines::runs::signal),
+        )
+        .route(
             "/machines/{name}/console",
             get(machines::console).post(machines::console_input),
         )
