@@ -134,6 +134,13 @@ jobs:
               run: python3 tools/test-ci-install-protoc.py
             - name: Python SDK against its HTTP fixture
               run: python3 -I -m unittest discover -s sdk/python/tests
+            - name: TypeScript SDK against its HTTP fixture
+              run: cd sdk/typescript && node --test
+            - name: TypeScript SDK's declarations, strictly
+              run: |
+                  npm install --prefix "$RUNNER_TEMP/tsc" --no-audit --no-fund typescript@5.6.3 @types/node@20.17.6
+                  node "$RUNNER_TEMP/tsc/node_modules/typescript/bin/tsc" -p sdk/typescript/test \
+                      --typeRoots "$RUNNER_TEMP/tsc/node_modules/@types"
             - name: Install pinned Helm
               uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
               with:
