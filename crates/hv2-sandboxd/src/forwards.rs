@@ -506,7 +506,7 @@ async fn carry_opened(
 
 /// Bytes both ways between the proxy's connection and the guest's, until
 /// either side is done.
-fn splice(stream: &VsockStream, tcp: std::net::TcpStream, early: &[u8]) {
+pub(crate) fn splice(stream: &VsockStream, tcp: std::net::TcpStream, early: &[u8]) {
     use std::io::{Read, Write};
     let Ok(mut to_proxy) = tcp.try_clone() else {
         return;

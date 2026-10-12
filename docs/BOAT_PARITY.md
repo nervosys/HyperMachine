@@ -42,7 +42,7 @@ reason, and are listed once at the end rather than counted as gaps.
 | Commands and files from outside | `exec`, with detach, attach and kill; `scp`; SSH | A sandbox: `exec`, processes with a terminal and standard input, files in and out; SSH by name is partial. A machine: `exec`, and [runs](MACHINES.md#runs), started and left, read from any offset, written to and signalled; and [files](MACHINES.md#files) in and out by path, up to 64 MiB each. No directories or trees in one request, and no SSH |
 | Output of past commands | Stored, listed and replayed (`boat history`) | **For a machine's [runs](MACHINES.md#runs)**: listed, and each one's output kept and read again, in the node's memory, so not across a node restart. Not for `exec`, and not for a sandbox, whose output is streamed once |
 | The guest's processes, listed from outside | `boat ps` | Only the processes started through the API and still running |
-| An HTTPS address for a port | `https://NAME-PORT.on.boat.dev`, behind a token unless made public; fifty ports | `{port}-{id}.{domain}` over TLS, with [custom domains](CUSTOM_DOMAINS.md) and [private URLs with a login](PRIVATE_GUEST_URLS.md). The operator supplies DNS and certificates |
+| An HTTPS address for a port | `https://NAME-PORT.on.boat.dev`, behind a token unless made public; fifty ports | `{port}-{id}.{domain}` over TLS, with [custom domains](CUSTOM_DOMAINS.md) and [private URLs with a login](PRIVATE_GUEST_URLS.md), for a sandbox. The operator supplies DNS and certificates. A machine has [published ports](MACHINES.md#published-ports) instead: a TCP port of its node, with no name, TLS or login of the node's |
 | A port from the caller's machine into the sandbox, and back | `boat forward`, and `--reverse` | Into the sandbox, TCP and UDP. **Not back**: nothing makes a port of the caller's reachable from the guest |
 | A public address of its own | IPv4 or IPv6 per sandbox | Managed public TCP and UDP ports per VM, partial; no address per VM |
 | A desktop in a browser | 1920x1080 at 60 frames a second over WebRTC, with sound and a clipboard; VNC over HTTPS as a fallback; a stream of the browser alone; recording to a file | **Absent.** No shipped binary gives a guest a display. About ten thousand lines of display and input devices sit in `hv2-core` attached to nothing |
@@ -75,8 +75,9 @@ In rough order of how much each matters to someone choosing between them:
    [installs Docker and runs containers](benchmarks/2026-10-11/machine-docker-kvm/README.md).
    With `guestAgent` it [runs this project's agent](benchmarks/2026-10-11/machine-agent-kvm/README.md),
    installed by cloud-init, and takes `exec`, runs and
-   [files](MACHINES.md#files). What it still lacks: a way in from the
-   network; and an image with tools already in it. A sandbox, as distinct from a machine, is
+   [files](MACHINES.md#files). What it still lacks: an HTTPS name for a
+   port, where it has [a TCP port of its node](MACHINES.md#published-ports);
+   and an image with tools already in it. A sandbox, as distinct from a machine, is
    unchanged. Most of the rows below stand on this one: an agent, a browser
    and a desktop are all things a distribution installs.
 2. **Coding agents that are already there, and proven.** A machine now

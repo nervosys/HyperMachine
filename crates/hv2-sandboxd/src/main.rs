@@ -293,6 +293,12 @@ struct Options {
     disk_dir: Option<String>,
     /// Where machines -- long-lived VMs -- are kept: this node's own.
     machine_dir: Option<String>,
+    /// The node's ports that may be published for machines, first and last.
+    /// See machines/ports.rs.
+    machine_ports: (u16, u16),
+    /// The node's address those ports listen on. Its loopback unless said:
+    /// publishing a port does not by itself put a guest on a network.
+    machine_port_address: std::net::IpAddr,
     /// PVH firmware that machines created from a disk image boot.
     firmware: Option<String>,
     /// The guest agent's binary, for machines from a disk image that ask to
@@ -375,6 +381,8 @@ fn parse_options() -> Result<Options, String> {
         volume_dir: None,
         disk_dir: None,
         machine_dir: None,
+        machine_ports: (20000, 29999),
+        machine_port_address: std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
         firmware: None,
         guest_agent: None,
         image_dir: None,
@@ -435,6 +443,15 @@ fn parse_options() -> Result<Options, String> {
             "--volume-dir" => opts.volume_dir = Some(value(&mut i)?),
             "--disk-dir" => opts.disk_dir = Some(value(&mut i)?),
             "--machine-dir" => opts.machine_dir = Some(value(&mut i)?),
+            "--machine-ports" => {
+                opts.machine_ports = machine_port_range(&value(&mut i)?)?;
+            }
+            "--machine-port-address" => {
+                let given = value(&mut i)?;
+                opts.machine_port_address = given
+                    .parse()
+                    .map_err(|e| format!("--machine-port-address {given}: {e}"))?;
+            }
             "--firmware" => opts.firmware = Some(value(&mut i)?),
             "--guest-agent" => opts.guest_agent = Some(value(&mut i)?),
             "--image-dir" => opts.image_dir = Some(value(&mut i)?),
@@ -556,6 +573,28 @@ fn parse_options() -> Result<Options, String> {
         return Err("--registration-reconcile-interval requires --cluster-store and a nonempty cluster token".into());
     }
     Ok(opts)
+}
+
+/// `FIRST-LAST`, as `--machine-ports` gives it: the node's ports that may be
+/// published for machines.
+fn machine_port_range(text: &str) -> Result<(u16, u16), String> {
+    let (first, last) = text
+        .split_once('-')
+        .ok_or_else(|| format!("--machine-ports {text}: FIRST-LAST"))?;
+    let port = |part: &str| {
+        part.trim()
+            .parse::<u16>()
+            .ok()
+            .filter(|port| *port != 0)
+            .ok_or_else(|| format!("--machine-ports {text}: {part:?} is not a port"))
+    };
+    let (first, last) = (port(first)?, port(last)?);
+    if first > last {
+        return Err(format!(
+            "--machine-ports {text}: the first is after the last"
+        ));
+    }
+    Ok((first, last))
 }
 
 fn parse_registration_reconcile_interval(value: &str) -> Result<Duration, String> {
@@ -6090,6 +6129,14 @@ async fn main() -> std::process::ExitCode {
         .route(
             "/machines/{name}/prompts/{promptID}/interrupt",
             post(machines::prompts::interrupt),
+        )
+        .route(
+            "/machines/{name}/ports",
+            get(machines::ports::list).post(machines::ports::publish),
+        )
+        .route(
+            "/machines/{name}/ports/{hostPort}",
+            axum::routing::delete(machines::ports::unpublish),
         )
         .route(
             "/machines/{name}/files",

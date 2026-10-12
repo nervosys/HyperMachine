@@ -68,6 +68,21 @@ pub(crate) mod runs {
     }
 }
 
+/// A machine's published ports: the same answer.
+pub(crate) mod ports {
+    use super::{refused, Response};
+
+    pub(crate) async fn publish() -> Response {
+        refused()
+    }
+    pub(crate) async fn list() -> Response {
+        refused()
+    }
+    pub(crate) async fn unpublish() -> Response {
+        refused()
+    }
+}
+
 /// Resizing a machine: the same answer.
 pub(crate) mod resize {
     use super::{refused, Response};

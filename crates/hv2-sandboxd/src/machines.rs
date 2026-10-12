@@ -39,6 +39,7 @@ use hv2_cluster::ownership::TeamId;
 use super::seed;
 
 pub(crate) mod files;
+pub(crate) mod ports;
 pub(crate) mod prompts;
 pub(crate) mod resize;
 pub(crate) mod runs;
@@ -149,6 +150,10 @@ pub(crate) struct Stored {
     /// template always runs it and does not say so here.
     #[serde(rename = "guestAgent", default)]
     guest_agent: bool,
+    /// Ports of the node that carry connections to ports of its guest. See
+    /// ports.rs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    ports: Vec<ports::Published>,
 }
 
 /// A machine's network: one NIC behind this node's egress gateway, which
@@ -295,6 +300,7 @@ fn describe(machine: &Stored) -> Value {
         "image": machine.image,
         "cloudInit": machine.cloud_init,
         "guestAgent": machine.guest_agent,
+        "ports": machine.ports,
     })
 }
 
@@ -808,6 +814,9 @@ async fn halt(id: &str) {
 /// Bring machines back after this daemon starts, then watch for guests that
 /// stop by themselves, restarting them by their policy.
 pub(crate) async fn supervise(state: Arc<AppState>) {
+    // Before any machine is started: a published port is listened on whether
+    // or not its machine is running.
+    ports::restore(&state).await;
     {
         let _ops = OPS.lock().await;
         for mut machine in all(&state) {
@@ -1111,6 +1120,7 @@ pub(crate) async fn create(
         image: req.image,
         cloud_init: req.user_data.is_some(),
         guest_agent: wants_agent,
+        ports: Vec::new(),
     };
     let dir = dir_of(&state, &machine.id);
     if let Err(e) = std::fs::create_dir_all(root(&state)) {
@@ -1271,6 +1281,7 @@ pub(crate) async fn delete(
     }
     runs::forget(&machine.id);
     prompts::forget(&machine.id);
+    ports::forget(&machine.id);
     match std::fs::remove_dir_all(dir_of(&state, &machine.id)) {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),

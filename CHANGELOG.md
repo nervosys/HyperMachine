@@ -75,6 +75,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- Published ports for machines: `POST /machines/{name}/ports` gives a port
+  of the guest one of the node's, and connections to it are carried in
+  through the guest agent, with no NIC needed. The node gives out ports from
+  `--machine-ports` (20000-29999) on `--machine-port-address` (loopback
+  unless said). Kept with the machine across stops and node restarts;
+  `GET` lists them and `DELETE .../ports/{hostPort}` takes one back.
+  `hm sandbox vm machine publish`, `ports` and `unpublish`.
 - Resizing a machine: `PATCH /machines/{name}` with any of `cpuCount`,
   `memoryMB` and `diskGiB` changes a stopped machine's size, which it has at
   its next start. A disk only grows; a template machine's filesystem is
