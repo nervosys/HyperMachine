@@ -468,6 +468,45 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
     assert_eq!(observed.lock().unwrap().len(), sent);
     std::fs::remove_dir_all(&scratch).unwrap();
 
+    // Publishing sends the guest's port, and the node's only when chosen.
+    for (arguments, method, path, body) in [
+        (
+            vec!["publish", "web-01", "80"],
+            "POST",
+            "/machines/web-01/ports",
+            json!({"guestPort": 80}),
+        ),
+        (
+            vec!["publish", "web-01", "443", "--host-port", "20443"],
+            "POST",
+            "/machines/web-01/ports",
+            json!({"guestPort": 443, "hostPort": 20443}),
+        ),
+        (
+            vec!["ports", "web-01"],
+            "GET",
+            "/machines/web-01/ports",
+            Value::Null,
+        ),
+        (
+            vec!["unpublish", "web-01", "20443"],
+            "DELETE",
+            "/machines/web-01/ports/20443",
+            Value::Null,
+        ),
+    ] {
+        let output = hm(arguments.clone(), "owned-machine-key").await;
+        assert!(
+            output.status.success(),
+            "{arguments:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let requests = observed.lock().unwrap();
+        let (seen_method, seen_path, sent) = requests.last().unwrap();
+        assert_eq!((seen_method.as_str(), seen_path.as_str()), (method, path));
+        assert_eq!(sent, &body);
+    }
+
     // A resize sends only the sizes that were given.
     for (arguments, body) in [
         (
@@ -522,6 +561,8 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
         vec!["exec", "web-01"],
         vec!["run", "web-01"],
         vec!["resize", "web-01"],
+        vec!["publish", "web-01", "0"],
+        vec!["publish", "web-01", "70000"],
         // A variable that is not set is not sent as an empty one.
         vec!["run", "web-01", "--pass-env", "HM_TEST_UNSET", "--", "true"],
         vec!["prompt", "web-01", "hello"],

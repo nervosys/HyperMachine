@@ -226,6 +226,48 @@ curl -sS $NODE/machines/web-01/runs          # every run kept, oldest first
 `hm sandbox vm machine run web-01 --cwd /srv/app --pass-env CI -- make test`
 starts one, and `... machine runs web-01 [ID]` lists them or shows one.
 
+## Published ports
+
+A machine's guest listens on a port; publishing it gives that port one of
+the node's, and a connection to the node's port is carried to the guest's.
+
+```sh
+curl -sS -X POST $NODE/machines/web-01/ports -H 'content-type: application/json' \
+  -d '{"guestPort":8080}'
+# → {"hostPort":20000,"guestPort":8080,"address":"127.0.0.1","listening":true}
+
+curl -sS http://127.0.0.1:20000/              # the guest's port 8080
+curl -sS $NODE/machines/web-01/ports
+curl -sS -X DELETE $NODE/machines/web-01/ports/20000
+
+hm sandbox vm machine publish web-01 8080 [--host-port 20080]
+hm sandbox vm machine ports web-01
+hm sandbox vm machine unpublish web-01 20000
+```
+
+- **The operator decides which ports and which address.** A node gives out
+  ports from `--machine-ports FIRST-LAST` (20000-29999 unless said) and
+  listens for them on `--machine-port-address` (its loopback unless said). A
+  caller picks a port in that range with `hostPort`, or lets the node pick.
+  So publishing a port does not by itself put a guest on the Internet:
+  that takes an operator starting the node with an address that is.
+- **It goes in through the guest agent**, to the port on the guest's
+  loopback. The machine needs no NIC for it, and one with a NIC keeps its
+  egress rules as they are. It needs the agent: a machine from an image made
+  without `guestAgent` is refused.
+- **The node listens for as long as the port is published.** While the
+  machine is stopped, or nothing in the guest listens on the port, a
+  connection is accepted and closed. When the machine starts again the port
+  works as it did.
+- **Published ports are kept with the machine**: there after the node
+  restarts, gone when the machine is deleted. At most 16 for a machine.
+- **It is TCP, and the bytes are the guest's.** The node adds no TLS, no
+  HTTP and no login; whoever can reach the node's port reaches the guest's.
+- **Through the control plane** the routes are forwarded, and the port is
+  on the machine's node, at that node's address.
+
+[Checked on real KVM](benchmarks/2026-10-11/machine-ports-kvm/README.md).
+
 ## Resizing
 
 A stopped machine can be given other processors, other memory, or a larger
@@ -370,10 +412,12 @@ without the VM exiting. Stop a machine through the API.
 - **A machine from a template that turns itself off.** Its kernel is this
   project's, with no power registers named in its tables, so `poweroff`
   there still halts the guest without the VM exiting.
-- **Networking beyond egress.** A machine cannot be reached from the network:
-  there is no inbound port forwarding, no bridged or VLAN networking, and no
-  second NIC. Its network cannot be changed after creation, and it does not join
-  private sandbox networks.
+- **Networking beyond egress and published ports.** A machine is reached
+  through [ports the node publishes](#published-ports), in TCP, and not at
+  an address of its own or by a name with TLS as a sandbox's ports are.
+  There is no bridged or VLAN networking and no second NIC. Its network
+  cannot be changed after creation, and it does not join private sandbox
+  networks.
 - **Formats.** QCOW2, and several disks per machine.
 - **Control plane.** It routes `/machines`, but there is no event or webhook
   when a machine changes state, and each request asks every node where the

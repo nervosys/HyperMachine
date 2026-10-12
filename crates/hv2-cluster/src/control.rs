@@ -320,6 +320,14 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
             get(to_machine_node).put(to_machine_node),
         )
         .route(
+            "/machines/{name}/ports",
+            get(to_machine_node).post(to_machine_node),
+        )
+        .route(
+            "/machines/{name}/ports/{hostPort}",
+            axum::routing::delete(to_machine_node),
+        )
+        .route(
             "/machines/{name}/console",
             get(to_machine_node).post(to_machine_node),
         )

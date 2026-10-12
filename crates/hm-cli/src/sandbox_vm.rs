@@ -594,6 +594,30 @@ pub enum MachineCommand {
         detach: bool,
         prompt: String,
     },
+    /// Give a port of a machine's guest one of the node's, to connect to
+    Publish {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        /// The port the guest listens on
+        #[arg(value_parser = clap::value_parser!(u16).range(1..))]
+        guest_port: u16,
+        /// One of the node's ports, in the range it gives out; the node
+        /// chooses unless given
+        #[arg(long, value_parser = clap::value_parser!(u16).range(1..))]
+        host_port: Option<u16>,
+    },
+    /// List a machine's published ports
+    Ports {
+        #[arg(value_parser = machine_name)]
+        name: String,
+    },
+    /// Take a published port back, by the node's port
+    Unpublish {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        #[arg(value_parser = clap::value_parser!(u16).range(1..))]
+        host_port: u16,
+    },
     /// Copy a local file into a machine, making the directories above it
     Upload {
         #[arg(value_parser = machine_name)]
@@ -1723,6 +1747,30 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                     bail!("sandbox API returned {}", response.status());
                 }
                 return Ok(0);
+            }
+            MachineCommand::Publish {
+                name,
+                guest_port,
+                host_port,
+            } => {
+                let mut body = json!({"guestPort": guest_port});
+                if let Some(host_port) = host_port {
+                    body["hostPort"] = json!(host_port);
+                }
+                api.request(Method::POST, &["machines", &name, "ports"], Some(body))
+                    .await?
+            }
+            MachineCommand::Ports { name } => {
+                api.request_bounded(Method::GET, &["machines", &name, "ports"], None, 65536)
+                    .await?
+            }
+            MachineCommand::Unpublish { name, host_port } => {
+                api.request(
+                    Method::DELETE,
+                    &["machines", &name, "ports", &host_port.to_string()],
+                    None,
+                )
+                .await?
             }
             MachineCommand::Upload {
                 name,

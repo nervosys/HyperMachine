@@ -1,0 +1,81 @@
+{
+  "success": true,
+  "purpose": "functional verification of machine published ports on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "73951a9482e13a1ffcc02104cf1b2d4b10692c2aea9fd2bd2b29f79bfae136a2",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d0cb1ca9e27fcf5c28669ef11c6c4cd9f8d2b220319dff4e5d1e454e6b6bdceb",
+    "driver": "ba8fb68c915eb256d14783d91a06c842b66e89a21b1f618b251e83f9c5b1ffee"
+  },
+  "cases": [
+    {
+      "name": "a published port carries a connection to the guest's port, and a file comes out whole",
+      "success": true,
+      "detail": {
+        "published": {
+          "address": "127.0.0.1",
+          "guestPort": 8080,
+          "hostPort": 31016,
+          "listening": true
+        },
+        "bytes": 5120000
+      }
+    },
+    {
+      "name": "what is sent to a published port is what the guest's listener received",
+      "success": true,
+      "detail": {
+        "bytes": 3145745
+      }
+    },
+    {
+      "name": "several connections at once each get the whole file",
+      "success": true,
+      "detail": {
+        "connections": 8
+      }
+    },
+    {
+      "name": "a published port whose guest port has no listener accepts and closes",
+      "success": true,
+      "detail": {
+        "hostPort": 31018
+      }
+    },
+    {
+      "name": "what cannot be published is refused, and nothing is",
+      "success": true,
+      "detail": {
+        "every port taken": "every port from 31016 to 31018 is in use",
+        "a port in use": "port 31016 of this node is in use",
+        "below the node's range": "hostPort is 31016 to 31018 on this node, not 31015",
+        "above the node's range": "hostPort is 31016 to 31018 on this node, not 31019",
+        "a low port": "hostPort is 31016 to 31018 on this node, not 22",
+        "a guest port that is not one": "guestPort is 1 to 65535"
+      }
+    },
+    {
+      "name": "a port taken back refuses connections, and can be published again",
+      "success": true
+    },
+    {
+      "name": "stopped, a connection is accepted and closed; started again, the port works as it was",
+      "success": true
+    },
+    {
+      "name": "after the node is restarted the port is still published and works",
+      "success": true,
+      "detail": {
+        "node_starts": 2
+      }
+    },
+    {
+      "name": "deleting the machine gives its ports back",
+      "success": true
+    }
+  ],
+  "node_ports": [
+    31016,
+    31018
+  ]
+}
