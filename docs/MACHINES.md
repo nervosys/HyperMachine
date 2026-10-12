@@ -55,6 +55,7 @@ talking to a control plane.
 | `templateID` | `base` | Any template this node has, including one built from an OCI image. Its file tree becomes the root disk. |
 | `image` | none | In place of `templateID`: a raw disk image in the node's `--image-dir`, booted by firmware. See [From a disk image](#from-a-disk-image). |
 | `userData` | none | With `image` only: cloud-init user data for the guest, a `#cloud-config` document or a script, up to about 1 MiB. See [firmware boot](FIRMWARE_BOOT.md#a-user-at-creation-the-cloud-init-seed). Refused for a machine from a template. Not returned afterwards; the machine's record carries `cloudInit: true`. |
+| `guestAgent` | false | With `image` only: run HyperMachine's guest agent in the guest, so `exec` works. Refused on a node without `--guest-agent`, and for a machine from a template, which always runs it. |
 | `cpuCount`, `memoryMB` | the node's defaults | `cpuCount` is 1 to 32, and refused otherwise. From an image it is 1 unless given |
 | `diskGiB` | 8 | 1–2048. The image is sparse, so it costs only what is written. |
 | `autostart` | true | Start it again when the daemon starts, if it was running. |
@@ -86,14 +87,22 @@ hm sandbox vm machine type cloud-01 cirros            # type at its serial conso
   changed. `diskGiB` may be larger than the image; the file is then grown, and
   an image that resizes its filesystem at first boot uses the space. It may not
   be smaller.
-- **No guest agent.** A stock image does not run HyperMachine's agent, so the
-  machine counts as running once its vCPU is, and `exec` answers 409. The
-  serial console is the way in: `GET /machines/{name}/console?tail=N` returns
-  its last N bytes (up to 1 MiB), and `POST /machines/{name}/console` types the
-  request body at it.
+- **A guest agent, when asked for.** A stock image does not run HyperMachine's
+  agent. Create the machine with `guestAgent: true`
+  (`hm sandbox vm machine create --guest-agent`) on a node started with
+  `--guest-agent FILE`, and the node installs it through the image's
+  cloud-init and gives the machine a channel to it; `exec` then works. The
+  machine counts as running once its vCPU is, which is before its agent
+  answers, and `exec` answers 409 until it does. The image must run
+  cloud-init and systemd, and the binary must run on its C library. See
+  [firmware boot](FIRMWARE_BOOT.md#a-guest-agent-in-the-image).
+- **The serial console is always there:** `GET /machines/{name}/console?tail=N`
+  returns its last N bytes (up to 1 MiB), and `POST /machines/{name}/console`
+  types the request body at it. Without an agent it is the only way in.
 - **Stopping** such a machine from the API stops the VM without asking the
-  guest, as pulling the plug would. Shut the guest down, or `sync`, from its
-  console first.
+  guest to shut down, as pulling the plug would. With an agent the node asks
+  it to `sync` first; without one, shut the guest down or `sync` from its
+  console.
 - **A guest that turns itself off stays off.** `poweroff` in the guest stops
   the machine, and it is left stopped whatever its `restartPolicy`: that
   policy restarts a guest that stopped by itself, a crash or a `reboot`, and

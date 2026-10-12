@@ -295,6 +295,10 @@ struct Options {
     machine_dir: Option<String>,
     /// PVH firmware that machines created from a disk image boot.
     firmware: Option<String>,
+    /// The guest agent's binary, for machines from a disk image that ask to
+    /// run it: built for the guest's own userspace, since it is a
+    /// distribution's and not this project's. See machines.rs.
+    guest_agent: Option<String>,
     /// Where the raw disk images machines may be created from are.
     image_dir: Option<String>,
     /// Let webhooks reach loopback, private and link-local addresses.
@@ -372,6 +376,7 @@ fn parse_options() -> Result<Options, String> {
         disk_dir: None,
         machine_dir: None,
         firmware: None,
+        guest_agent: None,
         image_dir: None,
         allow_private_webhooks: false,
         snapshot_store: None,
@@ -431,6 +436,7 @@ fn parse_options() -> Result<Options, String> {
             "--disk-dir" => opts.disk_dir = Some(value(&mut i)?),
             "--machine-dir" => opts.machine_dir = Some(value(&mut i)?),
             "--firmware" => opts.firmware = Some(value(&mut i)?),
+            "--guest-agent" => opts.guest_agent = Some(value(&mut i)?),
             "--image-dir" => opts.image_dir = Some(value(&mut i)?),
             "--allow-private-webhooks" => opts.allow_private_webhooks = true,
             "--template" => {

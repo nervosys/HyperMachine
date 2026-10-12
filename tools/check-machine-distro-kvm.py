@@ -35,6 +35,14 @@ the distribution's archive; and Docker pulls an image and runs a container.
 Those reach the Internet, so they are for a run by hand and say what they
 reached. `--disk-gib` grows the root disk, which an install needs.
 
+With `--guest-agent FILE`, the agent's binary built for the guest's
+userspace, the node is given it and the machine is created with
+`guestAgent`. Two more cases run: `exec` through the API starts to answer
+without anything being typed at the console, as root, in the same guest the
+console is logged in to; and after the machine is turned off and started
+again `exec` answers again, with no cloud-init run to install it a second
+time.
+
 Writes report.json, the node's log and the console into --output.
 """
 import argparse, hashlib, json, os, re, shutil, signal, socket, subprocess, tempfile, time
@@ -71,6 +79,8 @@ def main():
     parser.add_argument("--network", action="store_true",
                         help="give the machine a NIC with the Internet allowed, and install and run Docker")
     parser.add_argument("--disk-gib", type=int, help="the root disk's size, when larger than the image")
+    parser.add_argument("--guest-agent", type=Path,
+                        help="the guest agent's binary; create the machine with guestAgent and use exec")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     report = {"success": False,
@@ -82,6 +92,9 @@ def main():
     user_data = args.user_data.read_text() if args.user_data else None
     report["cloud_init_user_data_given"] = user_data is not None
     report["network_given"] = args.network
+    report["guest_agent_given"] = args.guest_agent is not None
+    if args.guest_agent:
+        report["input_sha256"]["guest_agent"] = digest(args.guest_agent)
     work = Path(tempfile.mkdtemp(prefix="hm-machine-distro-check-", dir="/var/tmp"))
     images = work / "images"
     images.mkdir()
@@ -92,7 +105,8 @@ def main():
     daemon = subprocess.Popen(
         [str(args.daemon), "--port", str(api), "--proxy-port", str(port()), "--no-template",
          "--machine-dir", str(work / "machines"), "--firmware", str(args.firmware), "--image-dir", str(images),
-         "--memory-mb", "512", "--cpu-cores", "1", "--capacity", "4"],
+         "--memory-mb", "512", "--cpu-cores", "1", "--capacity", "4"]
+        + (["--guest-agent", str(args.guest_agent)] if args.guest_agent else []),
         env=dict(os.environ, RUST_LOG="info"), stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
 
     def case(name, action):
@@ -185,6 +199,25 @@ def main():
 
     machine = {}
 
+    def run(command, seconds=30):
+        """`command` through the API's exec: (HTTP status, the reply)."""
+        return request("POST", f"/machines/{NAME}/exec", {"cmd": command, "timeout_secs": seconds},
+                       timeout=seconds + 30)
+
+    def wait_for_exec(seconds):
+        """Seconds until exec answers, having answered 409 until then."""
+        started = time.monotonic()
+        refusals = 0
+        while True:
+            status, value = run("true")
+            if status == 200 and value["exit_code"] == 0:
+                return round(time.monotonic() - started, 1), refusals
+            # Until the agent is up the node says so; anything else is a fault.
+            assert status == 409 and "no guest agent answering" in value["message"], (status, value)
+            refusals += 1
+            assert time.monotonic() - started < seconds, f"exec still refused after {seconds}s: {value}"
+            time.sleep(3)
+
     def state():
         status, value = request("GET", f"/machines/{NAME}")
         assert status == 200, (status, value)
@@ -210,7 +243,10 @@ def main():
                 body["network"] = {"allowInternetAccess": True}
             if args.disk_gib:
                 body["diskGiB"] = args.disk_gib
+            if args.guest_agent:
+                body["guestAgent"] = True
             status, created = request("POST", "/machines", body)
+            assert created.get("guestAgent") is (args.guest_agent is not None), created
             assert status == 201, (status, created)
             assert created["cloudInit"] is (user_data is not None), created
             # What was given is not handed back with the machine's record.
@@ -276,6 +312,38 @@ def main():
         if user_data is not None:
             case("cloud-init read the machine's seed: its name, its ID, and the user data that let this log in",
                  read_its_seed)
+
+        def exec_answers():
+            waited, refusals = wait_for_exec(420)
+            out = lambda command: run(command)[1]["stdout"].strip()
+            found = {
+                "seconds_until_exec_answered": waited,
+                "refused_before_that": refusals,
+                "whoami": out("id -un"),
+                "kernel": out("uname -r"),
+                "pid_1": out("cat /proc/1/comm"),
+                "nproc": int(out("nproc")),
+                "agent_unit": out("systemctl is-active hv2-guest-agent.service"),
+                "agent_enabled": out("systemctl is-enabled hv2-guest-agent.service"),
+                "vendor_script_ran": out("ls /var/lib/cloud/instance/scripts/vendor 2>/dev/null | wc -l"),
+            }
+            assert found["whoami"] == "root" and found["pid_1"] == "systemd", found
+            assert found["nproc"] == args.cpus, found
+            assert found["agent_unit"] == "active" and found["agent_enabled"] == "enabled", found
+            # It is the guest the console is logged in to: a file exec writes
+            # is read at the console, and one the console writes is read by exec.
+            status, value = run("echo from-exec-$((40+2)) > /tmp/via-exec; echo wrote")
+            assert status == 200 and value["stdout"].strip() == "wrote", (status, value)
+            assert ask("cat /tmp/via-exec", "viaexec") == "from-exec-42"
+            ask("echo from-console-$((50+5)) > /tmp/via-console; echo ok", "viaconsole")
+            assert out("cat /tmp/via-console") == "from-console-55"
+            # An exit code and standard error come back as they were.
+            status, value = run("echo oops >&2; exit 7")
+            assert status == 200 and value["exit_code"] == 7 and value["stderr"].strip() == "oops", value
+            found["exit_code_and_stderr"] = [value["exit_code"], value["stderr"].strip()]
+            return found
+        if args.guest_agent:
+            case("exec answers in the guest, as root, with nothing typed to make it", exec_answers)
 
         def finished_starting():
             # Up to three minutes for the last jobs; a state that is neither
@@ -367,6 +435,13 @@ def main():
             again = int(ask("nproc", "again"))
             assert again == args.cpus, again
             found = {"note": note, "nproc": again}
+            if args.guest_agent:
+                # The agent comes back with the machine, started by systemd:
+                # cloud-init does not install it a second time.
+                waited, refusals = wait_for_exec(240)
+                status, value = run("cat /proc/sys/kernel/random/boot_id | wc -c; systemctl is-active hv2-guest-agent")
+                assert status == 200 and value["stdout"].split()[-1] == "active", (status, value)
+                found["seconds_until_exec_answered_again"] = waited
             if user_data is not None:
                 # The same instance: cloud-init's once-per-instance steps did
                 # not run a second time, so the same ID is still recorded.

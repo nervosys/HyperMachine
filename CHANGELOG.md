@@ -75,6 +75,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- A guest agent in a machine from a disk image: `guestAgent` on
+  `POST /machines` (`hm sandbox vm machine create --guest-agent`), on a node
+  started with `--guest-agent FILE`, installs the agent through the image's
+  cloud-init and gives the machine a vsock channel, so `exec` works in a
+  distribution's image as it does in a template's. Nothing in the image is
+  changed beforehand.
 - cloud-init for a machine from a disk image: `userData` on `POST /machines`
   and `hm sandbox vm machine create --user-data FILE` reach the image's
   cloud-init on a seed disk the node writes itself, with the machine's name
