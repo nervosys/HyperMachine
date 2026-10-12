@@ -129,6 +129,7 @@ mod forwards;
 mod identity;
 mod idle;
 mod initramfs;
+mod lit_repos;
 #[cfg(target_os = "linux")]
 mod machines;
 #[cfg(not(target_os = "linux"))]
@@ -307,6 +308,10 @@ struct Options {
     guest_agent: Option<String>,
     /// Where the raw disk images machines may be created from are.
     image_dir: Option<String>,
+    /// The `lit` binary environments' repositories are cloned with.
+    lit: Option<std::path::PathBuf>,
+    /// The Lit remotes they may be cloned from. See lit_repos.rs.
+    lit_remotes: Vec<String>,
     /// What the flags said about pushing metrics over OTLP; the environment
     /// is consulted when they are parsed. See hv2_cluster::otlp.
     otlp_flags: hv2_cluster::otlp::Flags,
@@ -391,6 +396,8 @@ fn parse_options() -> Result<Options, String> {
         firmware: None,
         guest_agent: None,
         image_dir: None,
+        lit: None,
+        lit_remotes: Vec::new(),
         otlp_flags: hv2_cluster::otlp::Flags::default(),
         otlp: None,
         allow_private_webhooks: false,
@@ -462,6 +469,12 @@ fn parse_options() -> Result<Options, String> {
             "--firmware" => opts.firmware = Some(value(&mut i)?),
             "--guest-agent" => opts.guest_agent = Some(value(&mut i)?),
             "--image-dir" => opts.image_dir = Some(value(&mut i)?),
+            "--lit" => opts.lit = Some(value(&mut i)?.into()),
+            "--lit-remote" => {
+                let remote = value(&mut i)?;
+                reqwest::Url::parse(&remote).map_err(|e| format!("--lit-remote {remote}: {e}"))?;
+                opts.lit_remotes.push(remote);
+            }
             "--otlp-endpoint" => opts.otlp_flags.endpoint = Some(value(&mut i)?),
             "--otlp-header" => opts.otlp_flags.headers.push(value(&mut i)?),
             "--otlp-interval" => {
@@ -572,6 +585,7 @@ fn parse_options() -> Result<Options, String> {
                      [--tenant-reserved-cidr CIDR]...] \
                      [--tls-cert F --tls-key F] \
                      [--otlp-endpoint URL [--otlp-header KEY=VALUE]... [--otlp-interval SECS]] \
+                     [--lit BIN [--lit-remote URL]...] \
                      [--cluster-store redis://H:P --advertise-api URL --advertise-proxy H:P \
                      [--node-id ID] [--cluster-namespace NS] [--cluster-token T] [--node-ttl SECS] [--registration-reconcile-interval SECS]]\n\
                      HV2_KERNEL and HV2_INITRD name the guest; HV2_CLUSTER_TOKEN may carry the token."
@@ -2672,7 +2686,21 @@ async fn create_sandbox(
             Ok(Some(environment)) => {
                 let mut env = environment.env_vars;
                 env.extend(req.env_vars.clone());
-                (env, environment.files)
+                // Its repositories, cloned now, before anything is booted:
+                // one that cannot be is the caller's to hear of at once.
+                let mut files = environment.files;
+                match lit_repos::prepare(
+                    state.opts.lit.as_deref(),
+                    &state.opts.lit_remotes,
+                    &state.http,
+                    &environment.repositories,
+                )
+                .await
+                {
+                    Ok(cloned) => files.extend(cloned),
+                    Err((status, why)) => return api_error(status, why),
+                }
+                (env, files)
             }
             Ok(None) => return api_error(StatusCode::NOT_FOUND, format!("no environment {name}")),
             Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),

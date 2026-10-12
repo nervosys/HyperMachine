@@ -75,6 +75,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- Lit repositories in environments: an environment's `repositories`
+  (`remote`, `path`, `branch`, `username`, `password`) are cloned by the
+  node with the `lit` binary `--lit` names, only from remotes allowed with
+  `--lit-remote`, and unpacked into the guest, `.lit/` and all, owned by the
+  template's user, before the create answers. Passwords are never returned.
+  See docs/ENVIRONMENTS.md.
 - A TypeScript client, `sdk/typescript` (`@nervosys/hypermachine`), with no
   dependencies and types in `index.d.ts`: what the Python client has, in
   camelCase. Its tests and a strict `tsc` of its declarations run in CI;

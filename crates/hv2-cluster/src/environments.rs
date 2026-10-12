@@ -57,7 +57,40 @@ pub struct GuestFile {
     /// Its contents, base64 (standard, padded) as stored.
     #[serde(rename = "contentBase64")]
     pub content_base64: String,
+    /// A tar archive to unpack into this directory and then remove: how a
+    /// cloned repository goes into a guest. Never stored with an
+    /// environment; a node makes these when it clones.
+    #[serde(
+        rename = "unpackInto",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub unpack_into: Option<String>,
 }
+
+/// A Lit repository an environment's sandboxes start with: cloned by the
+/// node from `remote` into `path` in the guest, `.lit/` and all.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Repository {
+    /// A `lit server`'s URL. The node clones only from remotes its operator
+    /// allows (`--lit-remote`).
+    pub remote: String,
+    /// Where in the guest: absolute, made if it is not there.
+    pub path: String,
+    /// Checked out after the clone; the remote's default branch unless given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    /// An account on the remote, logged in to for each clone. Its password
+    /// is kept as the rest of an environment is and never returned.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+}
+
+/// The most repositories in one environment.
+pub const MOST_REPOSITORIES: usize = 8;
 
 impl GuestFile {
     /// Its bytes.
@@ -83,6 +116,8 @@ pub struct Environment {
     pub env_vars: BTreeMap<String, String>,
     #[serde(default)]
     pub files: Vec<GuestFile>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub repositories: Vec<Repository>,
     #[serde(rename = "createdAt")]
     pub created_ms: u64,
     #[serde(rename = "updatedAt")]
@@ -106,6 +141,14 @@ impl Environment {
             "files": self.files.iter().map(|file| json!({
                 "path": file.path,
                 "bytes": file.bytes().map_or(0, |b| b.len()),
+            })).collect::<Vec<_>>(),
+            // Where each comes from and goes, and whose account; never a
+            // password.
+            "repositories": self.repositories.iter().map(|repo| json!({
+                "remote": repo.remote,
+                "path": repo.path,
+                "branch": repo.branch,
+                "username": repo.username,
             })).collect::<Vec<_>>(),
             "createdAt": rfc3339(self.created_ms),
             "updatedAt": rfc3339(self.updated_ms),
@@ -132,6 +175,64 @@ pub struct Given {
     env_vars: BTreeMap<String, String>,
     #[serde(default)]
     files: Vec<GivenFile>,
+    #[serde(default)]
+    repositories: Vec<Repository>,
+}
+
+/// Why `repo` cannot be one, if it cannot. `paths` are the files' and the
+/// other repositories' paths so far.
+fn refused_repository(repo: &Repository, paths: &[&str]) -> Option<String> {
+    let remote = &repo.remote;
+    let scheme_ok = reqwest::Url::parse(remote).is_ok_and(|url| {
+        matches!(url.scheme(), "http" | "https" | "lit")
+            && url.host_str().is_some()
+            && url.username().is_empty()
+            && url.password().is_none()
+    });
+    if !scheme_ok {
+        return Some(format!(
+            "{remote:?}: a repository's remote is an http, https or lit URL with no credentials in it"
+        ));
+    }
+    let path = &repo.path;
+    if !path.starts_with('/') || path == "/" || path.contains('\0') || path.len() > 4096 {
+        return Some(format!(
+            "{path:?}: a repository's path is absolute and not the root"
+        ));
+    }
+    if path.split('/').any(|part| part == "..") {
+        return Some(format!("{path:?}: a repository's path has no `..` in it"));
+    }
+    if paths.iter().any(|other| *other == path) {
+        return Some(format!("{path:?} is given twice"));
+    }
+    let plain = |text: &str| {
+        !text.is_empty()
+            && text.len() <= 256
+            && text
+                .bytes()
+                .all(|b| b.is_ascii_graphic() && b != b'\'' && b != b'"' && b != b'\\')
+    };
+    if repo
+        .branch
+        .as_deref()
+        // A node reads the branch's ref by its name: no `..`, no `/` at
+        // either end, nothing that leaves the refs directory.
+        .is_some_and(|b| {
+            !plain(b)
+                || b.starts_with('-')
+                || b.starts_with('/')
+                || b.ends_with('/')
+                || b.split('/').any(|part| part.is_empty() || part == "." || part == "..")
+        })
+    {
+        return Some("a branch is a plain name".to_string());
+    }
+    match (&repo.username, &repo.password) {
+        (Some(user), Some(password)) if plain(user) && !password.is_empty() => None,
+        (None, None) => None,
+        _ => Some("give a repository both username and password, or neither".to_string()),
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -145,8 +246,11 @@ struct GivenFile {
     content_base64: Option<String>,
 }
 
-/// The variables and files `given` describes, or why they cannot be.
-fn checked(given: Given) -> Result<(BTreeMap<String, String>, Vec<GuestFile>), String> {
+/// The variables, files and repositories `given` describes, or why they
+/// cannot be.
+fn checked(
+    given: Given,
+) -> Result<(BTreeMap<String, String>, Vec<GuestFile>, Vec<Repository>), String> {
     if given.env_vars.len() > MOST_VARS {
         return Err(format!("at most {MOST_VARS} variables"));
     }
@@ -200,6 +304,7 @@ fn checked(given: Given) -> Result<(BTreeMap<String, String>, Vec<GuestFile>), S
         files.push(GuestFile {
             path,
             content_base64: base64::engine::general_purpose::STANDARD.encode(bytes),
+            unpack_into: None,
         });
     }
     if file_bytes > MOST_FILE_BYTES {
@@ -208,7 +313,18 @@ fn checked(given: Given) -> Result<(BTreeMap<String, String>, Vec<GuestFile>), S
             MOST_FILE_BYTES >> 20
         ));
     }
-    Ok((given.env_vars, files))
+    if given.repositories.len() > MOST_REPOSITORIES {
+        return Err(format!("at most {MOST_REPOSITORIES} repositories"));
+    }
+    let mut paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
+    for repo in &given.repositories {
+        if let Some(why) = refused_repository(repo, &paths) {
+            return Err(why);
+        }
+        paths.push(&repo.path);
+    }
+    let repositories = given.repositories.clone();
+    Ok((given.env_vars, files, repositories))
 }
 
 /// The environment `name` of `team`, if there is one.
@@ -297,7 +413,7 @@ async fn put(
             "an environment's name is 1 to 64 letters, digits, '-', '_' and '.', not starting with '.'",
         );
     }
-    let (env_vars, files) = match checked(given) {
+    let (env_vars, files, repositories) = match checked(given) {
         Ok(checked) => checked,
         Err(why) => return api_error(StatusCode::BAD_REQUEST, why),
     };
@@ -322,6 +438,7 @@ async fn put(
         team,
         env_vars,
         files,
+        repositories,
         created_ms: before.as_ref().map_or(now, |b| b.created_ms),
         updated_ms: now,
     };
@@ -360,7 +477,95 @@ mod tests {
     use crate::store::MemoryStore;
 
     fn given(body: Value) -> Result<(BTreeMap<String, String>, Vec<GuestFile>), String> {
-        checked(serde_json::from_value(body).map_err(|e| e.to_string())?)
+        checked(serde_json::from_value(body).map_err(|e| e.to_string())?).map(|(v, f, _)| (v, f))
+    }
+
+    #[test]
+    fn a_repository_is_a_remote_and_a_place_and_its_password_is_never_returned() {
+        let body = json!({"repositories": [
+            {"remote": "https://lit.example/team/app", "path": "/srv/app", "branch": "main",
+             "username": "ci", "password": "s3cret-pw"},
+            {"remote": "lit://10.0.0.5:9418/tools", "path": "/opt/tools"},
+        ]});
+        let (_, _, repos) = checked(serde_json::from_value(body).unwrap()).unwrap();
+        assert_eq!(repos.len(), 2);
+        let env = Environment {
+            name: "x".into(),
+            team: None,
+            env_vars: BTreeMap::new(),
+            files: Vec::new(),
+            repositories: repos,
+            created_ms: 0,
+            updated_ms: 0,
+        };
+        let described = env.describe().to_string();
+        assert!(
+            described.contains("lit.example") && described.contains("\"ci\""),
+            "{described}"
+        );
+        assert!(!described.contains("s3cret-pw"), "{described}");
+        for (repo, expect) in [
+            (
+                json!({"remote": "ftp://x/y", "path": "/a"}),
+                "http, https or lit",
+            ),
+            (
+                json!({"remote": "https://u:p@lit.example/a", "path": "/a"}),
+                "no credentials",
+            ),
+            (
+                json!({"remote": "not a url", "path": "/a"}),
+                "http, https or lit",
+            ),
+            (
+                json!({"remote": "https://lit.example/a", "path": "rel"}),
+                "absolute",
+            ),
+            (
+                json!({"remote": "https://lit.example/a", "path": "/"}),
+                "absolute",
+            ),
+            (
+                json!({"remote": "https://lit.example/a", "path": "/a/../etc"}),
+                "`..`",
+            ),
+            (
+                json!({"remote": "https://lit.example/a", "path": "/a", "branch": "--upload-pack=x"}),
+                "plain name",
+            ),
+            (
+                json!({"remote": "https://lit.example/a", "path": "/a", "branch": "../../../etc/passwd"}),
+                "plain name",
+            ),
+            (
+                json!({"remote": "https://lit.example/a", "path": "/a", "branch": "/abs"}),
+                "plain name",
+            ),
+            (
+                json!({"remote": "https://lit.example/a", "path": "/a", "branch": "a b"}),
+                "plain name",
+            ),
+            (
+                json!({"remote": "https://lit.example/a", "path": "/a", "username": "ci"}),
+                "both",
+            ),
+            (
+                json!({"remote": "https://lit.example/a", "path": "/a", "password": "x"}),
+                "both",
+            ),
+            (
+                json!({"remote": "https://lit.example/a", "path": "/a", "token": "x"}),
+                "unknown field",
+            ),
+        ] {
+            let refused = given(json!({"repositories": [repo.clone()]})).unwrap_err();
+            assert!(refused.contains(expect), "{repo}: {refused}");
+        }
+        // A file and a repository in one place.
+        let refused = given(json!({"files": [{"path": "/a", "content": "x"}],
+                                   "repositories": [{"remote": "https://l/a", "path": "/a"}]}))
+        .unwrap_err();
+        assert!(refused.contains("twice"), "{refused}");
     }
 
     #[test]

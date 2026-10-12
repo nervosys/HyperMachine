@@ -37,6 +37,53 @@ curl -sS -X DELETE $NODE/environments/web -H "x-api-key: $KEY"
 - **A node and a control plane both serve them**, from the cluster store, so
   every node starts a sandbox with the same environment.
 
+## Repositories
+
+An environment can hold [Lit](https://github.com/nervosys/Lit) repositories,
+nervosys' version control system. The node clones each one when a sandbox is
+created with the environment, and puts the tree, `.lit/` and all, in its
+place in the guest before the create answers.
+
+```json
+{"repositories": [
+  {"remote": "https://lit.example/team/app", "path": "/srv/app",
+   "branch": "main", "username": "ci", "password": "..."}
+]}
+```
+
+| Field | |
+|---|---|
+| `remote` | A `lit server`'s URL: `http`, `https` or `lit`, with no credentials in it |
+| `path` | Where in the guest; made if it is not there, and the tree given to the user commands run as |
+| `branch` | Checked out after the clone; the remote's default unless given |
+| `username`, `password` | An account on the remote, logged in to for each clone; both or neither. The password is kept as the rest of an environment is and never returned |
+
+- **The node clones, not the guest.** The guest needs no network and no
+  `lit`. The node runs the `lit` binary its operator names with `--lit`, as a
+  program: HyperMachine links no Lit code.
+- **Only from remotes the operator allows**, with `--lit-remote URL`
+  (repeatable): the same scheme, host and port, and a path at or below it.
+  Anything else is refused with 403, so an environment cannot make the node
+  fetch whatever it names.
+- **It is cloned when a sandbox is created**, so a new sandbox has the
+  remote as it is then. A reboot puts back that same tree; a fork has it.
+- **Refused before anything boots**: a remote not allowed, a login refused,
+  a branch the remote does not have. A sandbox is not left behind.
+- **At most 8 an environment, 64 MiB each** once packed.
+
+What [Lit 1.8.0](benchmarks/2026-10-12/lit-repositories-kvm/README.md)
+needs today: the account must be an **admin**, since its server lets no other
+role clone; and a session token expires, so the node logs in for each clone
+with the stored password rather than keeping a token. Both are with Lit's
+maintainers.
+
+**Taken together, that means an environment holding a repository holds an
+admin password for its Lit server**, in the cluster store, unencrypted, and
+every node that clones for it uses that password. Whoever can read the store
+can administer that Lit server. Until Lit lets a read-only account clone, or
+offers a read-scoped token, give each environment's repositories a Lit server
+of their own rather than one that matters for anything else.
+
 ## What is kept, and where
 
 An environment is kept in the cluster store as given, values and contents
@@ -46,8 +93,8 @@ not returned by the API and not written to the node's log.
 
 ## Not here
 
-- **Repositories.** boat's environments clone them; here a file can carry a
-  key and a sandbox can clone, but nothing clones for it.
+- **Git repositories.** A repository is a Lit one; Lit imports Git
+  repositories, and a Git remote is not cloned directly.
 - **Setup commands** run at creation; a [template](../README.md) runs its
   steps when it is built.
 - **Machines.** A machine's guest takes `userData` for cloud-init.

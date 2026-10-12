@@ -1,0 +1,56 @@
+{
+  "success": true,
+  "purpose": "functional verification of Lit repositories in environments on KVM; no timing claim",
+  "lit": "lit 1.8.0",
+  "input_sha256": {
+    "daemon": "7905089aac8c12f81fff93053e352c3ad5513b9e72026ead2bf72de1f8b174f7",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d0cb1ca9e27fcf5c28669ef11c6c4cd9f8d2b220319dff4e5d1e454e6b6bdceb",
+    "lit": "ec6cf6d819f83f0714e355cd9d1be2dbf42860c77302d2c0c793a4900ae04806",
+    "driver": "dd5bed5fd0a9c8145365b8145bf37c1318c00e87cef687299321b8ec7b5594bb"
+  },
+  "cases": [
+    {
+      "name": "an environment with a Lit repository twice is described without its password",
+      "success": true,
+      "detail": {
+        "described": [
+          {
+            "branch": null,
+            "path": "/srv/app",
+            "remote": "http://127.0.0.1:44685",
+            "username": "admin1"
+          },
+          {
+            "branch": "feature",
+            "path": "/srv/feature",
+            "remote": "http://127.0.0.1:44685",
+            "username": "admin1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a sandbox has each tree in its place, on its branch, with .lit, owned by its user",
+      "success": true,
+      "detail": {
+        "main": [
+          "on main",
+          "print('main')"
+        ],
+        "owners_uid": "0"
+      }
+    },
+    {
+      "name": "what cannot be is refused before anything boots, and no log holds the password",
+      "success": true,
+      "detail": {
+        "a remote the operator did not allow": "http://127.0.0.1:44686: this node clones only from the Lit remotes its operator allows",
+        "a wrong password": "http://127.0.0.1:44685: logging in as admin1: 401 Unauthorized Invalid credentials",
+        "a branch that is not there": "http://127.0.0.1:44685: the remote has no branch absent"
+      }
+    }
+  ],
+  "main_commit": "d49e849679da3a38",
+  "feature_commit": "0f9aaeeef59187ae"
+}
