@@ -54,7 +54,7 @@ reason, and are listed once at the end rather than counted as gaps.
 | Networks between sandboxes | Not described | By tag, partial: [same node and across two nodes](PRIVATE_VM_NETWORKS.md) |
 | Scoped, expiring API keys | Yes, with presets, rotation and usage per key | Yes on the control plane, with [reload and replacement](API_KEY_ROTATION.md); no usage per key |
 | Webhooks | Signed, with a rotated secret; a `degraded` event | Signed and team-scoped, for sandboxes. The signature is a hash of the secret and the body, not an HMAC; the secret is replaced in one step with no overlap; machines send none |
-| Telemetry sent where the user says | OTLP over HTTP, set per account | **No.** An exporter exists in `hv2-core` behind a feature no binary turns on, and `config.example.toml` describes settings nothing reads. Prometheus text at `/metrics` is real |
+| Telemetry sent where the user says | OTLP over HTTP, set per account | **Per node, set by its operator.** A node [pushes its metrics over OTLP/HTTP](TELEMETRY.md) with JSON, configured by flags or OpenTelemetry's own variables, [checked against the OpenTelemetry Collector](benchmarks/2026-10-12/otlp-export/README.md); and serves them at `/metrics`. Metrics only, and only the node's: nothing per sandbox, nothing from the control plane, no logs or traces, and not set per team |
 | Teams | Organizations, members, a shared wallet | [Teams](TEAMS.md), partial: keys and sandboxes belong to one, with roles |
 | How much was used | Per sandbox and per key | **No.** Lifecycle events with times are kept; nothing adds them up |
 | Client libraries | Python and TypeScript | E2B's own, unmodified, against E2B's API. None of HyperMachine's for the VM API; `sdk/node` is for the [process sandbox](SANDBOXES.md) |
@@ -99,7 +99,9 @@ In rough order of how much each matters to someone choosing between them:
    all; the guest's process list; and a port back to the caller's machine.
 7. **Environments**: variables, files and repositories applied to every new
    sandbox.
-8. **Usage figures and telemetry export.**
+8. **Usage figures**, and telemetry a team sets for itself. A node's
+   operator can [push its metrics over OTLP](TELEMETRY.md) now; nothing
+   counts use per sandbox, key or team.
 9. **Client libraries of its own** in Python and TypeScript.
 10. **An image with the tools already in it.**
 

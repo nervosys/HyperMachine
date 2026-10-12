@@ -260,6 +260,11 @@ consensus implementation. Each server is independent.
 
 ### Prometheus Metrics
 
+**For a sandbox node (`hv2-sandboxd`)** the metrics it really serves at
+`/metrics`, and how to push them to an OpenTelemetry collector, are in
+[TELEMETRY.md](TELEMETRY.md). What follows describes the `hv2` server, and
+like the rest of this page should be checked against the build.
+
 Metrics available at `http://localhost:9090/metrics`:
 
 ```

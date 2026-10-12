@@ -307,6 +307,11 @@ struct Options {
     guest_agent: Option<String>,
     /// Where the raw disk images machines may be created from are.
     image_dir: Option<String>,
+    /// What the flags said about pushing metrics over OTLP; the environment
+    /// is consulted when they are parsed. See hv2_cluster::otlp.
+    otlp_flags: hv2_cluster::otlp::Flags,
+    /// Where metrics are pushed, if anywhere.
+    otlp: Option<hv2_cluster::otlp::Config>,
     /// Let webhooks reach loopback, private and link-local addresses.
     allow_private_webhooks: bool,
     /// Prefault a restored guest's working set. Off by default: it halves
@@ -386,6 +391,8 @@ fn parse_options() -> Result<Options, String> {
         firmware: None,
         guest_agent: None,
         image_dir: None,
+        otlp_flags: hv2_cluster::otlp::Flags::default(),
+        otlp: None,
         allow_private_webhooks: false,
         snapshot_store: None,
         mtls_ca: None,
@@ -455,6 +462,16 @@ fn parse_options() -> Result<Options, String> {
             "--firmware" => opts.firmware = Some(value(&mut i)?),
             "--guest-agent" => opts.guest_agent = Some(value(&mut i)?),
             "--image-dir" => opts.image_dir = Some(value(&mut i)?),
+            "--otlp-endpoint" => opts.otlp_flags.endpoint = Some(value(&mut i)?),
+            "--otlp-header" => opts.otlp_flags.headers.push(value(&mut i)?),
+            "--otlp-interval" => {
+                let given = value(&mut i)?;
+                opts.otlp_flags.interval_secs = Some(
+                    given
+                        .parse()
+                        .map_err(|_| format!("--otlp-interval {given}: seconds"))?,
+                );
+            }
             "--allow-private-webhooks" => opts.allow_private_webhooks = true,
             "--template" => {
                 let spec = value(&mut i)?;
@@ -554,6 +571,7 @@ fn parse_options() -> Result<Options, String> {
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy] \
                      [--tenant-reserved-cidr CIDR]...] \
                      [--tls-cert F --tls-key F] \
+                     [--otlp-endpoint URL [--otlp-header KEY=VALUE]... [--otlp-interval SECS]] \
                      [--cluster-store redis://H:P --advertise-api URL --advertise-proxy H:P \
                      [--node-id ID] [--cluster-namespace NS] [--cluster-token T] [--node-ttl SECS] [--registration-reconcile-interval SECS]]\n\
                      HV2_KERNEL and HV2_INITRD name the guest; HV2_CLUSTER_TOKEN may carry the token."
@@ -572,6 +590,11 @@ fn parse_options() -> Result<Options, String> {
     {
         return Err("--registration-reconcile-interval requires --cluster-store and a nonempty cluster token".into());
     }
+    opts.otlp = hv2_cluster::otlp::configure(
+        &opts.otlp_flags,
+        |name| std::env::var(name).ok(),
+        "hv2-sandboxd",
+    )?;
     Ok(opts)
 }
 
@@ -842,6 +865,8 @@ struct NodeMetrics {
     pause_latency: Histogram,
     resume_latency: Histogram,
     checkpoint_latency: Histogram,
+    /// How pushes over OTLP went, when there are any.
+    otlp: Arc<hv2_cluster::otlp::Outcomes>,
 }
 
 impl AppState {
@@ -1396,6 +1421,15 @@ async fn counted_create(
 /// `GET /metrics`: Prometheus text format. Outside the cluster token, as a
 /// scraper holds none; counts are all it says.
 async fn node_metrics(State(state): State<Arc<AppState>>) -> Response {
+    (
+        [("content-type", hv2_cluster::metrics::CONTENT_TYPE)],
+        node_exposition(&state).finish(),
+    )
+        .into_response()
+}
+
+/// This node's metrics: what `/metrics` serves and what is pushed over OTLP.
+fn node_exposition(state: &AppState) -> Exposition {
     let m = &state.metrics;
     let mut e = Exposition::new();
     e.gauge(
@@ -1476,11 +1510,15 @@ async fn node_metrics(State(state): State<Arc<AppState>>) -> Response {
         "Time a fork's source is paused to be checkpointed.",
         &m.checkpoint_latency,
     );
-    (
-        [("content-type", hv2_cluster::metrics::CONTENT_TYPE)],
-        e.finish(),
-    )
-        .into_response()
+    if state.opts.otlp.is_some() {
+        e.counters(
+            "hv2_node_otlp_pushes_total",
+            "Pushes of these metrics over OTLP, by how each went.",
+            "result",
+            &[("ok", m.otlp.sent.get()), ("failed", m.otlp.failed.get())],
+        );
+    }
+    e
 }
 
 /// A slot against capacity, made or waited for.
@@ -5938,6 +5976,15 @@ async fn main() -> std::process::ExitCode {
     tokio::spawn(adopt_built(Arc::clone(&state)));
     tokio::spawn(snapshots::follow_store(Arc::clone(&state)));
     tokio::spawn(machines::supervise(Arc::clone(&state)));
+    if let Some(config) = state.opts.otlp.clone() {
+        let pushed = Arc::clone(&state);
+        tokio::spawn(hv2_cluster::otlp::push(
+            config,
+            state.node_id.clone(),
+            Arc::clone(&state.metrics.otlp),
+            move || node_exposition(&pushed),
+        ));
+    }
     tokio::spawn(pool::keep_full(Arc::clone(&state)));
     tokio::spawn(telemetry::sample(Arc::clone(&state)));
 

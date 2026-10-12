@@ -1,0 +1,65 @@
+{
+  "success": true,
+  "purpose": "functional verification of OTLP metric export against the OpenTelemetry Collector; no timing claim",
+  "input_sha256": {
+    "daemon": "37778c63e9ae60f9c5878642e97d603fc894f968320b3ccc3bd6999b93afbec3",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d0cb1ca9e27fcf5c28669ef11c6c4cd9f8d2b220319dff4e5d1e454e6b6bdceb",
+    "collector": "2425bdf5f89042cd71f56cf5a66b41681d340cbe14c0b1899bcfe2a3a685a064",
+    "driver": "f0eab0e8170d7676e978050b6038ad4760fbc268aaefeebf6ee4b73b8a8c4545"
+  },
+  "cases": [
+    {
+      "name": "the collector serves the numbers the node serves, every bucket included",
+      "success": true,
+      "detail": {
+        "samples_compared": 70,
+        "families": {
+          "gauge": 5,
+          "counter": 3,
+          "histogram": 4
+        },
+        "create_seconds_count": 3.0
+      }
+    },
+    {
+      "name": "what arrived names the node, and a histogram's buckets add up to its count",
+      "success": true,
+      "detail": {
+        "pushes_in_file": 3,
+        "resource": {
+          "service.name": "hv2-sandboxd",
+          "service.instance.id": "local"
+        }
+      }
+    },
+    {
+      "name": "without the collector pushes fail and are counted, and resume when it is back",
+      "success": true,
+      "detail": {
+        "ok": 5.0,
+        "failed": 2.0
+      }
+    },
+    {
+      "name": "OpenTelemetry's own variables configure it as the flags do",
+      "success": true
+    },
+    {
+      "name": "a wrong token is refused and counted, and no token is in any log",
+      "success": true,
+      "detail": {
+        "said": "[0m \u001b[2mhv2_cluster::otlp\u001b[0m\u001b[2m:\u001b[0m OTLP: push to http://127.0.0.1:55817/v1/metrics failed: 401 Unauthorized: {\"code\":16, \"message\":\"provided authorization does not match expected scheme or token\"}"
+      }
+    },
+    {
+      "name": "a protocol other than http/json is refused when the node starts",
+      "success": true,
+      "detail": {
+        "exit": 1,
+        "said": "hv2-sandboxd: OTEL_EXPORTER_OTLP_PROTOCOL=grpc: metrics are pushed as http/json only"
+      }
+    }
+  ],
+  "collector_version": "otelcol-contrib version 0.162.0"
+}
