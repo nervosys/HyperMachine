@@ -43,6 +43,7 @@ pub(crate) mod ports;
 pub(crate) mod prompts;
 pub(crate) mod resize;
 pub(crate) mod runs;
+pub(crate) mod snapshot_files;
 pub(crate) mod snapshots;
 use super::{
     api_error, new_vm, now_ms, reserve, start_network, AppState, Arc, Deserialize, IntoResponse,

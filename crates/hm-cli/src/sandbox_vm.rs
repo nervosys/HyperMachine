@@ -1814,6 +1814,50 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                     api.request(Method::DELETE, &["machines", &name, "snapshots", &id], None)
                         .await?
                 }
+                MachineSnapshotCommand::Ls {
+                    name,
+                    id,
+                    path,
+                    partition,
+                } => {
+                    let partition = partition.map(|p| p.to_string());
+                    let mut query = vec![("path", path.as_str())];
+                    if let Some(partition) = partition.as_deref() {
+                        query.push(("partition", partition));
+                    }
+                    api.request_bounded_query(
+                        Method::GET,
+                        &["machines", &name, "snapshots", &id, "files"],
+                        None,
+                        8 << 20,
+                        &query,
+                    )
+                    .await?
+                }
+                MachineSnapshotCommand::Cat {
+                    name,
+                    id,
+                    path,
+                    partition,
+                } => {
+                    let mut request = api
+                        .client
+                        .get(api.url(&["machines", &name, "snapshots", &id, "file"])?)
+                        .query(&[("path", path.as_str())]);
+                    if let Some(partition) = partition {
+                        request = request.query(&[("partition", partition)]);
+                    }
+                    let response = request.send().await.context("sandbox API request failed")?;
+                    let status = response.status();
+                    if !status.is_success() {
+                        let why = response.text().await.unwrap_or_default();
+                        bail!("sandbox API returned {status}: {why}");
+                    }
+                    let bytes = response.bytes().await?;
+                    use std::io::Write;
+                    std::io::stdout().write_all(&bytes)?;
+                    return Ok(0);
+                }
                 MachineSnapshotCommand::Download {
                     name,
                     id,
@@ -2576,6 +2620,26 @@ pub enum MachineSnapshotCommand {
         #[arg(value_parser = machine_name)]
         name: String,
         id: String,
+    },
+    /// List a directory in a snapshot's disk, without booting it
+    Ls {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        id: String,
+        #[arg(default_value = "/")]
+        path: String,
+        /// The disk's partition, counted from 1; the largest ext one unless given
+        #[arg(long)]
+        partition: Option<u32>,
+    },
+    /// Print a file from a snapshot's disk, without booting it
+    Cat {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        id: String,
+        path: String,
+        #[arg(long)]
+        partition: Option<u32>,
     },
     /// Download a snapshot's disk as a raw image; refuses to overwrite
     Download {

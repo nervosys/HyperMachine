@@ -311,6 +311,16 @@ hm sandbox vm machine snapshot download web-01 snap-61d5adc592c0469 web-01.img
 - **A download is the whole raw disk**, as long as the disk is; `hm`
   writes its zeros as holes. It is the image the guest boots, so `debugfs`
   or a loop mount reads it without booting anything.
+- **Its files are read without booting it.**
+  `GET .../snapshots/{id}/files?path=/etc` lists a directory and
+  `GET .../snapshots/{id}/file?path=/etc/hostname` is one file, up to 64 MiB
+  (`hm ... snapshot ls` and `cat`). An ext2, ext3 or ext4 filesystem is
+  read, with e2fsprogs' `debugfs`, which changes nothing: a template
+  machine's disk, or in a disk image the partition named with
+  `partition=N`, else the largest ext one, a cloud image's root. Symbolic
+  links are listed and not followed; XFS and Btrfs are not read.
+  [Checked on KVM](benchmarks/2026-10-12/snapshot-files-kvm/README.md),
+  Ubuntu's cloud image included.
 - **The cloud-init seed is not in one**, and is left as it is by a restore.
 - At most 32 a machine; deleting the machine deletes them.
 

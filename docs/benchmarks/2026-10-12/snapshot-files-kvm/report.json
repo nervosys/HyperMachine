@@ -1,0 +1,49 @@
+{
+  "success": true,
+  "purpose": "functional verification of reading files from machine disk snapshots; no timing claim",
+  "input_sha256": {
+    "daemon": "34b5d486a1b9d10486d68c55b038433ee82f9ba8afb56354d4ef191ef54d4d46",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d0cb1ca9e27fcf5c28669ef11c6c4cd9f8d2b220319dff4e5d1e454e6b6bdceb",
+    "firmware": "4a0a1e977368f6b15d2198a216bdedf9a350bf5e5ae07e29e695373ec16ad958",
+    "driver": "b7561bc2f5885a7df43167b0802675087e15831a1c3b2638124608a067fb52dd"
+  },
+  "image": "noble-stock.raw",
+  "cases": [
+    {
+      "name": "a template machine's snapshot is listed and read, odd names included",
+      "success": true,
+      "detail": {
+        "entries": [
+          "a file \"q\" $(touch pwned) 'x'",
+          "link",
+          "note",
+          "sub"
+        ],
+        "odd_file_bytes": 10240
+      }
+    },
+    {
+      "name": "a cloud image never booted: its root is found and read, links are not followed, /boot by number",
+      "success": true,
+      "detail": {
+        "root_partition": 1,
+        "boot_partition": 16,
+        "os": "PRETTY_NAME=\"Ubuntu 24.04.5 LTS\""
+      }
+    },
+    {
+      "name": "what cannot be read is refused, each with why",
+      "success": true,
+      "detail": {
+        "no such path": "\"/no/such\": there is no \"no\"",
+        "a directory read as a file": "\"/srv\" is a directory, not a file",
+        "a file listed as a directory": "\"/srv/data/note\" is a file, not a directory",
+        "a path that climbs": "\"/srv/../etc\": a path has no `.` or `..` in it",
+        "a relative path": "\"srv\": a path is absolute",
+        "a partition that is not ext": "partition 14 holds no ext2, ext3 or ext4 filesystem, which is all this reads",
+        "a partition that is not there": "the disk has no partition 99"
+      }
+    }
+  ]
+}
