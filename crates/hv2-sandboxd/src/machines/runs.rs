@@ -116,7 +116,7 @@ enum RunState {
     Lost(String),
 }
 
-struct Run {
+pub(super) struct Run {
     id: u64,
     cmd: String,
     pid: u32,
@@ -128,8 +128,19 @@ struct Run {
 }
 
 impl Run {
+    /// What it printed on standard output from `offset` on: where that text
+    /// really starts, the text, and every byte it has written so far.
+    pub(super) fn stdout_from(&self, offset: u64) -> (u64, &str, u64) {
+        self.stdout.from(offset)
+    }
+
+    /// Whether its program is still going.
+    pub(super) fn is_running(&self) -> bool {
+        self.state == RunState::Running
+    }
+
     /// The run without its output.
-    fn describe(&self) -> Value {
+    pub(super) fn describe(&self) -> Value {
         let (state, code, signal, reason) = match &self.state {
             RunState::Running => ("running", None, None, None),
             RunState::Exited { code, signal } => ("exited", *code, *signal, None),
@@ -204,6 +215,11 @@ pub(crate) fn forget(machine_id: &str) {
     runs(|all| all.remove(machine_id));
 }
 
+/// Look at one run of a machine, if it is kept.
+pub(super) fn with_run<T>(machine_id: &str, id: u64, f: impl FnOnce(&Run) -> T) -> Option<T> {
+    runs(|all| all.get(machine_id)?.runs.get(&id).map(f))
+}
+
 /// A signal by its name, with or without `SIG`, or by its number.
 fn signal_number(name: &str) -> Option<i32> {
     let upper = name.trim().to_ascii_uppercase();
@@ -225,17 +241,17 @@ fn signal_number(name: &str) -> Option<i32> {
 #[derive(Debug, Deserialize)]
 pub(crate) struct NewRun {
     /// A shell command line, run by the guest's `/bin/sh -c`.
-    cmd: String,
-    cwd: Option<String>,
+    pub(super) cmd: String,
+    pub(super) cwd: Option<String>,
     /// Set for the command, beside what the guest's own environment has.
     /// Not kept, and not returned.
     #[serde(default)]
-    env: BTreeMap<String, String>,
+    pub(super) env: BTreeMap<String, String>,
     /// The guest user to run it as; root unless given.
-    user: Option<String>,
+    pub(super) user: Option<String>,
     /// Written to its standard input, which is then closed. Leave it out to
     /// keep standard input open for `.../stdin`.
-    stdin: Option<String>,
+    pub(super) stdin: Option<String>,
 }
 
 // The error is the reply, returned by the handler at once.
@@ -260,25 +276,36 @@ pub(crate) async fn start(
     Path(name): Path<String>,
     Json(req): Json<NewRun>,
 ) -> Response {
-    if req.cmd.trim().is_empty() {
-        return api_error(StatusCode::BAD_REQUEST, "cmd is empty");
+    match launch(&state, &headers, &name, req).await {
+        Ok((_, _, described)) => (StatusCode::CREATED, Json(described)).into_response(),
+        Err(response) => response,
     }
-    let machine = match named(&state, &headers, &name) {
-        Ok(machine) => machine,
-        Err(response) => return response,
-    };
-    let vm = match agent_of(&state, &headers, &name) {
-        Ok(vm) => vm,
-        Err(response) => return response,
-    };
+}
+
+/// Start a run in the machine `name`: the machine's ID, the run's, and the
+/// run as it is described. What [`start`] does, for a caller in this crate
+/// that starts runs of its own.
+// The error is the reply, returned by the handler at once.
+#[allow(clippy::result_large_err)]
+pub(super) async fn launch(
+    state: &Arc<AppState>,
+    headers: &HeaderMap,
+    name: &str,
+    req: NewRun,
+) -> Result<(String, u64, Value), Response> {
+    if req.cmd.trim().is_empty() {
+        return Err(api_error(StatusCode::BAD_REQUEST, "cmd is empty"));
+    }
+    let machine = named(state, headers, name)?;
+    let vm = agent_of(state, headers, name)?;
     let Some(boot_ms) = live(|l| l.get(&machine.id).map(|m| m.started_ms)) else {
-        return api_error(
+        return Err(api_error(
             StatusCode::CONFLICT,
             format!("machine {name} is not running"),
-        );
+        ));
     };
     if let Err(full) = runs(|all| all.entry(machine.id.clone()).or_default().make_room()) {
-        return api_error(StatusCode::CONFLICT, full);
+        return Err(api_error(StatusCode::CONFLICT, full));
     }
     let pid = match vm
         .start_in_guest_as(
@@ -293,7 +320,12 @@ pub(crate) async fn start(
         .await
     {
         Ok(pid) => pid,
-        Err(e) => return api_error(StatusCode::BAD_GATEWAY, format!("starting the run: {e}")),
+        Err(e) => {
+            return Err(api_error(
+                StatusCode::BAD_GATEWAY,
+                format!("starting the run: {e}"),
+            ))
+        }
     };
     let (id, described) = runs(|all| {
         let machine_runs = all.entry(machine.id.clone()).or_default();
@@ -326,13 +358,29 @@ pub(crate) async fn start(
         {
             // The run is started and stays: the caller is told what did not
             // happen, and can read or signal it by its ID.
-            return api_error(
+            return Err(api_error(
                 StatusCode::BAD_GATEWAY,
                 format!("run {id} started, and its standard input could not be written: {e}"),
-            );
+            ));
         }
     }
-    (StatusCode::CREATED, Json(described)).into_response()
+    Ok((machine.id, id, described))
+}
+
+/// Signal a run of the machine `name` that is still running.
+// The error is the reply, returned by the handler at once.
+#[allow(clippy::result_large_err)]
+pub(super) async fn signal_run(
+    state: &AppState,
+    headers: &HeaderMap,
+    name: &str,
+    id: u64,
+    number: i32,
+) -> Result<(), Response> {
+    let (vm, pid) = reachable(state, headers, name, id)?;
+    vm.signal_in_guest(pid, number, AGENT_TIMEOUT)
+        .await
+        .map_err(|e| api_error(StatusCode::BAD_GATEWAY, format!("signalling run {id}: {e}")))
 }
 
 /// Poll the run's program and keep what it prints, until it ends or cannot
@@ -557,13 +605,9 @@ pub(crate) async fn signal(
             ),
         );
     };
-    let (vm, pid) = match reachable(&state, &headers, &name, id) {
-        Ok(found) => found,
-        Err(response) => return response,
-    };
-    match vm.signal_in_guest(pid, number, AGENT_TIMEOUT).await {
+    match signal_run(&state, &headers, &name, id, number).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => api_error(StatusCode::BAD_GATEWAY, format!("signalling run {id}: {e}")),
+        Err(response) => response,
     }
 }
 

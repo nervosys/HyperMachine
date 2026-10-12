@@ -49,6 +49,33 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
                     "exit_code": 7, "signal": null, "stdout": "guest-out\n", "stderr": "guest-err\n"
                 }))
                 .into_response(),
+                ("POST", "/machines/web-01/runs") => (
+                    StatusCode::CREATED,
+                    Json(json!({"runID": 3, "state": "running"})),
+                )
+                    .into_response(),
+                ("GET", "/machines/web-01/runs") => Json(json!([{"runID": 3}])).into_response(),
+                ("GET", "/machines/web-01/runs/3?stdout=0&stderr=0") => {
+                    Json(json!({"runID": 3, "stdout": {"text": "built\n"}})).into_response()
+                }
+                ("POST", "/machines/web-01/prompts") => (
+                    StatusCode::CREATED,
+                    Json(json!({"promptID": 5, "state": "running"})),
+                )
+                    .into_response(),
+                ("GET", "/machines/web-01/prompts/5?after=0") => Json(json!({
+                    "state": "running", "exitCode": null, "next": 17,
+                    "events": [{"offset": 0, "event": {"type": "start"}}],
+                }))
+                .into_response(),
+                ("GET", "/machines/web-01/prompts/5?after=17") => Json(json!({
+                    "state": "exited", "exitCode": 4, "next": 40,
+                    "events": [
+                        {"offset": 17, "text": "plain"},
+                        {"offset": 23, "event": {"type": "result"}},
+                    ],
+                }))
+                .into_response(),
                 ("GET", "/machines/web-01/console") => "[    0.1] booted\n".into_response(),
                 ("GET", "/machines/web-01/console?tail=64") => "login: ".into_response(),
                 ("POST", "/machines/web-01/console") => StatusCode::NO_CONTENT.into_response(),
@@ -67,6 +94,8 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
                 .args(["sandbox", "vm", "--endpoint", &endpoint, "machine"])
                 .args(arguments)
                 .env("HV2_API_KEY", key)
+                .env("HM_TEST_AGENT_KEY", "a-key-for-the-agent")
+                .env_remove("HM_TEST_UNSET")
                 .output()
                 .await
                 .unwrap()
@@ -216,6 +245,128 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
                "restartPolicy":"always","start":true})
     );
 
+    // A run is started and left: the command quoted for the guest's shell,
+    // and only the variables that were named.
+    let output = hm(
+        vec![
+            "run",
+            "web-01",
+            "--cwd",
+            "/srv",
+            "--user",
+            "dev",
+            "--pass-env",
+            "HM_TEST_AGENT_KEY",
+            "--",
+            "make",
+            "it's",
+        ],
+        "owned-machine-key",
+    )
+    .await;
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        observed.lock().unwrap().last().unwrap().2,
+        json!({"cmd": r"exec 'make' 'it'\''s'", "cwd": "/srv", "user": "dev",
+               "env": {"HM_TEST_AGENT_KEY": "a-key-for-the-agent"}})
+    );
+    for (arguments, path) in [
+        (vec!["runs", "web-01"], "/machines/web-01/runs"),
+        (
+            vec!["runs", "web-01", "3"],
+            "/machines/web-01/runs/3?stdout=0&stderr=0",
+        ),
+    ] {
+        let output = hm(arguments.clone(), "owned-machine-key").await;
+        assert!(output.status.success(), "{arguments:?}");
+        assert_eq!(observed.lock().unwrap().last().unwrap().1, path);
+    }
+
+    // A prompt is followed to its end: each event on a line as the agent
+    // printed it, read on from where the last read stopped, and the agent's
+    // exit code kept.
+    let output = hm(
+        vec![
+            "prompt",
+            "web-01",
+            "--provider",
+            "claude",
+            "--model",
+            "opus",
+            "--unattended",
+            "--user",
+            "dev",
+            "--pass-env",
+            "HM_TEST_AGENT_KEY",
+            "fix the $(tests)",
+        ],
+        "owned-machine-key",
+    )
+    .await;
+    assert_eq!(
+        output.status.code(),
+        Some(4),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "{\"type\":\"start\"}\nplain\n{\"type\":\"result\"}\n"
+    );
+    {
+        let requests = observed.lock().unwrap();
+        let last: Vec<(&str, &str)> = requests[requests.len() - 3..]
+            .iter()
+            .map(|(method, path, _)| (method.as_str(), path.as_str()))
+            .collect();
+        assert_eq!(
+            last,
+            [
+                ("POST", "/machines/web-01/prompts"),
+                ("GET", "/machines/web-01/prompts/5?after=0"),
+                ("GET", "/machines/web-01/prompts/5?after=17"),
+            ]
+        );
+        assert_eq!(
+            requests[requests.len() - 3].2,
+            json!({"provider": "claude", "prompt": "fix the $(tests)", "model": "opus",
+                   "unattended": true, "user": "dev",
+                   "env": {"HM_TEST_AGENT_KEY": "a-key-for-the-agent"}})
+        );
+    }
+    // Detached, it is started and not followed.
+    let output = hm(
+        vec![
+            "prompt",
+            "web-01",
+            "--provider",
+            "custom",
+            "--command",
+            "my-agent",
+            "--detach",
+            "hello",
+        ],
+        "owned-machine-key",
+    )
+    .await;
+    assert!(output.status.success());
+    {
+        let requests = observed.lock().unwrap();
+        let (method, path, body) = requests.last().unwrap();
+        assert_eq!(
+            (method.as_str(), path.as_str()),
+            ("POST", "/machines/web-01/prompts")
+        );
+        assert_eq!(
+            body,
+            &json!({"provider": "custom", "prompt": "hello", "command": "my-agent"})
+        );
+    }
+
     // Refusals fail, and a bad name never reaches the API.
     let before = observed.lock().unwrap().len();
     for (arguments, key) in [
@@ -235,6 +386,19 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
         vec!["create", "web-05", "--image", "a.raw", "--template", "base"],
         vec!["type", "web-01", "--no-enter", ""],
         vec!["exec", "web-01"],
+        vec!["run", "web-01"],
+        // A variable that is not set is not sent as an empty one.
+        vec!["run", "web-01", "--pass-env", "HM_TEST_UNSET", "--", "true"],
+        vec!["prompt", "web-01", "hello"],
+        vec![
+            "prompt",
+            "web-01",
+            "--provider",
+            "claude",
+            "--pass-env",
+            "HM_TEST_UNSET",
+            "hello",
+        ],
     ] {
         let output = hm(arguments.clone(), "owned-machine-key").await;
         assert!(!output.status.success(), "{arguments:?}");

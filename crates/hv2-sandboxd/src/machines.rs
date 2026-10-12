@@ -38,6 +38,7 @@ use hv2_cluster::ownership::TeamId;
 
 use super::seed;
 
+pub(crate) mod prompts;
 pub(crate) mod runs;
 use super::{
     api_error, new_vm, now_ms, reserve, start_network, AppState, Arc, Deserialize, IntoResponse,
@@ -1267,6 +1268,7 @@ pub(crate) async fn delete(
         );
     }
     runs::forget(&machine.id);
+    prompts::forget(&machine.id);
     match std::fs::remove_dir_all(dir_of(&state, &machine.id)) {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),

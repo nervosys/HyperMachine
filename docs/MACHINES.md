@@ -223,6 +223,75 @@ curl -sS $NODE/machines/web-01/runs          # every run kept, oldest first
 
 [Checked on real KVM](benchmarks/2026-10-11/machine-runs-kvm/README.md).
 
+`hm sandbox vm machine run web-01 --cwd /srv/app --pass-env CI -- make test`
+starts one, and `... machine runs web-01 [ID]` lists them or shows one.
+
+## Prompts
+
+A coding agent is a program with a command-line form: it takes one prompt,
+works, prints what it does a line of JSON at a time, and exits. A prompt is
+a [run](#runs) of one, with a command line the node writes and an output it
+reads.
+
+```sh
+curl -sS -X POST $NODE/machines/web-01/prompts -H 'content-type: application/json' -d '{
+  "provider": "claude", "prompt": "make the tests pass", "cwd": "/srv/app",
+  "user": "dev", "unattended": true, "env": {"ANTHROPIC_API_KEY": "..."}}'
+# → {"promptID":3,"state":"running","provider":"claude","prompt":"make the tests pass",...}
+
+# Its events so far. `next` is where to read from the next time.
+curl -sS "$NODE/machines/web-01/prompts/3?after=0"
+# → {"state":"running","session":"a0945f92-...","next":4631,
+#    "events":[{"offset":0,"event":{"type":"system","session_id":"a0945f92-...",...}},...]}
+
+curl -sS -X POST $NODE/machines/web-01/prompts/3/interrupt   # what Ctrl-C would be
+curl -sS $NODE/machines/web-01/prompts                       # every prompt kept, oldest first
+```
+
+With `hm`, which follows the prompt to its end, prints each event on a line
+and exits with the agent's code (`--detach` to start it and not wait):
+
+```sh
+hm sandbox vm machine prompt web-01 --provider claude --user dev --unattended \
+  --cwd /srv/app --pass-env ANTHROPIC_API_KEY "make the tests pass"
+```
+
+| `provider` | What is run |
+|---|---|
+| `claude` | `claude -p "$HM_PROMPT" --output-format stream-json --verbose` |
+| `codex` | `codex exec --json --skip-git-repo-check "$HM_PROMPT"` |
+| `custom` | Your `command`, a shell line that reads `$HM_PROMPT` (and `$HM_MODEL`). For any other agent |
+
+- **`model`** is passed as the agent's own flag. **`resume`** carries on a
+  session of Claude Code's: give an earlier prompt's `session`. It is refused
+  for `codex`.
+- **`unattended`** lets the agent act without asking, with the flag each
+  calls dangerous. It is off unless given. Claude Code will not take it as
+  root, so with `claude` it needs a `user`.
+- **The prompt is never part of the command line.** It reaches the agent in
+  the environment, so nothing in it is read by a shell.
+- **`env` is where the agent's key goes.** It is not kept, returned or
+  logged. `--pass-env NAME` gives the agent a variable of your own.
+- **An event is a line the agent printed.** A line of JSON is given as
+  `event`; any other line as `text`. Half a line is not given until the rest
+  arrives. The agent's standard error is not events: it is the run's, at
+  `/runs/{id}`.
+- **A prompt is a run** with the same ID, so it ends, is kept and is lost as
+  a run is.
+- **The agent must be in the machine.** This installs nothing: a machine
+  from a distribution's image has a package manager and a network, and its
+  `userData` is the place to install one. A prompt for an agent that is not
+  there ends with exit code 127.
+- **Not here:** steering a turn that is running, and conversations that are
+  named, listed or moved from one agent to another.
+
+Each provider's line was given to the agent as published (Claude Code
+2.1.296, Codex CLI 0.162.1) with no key: both took it, printed a first event
+naming a session, and ended for want of one. **No prompt has been answered by
+a model here.** Everything between a caller and the agent is
+[checked on real KVM](benchmarks/2026-10-11/machine-prompts-kvm/README.md)
+with a stand-in for the agent.
+
 ## How it boots
 
 At creation, the template's initramfs is unpacked into a fresh sparse ext4 image

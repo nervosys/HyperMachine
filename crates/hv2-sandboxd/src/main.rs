@@ -6078,6 +6078,18 @@ async fn main() -> std::process::ExitCode {
             post(machines::runs::signal),
         )
         .route(
+            "/machines/{name}/prompts",
+            get(machines::prompts::list).post(machines::prompts::start),
+        )
+        .route(
+            "/machines/{name}/prompts/{promptID}",
+            get(machines::prompts::get),
+        )
+        .route(
+            "/machines/{name}/prompts/{promptID}/interrupt",
+            post(machines::prompts::interrupt),
+        )
+        .route(
             "/machines/{name}/console",
             get(machines::console).post(machines::console_input),
         )

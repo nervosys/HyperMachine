@@ -67,3 +67,21 @@ pub(crate) mod runs {
         refused()
     }
 }
+
+/// A machine's prompts: the same answer.
+pub(crate) mod prompts {
+    use super::{refused, Response};
+
+    pub(crate) async fn start() -> Response {
+        refused()
+    }
+    pub(crate) async fn list() -> Response {
+        refused()
+    }
+    pub(crate) async fn get() -> Response {
+        refused()
+    }
+    pub(crate) async fn interrupt() -> Response {
+        refused()
+    }
+}
