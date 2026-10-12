@@ -3199,18 +3199,18 @@ dependencies = [
 
 [[package]]
 name = "ic-cipher"
-version = "0.2.13"
+version = "0.2.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "364cf6c9ebbe8fec87dd87893f82624e2c1e08d969ea6b5e3ac92681f957b43a"
+checksum = "5a090197e3faa31da0cae5ea77f32827d0fe3d676eb30a3a71e6c42e45bd0b20"
 dependencies = [
  "ic-core",
 ]
 
 [[package]]
 name = "ic-core"
-version = "0.2.13"
+version = "0.2.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99b796891cbe491d2dff8a9ec6c1b33dfab6ccf09104bc7a7d79fb4a202ec1cd"
+checksum = "08a6be590ab5d45dc8ed773cb980b30ede3cecd36561ed4c1bd900b526e54aba"
 
 [[package]]
 name = "ic-drbg"
@@ -5228,9 +5228,9 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.11.17"
+version = "0.11.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04759210543be93709136e28212294a659ef5001836ff4eab4d663e4529bba83"
+checksum = "0e750cca55fe4f0439a15d0bb529da9651e79993e8e72c61a899a36d462befbe"
 dependencies = [
  "bytes",
  "getrandom 0.4.3",
