@@ -1,0 +1,51 @@
+{
+  "success": true,
+  "purpose": "functional verification of the Python SDK against a node on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "dc7c04a2a62913441d2db8697c97211f4f3a01547e3aa32cbc7543e6beebaf27",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d0cb1ca9e27fcf5c28669ef11c6c4cd9f8d2b220319dff4e5d1e454e6b6bdceb",
+    "driver": "82c8c1d44e4521b12916a7a16975707d556d3881f88e5395b86c524d60d47cf0"
+  },
+  "sdk_sha256": "defd41d8c9421039f330978c6dd7c7ef67c09c49d82795fe3f8f86bc91082326",
+  "cases": [
+    {
+      "name": "a machine is made, a command run, a run followed",
+      "success": true,
+      "detail": {
+        "machine": "vm-ce0f333e35d8aa37"
+      }
+    },
+    {
+      "name": "a file goes in and out, and a published port serves it",
+      "success": true,
+      "detail": {
+        "hostPort": 33100
+      }
+    },
+    {
+      "name": "stopped, resized, snapshotted, read without booting, restored, downloaded sparse",
+      "success": true,
+      "detail": {
+        "snapshot": "snap-749ef606967144b"
+      }
+    },
+    {
+      "name": "an environment starts a sandbox, and its usage is read",
+      "success": true,
+      "detail": {
+        "usage_seconds": 1.051
+      }
+    },
+    {
+      "name": "refusals are raised as ApiError with the node's words",
+      "success": true,
+      "detail": {
+        "a machine that is not there": "404 no machine absent-99",
+        "a second machine of one name": "409 machine sdk-01 exists",
+        "a smaller disk": "no refusal",
+        "no disk at all": "400 diskGiB only grows: the disk is 1 GiB, and a smaller one would lose what is on it"
+      }
+    }
+  ]
+}
