@@ -75,6 +75,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- A login in front of a machine's port: the control plane's proxy routes
+  `{port}-{machineID}` to the node that has the machine, asking nodes only
+  for an ID of a machine's shape, so a port published with `proxy` is
+  reached through it behind the web access login, granted by `machineID`.
 - Lit repositories in environments: an environment's `repositories`
   (`remote`, `path`, `branch`, `username`, `password`) are cloned by the
   node with the `lit` binary `--lit` names, only from remotes allowed with

@@ -1,0 +1,46 @@
+{
+  "success": true,
+  "purpose": "functional verification of a login in front of a machine port on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "f9f5b72a943f7d62dd45216292dd44e4c7417cb2f20394ed11ff28cdca22a653",
+    "control": "6dbac4119c2c70f79f842876560c5b0c033d541fc1c6d3b5a72381dada6938e6",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d0cb1ca9e27fcf5c28669ef11c6c4cd9f8d2b220319dff4e5d1e454e6b6bdceb",
+    "driver": "60a23a35da87597536495ea8d5f65918680f39c717174a081d3cf4a1168e8bdb"
+  },
+  "cases": [
+    {
+      "name": "without a grant naming the machine, a login is asked for and refused",
+      "success": true,
+      "detail": {
+        "no credentials": 401,
+        "wrong password": 401,
+        "a grant that does not name the machine": 401
+      }
+    },
+    {
+      "name": "with a grant naming the machine, its page comes through the control plane",
+      "success": true,
+      "detail": {
+        "cache-control": "private, no-store"
+      }
+    },
+    {
+      "name": "a port published without proxy is not reached, credentials or not",
+      "success": true,
+      "detail": {
+        "9090 (published without proxy)": 404,
+        "22 (not published)": 404
+      }
+    },
+    {
+      "name": "an ID that is not a machine's is not asked of any node",
+      "success": true,
+      "detail": {
+        "8080-vm-ZZZZ": 404
+      }
+    }
+  ],
+  "machine_id": "vm-9e10eaae7df48f8b",
+  "run": 1
+}

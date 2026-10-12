@@ -42,6 +42,11 @@ access; `["*"]` grants all current and future sandbox IDs. Omitting the field
 retains the original all-sandbox behavior, so use an explicit list when sharing
 a subset. Names, domains and prefixes are not accepted as substitutes for IDs.
 
+A machine's port published with `proxy` is a guest application URL too, at
+`{port}-{machineID}`: its `machineID` (`vm-` and 16 hex digits) is granted in
+`sandboxes` as a sandbox's ID is. The control plane asks its nodes which has
+the machine, only for an ID of that shape.
+
 Authorization checks the resolved target ID, including explicit routing headers.
 A fork receives a new ID and is not granted by its parent's exact-ID scope.
 Rebinding a custom domain changes the ID evaluated for that request. Scope and

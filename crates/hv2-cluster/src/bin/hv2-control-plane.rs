@@ -386,6 +386,22 @@ async fn main() -> std::process::ExitCode {
         return std::process::ExitCode::FAILURE;
     }
     let routes = ClusterRoutes::new(Arc::clone(&store), Duration::from_secs(2));
+    // A machine's proxied port, through this proxy and its logins: nodes are
+    // asked who has the machine, over the client the control plane uses.
+    let machine_http = match &mtls {
+        Some(mtls) => mtls.http_client(),
+        None => reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .map_err(|e| std::io::Error::other(e.to_string())),
+    };
+    let routes = match machine_http {
+        Ok(http) => routes.with_machines(http, opts.cluster_token.clone()),
+        Err(e) => {
+            eprintln!("hv2-control-plane: a client for machines: {e}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
     let routes = match &web_access {
         Some(policy) => routes.with_web_access(Arc::clone(policy)),
         None => routes,

@@ -3129,6 +3129,18 @@ async fn machine_inventory(
     })
 }
 
+/// Whether `id` is a machine's ID as nodes make them: `vm-` and 16 hex
+/// digits. Checked before any node is asked, so a request names no other
+/// path on a node.
+#[must_use]
+pub fn is_machine_id(id: &str) -> bool {
+    id.len() == 19
+        && id.starts_with("vm-")
+        && id[3..]
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+}
+
 /// The team a node says a machine belongs to.
 fn machine_team(machine: &Value) -> Option<crate::ownership::TeamId> {
     machine["teamID"]
@@ -3376,6 +3388,10 @@ pub struct ClusterRoutes {
         Arc<rustls::ClientConfig>,
         rustls::pki_types::ServerName<'static>,
     )>,
+    /// How to ask nodes for a machine, which the store does not record: a
+    /// machine's port published with `proxy` is reached through this proxy
+    /// too, behind its logins. See `with_machines`.
+    machines: Option<(reqwest::Client, Option<String>)>,
 }
 
 impl ClusterRoutes {
@@ -3388,7 +3404,39 @@ impl ClusterRoutes {
             cache: Mutex::new(HashMap::new()),
             ttl,
             backend_tls: None,
+            machines: None,
         }
+    }
+
+    /// Route `{port}-{machineID}` to the node that has the machine, asking
+    /// each node with `http` and the cluster token. The node's own proxy
+    /// then answers only for a port its machine published with `proxy`.
+    #[must_use]
+    pub fn with_machines(mut self, http: reqwest::Client, cluster_token: Option<String>) -> Self {
+        self.machines = Some((http, cluster_token));
+        self
+    }
+
+    /// The proxy of the node that has the machine `id`, when one says so.
+    async fn machine_node(&self, id: &str) -> Option<SocketAddr> {
+        let (http, token) = self.machines.as_ref()?;
+        if !crate::control::is_machine_id(id) {
+            return None;
+        }
+        for node in self.store.nodes().await.ok()? {
+            let mut request = http
+                .get(format!("{}/machines/{id}", node.api))
+                .timeout(Duration::from_secs(5));
+            if let Some(token) = token {
+                request = request.header(CLUSTER_TOKEN_HEADER, token);
+            }
+            if let Ok(response) = request.send().await {
+                if response.status().is_success() {
+                    return Some(node.proxy);
+                }
+            }
+        }
+        None
     }
 
     /// Require a signed-in member on guest application URLs, who may view the
@@ -3555,7 +3603,16 @@ impl hv2_api::sandbox_proxy::SandboxRoutes for ClusterRoutes {
                 return Some(*addr);
             }
         }
-        let record = self.store.sandbox(sandbox).await.ok()??;
+        let Some(record) = self.store.sandbox(sandbox).await.ok()? else {
+            // Not a sandbox: a machine, when a node has one by this ID.
+            let node = self.machine_node(sandbox).await?;
+            let mut cache = self.cache.lock();
+            if cache.len() > 10_000 {
+                cache.clear();
+            }
+            cache.insert(sandbox.to_string(), (node, Instant::now()));
+            return Some(node);
+        };
         let node = match self.store.node(&record.node_id).await.ok()? {
             Some(node) => node,
             // Paused into shared storage, on a node that has gone: any node
@@ -3595,6 +3652,24 @@ impl hv2_api::sandbox_proxy::SandboxRoutes for ClusterRoutes {
 #[cfg(test)]
 mod access_audit_tests {
     use super::*;
+
+    #[test]
+    fn only_a_machine_s_own_id_shape_is_asked_of_nodes() {
+        assert!(is_machine_id("vm-4fdb792117677a5d"));
+        for id in [
+            "",
+            "vm-",
+            "vm-4fdb792117677a5",
+            "vm-4fdb792117677a5d0",
+            "vm-4FDB792117677A5D",
+            "vm-4fdb79211767/a5d",
+            "vm-../../machines/x",
+            "sbx-4fdb792117677a5d",
+            "web-01",
+        ] {
+            assert!(!is_machine_id(id), "{id}");
+        }
+    }
     #[test]
     fn pending_page_refuses_capabilities_and_malformed_pagination() {
         let page =
