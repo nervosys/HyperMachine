@@ -262,7 +262,16 @@ hm sandbox vm machine unpublish web-01 20000
 - **Published ports are kept with the machine**: there after the node
   restarts, gone when the machine is deleted. At most 16 for a machine.
 - **It is TCP, and the bytes are the guest's.** The node adds no TLS, no
-  HTTP and no login; whoever can reach the node's port reaches the guest's.
+  HTTP and no login on the published port itself; whoever can reach the
+  node's port reaches the guest's.
+- **By name, through the node's proxy**, with `"proxy": true` (`hm ...
+  publish web-01 8080 --proxy`): the port is also reached at
+  `{guestPort}-{machineID}.{domain}` through the node's sandbox proxy, as a
+  sandbox's ports are, over TLS when the node has `--tls-cert`; and by E2B's
+  `e2b-sandbox-id` and `e2b-sandbox-port` headers. The answer gives the
+  name's first label as `proxyLabel`. Off unless asked, since the proxy is
+  commonly on a public address. The proxy adds no login for it: a private
+  URL with a login is a sandbox's, not yet a machine's.
 - **Through the control plane** the routes are forwarded, and the port is
   on the machine's node, at that node's address.
 

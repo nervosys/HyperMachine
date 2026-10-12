@@ -105,6 +105,14 @@ pub(crate) mod ports {
     pub(crate) async fn unpublish() -> Response {
         refused()
     }
+    /// No machine's port is routed through the proxy on this host.
+    pub(crate) fn proxied(
+        _state: &crate::AppState,
+        _machine_id: &str,
+        _port: u16,
+    ) -> Option<std::net::SocketAddr> {
+        None
+    }
 }
 
 /// Resizing a machine: the same answer.

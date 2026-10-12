@@ -61,6 +61,10 @@ pub(crate) struct Published {
     host: u16,
     #[serde(rename = "guestPort")]
     guest: u16,
+    /// Reachable through the node's sandbox proxy too, at
+    /// `{guestPort}-{machineID}.{domain}`, as a sandbox's ports are.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    proxy: bool,
 }
 
 /// The listeners open on this node: machine ID, then the node's port.
@@ -163,7 +167,39 @@ fn describe(state: &AppState, machine: &Stored, published: Published) -> Value {
         "address": state.opts.machine_port_address,
         // False when the node could not take the port back after a restart.
         "listening": listening,
+        "proxy": published.proxy,
+        // What the proxy is asked for: the first label of its host name.
+        "proxyLabel": published.proxy.then(|| format!("{}-{}", published.guest, machine.id)),
     })
+}
+
+/// Where the node's proxy sends a request for `port` of the machine
+/// `machine_id`: the published port's listener, when one was published for
+/// that guest port with `proxy`. Read from the machine's record each time,
+/// so a port published or taken back is routed or not at once.
+pub(crate) fn proxied(state: &AppState, machine_id: &str, port: u16) -> Option<SocketAddr> {
+    if !machine_id.starts_with("vm-") {
+        return None;
+    }
+    let machine = super::load(state, machine_id)?;
+    let published = machine
+        .ports
+        .iter()
+        .find(|published| published.guest == port && published.proxy)?;
+    let listening = listeners(|all| {
+        all.get(&machine.id)
+            .is_some_and(|open| open.contains_key(&published.host))
+    });
+    if !listening {
+        return None;
+    }
+    // A listener on every address is reached on loopback.
+    let address = match state.opts.machine_port_address {
+        IpAddr::V4(v4) if v4.is_unspecified() => IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        IpAddr::V6(v6) if v6.is_unspecified() => IpAddr::V6(std::net::Ipv6Addr::LOCALHOST),
+        other => other,
+    };
+    Some(SocketAddr::new(address, published.host))
 }
 
 #[derive(Debug, Deserialize)]
@@ -175,6 +211,11 @@ pub(crate) struct Publish {
     /// the node chooses when this is absent.
     #[serde(rename = "hostPort")]
     host: Option<u16>,
+    /// Route the port through the node's sandbox proxy as well: a name
+    /// there, and the proxy's TLS when it has a certificate. Off unless
+    /// asked, since the proxy is commonly on a public address.
+    #[serde(default)]
+    proxy: bool,
 }
 
 /// Why `machine` cannot have `asked` published, when it cannot. Everything
@@ -231,6 +272,7 @@ pub(crate) async fn publish(
         let published = Published {
             host,
             guest: asked.guest,
+            proxy: asked.proxy,
         };
         match listen(address, &machine.id, published).await {
             Ok(()) => {
@@ -342,7 +384,11 @@ mod tests {
     }
 
     fn ask(guest: u16, host: Option<u16>) -> Publish {
-        Publish { guest, host }
+        Publish {
+            guest,
+            host,
+            proxy: false,
+        }
     }
 
     const RANGE: (u16, u16) = (20000, 20099);
@@ -410,7 +456,11 @@ mod tests {
             let probe = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
             probe.local_addr().unwrap().port()
         };
-        let published = Published { host, guest: 80 };
+        let published = Published {
+            host,
+            guest: 80,
+            proxy: false,
+        };
         let loopback: IpAddr = "127.0.0.1".parse().unwrap();
         listen(loopback, "ports-test-machine", published)
             .await

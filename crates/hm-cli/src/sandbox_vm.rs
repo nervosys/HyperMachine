@@ -621,6 +621,9 @@ pub enum MachineCommand {
         /// chooses unless given
         #[arg(long, value_parser = clap::value_parser!(u16).range(1..))]
         host_port: Option<u16>,
+        /// Route it through the node's sandbox proxy too, by name
+        #[arg(long)]
+        proxy: bool,
     },
     /// List a machine's published ports
     Ports {
@@ -1824,10 +1827,14 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 name,
                 guest_port,
                 host_port,
+                proxy,
             } => {
                 let mut body = json!({"guestPort": guest_port});
                 if let Some(host_port) = host_port {
                     body["hostPort"] = json!(host_port);
+                }
+                if proxy {
+                    body["proxy"] = json!(true);
                 }
                 api.request(Method::POST, &["machines", &name, "ports"], Some(body))
                     .await?
