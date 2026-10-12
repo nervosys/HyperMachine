@@ -6090,6 +6090,16 @@ async fn main() -> std::process::ExitCode {
             post(machines::prompts::interrupt),
         )
         .route(
+            "/machines/{name}/files",
+            get(machines::files::get)
+                .put(machines::files::put)
+                // A file is the request's whole body, and larger than the
+                // little a JSON request is allowed.
+                .layer(axum::extract::DefaultBodyLimit::max(
+                    machines::files::MAX_FILE,
+                )),
+        )
+        .route(
             "/machines/{name}/console",
             get(machines::console).post(machines::console_input),
         )

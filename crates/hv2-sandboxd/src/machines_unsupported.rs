@@ -68,6 +68,20 @@ pub(crate) mod runs {
     }
 }
 
+/// A machine's files: the same answer.
+pub(crate) mod files {
+    use super::{refused, Response};
+
+    pub(crate) const MAX_FILE: usize = 64 << 20;
+
+    pub(crate) async fn get() -> Response {
+        refused()
+    }
+    pub(crate) async fn put() -> Response {
+        refused()
+    }
+}
+
 /// A machine's prompts: the same answer.
 pub(crate) mod prompts {
     use super::{refused, Response};

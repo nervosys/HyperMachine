@@ -1,0 +1,71 @@
+{
+  "success": true,
+  "purpose": "functional verification of machine file routes on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "55792c5af056b0baae23629ba49b7939495ca77d4710c71c4260d881576425ea",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d0cb1ca9e27fcf5c28669ef11c6c4cd9f8d2b220319dff4e5d1e454e6b6bdceb",
+    "driver": "f1455fb9ccc4f9b09abe1ad5832095fd2be6ac2f824548d4836a04f26663ae79"
+  },
+  "cases": [
+    {
+      "name": "a file goes in and comes out the same, and the guest's digest of it agrees",
+      "success": true,
+      "detail": {
+        "text": 30,
+        "every byte value": 768,
+        "empty": 0,
+        "larger than a piece": 9437307
+      }
+    },
+    {
+      "name": "directories are made, and with a user they and the file are that user's",
+      "success": true,
+      "detail": {
+        "owners": [
+          "1000:1000 /srv/made",
+          "1000:1000 /srv/made/for",
+          "1000:1000 /srv/made/for/dev",
+          "1000:1000 /srv/made/for/dev/note.txt"
+        ]
+      }
+    },
+    {
+      "name": "a file written over a longer one is exactly the new one",
+      "success": true
+    },
+    {
+      "name": "a file the guest made comes out, by a path with spaces and more in it",
+      "success": true,
+      "detail": {
+        "path": "/tmp/files/made in the guest, with 'quotes' & \u00fc.txt"
+      }
+    },
+    {
+      "name": "what cannot be done is refused, each with a status that says whose it is",
+      "success": true,
+      "detail": {
+        "a relative path": "path must be absolute",
+        "a relative path, written": "path must be absolute",
+        "a directory's name": "path names a directory; give the file's own name",
+        "no path": "Failed to deserialize query string: missing field `path`",
+        "a file that is not there": "Script error: reading /tmp/files/absent: No such file or directory (os error 2)",
+        "reading a directory": "Script error: reading /tmp/files: it is a directory",
+        "writing under a file": "Script error: creating the directory of /tmp/files/text/below: File exists (os error 17)",
+        "a user for a read": "user is for a write: a file is read as root",
+        "a user the guest has not": "Script error: owning /tmp/files/x: no user nobody-here in this sandbox",
+        "a file out that is too large": "Script error: /tmp/files/too-big is 68157440 bytes, over the 67108864-byte limit",
+        "no such machine": "no machine absent-99",
+        "a file in that is too large": "Failed to buffer the request body: length limit exceeded"
+      }
+    },
+    {
+      "name": "nothing goes in or out of a stopped machine",
+      "success": true,
+      "detail": {
+        "read": "machine files-01 is not running",
+        "write": "machine files-01 is not running"
+      }
+    }
+  ]
+}

@@ -39,7 +39,7 @@ reason, and are listed once at the end rather than counted as gaps.
 | systemd, and Docker, in the guest | Both | **Both, in a machine from a disk image**: [Ubuntu 24.04's image as published](benchmarks/2026-10-11/machine-docker-kvm/README.md) boots on its own 6.8 kernel with systemd started in full, installs Docker with `apt`, and runs containers. That run was typed at its serial console; such a machine can also [take `exec`](benchmarks/2026-10-11/machine-agent-kvm/README.md). **Neither in a sandbox**, whose first process is the project's own and whose kernel is built without what Docker needs |
 | `/dev/kvm` in the guest | Yes on its standard hosts, and said to be absent on its fallback hosts | **Not offered.** Not masked either, and never tested |
 | Installed for you | Docker, Chrome, VS Code, some twenty languages and runtimes, a dozen agent programs | What the template's image holds. No image is shipped with more than the guest agent needs |
-| Commands and files from outside | `exec`, with detach, attach and kill; `scp`; SSH | A sandbox: `exec`, processes with a terminal and standard input, files in and out; SSH by name is partial. A machine: `exec`, and [runs](MACHINES.md#runs), started and left, read from any offset, written to and signalled; no file routes |
+| Commands and files from outside | `exec`, with detach, attach and kill; `scp`; SSH | A sandbox: `exec`, processes with a terminal and standard input, files in and out; SSH by name is partial. A machine: `exec`, and [runs](MACHINES.md#runs), started and left, read from any offset, written to and signalled; and [files](MACHINES.md#files) in and out by path, up to 64 MiB each. No directories or trees in one request, and no SSH |
 | Output of past commands | Stored, listed and replayed (`boat history`) | **For a machine's [runs](MACHINES.md#runs)**: listed, and each one's output kept and read again, in the node's memory, so not across a node restart. Not for `exec`, and not for a sandbox, whose output is streamed once |
 | The guest's processes, listed from outside | `boat ps` | Only the processes started through the API and still running |
 | An HTTPS address for a port | `https://NAME-PORT.on.boat.dev`, behind a token unless made public; fifty ports | `{port}-{id}.{domain}` over TLS, with [custom domains](CUSTOM_DOMAINS.md) and [private URLs with a login](PRIVATE_GUEST_URLS.md). The operator supplies DNS and certificates |
@@ -74,9 +74,9 @@ In rough order of how much each matters to someone choosing between them:
    through cloud-init, on the distribution's image as published. With a NIC it
    [installs Docker and runs containers](benchmarks/2026-10-11/machine-docker-kvm/README.md).
    With `guestAgent` it [runs this project's agent](benchmarks/2026-10-11/machine-agent-kvm/README.md),
-   installed by cloud-init, and takes `exec`. What it still lacks: file
-   routes, which no machine has; a way in from the network; and an image
-   with tools already in it. A sandbox, as distinct from a machine, is
+   installed by cloud-init, and takes `exec`, runs and
+   [files](MACHINES.md#files). What it still lacks: a way in from the
+   network; and an image with tools already in it. A sandbox, as distinct from a machine, is
    unchanged. Most of the rows below stand on this one: an agent, a browser
    and a desktop are all things a distribution installs.
 2. **Coding agents that are already there, and proven.** A machine now

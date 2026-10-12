@@ -582,6 +582,25 @@ pub enum MachineCommand {
         detach: bool,
         prompt: String,
     },
+    /// Copy a local file into a machine, making the directories above it
+    Upload {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        source: std::path::PathBuf,
+        /// Where in the machine: an absolute path, the file's own name
+        path: String,
+        /// The guest user who owns it; root unless given
+        #[arg(long)]
+        user: Option<String>,
+    },
+    /// Copy a file out of a machine; refuses to overwrite, and `-` prints it
+    Download {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        /// The file in the machine: an absolute path
+        path: String,
+        destination: std::path::PathBuf,
+    },
     /// Print the end of a machine's serial console
     Console {
         #[arg(value_parser = machine_name)]
@@ -1670,6 +1689,80 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 }
                 return Ok(0);
             }
+            MachineCommand::Upload {
+                name,
+                source,
+                path,
+                user,
+            } => {
+                let bytes = std::fs::read(&source)
+                    .with_context(|| format!("reading {}", source.display()))?;
+                if bytes.len() > MACHINE_FILE_LIMIT {
+                    bail!(
+                        "{} is {} bytes; a file into a machine is at most {}",
+                        source.display(),
+                        bytes.len(),
+                        MACHINE_FILE_LIMIT
+                    );
+                }
+                let mut query = vec![("path", path.as_str())];
+                if let Some(user) = user.as_deref() {
+                    query.push(("user", user));
+                }
+                let response = api
+                    .client
+                    .put(api.url(&["machines", &name, "files"])?)
+                    .query(&query)
+                    .body(bytes)
+                    .send()
+                    .await
+                    .context("sandbox API request failed")?;
+                let status = response.status();
+                if !status.is_success() {
+                    let why = response.text().await.unwrap_or_default();
+                    bail!("sandbox API returned {status}: {why}");
+                }
+                return Ok(0);
+            }
+            MachineCommand::Download {
+                name,
+                path,
+                destination,
+            } => {
+                let mut response = api
+                    .client
+                    .get(api.url(&["machines", &name, "files"])?)
+                    .query(&[("path", path.as_str())])
+                    .send()
+                    .await
+                    .context("sandbox API request failed")?;
+                let status = response.status();
+                if !status.is_success() {
+                    let why = response.text().await.unwrap_or_default();
+                    bail!("sandbox API returned {status}: {why}");
+                }
+                let mut bytes = Vec::new();
+                while let Some(chunk) = response.chunk().await? {
+                    if chunk.len() > MACHINE_FILE_LIMIT.saturating_sub(bytes.len()) {
+                        bail!("sandbox response exceeds byte limit");
+                    }
+                    bytes.extend_from_slice(&chunk);
+                }
+                use std::io::Write;
+                if destination.as_os_str() == "-" {
+                    std::io::stdout().write_all(&bytes)?;
+                } else {
+                    // Never over a file that is there: the name was typed by
+                    // hand, and what is under it is not ours to lose.
+                    std::fs::OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(&destination)
+                        .and_then(|mut file| file.write_all(&bytes))
+                        .with_context(|| format!("writing {}", destination.display()))?;
+                }
+                return Ok(0);
+            }
             MachineCommand::Console { name, tail } => {
                 // Text, not JSON: the guest's own serial output.
                 let mut request = api.client.get(api.url(&["machines", &name, "console"])?);
@@ -2293,6 +2386,9 @@ async fn public_ports(api: &Api, command: PublicPortCommand) -> Result<Value> {
         }
     }
 }
+
+/// The most a file into or out of a machine may be: the node's own limit.
+const MACHINE_FILE_LIMIT: usize = 64 << 20;
 
 /// The most one read of a run or a prompt may be: what a node keeps of a
 /// stream, with room for how it is wrapped.

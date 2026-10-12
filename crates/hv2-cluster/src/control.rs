@@ -314,6 +314,10 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
             post(to_machine_node),
         )
         .route(
+            "/machines/{name}/files",
+            get(to_machine_node).put(to_machine_node),
+        )
+        .route(
             "/machines/{name}/console",
             get(to_machine_node).post(to_machine_node),
         )
