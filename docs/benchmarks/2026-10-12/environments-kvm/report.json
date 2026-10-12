@@ -1,0 +1,86 @@
+{
+  "success": true,
+  "purpose": "functional verification of environments on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "952dd34e87e38df6d158705d2496f1eb6554e79da8162039230857c9fd093d29",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d0cb1ca9e27fcf5c28669ef11c6c4cd9f8d2b220319dff4e5d1e454e6b6bdceb",
+    "driver": "7c41680ae280e8f9e1a22e57fac647580c3413bf0e0413032ea9c5fa2c17ab19"
+  },
+  "cases": [
+    {
+      "name": "an environment is made and described without its values",
+      "success": true,
+      "detail": {
+        "described": {
+          "createdAt": "2026-10-12T17:12:58.863Z",
+          "envVarNames": [
+            "API_URL",
+            "MODE",
+            "SECRET_TOKEN"
+          ],
+          "files": [
+            {
+              "bytes": 12,
+              "path": "/etc/app/config.toml"
+            },
+            {
+              "bytes": 1029,
+              "path": "/srv/data/blob.bin"
+            }
+          ],
+          "name": "web",
+          "teamID": null,
+          "updatedAt": "2026-10-12T17:12:58.863Z"
+        }
+      }
+    },
+    {
+      "name": "a sandbox made with it has its variables and files, and its own envVars win",
+      "success": true,
+      "detail": {
+        "seen": "API=https://api.example MODE=from-request\nport = 8080\n",
+        "owner": [
+          "UNKNOWN 0",
+          "UNKNOWN 0",
+          "UNKNOWN 0"
+        ],
+        "commands_run_as": [
+          "0",
+          "0"
+        ]
+      }
+    },
+    {
+      "name": "a sandbox made without it has none of it",
+      "success": true
+    },
+    {
+      "name": "after a reboot it still has them, and a fork has them too",
+      "success": true,
+      "detail": {
+        "fork": "sbx-7575ef2c593c409ea978"
+      }
+    },
+    {
+      "name": "a change applies to sandboxes made after it, not one already running",
+      "success": true,
+      "detail": {
+        "later": "API=https://api.example MODE=from-request\nport = 8080\n"
+      }
+    },
+    {
+      "name": "what cannot be is refused, and a deleted environment starts nothing",
+      "success": true,
+      "detail": {
+        "no such environment": "no environment absent",
+        "a path that is not absolute": "\"rel\": a file's path is absolute and names the file",
+        "a path that climbs": "\"/a/../etc/shadow\": a file's path has no `..` in it",
+        "a variable name that is not one": "\"A-B\" is not a variable name",
+        "a name that is not one": "an environment's name is 1 to 64 letters, digits, '-', '_' and '.', not starting with '.'",
+        "a field that is not one": "Failed to deserialize the JSON body into the target type: secrets: unknown field `secrets`, expected `envVars` or `files` at line 1 column 10"
+      }
+    }
+  ],
+  "secret_in_log": false
+}

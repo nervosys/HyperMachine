@@ -75,6 +75,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- Environments: `PUT /environments/{name}` keeps a team's named set of
+  variables and files; a sandbox created with `"environment": NAME` starts
+  with them, its own `envVars` over the environment's and the files written
+  into its guest before the create answers. They are put back after a
+  reboot and carried into a fork. Listing returns names and sizes only.
+  Served by a node and a control plane from the cluster store. See
+  docs/ENVIRONMENTS.md.
 - Snapshots of a machine's disk: `POST /machines/{name}/snapshots` copies a
   stopped machine's disk (sparse, and sharing blocks where the filesystem
   can); `.../snapshots/{id}/restore` puts it back with its disk size,

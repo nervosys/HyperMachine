@@ -22,6 +22,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use hv2_agent::AgentVM;
+use hv2_cluster::environments::GuestFile;
 use hv2_guest_agent::{TemplateDefaults, TEMPLATE_DEFAULTS_PATH};
 
 /// How long the guest has to read or write its defaults.
@@ -34,6 +35,45 @@ pub(crate) const MAX_BYTES: usize = 128 * 1024;
 
 /// What each sandbox was created with, for its reboots.
 static KEPT: Mutex<Option<HashMap<String, BTreeMap<String, String>>>> = Mutex::new(None);
+/// The files of the environment each sandbox was created with, for its
+/// reboots, as the variables are kept.
+static FILES: Mutex<Option<HashMap<String, Vec<GuestFile>>>> = Mutex::new(None);
+
+fn files_map<T>(f: impl FnOnce(&mut HashMap<String, Vec<GuestFile>>) -> T) -> T {
+    let mut guard = FILES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    f(guard.get_or_insert_with(HashMap::new))
+}
+
+/// Keep `files` for `sandbox_id`'s reboots. Nothing is kept for none.
+pub(crate) fn keep_files(sandbox_id: &str, files: &[GuestFile]) {
+    if !files.is_empty() {
+        files_map(|m| m.insert(sandbox_id.to_string(), files.to_vec()));
+    }
+}
+
+/// The files `sandbox_id` was created with, as far as this process knows.
+pub(crate) fn kept_files(sandbox_id: &str) -> Vec<GuestFile> {
+    files_map(|m| m.get(sandbox_id).cloned().unwrap_or_default())
+}
+
+/// Write an environment's `files` into `vm`'s guest, owned by the
+/// template's user, so its commands can read them.
+pub(crate) async fn write_files(vm: &AgentVM, files: &[GuestFile]) -> Result<(), String> {
+    for file in files {
+        let bytes = file.bytes()?;
+        vm.write_file_in_guest_as(
+            &file.path,
+            bytes,
+            Some(hv2_guest_agent::TEMPLATE_USER),
+            AGENT_TIMEOUT,
+        )
+        .await
+        .map_err(|e| format!("writing the environment's {}: {e}", file.path))?;
+    }
+    Ok(())
+}
 
 fn kept_map<T>(f: impl FnOnce(&mut HashMap<String, BTreeMap<String, String>>) -> T) -> T {
     let mut guard = KEPT
@@ -58,11 +98,13 @@ pub(crate) fn kept(sandbox_id: &str) -> BTreeMap<String, String> {
 pub(crate) fn inherit(source: &str, fork: &str) {
     let env = kept(source);
     keep(fork, &env);
+    keep_files(fork, &kept_files(source));
 }
 
 /// The sandbox ended.
 pub(crate) fn forget(sandbox_id: &str) {
     kept_map(|m| m.remove(sandbox_id));
+    files_map(|m| m.remove(sandbox_id));
 }
 
 /// Refuse what cannot be an environment variable, or is too much of one.

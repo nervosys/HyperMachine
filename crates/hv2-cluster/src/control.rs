@@ -286,6 +286,7 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/templates/{id}/builds/{build}/status", get(to_builder))
         .route("/templates/aliases/{alias}", get(template_alias))
         .merge(crate::events::router(Arc::clone(&control.store)))
+        .merge(crate::environments::router(Arc::clone(&control.store)))
         .route("/volumes", get(list_volumes).post(to_volume_node))
         .route("/volumes/{id}", get(to_volume_node).delete(to_volume_node))
         .route("/machines", get(list_machines).post(create_machine))

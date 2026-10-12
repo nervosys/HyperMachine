@@ -27,6 +27,7 @@ use crate::private_networks::{
 };
 use crate::web_sharing::{SharingAccess, SharingChange, WebSharingState};
 
+use crate::environments::Environment;
 use crate::model::{ClusterEvent, Delivery, NodeInfo, SandboxRecord, Webhook};
 
 /// A store error. Opaque on purpose: a caller's only decision is whether to
@@ -290,6 +291,19 @@ pub trait ClusterStore: Send + Sync {
     async fn record_delivery(&self, delivery: &Delivery) -> Result<()>;
     /// A webhook's most recent `count` deliveries, newest first.
     async fn deliveries(&self, webhook_id: &str, count: usize) -> Result<Vec<Delivery>>;
+
+    /// Make or replace an environment, by its team and name.
+    async fn put_environment(&self, _env: &Environment) -> Result<()> {
+        Err(StoreError("this store keeps no environments".into()))
+    }
+    /// Every team's environments.
+    async fn environments(&self) -> Result<Vec<Environment>> {
+        Ok(Vec::new())
+    }
+    /// Remove the environment [`Environment::key`] names; whether there was one.
+    async fn delete_environment(&self, _key: &str) -> Result<bool> {
+        Ok(false)
+    }
 }
 
 /// Deliveries kept per webhook, at most.
@@ -308,6 +322,7 @@ pub struct MemoryStore {
     events: Mutex<std::collections::VecDeque<ClusterEvent>>,
     webhooks: Mutex<Vec<Webhook>>,
     deliveries: Mutex<HashMap<String, std::collections::VecDeque<Delivery>>>,
+    environments: Mutex<std::collections::BTreeMap<String, Environment>>,
 }
 
 #[derive(Default)]
@@ -947,6 +962,21 @@ impl ClusterStore for MemoryStore {
             .take(count)
             .cloned()
             .collect())
+    }
+
+    async fn put_environment(&self, env: &Environment) -> Result<()> {
+        self.environments
+            .lock()
+            .insert(Environment::key(env.team.as_ref(), &env.name), env.clone());
+        Ok(())
+    }
+
+    async fn environments(&self) -> Result<Vec<Environment>> {
+        Ok(self.environments.lock().values().cloned().collect())
+    }
+
+    async fn delete_environment(&self, key: &str) -> Result<bool> {
+        Ok(self.environments.lock().remove(key).is_some())
     }
 
     async fn put_webhook(&self, hook: &Webhook) -> Result<()> {
@@ -2354,6 +2384,44 @@ return {1,values}
             }
         }
         Ok(events)
+    }
+
+    async fn put_environment(&self, env: &Environment) -> Result<()> {
+        let json = serde_json::to_string(env).map_err(json_error)?;
+        let mut c = self.connection.clone();
+        redis::cmd("HSET")
+            .arg(self.key("environments"))
+            .arg(Environment::key(env.team.as_ref(), &env.name))
+            .arg(json)
+            .query_async::<()>(&mut c)
+            .await
+            .map_err(redis_error)
+    }
+
+    async fn environments(&self) -> Result<Vec<Environment>> {
+        let mut c = self.connection.clone();
+        let all: HashMap<String, String> = redis::cmd("HGETALL")
+            .arg(self.key("environments"))
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        let mut found: Vec<Environment> = all
+            .values()
+            .filter_map(|json| serde_json::from_str(json).ok())
+            .collect();
+        found.sort_by(|a, b| (&a.team, &a.name).cmp(&(&b.team, &b.name)));
+        Ok(found)
+    }
+
+    async fn delete_environment(&self, key: &str) -> Result<bool> {
+        let mut c = self.connection.clone();
+        let removed: u64 = redis::cmd("HDEL")
+            .arg(self.key("environments"))
+            .arg(key)
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        Ok(removed > 0)
     }
 
     async fn put_webhook(&self, hook: &Webhook) -> Result<()> {
