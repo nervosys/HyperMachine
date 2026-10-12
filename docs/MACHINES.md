@@ -268,6 +268,45 @@ hm sandbox vm machine unpublish web-01 20000
 
 [Checked on real KVM](benchmarks/2026-10-11/machine-ports-kvm/README.md).
 
+## Snapshots
+
+A snapshot is a stopped machine's disk, copied and kept beside it: files,
+not memory. It is restored over the disk, or downloaded as a raw image.
+
+```sh
+curl -sS -X POST $NODE/machines/web-01/stop
+curl -sS -X POST $NODE/machines/web-01/snapshots -d '{"name":"before upgrade"}'
+# → {"snapshotID":"snap-61d5adc592c0469","name":"before upgrade","diskGiB":20,"bytesOnNode":5226496,...}
+curl -sS $NODE/machines/web-01/snapshots
+curl -sS -X POST $NODE/machines/web-01/snapshots/snap-61d5adc592c0469/restore -d '{}'
+curl -sS $NODE/machines/web-01/snapshots/snap-61d5adc592c0469/disk -o web-01.img
+curl -sS -X DELETE $NODE/machines/web-01/snapshots/snap-61d5adc592c0469
+
+hm sandbox vm machine snapshot take web-01 --name "before upgrade"
+hm sandbox vm machine snapshot list web-01
+hm sandbox vm machine snapshot restore web-01 snap-61d5adc592c0469
+hm sandbox vm machine snapshot download web-01 snap-61d5adc592c0469 web-01.img
+```
+
+- **Only while stopped.** Taking or restoring one while the machine runs is
+  refused with 409: a disk copied under a running guest is caught
+  half-written.
+- **A copy that costs what differs, where it can.** The node copies with
+  `cp --sparse=always --reflink=auto`: on XFS or Btrfs a snapshot shares the
+  disk's blocks until they change, and elsewhere it costs what the disk
+  holds, not its size. `bytesOnNode` says which.
+- **A restore puts back the disk and its size**: one taken before a resize
+  gives the machine its earlier size again. It goes beside the disk first
+  and over it in one rename, so a restore that fails leaves the disk as it
+  was. Snapshots are independent of each other and of the disk.
+- **A download is the whole raw disk**, as long as the disk is; `hm`
+  writes its zeros as holes. It is the image the guest boots, so `debugfs`
+  or a loop mount reads it without booting anything.
+- **The cloud-init seed is not in one**, and is left as it is by a restore.
+- At most 32 a machine; deleting the machine deletes them.
+
+[Checked on real KVM](benchmarks/2026-10-12/machine-snapshots-kvm/README.md).
+
 ## Resizing
 
 A stopped machine can be given other processors, other memory, or a larger

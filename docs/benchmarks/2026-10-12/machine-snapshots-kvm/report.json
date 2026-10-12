@@ -1,0 +1,67 @@
+{
+  "success": true,
+  "purpose": "functional verification of machine disk snapshots on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "31e1d64ff115ae6357e5ef5252a2060a3ef3e8e7a32b0b2ac838baf839983fda",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d0cb1ca9e27fcf5c28669ef11c6c4cd9f8d2b220319dff4e5d1e454e6b6bdceb",
+    "driver": "0b09765bfcf4beb60eb0bc3437506dcecdef45bef8555214c4572cab525c22bd"
+  },
+  "cases": [
+    {
+      "name": "a snapshot of a running machine is refused",
+      "success": true,
+      "detail": {
+        "refused": "machine snapped-01 is running; stop it to take a snapshot, so its disk is not half-written"
+      }
+    },
+    {
+      "name": "stopped, a snapshot is taken and listed, with what it holds on the node",
+      "success": true,
+      "detail": {
+        "snapshot": {
+          "bytesOnNode": 5226496,
+          "createdAt": "2026-10-12T16:31:39.647Z",
+          "diskGiB": 1,
+          "name": "first version",
+          "snapshotID": "snap-61d5adc592c0469"
+        }
+      }
+    },
+    {
+      "name": "restoring a snapshot undoes what changed since",
+      "success": true
+    },
+    {
+      "name": "restoring the later snapshot brings it back; each snapshot is its own",
+      "success": true
+    },
+    {
+      "name": "a downloaded disk is a clean filesystem holding the files as they were",
+      "success": true,
+      "detail": {
+        "bytes": 1073741824,
+        "note": "second version"
+      }
+    },
+    {
+      "name": "a snapshot taken before a resize restores the smaller disk",
+      "success": true,
+      "detail": {
+        "root_kb": 996780
+      }
+    },
+    {
+      "name": "what cannot be done is refused; deletes remove snapshots and the machine its own",
+      "success": true,
+      "detail": {
+        "restoring onto a running machine": "machine snapped-01 is running; stop it to restore a snapshot, so its disk is not half-written",
+        "no such snapshot": "machine snapped-01 has no snapshot snap-000000000000000",
+        "not a snapshot ID": "machine snapped-01 has no snapshot ../../machine.json",
+        "restoring no such snapshot": "machine snapped-01 has no snapshot snap-000000000000000",
+        "a name that is not one": "a snapshot's name is 1 to 128 characters, with no control characters and no space at either end",
+        "a field that is not one": "Failed to deserialize the JSON body into the target type: label: unknown field `label`, expected `name` at line 1 column 8"
+      }
+    }
+  ]
+}

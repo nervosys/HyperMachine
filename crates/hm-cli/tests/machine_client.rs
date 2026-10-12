@@ -88,6 +88,12 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
                     Json(json!({"code": 404, "message": "reading /nope: No such file"})),
                 )
                     .into_response(),
+                ("GET", "/machines/web-01/snapshots/snap-0123456789abcde/disk") => {
+                    let mut disk = vec![0u8; 3 << 20];
+                    disk[..5].copy_from_slice(b"start");
+                    disk[(2 << 20) + 7] = 9;
+                    disk.into_response()
+                }
                 ("GET", "/machines/web-01/console") => "[    0.1] booted\n".into_response(),
                 ("GET", "/machines/web-01/console?tail=64") => "login: ".into_response(),
                 ("POST", "/machines/web-01/console") => StatusCode::NO_CONTENT.into_response(),
@@ -506,6 +512,77 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
         assert_eq!((seen_method.as_str(), seen_path.as_str()), (method, path));
         assert_eq!(sent, &body);
     }
+
+    // Snapshots: what is asked goes where it should.
+    for (arguments, method, path, body) in [
+        (
+            vec!["snapshot", "take", "web-01", "--name", "before upgrade"],
+            "POST",
+            "/machines/web-01/snapshots",
+            json!({"name": "before upgrade"}),
+        ),
+        (
+            vec!["snapshot", "take", "web-01"],
+            "POST",
+            "/machines/web-01/snapshots",
+            json!({}),
+        ),
+        (
+            vec!["snapshot", "list", "web-01"],
+            "GET",
+            "/machines/web-01/snapshots",
+            Value::Null,
+        ),
+        (
+            vec!["snapshot", "restore", "web-01", "snap-0123456789abcde"],
+            "POST",
+            "/machines/web-01/snapshots/snap-0123456789abcde/restore",
+            json!({}),
+        ),
+        (
+            vec!["snapshot", "delete", "web-01", "snap-0123456789abcde"],
+            "DELETE",
+            "/machines/web-01/snapshots/snap-0123456789abcde",
+            Value::Null,
+        ),
+    ] {
+        let output = hm(arguments.clone(), "owned-machine-key").await;
+        assert!(
+            output.status.success(),
+            "{arguments:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let requests = observed.lock().unwrap();
+        let (seen_method, seen_path, sent) = requests.last().unwrap();
+        assert_eq!((seen_method.as_str(), seen_path.as_str()), (method, path));
+        assert_eq!(sent, &body);
+    }
+    // A download is the disk, byte for byte, and never over a file.
+    let scratch = std::env::temp_dir().join(format!("hm-machine-disk-{}", std::process::id()));
+    std::fs::create_dir_all(&scratch).unwrap();
+    let image = scratch.join("disk.img");
+    let image_arg: &'static str = Box::leak(image.to_str().unwrap().to_owned().into_boxed_str());
+    let download = vec![
+        "snapshot",
+        "download",
+        "web-01",
+        "snap-0123456789abcde",
+        image_arg,
+    ];
+    let output = hm(download.clone(), "owned-machine-key").await;
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let disk = std::fs::read(&image).unwrap();
+    assert_eq!(disk.len(), 3 << 20);
+    assert_eq!(&disk[..5], b"start");
+    assert_eq!(disk[(2 << 20) + 7], 9);
+    assert_eq!(disk.iter().filter(|b| **b != 0).count(), 6);
+    let output = hm(download, "owned-machine-key").await;
+    assert!(!output.status.success());
+    std::fs::remove_dir_all(&scratch).unwrap();
 
     // A resize sends only the sizes that were given.
     for (arguments, body) in [
