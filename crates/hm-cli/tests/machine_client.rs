@@ -468,6 +468,39 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
     assert_eq!(observed.lock().unwrap().len(), sent);
     std::fs::remove_dir_all(&scratch).unwrap();
 
+    // A resize sends only the sizes that were given.
+    for (arguments, body) in [
+        (
+            vec!["resize", "web-01", "--cpus", "4"],
+            json!({"cpuCount": 4}),
+        ),
+        (
+            vec![
+                "resize",
+                "web-01",
+                "--memory-mb",
+                "8192",
+                "--disk-gib",
+                "40",
+            ],
+            json!({"memoryMB": 8192, "diskGiB": 40}),
+        ),
+    ] {
+        let output = hm(arguments.clone(), "owned-machine-key").await;
+        assert!(
+            output.status.success(),
+            "{arguments:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let requests = observed.lock().unwrap();
+        let (method, path, sent) = requests.last().unwrap();
+        assert_eq!(
+            (method.as_str(), path.as_str()),
+            ("PATCH", "/machines/web-01")
+        );
+        assert_eq!(sent, &body);
+    }
+
     // Refusals fail, and a bad name never reaches the API.
     let before = observed.lock().unwrap().len();
     for (arguments, key) in [
@@ -488,6 +521,7 @@ async fn machine_commands_authenticate_send_what_was_asked_and_keep_exit_codes()
         vec!["type", "web-01", "--no-enter", ""],
         vec!["exec", "web-01"],
         vec!["run", "web-01"],
+        vec!["resize", "web-01"],
         // A variable that is not set is not sent as an empty one.
         vec!["run", "web-01", "--pass-env", "HM_TEST_UNSET", "--", "true"],
         vec!["prompt", "web-01", "hello"],

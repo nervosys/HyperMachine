@@ -1,0 +1,76 @@
+{
+  "success": true,
+  "purpose": "functional verification of machine resizing on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "84e121042be0b6d656037117ad5f2674dd8bc4b447b0ac0d62b3f0f1c7f96f35",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d0cb1ca9e27fcf5c28669ef11c6c4cd9f8d2b220319dff4e5d1e454e6b6bdceb",
+    "driver": "b90db6abd310a650d2138e713b154558f94dece03a3d647621a288629c40ce35"
+  },
+  "cases": [
+    {
+      "name": "a running machine is not resized, and is left as it was",
+      "success": true,
+      "detail": {
+        "refused": "machine sized-01 is running; stop it first: a size is what a machine starts with"
+      }
+    },
+    {
+      "name": "stopped, it takes other processors, memory and a larger disk, and its record says so",
+      "success": true,
+      "detail": {
+        "record": {
+          "cpuCount": 2,
+          "memoryMB": 1024,
+          "diskGiB": 3
+        },
+        "disk_bytes": 3221225472
+      }
+    },
+    {
+      "name": "started, the guest counts the processors, reports the memory, and has a root as large as the disk",
+      "success": true,
+      "detail": {
+        "before": {
+          "processors": 1,
+          "memory_kb": 479396,
+          "root_kb": 996780
+        },
+        "after": {
+          "processors": 2,
+          "memory_kb": 994508,
+          "root_kb": 3060520
+        }
+      }
+    },
+    {
+      "name": "one size changed alone leaves the others",
+      "success": true,
+      "detail": {
+        "after": {
+          "processors": 2,
+          "memory_kb": 736460,
+          "root_kb": 3060520
+        }
+      }
+    },
+    {
+      "name": "what cannot be is refused, and changes nothing",
+      "success": true,
+      "detail": {
+        "a smaller disk": "diskGiB only grows: the disk is 3 GiB, and a smaller one would lose what is on it",
+        "a smaller disk, with sizes that could be": "diskGiB only grows: the disk is 3 GiB, and a smaller one would lose what is on it",
+        "no processors": "cpuCount is 1 to 32, not 0",
+        "too little memory": "memoryMB is 128 to 1048576, not 64",
+        "a disk too large": "diskGiB is at most 2048",
+        "nothing": "give cpuCount, memoryMB or diskGiB",
+        "something that is not a size": "Failed to deserialize the JSON body into the target type: name: unknown field `name`, expected one of `cpuCount`, `memor"
+      }
+    }
+  ],
+  "as_created": {
+    "processors": 1,
+    "memory_kb": 479396,
+    "root_kb": 996780
+  }
+}
