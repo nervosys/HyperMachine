@@ -3948,6 +3948,12 @@ const MAX_DISK_FORKS: u32 = 8;
 struct ForkRequest {
     timeout: Option<u64>,
     count: Option<u32>,
+    /// Another size for the forks, which boot at it rather than carry the
+    /// source's memory.
+    #[serde(rename = "cpuCount")]
+    cpu_count: Option<u32>,
+    #[serde(rename = "memoryMB")]
+    memory_mb: Option<u64>,
 }
 
 /// `POST /sandboxes/{id}/fork`: checkpoint a running sandbox in place and
@@ -3959,6 +3965,11 @@ struct ForkRequest {
 /// own ID, token, network gateway (with the source's policy) and a reseeded
 /// RNG: a fork that drew the same random numbers as its siblings would be a
 /// fork of their secrets too.
+///
+/// With `cpuCount` or `memoryMB` the forks are another size. A guest's
+/// memory cannot be carried to another size, so they boot, with what a
+/// reboot keeps: a copy of the disk, volumes, network and variables. Then
+/// only a source with a disk is paused, while its disk is copied.
 async fn fork_route(
     State(state): State<Arc<AppState>>,
     Path(sandbox_id): Path<String>,
@@ -3991,7 +4002,17 @@ async fn fork_route(
         "{sandbox_id}-fork-{}.snap",
         uuid::Uuid::new_v4().simple()
     ));
-    let (template_id, metadata, network, source_request, volume_mounts, creator, mut claims, size) = {
+    let (
+        template_id,
+        metadata,
+        network,
+        source_request,
+        volume_mounts,
+        creator,
+        mut claims,
+        size,
+        fresh,
+    ) = {
         let lock = transition_lock(&state, &sandbox_id);
         let _held = lock.lock().await;
         let source = {
@@ -4063,35 +4084,51 @@ async fn fork_route(
         } else {
             creator
         };
+        // Only a size asked for is weighed against this host, as on a resume.
+        let fork_size = match (body.cpu_count, body.memory_mb) {
+            (None, None) => size,
+            (cpus, memory_mb) => match Sizes::requested(cpus, memory_mb, size) {
+                Ok(asked) => asked,
+                Err(why) => return api_error(StatusCode::BAD_REQUEST, why),
+            },
+        };
+        let fresh = fork_size != size;
         let started = std::time::Instant::now();
         // A sandbox with a disk booted, so its memory is written whole; and
         // its disk is copied before it runs again, so each copy is the disk
         // that memory describes.
         let booted_size = size != sizes_of(&state, &template_id);
-        let checkpointed = if with_disk {
-            let copy_state = Arc::clone(&state);
-            let (source, ids) = (sandbox_id.clone(), fork_ids.clone());
-            let whole = disks::cold_booted(&state, &sandbox_id) || booted_size;
-            vm.checkpoint_with(&checkpoint, whole, move || {
-                let mut claims = Vec::with_capacity(ids.len());
-                for id in &ids {
-                    match disks::fork_for(&copy_state, &source, id) {
-                        Ok(claim) => claims.push(Some(claim)),
-                        Err(e) => {
-                            // The copies already made belong to forks that
-                            // will not exist.
-                            for claim in claims.drain(..).flatten() {
-                                let serial = claim.serial.clone();
-                                drop(claim);
-                                disks::discard(&copy_state, &serial);
-                            }
-                            return Err(e);
+        let copy_state = Arc::clone(&state);
+        let (source, ids) = (sandbox_id.clone(), fork_ids.clone());
+        let copy_disks = move || {
+            let mut claims = Vec::with_capacity(ids.len());
+            for id in &ids {
+                match disks::fork_for(&copy_state, &source, id) {
+                    Ok(claim) => claims.push(Some(claim)),
+                    Err(e) => {
+                        // The copies already made belong to forks that
+                        // will not exist.
+                        for claim in claims.drain(..).flatten() {
+                            let serial = claim.serial.clone();
+                            drop(claim);
+                            disks::discard(&copy_state, &serial);
                         }
+                        return Err(e);
                     }
                 }
-                Ok(claims)
-            })
-            .await
+            }
+            Ok(claims)
+        };
+        let checkpointed = if fresh && with_disk {
+            // Forks of another size take none of its memory: the source is
+            // paused only while its disk is copied.
+            vm.paused_while(copy_disks).await
+        } else if fresh {
+            // Nor anything else: the source is not even paused.
+            Ok((0..count).map(|_| None).collect())
+        } else if with_disk {
+            let whole = disks::cold_booted(&state, &sandbox_id) || booted_size;
+            vm.checkpoint_with(&checkpoint, whole, copy_disks).await
         } else if booted_size {
             // Booted its own size: written whole, as a sandbox with a disk is.
             vm.checkpoint_with(&checkpoint, true, || Ok((0..count).map(|_| None).collect()))
@@ -4111,7 +4148,9 @@ async fn fork_route(
                 );
             }
         };
-        state.metrics.checkpoint_latency.observe(started.elapsed());
+        if !fresh {
+            state.metrics.checkpoint_latency.observe(started.elapsed());
+        }
         (
             template_id,
             metadata,
@@ -4120,7 +4159,8 @@ async fn fork_route(
             volume_mounts,
             creator,
             claims,
-            size,
+            fork_size,
+            fresh,
         )
     };
 
@@ -4159,17 +4199,24 @@ async fn fork_route(
                     }
                 };
                 let access_token = new_access_token();
+                // Of another size it boots, with what a reboot of its source
+                // would be given; otherwise its memory has all of that.
+                let (env, files) = if fresh {
+                    (env_vars::kept(&source_id), env_vars::kept_files(&source_id))
+                } else {
+                    (BTreeMap::new(), Vec::new())
+                };
                 let running = match bring_up(
                     &state,
                     &fork_id,
                     &template_id,
-                    Some(&checkpoint),
+                    (!fresh).then_some(checkpoint.as_path()),
                     network,
                     &volume_mounts,
                     creator.1.as_ref(),
                     claim.as_ref(),
-                    &BTreeMap::new(),
-                    &[],
+                    &env,
+                    &files,
                     &access_token,
                     Some(size),
                 )
@@ -4192,7 +4239,7 @@ async fn fork_route(
                     proxy_port: state.opts.proxy_port,
                     envd_access_token: access_token,
                 };
-                // A fork is its source's size, whatever its template's is.
+                // Its source's size, or the one asked for; whatever its template's is.
                 let sizes = size;
                 let record = SandboxRecord {
                     owner_id: creator.0,

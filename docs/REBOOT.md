@@ -29,7 +29,8 @@ reboots without them.
 ## Changing its size
 
 A sandbox's processors and memory can be changed after it is created, by
-rebooting it at the new size:
+rebooting it at the new size, and [a fork](#on-a-fork) can be another size
+than its source:
 
 ```sh
 curl -s -X POST localhost:3980/sandboxes/$SBX/resize \
@@ -67,9 +68,31 @@ hm sandbox vm resume $SBX --cpus 2 --memory-mb 2048
   `sandbox.lifecycle.updated`, and counted among reboots toward the crash
   limit below.
 
-Not here: a size changed on a fork, and a disk's size.
+### On a fork
 
-Evidence: [real KVM resize checks](benchmarks/2026-10-13/sandbox-resize-kvm/README.md).
+A fork can be another size than its source:
+
+```sh
+curl -s -X POST localhost:3980/sandboxes/$SBX/fork \
+  -H 'content-type: application/json' -d '{"count": 3, "cpuCount": 4, "memoryMB": 8192}'
+
+hm sandbox vm fork $SBX --count 3 --cpus 4 --memory-mb 8192
+```
+
+- **Each fork boots at that size**, given what its source would keep
+  across a reboot: a copy of its disk, its volumes, network and variables.
+  It does not carry its source's memory, which a fork of the same size does.
+- **The source is not paused,** unless it holds a disk. Then it is paused
+  only while the disk is copied, and its memory is not written.
+- At the template's size a fork is restored from the template; at another
+  it boots. Either way it is that size from then on, as a resized sandbox
+  is.
+- A size that cannot be is refused, and no fork is made.
+
+Not here: a disk's size.
+
+Evidence: [real KVM resize checks](benchmarks/2026-10-13/sandbox-resize-kvm/README.md),
+and [forks at another size](benchmarks/2026-10-13/fork-size-kvm/README.md).
 
 ## Crash loops
 

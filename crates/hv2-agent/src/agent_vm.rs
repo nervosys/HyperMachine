@@ -336,6 +336,25 @@ impl AgentVM {
             .map_err(AgentError::Script)
     }
 
+    /// Pause, run `while_paused`, and resume, writing nothing.
+    ///
+    /// For copying what the guest must not change meanwhile -- its disk --
+    /// when its memory is not wanted. `while_paused` runs on a thread that
+    /// may block. The VM is resumed whatever happens.
+    ///
+    /// # Errors
+    ///
+    /// The VM could not be paused or resumed, or `while_paused` failed.
+    pub async fn paused_while<T>(
+        &self,
+        while_paused: impl FnOnce() -> std::result::Result<T, String>,
+    ) -> Result<T> {
+        self.vm.pause().await?;
+        let done = tokio::task::block_in_place(while_paused);
+        self.vm.resume().await?;
+        done.map_err(AgentError::Script)
+    }
+
     /// Pause, write this VM to `snapshot` as only what it changed since the
     /// image it was restored from, and resume it: a checkpoint to fork from,
     /// which the guest sees as a pause of a few milliseconds.

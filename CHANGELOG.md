@@ -89,6 +89,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Resume:** `resume` takes the same fields, to bring a paused sandbox
     back at another size, booted rather than restored
     (`hm sandbox vm resume --cpus --memory-mb`).
+  - **Fork:** `fork` takes the same fields (`hm sandbox vm fork --cpus
+    --memory-mb`). Forks of another size boot at it, with a copy of the
+    source's disk and its volumes, network and variables, but not its
+    memory. The source is paused only to copy a disk.
   - **Afterwards:** usage counts each size for the time spent at it, and a
     resize is reported as `sandbox-resized`.
 - A desktop for a machine, and computer use on it: `desktop` on

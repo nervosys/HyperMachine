@@ -1,0 +1,77 @@
+{
+  "success": true,
+  "purpose": "functional verification of forking a sandbox at another size on KVM; the times are the check's own stopwatch and not a benchmark",
+  "input_sha256": {
+    "daemon": "c7fb9f3d0fe518d367e6919e871254fb816e233b3d2396a0ebd781d41320539f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d0cb1ca9e27fcf5c28669ef11c6c4cd9f8d2b220319dff4e5d1e454e6b6bdceb",
+    "driver": "792470198212951b05afa14d01e37f3baddae0684568e4a5693276fe5c47b8d5"
+  },
+  "host_cpus": 24,
+  "cases": [
+    {
+      "name": "forks at another size boot at it, with the source's variables and not its memory",
+      "success": true,
+      "detail": {
+        "forks": {
+          "sbx-b01f665847694dcf8ec6": {
+            "processors": 2,
+            "memory_kb": 479180
+          },
+          "sbx-da88ceaca81142c28768": {
+            "processors": 2,
+            "memory_kb": 479180
+          }
+        },
+        "seconds": 0.955
+      }
+    },
+    {
+      "name": "a fork with no size is its source's size, with its memory",
+      "success": true,
+      "detail": {
+        "seconds": 0.045
+      }
+    },
+    {
+      "name": "a fork at its template's size is restored from it, and pauses with its memory",
+      "success": true,
+      "detail": {
+        "seconds": 0.049
+      }
+    },
+    {
+      "name": "a fork of a sandbox with a disk, at another size, has its own copy of the disk",
+      "success": true,
+      "detail": {
+        "seconds": 0.741
+      }
+    },
+    {
+      "name": "a fork's usage is counted at its own size",
+      "success": true,
+      "detail": {
+        "usage": {
+          "key": "sbx-b01f665847694dcf8ec6",
+          "memoryGiBSeconds": 2.1825,
+          "partial": false,
+          "runningSeconds": 4.365,
+          "sandboxes": 1,
+          "vcpuSeconds": 8.73
+        }
+      }
+    },
+    {
+      "name": "a size that cannot be is refused, and no fork is made",
+      "success": true,
+      "detail": {
+        "refused": {
+          "no processors": "cpuCount 0: between 1 and 24, this host's CPUs",
+          "more processors than the host": "cpuCount 4096: between 1 and 24, this host's CPUs",
+          "too little memory": "memoryMB 128: an even number from 256 to 65536",
+          "an odd amount": "memoryMB 1023: an even number from 256 to 65536"
+        }
+      }
+    }
+  ]
+}
