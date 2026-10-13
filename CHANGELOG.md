@@ -81,6 +81,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- A machine's runs, and their output, are kept across a node restart, in
+  the machine's directory under `runs/`. A run that was going when the node
+  stopped comes back as `lost`, saying so, with its output to the node's
+  last poll. The output files are cut back to what is kept, 4 MiB a
+  stream, once they are twice that.
 - A sandbox's checkpoint read from outside, without touching the sandbox:
   `GET /sandboxes/{id}/checkpoints/{name}/files?path=` lists a directory in
   it and `.../file?path=` reads a file, up to 64 MiB
