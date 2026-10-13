@@ -57,9 +57,10 @@ hm sandbox vm resume $SBX --cpus 2 --memory-mb 2048
   [usage](USAGE.md) are at it. Usage counts each size for the time the
   sandbox ran at it.
 - **At its template's size it is restored from the template**, quickly, as
-  any reboot is. At another size it boots, as a sandbox created at that size
-  does. It can then be paused and forked, but not checkpointed or made a
-  template.
+  any reboot is. At another size it is restored from
+  [the template built at that size](SANDBOX_SIZES.md#a-fast-start-at-any-size)
+  when the node has one, and otherwise boots. It can then be paused and
+  forked, but not checkpointed or made a template.
 - **Refused:** a size no guest here can be, which is 1 vCPU up to this
   host's, and 256 MiB to 64 GiB in even numbers. Also refused: a resize of
   a paused sandbox (resume it at a size instead). A resume at a size that
@@ -85,8 +86,9 @@ hm sandbox vm fork $SBX --count 3 --cpus 4 --memory-mb 8192
 - **The source is not paused,** unless it holds a disk. Then it is paused
   only while the disk is copied, and its memory is not written.
 - At the template's size a fork is restored from the template; at another
-  it boots. Either way it is that size from then on, as a resized sandbox
-  is.
+  it is restored from [that size's](SANDBOX_SIZES.md#a-fast-start-at-any-size)
+  when the node has one, and otherwise boots. Either way it is that size
+  from then on, as a resized sandbox is.
 - A size that cannot be is refused, and no fork is made.
 
 Not here: a disk's size.

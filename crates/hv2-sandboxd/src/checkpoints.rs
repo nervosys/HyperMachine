@@ -171,7 +171,7 @@ async fn save(state: &Arc<AppState>, sandbox_id: &str, name: &str) -> Result<u64
         return Err(Refused::Because(
             StatusCode::CONFLICT,
             format!(
-                "sandbox {sandbox_id} is a size of its own and was booted, and such a sandbox \
+                "sandbox {sandbox_id} is a size of its own, not its template's, and such a sandbox \
                  cannot be checkpointed; it can be paused"
             ),
         ));

@@ -95,6 +95,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     memory. The source is paused only to copy a disk.
   - **Afterwards:** usage counts each size for the time spent at it, and a
     resize is reported as `sandbox-resized`.
+  - **A fast start at any size:** the node builds a template again at each
+    size a sandbox asks for, and restores later sandboxes at that size from
+    it, whether created, resized, forked or resumed at it. Only the first
+    boots. `--template-size CPUSxMB` builds one at start, and
+    `--sized-templates N` (default 4) bounds how many are kept. See
+    `docs/SANDBOX_SIZES.md`.
 - A desktop for a machine, and computer use on it: `desktop` on
   `POST /machines`, for a machine from an image with `guestAgent`.
   - **What is installed:** at first boot, a virtual display with a window
