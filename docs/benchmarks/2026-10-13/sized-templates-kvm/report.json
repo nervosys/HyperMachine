@@ -1,0 +1,62 @@
+{
+  "success": true,
+  "purpose": "functional verification of restoring sandboxes of another size from templates built at that size, on KVM; the times are the check's own stopwatch and not a benchmark",
+  "input_sha256": {
+    "daemon": "b19ca9cf3225ce5e02a51d208eddc3919ac47f894efed07aa6bede44a80d3e81",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d0cb1ca9e27fcf5c28669ef11c6c4cd9f8d2b220319dff4e5d1e454e6b6bdceb",
+    "driver": "3858c9dd0a72972a35347394b8a7244336a8ef2a53e8b11f594230c15ad10224"
+  },
+  "host_cpus": 24,
+  "cases": [
+    {
+      "name": "a size built at start: its sandboxes are restored from it, each with its own randomness",
+      "success": true,
+      "detail": {
+        "seconds": [
+          0.025,
+          0.019
+        ],
+        "memory_kb": 994508,
+        "restored_from": "/tmp/hv2-sandboxd-3138-base-2x1024-5b72cd90/template.snap"
+      }
+    },
+    {
+      "name": "a size built when first asked for: the first boots, the next are restored",
+      "success": true,
+      "detail": {
+        "booted_seconds": 0.248,
+        "restored_seconds": [
+          0.024,
+          0.02
+        ],
+        "restored_from": "/tmp/hv2-sandboxd-3138-base-2x512-a064df71/template.snap"
+      }
+    },
+    {
+      "name": "a resize and a fork to a built size are restored from it",
+      "success": true,
+      "detail": {
+        "resize_seconds": 0.024,
+        "fork_seconds": 0.025
+      }
+    },
+    {
+      "name": "restored at another size, it is still its own size: pauses whole, no checkpoint",
+      "success": true,
+      "detail": {
+        "checkpoint_refused": "sandbox sbx-64f3c336b9694225b8df is a size of its own, not its template's, and such a sandbox cannot be checkpointed; it can be paused"
+      }
+    },
+    {
+      "name": "with as many sizes held as allowed, another size boots every time",
+      "success": true,
+      "detail": {
+        "restored_from": [
+          null,
+          null
+        ]
+      }
+    }
+  ]
+}

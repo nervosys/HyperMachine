@@ -140,6 +140,7 @@ mod private_source;
 mod reboot;
 #[cfg(target_os = "linux")]
 mod seed;
+mod sized;
 // Volumes are served with openat2 and O_PATH, which only Linux has; see
 // volumes_unsupported.rs for what other hosts answer.
 #[cfg(target_os = "linux")]
@@ -330,6 +331,10 @@ struct Options {
     evict_idle_after: Option<Duration>,
     /// How many restored sandboxes to keep ready for creates to take.
     warm_pool: usize,
+    /// How many templates at sizes not their own to keep. See sized.rs.
+    sized_templates: usize,
+    /// Sizes to build the base template at when the node starts.
+    template_sizes: Vec<Sizes>,
     /// Boot template guests with a placeholder disk, so a sandbox that asks
     /// for a disk can be restored from a template and given it.
     disk_slot: bool,
@@ -410,6 +415,8 @@ fn parse_options() -> Result<Options, String> {
         identity_key: None,
         evict_idle_after: None,
         warm_pool: 0,
+        sized_templates: sized::DEFAULT_LIMIT,
+        template_sizes: Vec::new(),
         disk_slot: false,
         idle_pause_after: None,
         auto_checkpoint_every: None,
@@ -558,6 +565,14 @@ fn parse_options() -> Result<Options, String> {
                 opts.idle_standby_after = (secs > 0).then(|| Duration::from_secs(secs));
             }
             "--disk-slot" => opts.disk_slot = true,
+            "--sized-templates" => {
+                let most: usize = value(&mut i)?.parse().map_err(|e| format!("{e}"))?;
+                if most > 64 {
+                    return Err("--sized-templates is at most 64".into());
+                }
+                opts.sized_templates = most;
+            }
+            "--template-size" => opts.template_sizes.push(sized::parse(&value(&mut i)?)?),
             "--warm-pool" => {
                 let spares: usize = value(&mut i)?.parse().map_err(|e| format!("{e}"))?;
                 if spares > 64 {
@@ -580,7 +595,7 @@ fn parse_options() -> Result<Options, String> {
             "--help" | "-h" => {
                 println!(
                     "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N | --memory-mb N] [--cpu-cores N] \
-                     [--capacity N] [--guest-transport mmio|pci] [--cold-start-concurrency N] [--no-template | --require-template] [--prefault] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] [--idle-pause-after SECS] \
+                     [--capacity N] [--guest-transport mmio|pci] [--cold-start-concurrency N] [--no-template | --require-template] [--prefault] [--sized-templates N] [--template-size CPUSxMB ...] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] [--idle-pause-after SECS] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy] \
                      [--tenant-reserved-cidr CIDR]...] \
                      [--tls-cert F --tls-key F] \
@@ -835,6 +850,8 @@ struct AppState {
     pool: pool::Pool,
     /// Templates' sandboxes' sizes, where they are not the node's.
     sizes: parking_lot::RwLock<BTreeMap<String, Sizes>>,
+    /// Templates built again at sizes not their own. See sized.rs.
+    sized: sized::SizedTemplates,
     /// Sandboxes' snapshots, by name: templates too, to a create.
     snapshots: parking_lot::RwLock<BTreeMap<String, Arc<snapshots::Snapshot>>>,
     /// Template builds by steps (E2B's `Template.build`), by build ID.
@@ -1757,12 +1774,24 @@ async fn bring_up(
     // template's guest booted with a placeholder disk, so it is restored like
     // any other and the placeholder swapped for the real disk.
     let swap = plain_create && disk.is_some() && state.opts.disk_slot;
+    // Of another size, restored from the template built at that size when
+    // there is one, and otherwise booted while one is built (see sized.rs).
+    let sized = if resized_create && disk.is_none() {
+        let sized = sized::get(state, template_id, sizes);
+        if sized.is_none() {
+            sized::want(state, template_id, sizes);
+        }
+        sized
+    } else {
+        None
+    };
+    let template = sized.clone().or(template);
     let snapshot = if disk.is_some() && plain_create && !swap {
         None
     } else if disk.is_some() && !plain_create {
         snapshot
     } else if resized_create {
-        None
+        sized.as_ref().map(|t| t.snapshot.as_path())
     } else {
         snapshot.or(template.as_ref().map(|t| t.snapshot.as_path()))
     };
@@ -1830,7 +1859,8 @@ async fn bring_up(
     // A plain create of the base template takes a guest restored before it
     // was asked for, when one is ready (see pool.rs). Everything from here to
     // the agent answering is what such a guest has already done.
-    let spare = if plain_create && (disk.is_none() || swap) && snapshot.is_some() {
+    let spare = if plain_create && !resized_create && (disk.is_none() || swap) && snapshot.is_some()
+    {
         pool::take(state, template_id, network.is_some()).await
     } else {
         None
@@ -5043,6 +5073,8 @@ async fn offer(state: &AppState, name: &str, initramfs: &str, sizes: Sizes) -> R
             .write()
             .insert(name.to_string(), Arc::new(built));
     }
+    // Its sizes were of the guest it replaces.
+    sized::forget(state, name);
     state.sizes.write().insert(name.to_string(), sizes);
     state
         .initrds
@@ -6156,6 +6188,7 @@ async fn main() -> std::process::ExitCode {
         initrds: parking_lot::RwLock::new(initrds),
         builds: Mutex::new(BTreeMap::new()),
         sizes: parking_lot::RwLock::new(BTreeMap::new()),
+        sized: sized::SizedTemplates::default(),
         telemetry: parking_lot::Mutex::new(HashMap::new()),
         pool: pool::Pool::default(),
         forwards: forwards::Forwards::default(),
@@ -6223,6 +6256,9 @@ async fn main() -> std::process::ExitCode {
     }
     tokio::spawn(expire(Arc::clone(&state)));
     tokio::spawn(adopt_built(Arc::clone(&state)));
+    for size in state.opts.template_sizes.clone() {
+        sized::want(&state, "base", size);
+    }
     tokio::spawn(snapshots::follow_store(Arc::clone(&state)));
     tokio::spawn(machines::supervise(Arc::clone(&state)));
     if let Some(config) = state.opts.otlp.clone() {

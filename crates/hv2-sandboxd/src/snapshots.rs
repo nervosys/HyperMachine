@@ -107,7 +107,7 @@ pub(crate) async fn create(
         return api_error(
             StatusCode::CONFLICT,
             format!(
-                "sandbox {sandbox_id} is a size of its own and was booted, and such a sandbox \
+                "sandbox {sandbox_id} is a size of its own, not its template's, and such a sandbox \
                  cannot be snapshotted into a template"
             ),
         );
