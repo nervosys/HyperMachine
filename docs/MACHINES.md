@@ -218,6 +218,16 @@ curl -sS $NODE/machines/web-01/runs          # every run kept, oldest first
   run, the machine being stopped and the node restarting, and is gone when
   the machine is deleted. 256 runs are kept for a machine; the oldest
   finished one makes room, and with 256 still running a new one is refused.
+- **A program printing faster than it is read:** the guest agent holds at
+  most 1 MiB of a stream between the node's polls, and drops the oldest
+  beyond that. It says how much, and those bytes are counted in `dropped`,
+  so every offset is still the program's. Output kept from before such a
+  gap is counted as dropped too: the kept part of a stream is one unbroken
+  piece. The node polls again at once while a program floods, so a gap
+  takes printing faster than it can read, as `head -c 9M /dev/zero` does.
+  A guest agent from before this does not say what it dropped, and its
+  runs undercount. [Checked on real
+  KVM](benchmarks/2026-10-13/machine-run-flood-kvm/README.md).
 - **Across a node restart:** each run is kept in the machine's directory
   under `runs/`: `<id>.json`, and its output as it came in `<id>.stdout`
   and `<id>.stderr`, cut back to what is kept once twice that. A node that

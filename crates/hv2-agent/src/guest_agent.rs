@@ -351,6 +351,11 @@ pub struct GuestOutput {
     /// `None` when a signal ended the program, which is not exiting 0.
     pub exit_code: Option<i32>,
     pub signal: Option<i32>,
+    /// Bytes written on each stream since the previous poll that the agent
+    /// dropped, before this poll's text: it holds a bounded amount between
+    /// polls. Zero from an agent too old to say.
+    pub stdout_dropped: u64,
+    pub stderr_dropped: u64,
 }
 
 /// What a command did inside the guest.
@@ -562,6 +567,8 @@ impl GuestAgent {
                 running,
                 exit_code,
                 signal,
+                stdout_dropped,
+                stderr_dropped,
             } => Ok(GuestOutput {
                 stdout,
                 stderr,
@@ -569,6 +576,8 @@ impl GuestAgent {
                 running,
                 exit_code,
                 signal,
+                stdout_dropped,
+                stderr_dropped,
             }),
             OpResult::Failed { message } => Err(AgentError::Script(format!(
                 "the guest agent could not poll pid {pid}: {message}"

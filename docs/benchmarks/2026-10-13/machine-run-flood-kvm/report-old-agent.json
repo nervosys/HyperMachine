@@ -1,0 +1,16 @@
+{
+  "success": false,
+  "purpose": "functional verification of runs that outprint their polls on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "426f2aee5b8f8b2db0223a0656de95b2de5c4932d88f8c4f1b64fb7cb6af160e",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "driver": "4d4a781b27904b3fd2966f18bb2b09b63c7d88f42e2ff6b0d319428bbd192fdb"
+  },
+  "cases": [
+    {
+      "name": "a run printing faster than it is polled has every byte accounted for",
+      "success": false
+    }
+  ]
+}
