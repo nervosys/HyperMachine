@@ -90,6 +90,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- A sandbox's command history: every command run through `exec` or envd's
+  `process.Process/Start` (E2B's `commands.run`) is kept with its command
+  line, user, PID, how it ended and the newest 64 KiB of each stream, at
+  `GET /sandboxes/{id}/commands` and `.../commands/{n}`
+  (`hm sandbox vm history`). The newest 64 are kept, through a pause and,
+  with a snapshot store, onto the node that resumes it. `hv2-api`'s
+  `EnvdProcess` takes a `ProcessObserver` for this. See
+  `docs/COMMAND_HISTORY.md`.
 - A guest's processes listed from outside: `GET /sandboxes/{id}/processes`
   and `GET /machines/{name}/processes` (`?all=true` for kernel threads),
   `hm sandbox vm ps` and `hm sandbox vm machine ps`, and `processes()` in

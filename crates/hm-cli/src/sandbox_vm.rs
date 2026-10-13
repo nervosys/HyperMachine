@@ -215,6 +215,8 @@ pub enum VmCommand {
         #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
         command: Vec<String>,
     },
+    /// List a VM sandbox's commands, or show one with what it printed
+    History { id: String, n: Option<u64> },
     /// List every process in a VM sandbox's guest, as ps does
     Ps {
         id: String,
@@ -2494,6 +2496,20 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             api.request(Method::POST, &["sandboxes", &id, "fork"], Some(body))
                 .await?
         }
+        VmCommand::History { id, n } => match n {
+            Some(n) => {
+                api.request(
+                    Method::GET,
+                    &["sandboxes", &id, "commands", &n.to_string()],
+                    None,
+                )
+                .await?
+            }
+            None => {
+                api.request(Method::GET, &["sandboxes", &id, "commands"], None)
+                    .await?
+            }
+        },
         VmCommand::Ps { id, all } => {
             api.request_bounded_query(
                 Method::GET,

@@ -40,7 +40,7 @@ reason, and are listed once at the end rather than counted as gaps.
 | `/dev/kvm` in the guest | Yes on its standard hosts, and said to be absent on its fallback hosts | **Not offered.** Not masked either, and never tested |
 | Installed for you | Docker, Chrome, VS Code, some twenty languages and runtimes, a dozen agent programs | What the template's image holds. No image is shipped with more than the guest agent needs. A machine from a distribution's image can be created with [Claude Code and Codex installed](MACHINES.md#agents-installed-at-first-boot) at its first boot, [checked on KVM](benchmarks/2026-10-12/machine-agents-kvm/README.md); nothing else is installed for you |
 | Commands and files from outside | `exec`, with detach, attach and kill; `scp`; SSH | A sandbox: `exec`, processes with a terminal and standard input, files in and out; SSH by name is partial. A machine: `exec`, and [runs](MACHINES.md#runs), started and left, read from any offset, written to and signalled; and [files](MACHINES.md#files) in and out by path, up to 64 MiB each. No directories or trees in one request, and no SSH |
-| Output of past commands | Stored, listed and replayed (`boat history`) | **For a machine's [runs](MACHINES.md#runs)**: listed, and each one's output kept and read again, [across a node restart](benchmarks/2026-10-13/machine-runs-durable-kvm/README.md), in the machine's directory; a run going when the node stopped is `lost`, with its output. Not for `exec`, and not for a sandbox, whose output is streamed once |
+| Output of past commands | Stored, listed and replayed (`boat history`) | **For a machine's [runs](MACHINES.md#runs)**: listed, and each one's output kept and read again, [across a node restart](benchmarks/2026-10-13/machine-runs-durable-kvm/README.md), in the machine's directory; a run going when the node stopped is `lost`, with its output. **For a sandbox's commands**: every one run through `exec` or envd (E2B's `commands.run`) is [kept with its output](COMMAND_HISTORY.md), listed and read again, through a pause and onto the node that resumes it (`hm sandbox vm history`), [checked on KVM](benchmarks/2026-10-13/sandbox-history-kvm/README.md); in memory, so not across a node restart while it runs |
 | The guest's processes, listed from outside | `boat ps` | **Yes, every one**, for a sandbox or a machine: [`/processes`](PROCESSES.md) lists each with its parent, user, state, command line, memory, CPU time and age, read from the guest's `/proc` (`hm sandbox vm ps`, `machine ps`, `processes()` in both SDKs), [checked on KVM](benchmarks/2026-10-13/guest-processes-kvm/README.md). Needs the guest agent |
 | An HTTPS address for a port | `https://NAME-PORT.on.boat.dev`, behind a token unless made public; fifty ports | `{port}-{id}.{domain}` over TLS, with [custom domains](CUSTOM_DOMAINS.md) and [private URLs with a login](PRIVATE_GUEST_URLS.md), for a sandbox. The operator supplies DNS and certificates. A machine's [published ports](MACHINES.md#published-ports) are a TCP port of its node, and with `proxy` the same `{port}-{id}.{domain}` over the proxy's TLS, [checked on KVM](benchmarks/2026-10-12/machine-proxy-kvm/README.md), and through the control plane behind its [login](PRIVATE_GUEST_URLS.md), [checked on KVM](benchmarks/2026-10-12/machine-port-login-kvm/README.md) |
 | A port from the caller's machine into the sandbox, and back | `boat forward`, and `--reverse` | Into the sandbox, TCP and UDP. **Not back**: nothing makes a port of the caller's reachable from the guest |
@@ -106,9 +106,9 @@ In rough order of how much each matters to someone choosing between them:
    [listed and read file by file](CHECKPOINTS.md#reading-one-from-outside).
    boat downloads all or part of a snapshot's tree as an archive; nothing
    here does.
-6. **Stored command output for sandboxes**, and a port back to the
-   caller's machine. A machine's runs are kept
-   [across a node restart](MACHINES.md#runs), and a guest's processes are
+6. **A port back to the caller's machine.** A machine's runs are kept
+   [across a node restart](MACHINES.md#runs), a sandbox's commands are
+   [kept and read again](COMMAND_HISTORY.md), and a guest's processes are
    [listed](PROCESSES.md).
 7. **Git repositories in an environment.** An environment's repositories
    are [Lit's](ENVIRONMENTS.md#repositories); boat clones Git ones.

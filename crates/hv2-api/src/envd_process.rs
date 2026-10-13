@@ -128,6 +128,32 @@ pub fn user_of(metadata: &tonic::metadata::MetadataMap) -> Option<String> {
     (!user.is_empty()).then(|| user.to_string())
 }
 
+/// Told of every process a service starts, what it prints and how it
+/// ends: for keeping a sandbox's history of commands, which this service,
+/// knowing only the running ones, does not.
+pub trait ProcessObserver: Send + Sync {
+    /// A process started; the key it returns goes with every later call
+    /// about it.
+    fn started(&self, started: &Started<'_>) -> u64;
+    /// It printed: what came since the last call, and how many bytes the
+    /// guest dropped before that, unseen.
+    fn printed(&self, key: u64, stdout: &str, stderr: &str, dropped: (u64, u64));
+    /// It ended: by exiting, by a signal, or by no longer being reachable,
+    /// with why.
+    fn ended(&self, key: u64, exit_code: Option<i32>, signal: Option<i32>, error: Option<&str>);
+}
+
+/// What a process was started as.
+pub struct Started<'a> {
+    pub pid: u32,
+    pub cmd: &'a str,
+    pub args: &'a [String],
+    pub cwd: Option<&'a str>,
+    pub tag: Option<&'a str>,
+    pub user: Option<&'a str>,
+    pub pty: bool,
+}
+
 /// A process this service started and has not yet seen exit.
 struct Tracked {
     info: ProcessInfo,
@@ -153,6 +179,8 @@ pub struct EnvdProcess {
     vm: Arc<AgentVM>,
     /// Guest pid -> the process, for every one currently running.
     running: Arc<Mutex<HashMap<u32, Tracked>>>,
+    /// Told of each process, when one is given.
+    observer: Option<Arc<dyn ProcessObserver>>,
 }
 
 impl EnvdProcess {
@@ -160,7 +188,15 @@ impl EnvdProcess {
         Self {
             vm,
             running: Arc::new(Mutex::new(HashMap::new())),
+            observer: None,
         }
+    }
+
+    /// Tell `observer` of every process this starts.
+    #[must_use]
+    pub fn with_observer(mut self, observer: Arc<dyn ProcessObserver>) -> Self {
+        self.observer = Some(observer);
+        self
     }
 
     /// Resolve the pid a request is about.
@@ -294,12 +330,29 @@ async fn pump(
     running: Arc<Mutex<HashMap<u32, Tracked>>>,
     events: broadcast::Sender<ProcessEvent>,
     wake: Arc<Notify>,
+    observer: Option<(Arc<dyn ProcessObserver>, u64)>,
 ) {
     use process_proto::process_event::data_event::Output;
 
     loop {
         match vm.poll_in_guest(pid, GUEST_TIMEOUT).await {
             Ok(output) => {
+                if let Some((observer, key)) = &observer {
+                    if !output.stdout.is_empty()
+                        || !output.stderr.is_empty()
+                        || output.stdout_dropped + output.stderr_dropped > 0
+                    {
+                        observer.printed(
+                            *key,
+                            &output.stdout,
+                            &output.stderr,
+                            (output.stdout_dropped, output.stderr_dropped),
+                        );
+                    }
+                    if !output.running {
+                        observer.ended(*key, output.exit_code, output.signal, None);
+                    }
+                }
                 if !output.stdout.is_empty() {
                     // A terminal's output is `pty`, not `stdout`: the client
                     // is told which it is looking at, since only one of them
@@ -338,6 +391,9 @@ async fn pump(
                 }
             }
             Err(e) => {
+                if let Some((observer, key)) = &observer {
+                    observer.ended(*key, None, None, Some(&e.to_string()));
+                }
                 let _ = events.send(ProcessEvent {
                     event: Some(ProcessEventKind::End(EndEvent {
                         exit_code: -1,
@@ -429,6 +485,19 @@ impl Process for EnvdProcess {
             event: Some(ProcessEventKind::Start(StartEvent { pid })),
         });
 
+        let observer = self.observer.as_ref().map(|observer| {
+            let key = observer.started(&Started {
+                pid,
+                cmd: &config.cmd,
+                args: &config.args,
+                cwd: config.cwd.as_deref(),
+                tag: req.tag.as_deref(),
+                user: user.as_deref(),
+                pty: pty.is_some(),
+            });
+            (Arc::clone(observer), key)
+        });
+
         let wake = Arc::new(Notify::new());
         self.running.lock().insert(
             pid,
@@ -450,6 +519,7 @@ impl Process for EnvdProcess {
             Arc::clone(&self.running),
             events,
             wake,
+            observer,
         ));
 
         Ok(Response::new(stream_of(rx, |event| StartResponse {
