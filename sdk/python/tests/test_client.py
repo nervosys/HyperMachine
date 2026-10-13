@@ -131,6 +131,26 @@ class ClientTest(unittest.TestCase):
         self.assertEqual(list(prompt.events(interval=0)),
                          [{"offset": 0, "event": {"type": "a"}}, {"offset": 5, "text": "plain"}])
 
+    def test_a_conversation_is_spoken_to_and_its_turns_are_prompts(self):
+        Node.answers[("GET", "/machines/web-01")] = (200, MACHINE)
+        machine = self.hm.machines.get("web-01")
+        Node.answers[("POST", "/machines/web-01/conversations")] = (
+            201, {"conversationID": 3, "name": "fix", "state": "idle"})
+        talk = machine.conversations.create("codex", name="fix", user="dev", from_=1)
+        self.assertEqual(self.last()[3], {"provider": "codex", "name": "fix", "user": "dev", "from": "1"})
+        Node.answers[("POST", "/machines/web-01/conversations/3/messages")] = (
+            202, {"conversationID": 3, "promptID": 8, "steered": True})
+        turn = talk.say("and the docs", env={"K": "v"})
+        self.assertEqual(self.last()[3], {"prompt": "and the docs", "env": {"K": "v"}})
+        self.assertEqual((turn.id, turn.info["steered"]), (8, True))
+        self.assertEqual(turn._path, "/machines/web-01/prompts/8")
+        Node.answers[("GET", "/machines/web-01/conversations/3/transcript")] = (
+            200, [{"role": "user", "text": "hi", "promptID": 8}])
+        self.assertEqual(talk.transcript()[0]["role"], "user")
+        Node.answers[("GET", "/machines/web-01/conversations/a%2Fb")] = (
+            200, {"conversationID": 4, "name": "a/b"})
+        self.assertEqual(machine.conversations.get("a/b").id, 4)
+
     def test_files_go_in_and_out_as_bytes(self):
         Node.answers[("GET", "/machines/web-01")] = (200, MACHINE)
         machine = self.hm.machines.get("web-01")

@@ -6330,6 +6330,26 @@ async fn main() -> std::process::ExitCode {
             post(machines::prompts::interrupt),
         )
         .route(
+            "/machines/{name}/conversations",
+            get(machines::conversations::list).post(machines::conversations::create),
+        )
+        .route(
+            "/machines/{name}/conversations/{conversation}",
+            get(machines::conversations::get).delete(machines::conversations::delete),
+        )
+        .route(
+            "/machines/{name}/conversations/{conversation}/messages",
+            post(machines::conversations::message),
+        )
+        .route(
+            "/machines/{name}/conversations/{conversation}/transcript",
+            get(machines::conversations::get_transcript),
+        )
+        .route(
+            "/machines/{name}/conversations/{conversation}/interrupt",
+            post(machines::conversations::interrupt),
+        )
+        .route(
             "/machines/{name}/ports",
             get(machines::ports::list).post(machines::ports::publish),
         )

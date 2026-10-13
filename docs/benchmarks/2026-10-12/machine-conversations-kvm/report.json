@@ -1,0 +1,171 @@
+{
+  "success": true,
+  "purpose": "functional verification of machine conversations on KVM: a stand-in for each agent, and the real agents with no key when an image is given; no timing claim",
+  "input_sha256": {
+    "daemon": "e84c0eb26c363b324251112a9d7d2abca27db92f3e3f717ff231abbc2dd4d255",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d0cb1ca9e27fcf5c28669ef11c6c4cd9f8d2b220319dff4e5d1e454e6b6bdceb",
+    "image": "8f598f38474570f5422796c3d0863ead381cd72a232b28654955b14842ddf720",
+    "firmware": "4a0a1e977368f6b15d2198a216bdedf9a350bf5e5ae07e29e695373ec16ad958",
+    "guest_agent": "f981161d94e91f8adf568a21bcefc271530431b4ac7df0ccba78402ab1a7afe5",
+    "driver": "2c35751711f397107818ff5463c28333d6c4346083b5d7b4080289256be6308f"
+  },
+  "real_agents": true,
+  "cases": [
+    {
+      "name": "a conversation is made with nothing running; what cannot be is refused, with why",
+      "success": true,
+      "detail": {
+        "refused": {
+          "a custom provider": "no provider \"custom\" for a conversation: claude or codex",
+          "no such provider": "no provider \"gpt\" for a conversation: claude or codex",
+          "a name already taken": "machine talk-01 has a conversation named fix",
+          "a name that is a number": "a conversation's name is letters, digits, - and _, up to 63, and not a number",
+          "a name with a slash": "a conversation's name is letters, digits, - and _, up to 63, and not a number",
+          "claude unattended as root": "claude will not run unattended as root: give `user`, a user of the guest that is not",
+          "from a conversation that is not there": "machine talk-01 has no conversation absent to carry on from",
+          "an empty model": "model is empty"
+        }
+      }
+    },
+    {
+      "name": "a message while a turn works goes into it: one process, one session, answered twice",
+      "success": true,
+      "detail": {
+        "promptID": 3,
+        "events": [
+          "system",
+          "user",
+          "assistant",
+          "result",
+          "user",
+          "assistant",
+          "result",
+          "standin"
+        ],
+        "seconds_for_both": 6.4,
+        "session": "standin-85"
+      }
+    },
+    {
+      "name": "a message after the turn ended starts a new one, resuming the session",
+      "success": true,
+      "detail": {
+        "promptID": 4,
+        "arguments": [
+          "-p",
+          "--input-format",
+          "stream-json",
+          "--output-format",
+          "stream-json",
+          "--verbose",
+          "--replay-user-messages",
+          "--resume",
+          "standin-85"
+        ]
+      }
+    },
+    {
+      "name": "the transcript is both sides, in order, from the agent's own events",
+      "success": true,
+      "detail": {
+        "lines": 6
+      }
+    },
+    {
+      "name": "an interrupt ends the running turn, and then there is none to interrupt",
+      "success": true,
+      "detail": {
+        "promptID": 5,
+        "turns": 3
+      }
+    },
+    {
+      "name": "codex is a turn at a time: refused while one runs, and the next resumes its thread",
+      "success": true,
+      "detail": {
+        "thread": "standin-thread-270",
+        "arguments": [
+          "exec",
+          "--json",
+          "--skip-git-repo-check",
+          "-m",
+          "a-model",
+          "resume",
+          "standin-thread-270",
+          "codex two"
+        ],
+        "refused": "turn 6 of this conversation is running, and codex takes no message while it does; interrupt it, or send this when it ends"
+      }
+    },
+    {
+      "name": "a conversation made from another gives the new agent what was said, both ways",
+      "success": true,
+      "detail": {
+        "carried_to_codex_bytes": 312,
+        "carried_to_claude_bytes": 251
+      }
+    },
+    {
+      "name": "conversations are listed, found by number or name, and deleted only when idle",
+      "success": true,
+      "detail": {
+        "conversations": 4
+      }
+    },
+    {
+      "name": "an agent that ends before its first message is written says why",
+      "success": true,
+      "detail": {
+        "branch": "taken, and the turn ended saying why",
+        "said": "stand-in giving up at once\n"
+      }
+    },
+    {
+      "name": "real agents: a machine from the image with both installed",
+      "success": true,
+      "detail": {
+        "versions": [
+          "2.1.296 (Claude Code)",
+          "codex-cli 0.162.1"
+        ]
+      }
+    },
+    {
+      "name": "real Claude Code: three messages answered in one session, the second into a turn if one ran",
+      "success": true,
+      "detail": {
+        "second_message_steered": true,
+        "turns": 2,
+        "session": "ee34e5a6-8be0-44a4-990d-5cf319560ef5",
+        "answers": [
+          "Not logged in \u00b7 Please run /login",
+          "Not logged in \u00b7 Please run /login",
+          "Not logged in \u00b7 Please run /login"
+        ]
+      }
+    },
+    {
+      "name": "real Codex: the second turn resumes the first's thread",
+      "success": true,
+      "detail": {
+        "thread": "01a1337e-bbfb-79e2-9d26-433b4a834a88",
+        "turns": [
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "name": "real agents: Codex is given what was said to Claude Code",
+      "success": true,
+      "detail": {
+        "codex_session_files_with_the_carried_transcript": 3
+      }
+    }
+  ],
+  "stand_in_installed_as": [
+    "/sbin/claude",
+    "/sbin/codex"
+  ]
+}

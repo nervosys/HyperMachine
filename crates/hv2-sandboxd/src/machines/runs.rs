@@ -134,6 +134,17 @@ impl Run {
         self.stdout.from(offset)
     }
 
+    /// The last `most` bytes it printed on standard error, cut between
+    /// characters.
+    pub(super) fn stderr_tail(&self, most: usize) -> &str {
+        let kept = &self.stderr.kept;
+        let mut at = kept.len().saturating_sub(most);
+        while !kept.is_char_boundary(at) {
+            at += 1;
+        }
+        &kept[at..]
+    }
+
     /// Whether its program is still going.
     pub(super) fn is_running(&self) -> bool {
         self.state == RunState::Running
@@ -525,11 +536,11 @@ pub(crate) async fn get(
     }
 }
 
-/// The pid of a run that is still running, in a machine that still is, or
-/// why it cannot be reached.
+/// The guest agent and PID of a run that is still running, in a machine
+/// that still is, or why it cannot be reached.
 // The error is the reply, returned by the handler at once.
 #[allow(clippy::result_large_err)]
-fn reachable(
+pub(super) fn reachable(
     state: &AppState,
     headers: &HeaderMap,
     name: &str,
@@ -552,6 +563,18 @@ fn reachable(
             format!("run {id} has ended"),
         )),
     }
+}
+
+/// Write `data` to a run's standard input, and close it after if `close`.
+pub(super) async fn write_stdin(
+    vm: &AgentVM,
+    pid: u32,
+    data: &str,
+    close: bool,
+) -> Result<(), String> {
+    vm.write_stdin_in_guest(pid, data, close, AGENT_TIMEOUT)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Deserialize)]

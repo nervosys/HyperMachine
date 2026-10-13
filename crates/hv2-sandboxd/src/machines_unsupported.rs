@@ -167,3 +167,30 @@ pub(crate) mod prompts {
         refused()
     }
 }
+
+/// A machine's conversations: the same answer.
+pub(crate) mod conversations {
+    use super::{refused, Response};
+
+    pub(crate) async fn create() -> Response {
+        refused()
+    }
+    pub(crate) async fn list() -> Response {
+        refused()
+    }
+    pub(crate) async fn get() -> Response {
+        refused()
+    }
+    pub(crate) async fn delete() -> Response {
+        refused()
+    }
+    pub(crate) async fn message() -> Response {
+        refused()
+    }
+    pub(crate) async fn get_transcript() -> Response {
+        refused()
+    }
+    pub(crate) async fn interrupt() -> Response {
+        refused()
+    }
+}

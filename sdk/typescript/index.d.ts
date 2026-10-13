@@ -80,6 +80,7 @@ export class Machine {
   readonly info: Record<string, any>;
   readonly runs: Runs;
   readonly prompts: Prompts;
+  readonly conversations: Conversations;
   readonly files: Files;
   readonly ports: Ports;
   readonly snapshots: Snapshots;
@@ -141,6 +142,40 @@ export interface Prompts {
     },
   ): Promise<Prompt>;
   list(): Promise<Prompt[]>;
+}
+
+export interface TranscriptLine {
+  role: 'user' | 'assistant';
+  text: string;
+  promptID: number;
+}
+
+export class Conversation {
+  readonly id: number;
+  readonly name: string | null;
+  readonly info: Record<string, any>;
+  /** The turn the message went to; `info.steered` says whether it was running. */
+  say(prompt: string, options?: { env?: Record<string, string> }): Promise<Prompt>;
+  refresh(): Promise<Conversation>;
+  transcript(): Promise<TranscriptLine[]>;
+  interrupt(): Promise<void>;
+  delete(): Promise<void>;
+}
+
+export interface Conversations {
+  create(
+    provider: 'claude' | 'codex',
+    options?: {
+      name?: string;
+      model?: string;
+      user?: string;
+      cwd?: string;
+      unattended?: boolean;
+      from?: number | string;
+    },
+  ): Promise<Conversation>;
+  get(key: number | string): Promise<Conversation>;
+  list(): Promise<Conversation[]>;
 }
 
 export interface Files {

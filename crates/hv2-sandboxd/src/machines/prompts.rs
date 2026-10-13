@@ -42,11 +42,10 @@
 //!   the shell that runs the line, so a line that should be interrupted
 //!   `exec`s its harness.
 //!
-//! # Not here
-//!
-//! Steering a turn that is running, and conversations as boat has them:
-//! named, listed, moved between harnesses. `resume` carries a harness's own
-//! session ID from one prompt to the next, where the harness has one.
+//! `resume` carries a harness's own session ID from one prompt to the next:
+//! Claude Code's `--resume`, and `codex exec resume`. A conversation, which
+//! does that for the caller, steers a turn that is running and moves from one
+//! harness to another, is in [`conversations`](super::conversations).
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex as StdMutex;
@@ -60,22 +59,22 @@ use super::super::{
 use super::{named, runs};
 
 /// The variable the prompt reaches the harness in.
-const PROMPT_VAR: &str = "HM_PROMPT";
+pub(super) const PROMPT_VAR: &str = "HM_PROMPT";
 /// The model's name, when one is given.
-const MODEL_VAR: &str = "HM_MODEL";
+pub(super) const MODEL_VAR: &str = "HM_MODEL";
 /// The harness's session to carry on from, when one is given.
-const RESUME_VAR: &str = "HM_RESUME";
+pub(super) const RESUME_VAR: &str = "HM_RESUME";
 
 /// The most a prompt may be. It travels in the environment, which has a
 /// limit of its own.
 pub(crate) const MAX_PROMPT: usize = 128 << 10;
 
 /// What is remembered of a prompt beside its run.
-struct Prompt {
-    provider: String,
-    prompt: String,
-    model: Option<String>,
-    resume: Option<String>,
+pub(super) struct Prompt {
+    pub(super) provider: String,
+    pub(super) prompt: String,
+    pub(super) model: Option<String>,
+    pub(super) resume: Option<String>,
 }
 
 /// Every machine's prompts on this node: machine ID, then run ID.
@@ -93,13 +92,23 @@ pub(crate) fn forget(machine_id: &str) {
     prompts(|all| all.remove(machine_id));
 }
 
+/// Keep `prompt` as the prompt of the machine's run `id`, which a caller in
+/// this crate started.
+pub(super) fn remember(machine_id: String, id: u64, prompt: Prompt) {
+    prompts(|all| all.entry(machine_id).or_default().insert(id, prompt));
+}
+
 /// What a caller chose about how a harness is run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Choices {
-    model: bool,
-    resume: bool,
+pub(super) struct Choices {
+    pub(super) model: bool,
+    pub(super) resume: bool,
     /// Let the harness act without asking: there is nobody to ask.
-    unattended: bool,
+    pub(super) unattended: bool,
+    /// Claude Code only: messages arrive as lines of JSON on its standard
+    /// input, each a turn, and it says them back as events. What a
+    /// conversation runs, so that a turn can be steered.
+    pub(super) streamed: bool,
 }
 
 /// The command line that runs `provider` on the prompt in [`PROMPT_VAR`].
@@ -107,32 +116,48 @@ struct Choices {
 /// Every value a caller supplies is named by its variable and quoted, never
 /// written into the line. A provider's harness is `exec`ed, so that it is the
 /// run's own process and an interrupt reaches it and not a shell around it.
-fn command_for(provider: &str, choices: Choices, custom: Option<&str>) -> Result<String, String> {
-    let mut line = match provider {
+pub(super) fn command_for(
+    provider: &str,
+    choices: Choices,
+    custom: Option<&str>,
+) -> Result<String, String> {
+    let line = match provider {
         "claude" => {
             // `stream-json` in print mode needs `--verbose`; without it the
             // harness refuses to start.
-            let mut line =
-                format!("exec claude -p \"${PROMPT_VAR}\" --output-format stream-json --verbose");
+            let mut line = if choices.streamed {
+                "exec claude -p --input-format stream-json --output-format stream-json --verbose \
+                 --replay-user-messages"
+                    .to_string()
+            } else {
+                format!("exec claude -p \"${PROMPT_VAR}\" --output-format stream-json --verbose")
+            };
             if choices.unattended {
                 line.push_str(" --dangerously-skip-permissions");
             }
             if choices.resume {
                 line.push_str(&format!(" --resume \"${RESUME_VAR}\""));
             }
+            if choices.model {
+                line.push_str(&format!(" --model \"${MODEL_VAR}\""));
+            }
             line
         }
         "codex" => {
-            if choices.resume {
-                return Err(
-                    "resume is not offered for codex: its way of carrying a session on has \
-                     not been checked here"
-                        .to_string(),
-                );
+            if choices.streamed {
+                return Err("codex takes its prompt as an argument, not as a stream".to_string());
             }
+            // `exec`'s own flags first: `resume` is a subcommand of it, and
+            // the prompt is the last argument.
             let mut line = "exec codex exec --json --skip-git-repo-check".to_string();
             if choices.unattended {
                 line.push_str(" --dangerously-bypass-approvals-and-sandbox");
+            }
+            if choices.model {
+                line.push_str(&format!(" -m \"${MODEL_VAR}\""));
+            }
+            if choices.resume {
+                line.push_str(&format!(" resume \"${RESUME_VAR}\""));
             }
             line.push_str(&format!(" \"${PROMPT_VAR}\""));
             line
@@ -142,7 +167,7 @@ fn command_for(provider: &str, choices: Choices, custom: Option<&str>) -> Result
                 .map(str::trim)
                 .filter(|c| !c.is_empty())
                 .ok_or("provider \"custom\" needs `command`: a shell line that reads $HM_PROMPT")?;
-            return if choices.unattended || choices.resume {
+            return if choices.unattended || choices.resume || choices.streamed {
                 Err(
                     "`unattended` and `resume` are a provider's flags; a custom command \
                      says what it means itself"
@@ -163,16 +188,17 @@ fn command_for(provider: &str, choices: Choices, custom: Option<&str>) -> Result
             "`command` is for provider \"custom\"; {provider} has its own"
         ));
     }
-    if choices.model {
-        let flag = if provider == "codex" { "-m" } else { "--model" };
-        // Before the prompt for codex, whose prompt is its last argument.
-        let model = format!(" {flag} \"${MODEL_VAR}\"");
-        match line.rfind(&format!(" \"${PROMPT_VAR}\"")) {
-            Some(at) if provider == "codex" => line.insert_str(at, &model),
-            _ => line.push_str(&model),
-        }
-    }
     Ok(line)
+}
+
+/// Claude Code is kept from updating itself while it runs, unless the caller
+/// says otherwise: its updater reinstalls its program, and a turn started
+/// meanwhile finds none. See [`seed`](super::super::seed).
+pub(super) fn keep_as_installed(provider: &str, env: &mut BTreeMap<String, String>) {
+    if provider == "claude" {
+        env.entry(super::seed::NO_AUTOUPDATE.to_string())
+            .or_insert_with(|| "1".to_string());
+    }
 }
 
 /// Why `provider` will not run as `user`, when it will not.
@@ -181,7 +207,11 @@ fn command_for(provider: &str, choices: Choices, custom: Option<&str>) -> Result
 /// standard error and exits, which a caller reading events sees as a prompt
 /// that ended with none; said here, it is said where they are looking. A
 /// run is root's unless a user is given.
-fn refused_as_root(provider: &str, unattended: bool, user: Option<&str>) -> Option<&'static str> {
+pub(super) fn refused_as_root(
+    provider: &str,
+    unattended: bool,
+    user: Option<&str>,
+) -> Option<&'static str> {
     let root = user.is_none_or(|user| matches!(user.trim(), "root" | "0"));
     (provider == "claude" && unattended && root).then_some(
         "claude will not run unattended as root: give `user`, a user of the guest that is not",
@@ -195,7 +225,7 @@ fn refused_as_root(provider: &str, unattended: bool, user: Option<&str>) -> Opti
 /// and not thrown away. Only whole lines count while the harness is running:
 /// half a line is half an event. Returns the events and the byte to read
 /// from next.
-fn events(text: &str, base: u64, ended: bool) -> (Vec<Value>, u64) {
+pub(super) fn events(text: &str, base: u64, ended: bool) -> (Vec<Value>, u64) {
     let mut found = Vec::new();
     let mut at = 0usize;
     while at < text.len() {
@@ -220,7 +250,7 @@ fn events(text: &str, base: u64, ended: bool) -> (Vec<Value>, u64) {
 
 /// The harness's own name for its session, where an event carries one: what
 /// a later prompt gives as `resume`.
-fn session_in(events: &[Value]) -> Option<String> {
+pub(super) fn session_in(events: &[Value]) -> Option<String> {
     events.iter().find_map(|entry| {
         let event = entry.get("event")?;
         ["session_id", "thread_id", "conversation_id"]
@@ -294,6 +324,7 @@ pub(crate) async fn start(
         model: req.model.is_some(),
         resume: req.resume.is_some(),
         unattended: req.unattended,
+        streamed: false,
     };
     let cmd = match command_for(&req.provider, choices, req.command.as_deref()) {
         Ok(cmd) => cmd,
@@ -306,6 +337,7 @@ pub(crate) async fn start(
     // name the prompt's own variable and have the harness read something
     // else as its prompt.
     let mut env = req.env;
+    keep_as_installed(&req.provider, &mut env);
     env.insert(PROMPT_VAR.to_string(), req.prompt.clone());
     if let Some(model) = &req.model {
         env.insert(MODEL_VAR.to_string(), model.clone());
@@ -333,7 +365,7 @@ pub(crate) async fn start(
         resume: req.resume,
     };
     let reply = describe(described, &prompt);
-    prompts(|all| all.entry(machine_id).or_default().insert(id, prompt));
+    remember(machine_id, id, prompt);
     (StatusCode::CREATED, Json(reply)).into_response()
 }
 
@@ -438,6 +470,7 @@ mod tests {
         model: false,
         resume: false,
         unattended: false,
+        streamed: false,
     };
 
     #[test]
@@ -450,6 +483,7 @@ mod tests {
             model: true,
             resume: true,
             unattended: true,
+            streamed: false,
         };
         assert_eq!(
             command_for("claude", all, None).unwrap(),
@@ -469,6 +503,20 @@ mod tests {
             command_for("codex", model, None).unwrap(),
             r#"exec codex exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -m "$HM_MODEL" "$HM_PROMPT""#
         );
+        // `resume` is a subcommand of `exec`, after exec's own flags.
+        assert_eq!(
+            command_for("codex", all, None).unwrap(),
+            r#"exec codex exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -m "$HM_MODEL" resume "$HM_RESUME" "$HM_PROMPT""#
+        );
+        // Streamed: no prompt in the line; it comes on standard input.
+        let streamed = Choices {
+            streamed: true,
+            ..all
+        };
+        assert_eq!(
+            command_for("claude", streamed, None).unwrap(),
+            r#"exec claude -p --input-format stream-json --output-format stream-json --verbose --replay-user-messages --dangerously-skip-permissions --resume "$HM_RESUME" --model "$HM_MODEL""#
+        );
         assert_eq!(
             command_for(
                 "custom",
@@ -478,6 +526,24 @@ mod tests {
             .unwrap(),
             r#"my-agent --prompt "$HM_PROMPT""#
         );
+    }
+
+    #[test]
+    fn claude_is_kept_as_installed_unless_the_caller_says_otherwise() {
+        let mut env = BTreeMap::new();
+        keep_as_installed("claude", &mut env);
+        assert_eq!(
+            env.get("DISABLE_AUTOUPDATER").map(String::as_str),
+            Some("1")
+        );
+        let mut theirs = BTreeMap::from([("DISABLE_AUTOUPDATER".to_string(), "0".to_string())]);
+        keep_as_installed("claude", &mut theirs);
+        assert_eq!(theirs["DISABLE_AUTOUPDATER"], "0");
+        for provider in ["codex", "custom"] {
+            let mut env = BTreeMap::new();
+            keep_as_installed(provider, &mut env);
+            assert!(env.is_empty(), "{provider}");
+        }
     }
 
     #[test]
@@ -502,8 +568,13 @@ mod tests {
             unattended: true,
             ..PLAIN
         };
+        let streamed = Choices {
+            streamed: true,
+            ..PLAIN
+        };
         for (provider, choices, custom, expect) in [
-            ("codex", resume, None, "not offered for codex"),
+            ("codex", streamed, None, "not as a stream"),
+            ("custom", streamed, Some("x"), "a provider's flags"),
             ("custom", PLAIN, None, "needs `command`"),
             ("custom", PLAIN, Some("   "), "needs `command`"),
             ("custom", unattended, Some("x"), "a provider's flags"),

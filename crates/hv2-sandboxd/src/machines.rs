@@ -38,6 +38,7 @@ use hv2_cluster::ownership::TeamId;
 
 use super::seed;
 
+pub(crate) mod conversations;
 pub(crate) mod files;
 pub(crate) mod ports;
 pub(crate) mod prompts;
@@ -1315,6 +1316,7 @@ pub(crate) async fn delete(
     }
     runs::forget(&machine.id);
     prompts::forget(&machine.id);
+    conversations::forget(&machine.id);
     ports::forget(&machine.id);
     match std::fs::remove_dir_all(dir_of(&state, &machine.id)) {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),

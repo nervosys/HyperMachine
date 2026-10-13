@@ -116,6 +116,21 @@ test('prompt events are read on from next', async () => {
   assert.deepEqual(events, [{ offset: 0, event: { type: 'a' } }, { offset: 5, text: 'plain' }]);
 });
 
+test('a conversation is spoken to and its turns are prompts', async () => {
+  const machine = await webMachine();
+  answers.set('POST /machines/web-01/conversations', [201, { conversationID: 3, name: 'fix', state: 'idle' }]);
+  const talk = await machine.conversations.create('codex', { name: 'fix', user: 'dev', from: 1 });
+  assert.deepEqual(json(), { provider: 'codex', name: 'fix', user: 'dev', from: '1' });
+  answers.set('POST /machines/web-01/conversations/3/messages', [202, { conversationID: 3, promptID: 8, steered: true }]);
+  const turn = await talk.say('and the docs', { env: { K: 'v' } });
+  assert.deepEqual(json(), { prompt: 'and the docs', env: { K: 'v' } });
+  assert.deepEqual([turn.id, turn.info.steered, turn.path], [8, true, '/machines/web-01/prompts/8']);
+  answers.set('GET /machines/web-01/conversations/3/transcript', [200, [{ role: 'user', text: 'hi', promptID: 8 }]]);
+  assert.equal((await talk.transcript())[0].role, 'user');
+  answers.set('GET /machines/web-01/conversations/a%2Fb', [200, { conversationID: 4, name: 'a/b' }]);
+  assert.equal((await machine.conversations.get('a/b')).id, 4);
+});
+
 test('files go in and out as bytes', async () => {
   const machine = await webMachine();
   answers.set('PUT /machines/web-01/files?path=%2Fa+b%2Fc&user=dev', [204, null]);
