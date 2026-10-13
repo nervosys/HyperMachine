@@ -119,6 +119,7 @@ use hv2_net::network_policy::{Cidr, Headers, NetworkPolicy, Verdict};
 
 mod boot_diagnostics;
 mod builds;
+mod checkpoint_files;
 mod checkpoints;
 mod cloud_login;
 mod disks;
@@ -6407,6 +6408,14 @@ async fn main() -> std::process::ExitCode {
         .route(
             "/sandboxes/{sandboxID}/checkpoints/{name}/restore",
             post(checkpoints::restore),
+        )
+        .route(
+            "/sandboxes/{sandboxID}/checkpoints/{name}/files",
+            get(checkpoint_files::list),
+        )
+        .route(
+            "/sandboxes/{sandboxID}/checkpoints/{name}/file",
+            get(checkpoint_files::file),
         )
         .route("/snapshots", get(snapshots::list))
         .route(

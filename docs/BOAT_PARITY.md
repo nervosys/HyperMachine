@@ -34,7 +34,7 @@ reason, and are listed once at the end rather than counted as gaps.
 | Fork | A new sandbox from the latest disk snapshot; the source's processes are not in it | A running sandbox with its memory, 1 to 100 copies, a block disk included; or, [at another size](REBOOT.md#on-a-fork), booted with its disk and not its memory |
 | Automatic snapshots | Every minute while running, and on stop; incremental; free; files only | **Yes, with memory**: `autoCheckpoint` seconds on create (`hm sandbox vm create --auto-checkpoint`), or `--auto-checkpoint-every` for a whole node, keeps one checkpoint named `auto`, replaced on the interval and rolled back to like any other. At least 60 seconds apart; skipped when nothing has happened in the sandbox since the last. Not for a sandbox holding a disk, and kept on the node that took it |
 | Named snapshots, and new sandboxes from them | Yes; ten free | Yes: a snapshot becomes a template |
-| Reading a snapshot from outside | A file tree, and download of all or part of it, with the sandbox stopped | **For a machine, file by file or whole.** A stopped machine's [disk snapshots](MACHINES.md#snapshots) are taken and restored; their directories are listed and their files read through the API without booting anything, a cloud image's partitions included, or the whole disk downloaded raw. ext2/3/4 only, and a file at most 64 MiB. A sandbox's snapshot is memory pages, with no tree to list without restoring it |
+| Reading a snapshot from outside | A file tree, and download of all or part of it, with the sandbox stopped | **For a machine, file by file or whole.** A stopped machine's [disk snapshots](MACHINES.md#snapshots) are taken and restored; their directories are listed and their files read through the API without booting anything, a cloud image's partitions included, or the whole disk downloaded raw. ext2/3/4 only, and a file at most 64 MiB. **For a sandbox, file by file**: a [checkpoint's](CHECKPOINTS.md#reading-one-from-outside) directories are listed and its files read without touching the sandbox, running or paused, by restoring the checkpoint into a guest of its own for the request, [checked on KVM](benchmarks/2026-10-13/checkpoint-files-kvm/README.md) at 61 to 132 ms a request. A file at most 64 MiB; no download of a whole checkpoint as a tree |
 | Sharing a snapshot with another account | Share codes; secrets and logins removed first | **No.** A snapshot belongs to its team, or to everyone when an operator made it |
 | systemd, and Docker, in the guest | Both | **Both, in a machine from a disk image**: [Ubuntu 24.04's image as published](benchmarks/2026-10-11/machine-docker-kvm/README.md) boots on its own 6.8 kernel with systemd started in full, installs Docker with `apt`, and runs containers. That run was typed at its serial console; such a machine can also [take `exec`](benchmarks/2026-10-11/machine-agent-kvm/README.md). **Neither in a sandbox**, whose first process is the project's own and whose kernel is built without what Docker needs |
 | `/dev/kvm` in the guest | Yes on its standard hosts, and said to be absent on its fallback hosts | **Not offered.** Not masked either, and never tested |
@@ -100,10 +100,12 @@ In rough order of how much each matters to someone choosing between them:
    from that size's template, which is this node's own. It still cannot be
    checkpointed or made a template at such a size. A machine takes a size
    when created and [another while stopped](MACHINES.md#resizing).
-5. **Reading a sandbox's snapshot from outside.** A machine's disk
-   snapshot is [listed and read file by file](MACHINES.md#snapshots) now; a
-   sandbox's checkpoint is memory, one per sandbox, and nothing reads it
-   from outside.
+5. **Downloading a snapshot whole.** A machine's disk snapshot is
+   [listed and read file by file](MACHINES.md#snapshots), or downloaded as
+   a raw disk; a sandbox's checkpoint is
+   [listed and read file by file](CHECKPOINTS.md#reading-one-from-outside).
+   boat downloads all or part of a snapshot's tree as an archive; nothing
+   here does.
 6. **Stored command output that survives the node**, and for sandboxes at
    all; the guest's process list; and a port back to the caller's machine.
 7. **Git repositories in an environment.** An environment's repositories

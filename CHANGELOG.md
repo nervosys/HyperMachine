@@ -81,6 +81,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- A sandbox's checkpoint read from outside, without touching the sandbox:
+  `GET /sandboxes/{id}/checkpoints/{name}/files?path=` lists a directory in
+  it and `.../file?path=` reads a file, up to 64 MiB
+  (`hm sandbox vm checkpoint ls|cat`). Each request restores the checkpoint
+  into a guest of its own, with no network or volumes, stops the
+  checkpoint's programs, reads, and stops the guest. See
+  `docs/CHECKPOINTS.md`.
 - A sandbox's size changed after it was created:
   - **Resize:** `POST /sandboxes/{id}/resize` with `cpuCount` and
     `memoryMB` (`hm sandbox vm resize`). It is a reboot at the new size:
