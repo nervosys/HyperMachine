@@ -1413,6 +1413,33 @@ pub(crate) async fn exec(
     }
 }
 
+/// `GET /machines/{name}/processes`: every process in its guest, as `ps`
+/// lists them. See processes.rs.
+pub(crate) async fn processes(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(name): Path<String>,
+    axum::extract::Query(query): axum::extract::Query<super::processes::Listing>,
+) -> Response {
+    let vm = match running(&state, &headers, &name) {
+        Ok((vm, true)) => vm,
+        Ok((_, false)) => {
+            return api_error(
+                StatusCode::CONFLICT,
+                format!(
+                    "machine {name} has no guest agent answering, and its processes are listed \
+                     through one"
+                ),
+            )
+        }
+        Err(response) => return response,
+    };
+    match super::processes::list(&vm, &query).await {
+        Ok(listed) => Json(listed).into_response(),
+        Err(e) => api_error(StatusCode::BAD_GATEWAY, e),
+    }
+}
+
 /// `GET /machines/{name}/network/decisions`: what its gateway allowed and
 /// refused, since this boot.
 pub(crate) async fn network_decisions(

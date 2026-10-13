@@ -242,6 +242,8 @@ curl -sS $NODE/machines/web-01/runs          # every run kept, oldest first
   always has it, and one from an image has it when created with
   `guestAgent`.
 - **It has pipes, not a terminal.**
+- **Every process in the guest**, a run's or not, is
+  [listed](PROCESSES.md) by `GET /machines/{name}/processes`.
 
 [Checked on real KVM](benchmarks/2026-10-11/machine-runs-kvm/README.md).
 

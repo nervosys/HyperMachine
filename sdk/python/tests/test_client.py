@@ -104,6 +104,13 @@ class ClientTest(unittest.TestCase):
         machine.resize(cpu_count=4)
         self.assertEqual(self.last()[3], {"cpuCount": 4})
 
+    def test_processes(self):
+        Node.answers[("GET", "/machines/web-01")] = (200, MACHINE)
+        machine = self.hm.machines.get("web-01")
+        Node.answers[("GET", "/machines/web-01/processes")] = (
+            200, {"processes": [{"pid": 1, "command": "init"}]})
+        self.assertEqual(machine.processes(), [{"pid": 1, "command": "init"}])
+
     def test_a_run_is_followed_from_where_the_last_read_stopped(self):
         Node.answers[("GET", "/machines/web-01")] = (200, MACHINE)
         machine = self.hm.machines.get("web-01")

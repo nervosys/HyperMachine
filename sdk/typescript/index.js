@@ -190,6 +190,12 @@ export class Machine {
     return this;
   }
 
+  /** Every process in the guest, as `ps` lists them; kernel threads only with `all`. */
+  async processes({ all = false } = {}) {
+    const answer = await this.client.call('GET', `${this.path}/processes${all ? '?all=true' : ''}`);
+    return answer.processes;
+  }
+
   /** Run a shell line in the guest and wait for it. */
   async exec(cmd, { timeoutSecs = 60 } = {}) {
     const answer = await this.client.call(

@@ -215,6 +215,13 @@ pub enum VmCommand {
         #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
         command: Vec<String>,
     },
+    /// List every process in a VM sandbox's guest, as ps does
+    Ps {
+        id: String,
+        /// Kernel threads too
+        #[arg(long)]
+        all: bool,
+    },
     /// Pause a VM to disk
     Pause { id: String },
     /// Stop a VM's vCPUs and keep its memory; the next request resumes it
@@ -616,6 +623,14 @@ pub enum MachineCommand {
         #[arg(value_parser = machine_name)]
         name: String,
         id: Option<u64>,
+    },
+    /// List every process in a machine's guest, as ps does
+    Ps {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        /// Kernel threads too
+        #[arg(long)]
+        all: bool,
     },
     /// Run a coding agent in a machine on a prompt; prints its events and
     /// exits with its code
@@ -1791,6 +1806,16 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 api.request(Method::POST, &["machines", &name, "runs"], Some(body))
                     .await?
             }
+            MachineCommand::Ps { name, all } => {
+                api.request_bounded_query(
+                    Method::GET,
+                    &["machines", &name, "processes"],
+                    None,
+                    8 << 20,
+                    &[("all", if all { "true" } else { "false" })],
+                )
+                .await?
+            }
             MachineCommand::Runs { name, id } => match id {
                 Some(id) => {
                     api.request_bounded_query(
@@ -2468,6 +2493,16 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             }
             api.request(Method::POST, &["sandboxes", &id, "fork"], Some(body))
                 .await?
+        }
+        VmCommand::Ps { id, all } => {
+            api.request_bounded_query(
+                Method::GET,
+                &["sandboxes", &id, "processes"],
+                None,
+                8 << 20,
+                &[("all", if all { "true" } else { "false" })],
+            )
+            .await?
         }
         VmCommand::Exec {
             id,

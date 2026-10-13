@@ -138,6 +138,7 @@ mod machines;
 mod machines;
 mod pool;
 mod private_source;
+mod processes;
 mod reboot;
 #[cfg(target_os = "linux")]
 mod seed;
@@ -5684,6 +5685,34 @@ fn gateway_decisions(gateway: &GatewayHandle) -> serde_json::Value {
     })
 }
 
+/// `GET /sandboxes/{id}/processes`: every process in its guest, as `ps`
+/// lists them. See processes.rs.
+async fn sandbox_processes(
+    State(state): State<Arc<AppState>>,
+    Path(sandbox_id): Path<String>,
+    Query(query): Query<processes::Listing>,
+) -> Response {
+    let vm = state
+        .sandboxes
+        .lock()
+        .get(&sandbox_id)
+        .map(|live| Arc::clone(&live.vm));
+    let Some(vm) = vm else {
+        return if state.paused.lock().contains_key(&sandbox_id) {
+            api_error(
+                StatusCode::CONFLICT,
+                format!("sandbox {sandbox_id} is paused, and runs nothing"),
+            )
+        } else {
+            api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}"))
+        };
+    };
+    match processes::list(&vm, &query).await {
+        Ok(listed) => Json(listed).into_response(),
+        Err(e) => api_error(StatusCode::BAD_GATEWAY, e),
+    }
+}
+
 async fn exec(
     State(state): State<Arc<AppState>>,
     Path(sandbox_id): Path<String>,
@@ -6448,6 +6477,7 @@ async fn main() -> std::process::ExitCode {
                 .patch(machines::resize::patch),
         )
         .route("/machines/{name}/exec", post(machines::exec))
+        .route("/machines/{name}/processes", get(machines::processes))
         .route(
             "/machines/{name}/runs",
             get(machines::runs::list).post(machines::runs::start),
@@ -6559,6 +6589,7 @@ async fn main() -> std::process::ExitCode {
             get(volumes::get).delete(volumes::delete),
         )
         .route("/sandboxes/{sandboxID}/exec", post(exec))
+        .route("/sandboxes/{sandboxID}/processes", get(sandbox_processes))
         .route("/sandboxes/{sandboxID}/private-ports/{port}/tcp",get(forwards::private_tcp_tunnel))
         .route("/sandboxes/{sandboxID}/private-ports/{port}/udp",get(forwards::private_udp_tunnel))
         .route(
