@@ -37,6 +37,9 @@ pub(crate) async fn action() -> Response {
 pub(crate) async fn exec() -> Response {
     refused()
 }
+pub(crate) async fn processes() -> Response {
+    refused()
+}
 pub(crate) async fn console() -> Response {
     refused()
 }
