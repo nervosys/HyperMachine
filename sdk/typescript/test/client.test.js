@@ -91,6 +91,12 @@ test('exec and resize', async () => {
   assert.deepEqual(json(), { cpuCount: 4 });
 });
 
+test('processes', async () => {
+  const machine = await webMachine();
+  answers.set('GET /machines/web-01/processes', [200, { processes: [{ pid: 1, command: 'init' }] }]);
+  assert.deepEqual(await machine.processes(), [{ pid: 1, command: 'init' }]);
+});
+
 test('a run is followed from where the last read stopped', async () => {
   const machine = await webMachine();
   answers.set('POST /machines/web-01/runs', [201, { runID: 7, state: 'running' }]);

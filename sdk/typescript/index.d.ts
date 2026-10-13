@@ -94,6 +94,21 @@ export class Machine {
   delete(): Promise<void>;
   resize(size: { cpuCount?: number; memoryMB?: number; diskGiB?: number }): Promise<Machine>;
   exec(cmd: string, options?: { timeoutSecs?: number }): Promise<ExecResult>;
+  processes(options?: { all?: boolean }): Promise<GuestProcess[]>;
+}
+
+/** One process in a machine's guest, as `ps` lists it. */
+export interface GuestProcess {
+  pid: number;
+  ppid: number;
+  uid: number | null;
+  state: string;
+  command: string;
+  args: string;
+  threads: number;
+  rssKiB: number;
+  cpuSeconds: number;
+  startedSecondsAgo: number;
 }
 
 export class Run {

@@ -90,6 +90,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- A guest's processes listed from outside: `GET /sandboxes/{id}/processes`
+  and `GET /machines/{name}/processes` (`?all=true` for kernel threads),
+  `hm sandbox vm ps` and `hm sandbox vm machine ps`, and `processes()` in
+  both SDKs. Every process the guest has, with its parent, user, state,
+  command line, threads, memory, CPU time and age, read from its `/proc`
+  through the guest agent. See `docs/PROCESSES.md`.
 - A machine's runs, and their output, are kept across a node restart, in
   the machine's directory under `runs/`. A run that was going when the node
   stopped comes back as `lost`, saying so, with its output to the node's

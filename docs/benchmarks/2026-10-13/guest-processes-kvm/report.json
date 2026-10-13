@@ -1,0 +1,102 @@
+{
+  "success": true,
+  "purpose": "functional verification of listing a guest's processes on KVM; the times are the check's own stopwatch and not a benchmark",
+  "input_sha256": {
+    "daemon": "de681627492aeca9db629e3b19d66a23880c26093a577094754fecd864c226f1",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "36b4f2f4ae1d56875302731d95494130173997cdb022e6db0f90ee5e503c27b0",
+    "driver": "7927a70843c838484b42f2cf803688b8b34a3be7f50bcb163d803c6c046eeed8"
+  },
+  "cases": [
+    {
+      "name": "a sandbox's processes: running, sleeping and zombie, with their command lines",
+      "success": true,
+      "detail": {
+        "seconds": 0.728,
+        "count": 6,
+        "spinner": {
+          "args": "sh -c while :; do :; done",
+          "command": "sh",
+          "cpuSeconds": 1.81,
+          "pid": 61,
+          "ppid": 1,
+          "rssKiB": 1408,
+          "startedSecondsAgo": 1.54,
+          "state": "R",
+          "threads": 1,
+          "uid": 0
+        },
+        "sleeper": {
+          "args": "sleep 4321",
+          "command": "sleep",
+          "cpuSeconds": 0.0,
+          "pid": 62,
+          "ppid": 1,
+          "rssKiB": 1280,
+          "startedSecondsAgo": 1.54,
+          "state": "S",
+          "threads": 1,
+          "uid": 0
+        },
+        "zombie": {
+          "args": "",
+          "command": "sleep",
+          "cpuSeconds": 0.0,
+          "pid": 64,
+          "ppid": 63,
+          "rssKiB": 0,
+          "startedSecondsAgo": 1.52,
+          "state": "Z",
+          "threads": 1,
+          "uid": 0
+        }
+      }
+    },
+    {
+      "name": "kernel threads only with all, and never the listing itself",
+      "success": true,
+      "detail": {
+        "without": 6,
+        "with_kernel_threads": 44
+      }
+    },
+    {
+      "name": "a process killed no longer runs: gone, or a zombie its init has not reaped",
+      "success": true,
+      "detail": {
+        "after_kill": "Z"
+      }
+    },
+    {
+      "name": "a machine's processes, the same way",
+      "success": true,
+      "detail": {
+        "seconds": 0.109,
+        "count": 3,
+        "sleeper": {
+          "args": "sleep 5555",
+          "command": "sleep",
+          "cpuSeconds": 0.0,
+          "pid": 62,
+          "ppid": 1,
+          "rssKiB": 1280,
+          "startedSecondsAgo": 0.51,
+          "state": "S",
+          "threads": 1,
+          "uid": 0
+        }
+      }
+    },
+    {
+      "name": "what cannot be listed is refused, each with why",
+      "success": true,
+      "detail": {
+        "refused": {
+          "a paused sandbox": "sandbox sbx-13c816ff503948a38a4d is paused, and runs nothing",
+          "no such sandbox": "no sandbox sbx-absent",
+          "a stopped machine": "machine ps-01 is not running"
+        }
+      }
+    }
+  ]
+}

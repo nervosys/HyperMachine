@@ -300,6 +300,7 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
                 .patch(to_machine_node),
         )
         .route("/machines/{name}/exec", post(to_machine_node))
+        .route("/machines/{name}/processes", get(to_machine_node))
         .route(
             "/machines/{name}/runs",
             get(to_machine_node).post(to_machine_node),
@@ -365,6 +366,7 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/sandboxes/{id}/network", any(forward))
         .route("/sandboxes/{id}/network/decisions", get(forward))
         .route("/sandboxes/{id}/exec", post(forward))
+        .route("/sandboxes/{id}/processes", get(forward))
         .route("/sandboxes/{id}/ports/{port}/tcp", get(tcp_tunnel))
         .route("/sandboxes/{id}/ports/{port}/udp", get(udp_tunnel))
         .route("/sandboxes/{id}/ports/{port}/udp6", get(udp_tunnel_ipv6))

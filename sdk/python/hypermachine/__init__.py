@@ -295,6 +295,11 @@ class Machine:
         self._set(self._client.call("PATCH", self._path, body))
         return self
 
+    def processes(self, all: bool = False) -> list:
+        """Every process in the guest, as `ps` lists them; kernel threads only with `all`."""
+        path = f"{self._path}/processes" + ("?all=true" if all else "")
+        return self._client.call("GET", path)["processes"]
+
     def exec(self, cmd: str, timeout: int = 60) -> ExecResult:
         """Run a shell line in the guest and wait for it."""
         answer = self._client.call(
