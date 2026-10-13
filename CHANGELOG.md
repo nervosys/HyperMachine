@@ -81,6 +81,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- A sandbox's size changed after it was created:
+  - **Resize:** `POST /sandboxes/{id}/resize` with `cpuCount` and
+    `memoryMB` (`hm sandbox vm resize`). It is a reboot at the new size:
+    the sandbox keeps its ID, token, network, volumes, disk and variables,
+    and loses what was in its memory.
+  - **Resume:** `resume` takes the same fields, to bring a paused sandbox
+    back at another size, booted rather than restored
+    (`hm sandbox vm resume --cpus --memory-mb`).
+  - **Afterwards:** usage counts each size for the time spent at it, and a
+    resize is reported as `sandbox-resized`.
 - A desktop for a machine, and computer use on it: `desktop` on
   `POST /machines`, for a machine from an image with `guestAgent`.
   - **What is installed:** at first boot, a virtual display with a window

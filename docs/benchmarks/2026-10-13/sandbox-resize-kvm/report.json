@@ -1,0 +1,82 @@
+{
+  "success": true,
+  "purpose": "functional verification of changing a sandbox's size on KVM; the times are the check's own stopwatch and not a benchmark",
+  "input_sha256": {
+    "daemon": "4eb41e98bdf5abb74e19708522bf89bcee7237e81c8065c6eeddbde6cc3f502d",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d0cb1ca9e27fcf5c28669ef11c6c4cd9f8d2b220319dff4e5d1e454e6b6bdceb",
+    "driver": "24b0d5851296368a9793edcfac8a288a2b53ceba6311b1aa2dd21cb19b56f1fd"
+  },
+  "host_cpus": 24,
+  "cases": [
+    {
+      "name": "resize reboots a running sandbox at its new size, keeping its variables, not its memory",
+      "success": true,
+      "detail": {
+        "processors": 2,
+        "memory_kb": 994508,
+        "seconds": 0.3
+      }
+    },
+    {
+      "name": "a sandbox's disk is kept across a resize",
+      "success": true,
+      "detail": {
+        "seconds": 0.248
+      }
+    },
+    {
+      "name": "asking for the size it has changes nothing, and keeps its memory",
+      "success": true,
+      "detail": {
+        "seconds": 0.001
+      }
+    },
+    {
+      "name": "back at its template's size it is restored, and pauses and resumes with its memory",
+      "success": true,
+      "detail": {
+        "seconds": 0.03
+      }
+    },
+    {
+      "name": "resume at another size boots it at that size; resumed again, it keeps it",
+      "success": true,
+      "detail": {
+        "processors": 2,
+        "memory_kb": 479180,
+        "seconds": 0.206
+      }
+    },
+    {
+      "name": "its usage counts each size for the time it ran at it",
+      "success": true,
+      "detail": {
+        "usage": {
+          "key": "sbx-09be59e863664d0096f8",
+          "memoryGiBSeconds": 1.9135,
+          "partial": false,
+          "runningSeconds": 3.243,
+          "sandboxes": 1,
+          "vcpuSeconds": 6.17
+        }
+      }
+    },
+    {
+      "name": "what cannot be done is refused, each with why",
+      "success": true,
+      "detail": {
+        "refused": {
+          "no size": "give cpuCount, memoryMB or both: the size to reboot it at",
+          "no processors": "cpuCount 0: between 1 and 24, this host's CPUs",
+          "more processors than the host": "cpuCount 4096: between 1 and 24, this host's CPUs",
+          "too little memory": "memoryMB 128: an even number from 256 to 65536",
+          "an odd amount": "memoryMB 1023: an even number from 256 to 65536",
+          "no such sandbox": "no sandbox absent-sandbox",
+          "a paused sandbox": "sandbox sbx-09be59e863664d0096f8 is paused: resume it with cpuCount and memoryMB to bring it back at another size",
+          "resuming at a size that cannot be": "memoryMB 100: an even number from 256 to 65536"
+        }
+      }
+    }
+  ]
+}

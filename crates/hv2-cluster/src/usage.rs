@@ -31,8 +31,14 @@ use serde_json::{json, Value};
 use crate::model::{rfc3339, ClusterEvent, SandboxRecord};
 use crate::ownership::TeamId;
 
-/// Event kinds that start a sandbox running.
-const STARTS: [&str; 3] = ["sandbox-created", "sandbox-forked", "sandbox-resumed"];
+/// Event kinds that start a sandbox running. A resize starts it again at its
+/// new size, which ends the stretch at the old one.
+const STARTS: [&str; 4] = [
+    "sandbox-created",
+    "sandbox-forked",
+    "sandbox-resumed",
+    "sandbox-resized",
+];
 /// Event kinds that stop one.
 const STOPS: [&str; 4] = [
     "sandbox-paused",
@@ -536,6 +542,34 @@ mod tests {
         let only_b = |team: Option<&TeamId>| team.is_some_and(|t| t.as_str() == "team-b");
         let answer = report(&sorted, false, 0, 100_000, 100_000, By::Owner, only_b);
         assert_eq!(answer["total"]["sandboxes"], 0);
+    }
+
+    #[test]
+    fn a_resize_ends_the_old_size_and_counts_the_new_one() {
+        let mut sorted = vec![
+            event("sandbox-created", "s1", 0, "team-a", running(1, 1024, true)),
+            event(
+                "sandbox-resized",
+                "s1",
+                10_000,
+                "team-a",
+                running(4, 4096, true),
+            ),
+            event(
+                "sandbox-deleted",
+                "s1",
+                15_000,
+                "team-a",
+                running(4, 4096, true),
+            ),
+        ];
+        sorted.sort_by_key(|e| std::cmp::Reverse(e.at_ms));
+        let answer = report(&sorted, false, 0, 100_000, 100_000, By::Sandbox, everyone);
+        // 10 s at one vCPU and 1 GiB, then 5 s at four and 4 GiB.
+        assert_eq!(answer["total"]["runningSeconds"], 15.0);
+        assert_eq!(answer["total"]["vcpuSeconds"], 30.0);
+        assert_eq!(answer["total"]["memoryGiBSeconds"], 30.0);
+        assert!(super::entry("sandbox-resized", &record(false)).is_some());
     }
 
     #[test]

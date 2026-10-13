@@ -1213,7 +1213,15 @@ async fn connect_sandbox(
             .as_ref()
             .is_some_and(|store| store.peek(&sandbox_id).is_some());
     if paused_here || paused_in_store {
-        match resume_sandbox(&state, &sandbox_id, Some(requested.unwrap_or(300)), None).await {
+        match resume_sandbox(
+            &state,
+            &sandbox_id,
+            Some(requested.unwrap_or(300)),
+            None,
+            (None, None),
+        )
+        .await
+        {
             Ok(Some(descriptor)) => return (StatusCode::CREATED, Json(descriptor)).into_response(),
             Ok(None) => {}
             Err((status, e)) => return api_error(status, e),
@@ -3342,11 +3350,17 @@ async fn pause_sandbox(
 
 /// Bring a paused sandbox back, under the same ID and token, to live
 /// `lifetime_secs` from now. `Ok(None)` when it was running already.
+///
+/// With `resize`, a `cpuCount` and `memoryMB` either of which is not its own,
+/// it comes back at that size: booted fresh, as a reboot is, since its
+/// memory cannot be carried to another size. Its disk, volumes, network and
+/// variables come back with it; what was in its memory does not.
 async fn resume_sandbox(
     state: &Arc<AppState>,
     sandbox_id: &str,
     lifetime_secs: Option<u64>,
     park: Option<Duration>,
+    resize: (Option<u32>, Option<u64>),
 ) -> Result<Option<SandboxResponse>, (StatusCode, String)> {
     let lock = transition_lock(state, sandbox_id);
     let _held = lock.lock().await;
@@ -3490,23 +3504,44 @@ async fn resume_sandbox(
         (None, None) => None,
     };
     let template_id = paused.record.template_id.clone();
+    let own = Sizes {
+        cpus: paused.record.cpu_count,
+        memory_mb: paused.record.memory_mb,
+    };
+    // Only a size asked for is weighed against this host: one it already
+    // had is what it was paused at.
+    let size = match resize {
+        (None, None) => own,
+        (cpus, memory_mb) => match Sizes::requested(cpus, memory_mb, own) {
+            Ok(size) => size,
+            Err(why) => {
+                give_back(paused);
+                return Err((StatusCode::BAD_REQUEST, why));
+            }
+        },
+    };
+    // At another size it boots, with what a reboot gives a guest; at its own,
+    // its memory is restored and has all of that already.
+    let fresh = size != own;
+    let (env, files) = if fresh {
+        (env_vars::kept(sandbox_id), env_vars::kept_files(sandbox_id))
+    } else {
+        (BTreeMap::new(), Vec::new())
+    };
     let running = match bring_up(
         state,
         sandbox_id,
         &template_id,
-        Some(&paused.snapshot),
+        (!fresh).then_some(&paused.snapshot),
         network,
         &paused.record.volume_mounts,
         paused.record.team_id.as_ref(),
         // The disk it held when it was paused, still claimed for it.
         disks::reattach(state, sandbox_id).as_ref(),
-        &BTreeMap::new(),
-        &[],
+        &env,
+        &files,
         &paused.descriptor.envd_access_token,
-        Some(Sizes {
-            cpus: paused.record.cpu_count,
-            memory_mb: paused.record.memory_mb,
-        }),
+        Some(size),
     )
     .await
     {
@@ -3528,6 +3563,8 @@ async fn resume_sandbox(
     let mut record = paused.record;
     record.paused = false;
     record.portable = false;
+    record.cpu_count = size.cpus;
+    record.memory_mb = size.memory_mb;
     record.node_id.clone_from(&state.node_id);
     let lifetime = lifetime_secs
         .unwrap_or(paused.lifecycle.lifetime_secs)
@@ -3863,6 +3900,11 @@ async fn pause_route(
 struct ResumeRequest {
     timeout: Option<u64>,
     memory: Option<bool>,
+    /// Another size to come back at, booted rather than restored.
+    #[serde(rename = "cpuCount")]
+    cpu_count: Option<u32>,
+    #[serde(rename = "memoryMB")]
+    memory_mb: Option<u64>,
 }
 
 /// `POST /sandboxes/{id}/resume`: E2B's deprecated route, 15 s by default.
@@ -3878,7 +3920,15 @@ async fn resume_route(
             "memory=false (resume from disk only) is not available here",
         );
     }
-    match resume_sandbox(&state, &sandbox_id, Some(body.timeout.unwrap_or(15)), None).await {
+    match resume_sandbox(
+        &state,
+        &sandbox_id,
+        Some(body.timeout.unwrap_or(15)),
+        None,
+        (body.cpu_count, body.memory_mb),
+    )
+    .await
+    {
         Ok(Some(descriptor)) => (StatusCode::CREATED, Json(descriptor)).into_response(),
         Ok(None) => api_error(
             StatusCode::CONFLICT,
@@ -4316,6 +4366,7 @@ impl sandbox_proxy::SandboxRoutes for ResumingRoutes {
             sandbox,
             None,
             Some(self.state.opts.ready_timeout),
+            (None, None),
         )
         .await
         {
@@ -6259,6 +6310,7 @@ async fn main() -> std::process::ExitCode {
         .route("/sandboxes/{sandboxID}/resume", post(resume_route))
         .route("/sandboxes/{sandboxID}/fork", post(fork_route))
         .route("/sandboxes/{sandboxID}/reboot", post(reboot::route))
+        .route("/sandboxes/{sandboxID}/resize", post(reboot::resize_route))
         .route("/sandboxes/{sandboxID}/owner", post(adopt_owner_route))
         .route("/sandboxes/{sandboxID}/snapshots", post(snapshots::create))
         .route(
