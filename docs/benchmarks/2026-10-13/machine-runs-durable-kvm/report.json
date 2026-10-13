@@ -1,0 +1,52 @@
+{
+  "success": true,
+  "purpose": "functional verification of machine runs kept across a node restart on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "b7478d693efc3d5d4a2884271066f1e14aad2d9c5d9249f161c25591d31a6e23",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "driver": "60259e557a9ebeaeb2accc90f9d86cdbcf46a546df72e3e245020ffe25a32cb6"
+  },
+  "cases": [
+    {
+      "name": "a run that had ended is there after the restart, as it ended",
+      "success": true,
+      "detail": {
+        "run": {
+          "runID": 1,
+          "state": "exited",
+          "exitCode": 3,
+          "stdoutBytes": 12
+        }
+      }
+    },
+    {
+      "name": "a run going when the node was killed is lost, saying so, with its output",
+      "success": true,
+      "detail": {
+        "ticks_kept": 4,
+        "reason": "the node stopped while it ran"
+      }
+    },
+    {
+      "name": "a run that printed more than is kept comes back with the same offsets",
+      "success": true,
+      "detail": {
+        "stdoutBytes": 9437194,
+        "dropped": 5242890,
+        "file_bytes": 4980746
+      }
+    },
+    {
+      "name": "a new run after the restart takes the next ID, and works",
+      "success": true,
+      "detail": {
+        "new_run": 4
+      }
+    },
+    {
+      "name": "deleting the machine deletes its runs, on disk too",
+      "success": true
+    }
+  ]
+}

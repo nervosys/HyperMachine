@@ -826,8 +826,10 @@ async fn halt(id: &str) {
 /// Bring machines back after this daemon starts, then watch for guests that
 /// stop by themselves, restarting them by their policy.
 pub(crate) async fn supervise(state: Arc<AppState>) {
-    // Before any machine is started: a published port is listened on whether
-    // or not its machine is running.
+    // Before any machine is started: the runs kept from before, so a new one
+    // takes the next ID; and a published port is listened on whether or not
+    // its machine is running.
+    runs::keep_in(root(&state));
     ports::restore(&state).await;
     {
         let _ops = OPS.lock().await;

@@ -213,11 +213,21 @@ curl -sS $NODE/machines/web-01/runs          # every run kept, oldest first
 - **A run ends** as `exited`, with an exit code or the signal that ended it,
   or as `lost` with the reason when the node can no longer reach it. A
   machine that stops takes its programs with it, and their runs are `lost`.
-- **Output is kept on the node, in memory**: the newest 4 MiB of each stream,
-  with `dropped` counting what went before. It outlives the run and the
-  machine being stopped, and is gone when the node restarts or the machine is
-  deleted. 256 runs are kept for a machine; the oldest finished one makes
-  room, and with 256 still running a new one is refused.
+- **Output is kept on the node, in memory and on disk**: the newest 4 MiB
+  of each stream, with `dropped` counting what went before. It outlives the
+  run, the machine being stopped and the node restarting, and is gone when
+  the machine is deleted. 256 runs are kept for a machine; the oldest
+  finished one makes room, and with 256 still running a new one is refused.
+- **Across a node restart:** each run is kept in the machine's directory
+  under `runs/`: `<id>.json`, and its output as it came in `<id>.stdout`
+  and `<id>.stderr`, cut back to what is kept once twice that. A node that
+  starts again reads them back, with the same offsets. A run still going
+  when it stopped is `lost`, "the node stopped while it ran", with its
+  output to the node's last poll of it (every 150 to 750 ms). Output is not
+  synced as it comes, so a power cut can lose the last of it; a killed node
+  does not. Restart-proof only with a `--machine-dir` that is: the default
+  is in the temporary directory. [Checked on real
+  KVM](benchmarks/2026-10-13/machine-runs-durable-kvm/README.md).
 - **It needs the guest agent**, as `exec` does: a machine from a template
   always has it, and one from an image has it when created with
   `guestAgent`.
@@ -568,7 +578,8 @@ hm sandbox vm machine conversation create web-01 --provider codex --from fix-tes
   (`--replay-user-messages`), so a steering message is where it was taken
   in. Tool calls and their results are in the events and not in the
   transcript.
-- **Kept on the node, in memory**, as runs are, and gone when it restarts.
+- **Kept on the node, in memory**, and gone when it restarts. Each turn's
+  run, and its output, is kept across a restart, as [runs](#runs) are.
   A machine keeps 64. One with a turn running is not deleted.
 
 **What a model does with a message that steers it has not been seen.**

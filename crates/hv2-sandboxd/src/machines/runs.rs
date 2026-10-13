@@ -18,13 +18,21 @@
 //!
 //! # Where the output is
 //!
-//! On the node, in memory. The guest agent hands a program's output over as
-//! it is polled, and a task per run polls and keeps it: up to [`MAX_LOG`]
-//! bytes of each stream, the oldest dropped first and counted, so an offset
-//! from before what was dropped is answered with where the kept part starts.
-//! A run's output outlives the run and the machine's stop, and is gone when
-//! the node restarts or the machine is deleted. At most [`MAX_RUNS`] are
-//! kept for a machine; the oldest finished one makes room.
+//! On the node, in memory, and in the machine's directory. The guest agent
+//! hands a program's output over as it is polled, and a task per run polls
+//! and keeps it: up to [`MAX_LOG`] bytes of each stream, the oldest dropped
+//! first and counted, so an offset from before what was dropped is answered
+//! with where the kept part starts. At most [`MAX_RUNS`] are kept for a
+//! machine; the oldest finished one makes room.
+//!
+//! A run's output outlives the run, the machine's stop and the node's
+//! restart, and is gone when the machine is deleted. On disk, under the
+//! machine's directory in `runs/`, each run is `<id>.json`, its record, and
+//! `<id>.stdout` and `<id>.stderr`, its output as it came, appended and cut
+//! back to what is kept once it is twice that. A node that starts again
+//! reads them back; a run that was running when it stopped is `lost`, its
+//! output kept to the last poll before. Appends are not synced, so a power
+//! cut, as against a restart, can lose the last of a run's output.
 //!
 //! # What ends a run
 //!
@@ -38,7 +46,9 @@
 //! run's record is returned to whoever can ask about the machine.
 
 use std::collections::{BTreeMap, HashMap};
+use std::path::{Path as FsPath, PathBuf};
 use std::sync::Mutex as StdMutex;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use axum::http::HeaderMap;
@@ -65,6 +75,9 @@ const AGENT_TIMEOUT: Duration = Duration::from_secs(15);
 struct Log {
     kept: String,
     dropped: u64,
+    /// Where in the stream its file starts, and how much is in it.
+    base: u64,
+    on_disk: u64,
 }
 
 impl Log {
@@ -178,6 +191,15 @@ impl Run {
             self.ended_ms = Some(now_ms());
         }
     }
+
+    /// What is written to `<id>.json`: the description, and where each
+    /// stream's file starts in it.
+    fn record(&self) -> Value {
+        let mut record = self.describe();
+        record["stdoutBase"] = json!(self.stdout.base);
+        record["stderrBase"] = json!(self.stderr.base);
+        record
+    }
 }
 
 #[derive(Default)]
@@ -189,7 +211,8 @@ struct MachineRuns {
 impl MachineRuns {
     /// Make room for one more: the oldest finished run goes. With every one
     /// still running there is no room, and the caller is told.
-    fn make_room(&mut self) -> Result<(), String> {
+    fn make_room(&mut self) -> Result<Vec<u64>, String> {
+        let mut removed = Vec::new();
         while self.runs.len() >= MAX_RUNS {
             let oldest_finished = self
                 .runs
@@ -199,6 +222,7 @@ impl MachineRuns {
             match oldest_finished {
                 Some(id) => {
                     self.runs.remove(&id);
+                    removed.push(id);
                 }
                 None => {
                     return Err(format!(
@@ -207,7 +231,7 @@ impl MachineRuns {
                 }
             }
         }
-        Ok(())
+        Ok(removed)
     }
 }
 
@@ -221,9 +245,198 @@ fn runs<T>(f: impl FnOnce(&mut HashMap<String, MachineRuns>) -> T) -> T {
     f(guard.get_or_insert_with(HashMap::new))
 }
 
-/// Forget a machine's runs, when it is deleted.
+/// Forget a machine's runs, when it is deleted. Their files go with its
+/// directory.
 pub(crate) fn forget(machine_id: &str) {
     runs(|all| all.remove(machine_id));
+}
+
+/// The directory every machine's is in, set once when the node starts.
+/// Unset, as in tests, runs are kept in memory only.
+static ROOT: OnceLock<PathBuf> = OnceLock::new();
+
+fn runs_dir(root: &FsPath, machine_id: &str) -> PathBuf {
+    root.join(machine_id).join("runs")
+}
+
+/// Keep runs under `root`, and take back the ones kept there before. Run
+/// once, when the node starts, before any machine is.
+pub(crate) fn keep_in(root: PathBuf) {
+    let loaded = load_from(&root, now_ms());
+    let count: usize = loaded.values().map(|m| m.runs.len()).sum();
+    if count > 0 {
+        tracing::info!("{count} machine runs kept from before this node started");
+    }
+    // Those it found running are lost now, and recorded so.
+    for (machine_id, machine_runs) in &loaded {
+        for run in machine_runs.runs.values() {
+            if let Err(e) = write_record(&root, machine_id, &run.record()) {
+                tracing::warn!("keeping run {} of {machine_id}: {e}", run.id);
+            }
+        }
+    }
+    runs(|all| all.extend(loaded));
+    let _ = ROOT.set(root);
+}
+
+/// Write a file beside, then rename it over: a reader sees all of one or
+/// all of the other.
+fn replace(path: &FsPath, bytes: &[u8]) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let beside = path.with_extension("new");
+    std::fs::write(&beside, bytes)?;
+    std::fs::rename(&beside, path)
+}
+
+fn write_record(root: &FsPath, machine_id: &str, record: &Value) -> std::io::Result<()> {
+    let id = record["runID"].as_u64().unwrap_or_default();
+    let bytes = serde_json::to_vec(record).map_err(std::io::Error::other)?;
+    replace(
+        &runs_dir(root, machine_id).join(format!("{id}.json")),
+        &bytes,
+    )
+}
+
+/// What to do to a run's files after it changed in memory.
+#[derive(Default)]
+struct ToDisk {
+    /// Text to add to the end of each stream's file.
+    append: [(&'static str, String); 2],
+    /// Or the whole of a stream's file, when it is cut back.
+    rewrite: Vec<(&'static str, String)>,
+    /// Its record, when that changed.
+    record: Option<Value>,
+}
+
+impl ToDisk {
+    fn write(self, machine_id: &str, id: u64) {
+        let Some(root) = ROOT.get() else {
+            return;
+        };
+        let dir = runs_dir(root, machine_id);
+        let done = || -> std::io::Result<()> {
+            for (stream, text) in &self.rewrite {
+                replace(&dir.join(format!("{id}.{stream}")), text.as_bytes())?;
+            }
+            for (stream, text) in &self.append {
+                if text.is_empty() || self.rewrite.iter().any(|(s, _)| s == stream) {
+                    continue;
+                }
+                std::fs::create_dir_all(&dir)?;
+                use std::io::Write as _;
+                std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(dir.join(format!("{id}.{stream}")))?
+                    .write_all(text.as_bytes())?;
+            }
+            if let Some(record) = &self.record {
+                write_record(root, machine_id, record)?;
+            }
+            Ok(())
+        };
+        if let Err(e) = done() {
+            tracing::warn!("keeping run {id} of {machine_id} on disk: {e}");
+        }
+    }
+}
+
+/// Add `text` to `log`, in memory and to what goes to its file.
+fn add(log: &mut Log, stream: &'static str, text: &str, to_disk: &mut ToDisk) {
+    log.append(text);
+    log.on_disk += text.len() as u64;
+    if log.on_disk > 2 * MAX_LOG as u64 {
+        // Cut back to what is kept.
+        log.base = log.dropped;
+        log.on_disk = log.kept.len() as u64;
+        to_disk.rewrite.push((stream, log.kept.clone()));
+    }
+    let slot = if stream == "stdout" { 0 } else { 1 };
+    to_disk.append[slot] = (stream, text.to_string());
+}
+
+/// Every run kept under `root`, by machine ID. One found running was
+/// running when the node stopped, and is lost as of `now`.
+fn load_from(root: &FsPath, now: u64) -> HashMap<String, MachineRuns> {
+    let mut all: HashMap<String, MachineRuns> = HashMap::new();
+    let Ok(machines) = std::fs::read_dir(root) else {
+        return all;
+    };
+    for machine in machines.flatten() {
+        let machine_id = machine.file_name().to_string_lossy().into_owned();
+        let Ok(files) = std::fs::read_dir(machine.path().join("runs")) else {
+            continue;
+        };
+        for file in files.flatten() {
+            let path = file.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let Some(run) = std::fs::read(&path)
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+                .and_then(|record| read_run(&path, &record, now))
+            else {
+                tracing::warn!("{}: not a run this node can read; left", path.display());
+                continue;
+            };
+            let machine_runs = all.entry(machine_id.clone()).or_default();
+            machine_runs.last_id = machine_runs.last_id.max(run.id);
+            machine_runs.runs.insert(run.id, run);
+        }
+    }
+    all
+}
+
+/// The run `record` describes, with its output from the files beside it.
+fn read_run(record_path: &FsPath, record: &Value, now: u64) -> Option<Run> {
+    let id = record["runID"].as_u64()?;
+    let log = |stream: &str, base: &str| {
+        let bytes = std::fs::read(record_path.with_extension(stream)).unwrap_or_default();
+        let text = String::from_utf8_lossy(&bytes).into_owned();
+        let base = record[base].as_u64().unwrap_or(0);
+        let on_disk = text.len() as u64;
+        let mut cut = text.len().saturating_sub(MAX_LOG);
+        while !text.is_char_boundary(cut) {
+            cut += 1;
+        }
+        Log {
+            kept: text[cut..].to_string(),
+            dropped: base + cut as u64,
+            base,
+            on_disk,
+        }
+    };
+    let as_i32 = |key: &str| record[key].as_i64().and_then(|n| i32::try_from(n).ok());
+    let (state, ended_ms) = match record["state"].as_str()? {
+        "running" => (
+            RunState::Lost("the node stopped while it ran".into()),
+            Some(now),
+        ),
+        "exited" => (
+            RunState::Exited {
+                code: as_i32("exitCode"),
+                signal: as_i32("signal"),
+            },
+            record["endedAt"].as_u64(),
+        ),
+        _ => (
+            RunState::Lost(record["reason"].as_str().unwrap_or("lost").to_string()),
+            record["endedAt"].as_u64(),
+        ),
+    };
+    Some(Run {
+        id,
+        cmd: record["cmd"].as_str()?.to_string(),
+        pid: u32::try_from(record["pid"].as_u64()?).ok()?,
+        started_ms: record["startedAt"].as_u64()?,
+        ended_ms,
+        state,
+        stdout: log("stdout", "stdoutBase"),
+        stderr: log("stderr", "stderrBase"),
+    })
 }
 
 /// Look at one run of a machine, if it is kept.
@@ -315,8 +528,18 @@ pub(super) async fn launch(
             format!("machine {name} is not running"),
         ));
     };
-    if let Err(full) = runs(|all| all.entry(machine.id.clone()).or_default().make_room()) {
-        return Err(api_error(StatusCode::CONFLICT, full));
+    match runs(|all| all.entry(machine.id.clone()).or_default().make_room()) {
+        Ok(removed) => {
+            if let Some(root) = ROOT.get() {
+                let dir = runs_dir(root, &machine.id);
+                for id in removed {
+                    for kind in ["json", "stdout", "stderr"] {
+                        let _ = std::fs::remove_file(dir.join(format!("{id}.{kind}")));
+                    }
+                }
+            }
+        }
+        Err(full) => return Err(api_error(StatusCode::CONFLICT, full)),
     }
     let pid = match vm
         .start_in_guest_as(
@@ -338,7 +561,7 @@ pub(super) async fn launch(
             ))
         }
     };
-    let (id, described) = runs(|all| {
+    let (id, described, record) = runs(|all| {
         let machine_runs = all.entry(machine.id.clone()).or_default();
         machine_runs.last_id += 1;
         let run = Run {
@@ -351,10 +574,15 @@ pub(super) async fn launch(
             stdout: Log::default(),
             stderr: Log::default(),
         };
-        let described = run.describe();
+        let (described, record) = (run.describe(), run.record());
         machine_runs.runs.insert(run.id, run);
-        (machine_runs.last_id, described)
+        (machine_runs.last_id, described, record)
     });
+    ToDisk {
+        record: Some(record),
+        ..ToDisk::default()
+    }
+    .write(&machine.id, id);
     tokio::spawn(follow(
         machine.id.clone(),
         id,
@@ -428,21 +656,26 @@ async fn follow(machine_id: String, id: u64, vm: Arc<AgentVM>, pid: u32, boot_ms
                 } else {
                     0
                 };
+                let mut to_disk = ToDisk::default();
                 let ended = runs(|all| {
                     let Some(run) = all.get_mut(&machine_id).and_then(|m| m.runs.get_mut(&id))
                     else {
                         return true;
                     };
-                    run.stdout.append(&out.stdout);
-                    run.stderr.append(&out.stderr);
+                    add(&mut run.stdout, "stdout", &out.stdout, &mut to_disk);
+                    add(&mut run.stderr, "stderr", &out.stderr, &mut to_disk);
                     if !out.running {
                         run.end(RunState::Exited {
                             code: out.exit_code,
                             signal: out.signal,
                         });
                     }
+                    if !out.running || !to_disk.rewrite.is_empty() {
+                        to_disk.record = Some(run.record());
+                    }
                     !out.running
                 });
+                to_disk.write(&machine_id, id);
                 if ended {
                     return;
                 }
@@ -464,11 +697,18 @@ async fn follow(machine_id: String, id: u64, vm: Arc<AgentVM>, pid: u32, boot_ms
 }
 
 fn finish(machine_id: &str, id: u64, state: RunState) {
-    runs(|all| {
-        if let Some(run) = all.get_mut(machine_id).and_then(|m| m.runs.get_mut(&id)) {
-            run.end(state);
-        }
+    let record = runs(|all| {
+        let run = all.get_mut(machine_id).and_then(|m| m.runs.get_mut(&id))?;
+        run.end(state);
+        Some(run.record())
     });
+    if let Some(record) = record {
+        ToDisk {
+            record: Some(record),
+            ..ToDisk::default()
+        }
+        .write(machine_id, id);
+    }
 }
 
 /// `GET /machines/{name}/runs`: every run kept for the machine, oldest
@@ -637,6 +877,102 @@ pub(crate) async fn signal(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A run as `launch` and `follow` keep it, read back as a node that
+    /// starts again does.
+    #[test]
+    fn a_run_is_read_back_from_disk() {
+        let root = tempfile::tempdir().unwrap();
+        let mut run = Run {
+            id: 7,
+            cmd: "echo hi".into(),
+            pid: 42,
+            started_ms: 1_000,
+            ended_ms: None,
+            state: RunState::Running,
+            stdout: Log::default(),
+            stderr: Log::default(),
+        };
+        let mut to_disk = ToDisk::default();
+        add(&mut run.stdout, "stdout", "hi\n", &mut to_disk);
+        add(&mut run.stderr, "stderr", "warn\n", &mut to_disk);
+        to_disk.record = Some(run.record());
+        let dir = runs_dir(root.path(), "vm-a");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("7.stdout"), "hi\n").unwrap();
+        std::fs::write(dir.join("7.stderr"), "warn\n").unwrap();
+        write_record(root.path(), "vm-a", &run.record()).unwrap();
+
+        // Running when the node stopped: lost, with what it printed.
+        let loaded = load_from(root.path(), 5_000);
+        let back = &loaded["vm-a"].runs[&7];
+        assert_eq!(loaded["vm-a"].last_id, 7);
+        assert_eq!(
+            (back.cmd.as_str(), back.pid, back.started_ms),
+            ("echo hi", 42, 1_000)
+        );
+        assert!(matches!(back.state, RunState::Lost(_)));
+        assert_eq!(back.ended_ms, Some(5_000));
+        assert_eq!(back.stdout.from(0), (0, "hi\n", 3));
+        assert_eq!(back.stderr.from(0), (0, "warn\n", 5));
+
+        // Ended: as it ended.
+        run.end(RunState::Exited {
+            code: Some(3),
+            signal: None,
+        });
+        write_record(root.path(), "vm-a", &run.record()).unwrap();
+        let loaded = load_from(root.path(), 9_000);
+        let back = &loaded["vm-a"].runs[&7];
+        assert_eq!(
+            back.state,
+            RunState::Exited {
+                code: Some(3),
+                signal: None
+            }
+        );
+        assert_eq!(back.ended_ms, run.ended_ms);
+    }
+
+    /// A stream twice what is kept is cut back to it, and where its file
+    /// starts is recorded, so offsets stay the program's.
+    #[test]
+    fn a_long_stream_is_cut_back_on_disk() {
+        let mut log = Log::default();
+        let mut to_disk = ToDisk::default();
+        let chunk = "x".repeat(MAX_LOG);
+        add(&mut log, "stdout", &chunk, &mut to_disk);
+        add(&mut log, "stdout", &chunk, &mut to_disk);
+        assert!(to_disk.rewrite.is_empty());
+        add(&mut log, "stdout", "tail", &mut to_disk);
+        assert_eq!(to_disk.rewrite.len(), 1);
+        assert_eq!(log.base, log.dropped);
+        assert_eq!(log.on_disk, MAX_LOG as u64);
+        assert_eq!(log.total(), 2 * MAX_LOG as u64 + 4);
+
+        // Read back from that file: the same offsets.
+        let root = tempfile::tempdir().unwrap();
+        let dir = runs_dir(root.path(), "vm-b");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("1.stdout"), &to_disk.rewrite[0].1).unwrap();
+        let record = json!({"runID": 1, "cmd": "yes", "pid": 1, "startedAt": 0,
+            "state": "exited", "exitCode": 0, "stdoutBase": log.base});
+        let back = read_run(&dir.join("1.json"), &record, 0).unwrap();
+        assert_eq!(back.stdout.total(), log.total());
+        assert_eq!(back.stdout.from(log.total() - 4).1, "tail");
+    }
+
+    #[test]
+    fn a_record_that_is_not_one_is_left() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = runs_dir(root.path(), "vm-c");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("1.json"), "not json").unwrap();
+        std::fs::write(dir.join("2.json"), r#"{"runID": 2}"#).unwrap();
+        assert!(load_from(root.path(), 0)
+            .get("vm-c")
+            .is_none_or(|m| m.runs.is_empty()));
+    }
 
     #[test]
     fn a_log_keeps_its_newest_bytes_and_counts_what_it_dropped() {
