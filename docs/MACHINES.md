@@ -56,6 +56,7 @@ talking to a control plane.
 | `image` | none | In place of `templateID`: a raw disk image in the node's `--image-dir`, booted by firmware. See [From a disk image](#from-a-disk-image). |
 | `userData` | none | With `image` only: cloud-init user data for the guest, a `#cloud-config` document or a script, up to about 1 MiB. See [firmware boot](FIRMWARE_BOOT.md#a-user-at-creation-the-cloud-init-seed). Refused for a machine from a template. Not returned afterwards; the machine's record carries `cloudInit: true`. |
 | `guestAgent` | false | With `image` only: run HyperMachine's guest agent in the guest, so `exec` works. Refused on a node without `--guest-agent`, and for a machine from a template, which always runs it. |
+| `agents` | none | With `guestAgent` only: coding agents to install at first boot, for [prompts](#prompts). `claude` (Claude Code) and `codex` (Codex CLI). Each is installed once, from npm, after the guest agent. `hm`: `--agent claude --agent codex`. |
 | `cpuCount`, `memoryMB` | the node's defaults | `cpuCount` is 1 to 32, and refused otherwise. From an image it is 1 unless given |
 | `diskGiB` | 8 | 1–2048. The image is sparse, so it costs only what is written. |
 | `autostart` | true | Start it again when the daemon starts, if it was running. |
@@ -441,10 +442,11 @@ hm sandbox vm machine prompt web-01 --provider claude --user dev --unattended \
   `/runs/{id}`.
 - **A prompt is a run** with the same ID, so it ends, is kept and is lost as
   a run is.
-- **The agent must be in the machine.** This installs nothing: a machine
-  from a distribution's image has a package manager and a network, and its
-  `userData` is the place to install one. A prompt for an agent that is not
-  there ends with exit code 127.
+- **The agent must be in the machine.** Create a machine from an image
+  with `guestAgent` and `agents: ["claude", "codex"]` and its first boot
+  installs them; see [below](#agents-installed-at-first-boot). Any other
+  agent goes in by `userData`. A prompt for an agent that is not there ends
+  with exit code 127.
 - **Not here:** steering a turn that is running, and conversations that are
   named, listed or moved from one agent to another.
 
@@ -454,8 +456,38 @@ naming a session, and ended for want of one. **No prompt has been answered by
 a model here.** Everything between a caller and the agent is
 [checked on real KVM](benchmarks/2026-10-11/machine-prompts-kvm/README.md)
 with a stand-in for the agent.
+Installed at first boot, both agents were
+[prompted through the API on real KVM](benchmarks/2026-10-12/machine-agents-kvm/README.md),
+and each stopped at the same place, for want of a key.
 
-## How it boots
+### Agents installed at first boot
+
+```sh
+curl -sS -X POST $NODE/machines -H 'content-type: application/json' -d '{
+  "name": "ai-01", "image": "noble.raw", "diskGiB": 8, "memoryMB": 2048,
+  "guestAgent": true, "agents": ["claude", "codex"],
+  "network": {"allowInternetAccess": true}}'
+
+hm sandbox vm machine create ai-01 --image noble.raw --guest-agent   --agent claude --agent codex --network --disk-gib 8 --memory-mb 2048
+```
+
+The node adds the install to the cloud-init vendor data that installs its
+guest agent, after it:
+
+- **Node and npm** come from the distribution's own packages (`apt-get` or
+  `dnf`) when the image has no `npm`, then `npm install -g` installs
+  `@anthropic-ai/claude-code` and `@openai/codex`, at the newest version
+  published at that moment.
+- **It needs the network.** Without one, or with npm's registry not
+  allowed, the install fails; the machine still boots and runs its guest
+  agent.
+- **`exec` answers before it finishes.** `/var/lib/hv2/agents-ready` is
+  written when it is done, and `/var/log/hv2-agents.log` says what it did or
+  why it failed. Wait for the file before prompting.
+- **Once in the machine's life.** It is cloud-init's first boot, so a
+  restart does not install them again, nor update them.
+- **No key comes with them.** Each prompt brings its own in `env`.
+
 
 At creation, the template's initramfs is unpacked into a fresh sparse ext4 image
 with `mkfs.ext4 -d`. Device nodes are skipped, since the guest's init mounts

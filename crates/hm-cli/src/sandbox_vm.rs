@@ -476,6 +476,11 @@ pub enum MachineCommand {
         /// works in it. The node installs it through the image's cloud-init
         #[arg(long, requires = "image")]
         guest_agent: bool,
+        /// A coding agent to install at first boot, for prompts: `claude`
+        /// or `codex`. Give it again for both. Needs --guest-agent
+        #[arg(long = "agent", value_name = "NAME", value_parser = ["claude", "codex"],
+              requires = "guest_agent")]
+        agents: Vec<String>,
         /// Processors, up to 32. A machine from an image has one unless told
         #[arg(long, value_parser = clap::value_parser!(u32).range(1..=32))]
         cpus: Option<u32>,
@@ -1537,6 +1542,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 image,
                 user_data,
                 guest_agent,
+                agents,
                 cpus,
                 memory_mb,
                 disk_gib,
@@ -1572,6 +1578,9 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 }
                 if guest_agent {
                     body["guestAgent"] = json!(true);
+                }
+                if !agents.is_empty() {
+                    body["agents"] = json!(agents);
                 }
                 if let Some(disk_gib) = disk_gib {
                     body["diskGiB"] = json!(disk_gib);

@@ -72,6 +72,8 @@ test('create sends only what was given, and a name stays one segment', async () 
   answers.set('POST /machines', [201, MACHINE]);
   await hm.machines.create('web-01', { cpuCount: 2, diskGiB: 20, start: false });
   assert.deepEqual(json(), { name: 'web-01', start: false, cpuCount: 2, diskGiB: 20 });
+  await hm.machines.create('ai-01', { image: 'noble.raw', guestAgent: true, agents: ['claude', 'codex'] });
+  assert.deepEqual(json(), { name: 'ai-01', start: true, image: 'noble.raw', guestAgent: true, agents: ['claude', 'codex'] });
   answers.set('GET /machines/a%2F..%2Fb', [200, { ...MACHINE, name: 'a/../b' }]);
   const odd = await hm.machines.get('a/../b');
   assert.equal(seen.at(-1).url, '/machines/a%2F..%2Fb');

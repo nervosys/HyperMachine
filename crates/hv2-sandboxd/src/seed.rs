@@ -139,6 +139,51 @@ systemctl daemon-reload
 systemctl enable --now hv2-guest-agent.service
 "#;
 
+/// The coding agents a machine may have installed, by the name a prompt's
+/// `provider` gives them, and the npm package each is.
+pub(crate) const CODING_AGENTS: [(&str, &str); 2] = [
+    ("claude", "@anthropic-ai/claude-code"),
+    ("codex", "@openai/codex"),
+];
+
+/// Where the agents' install says it is done, and where it logs.
+pub(crate) const AGENTS_READY: &str = "/var/lib/hv2/agents-ready";
+pub(crate) const AGENTS_LOG: &str = "/var/log/hv2-agents.log";
+
+/// What installs `packages` once the guest agent is up: Node and npm from the
+/// distribution's own packages when there is no npm, then the agents from
+/// npm. It is not fatal to the script: a machine whose agents could not be
+/// installed still has its guest agent, and says why in its log.
+fn agents_install(packages: &[&str]) -> String {
+    format!(
+        r#"
+# The coding agents asked for, from npm, for prompts. After the guest agent,
+# so a failure here leaves a machine that can still be reached and asked.
+(
+  set -e
+  if ! command -v npm >/dev/null 2>&1; then
+    if command -v apt-get >/dev/null 2>&1; then
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update -q
+      apt-get install -y -q --no-install-recommends nodejs npm
+    elif command -v dnf >/dev/null 2>&1; then
+      dnf install -y -q --setopt=install_weak_deps=False nodejs npm
+    else
+      echo "no apt-get or dnf to install Node with" >&2
+      exit 1
+    fi
+  fi
+  npm install -g --no-audit --no-fund {packages}
+  mkdir -p "$(dirname {ready})"
+  date -u +%Y-%m-%dT%H:%M:%SZ > {ready}
+) > {log} 2>&1 || echo "installing the coding agents failed; see {log}" >&2
+"#,
+        packages = packages.join(" "),
+        ready = AGENTS_READY,
+        log = AGENTS_LOG,
+    )
+}
+
 /// One file in the seed's root directory.
 pub(crate) struct SeedFile<'a> {
     /// Its name as the guest sees it: ASCII, at most 26 characters.
@@ -157,6 +202,8 @@ pub(crate) struct Seed<'a> {
     pub(crate) user_data: Option<&'a str>,
     /// The guest agent's binary, when the machine is to run it.
     pub(crate) agent: Option<&'a [u8]>,
+    /// The npm packages of the coding agents to install with it.
+    pub(crate) coding_agents: &'a [&'a str],
 }
 
 impl Seed<'_> {
@@ -178,10 +225,14 @@ impl Seed<'_> {
                 contents: user_data.as_bytes(),
             },
         ];
+        let mut install = AGENT_INSTALL.to_string();
+        if !self.coding_agents.is_empty() {
+            install.push_str(&agents_install(self.coding_agents));
+        }
         if let Some(agent) = self.agent {
             files.push(SeedFile {
                 name: "vendor-data",
-                contents: AGENT_INSTALL.as_bytes(),
+                contents: install.as_bytes(),
             });
             files.push(SeedFile {
                 name: AGENT_FILE,
@@ -600,6 +651,7 @@ mod tests {
             hostname: "web-01",
             user_data: Some("#cloud-config\npassword: x\n"),
             agent: None,
+            coding_agents: &[],
         }
         .image()
         .unwrap();
@@ -626,6 +678,7 @@ mod tests {
             hostname: "a",
             user_data: None,
             agent: Some(&binary),
+            coding_agents: &[],
         }
         .image()
         .unwrap();
@@ -647,5 +700,43 @@ mod tests {
             assert!(script.contains(needed), "{needed}");
         }
         assert_eq!(files[3].1, binary);
+        // No agents asked for, none installed.
+        assert!(!script.contains("npm"), "{script}");
+    }
+
+    #[test]
+    fn coding_agents_are_installed_after_the_guest_agent_and_not_fatally() {
+        let binary = vec![0x7Fu8; 1000];
+        let disk = Seed {
+            instance_id: "vm-a",
+            hostname: "a",
+            user_data: None,
+            agent: Some(&binary),
+            coding_agents: &["@anthropic-ai/claude-code", "@openai/codex"],
+        }
+        .image()
+        .unwrap();
+        let files = read_back(&disk);
+        let script = String::from_utf8(files[2].1.clone()).unwrap();
+        let agent_at = script
+            .find("systemctl enable --now hv2-guest-agent")
+            .unwrap();
+        let npm_at = script
+            .find("npm install -g --no-audit --no-fund @anthropic-ai/claude-code @openai/codex")
+            .unwrap();
+        assert!(agent_at < npm_at, "the guest agent comes first");
+        assert!(
+            script.contains(AGENTS_READY) && script.contains(AGENTS_LOG),
+            "{script}"
+        );
+        assert!(
+            script.contains("apt-get install -y -q --no-install-recommends nodejs npm"),
+            "{script}"
+        );
+        // Its failure is reported, not the script's.
+        assert!(
+            script.contains("|| echo \"installing the coding agents failed"),
+            "{script}"
+        );
     }
 }

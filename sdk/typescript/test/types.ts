@@ -6,6 +6,7 @@ import { ApiError, Client, type DirectoryEntry, type ExecResult, type PromptEven
 async function use(): Promise<void> {
   const hm = new Client({ endpoint: 'http://node:3980', apiKey: 'k' });
   const web = await hm.machines.create('web-01', { cpuCount: 2, diskGiB: 20 });
+  await hm.machines.create('ai-01', { image: 'noble.raw', guestAgent: true, agents: ['claude', 'codex'] });
   const result: ExecResult = await web.exec('uname -a', { timeoutSecs: 10 });
   const code: number | null = result.exitCode;
 
