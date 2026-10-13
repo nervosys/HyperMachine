@@ -239,6 +239,7 @@ class Machine:
         self._set(described)
         self.runs = Runs(self)
         self.prompts = Prompts(self)
+        self.conversations = Conversations(self)
         self.files = Files(self)
         self.ports = Ports(self)
         self.snapshots = Snapshots(self)
@@ -451,6 +452,80 @@ class Prompts:
 
     def list(self) -> List[Prompt]:
         return [Prompt(self._machine, p) for p in self._machine._client.call("GET", f"{self._machine._path}/prompts")]
+
+
+class Conversation:
+    """A coding agent talked to over many turns, each a prompt."""
+
+    def __init__(self, machine: Machine, described: Mapping[str, Any]):
+        self.machine = machine
+        self.info: Dict[str, Any] = dict(described)
+        self.id: int = described["conversationID"]
+        self.name: Optional[str] = described.get("name")
+
+    @property
+    def _path(self) -> str:
+        return f"{self.machine._path}/conversations/{self.id}"
+
+    def say(self, prompt: str, env: Optional[Mapping[str, str]] = None) -> Prompt:
+        """Send a message. With nothing running it starts a turn; with a turn
+        of Claude Code's running it goes into that turn, and the prompt's
+        `info["steered"]` is true. Either way, the prompt is the turn."""
+        body: Dict[str, Any] = {"prompt": prompt}
+        if env:
+            body["env"] = dict(env)
+        answer = self.machine._client.call("POST", f"{self._path}/messages", body)
+        return Prompt(self.machine, answer)
+
+    def refresh(self) -> "Conversation":
+        self.info = self.machine._client.call("GET", self._path)
+        return self
+
+    def transcript(self) -> List[Dict[str, Any]]:
+        """Who said what, in order: `{"role", "text", "promptID"}`."""
+        return self.machine._client.call("GET", f"{self._path}/transcript")
+
+    def interrupt(self) -> None:
+        self.machine._client.call("POST", f"{self._path}/interrupt")
+
+    def delete(self) -> None:
+        self.machine._client.call("DELETE", self._path)
+
+
+class Conversations:
+    def __init__(self, machine: Machine):
+        self._machine = machine
+
+    def create(
+        self,
+        provider: str,
+        name: Optional[str] = None,
+        model: Optional[str] = None,
+        user: Optional[str] = None,
+        cwd: Optional[str] = None,
+        unattended: bool = False,
+        from_: Optional[Any] = None,
+    ) -> Conversation:
+        """A new conversation. `from_` is another of this machine's, by
+        number or name, whose transcript the new one starts from."""
+        body: Dict[str, Any] = {"provider": provider}
+        for key, value in [("name", name), ("model", model), ("user", user), ("cwd", cwd)]:
+            if value is not None:
+                body[key] = value
+        if from_ is not None:
+            body["from"] = str(from_)
+        if unattended:
+            body["unattended"] = True
+        path = f"{self._machine._path}/conversations"
+        return Conversation(self._machine, self._machine._client.call("POST", path, body))
+
+    def get(self, key: Any) -> Conversation:
+        path = f"{self._machine._path}/conversations/{_seg(key)}"
+        return Conversation(self._machine, self._machine._client.call("GET", path))
+
+    def list(self) -> List[Conversation]:
+        path = f"{self._machine._path}/conversations"
+        return [Conversation(self._machine, c) for c in self._machine._client.call("GET", path)]
 
 
 class Files:

@@ -427,8 +427,8 @@ hm sandbox vm machine prompt web-01 --provider claude --user dev --unattended \
 | `custom` | Your `command`, a shell line that reads `$HM_PROMPT` (and `$HM_MODEL`). For any other agent |
 
 - **`model`** is passed as the agent's own flag. **`resume`** carries on a
-  session of Claude Code's: give an earlier prompt's `session`. It is refused
-  for `codex`.
+  session: give an earlier prompt's `session`. For `codex` it is
+  `codex exec resume`, carrying its thread on.
 - **`unattended`** lets the agent act without asking, with the flag each
   calls dangerous. It is off unless given. Claude Code will not take it as
   root, so with `claude` it needs a `user`.
@@ -447,8 +447,8 @@ hm sandbox vm machine prompt web-01 --provider claude --user dev --unattended \
   installs them; see [below](#agents-installed-at-first-boot). Any other
   agent goes in by `userData`. A prompt for an agent that is not there ends
   with exit code 127.
-- **Not here:** steering a turn that is running, and conversations that are
-  named, listed or moved from one agent to another.
+- **To steer a turn, or to talk over many,** use a
+  [conversation](#conversations).
 
 Each provider's line was given to the agent as published (Claude Code
 2.1.296, Codex CLI 0.162.1) with no key: both took it, printed a first event
@@ -486,8 +486,100 @@ guest agent, after it:
   why it failed. Wait for the file before prompting.
 - **Once in the machine's life.** It is cloud-init's first boot, so a
   restart does not install them again, nor update them.
+- **They do not update themselves.** Claude Code's updater reinstalls its
+  npm package the first time it runs, and until it has, there is no
+  `claude`: a turn started then failed with "not found". So it is turned
+  off three ways: `DISABLE_AUTOUPDATER` in `/etc/claude-code/managed-settings.json`
+  and `/etc/profile.d/hv2-agents.sh`, and in every turn of Claude Code's
+  the node starts unless the caller sets it. To update an agent, run
+  `npm install -g` in the machine.
 - **No key comes with them.** Each prompt brings its own in `env`.
 
+## Conversations
+
+A conversation is a coding agent talked to over many turns. It carries the
+agent's session from one turn to the next itself, takes a message into a
+turn that is running, and can start from what was said in another
+conversation, with another agent.
+
+```sh
+# Make one. Nothing runs yet.
+curl -sS -X POST $NODE/machines/web-01/conversations -H 'content-type: application/json' -d '{
+  "provider": "claude", "name": "fix-tests", "user": "dev", "unattended": true, "cwd": "/srv/app"}'
+# → {"conversationID":1,"name":"fix-tests","state":"idle","turns":[],...}
+
+# Say something. With nothing running, this starts a turn: a prompt.
+curl -sS -X POST $NODE/machines/web-01/conversations/fix-tests/messages \
+  -H 'content-type: application/json' \
+  -d '{"prompt": "make the tests pass", "env": {"ANTHROPIC_API_KEY": "..."}}'
+# → 201 {"conversationID":1,"promptID":7,"steered":false}
+
+# Say more while it works: the message goes into the same turn.
+curl -sS -X POST $NODE/machines/web-01/conversations/fix-tests/messages \
+  -H 'content-type: application/json' -d '{"prompt": "leave the docs alone"}'
+# → 202 {"conversationID":1,"promptID":7,"steered":true}
+
+curl -sS $NODE/machines/web-01/prompts/7?after=0                         # the turn's events, as for any prompt
+curl -sS $NODE/machines/web-01/conversations/fix-tests                   # its turns, messages and session
+curl -sS $NODE/machines/web-01/conversations/fix-tests/transcript        # who said what, in order
+curl -sS -X POST $NODE/machines/web-01/conversations/fix-tests/interrupt # the turn running
+curl -sS -X DELETE $NODE/machines/web-01/conversations/fix-tests
+
+# Carry on with Codex from where Claude Code got to.
+curl -sS -X POST $NODE/machines/web-01/conversations -H 'content-type: application/json' -d '{
+  "provider": "codex", "from": "fix-tests", "user": "dev"}'
+```
+
+A conversation is named in a path by its number or by its `name`. With `hm`,
+where `say` follows a turn it starts to its end, and returns at once from
+one it steers:
+
+```sh
+hm sandbox vm machine conversation create web-01 --provider claude --name fix-tests \
+  --user dev --unattended --cwd /srv/app
+hm sandbox vm machine conversation say web-01 fix-tests --pass-env ANTHROPIC_API_KEY \
+  "make the tests pass"
+hm sandbox vm machine conversation say web-01 fix-tests "leave the docs alone"  # from another terminal
+hm sandbox vm machine conversation transcript web-01 fix-tests
+hm sandbox vm machine conversation create web-01 --provider codex --from fix-tests --user dev
+```
+
+- **A turn is a [prompt](#prompts).** Its ID is a prompt's and a run's,
+  its events are read the same way, and it is kept and lost as they are.
+  `provider`, `model`, `user`, `cwd` and `unattended` are the
+  conversation's, and the same for every turn. `env` is each message's, and
+  goes to the turn that message starts.
+- **The session is carried for you.** The next turn resumes the session the
+  last one reported: Claude Code's `--resume`, Codex's `codex exec resume`.
+- **Steering is Claude Code's.** Its turn reads messages as lines of JSON on
+  its standard input (`--input-format stream-json`). A message sent while
+  it runs is written there, into the same process and session, and
+  answered. The turn ends once it has answered every message sent to it. A
+  steering message is given the environment its turn started with.
+- **Codex is a turn at a time.** It has no input to steer through while it
+  runs, so a message then is refused with 409: interrupt it, or wait.
+- **`from` moves a conversation to another agent.** What was said in the
+  other conversation, the newest 64 KiB of it, is put before the first
+  message of the new one. What moves is what was said; a harness cannot
+  take over another harness's session.
+- **The transcript** is the caller's messages and the agent's replies, read
+  from the agent's events. Claude Code says each message back
+  (`--replay-user-messages`), so a steering message is where it was taken
+  in. Tool calls and their results are in the events and not in the
+  transcript.
+- **Kept on the node, in memory**, as runs are, and gone when it restarts.
+  A machine keeps 64. One with a turn running is not deleted.
+
+**What a model does with a message that steers it has not been seen.**
+[Checked on real KVM](benchmarks/2026-10-12/machine-conversations-kvm/README.md):
+
+- **With a stand-in for each agent:** steering, the session carried on,
+  the transcript, the interrupt and the move between agents.
+- **With the real Claude Code and Codex, without a key:** each takes what
+  a conversation sends it and keeps one session across turns, and Codex
+  was given what was said to Claude Code.
+
+## How it boots
 
 At creation, the template's initramfs is unpacked into a fresh sparse ext4 image
 with `mkfs.ext4 -d`. Device nodes are skipped, since the guest's init mounts

@@ -617,6 +617,12 @@ pub enum MachineCommand {
         detach: bool,
         prompt: String,
     },
+    /// A coding agent talked to over many turns: steered, and moved from
+    /// one agent to another
+    Conversation {
+        #[command(subcommand)]
+        command: MachineConversationCommand,
+    },
     /// Snapshots of a stopped machine's disk
     Snapshot {
         #[command(subcommand)]
@@ -1800,6 +1806,132 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 }
                 return Ok(0);
             }
+            MachineCommand::Conversation { command } => match command {
+                MachineConversationCommand::Create {
+                    name,
+                    provider,
+                    label,
+                    model,
+                    user,
+                    cwd,
+                    unattended,
+                    from,
+                } => {
+                    let mut body = json!({"provider": provider});
+                    for (key, value) in [
+                        ("name", label),
+                        ("model", model),
+                        ("user", user),
+                        ("cwd", cwd),
+                        ("from", from),
+                    ] {
+                        if let Some(value) = value {
+                            body[key] = json!(value);
+                        }
+                    }
+                    if unattended {
+                        body["unattended"] = json!(true);
+                    }
+                    api.request(
+                        Method::POST,
+                        &["machines", &name, "conversations"],
+                        Some(body),
+                    )
+                    .await?
+                }
+                MachineConversationCommand::List { name } => {
+                    api.request_bounded(
+                        Method::GET,
+                        &["machines", &name, "conversations"],
+                        None,
+                        1024 * 1024,
+                    )
+                    .await?
+                }
+                MachineConversationCommand::Show { name, conversation } => {
+                    api.request_bounded(
+                        Method::GET,
+                        &["machines", &name, "conversations", &conversation],
+                        None,
+                        FOLLOW_LIMIT,
+                    )
+                    .await?
+                }
+                MachineConversationCommand::Say {
+                    name,
+                    conversation,
+                    pass_env,
+                    detach,
+                    prompt,
+                } => {
+                    let mut body = json!({"prompt": prompt});
+                    let env = passed_env(&pass_env)?;
+                    if !env.is_empty() {
+                        body["env"] = Value::Object(env);
+                    }
+                    let sent = api
+                        .request(
+                            Method::POST,
+                            &[
+                                "machines",
+                                &name,
+                                "conversations",
+                                &conversation,
+                                "messages",
+                            ],
+                            Some(body),
+                        )
+                        .await?;
+                    // A message that steers a running turn is followed by
+                    // whoever started that turn.
+                    if detach || sent["steered"].as_bool() == Some(true) {
+                        sent
+                    } else {
+                        let id = sent["promptID"]
+                            .as_u64()
+                            .context("message response missing promptID")?
+                            .to_string();
+                        return follow_prompt(&api, &name, &id).await;
+                    }
+                }
+                MachineConversationCommand::Transcript { name, conversation } => {
+                    api.request_bounded(
+                        Method::GET,
+                        &[
+                            "machines",
+                            &name,
+                            "conversations",
+                            &conversation,
+                            "transcript",
+                        ],
+                        None,
+                        FOLLOW_LIMIT,
+                    )
+                    .await?
+                }
+                MachineConversationCommand::Interrupt { name, conversation } => {
+                    api.request(
+                        Method::POST,
+                        &[
+                            "machines",
+                            &name,
+                            "conversations",
+                            &conversation,
+                            "interrupt",
+                        ],
+                        Some(json!({})),
+                    )
+                    .await?
+                }
+                MachineConversationCommand::Delete { name, conversation } => {
+                    api.request(
+                        Method::DELETE,
+                        &["machines", &name, "conversations", &conversation],
+                        None,
+                    )
+                    .await?
+                }
+            },
             MachineCommand::Snapshot { command } => match command {
                 MachineSnapshotCommand::Take { name, label } => {
                     let body = match label {
@@ -2615,6 +2747,82 @@ async fn public_ports(api: &Api, command: PublicPortCommand) -> Result<Value> {
             .await
         }
     }
+}
+
+/// Conversations with a machine's coding agents.
+#[derive(Debug, Subcommand)]
+pub enum MachineConversationCommand {
+    /// Start one; nothing runs until it is said something
+    Create {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        /// claude or codex
+        #[arg(long)]
+        provider: String,
+        /// A name for it, to use in place of its number
+        #[arg(long = "name", value_name = "LABEL")]
+        label: Option<String>,
+        #[arg(long)]
+        model: Option<String>,
+        /// The guest user its agent runs as; root unless given
+        #[arg(long)]
+        user: Option<String>,
+        /// The directory its agent works in
+        #[arg(long)]
+        cwd: Option<String>,
+        /// Let the agent act without asking for approval
+        #[arg(long)]
+        unattended: bool,
+        /// Another of the machine's conversations to carry on from, with
+        /// what was said in it
+        #[arg(long)]
+        from: Option<String>,
+    },
+    /// List a machine's conversations
+    List {
+        #[arg(value_parser = machine_name)]
+        name: String,
+    },
+    /// Show one: its turns, messages and session
+    Show {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        /// Its number or name
+        conversation: String,
+    },
+    /// Say something: a new turn, followed to its end, or into the turn
+    /// running, which steers it
+    Say {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        /// Its number or name
+        conversation: String,
+        /// Give the agent this variable of your own environment: its key
+        #[arg(long = "pass-env", value_name = "NAME")]
+        pass_env: Vec<String>,
+        /// Print what the node answered and do not follow the turn
+        #[arg(long)]
+        detach: bool,
+        prompt: String,
+    },
+    /// Who said what, in order
+    Transcript {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        conversation: String,
+    },
+    /// Interrupt the turn running
+    Interrupt {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        conversation: String,
+    },
+    /// Forget one that has no turn running
+    Delete {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        conversation: String,
+    },
 }
 
 /// Snapshots of a machine's disk.

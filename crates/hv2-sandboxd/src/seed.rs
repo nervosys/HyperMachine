@@ -154,6 +154,11 @@ pub(crate) const AGENTS_LOG: &str = "/var/log/hv2-agents.log";
 /// distribution's own packages when there is no npm, then the agents from
 /// npm. It is not fatal to the script: a machine whose agents could not be
 /// installed still has its guest agent, and says why in its log.
+///
+/// Claude Code's own updater is turned off. Run for the first time, it
+/// reinstalls its npm package, and until it has there is no `claude`: a turn
+/// started then ended with "not found". An agent here changes when its
+/// machine's owner changes it.
 fn agents_install(packages: &[&str]) -> String {
     format!(
         r#"
@@ -161,6 +166,10 @@ fn agents_install(packages: &[&str]) -> String {
 # so a failure here leaves a machine that can still be reached and asked.
 (
   set -e
+  # They stay as installed: an agent updating itself is gone while it does.
+  mkdir -p /etc/claude-code /etc/profile.d
+  echo '{{"env": {{"{no_update}": "1"}}}}' > /etc/claude-code/managed-settings.json
+  echo 'export {no_update}=1' > /etc/profile.d/hv2-agents.sh
   if ! command -v npm >/dev/null 2>&1; then
     if command -v apt-get >/dev/null 2>&1; then
       export DEBIAN_FRONTEND=noninteractive
@@ -181,8 +190,12 @@ fn agents_install(packages: &[&str]) -> String {
         packages = packages.join(" "),
         ready = AGENTS_READY,
         log = AGENTS_LOG,
+        no_update = NO_AUTOUPDATE,
     )
 }
+
+/// What turns Claude Code's updater off, in its environment or its settings.
+pub(crate) const NO_AUTOUPDATE: &str = "DISABLE_AUTOUPDATER";
 
 /// One file in the seed's root directory.
 pub(crate) struct SeedFile<'a> {
@@ -731,6 +744,16 @@ mod tests {
         );
         assert!(
             script.contains("apt-get install -y -q --no-install-recommends nodejs npm"),
+            "{script}"
+        );
+        // Claude Code's updater is off, in its settings and for a login, and
+        // before it is installed.
+        let settings_at = script
+            .find(r#"echo '{"env": {"DISABLE_AUTOUPDATER": "1"}}' > /etc/claude-code/managed-settings.json"#)
+            .unwrap();
+        assert!(settings_at < npm_at, "{script}");
+        assert!(
+            script.contains("echo 'export DISABLE_AUTOUPDATER=1' > /etc/profile.d/hv2-agents.sh"),
             "{script}"
         );
         // Its failure is reported, not the script's.

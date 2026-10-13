@@ -140,6 +140,7 @@ export class Machine {
     this.set(described);
     this.runs = new Runs(this);
     this.prompts = new Prompts(this);
+    this.conversations = new Conversations(this);
     this.files = new Files(this);
     this.ports = new Ports(this);
     this.snapshots = new Snapshots(this);
@@ -321,6 +322,70 @@ class Prompts {
 
   async list() {
     return (await this.machine.client.call('GET', `${this.machine.path}/prompts`)).map((p) => new Prompt(this.machine, p));
+  }
+}
+
+/** A coding agent talked to over many turns, each a prompt. */
+export class Conversation {
+  constructor(machine, described) {
+    this.machine = machine;
+    this.info = { ...described };
+    this.id = described.conversationID;
+    this.name = described.name ?? null;
+  }
+
+  get path() {
+    return `${this.machine.path}/conversations/${this.id}`;
+  }
+
+  /**
+   * Send a message. With nothing running it starts a turn; with a turn of
+   * Claude Code's running it goes into that turn, and `info.steered` is true.
+   * Either way, the prompt returned is the turn.
+   */
+  async say(prompt, { env } = {}) {
+    const body = { prompt, ...given({ env }) };
+    return new Prompt(this.machine, await this.machine.client.call('POST', `${this.path}/messages`, body));
+  }
+
+  async refresh() {
+    this.info = await this.machine.client.call('GET', this.path);
+    return this;
+  }
+
+  /** Who said what, in order: `{ role, text, promptID }`. */
+  async transcript() {
+    return this.machine.client.call('GET', `${this.path}/transcript`);
+  }
+
+  async interrupt() {
+    await this.machine.client.call('POST', `${this.path}/interrupt`);
+  }
+
+  async delete() {
+    await this.machine.client.call('DELETE', this.path);
+  }
+}
+
+class Conversations {
+  constructor(machine) {
+    this.machine = machine;
+  }
+
+  /** `from` is another of this machine's, by number or name, to start from. */
+  async create(provider, { name, model, user, cwd, unattended, from } = {}) {
+    const body = { provider, ...given({ name, model, user, cwd }) };
+    if (from !== undefined && from !== null) body.from = String(from);
+    if (unattended) body.unattended = true;
+    return new Conversation(this.machine, await this.machine.client.call('POST', `${this.machine.path}/conversations`, body));
+  }
+
+  async get(key) {
+    return new Conversation(this.machine, await this.machine.client.call('GET', `${this.machine.path}/conversations/${seg(key)}`));
+  }
+
+  async list() {
+    return (await this.machine.client.call('GET', `${this.machine.path}/conversations`)).map((c) => new Conversation(this.machine, c));
   }
 }
 

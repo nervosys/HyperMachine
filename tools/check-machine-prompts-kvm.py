@@ -380,7 +380,6 @@ def main():
                 ("custom without a command", "POST", "/prompts", {"provider": "custom", "prompt": "x"}, 400),
                 ("a command for a provider that has one", "POST", "/prompts",
                  {"provider": "claude", "prompt": "x", "command": "true"}, 400),
-                ("resume for codex", "POST", "/prompts", {"provider": "codex", "prompt": "x", "resume": "s"}, 400),
                 ("claude unattended as root", "POST", "/prompts",
                  {"provider": "claude", "prompt": "x", "unattended": True}, 400),
                 ("an empty model", "POST", "/prompts", {"provider": "claude", "prompt": "x", "model": ""}, 400),

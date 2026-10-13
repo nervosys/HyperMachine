@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   program starts, the bounding set included.
 
 ### Fixed
+- A machine with Claude Code installed at first boot could lose it for a
+  while. The first time `claude` ran, its updater reinstalled its own npm
+  package, and a prompt or conversation started during that window failed
+  with "claude: not found". The updater is now off in the machine's Claude
+  Code settings and login environment, and in every Claude Code turn the
+  node starts.
 - A guest's hardware clock gave the wrong date, for two reasons. The
   emulated RTC had its data-mode bit the wrong way round, so a guest that
   left it clear, as every PC does, was handed binary numbers and read them as
@@ -75,6 +81,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- Conversations with a machine's coding agents:
+  `/machines/{name}/conversations`, `hm sandbox vm machine conversation`,
+  and `conversations` in both SDKs.
+  - **Turns:** each message is a turn, which is a prompt, and the agent's
+    session is carried from one turn to the next.
+  - **Steering:** a message to Claude Code while its turn runs goes into
+    that turn. The turn reads messages as stream-json on its standard input,
+    and ends once each message has been answered. Codex takes one turn at a
+    time, and a message while it runs is refused.
+  - **Transcript:** what was said, in order, read from the agent's events.
+  - **Moving to another agent:** `from` starts a new conversation, with
+    either agent, from what was said in another.
+- Prompts: `resume` works for `codex`, as `codex exec resume`. It was
+  refused.
 - Coding agents installed in a machine: `agents: ["claude", "codex"]` on
   `POST /machines` with `image` and `guestAgent` (`hm sandbox vm machine
   create --agent claude --agent codex`, `agents` in both SDKs). The node adds

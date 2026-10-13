@@ -1,7 +1,7 @@
 // Compiled, not run: the declarations in index.d.ts must type what a caller
 // writes, and refuse what a caller must not. `tsc -p test` checks this.
 
-import { ApiError, Client, type DirectoryEntry, type ExecResult, type PromptEvent } from '../index.js';
+import { ApiError, Client, type DirectoryEntry, type ExecResult, type Prompt, type PromptEvent, type TranscriptLine } from '../index.js';
 
 async function use(): Promise<void> {
   const hm = new Client({ endpoint: 'http://node:3980', apiKey: 'k' });
@@ -22,6 +22,14 @@ async function use(): Promise<void> {
     const seen: PromptEvent = event;
     void seen.event?.type;
   }
+
+  const talk = await web.conversations.create('claude', { name: 'fix', user: 'dev', unattended: true });
+  const turn: Prompt = await talk.say('fix it', { env: { ANTHROPIC_API_KEY: 'k' } });
+  const steered: boolean = turn.info.steered;
+  const lines: TranscriptLine[] = await talk.transcript();
+  const role: 'user' | 'assistant' = lines[0].role;
+  await web.conversations.create('codex', { from: talk.id });
+  void [steered, role];
 
   await web.files.write('/etc/x', new Uint8Array([1, 2]));
   const bytes: Buffer = await web.files.read('/etc/x');
@@ -48,6 +56,8 @@ async function use(): Promise<void> {
 
   // @ts-expect-error a provider that is not one
   await web.prompts.start('gpt', 'x');
+  // @ts-expect-error a conversation is not with a custom command
+  await web.conversations.create('custom');
   // @ts-expect-error a grouping that is not one
   await hm.usage({ by: 'colour' });
   // @ts-expect-error a size is a number
