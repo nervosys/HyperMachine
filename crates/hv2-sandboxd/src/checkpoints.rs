@@ -82,7 +82,7 @@ pub(crate) fn due(now: u64, last: u64, every_secs: u64, has_one: bool, used_sinc
 /// One saved state of one sandbox.
 #[derive(Debug, Clone)]
 pub(crate) struct Checkpoint {
-    path: std::path::PathBuf,
+    pub(crate) path: std::path::PathBuf,
     created_ms: u64,
 }
 

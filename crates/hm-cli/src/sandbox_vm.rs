@@ -1128,10 +1128,34 @@ pub enum VmFileCommand {
 /// In-place checkpoints preserve the VM's identity on restore.
 #[derive(Debug, Subcommand)]
 pub enum CheckpointCommand {
-    Save { id: String, name: String },
-    List { id: String },
-    Restore { id: String, name: String },
-    Delete { id: String, name: String },
+    Save {
+        id: String,
+        name: String,
+    },
+    List {
+        id: String,
+    },
+    Restore {
+        id: String,
+        name: String,
+    },
+    Delete {
+        id: String,
+        name: String,
+    },
+    /// List a directory in a checkpoint, without touching the sandbox
+    Ls {
+        id: String,
+        name: String,
+        #[arg(default_value = "/")]
+        path: String,
+    },
+    /// Print a file from a checkpoint, without touching the sandbox
+    Cat {
+        id: String,
+        name: String,
+        path: String,
+    },
 }
 
 #[derive(Clone)]
@@ -2543,6 +2567,34 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                     None,
                 )
                 .await?
+            }
+            CheckpointCommand::Ls { id, name, path } => {
+                api.request_bounded_query(
+                    Method::GET,
+                    &["sandboxes", &id, "checkpoints", &name, "files"],
+                    None,
+                    8 << 20,
+                    &[("path", path.as_str())],
+                )
+                .await?
+            }
+            CheckpointCommand::Cat { id, name, path } => {
+                let response = api
+                    .client
+                    .get(api.url(&["sandboxes", &id, "checkpoints", &name, "file"])?)
+                    .query(&[("path", path.as_str())])
+                    .send()
+                    .await
+                    .context("sandbox API request failed")?;
+                let status = response.status();
+                if !status.is_success() {
+                    let why = response.text().await.unwrap_or_default();
+                    bail!("sandbox API returned {status}: {why}");
+                }
+                let bytes = response.bytes().await?;
+                use std::io::Write;
+                std::io::stdout().write_all(&bytes)?;
+                return Ok(0);
             }
         },
     };
