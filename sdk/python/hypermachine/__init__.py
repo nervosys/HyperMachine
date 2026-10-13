@@ -34,7 +34,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Dict, Iterator, List, Mapping, Optional
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence
 
 __all__ = [
     "ApiError",
@@ -202,6 +202,7 @@ class Machines:
         guest_agent: Optional[bool] = None,
         user_data: Optional[str] = None,
         network: Optional[Mapping[str, Any]] = None,
+        agents: Optional[Sequence[str]] = None,
         **more: Any,
     ) -> "Machine":
         """A new machine, from a template (the node's `base` unless given)
@@ -216,6 +217,7 @@ class Machines:
             ("guestAgent", guest_agent),
             ("userData", user_data),
             ("network", network),
+            ("agents", None if agents is None else list(agents)),
         ]:
             if value is not None:
                 body[key] = value

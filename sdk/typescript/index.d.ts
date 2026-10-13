@@ -61,6 +61,8 @@ export interface CreateOptions {
   guestAgent?: boolean;
   userData?: string;
   network?: Record<string, unknown>;
+  /** Coding agents to install at first boot, for prompts. Needs `guestAgent`. */
+  agents?: Array<'claude' | 'codex'>;
   [field: string]: unknown;
 }
 

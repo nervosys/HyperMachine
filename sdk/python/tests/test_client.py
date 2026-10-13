@@ -81,6 +81,9 @@ class ClientTest(unittest.TestCase):
         Node.answers[("POST", "/machines")] = (201, MACHINE)
         self.hm.machines.create("web-01", cpu_count=2, disk_gib=20, start=False)
         self.assertEqual(self.last()[3], {"name": "web-01", "start": False, "cpuCount": 2, "diskGiB": 20})
+        self.hm.machines.create("ai-01", image="noble.raw", guest_agent=True, agents=("claude", "codex"))
+        self.assertEqual(self.last()[3], {"name": "ai-01", "start": True, "image": "noble.raw",
+                                          "guestAgent": True, "agents": ["claude", "codex"]})
 
     def test_a_name_cannot_step_into_another_route(self):
         Node.answers[("GET", "/machines/a%2F..%2Fb")] = (200, dict(MACHINE, name="a/../b"))

@@ -75,6 +75,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- Coding agents installed in a machine: `agents: ["claude", "codex"]` on
+  `POST /machines` with `image` and `guestAgent` (`hm sandbox vm machine
+  create --agent claude --agent codex`, `agents` in both SDKs). The node adds
+  their install to the cloud-init vendor data that installs its guest agent:
+  Node and npm from the distribution's packages if the image has no `npm`,
+  then Claude Code and Codex from npm, once, at first boot. A failure is
+  logged to `/var/log/hv2-agents.log` and leaves the machine reachable;
+  `/var/lib/hv2/agents-ready` says when they are there. An agent not
+  offered, or agents without the guest agent, are refused.
 - A sandbox's own size: `cpuCount` and `memoryMB` on a create (`hm sandbox vm
   create --cpus --memory-mb`). One its template is not is booted at that
   size rather than restored, kept through pause and resume, inherited by a

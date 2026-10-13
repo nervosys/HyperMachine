@@ -115,11 +115,11 @@ class Machines {
     this.client = client;
   }
 
-  async create(name, { template, image, cpuCount, memoryMB, diskGiB, start = true, guestAgent, userData, network, ...more } = {}) {
+  async create(name, { template, image, cpuCount, memoryMB, diskGiB, start = true, guestAgent, userData, network, agents, ...more } = {}) {
     const body = {
       name,
       start,
-      ...given({ templateID: template, image, cpuCount, memoryMB, diskGiB, guestAgent, userData, network }),
+      ...given({ templateID: template, image, cpuCount, memoryMB, diskGiB, guestAgent, userData, network, agents }),
       ...more,
     };
     return new Machine(this.client, await this.client.call('POST', '/machines', body));

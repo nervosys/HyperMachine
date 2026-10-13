@@ -152,6 +152,9 @@ pub(crate) struct Stored {
     /// template always runs it and does not say so here.
     #[serde(rename = "guestAgent", default)]
     guest_agent: bool,
+    /// The coding agents its first boot installs, by provider name.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    agents: Vec<String>,
     /// Ports of the node that carry connections to ports of its guest. See
     /// ports.rs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -302,6 +305,7 @@ fn describe(machine: &Stored) -> Value {
         "image": machine.image,
         "cloudInit": machine.cloud_init,
         "guestAgent": machine.guest_agent,
+        "agents": machine.agents,
         "ports": machine.ports,
     })
 }
@@ -949,6 +953,10 @@ pub(crate) struct NewMachine {
     /// given the agent's binary.
     #[serde(rename = "guestAgent")]
     guest_agent: Option<bool>,
+    /// Coding agents to install at first boot, by a prompt's provider name
+    /// (`claude`, `codex`), for a machine from an image with `guestAgent`.
+    #[serde(default)]
+    agents: Vec<String>,
 }
 
 /// How many processors a new machine has, or why what was asked cannot be.
@@ -1055,6 +1063,28 @@ pub(crate) async fn create(
              runs the agent",
         );
     }
+    // The coding agents to install, each by the name a prompt uses: they
+    // are installed with the guest agent, and prompts reach them through it.
+    let (mut agents, mut coding_agents) = (Vec::new(), Vec::<&'static str>::new());
+    for name in &req.agents {
+        let Some((short, package)) = seed::CODING_AGENTS.iter().find(|(n, _)| n == name) else {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                format!("no coding agent {name:?}: claude or codex"),
+            );
+        };
+        if !coding_agents.contains(package) {
+            agents.push(short.to_string());
+            coding_agents.push(*package);
+        }
+    }
+    if !coding_agents.is_empty() && !wants_agent {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "agents are installed and prompted through the guest agent: create the machine \
+             from an image with guestAgent",
+        );
+    }
     let agent = if wants_agent {
         let Some(path) = state.opts.guest_agent.as_deref() else {
             return api_error(
@@ -1122,6 +1152,7 @@ pub(crate) async fn create(
         image: req.image,
         cloud_init: req.user_data.is_some(),
         guest_agent: wants_agent,
+        agents,
         ports: Vec::new(),
     };
     let dir = dir_of(&state, &machine.id);
@@ -1151,6 +1182,7 @@ pub(crate) async fn create(
                 hostname: &seed_name,
                 user_data: user_data.as_deref(),
                 agent: agent.as_deref(),
+                coding_agents: &coding_agents,
             }
             .write(&seed_path)?;
         }
