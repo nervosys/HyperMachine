@@ -28,10 +28,10 @@ reason, and are listed once at the end rather than counted as gaps.
 |---|---|---|
 | What a sandbox is | An Ubuntu 24.04 VM, x86-64, with root | A Linux microVM on its own VMM, from a template whose root filesystem is in memory; or a [machine](MACHINES.md) with a disk |
 | Sizes | Four, chosen at creation: 2 to 16 vCPUs, 4 to 32 GB, 12 to 251 GB of disk | **Chosen at creation**, any number of vCPUs the host has (to 32) and 256 MiB to 64 GiB: `cpuCount` and `memoryMB` on a create (`hm sandbox vm create --cpus --memory-mb`), [checked on KVM](benchmarks/2026-10-12/sandbox-sizes-kvm/README.md). A sandbox not its template's size boots rather than being restored, and cannot be checkpointed or made a template; no disk size for a sandbox. Before this: **a sandbox had no size of its own.** Size is fixed when its template is built (up to 32 vCPUs and 64 GiB), or node-wide. A machine takes `cpuCount` (to 32), `memoryMB` and `diskGiB`, whether from a template or [from a disk image](FIRMWARE_BOOT.md#acpi-tables) |
-| Changing size later | On resume and on fork | **A sandbox, running or on resume**: [`resize`, or `resume` with a size](REBOOT.md#changing-its-size), a reboot at the new size that keeps its disk, volumes, network and variables and not its memory, [checked on KVM](benchmarks/2026-10-13/sandbox-resize-kvm/README.md). **A machine, while stopped**: [processors, memory and a larger disk](MACHINES.md#resizing), there at its next start. Not on a fork, and no disk size for a sandbox |
+| Changing size later | On resume and on fork | **A sandbox, running or on resume**: [`resize`, or `resume` with a size](REBOOT.md#changing-its-size), a reboot at the new size that keeps its disk, volumes, network and variables and not its memory, [checked on KVM](benchmarks/2026-10-13/sandbox-resize-kvm/README.md). **A sandbox, on a fork**: [forks of another size](REBOOT.md#on-a-fork) boot at it, with a copy of the source's disk and not its memory, [checked on KVM](benchmarks/2026-10-13/fork-size-kvm/README.md). **A machine, while stopped**: [processors, memory and a larger disk](MACHINES.md#resizing), there at its next start. No disk size for a sandbox |
 | Creating one | "usually under a second on a ready machine"; `--fail-fast` answers within about 1.5 s whether one was ready | From a template: 18.9 ms at the median on this project's own host, and 0.65 ms from the [warm pool](WARM_POOL.md). A full node answers 503 at once by default; there is no request option that says so when the node queues |
 | What stopping keeps | **Files only.** "Snapshots capture your sandbox's files, not its running processes or memory"; processes run by hand are restarted by the user | **Memory and processes.** Pause to disk and resume on any node; [standby](STANDBY.md) keeps memory and wakes on the next request |
-| Fork | A new sandbox from the latest disk snapshot; the source's processes are not in it | A running sandbox with its memory, 1 to 100 copies, a block disk included |
+| Fork | A new sandbox from the latest disk snapshot; the source's processes are not in it | A running sandbox with its memory, 1 to 100 copies, a block disk included; or, [at another size](REBOOT.md#on-a-fork), booted with its disk and not its memory |
 | Automatic snapshots | Every minute while running, and on stop; incremental; free; files only | **Yes, with memory**: `autoCheckpoint` seconds on create (`hm sandbox vm create --auto-checkpoint`), or `--auto-checkpoint-every` for a whole node, keeps one checkpoint named `auto`, replaced on the interval and rolled back to like any other. At least 60 seconds apart; skipped when nothing has happened in the sandbox since the last. Not for a sandbox holding a disk, and kept on the node that took it |
 | Named snapshots, and new sandboxes from them | Yes; ten free | Yes: a snapshot becomes a template |
 | Reading a snapshot from outside | A file tree, and download of all or part of it, with the sandbox stopped | **For a machine, file by file or whole.** A stopped machine's [disk snapshots](MACHINES.md#snapshots) are taken and restored; their directories are listed and their files read through the API without booting anything, a cloud image's partitions included, or the whole disk downloaded raw. ext2/3/4 only, and a file at most 64 MiB. A sandbox's snapshot is memory pages, with no tree to list without restoring it |
@@ -92,12 +92,13 @@ In rough order of how much each matters to someone choosing between them:
    pointer and keys through the API and as tools for its agents. boat streams
    one over WebRTC with sound and a clipboard, and has a browser in it with
    actions of its own; and a sandbox here has no desktop.
-4. **A fast start at any size, and a size on a fork.** A sandbox takes
+4. **A fast start at any size.** A sandbox takes
    [a size of its own](benchmarks/2026-10-12/sandbox-sizes-kvm/README.md)
-   at creation, and [another later](REBOOT.md#changing-its-size), running or
-   on resume, by booting at it instead of being restored; it cannot be
-   checkpointed at such a size, nor take one on a fork. A machine takes a size when created
-   and [another while stopped](MACHINES.md#resizing).
+   at creation, [another later](REBOOT.md#changing-its-size), running or
+   on resume, and [another on a fork](REBOOT.md#on-a-fork), by booting at
+   it instead of being restored; it cannot be checkpointed at such a size.
+   A machine takes a size when created and
+   [another while stopped](MACHINES.md#resizing).
 5. **Reading a sandbox's snapshot from outside.** A machine's disk
    snapshot is [listed and read file by file](MACHINES.md#snapshots) now; a
    sandbox's checkpoint is memory, one per sandbox, and nothing reads it

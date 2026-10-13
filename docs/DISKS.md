@@ -126,6 +126,10 @@ disk mounted, and writes it had not yet flushed still in its page cache.
   before anything is paused.
 - **The whole of the source's memory is written,** as for a pause, since a
   sandbox with a disk booted and was not restored from a template.
+- **A fork [of another size](REBOOT.md#on-a-fork)** has no memory of its
+  source, so none is written; the source is paused only for the copy. Its
+  disk is then as after a power cut: writes the source had not flushed are
+  not on it. Run `sync` in the source first.
 
 Evidence: [real KVM: a sandbox forked with its disk, unflushed writes included](benchmarks/2026-10-08/disk-fork-kvm/README.md).
 

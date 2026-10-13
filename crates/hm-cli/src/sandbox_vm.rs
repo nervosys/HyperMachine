@@ -248,6 +248,12 @@ pub enum VmCommand {
         count: u32,
         #[arg(long, default_value_t = 300, value_parser = clap::value_parser!(u64).range(1..))]
         lifetime: u64,
+        /// Forks of another size boot at it: the source's disk, volumes,
+        /// network and variables, not its memory
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..=32))]
+        cpus: Option<u32>,
+        #[arg(long, value_parser = clap::value_parser!(u64).range(256..=65536))]
+        memory_mb: Option<u64>,
     },
     /// Destroy a VM sandbox
     Delete { id: String },
@@ -2426,13 +2432,18 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             id,
             count,
             lifetime,
+            cpus,
+            memory_mb,
         } => {
-            api.request(
-                Method::POST,
-                &["sandboxes", &id, "fork"],
-                Some(json!({"count": count, "timeout": lifetime})),
-            )
-            .await?
+            let mut body = json!({"count": count, "timeout": lifetime});
+            if let Some(cpus) = cpus {
+                body["cpuCount"] = json!(cpus);
+            }
+            if let Some(memory_mb) = memory_mb {
+                body["memoryMB"] = json!(memory_mb);
+            }
+            api.request(Method::POST, &["sandboxes", &id, "fork"], Some(body))
+                .await?
         }
         VmCommand::Exec {
             id,
