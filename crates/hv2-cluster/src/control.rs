@@ -366,6 +366,8 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/sandboxes/{id}/network", any(forward))
         .route("/sandboxes/{id}/network/decisions", get(forward))
         .route("/sandboxes/{id}/exec", post(forward))
+        .route("/sandboxes/{id}/commands", get(forward))
+        .route("/sandboxes/{id}/commands/{n}", get(forward))
         .route("/sandboxes/{id}/processes", get(forward))
         .route("/sandboxes/{id}/ports/{port}/tcp", get(tcp_tunnel))
         .route("/sandboxes/{id}/ports/{port}/udp", get(udp_tunnel))

@@ -127,6 +127,7 @@ mod disks;
 // modes; see machines_unsupported.rs for other hosts.
 mod env_vars;
 mod forwards;
+mod history;
 mod identity;
 mod idle;
 mod initramfs;
@@ -2038,10 +2039,15 @@ async fn bring_up(
     let listener_token = Some(access_token.to_string());
     let process_vm = Arc::clone(&vm);
     let process_sandbox_id = sandbox_id.to_string();
+    // Each process it starts is kept in the sandbox's history.
+    let observer = Arc::new(history::Observer {
+        sandbox_id: sandbox_id.to_string(),
+    });
     tokio::spawn(async move {
         let served = hv2_api::connect::serve_on(
             listener,
-            hv2_api::envd_process::EnvdProcess::new(Arc::clone(&process_vm)),
+            hv2_api::envd_process::EnvdProcess::new(Arc::clone(&process_vm))
+                .with_observer(observer),
             hv2_api::envd_filesystem::EnvdFilesystem::new(process_vm),
             listener_token,
             shutdown_rx,
@@ -2508,6 +2514,7 @@ async fn ended(
     checkpoints::forget(state, sandbox_id);
     disks::release(state, sandbox_id);
     env_vars::forget(sandbox_id);
+    history::forget(sandbox_id);
     reboot::forget(sandbox_id);
     let event = match &state.node {
         Some(node) => match node.ended(sandbox_id, record, kind, running).await {
@@ -3096,6 +3103,9 @@ struct PausedMeta {
     record: SandboxRecord,
     lifecycle: Lifecycle,
     network: Option<NetworkRequest>,
+    /// Its commands, for the node that resumes it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    history: Vec<history::Command>,
 }
 
 /// A directory every node of a cluster mounts at the same path, holding
@@ -3356,6 +3366,7 @@ async fn pause_sandbox(
             record: record.clone(),
             lifecycle: live.lifecycle,
             network: live.network_request.clone(),
+            history: history::export(sandbox_id),
         };
         if let Err(e) = store.put(sandbox_id, &meta) {
             tracing::warn!("{e}; {sandbox_id} can resume only on this node");
@@ -3429,14 +3440,19 @@ async fn resume_sandbox(
             claim = Some(claimed);
             match state.paused.lock().remove(sandbox_id) {
                 Some(paused) => paused,
-                None => PausedSandbox {
-                    snapshot: store.snapshot(sandbox_id),
-                    descriptor: meta.descriptor,
-                    record: meta.record,
-                    lifecycle: meta.lifecycle,
-                    network: None,
-                    network_request: meta.network,
-                },
+                None => {
+                    // Paused by another node: its commands come from the
+                    // store.
+                    history::import(sandbox_id, meta.history);
+                    PausedSandbox {
+                        snapshot: store.snapshot(sandbox_id),
+                        descriptor: meta.descriptor,
+                        record: meta.record,
+                        lifecycle: meta.lifecycle,
+                        network: None,
+                        network_request: meta.network,
+                    }
+                }
             }
         }
         None => match state.paused.lock().remove(sandbox_id) {
@@ -5735,6 +5751,21 @@ async fn exec(
     };
 
     let timeout = Duration::from_secs(req.timeout_secs.unwrap_or(30));
+    let n = history::begin(
+        &sandbox_id,
+        history::Begun {
+            source: "exec",
+            cmd: std::iter::once(req.cmd.as_str())
+                .chain(req.args.iter().map(String::as_str))
+                .collect::<Vec<_>>()
+                .join(" "),
+            cwd: None,
+            user: None,
+            tag: None,
+            pid: None,
+            pty: false,
+        },
+    );
     // Direct exec, not through a shell -- see AgentVM::exec_in_guest's own
     // doc comment. Run through /bin/sh -c only when the caller's "cmd" is
     // meant as a shell line, which is the common case for a code-exec
@@ -5750,6 +5781,16 @@ async fn exec(
         )
         .await;
 
+    match &result {
+        Ok(exec) => {
+            history::printed(&sandbox_id, n, &exec.stdout, &exec.stderr, (0, 0));
+            let timed_out = exec
+                .timed_out
+                .then_some("it ran past its timeout and was killed");
+            history::ended(&sandbox_id, n, exec.exit_code, exec.signal, timed_out);
+        }
+        Err(e) => history::ended(&sandbox_id, n, None, None, Some(&e.to_string())),
+    }
     match result {
         Ok(exec) => Json(ExecResponse {
             exit_code: exec.exit_code,
@@ -6589,6 +6630,8 @@ async fn main() -> std::process::ExitCode {
             get(volumes::get).delete(volumes::delete),
         )
         .route("/sandboxes/{sandboxID}/exec", post(exec))
+        .route("/sandboxes/{sandboxID}/commands", get(history::list))
+        .route("/sandboxes/{sandboxID}/commands/{n}", get(history::get))
         .route("/sandboxes/{sandboxID}/processes", get(sandbox_processes))
         .route("/sandboxes/{sandboxID}/private-ports/{port}/tcp",get(forwards::private_tcp_tunnel))
         .route("/sandboxes/{sandboxID}/private-ports/{port}/udp",get(forwards::private_udp_tunnel))
