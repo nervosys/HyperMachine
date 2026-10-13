@@ -115,11 +115,11 @@ class Machines {
     this.client = client;
   }
 
-  async create(name, { template, image, cpuCount, memoryMB, diskGiB, start = true, guestAgent, userData, network, agents, ...more } = {}) {
+  async create(name, { template, image, cpuCount, memoryMB, diskGiB, start = true, guestAgent, userData, network, agents, desktop, ...more } = {}) {
     const body = {
       name,
       start,
-      ...given({ templateID: template, image, cpuCount, memoryMB, diskGiB, guestAgent, userData, network, agents }),
+      ...given({ templateID: template, image, cpuCount, memoryMB, diskGiB, guestAgent, userData, network, agents, desktop }),
       ...more,
     };
     return new Machine(this.client, await this.client.call('POST', '/machines', body));
@@ -141,6 +141,7 @@ export class Machine {
     this.runs = new Runs(this);
     this.prompts = new Prompts(this);
     this.conversations = new Conversations(this);
+    this.desktop = new Desktop(this);
     this.files = new Files(this);
     this.ports = new Ports(this);
     this.snapshots = new Snapshots(this);
@@ -386,6 +387,58 @@ class Conversations {
 
   async list() {
     return (await this.machine.client.call('GET', `${this.machine.path}/conversations`)).map((c) => new Conversation(this.machine, c));
+  }
+}
+
+/** A machine's desktop, and computer use on it: for a machine created with `desktop`. */
+class Desktop {
+  constructor(machine) {
+    this.machine = machine;
+  }
+
+  get path() {
+    return `${this.machine.path}/desktop`;
+  }
+
+  /** Its size, whether it is up, and the guest port noVNC serves it on. */
+  async info() {
+    return this.machine.client.call('GET', this.path);
+  }
+
+  /** A PNG of the whole screen. */
+  async screenshot() {
+    const response = await this.machine.client.raw('GET', `${this.path}/screenshot`);
+    return Buffer.from(await response.arrayBuffer());
+  }
+
+  /** One action; answers with where the pointer is, `[x, y]`. */
+  async act(action, fields = {}) {
+    return (await this.machine.client.call('POST', `${this.path}/actions`, { action, ...fields })).cursor;
+  }
+
+  click(x, y, { button = 'left', count = 1 } = {}) {
+    return this.act('click', { x, y, button, count });
+  }
+
+  move(x, y) {
+    return this.act('move', { x, y });
+  }
+
+  drag(x, y, toX, toY, { button = 'left' } = {}) {
+    return this.act('drag', { x, y, toX, toY, button });
+  }
+
+  type(text) {
+    return this.act('type', { text });
+  }
+
+  /** X key names or chords, such as `Return` or `ctrl+c`, separated by spaces. */
+  key(keys) {
+    return this.act('key', { keys });
+  }
+
+  scroll(x, y, { direction = 'down', amount = 3 } = {}) {
+    return this.act('scroll', { x, y, direction, amount });
   }
 }
 

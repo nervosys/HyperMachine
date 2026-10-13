@@ -63,6 +63,8 @@ export interface CreateOptions {
   network?: Record<string, unknown>;
   /** Coding agents to install at first boot, for prompts. Needs `guestAgent`. */
   agents?: Array<'claude' | 'codex'>;
+  /** A desktop, and computer use on it: `true` for 1280x800, or a size. Needs `guestAgent`. */
+  desktop?: true | { width: number; height: number };
   [field: string]: unknown;
 }
 
@@ -81,6 +83,7 @@ export class Machine {
   readonly runs: Runs;
   readonly prompts: Prompts;
   readonly conversations: Conversations;
+  readonly desktop: Desktop;
   readonly files: Files;
   readonly ports: Ports;
   readonly snapshots: Snapshots;
@@ -142,6 +145,27 @@ export interface Prompts {
     },
   ): Promise<Prompt>;
   list(): Promise<Prompt[]>;
+}
+
+export type MouseButton = 'left' | 'middle' | 'right';
+
+export interface Desktop {
+  info(): Promise<{ width: number; height: number; ready: boolean; webPort: number; webPath: string }>;
+  screenshot(): Promise<Buffer>;
+  act(
+    action: 'move' | 'click' | 'drag' | 'type' | 'key' | 'scroll' | 'cursor',
+    fields?: Record<string, unknown>,
+  ): Promise<[number, number]>;
+  click(x: number, y: number, options?: { button?: MouseButton; count?: 1 | 2 | 3 }): Promise<[number, number]>;
+  move(x: number, y: number): Promise<[number, number]>;
+  drag(x: number, y: number, toX: number, toY: number, options?: { button?: MouseButton }): Promise<[number, number]>;
+  type(text: string): Promise<[number, number]>;
+  key(keys: string): Promise<[number, number]>;
+  scroll(
+    x: number,
+    y: number,
+    options?: { direction?: 'up' | 'down' | 'left' | 'right'; amount?: number },
+  ): Promise<[number, number]>;
 }
 
 export interface TranscriptLine {

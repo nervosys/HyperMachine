@@ -39,6 +39,7 @@ use hv2_cluster::ownership::TeamId;
 use super::seed;
 
 pub(crate) mod conversations;
+pub(crate) mod desktop;
 pub(crate) mod files;
 pub(crate) mod ports;
 pub(crate) mod prompts;
@@ -156,6 +157,9 @@ pub(crate) struct Stored {
     /// The coding agents its first boot installs, by provider name.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     agents: Vec<String>,
+    /// The desktop its first boot installs, if it was asked for one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    desktop: Option<desktop::Size>,
     /// Ports of the node that carry connections to ports of its guest. See
     /// ports.rs.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -307,6 +311,7 @@ fn describe(machine: &Stored) -> Value {
         "cloudInit": machine.cloud_init,
         "guestAgent": machine.guest_agent,
         "agents": machine.agents,
+        "desktop": machine.desktop,
         "ports": machine.ports,
     })
 }
@@ -958,6 +963,9 @@ pub(crate) struct NewMachine {
     /// (`claude`, `codex`), for a machine from an image with `guestAgent`.
     #[serde(default)]
     agents: Vec<String>,
+    /// A desktop, and computer use on it: `true` for the default size, or
+    /// `{"width", "height"}`. For a machine from an image with `guestAgent`.
+    desktop: Option<desktop::Asked>,
 }
 
 /// How many processors a new machine has, or why what was asked cannot be.
@@ -1086,6 +1094,17 @@ pub(crate) async fn create(
              from an image with guestAgent",
         );
     }
+    let desktop = match req.desktop.as_ref().map(desktop::Asked::size).transpose() {
+        Ok(size) => size,
+        Err(why) => return api_error(StatusCode::BAD_REQUEST, why),
+    };
+    if desktop.is_some() && !wants_agent {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "a desktop is installed and used through the guest agent: create the machine \
+             from an image with guestAgent",
+        );
+    }
     let agent = if wants_agent {
         let Some(path) = state.opts.guest_agent.as_deref() else {
             return api_error(
@@ -1154,6 +1173,7 @@ pub(crate) async fn create(
         cloud_init: req.user_data.is_some(),
         guest_agent: wants_agent,
         agents,
+        desktop,
         ports: Vec::new(),
     };
     let dir = dir_of(&state, &machine.id);
@@ -1184,6 +1204,7 @@ pub(crate) async fn create(
                 user_data: user_data.as_deref(),
                 agent: agent.as_deref(),
                 coding_agents: &coding_agents,
+                desktop: desktop.map(|size| (size.width, size.height)),
             }
             .write(&seed_path)?;
         }

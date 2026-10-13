@@ -197,6 +197,120 @@ fn agents_install(packages: &[&str]) -> String {
 /// What turns Claude Code's updater off, in its environment or its settings.
 pub(crate) const NO_AUTOUPDATE: &str = "DISABLE_AUTOUPDATER";
 
+/// Where a desktop's install says it is done, and where it logs.
+pub(crate) const DESKTOP_READY: &str = "/var/lib/hv2/desktop-ready";
+pub(crate) const DESKTOP_LOG: &str = "/var/log/hv2-desktop.log";
+
+/// The guest's port that noVNC serves the desktop on, to a browser.
+pub(crate) const DESKTOP_WEB_PORT: u16 = 6080;
+
+/// What acts on the desktop: computer use for the node, and an MCP server
+/// for the coding agents. See `guest/hv2-computer.py`.
+pub(crate) const COMPUTER: &str = "/usr/local/bin/hv2-computer";
+const COMPUTER_SCRIPT: &str = include_str!("../guest/hv2-computer.py");
+
+/// What installs a desktop of `width` by `height`, after the guest agent and
+/// any coding agents: a virtual display with a window manager and a
+/// terminal, served to a browser by noVNC, and computer use on it, given to
+/// each coding agent installed as an MCP server named `computer`.
+///
+/// The core X fonts are asked for by name: they are only a recommendation
+/// of the X server's, and without them the terminal cannot start and the
+/// screen stays black.
+///
+/// The display takes any local user (`-ac`): the node acts on it as root and
+/// an agent as the user it runs as. Nothing of it listens outside the guest
+/// but noVNC, which the machine's owner reaches through a published port.
+fn desktop_install(width: u32, height: u32) -> String {
+    format!(
+        r#"
+# A desktop, and computer use on it. Not fatal either: the machine can still
+# be reached and asked why, in its log.
+(
+  set -e
+  if command -v apt-get >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -q
+    apt-get install -y -q --no-install-recommends xvfb openbox xterm x11-utils x11vnc \
+      novnc websockify xdotool scrot python3 fonts-dejavu-core xfonts-base
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf install -y -q --setopt=install_weak_deps=False xorg-x11-server-Xvfb openbox xterm \
+      xorg-x11-utils x11vnc novnc python3-websockify xdotool scrot python3 dejavu-sans-fonts \
+      xorg-x11-fonts-misc
+  else
+    echo "no apt-get or dnf to install a desktop with" >&2
+    exit 1
+  fi
+  cat > {computer} <<'HV2_COMPUTER'
+{script}HV2_COMPUTER
+  chmod 0755 {computer}
+  cat > /etc/systemd/system/hv2-desktop.service <<'UNIT'
+[Unit]
+Description=HyperMachine desktop: display :1
+
+[Service]
+ExecStart=/usr/bin/Xvfb :1 -screen 0 {width}x{height}x24 -nolisten tcp -ac
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  for part in "wm|openbox" "terminal|xterm -geometry 100x30+40+40" \
+      "vnc|x11vnc -display :1 -localhost -rfbport 5900 -forever -shared -nopw -quiet" \
+      "web|websockify --web /usr/share/novnc {web_port} localhost:5900"; do
+    name=${{part%%|*}}
+    cat > /etc/systemd/system/hv2-desktop-$name.service <<UNIT
+[Unit]
+Description=HyperMachine desktop: $name
+After=hv2-desktop.service
+Requires=hv2-desktop.service
+
+[Service]
+Environment=DISPLAY=:1
+ExecStart=/usr/bin/env ${{part#*|}}
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  done
+  systemctl daemon-reload
+  systemctl enable --now hv2-desktop.service hv2-desktop-wm.service \
+    hv2-desktop-terminal.service hv2-desktop-vnc.service hv2-desktop-web.service
+  for i in $(seq 1 100); do
+    DISPLAY=:1 xdotool getdisplaygeometry >/dev/null 2>&1 && break
+    sleep 0.2
+  done
+  DISPLAY=:1 xdotool getdisplaygeometry
+  # Computer use, for every coding agent installed and every user with a home.
+  for home in /root /home/*; do
+    [ -d "$home" ] || continue
+    user=$(stat -c %U "$home")
+    if command -v claude >/dev/null 2>&1; then
+      su - "$user" -c "claude mcp add --scope user computer -- {computer} mcp" \
+        || echo "computer use not given to claude for $user" >&2
+    fi
+    if command -v codex >/dev/null 2>&1; then
+      su - "$user" -c "codex mcp add computer -- {computer} mcp" \
+        || echo "computer use not given to codex for $user" >&2
+    fi
+  done
+  mkdir -p "$(dirname {ready})"
+  date -u +%Y-%m-%dT%H:%M:%SZ > {ready}
+) > {log} 2>&1 || echo "installing the desktop failed; see {log}" >&2
+"#,
+        computer = COMPUTER,
+        script = COMPUTER_SCRIPT,
+        width = width,
+        height = height,
+        web_port = DESKTOP_WEB_PORT,
+        ready = DESKTOP_READY,
+        log = DESKTOP_LOG,
+    )
+}
+
 /// One file in the seed's root directory.
 pub(crate) struct SeedFile<'a> {
     /// Its name as the guest sees it: ASCII, at most 26 characters.
@@ -217,6 +331,8 @@ pub(crate) struct Seed<'a> {
     pub(crate) agent: Option<&'a [u8]>,
     /// The npm packages of the coding agents to install with it.
     pub(crate) coding_agents: &'a [&'a str],
+    /// A desktop to install with it, this wide and high.
+    pub(crate) desktop: Option<(u32, u32)>,
 }
 
 impl Seed<'_> {
@@ -241,6 +357,9 @@ impl Seed<'_> {
         let mut install = AGENT_INSTALL.to_string();
         if !self.coding_agents.is_empty() {
             install.push_str(&agents_install(self.coding_agents));
+        }
+        if let Some((width, height)) = self.desktop {
+            install.push_str(&desktop_install(width, height));
         }
         if let Some(agent) = self.agent {
             files.push(SeedFile {
@@ -665,6 +784,7 @@ mod tests {
             user_data: Some("#cloud-config\npassword: x\n"),
             agent: None,
             coding_agents: &[],
+            desktop: None,
         }
         .image()
         .unwrap();
@@ -692,6 +812,7 @@ mod tests {
             user_data: None,
             agent: Some(&binary),
             coding_agents: &[],
+            desktop: None,
         }
         .image()
         .unwrap();
@@ -726,6 +847,7 @@ mod tests {
             user_data: None,
             agent: Some(&binary),
             coding_agents: &["@anthropic-ai/claude-code", "@openai/codex"],
+            desktop: None,
         }
         .image()
         .unwrap();
@@ -761,5 +883,51 @@ mod tests {
             script.contains("|| echo \"installing the coding agents failed"),
             "{script}"
         );
+        assert!(!script.contains("Xvfb"), "no desktop unless asked for");
+    }
+
+    #[test]
+    fn a_desktop_comes_last_with_computer_use_given_to_the_agents() {
+        let binary = vec![0x7Fu8; 1000];
+        let disk = Seed {
+            instance_id: "vm-a",
+            hostname: "a",
+            user_data: None,
+            agent: Some(&binary),
+            coding_agents: &["@anthropic-ai/claude-code"],
+            desktop: Some((1280, 800)),
+        }
+        .image()
+        .unwrap();
+        let files = read_back(&disk);
+        let script = String::from_utf8(files[2].1.clone()).unwrap();
+        let npm_at = script.find("npm install -g").unwrap();
+        let desktop_at = script.find("Xvfb :1 -screen 0 1280x800x24").unwrap();
+        // After the agents, so that it can give them computer use.
+        assert!(npm_at < desktop_at, "{script}");
+        let mcp_at = script
+            .find("claude mcp add --scope user computer -- /usr/local/bin/hv2-computer mcp")
+            .unwrap();
+        assert!(desktop_at < mcp_at, "{script}");
+        assert!(script.contains("codex mcp add computer -- /usr/local/bin/hv2-computer mcp"));
+        // The helper is written whole, between its delimiters, and nothing
+        // in it is expanded by the shell that writes it.
+        let helper = format!("cat > {COMPUTER} <<'HV2_COMPUTER'\n{COMPUTER_SCRIPT}HV2_COMPUTER\n");
+        assert!(script.contains(&helper), "{script}");
+        assert_eq!(COMPUTER_SCRIPT.matches("HV2_COMPUTER").count(), 0);
+        assert!(COMPUTER_SCRIPT.ends_with('\n'));
+        // noVNC is the one thing that listens outside the guest; VNC itself
+        // only on its loopback.
+        assert!(script.contains("websockify --web /usr/share/novnc 6080 localhost:5900"));
+        assert!(script.contains("x11vnc -display :1 -localhost -rfbport 5900"));
+        assert!(script.contains(DESKTOP_READY) && script.contains(DESKTOP_LOG));
+        // The terminal's fonts, which nothing else installed brings.
+        assert!(
+            script.contains("fonts-dejavu-core xfonts-base\n"),
+            "{script}"
+        );
+        assert!(script.contains("|| echo \"installing the desktop failed"));
+        // Everything fits beside the largest user data and agent a node takes.
+        assert!(files[2].1.len() < 64 << 10, "{}", files[2].1.len());
     }
 }

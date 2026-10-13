@@ -131,6 +131,17 @@ test('a conversation is spoken to and its turns are prompts', async () => {
   assert.equal((await machine.conversations.get('a/b')).id, 4);
 });
 
+test('the desktop is pictured and acted on', async () => {
+  const machine = await webMachine();
+  answers.set('GET /machines/web-01/desktop/screenshot', [200, Buffer.from([0x89, 0x50, 0x4e, 0x47])]);
+  assert.deepEqual([...(await machine.desktop.screenshot())], [0x89, 0x50, 0x4e, 0x47]);
+  answers.set('POST /machines/web-01/desktop/actions', [200, { cursor: [5, 6] }]);
+  assert.deepEqual(await machine.desktop.drag(1, 2, 5, 6), [5, 6]);
+  assert.deepEqual(json(), { action: 'drag', x: 1, y: 2, toX: 5, toY: 6, button: 'left' });
+  await machine.desktop.key('ctrl+c');
+  assert.deepEqual(json(), { action: 'key', keys: 'ctrl+c' });
+});
+
 test('files go in and out as bytes', async () => {
   const machine = await webMachine();
   answers.set('PUT /machines/web-01/files?path=%2Fa+b%2Fc&user=dev', [204, null]);

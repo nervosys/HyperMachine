@@ -151,6 +151,17 @@ class ClientTest(unittest.TestCase):
             200, {"conversationID": 4, "name": "a/b"})
         self.assertEqual(machine.conversations.get("a/b").id, 4)
 
+    def test_the_desktop_is_pictured_and_acted_on(self):
+        Node.answers[("GET", "/machines/web-01")] = (200, MACHINE)
+        machine = self.hm.machines.get("web-01")
+        Node.answers[("GET", "/machines/web-01/desktop/screenshot")] = (200, b"\x89PNG\r\n\x1a\n...")
+        self.assertEqual(machine.desktop.screenshot()[:4], b"\x89PNG")
+        Node.answers[("POST", "/machines/web-01/desktop/actions")] = (200, {"cursor": [5, 6]})
+        self.assertEqual(machine.desktop.drag(1, 2, 5, 6), [5, 6])
+        self.assertEqual(self.last()[3], {"action": "drag", "x": 1, "y": 2, "toX": 5, "toY": 6, "button": "left"})
+        machine.desktop.key("ctrl+c")
+        self.assertEqual(self.last()[3], {"action": "key", "keys": "ctrl+c"})
+
     def test_files_go_in_and_out_as_bytes(self):
         Node.answers[("GET", "/machines/web-01")] = (200, MACHINE)
         machine = self.hm.machines.get("web-01")

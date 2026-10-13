@@ -481,6 +481,18 @@ pub enum MachineCommand {
         #[arg(long = "agent", value_name = "NAME", value_parser = ["claude", "codex"],
               requires = "guest_agent")]
         agents: Vec<String>,
+        /// Install a desktop, 1280x800, and computer use on it. Needs
+        /// --guest-agent
+        #[arg(long, requires = "guest_agent")]
+        desktop: bool,
+        /// A desktop of this size instead, such as 1920x1080
+        #[arg(
+            long,
+            value_name = "WxH",
+            requires = "guest_agent",
+            conflicts_with = "desktop"
+        )]
+        desktop_size: Option<String>,
         /// Processors, up to 32. A machine from an image has one unless told
         #[arg(long, value_parser = clap::value_parser!(u32).range(1..=32))]
         cpus: Option<u32>,
@@ -616,6 +628,11 @@ pub enum MachineCommand {
         #[arg(long)]
         detach: bool,
         prompt: String,
+    },
+    /// A machine's desktop, and computer use on it
+    Desktop {
+        #[command(subcommand)]
+        command: MachineDesktopCommand,
     },
     /// A coding agent talked to over many turns: steered, and moved from
     /// one agent to another
@@ -1549,6 +1566,8 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 user_data,
                 guest_agent,
                 agents,
+                desktop,
+                desktop_size,
                 cpus,
                 memory_mb,
                 disk_gib,
@@ -1587,6 +1606,16 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 }
                 if !agents.is_empty() {
                     body["agents"] = json!(agents);
+                }
+                if desktop {
+                    body["desktop"] = json!(true);
+                }
+                if let Some(size) = desktop_size {
+                    let (width, height) = size
+                        .split_once('x')
+                        .and_then(|(w, h)| Some((w.parse::<u32>().ok()?, h.parse::<u32>().ok()?)))
+                        .with_context(|| format!("--desktop-size is WIDTHxHEIGHT, not {size:?}"))?;
+                    body["desktop"] = json!({"width": width, "height": height});
                 }
                 if let Some(disk_gib) = disk_gib {
                     body["diskGiB"] = json!(disk_gib);
@@ -1806,6 +1835,39 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 }
                 return Ok(0);
             }
+            MachineCommand::Desktop { command } => match command {
+                MachineDesktopCommand::Show { name } => {
+                    api.request(Method::GET, &["machines", &name, "desktop"], None)
+                        .await?
+                }
+                MachineDesktopCommand::Screenshot { name, output } => {
+                    let response = api
+                        .client
+                        .get(api.url(&["machines", &name, "desktop", "screenshot"])?)
+                        .send()
+                        .await
+                        .context("sandbox API request failed")?;
+                    let status = response.status();
+                    if !status.is_success() {
+                        let why = response.text().await.unwrap_or_default();
+                        bail!("sandbox API returned {status}: {why}");
+                    }
+                    let png = response.bytes().await?;
+                    std::fs::write(&output, &png)
+                        .with_context(|| format!("writing {}", output.display()))?;
+                    json!({"path": output.display().to_string(), "bytes": png.len()})
+                }
+                MachineDesktopCommand::Act { name, action } => {
+                    let action: Value = serde_json::from_str(&action)
+                        .context("an action is a JSON object, such as {\"action\":\"click\",\"x\":10,\"y\":20}")?;
+                    api.request(
+                        Method::POST,
+                        &["machines", &name, "desktop", "actions"],
+                        Some(action),
+                    )
+                    .await?
+                }
+            },
             MachineCommand::Conversation { command } => match command {
                 MachineConversationCommand::Create {
                     name,
@@ -2747,6 +2809,30 @@ async fn public_ports(api: &Api, command: PublicPortCommand) -> Result<Value> {
             .await
         }
     }
+}
+
+/// A machine's desktop.
+#[derive(Debug, Subcommand)]
+pub enum MachineDesktopCommand {
+    /// Its size, whether it is up, and the guest port noVNC serves it on
+    Show {
+        #[arg(value_parser = machine_name)]
+        name: String,
+    },
+    /// Save a PNG of the whole screen
+    Screenshot {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        #[arg(short, long, value_name = "FILE")]
+        output: std::path::PathBuf,
+    },
+    /// One action, as JSON: {"action":"click","x":10,"y":20}, or move, drag,
+    /// type, key, scroll, cursor
+    Act {
+        #[arg(value_parser = machine_name)]
+        name: String,
+        action: String,
+    },
 }
 
 /// Conversations with a machine's coding agents.

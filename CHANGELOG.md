@@ -81,6 +81,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- A desktop for a machine, and computer use on it: `desktop` on
+  `POST /machines`, for a machine from an image with `guestAgent`.
+  - **What is installed:** at first boot, a virtual display with a window
+    manager and a terminal, and noVNC on guest port 6080 to watch it in a
+    browser.
+  - **Through the API:** `/machines/{name}/desktop`, `.../screenshot` (PNG)
+    and `.../actions`, which moves, clicks, drags, types, presses keys or
+    scrolls. `hm sandbox vm machine desktop`, and `desktop` in both SDKs.
+  - **For the agents:** each coding agent installed is given the same
+    actions as an MCP server named `computer`.
 - Conversations with a machine's coding agents:
   `/machines/{name}/conversations`, `hm sandbox vm machine conversation`,
   and `conversations` in both SDKs.

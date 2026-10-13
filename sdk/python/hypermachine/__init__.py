@@ -203,6 +203,7 @@ class Machines:
         user_data: Optional[str] = None,
         network: Optional[Mapping[str, Any]] = None,
         agents: Optional[Sequence[str]] = None,
+        desktop: Any = None,
         **more: Any,
     ) -> "Machine":
         """A new machine, from a template (the node's `base` unless given)
@@ -218,6 +219,7 @@ class Machines:
             ("userData", user_data),
             ("network", network),
             ("agents", None if agents is None else list(agents)),
+            ("desktop", desktop),
         ]:
             if value is not None:
                 body[key] = value
@@ -240,6 +242,7 @@ class Machine:
         self.runs = Runs(self)
         self.prompts = Prompts(self)
         self.conversations = Conversations(self)
+        self.desktop = Desktop(self)
         self.files = Files(self)
         self.ports = Ports(self)
         self.snapshots = Snapshots(self)
@@ -548,6 +551,52 @@ class Files:
     def read(self, path: str) -> bytes:
         with self._machine._client.raw("GET", f"{self._machine._path}/files", query={"path": path}) as response:
             return response.read()
+
+
+class Desktop:
+    """A machine's desktop, and computer use on it: for a machine created
+    with `desktop`."""
+
+    def __init__(self, machine: Machine):
+        self._machine = machine
+
+    @property
+    def _path(self) -> str:
+        return f"{self._machine._path}/desktop"
+
+    def info(self) -> Dict[str, Any]:
+        """Its size, whether it is up, and the guest port noVNC serves it on."""
+        return self._machine._client.call("GET", self._path)
+
+    def screenshot(self) -> bytes:
+        """A PNG of the whole screen."""
+        with self._machine._client.raw("GET", f"{self._path}/screenshot") as response:
+            return response.read()
+
+    def act(self, action: str, **fields: Any) -> List[int]:
+        """One action: move, click, drag, type, key, scroll or cursor. Answers
+        with where the pointer is."""
+        done = self._machine._client.call("POST", f"{self._path}/actions", {"action": action, **fields})
+        return done["cursor"]
+
+    def click(self, x: int, y: int, button: str = "left", count: int = 1) -> List[int]:
+        return self.act("click", x=x, y=y, button=button, count=count)
+
+    def move(self, x: int, y: int) -> List[int]:
+        return self.act("move", x=x, y=y)
+
+    def drag(self, x: int, y: int, to_x: int, to_y: int, button: str = "left") -> List[int]:
+        return self.act("drag", x=x, y=y, toX=to_x, toY=to_y, button=button)
+
+    def type(self, text: str) -> List[int]:
+        return self.act("type", text=text)
+
+    def key(self, keys: str) -> List[int]:
+        """X key names or chords, such as `Return` or `ctrl+c`, separated by spaces."""
+        return self.act("key", keys=keys)
+
+    def scroll(self, x: int, y: int, direction: str = "down", amount: int = 3) -> List[int]:
+        return self.act("scroll", x=x, y=y, direction=direction, amount=amount)
 
 
 class Ports:
