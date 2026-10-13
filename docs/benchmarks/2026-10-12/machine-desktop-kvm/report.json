@@ -1,0 +1,123 @@
+{
+  "success": true,
+  "purpose": "functional verification of a machine's desktop and computer use on KVM; no key, no agent using it, no timing claim",
+  "input_sha256": {
+    "daemon": "0cbefaffd7cdd28ecb6edf0d164cc7d286566fbc69a571195613e73a06a46c30",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d0cb1ca9e27fcf5c28669ef11c6c4cd9f8d2b220319dff4e5d1e454e6b6bdceb",
+    "firmware": "4a0a1e977368f6b15d2198a216bdedf9a350bf5e5ae07e29e695373ec16ad958",
+    "image": "8f598f38474570f5422796c3d0863ead381cd72a232b28654955b14842ddf720",
+    "guest-agent": "f981161d94e91f8adf568a21bcefc271530431b4ac7df0ccba78402ab1a7afe5",
+    "driver": "9f7398f75c87d20e5e79968c7e3d67d9f1b0ed12d1a9203f854a067932c22f9e"
+  },
+  "cases": [
+    {
+      "name": "what cannot be made is refused, each with why",
+      "success": true,
+      "detail": {
+        "a desktop without the guest agent": "a desktop is installed and used through the guest agent: create the machine from an image with guestAgent",
+        "desktop false": "desktop is true or a size; leave it out for none",
+        "a screen too small": "a desktop is 640 to 3840 pixels wide and 480 to 2160 high",
+        "an odd width": "a desktop's width and height are even",
+        "a machine without a desktop": "machine plain has no desktop: create a machine from an image with guestAgent and desktop"
+      }
+    },
+    {
+      "name": "the desktop installs and says it is up, at the size asked for",
+      "success": true,
+      "detail": {
+        "seconds_until_ready": 165,
+        "units": [
+          "active",
+          "active",
+          "active",
+          "active",
+          "active"
+        ],
+        "desktop": {
+          "display": ":1",
+          "height": 800,
+          "log": "/var/log/hv2-desktop.log",
+          "ready": true,
+          "webPath": "/vnc.html",
+          "webPort": 6080,
+          "width": 1280
+        }
+      }
+    },
+    {
+      "name": "a screenshot is a PNG of that size, with something drawn on it",
+      "success": true,
+      "detail": {
+        "bytes": 8089,
+        "size": [
+          1280,
+          800
+        ]
+      }
+    },
+    {
+      "name": "a click puts the focus where it clicked, and what is typed runs there",
+      "success": true,
+      "detail": {
+        "typed_into": {
+          "first": "first",
+          "second": "second",
+          "first-again": "first-again"
+        }
+      }
+    },
+    {
+      "name": "moving, dragging and scrolling leave the pointer where they say; the rest is refused",
+      "success": true,
+      "detail": {
+        "refused": {
+          "off the screen": "x must be a whole number from 0 to 1279",
+          "not a key": "keys must be key names or chords such as Return or ctrl+c, separated by spaces",
+          "no such action": "action must be one of move, click, drag, type, key, scroll, cursor",
+          "nothing to type": "text must be 1 to 4096 characters",
+          "not a direction": "direction must be one of down, left, right, up"
+        }
+      }
+    },
+    {
+      "name": "noVNC, through a published port, serves its page and the VNC server's greeting",
+      "success": true,
+      "detail": {
+        "hostPort": 20000,
+        "page_bytes": 15212,
+        "greeting": "RFB 003.008"
+      }
+    },
+    {
+      "name": "each coding agent is given computer use, and the server works for the default user",
+      "success": true,
+      "detail": {
+        "claude, root": "computer: /usr/local/bin/hv2-computer mcp - \u2714 Connected",
+        "codex, root": "computer /usr/local/bin/hv2-computer mcp - - enabled Unsupported",
+        "claude, ubuntu": "computer: /usr/local/bin/hv2-computer mcp - \u2714 Connected",
+        "codex, ubuntu": "computer /usr/local/bin/hv2-computer mcp - - enabled Unsupported",
+        "server, as the default user": {
+          "tools": [
+            "screenshot",
+            "move",
+            "click",
+            "drag",
+            "type",
+            "key",
+            "scroll",
+            "cursor_position"
+          ],
+          "screenshot_bytes": 31352
+        }
+      }
+    },
+    {
+      "name": "started again, the desktop comes back",
+      "success": true,
+      "detail": {
+        "seconds_until_a_screenshot": 30
+      }
+    }
+  ]
+}

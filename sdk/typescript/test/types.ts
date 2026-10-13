@@ -31,6 +31,12 @@ async function use(): Promise<void> {
   await web.conversations.create('codex', { from: talk.id });
   void [steered, role];
 
+  await hm.machines.create('desk-01', { image: 'noble.raw', guestAgent: true, desktop: { width: 1920, height: 1080 } });
+  const png: Buffer = await web.desktop.screenshot();
+  const [px, py]: [number, number] = await web.desktop.click(10, 20, { button: 'right', count: 2 });
+  await web.desktop.key('ctrl+c');
+  void [png, px, py];
+
   await web.files.write('/etc/x', new Uint8Array([1, 2]));
   const bytes: Buffer = await web.files.read('/etc/x');
   await web.ports.publish(8080, { proxy: true });
@@ -56,6 +62,10 @@ async function use(): Promise<void> {
 
   // @ts-expect-error a provider that is not one
   await web.prompts.start('gpt', 'x');
+  // @ts-expect-error a desktop is true or a size
+  await hm.machines.create('desk-02', { desktop: false });
+  // @ts-expect-error no such mouse button
+  await web.desktop.click(1, 1, { button: 'fourth' });
   // @ts-expect-error a conversation is not with a custom command
   await web.conversations.create('custom');
   // @ts-expect-error a grouping that is not one

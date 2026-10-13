@@ -56,6 +56,7 @@ talking to a control plane.
 | `image` | none | In place of `templateID`: a raw disk image in the node's `--image-dir`, booted by firmware. See [From a disk image](#from-a-disk-image). |
 | `userData` | none | With `image` only: cloud-init user data for the guest, a `#cloud-config` document or a script, up to about 1 MiB. See [firmware boot](FIRMWARE_BOOT.md#a-user-at-creation-the-cloud-init-seed). Refused for a machine from a template. Not returned afterwards; the machine's record carries `cloudInit: true`. |
 | `guestAgent` | false | With `image` only: run HyperMachine's guest agent in the guest, so `exec` works. Refused on a node without `--guest-agent`, and for a machine from a template, which always runs it. |
+| `desktop` | none | With `guestAgent` only: a [desktop](#desktop), and computer use on it. `true` for 1280x800, or `{"width", "height"}`, even numbers from 640x480 to 3840x2160. `hm`: `--desktop`, `--desktop-size 1920x1080`. |
 | `agents` | none | With `guestAgent` only: coding agents to install at first boot, for [prompts](#prompts). `claude` (Claude Code) and `codex` (Codex CLI). Each is installed once, from npm, after the guest agent. `hm`: `--agent claude --agent codex`. |
 | `cpuCount`, `memoryMB` | the node's defaults | `cpuCount` is 1 to 32, and refused otherwise. From an image it is 1 unless given |
 | `diskGiB` | 8 | 1–2048. The image is sparse, so it costs only what is written. |
@@ -578,6 +579,76 @@ hm sandbox vm machine conversation create web-01 --provider codex --from fix-tes
 - **With the real Claude Code and Codex, without a key:** each takes what
   a conversation sends it and keeps one session across turns, and Codex
   was given what was said to Claude Code.
+
+## Desktop
+
+A machine from an image created with `guestAgent` and `desktop` has a
+desktop installed at its first boot, with computer use on it:
+
+- **A virtual display**, `:1`, drawn in the guest's memory by Xvfb, with
+  the openbox window manager and a terminal on it.
+- **noVNC**, which serves it to a browser on guest port 6080: publish that
+  port and open `/vnc.html`.
+- **Computer use**, through the API and for the coding agents installed with
+  it.
+
+```sh
+curl -sS -X POST $NODE/machines -H 'content-type: application/json' -d '{
+  "name": "desk-01", "image": "noble.raw", "diskGiB": 10, "memoryMB": 2048,
+  "guestAgent": true, "agents": ["claude"], "desktop": true,
+  "network": {"allowInternetAccess": true}}'
+
+curl -sS $NODE/machines/desk-01/desktop                     # its size, and whether it is up
+curl -sS $NODE/machines/desk-01/desktop/screenshot -o screen.png
+curl -sS -X POST $NODE/machines/desk-01/desktop/actions -H 'content-type: application/json' \
+  -d '{"action": "click", "x": 300, "y": 200}'              # → {"cursor":[300,200]}
+curl -sS -X POST $NODE/machines/desk-01/desktop/actions -H 'content-type: application/json' \
+  -d '{"action": "type", "text": "make test"}'
+
+# Watch it in a browser: publish noVNC's port, behind the proxy's login.
+curl -sS -X POST $NODE/machines/desk-01/ports -H 'content-type: application/json' \
+  -d '{"guestPort": 6080, "proxy": true}'
+
+hm sandbox vm machine desktop screenshot desk-01 -o screen.png
+hm sandbox vm machine desktop act desk-01 '{"action":"key","keys":"ctrl+c"}'
+```
+
+| `action` | Fields | |
+|---|---|---|
+| `move` | `x`, `y` | |
+| `click` | `x`, `y`, `button` (`left`, `middle`, `right`), `count` (1 to 3) | `count: 2` is a double click |
+| `drag` | `x`, `y`, `toX`, `toY`, `button` | press, move, let go |
+| `type` | `text` | up to 4096 characters, as keystrokes |
+| `key` | `keys` | X key names or chords, such as `Return`, `Page_Down` or `ctrl+shift+t`, separated by spaces |
+| `scroll` | `x`, `y`, `direction` (`up`, `down`, `left`, `right`), `amount` | |
+| `cursor` | | where the pointer is |
+
+Each answers with where the pointer is afterwards. A point off the screen, a
+key that is not a name and an action that is not one are refused with 400.
+
+- **Each coding agent installed is given computer use.** An MCP server
+  named `computer` offers the same actions, and a screenshot, as tools. It
+  is registered for root and every user with a home, for Claude Code
+  (`claude mcp add --scope user`) and for Codex (`codex mcp add`), at
+  first boot. A user made later is not given it.
+- **The display takes any local user.** The node acts on it as root and an
+  agent as its own user. Nothing of the desktop listens outside the guest
+  but noVNC, which has no password of its own: reach it through a published
+  port, and with `proxy`, behind the proxy's login.
+- **It is the guest's, not a VM's display device.** Nothing on the node
+  draws it, and the machine's console is still its serial port.
+- **What is installed** is Xvfb, openbox, xterm, x11vnc, noVNC, xdotool,
+  scrot and `hv2-computer`, from the distribution's packages. That needs a
+  network. It has no browser yet. `/var/log/hv2-desktop.log` says what the
+  install did, and `ready` in `GET .../desktop` says when it is done.
+
+**No agent has used it here**, for want of a key.
+[Checked on real KVM](benchmarks/2026-10-12/machine-desktop-kvm/README.md):
+
+- The screen, clicks, typing and the other actions.
+- noVNC to a WebSocket greeting.
+- Claude Code connecting to the MCP server, Codex listing it, and the
+  server taking a picture as an unprivileged user.
 
 ## How it boots
 

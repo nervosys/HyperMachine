@@ -194,3 +194,18 @@ pub(crate) mod conversations {
         refused()
     }
 }
+
+/// A machine's desktop: the same answer.
+pub(crate) mod desktop {
+    use super::{refused, Response};
+
+    pub(crate) async fn get() -> Response {
+        refused()
+    }
+    pub(crate) async fn screenshot() -> Response {
+        refused()
+    }
+    pub(crate) async fn act() -> Response {
+        refused()
+    }
+}
