@@ -224,6 +224,22 @@ pub enum VmCommand {
         id: String,
         #[arg(long, default_value_t = 300, value_parser = clap::value_parser!(u64).range(1..))]
         lifetime: u64,
+        /// Come back with this many vCPUs: booted, not restored, so what was
+        /// in its memory is not kept
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..=32))]
+        cpus: Option<u32>,
+        /// Come back with this much memory, booted as with --cpus
+        #[arg(long, value_parser = clap::value_parser!(u64).range(256..=65536))]
+        memory_mb: Option<u64>,
+    },
+    /// Reboot a running VM at another size: its disk, volumes, network and
+    /// variables are kept, what was in its memory is not
+    Resize {
+        id: String,
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..=32))]
+        cpus: Option<u32>,
+        #[arg(long, value_parser = clap::value_parser!(u64).range(256..=65536))]
+        memory_mb: Option<u64>,
     },
     /// Fork a running VM, including memory
     Fork {
@@ -2372,13 +2388,39 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             api.request(Method::POST, &["sandboxes", &id, "standby"], None)
                 .await?
         }
-        VmCommand::Resume { id, lifetime } => {
-            api.request(
-                Method::POST,
-                &["sandboxes", &id, "resume"],
-                Some(json!({"timeout": lifetime})),
-            )
-            .await?
+        VmCommand::Resume {
+            id,
+            lifetime,
+            cpus,
+            memory_mb,
+        } => {
+            let mut body = json!({"timeout": lifetime});
+            if let Some(cpus) = cpus {
+                body["cpuCount"] = json!(cpus);
+            }
+            if let Some(memory_mb) = memory_mb {
+                body["memoryMB"] = json!(memory_mb);
+            }
+            api.request(Method::POST, &["sandboxes", &id, "resume"], Some(body))
+                .await?
+        }
+        VmCommand::Resize {
+            id,
+            cpus,
+            memory_mb,
+        } => {
+            if cpus.is_none() && memory_mb.is_none() {
+                bail!("give --cpus, --memory-mb or both");
+            }
+            let mut body = json!({});
+            if let Some(cpus) = cpus {
+                body["cpuCount"] = json!(cpus);
+            }
+            if let Some(memory_mb) = memory_mb {
+                body["memoryMB"] = json!(memory_mb);
+            }
+            api.request(Method::POST, &["sandboxes", &id, "resize"], Some(body))
+                .await?
         }
         VmCommand::Fork {
             id,

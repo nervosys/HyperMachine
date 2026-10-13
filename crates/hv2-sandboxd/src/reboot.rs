@@ -20,6 +20,15 @@
 //!
 //! A guest that keeps dying is not rebooted forever: after
 //! [`MAX_REBOOTS`] within [`REBOOT_WINDOW`] the sandbox is ended as lost.
+//!
+//! # Resizing
+//!
+//! `POST /sandboxes/{id}/resize` `{"cpuCount", "memoryMB"}` is a reboot at
+//! another size. A guest's memory cannot be carried to a different number of
+//! processors or a different amount of memory, so what is kept is what a
+//! reboot keeps, and its memory is not. At its template's size the new guest
+//! is restored from the template, as any reboot is; at another it boots.
+//! From then on it is that size: its reboots, pauses and usage are at it.
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
@@ -29,11 +38,12 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use serde::Deserialize;
 use serde_json::json;
 
 use super::{
     api_error, bring_up, disks, end_sandbox, env_vars, forwards, register, telemetry,
-    transition_lock, AppState, NetworkSpec, RegistrationContext,
+    transition_lock, AppState, NetworkSpec, RegistrationContext, Sizes,
 };
 
 /// The most reboots a sandbox may take within [`REBOOT_WINDOW`].
@@ -92,8 +102,74 @@ pub(crate) async fn route(
     State(state): State<Arc<AppState>>,
     Path(sandbox_id): Path<String>,
 ) -> Response {
-    match reboot(&state, &sandbox_id, Cause::Request).await {
+    match reboot(&state, &sandbox_id, Cause::Request, None).await {
         Ok(true) => Json(json!({ "sandboxID": sandbox_id })).into_response(),
+        Ok(false) => api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}")),
+        Err((status, message)) => api_error(status, message),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ResizeRequest {
+    #[serde(rename = "cpuCount")]
+    cpu_count: Option<u32>,
+    #[serde(rename = "memoryMB")]
+    memory_mb: Option<u64>,
+}
+
+/// `POST /sandboxes/{id}/resize`: reboot it at another size.
+pub(crate) async fn resize_route(
+    State(state): State<Arc<AppState>>,
+    Path(sandbox_id): Path<String>,
+    Json(req): Json<ResizeRequest>,
+) -> Response {
+    if req.cpu_count.is_none() && req.memory_mb.is_none() {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "give cpuCount, memoryMB or both: the size to reboot it at",
+        );
+    }
+    let current = state.sandboxes.lock().get(&sandbox_id).map(|live| Sizes {
+        cpus: live.record.cpu_count,
+        memory_mb: live.record.memory_mb,
+    });
+    let Some(current) = current else {
+        let paused = state.paused.lock().contains_key(&sandbox_id)
+            || state
+                .store
+                .as_ref()
+                .is_some_and(|store| store.meta(&sandbox_id).exists());
+        return if paused {
+            api_error(
+                StatusCode::CONFLICT,
+                format!(
+                    "sandbox {sandbox_id} is paused: resume it with cpuCount and memoryMB to \
+                     bring it back at another size"
+                ),
+            )
+        } else {
+            api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}"))
+        };
+    };
+    let size = match Sizes::requested(req.cpu_count, req.memory_mb, current) {
+        Ok(size) => size,
+        Err(why) => return api_error(StatusCode::BAD_REQUEST, why),
+    };
+    let answer = |size: Sizes, resized: bool| {
+        Json(json!({
+            "sandboxID": sandbox_id,
+            "cpuCount": size.cpus,
+            "memoryMB": size.memory_mb,
+            "resized": resized,
+        }))
+        .into_response()
+    };
+    if size == current {
+        // Nothing to change, and so nothing lost.
+        return answer(size, false);
+    }
+    match reboot(&state, &sandbox_id, Cause::Request, Some(size)).await {
+        Ok(true) => answer(size, true),
         Ok(false) => api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}")),
         Err((status, message)) => api_error(status, message),
     }
@@ -113,15 +189,16 @@ pub(crate) async fn reboot_stopped(state: &Arc<AppState>) {
         let state = Arc::clone(state);
         tokio::spawn(async move {
             tracing::info!("sandbox {id}: its guest stopped by itself; rebooting it");
-            if let Err((_, e)) = reboot(&state, &id, Cause::Stopped).await {
+            if let Err((_, e)) = reboot(&state, &id, Cause::Stopped, None).await {
                 tracing::warn!("sandbox {id}: reboot failed: {e}");
             }
         });
     }
 }
 
-/// Reboot `sandbox_id` in place. `Ok(false)` when there is no such running
-/// sandbox, or when `cause` is [`Cause::Stopped`] and its guest is running.
+/// Reboot `sandbox_id` in place, at `size` when one is given and at its own
+/// otherwise. `Ok(false)` when there is no such running sandbox, or when
+/// `cause` is [`Cause::Stopped`] and its guest is running.
 ///
 /// # Errors
 ///
@@ -132,6 +209,7 @@ pub(crate) async fn reboot(
     state: &Arc<AppState>,
     sandbox_id: &str,
     cause: Cause,
+    size: Option<Sizes>,
 ) -> Result<bool, (StatusCode, String)> {
     let lock = transition_lock(state, sandbox_id);
     let held = lock.lock().await;
@@ -202,10 +280,10 @@ pub(crate) async fn reboot(
         &env,
         &files,
         &token,
-        Some(super::Sizes {
+        Some(size.unwrap_or(Sizes {
             cpus: record.cpu_count,
             memory_mb: record.memory_mb,
-        }),
+        })),
     )
     .await
     .map_err(|(status, e)| (status, format!("rebooting {sandbox_id}: {e}")))?;
@@ -223,6 +301,12 @@ pub(crate) async fn reboot(
     descriptor.process_port = running.process_addr.port();
     let mut record = old.record;
     record.descriptor = serde_json::to_value(&descriptor).unwrap_or_default();
+    let resized =
+        size.filter(|size| (size.cpus, size.memory_mb) != (record.cpu_count, record.memory_mb));
+    if let Some(size) = resized {
+        record.cpu_count = size.cpus;
+        record.memory_mb = size.memory_mb;
+    }
     register(
         state,
         old._slot,
@@ -232,7 +316,12 @@ pub(crate) async fn reboot(
         old.lifecycle,
         old.network_request,
         RegistrationContext {
-            event: Some("sandbox-updated"),
+            // A resize starts it again at another size, which usage counts.
+            event: Some(if resized.is_some() {
+                "sandbox-resized"
+            } else {
+                "sandbox-updated"
+            }),
             ..RegistrationContext::default()
         },
     )
@@ -244,9 +333,10 @@ pub(crate) async fn reboot(
         "info",
         format!(
             "rebooted ({}) in {:?}",
-            match cause {
-                Cause::Request => "requested",
-                Cause::Stopped => "its guest stopped",
+            match (cause, resized) {
+                (_, Some(size)) => format!("at {} vCPUs and {} MiB", size.cpus, size.memory_mb),
+                (Cause::Request, None) => "requested".to_string(),
+                (Cause::Stopped, None) => "its guest stopped".to_string(),
             },
             started.elapsed()
         ),

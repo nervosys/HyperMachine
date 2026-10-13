@@ -239,6 +239,7 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/sandboxes/{id}/pause", post(forward))
         .route("/sandboxes/{id}/standby", post(forward).get(forward))
         .route("/sandboxes/{id}/resume", post(forward))
+        .route("/sandboxes/{id}/resize", post(forward))
         .route("/sandboxes/{id}/fork", post(forward))
         .route("/sandboxes/{id}/owner", post(adopt_owner))
         .route(

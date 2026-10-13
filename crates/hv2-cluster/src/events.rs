@@ -46,7 +46,7 @@ pub fn e2b_type(kind: &str) -> Option<&'static str> {
         "sandbox-created" | "sandbox-forked" => "sandbox.lifecycle.created",
         "sandbox-paused" => "sandbox.lifecycle.paused",
         "sandbox-resumed" => "sandbox.lifecycle.resumed",
-        "sandbox-updated" => "sandbox.lifecycle.updated",
+        "sandbox-updated" | "sandbox-resized" => "sandbox.lifecycle.updated",
         "sandbox-deleted" | "sandbox-expired" | "sandbox-lost" => "sandbox.lifecycle.killed",
         _ => return None,
     })

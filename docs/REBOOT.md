@@ -26,6 +26,51 @@ survive a reboot on a volume or a disk.
 written to disk. So a sandbox resumed on another node, or after its daemon restarted,
 reboots without them.
 
+## Changing its size
+
+A sandbox's processors and memory can be changed after it is created, by
+rebooting it at the new size:
+
+```sh
+curl -s -X POST localhost:3980/sandboxes/$SBX/resize \
+  -H 'content-type: application/json' -d '{"cpuCount": 4, "memoryMB": 4096}'
+# → {"sandboxID":"sbx-…","cpuCount":4,"memoryMB":4096,"resized":true}
+
+# A paused one, brought back at another size.
+curl -s -X POST localhost:3980/sandboxes/$SBX/resume \
+  -H 'content-type: application/json' -d '{"cpuCount": 2, "memoryMB": 2048}'
+
+hm sandbox vm resize $SBX --cpus 4 --memory-mb 4096
+hm sandbox vm resume $SBX --cpus 2 --memory-mb 2048
+```
+
+- **It is a reboot.** A guest's memory cannot be moved to a different
+  number of processors or a different amount of memory. So a resize keeps
+  what a reboot keeps (the table above) and loses what is in the guest's
+  memory. A resume at another size does the same to a paused sandbox, which
+  would otherwise come back with its memory.
+- **Either or both.** Whichever of `cpuCount` and `memoryMB` is not given
+  stays as it was. A size the sandbox already has changes nothing, and
+  nothing is rebooted.
+- **From then on it is that size.** Its later reboots, pauses, resumes and
+  [usage](USAGE.md) are at it. Usage counts each size for the time the
+  sandbox ran at it.
+- **At its template's size it is restored from the template**, quickly, as
+  any reboot is. At another size it boots, as a sandbox created at that size
+  does. It can then be paused and forked, but not checkpointed or made a
+  template.
+- **Refused:** a size no guest here can be, which is 1 vCPU up to this
+  host's, and 256 MiB to 64 GiB in even numbers. Also refused: a resize of
+  a paused sandbox (resume it at a size instead). A resume at a size that
+  cannot be leaves the sandbox paused.
+- Reported as `sandbox-resized`, which webhooks send as
+  `sandbox.lifecycle.updated`, and counted among reboots toward the crash
+  limit below.
+
+Not here: a size changed on a fork, and a disk's size.
+
+Evidence: [real KVM resize checks](benchmarks/2026-10-13/sandbox-resize-kvm/README.md).
+
 ## Crash loops
 
 A sandbox that reboots five times within 60 seconds is ended, with the `sandbox-lost`
