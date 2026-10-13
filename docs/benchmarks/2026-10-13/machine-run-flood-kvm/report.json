@@ -1,0 +1,38 @@
+{
+  "success": true,
+  "purpose": "functional verification of runs that outprint their polls on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "426f2aee5b8f8b2db0223a0656de95b2de5c4932d88f8c4f1b64fb7cb6af160e",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "36b4f2f4ae1d56875302731d95494130173997cdb022e6db0f90ee5e503c27b0",
+    "driver": "4d4a781b27904b3fd2966f18bb2b09b63c7d88f42e2ff6b0d319428bbd192fdb"
+  },
+  "cases": [
+    {
+      "name": "a run printing faster than it is polled has every byte accounted for",
+      "success": true,
+      "detail": {
+        "stdoutBytes": 9437196,
+        "dropped": 8388620,
+        "kept": 1048576,
+        "seconds": 0.52
+      }
+    },
+    {
+      "name": "two-byte characters flooded are never cut in two",
+      "success": true,
+      "detail": {
+        "stdoutBytes": 3147275,
+        "dropped": 2098700,
+        "characters_kept": 524538
+      }
+    },
+    {
+      "name": "a run printing slowly loses nothing",
+      "success": true,
+      "detail": {
+        "stdoutBytes": 150
+      }
+    }
+  ]
+}

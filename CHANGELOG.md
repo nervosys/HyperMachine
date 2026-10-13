@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   program starts, the bounding set included.
 
 ### Fixed
+- A machine run that printed faster than it was polled lost output without
+  saying so. The guest agent holds at most 1 MiB of a stream between polls
+  and dropped the oldest beyond that uncounted, so a run of 9 MiB reported
+  1 MiB written and nothing dropped. It also turned a character split across
+  two polls into U+FFFD. The agent now reports what it dropped
+  (`stdout_dropped` and `stderr_dropped` on a poll, 0 from an older agent),
+  keeps a half-written character for the next poll, and cuts between
+  characters. The node counts the drops and polls again at once while a
+  program floods.
 - A machine with Claude Code installed at first boot could lose it for a
   while. The first time `claude` ran, its updater reinstalled its own npm
   package, and a prompt or conversation started during that window failed

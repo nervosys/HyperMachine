@@ -69,6 +69,10 @@ pub(crate) const MAX_RUNS: usize = 256;
 /// How long the guest agent has to answer one request about a run.
 const AGENT_TIMEOUT: Duration = Duration::from_secs(15);
 
+/// A poll this full means the program prints about as fast as the guest
+/// agent's buffer between polls fills (1 MiB): poll again at once.
+const FLOODING: usize = 256 << 10;
+
 /// One stream of a run's output: the newest [`MAX_LOG`] bytes of it, and how
 /// many were dropped from the front to keep it so.
 #[derive(Debug, Default)]
@@ -343,11 +347,18 @@ impl ToDisk {
     }
 }
 
-/// Add `text` to `log`, in memory and to what goes to its file.
-fn add(log: &mut Log, stream: &'static str, text: &str, to_disk: &mut ToDisk) {
+/// Add `text` to `log`, in memory and to what goes to its file. `gap` is
+/// bytes the program wrote before `text` that the guest agent dropped.
+fn add(log: &mut Log, stream: &'static str, text: &str, gap: u64, to_disk: &mut ToDisk) {
+    if gap > 0 {
+        // What is kept no longer runs on into what comes next, and the kept
+        // part of a stream is one piece: it goes, counted, with the gap.
+        log.dropped = log.total() + gap;
+        log.kept.clear();
+    }
     log.append(text);
     log.on_disk += text.len() as u64;
-    if log.on_disk > 2 * MAX_LOG as u64 {
+    if gap > 0 || log.on_disk > 2 * MAX_LOG as u64 {
         // Cut back to what is kept.
         log.base = log.dropped;
         log.on_disk = log.kept.len() as u64;
@@ -627,9 +638,17 @@ pub(super) async fn signal_run(
 async fn follow(machine_id: String, id: u64, vm: Arc<AgentVM>, pid: u32, boot_ms: u64) {
     let mut failures = 0u32;
     let mut quiet = 0u32;
+    let mut flooding = false;
     loop {
-        // Quick while it is printing, slower when it is not.
-        let pause = if quiet < 10 { 150 } else { 750 };
+        // Quick while it is printing, slower when it is not, and at once
+        // while it prints more than the guest agent holds between polls.
+        let pause = if flooding {
+            0
+        } else if quiet < 10 {
+            150
+        } else {
+            750
+        };
         tokio::time::sleep(Duration::from_millis(pause)).await;
         // Forgotten with its machine: nothing left to keep output for.
         let known = runs(|all| {
@@ -656,14 +675,27 @@ async fn follow(machine_id: String, id: u64, vm: Arc<AgentVM>, pid: u32, boot_ms
                 } else {
                     0
                 };
+                flooding = out.stdout.len().max(out.stderr.len()) >= FLOODING;
                 let mut to_disk = ToDisk::default();
                 let ended = runs(|all| {
                     let Some(run) = all.get_mut(&machine_id).and_then(|m| m.runs.get_mut(&id))
                     else {
                         return true;
                     };
-                    add(&mut run.stdout, "stdout", &out.stdout, &mut to_disk);
-                    add(&mut run.stderr, "stderr", &out.stderr, &mut to_disk);
+                    add(
+                        &mut run.stdout,
+                        "stdout",
+                        &out.stdout,
+                        out.stdout_dropped,
+                        &mut to_disk,
+                    );
+                    add(
+                        &mut run.stderr,
+                        "stderr",
+                        &out.stderr,
+                        out.stderr_dropped,
+                        &mut to_disk,
+                    );
                     if !out.running {
                         run.end(RunState::Exited {
                             code: out.exit_code,
@@ -894,8 +926,8 @@ mod tests {
             stderr: Log::default(),
         };
         let mut to_disk = ToDisk::default();
-        add(&mut run.stdout, "stdout", "hi\n", &mut to_disk);
-        add(&mut run.stderr, "stderr", "warn\n", &mut to_disk);
+        add(&mut run.stdout, "stdout", "hi\n", 0, &mut to_disk);
+        add(&mut run.stderr, "stderr", "warn\n", 0, &mut to_disk);
         to_disk.record = Some(run.record());
         let dir = runs_dir(root.path(), "vm-a");
         std::fs::create_dir_all(&dir).unwrap();
@@ -941,10 +973,10 @@ mod tests {
         let mut log = Log::default();
         let mut to_disk = ToDisk::default();
         let chunk = "x".repeat(MAX_LOG);
-        add(&mut log, "stdout", &chunk, &mut to_disk);
-        add(&mut log, "stdout", &chunk, &mut to_disk);
+        add(&mut log, "stdout", &chunk, 0, &mut to_disk);
+        add(&mut log, "stdout", &chunk, 0, &mut to_disk);
         assert!(to_disk.rewrite.is_empty());
-        add(&mut log, "stdout", "tail", &mut to_disk);
+        add(&mut log, "stdout", "tail", 0, &mut to_disk);
         assert_eq!(to_disk.rewrite.len(), 1);
         assert_eq!(log.base, log.dropped);
         assert_eq!(log.on_disk, MAX_LOG as u64);
@@ -960,6 +992,22 @@ mod tests {
         let back = read_run(&dir.join("1.json"), &record, 0).unwrap();
         assert_eq!(back.stdout.total(), log.total());
         assert_eq!(back.stdout.from(log.total() - 4).1, "tail");
+    }
+
+    /// Bytes the guest agent dropped are counted, and the kept part starts
+    /// after them, so every offset is still the program's.
+    #[test]
+    fn a_gap_the_agent_reports_is_counted() {
+        let mut log = Log::default();
+        let mut to_disk = ToDisk::default();
+        add(&mut log, "stdout", "before", 0, &mut to_disk);
+        add(&mut log, "stdout", "after", 100, &mut to_disk);
+        assert_eq!(log.total(), 6 + 100 + 5);
+        assert_eq!(log.dropped, 106);
+        assert_eq!(log.from(0), (106, "after", 111));
+        // Its file is what is kept, starting where that does.
+        assert_eq!(to_disk.rewrite, vec![("stdout", "after".to_string())]);
+        assert_eq!((log.base, log.on_disk), (106, 5));
     }
 
     #[test]

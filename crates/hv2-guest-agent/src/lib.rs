@@ -373,6 +373,15 @@ pub enum OpResult {
         /// which is not the same as exiting 0.
         exit_code: Option<i32>,
         signal: Option<i32>,
+        /// Bytes the program wrote on each stream since the previous poll
+        /// that are not in this one: the agent holds at most
+        /// [`MAX_OUTPUT_BYTES`] of a stream between polls and drops the
+        /// oldest beyond that. They came before this poll's text. Zero from
+        /// an agent too old to say.
+        #[serde(default)]
+        stdout_dropped: u64,
+        #[serde(default)]
+        stderr_dropped: u64,
     },
     /// Answer to [`Operation::WriteStdin`] and [`Operation::Signal`]: the agent
     /// did it. Nothing is reported back because neither produces anything.
@@ -689,6 +698,8 @@ mod tests {
             running: true,
             exit_code: None,
             signal: None,
+            stdout_dropped: 4096,
+            stderr_dropped: 0,
         };
         let killed = OpResult::Output {
             stdout: String::new(),
@@ -699,6 +710,8 @@ mod tests {
             running: false,
             exit_code: None,
             signal: Some(9),
+            stdout_dropped: 0,
+            stderr_dropped: 0,
         };
         for result in [running, killed] {
             let json = serde_json::to_string(&result).expect("encode");

@@ -891,8 +891,8 @@ mod linux {
         /// stdin, which is why this is not the field below.
         pty: Option<std::fs::File>,
         stdin: Option<std::process::ChildStdin>,
-        stdout: Arc<Mutex<Vec<u8>>>,
-        stderr: Arc<Mutex<Vec<u8>>>,
+        stdout: Arc<Mutex<Pending>>,
+        stderr: Arc<Mutex<Pending>>,
         /// `Some` once the program has finished, with its exit code and the
         /// signal that ended it, kept apart because exiting 0 and being killed
         /// are not the same outcome.
@@ -908,10 +908,19 @@ mod linux {
         PROCS.get_or_init(|| Mutex::new(HashMap::new()))
     }
 
+    /// What a started program printed on one stream and no poll has taken
+    /// yet, and how many bytes were dropped to keep it bounded since the last
+    /// poll took any.
+    #[derive(Default)]
+    struct Pending {
+        bytes: Vec<u8>,
+        dropped: u64,
+    }
+
     /// Drain a pipe into a buffer until it closes.
     fn drain<R: Read + Send + 'static>(
         mut source: R,
-        into: Arc<Mutex<Vec<u8>>>,
+        into: Arc<Mutex<Pending>>,
     ) -> std::thread::JoinHandle<()> {
         std::thread::spawn(move || {
             let mut chunk = [0u8; 8192];
@@ -926,27 +935,46 @@ mod linux {
                         // Bounded like `exec`'s output: a program that prints
                         // forever must not grow this agent until the guest is
                         // out of memory. Oldest bytes go first, because the
-                        // newest are the ones a caller is waiting on.
-                        if buf.len() + n > MAX_OUTPUT_BYTES {
-                            let over = buf.len() + n - MAX_OUTPUT_BYTES;
-                            let drop_to = over.min(buf.len());
-                            buf.drain(..drop_to);
+                        // newest are the ones a caller is waiting on -- and
+                        // are counted, so the caller knows.
+                        if buf.bytes.len() + n > MAX_OUTPUT_BYTES {
+                            let over = buf.bytes.len() + n - MAX_OUTPUT_BYTES;
+                            let drop_to = past_partial(&buf.bytes, over.min(buf.bytes.len()));
+                            buf.bytes.drain(..drop_to);
+                            buf.dropped += drop_to as u64;
                         }
-                        buf.extend_from_slice(&chunk[..n]);
+                        buf.bytes.extend_from_slice(&chunk[..n]);
                     }
                 }
             }
         })
     }
 
-    /// Take everything buffered so far, leaving the buffer empty.
-    fn take(buf: &Arc<Mutex<Vec<u8>>>) -> String {
+    /// `at`, or the first byte after it that does not continue a UTF-8
+    /// character: where to cut so no character is cut in two.
+    fn past_partial(bytes: &[u8], mut at: usize) -> usize {
+        while at < bytes.len() && (bytes[at] & 0xC0) == 0x80 {
+            at += 1;
+        }
+        at
+    }
+
+    /// Take what is buffered and how many bytes were dropped since the last
+    /// take. A character the program has only begun to write stays for the
+    /// next take, unless `last`, when the program has ended and nothing will
+    /// finish it.
+    fn take(buf: &Arc<Mutex<Pending>>, last: bool) -> (String, u64) {
         let mut guard = match buf.lock() {
             Ok(guard) => guard,
             Err(poisoned) => poisoned.into_inner(),
         };
-        let bytes = std::mem::take(&mut *guard);
-        String::from_utf8_lossy(&bytes).into_owned()
+        let dropped = std::mem::take(&mut guard.dropped);
+        let whole = match std::str::from_utf8(&guard.bytes) {
+            Err(e) if !last && e.error_len().is_none() => e.valid_up_to(),
+            _ => guard.bytes.len(),
+        };
+        let bytes: Vec<u8> = guard.bytes.drain(..whole).collect();
+        (String::from_utf8_lossy(&bytes).into_owned(), dropped)
     }
 
     /// Open a pseudo-terminal, returning (master, slave).
@@ -1162,8 +1190,8 @@ mod linux {
         };
 
         let pid = child.id();
-        let stdout = Arc::new(Mutex::new(Vec::new()));
-        let stderr = Arc::new(Mutex::new(Vec::new()));
+        let stdout = Arc::new(Mutex::new(Pending::default()));
+        let stderr = Arc::new(Mutex::new(Pending::default()));
         let mut readers = Vec::new();
 
         // The parent's copy of the slave is dropped here. It has to be: the
@@ -1259,8 +1287,8 @@ mod linux {
         };
         // Observe completion before draining: completion guarantees all final
         // bytes are buffered, and a later completion waits for another poll.
-        let stdout = take(&proc.stdout);
-        let stderr = take(&proc.stderr);
+        let (stdout, stdout_dropped) = take(&proc.stdout, finished.is_some());
+        let (stderr, stderr_dropped) = take(&proc.stderr, finished.is_some());
 
         let pty = proc.pty.is_some();
         match finished {
@@ -1271,6 +1299,8 @@ mod linux {
                 running: true,
                 exit_code: None,
                 signal: None,
+                stdout_dropped,
+                stderr_dropped,
             },
             Some((exit_code, signal)) => OpResult::Output {
                 stdout,
@@ -1279,6 +1309,8 @@ mod linux {
                 running: false,
                 exit_code,
                 signal,
+                stdout_dropped,
+                stderr_dropped,
             },
         }
     }
@@ -1505,6 +1537,74 @@ mod linux {
     #[cfg(test)]
     mod process_output_tests {
         use super::*;
+
+        #[test]
+        fn a_character_begun_is_kept_for_the_next_take() {
+            let buf = Arc::new(Mutex::new(Pending::default()));
+            // "é" is two bytes; the program has written only the first.
+            buf.lock().unwrap().bytes.extend_from_slice(b"caf\xc3");
+            assert_eq!(take(&buf, false), ("caf".to_string(), 0));
+            buf.lock().unwrap().bytes.push(0xa9);
+            assert_eq!(take(&buf, false), ("\u{e9}".to_string(), 0));
+            // Ended with half a character: what there is, as it is.
+            buf.lock().unwrap().bytes.push(0xc3);
+            assert_eq!(take(&buf, true), ("\u{fffd}".to_string(), 0));
+        }
+
+        #[test]
+        fn a_cut_is_between_characters() {
+            let text = "a\u{e9}b".as_bytes();
+            // Byte 2 continues the character that begins at 1.
+            assert_eq!(past_partial(text, 2), 3);
+            assert_eq!(past_partial(text, 1), 1);
+            assert_eq!(past_partial(text, text.len()), text.len());
+        }
+
+        /// A program that prints more between two polls than the agent
+        /// holds: what is dropped is counted, and with what is taken makes
+        /// up every byte it wrote.
+        #[test]
+        fn what_a_program_outprints_is_counted() {
+            const WROTE: usize = 3 * MAX_OUTPUT_BYTES + 12_345;
+            let OpResult::Started { pid } = start(
+                "/bin/sh",
+                &[
+                    "-c".into(),
+                    format!("head -c {WROTE} /dev/zero | tr '\\0' x"),
+                ],
+                None,
+                &BTreeMap::new(),
+                None,
+                None,
+            ) else {
+                panic!("could not start test process")
+            };
+            // Not polled until it has finished, so the agent must drop.
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            let (mut taken, mut dropped) = (0usize, 0u64);
+            loop {
+                let OpResult::Output {
+                    stdout,
+                    stdout_dropped,
+                    running,
+                    ..
+                } = poll(pid)
+                else {
+                    panic!("could not poll test process")
+                };
+                taken += stdout.len();
+                dropped += stdout_dropped;
+                if !running {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            assert!(
+                dropped > 0,
+                "nothing dropped: the test did not outprint the buffer"
+            );
+            assert_eq!(taken as u64 + dropped, WROTE as u64);
+        }
 
         #[test]
         fn rapid_polls_preserve_final_stdout_and_stderr() {
