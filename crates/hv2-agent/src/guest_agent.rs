@@ -751,6 +751,18 @@ impl GuestAgent {
         self.forward_transport(Operation::Forward { port }, timeout)
     }
 
+    /// Have the guest listen on its TCP `port` and carry the next connection
+    /// a guest program makes there over this one: answered once it listens,
+    /// then [`hv2_guest_agent::REVERSE_ACCEPTED`] when a program connects.
+    /// Returns the stream and what already arrived past the answer.
+    ///
+    /// # Errors
+    ///
+    /// The guest cannot listen on `port`, or the transport failed.
+    pub fn listen(self, port: u16, timeout: Duration) -> Result<(VsockStream, Vec<u8>)> {
+        self.forward_transport(Operation::Listen { port }, timeout)
+    }
+
     /// Open a framed IPv4 loopback UDP session. Setup does not prove a listener.
     ///
     /// # Errors

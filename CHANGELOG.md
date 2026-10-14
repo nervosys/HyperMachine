@@ -90,6 +90,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- A port of the caller's reached from inside a sandbox, as `ssh -R` does:
+  `hm sandbox vm reverse ID --port P --to HOST:PORT`, over
+  `GET /sandboxes/{id}/ports/{port}/reverse` upgraded to `hv2-reverse/1`.
+  A program in the guest connects to its `127.0.0.1:P`, with no network
+  card needed. The guest agent has a new `Listen` operation for it, so a
+  guest needs this release's agent. See `docs/REVERSE_PORTS.md`.
 - A sandbox's command history: every command run through `exec` or envd's
   `process.Process/Start` (E2B's `commands.run`) is kept with its command
   line, user, PID, how it ended and the newest 64 KiB of each stream, at

@@ -618,6 +618,26 @@ impl AgentVM {
         .map_err(|e| AgentError::Script(format!("guest forward task failed: {e}")))?
     }
 
+    /// The next connection a guest program makes to its TCP `port`, carried
+    /// over vsock out to the host: see [`GuestAgent::listen`]. Returns once
+    /// the guest listens, not when a program connects.
+    ///
+    /// # Errors
+    ///
+    /// Requires the `GuestExec` capability; the guest could not listen.
+    pub async fn listen_port(
+        &self,
+        port: u16,
+        timeout: Duration,
+    ) -> Result<(crate::guest_agent::VsockStream, Vec<u8>)> {
+        let device = self.file_channel()?;
+        tokio::task::spawn_blocking(move || {
+            GuestAgent::over_vsock(device, timeout)?.listen(port, timeout)
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest listen task failed: {e}")))?
+    }
+
     /// Open a framed UDP connection to a guest loopback port over vsock.
     ///
     /// # Errors

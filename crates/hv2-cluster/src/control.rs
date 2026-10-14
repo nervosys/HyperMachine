@@ -370,6 +370,7 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/sandboxes/{id}/commands/{n}", get(forward))
         .route("/sandboxes/{id}/processes", get(forward))
         .route("/sandboxes/{id}/ports/{port}/tcp", get(tcp_tunnel))
+        .route("/sandboxes/{id}/ports/{port}/reverse", get(reverse_tunnel))
         .route("/sandboxes/{id}/ports/{port}/udp", get(udp_tunnel))
         .route("/sandboxes/{id}/ports/{port}/udp6", get(udp_tunnel_ipv6))
         .route("/cluster/nodes", get(cluster_nodes))
@@ -1945,6 +1946,16 @@ async fn udp_tunnel(
     port_tunnel(control, id, port, request, true, false).await
 }
 
+/// A guest program's connection out to the caller: carried on from the
+/// node as a TCP tunnel is, under its own protocol.
+async fn reverse_tunnel(
+    State(control): State<Arc<ControlPlane>>,
+    Path((id, port)): Path<(String, u16)>,
+    request: Request,
+) -> Response {
+    port_tunnel(control, id, port, request, false, false).await
+}
+
 async fn udp_tunnel_ipv6(
     State(control): State<Arc<ControlPlane>>,
     Path((id, port)): Path<(String, u16)>,
@@ -1961,14 +1972,19 @@ async fn port_tunnel(
     udp: bool,
     ipv6: bool,
 ) -> Response {
-    let protocol = if ipv6 {
+    let reverse = request.uri().path().ends_with("/reverse");
+    let protocol = if reverse {
+        hv2_api::tcp_tunnel::REVERSE_PROTOCOL
+    } else if ipv6 {
         hv2_api::udp_tunnel::PROTOCOL_IPV6
     } else if udp {
         hv2_api::udp_tunnel::PROTOCOL
     } else {
         hv2_api::tcp_tunnel::PROTOCOL
     };
-    let negotiation = if ipv6 {
+    let negotiation = if reverse {
+        hv2_api::tcp_tunnel::validate_reverse(&request)
+    } else if ipv6 {
         hv2_api::udp_tunnel::validate_ipv6(&request)
     } else if udp {
         hv2_api::udp_tunnel::validate(&request)
@@ -2040,7 +2056,9 @@ async fn port_tunnel(
     .await;
     match result {
         Ok(Ok(Ok(stream))) => {
-            if ipv6 {
+            if reverse {
+                hv2_api::tcp_tunnel::accept_reverse(request, stream)
+            } else if ipv6 {
                 hv2_api::udp_tunnel::accept_ipv6(request, stream)
             } else if udp {
                 hv2_api::udp_tunnel::accept(request, stream)

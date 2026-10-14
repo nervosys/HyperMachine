@@ -6636,6 +6636,10 @@ async fn main() -> std::process::ExitCode {
         .route("/sandboxes/{sandboxID}/private-ports/{port}/tcp",get(forwards::private_tcp_tunnel))
         .route("/sandboxes/{sandboxID}/private-ports/{port}/udp",get(forwards::private_udp_tunnel))
         .route(
+            "/sandboxes/{sandboxID}/ports/{port}/reverse",
+            get(forwards::reverse_tunnel),
+        )
+        .route(
             "/sandboxes/{sandboxID}/ports/{port}/tcp",
             get(forwards::tcp_tunnel),
         )

@@ -32,6 +32,158 @@ pub(crate) async fn tcp_tunnel(
     port_tunnel(state, sandbox, port, request, false, false, None).await
 }
 
+/// How many connections a sandbox may have waiting for its guest's programs
+/// to connect out, across its ports.
+const MAX_WAITING: usize = 64;
+
+/// `GET /sandboxes/{id}/ports/{port}/reverse`, upgraded to `hv2-reverse/1`:
+/// a port of the caller's, reached from inside the guest. The guest listens
+/// on its `127.0.0.1:port`; when a program there connects, this stream
+/// carries that connection, after one byte saying so. One stream carries
+/// one connection: a caller wanting more keeps several waiting.
+pub(crate) async fn reverse_tunnel(
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    axum::extract::Path((sandbox, port)): axum::extract::Path<(String, u16)>,
+    request: axum::extract::Request,
+) -> axum::response::Response {
+    use axum::http::StatusCode;
+    if let Err(message) = hv2_api::tcp_tunnel::validate_reverse(&request) {
+        return super::api_error(StatusCode::BAD_REQUEST, message);
+    }
+    if port == 0 {
+        return super::api_error(StatusCode::BAD_REQUEST, "guest port must be nonzero");
+    }
+    let vm = state
+        .sandboxes
+        .lock()
+        .get(&sandbox)
+        .map(|live| Arc::clone(&live.vm));
+    let Some(vm) = vm else {
+        return super::api_error(StatusCode::NOT_FOUND, "sandbox is not running on this node");
+    };
+    let waiting = {
+        let mut waiting = state.forwards.waiting.lock();
+        let count = waiting.entry(sandbox.clone()).or_default();
+        if *count >= MAX_WAITING {
+            return super::api_error(
+                StatusCode::TOO_MANY_REQUESTS,
+                format!("this sandbox has {MAX_WAITING} connections waiting already"),
+            );
+        }
+        *count += 1;
+        Waiting {
+            state: Arc::clone(&state),
+            sandbox: sandbox.clone(),
+        }
+    };
+    let (stream, early) = match vm.listen_port(port, FORWARD_TIMEOUT).await {
+        Ok(opened) => opened,
+        Err(error) => {
+            return super::api_error(
+                StatusCode::BAD_GATEWAY,
+                format!("the guest could not listen on port {port}: {error}"),
+            );
+        }
+    };
+    let pairing = async {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let client = tokio::net::TcpStream::connect(listener.local_addr()?).await?;
+        let (server, _) = listener.accept().await?;
+        Ok::<_, std::io::Error>((client, server))
+    };
+    let (client, server) = match pairing.await {
+        Ok(pair) => pair,
+        Err(error) => {
+            stream.close();
+            return super::api_error(StatusCode::INTERNAL_SERVER_ERROR, error);
+        }
+    };
+    // Closed with the sandbox's other carried connections when it pauses
+    // or ends, waiting or not.
+    state
+        .forwards
+        .open
+        .lock()
+        .entry(sandbox.clone())
+        .or_default()
+        .push(stream.clone());
+    let relay_state = Arc::clone(&state);
+    tokio::spawn(async move {
+        let accepted = await_accepted(stream.clone(), early, &server).await;
+        drop(waiting);
+        let Some(rest) = accepted else {
+            stream.close();
+            return;
+        };
+        let mut server = server;
+        use tokio::io::AsyncWriteExt as _;
+        if server
+            .write_all(&[hv2_guest_agent::REVERSE_ACCEPTED])
+            .await
+            .is_err()
+        {
+            stream.close();
+            return;
+        }
+        // In use from here, as any carried connection is.
+        let _active = relay_state
+            .sandboxes
+            .lock()
+            .get(&sandbox)
+            .map(|live| super::ActivityGuard::enter(&live.activity));
+        carry_opened(&relay_state, &sandbox, stream, rest, server).await;
+    });
+    hv2_api::tcp_tunnel::accept_reverse(request, client)
+}
+
+/// One of a sandbox's waiting reverse connections, counted while it waits.
+struct Waiting {
+    state: Arc<AppState>,
+    sandbox: String,
+}
+
+impl Drop for Waiting {
+    fn drop(&mut self) {
+        let mut waiting = self.state.forwards.waiting.lock();
+        if let Some(count) = waiting.get_mut(&self.sandbox) {
+            *count -= 1;
+            if *count == 0 {
+                waiting.remove(&self.sandbox);
+            }
+        }
+    }
+}
+
+/// Wait for the guest to say a program connected, and return what followed
+/// it; `None` if the guest's side closed first, or the caller hung up.
+async fn await_accepted(
+    stream: VsockStream,
+    early: Vec<u8>,
+    caller: &tokio::net::TcpStream,
+) -> Option<Vec<u8>> {
+    let closing = stream.clone();
+    let mut guest = tokio::task::spawn_blocking(move || {
+        let mut got = early;
+        while got.is_empty() {
+            let more = stream.read().ok()?;
+            if more.is_empty() {
+                return None;
+            }
+            got.extend_from_slice(&more);
+        }
+        (got[0] == hv2_guest_agent::REVERSE_ACCEPTED).then(|| got.split_off(1))
+    });
+    tokio::select! {
+        accepted = &mut guest => accepted.ok().flatten(),
+        // The caller sends nothing before the byte: readable means gone.
+        _ = caller.readable() => {
+            closing.close();
+            let _ = guest.await;
+            None
+        }
+    }
+}
+
 pub(crate) async fn udp_tunnel(
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
     axum::extract::Path((sandbox, port)): axum::extract::Path<(String, u16)>,
@@ -390,6 +542,8 @@ async fn port_tunnel(
 }
 
 pub(crate) struct Forwards {
+    /// Reverse connections waiting for a guest program, by sandbox.
+    waiting: parking_lot::Mutex<HashMap<String, usize>>,
     private_slots: Arc<tokio::sync::Semaphore>,
     listeners: parking_lot::Mutex<HashMap<(String, u16), (SocketAddr, tokio::task::AbortHandle)>>,
     /// Connections carried now, by sandbox, to close when it stops.
@@ -399,6 +553,7 @@ pub(crate) struct Forwards {
 impl Default for Forwards {
     fn default() -> Self {
         Self {
+            waiting: Default::default(),
             private_slots: Arc::new(tokio::sync::Semaphore::new(128)),
             listeners: Default::default(),
             open: Default::default(),
