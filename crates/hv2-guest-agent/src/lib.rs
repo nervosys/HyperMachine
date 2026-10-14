@@ -50,6 +50,10 @@ pub const GUEST_AGENT_PORT: u32 = 1024;
 /// make the host allocate it.
 pub const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
 
+/// What the agent writes on a [`Operation::Listen`] connection when a guest
+/// program has connected, before the program's bytes.
+pub const REVERSE_ACCEPTED: u8 = b'+';
+
 /// Bytes of captured output the agent returns per stream before truncating.
 pub const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 
@@ -235,6 +239,16 @@ pub enum Operation {
     /// reached from the host with no network interface involved. Answered
     /// with [`OpResult::Failed`] if nothing listens there.
     Forward { port: u16 },
+
+    /// Listen on the guest's TCP `127.0.0.1:port` for one connection, and
+    /// carry it over *this connection*: a port of the host's caller, reached
+    /// from inside the guest. Answered with [`OpResult::Acknowledged`] once
+    /// listening; then, when a guest program connects, the agent writes the
+    /// one byte [`REVERSE_ACCEPTED`] and from then on copies bytes both ways.
+    /// Every such connection for a port shares one listener, which stays open
+    /// while any waits and a few seconds after. The host hanging up first
+    /// ends the wait. [`OpResult::Failed`] if the port cannot be listened on.
+    Listen { port: u16 },
 
     /// Carry length-prefixed datagrams to IPv4 loopback UDP `port`.
     /// Acknowledgement confirms socket setup, not a listening peer.

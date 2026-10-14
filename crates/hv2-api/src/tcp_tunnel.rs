@@ -11,6 +11,24 @@ use tokio::io::{AsyncRead, AsyncWrite};
 
 pub const PROTOCOL: &str = "hv2-tcp/1";
 
+/// A connection a program in the guest makes, carried out to the caller:
+/// the stream's first byte is [`hv2_guest_agent::REVERSE_ACCEPTED`], sent
+/// when the program connects, and the program's bytes follow.
+pub const REVERSE_PROTOCOL: &str = "hv2-reverse/1";
+
+/// [`validate`], for [`REVERSE_PROTOCOL`].
+pub fn validate_reverse(request: &Request) -> Result<(), &'static str> {
+    validate_protocol(request, REVERSE_PROTOCOL)
+}
+
+/// [`accept`], for [`REVERSE_PROTOCOL`].
+pub fn accept_reverse<T>(request: Request, backend: T) -> Response
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    accept_protocol(request, backend, REVERSE_PROTOCOL)
+}
+
 /// Reject ambiguous framing before a caller opens the guest connection.
 pub fn validate(request: &Request) -> Result<(), &'static str> {
     validate_protocol(request, PROTOCOL)

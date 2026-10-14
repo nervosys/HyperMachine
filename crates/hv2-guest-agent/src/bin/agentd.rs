@@ -236,6 +236,33 @@ mod linux {
                     splice(fd, tcp, &buf);
                     return Ok(());
                 }
+                // A listen takes it too: answered, then held until a guest
+                // program connects, then spliced.
+                if let Operation::Listen { port } = request.op {
+                    let held = listening::hold(port);
+                    let response = Response {
+                        id: request.id,
+                        version: PROTOCOL_VERSION,
+                        result: match &held {
+                            Ok(_) => OpResult::Acknowledged,
+                            Err(e) => OpResult::Failed {
+                                message: format!("listening on port {port}: {e}"),
+                            },
+                        },
+                    };
+                    let bytes = encode(&response).map_err(|e| {
+                        std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
+                    })?;
+                    write_all_fd(fd, &bytes)?;
+                    let Ok(held) = held else { return Ok(()) };
+                    let accepted = held.accept_or_hangup(fd);
+                    drop(held);
+                    if let Some(tcp) = accepted {
+                        write_all_fd(fd, &[hv2_guest_agent::REVERSE_ACCEPTED])?;
+                        splice(fd, tcp, &buf);
+                    }
+                    return Ok(());
+                }
                 if let Operation::ForwardUdp { port } | Operation::ForwardUdp6 { port } = request.op
                 {
                     let host = if matches!(request.op, Operation::ForwardUdp6 { .. }) {
@@ -442,6 +469,182 @@ mod linux {
             .join()
             .map_err(|_| std::io::Error::other("UDP relay reader failed"))?;
         result.and(reader_result)
+    }
+
+    /// Guest loopback ports listened on for the host: a program in the guest
+    /// connects, and the connection is carried out to the host's caller.
+    mod listening {
+        use std::collections::HashMap;
+        use std::net::{TcpListener, TcpStream};
+        use std::os::fd::AsRawFd;
+        use std::sync::{Arc, Mutex, OnceLock};
+        use std::time::Duration;
+
+        /// How long a port stays listened on after the last connection
+        /// waiting on it has gone: the host's next one is on its way.
+        const GRACE: Duration = Duration::from_secs(5);
+
+        struct Entry {
+            listener: Arc<TcpListener>,
+            /// Connections from the host waiting on it now.
+            holders: usize,
+            /// Changes with every hold, so a grace that ended is not one a
+            /// later hold already outlived.
+            generation: u64,
+        }
+
+        fn table() -> std::sync::MutexGuard<'static, HashMap<u16, Entry>> {
+            static TABLE: OnceLock<Mutex<HashMap<u16, Entry>>> = OnceLock::new();
+            TABLE
+                .get_or_init(|| Mutex::new(HashMap::new()))
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+        }
+
+        /// One host connection's share of a listened port.
+        pub(super) struct Held {
+            port: u16,
+            listener: Arc<TcpListener>,
+        }
+
+        /// Listen on `port`, or share the listener already there.
+        pub(super) fn hold(port: u16) -> std::io::Result<Held> {
+            if port == 0 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "the port must be nonzero",
+                ));
+            }
+            let mut table = table();
+            if let Some(entry) = table.get_mut(&port) {
+                entry.holders += 1;
+                entry.generation += 1;
+                return Ok(Held {
+                    port,
+                    listener: Arc::clone(&entry.listener),
+                });
+            }
+            let listener = TcpListener::bind(("127.0.0.1", port))?;
+            listener.set_nonblocking(true)?;
+            let listener = Arc::new(listener);
+            table.insert(
+                port,
+                Entry {
+                    listener: Arc::clone(&listener),
+                    holders: 1,
+                    generation: 0,
+                },
+            );
+            Ok(Held { port, listener })
+        }
+
+        impl Held {
+            /// A guest program's connection, or `None` once the host has hung
+            /// up -- it sends nothing before the answer, so anything it does
+            /// send means it is gone.
+            pub(super) fn accept_or_hangup(&self, host: libc::c_int) -> Option<TcpStream> {
+                loop {
+                    let mut fds = [
+                        libc::pollfd {
+                            fd: self.listener.as_raw_fd(),
+                            events: libc::POLLIN,
+                            revents: 0,
+                        },
+                        libc::pollfd {
+                            fd: host,
+                            events: libc::POLLIN,
+                            revents: 0,
+                        },
+                    ];
+                    // SAFETY: two valid pollfds, for the length given.
+                    let ready = unsafe { libc::poll(fds.as_mut_ptr(), 2, -1) };
+                    if ready < 0 {
+                        if std::io::Error::last_os_error().kind() == std::io::ErrorKind::Interrupted
+                        {
+                            continue;
+                        }
+                        return None;
+                    }
+                    if fds[1].revents != 0 {
+                        return None;
+                    }
+                    if fds[0].revents != 0 {
+                        // Another host connection waiting on the same port
+                        // may have taken it.
+                        match self.listener.accept() {
+                            Ok((tcp, _)) => {
+                                let _ = tcp.set_nonblocking(false);
+                                return Some(tcp);
+                            }
+                            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
+                            Err(_) => return None,
+                        }
+                    }
+                }
+            }
+        }
+
+        impl Drop for Held {
+            fn drop(&mut self) {
+                let mut entries = table();
+                let Some(entry) = entries.get_mut(&self.port) else {
+                    return;
+                };
+                entry.holders -= 1;
+                if entry.holders > 0 {
+                    return;
+                }
+                let (port, generation) = (self.port, entry.generation);
+                std::thread::spawn(move || {
+                    std::thread::sleep(GRACE);
+                    let mut entries = table();
+                    if entries
+                        .get(&port)
+                        .is_some_and(|e| e.holders == 0 && e.generation == generation)
+                    {
+                        entries.remove(&port);
+                    }
+                });
+            }
+        }
+
+        #[cfg(test)]
+        mod tests {
+            use super::*;
+
+            #[test]
+            fn a_port_is_shared_and_closed_after_its_last_holder() {
+                let port = {
+                    let probe = TcpListener::bind("127.0.0.1:0").unwrap();
+                    probe.local_addr().unwrap().port()
+                };
+                let first = hold(port).unwrap();
+                let second = hold(port).unwrap();
+                assert!(Arc::ptr_eq(&first.listener, &second.listener));
+                // A guest program connects; one holder takes it.
+                let client = TcpStream::connect(("127.0.0.1", port)).unwrap();
+                let (host, _keep) = std::os::unix::net::UnixStream::pair().unwrap();
+                let taken = first.accept_or_hangup(host.as_raw_fd()).unwrap();
+                assert_eq!(taken.peer_addr().unwrap(), client.local_addr().unwrap());
+                drop((first, second));
+                assert!(table().contains_key(&port), "closed before its grace");
+                std::thread::sleep(GRACE + Duration::from_millis(500));
+                assert!(!table().contains_key(&port));
+                assert!(TcpStream::connect(("127.0.0.1", port)).is_err());
+            }
+
+            #[test]
+            fn the_host_hanging_up_ends_the_wait() {
+                let held = hold({
+                    let probe = TcpListener::bind("127.0.0.1:0").unwrap();
+                    probe.local_addr().unwrap().port()
+                })
+                .unwrap();
+                let (host, other) = std::os::unix::net::UnixStream::pair().unwrap();
+                drop(other);
+                assert!(held.accept_or_hangup(host.as_raw_fd()).is_none());
+            }
+        }
     }
 
     /// Copy bytes both ways between the host's connection `fd` and `tcp`
@@ -657,6 +860,7 @@ mod linux {
             Operation::Stats => OpResult::Stats(stats()),
             // Served in `serve`, which owns the connection it takes.
             Operation::Forward { .. }
+            | Operation::Listen { .. }
             | Operation::ForwardUdp { .. }
             | Operation::ForwardUdp6 { .. } => OpResult::Failed {
                 message: "a forward must be the connection's own request".into(),

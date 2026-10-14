@@ -276,6 +276,21 @@ pub enum VmCommand {
         #[arg(long, default_value_t = 22, value_parser = clap::value_parser!(u16).range(1..))]
         port: u16,
     },
+    /// Make a port on this machine reachable from inside a running VM:
+    /// programs in the guest connect to its 127.0.0.1:PORT and reach TO here
+    Reverse {
+        id: String,
+        /// The guest port its programs connect to
+        #[arg(long, value_parser = clap::value_parser!(u16).range(1..))]
+        port: u16,
+        /// Where each connection goes, from this machine
+        #[arg(long)]
+        to: String,
+        /// Connections kept waiting for the guest, and so how many it can
+        /// make at once without one being turned away
+        #[arg(long, default_value_t = 4, value_parser = clap::value_parser!(u32).range(1..=32))]
+        waiting: u32,
+    },
     /// Forward a loopback TCP listener to a running VM's guest port
     Tcp {
         id: String,
@@ -1275,29 +1290,33 @@ impl Api {
         udp: bool,
         ipv6: bool,
     ) -> Result<reqwest::Upgraded> {
-        let protocol = if ipv6 {
-            "hv2-udp6/1"
+        let (protocol, kind) = if ipv6 {
+            ("hv2-udp6/1", "udp6")
         } else if udp {
-            "hv2-udp/1"
+            ("hv2-udp/1", "udp")
         } else {
-            "hv2-tcp/1"
+            ("hv2-tcp/1", "tcp")
         };
+        self.upgrade(id, port, protocol, kind).await
+    }
+
+    /// A connection waiting for a program in the guest to connect to its
+    /// `port`, carried here once one does.
+    async fn reverse(&self, id: &str, port: u16) -> Result<reqwest::Upgraded> {
+        self.upgrade(id, port, "hv2-reverse/1", "reverse").await
+    }
+
+    async fn upgrade(
+        &self,
+        id: &str,
+        port: u16,
+        protocol: &str,
+        kind: &str,
+    ) -> Result<reqwest::Upgraded> {
         let port = port.to_string();
         let response = self
             .tcp_client
-            .get(self.url(&[
-                "sandboxes",
-                id,
-                "ports",
-                &port,
-                if ipv6 {
-                    "udp6"
-                } else if udp {
-                    "udp"
-                } else {
-                    "tcp"
-                },
-            ])?)
+            .get(self.url(&["sandboxes", id, "ports", &port, kind])?)
             .version(reqwest::Version::HTTP_11)
             .header("connection", "upgrade")
             .header("upgrade", protocol)
@@ -2308,6 +2327,15 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             tcp_stdio(api.tcp(&id, port).await?).await?;
             return Ok(0);
         }
+        VmCommand::Reverse {
+            id,
+            port,
+            to,
+            waiting,
+        } => {
+            reverse_forward(api, id, port, to, waiting).await?;
+            return Ok(0);
+        }
         VmCommand::Tcp {
             id,
             port,
@@ -2793,6 +2821,56 @@ async fn tcp_forward(
             }
         }
     }
+}
+
+/// Keep `waiting` connections open for programs in the guest to connect to
+/// its `port`; each that one does is carried to `to`, and another opened.
+async fn reverse_forward(api: Api, id: String, port: u16, to: String, waiting: u32) -> Result<()> {
+    use tokio::io::AsyncReadExt as _;
+    // Fail authentication and refusals before reporting ready.
+    let first = api.reverse(&id, port).await?;
+    println!("{}", json!({"sandboxID": id, "guestPort": port, "to": to}));
+    let mut slots = tokio::task::JoinSet::new();
+    let mut first = Some(first);
+    for _ in 0..waiting {
+        let (api, id, to, initial) = (api.clone(), id.clone(), to.clone(), first.take());
+        slots.spawn(async move {
+            let mut initial = initial;
+            loop {
+                let opened = match initial.take() {
+                    Some(tunnel) => Ok(tunnel),
+                    None => api.reverse(&id, port).await,
+                };
+                let mut tunnel = match opened {
+                    Ok(tunnel) => tunnel,
+                    Err(error) => {
+                        eprintln!("reverse connection not opened: {error}");
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                        continue;
+                    }
+                };
+                let mut marker = [0u8; 1];
+                if tunnel.read_exact(&mut marker).await.is_err() || marker[0] != b'+' {
+                    continue;
+                }
+                // Carried on its own, so this slot waits again at once.
+                let to = to.clone();
+                tokio::spawn(async move {
+                    match tokio::net::TcpStream::connect(&to).await {
+                        Ok(mut local) => {
+                            let _ = tokio::io::copy_bidirectional(&mut tunnel, &mut local).await;
+                        }
+                        Err(error) => eprintln!("could not reach {to}: {error}"),
+                    }
+                });
+            }
+        });
+    }
+    tokio::signal::ctrl_c()
+        .await
+        .context("could not listen for interrupt")?;
+    slots.abort_all();
+    Ok(())
 }
 
 const MAX_FILE_BYTES: u64 = 512 * 1024 * 1024;
