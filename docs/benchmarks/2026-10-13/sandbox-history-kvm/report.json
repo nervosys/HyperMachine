@@ -2,10 +2,10 @@
   "success": true,
   "purpose": "functional verification of a sandbox's command history on KVM; no timing claim",
   "input_sha256": {
-    "daemon": "ea5b682aed696abe75afadebac854374d169a7d0c077a383ce6f19910968025d",
+    "daemon": "8e200210a759f0492beeb388f68d59c232bbf165e41552da5f99bbc6c534c497",
     "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
     "initrd": "36b4f2f4ae1d56875302731d95494130173997cdb022e6db0f90ee5e503c27b0",
-    "driver": "4b1f8ba591b7029d7120611cc36464f66cca64c29477dc73421b77d101eaf144"
+    "driver": "e110eaf36d1277d34722fdb612e0b1a079483eee05fb3642940faa8248e54f1b"
   },
   "e2b_sdk": "2.51.0",
   "cases": [
@@ -40,6 +40,20 @@
       }
     },
     {
+      "name": "a command line's secrets are masked before it is kept",
+      "success": true,
+      "detail": {
+        "kept_as": "TOKEN=[redacted] true --password [redacted] https://[redacted]@h.example/x"
+      }
+    },
+    {
+      "name": "a sandbox created with commandHistory off keeps none",
+      "success": true,
+      "detail": {
+        "refused": "sbx-1a28ca2e312f4472a38a was created with commandHistory off, and keeps none"
+      }
+    },
+    {
       "name": "a command that printed more than is kept: every byte counted, the newest kept",
       "success": true,
       "detail": {
@@ -51,15 +65,15 @@
       "name": "paused and resumed on the same node, its commands are still there",
       "success": true,
       "detail": {
-        "commands": 5
+        "commands": 6
       }
     },
     {
       "name": "paused into the store and resumed on the other node, its commands come too",
       "success": true,
       "detail": {
-        "carried": 5,
-        "next": 6
+        "carried": 6,
+        "next": 7
       }
     },
     {
@@ -67,9 +81,9 @@
       "success": true,
       "detail": {
         "refused": {
-          "no such command": "sandbox sbx-2b66f9c9f92846d488ef has no command 9999",
+          "no such command": "sandbox sbx-b16216b1bbbb44b7bc8d has no command 9999",
           "no such sandbox": "no sandbox sbx-absent",
-          "a deleted sandbox": "no sandbox sbx-2b66f9c9f92846d488ef"
+          "a deleted sandbox": "no sandbox sbx-b16216b1bbbb44b7bc8d"
         }
       }
     }

@@ -90,6 +90,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- A sandbox's command history masks secrets before it keeps a command line:
+  `NAME=VALUE` for secret-looking names, `--password`/`--token` values,
+  `Bearer`/`Basic` credentials and credentials in URLs. `"commandHistory":
+  false` on a create, inherited by forks, or `--no-command-history` on a
+  node, keeps none. Output is not scanned.
 - Usage kept for good: as each lifecycle event is published, the cluster
   store folds it into a usage ledger of running stretches, kept in Redis with
   no limit (a lone node: in memory, the last 100,000). `GET /usage` reads the

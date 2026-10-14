@@ -463,6 +463,7 @@ fn parse_options() -> Result<Options, String> {
             "--egress-secrets-file" => opts.egress_secrets_file = Some(value(&mut i)?),
             "--egress-upstream-ca" => opts.egress_upstream_ca = Some(value(&mut i)?),
             "--no-template" => opts.no_template = true,
+            "--no-command-history" => history::disable_node(),
             "--require-template" => opts.require_template = true,
             "--prefault" => opts.prefault = true,
             "--no-net-offload" => opts.no_net_offload = true,
@@ -968,6 +969,9 @@ struct NewSandbox {
     /// A named set of variables and files of the caller's team to start
     /// with, under `envVars`. See hv2_cluster::environments.
     environment: Option<String>,
+    /// `false` keeps no history of its commands; see history.rs. Not E2B's.
+    #[serde(rename = "commandHistory")]
+    command_history: Option<bool>,
     /// Seconds without use after which the sandbox pauses -- to disk, and
     /// resumed by the next request when `autoResume` is on. 0 turns off a
     /// node's `--idle-pause-after`. Not E2B's: see idle.rs.
@@ -2987,6 +2991,9 @@ async fn create_sandbox(
     }
     env_vars::keep(&sandbox_id, &env);
     env_vars::keep_files(&sandbox_id, &files);
+    if req.command_history == Some(false) {
+        history::turn_off(&sandbox_id);
+    }
 
     (StatusCode::CREATED, Json(descriptor)).into_response()
 }
@@ -3116,6 +3123,9 @@ struct PausedMeta {
     /// Its commands, for the node that resumes it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     history: Vec<history::Command>,
+    /// It keeps no history, which the node that resumes it keeps to.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    history_off: bool,
 }
 
 /// A directory every node of a cluster mounts at the same path, holding
@@ -3377,6 +3387,7 @@ async fn pause_sandbox(
             lifecycle: live.lifecycle,
             network: live.network_request.clone(),
             history: history::export(sandbox_id),
+            history_off: history::is_off(sandbox_id),
         };
         if let Err(e) = store.put(sandbox_id, &meta) {
             tracing::warn!("{e}; {sandbox_id} can resume only on this node");
@@ -3453,6 +3464,9 @@ async fn resume_sandbox(
                 None => {
                     // Paused by another node: its commands come from the
                     // store.
+                    if meta.history_off {
+                        history::turn_off(sandbox_id);
+                    }
                     history::import(sandbox_id, meta.history);
                     PausedSandbox {
                         snapshot: store.snapshot(sandbox_id),
@@ -4343,6 +4357,7 @@ async fn fork_route(
                     claim.keep();
                 }
                 env_vars::inherit(&source_id, &descriptor.sandbox_id);
+                history::inherit_off(&source_id, &descriptor.sandbox_id);
                 Ok::<_, (StatusCode, String)>(descriptor)
             }
         })
