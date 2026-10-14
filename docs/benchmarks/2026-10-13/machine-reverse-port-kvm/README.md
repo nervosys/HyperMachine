@@ -47,4 +47,6 @@ machine stub, which was added; `cargo check` of it and `hm` is clean now.
   end with the VM, but their entries stay in the node's table until the
   node restarts.
 - **Many connections** beyond the three at once.
-- **An old guest agent,** which is refused (502); not run.
+- **An old guest agent** was run for a sandbox, which shares the code: it
+  is refused with 502 and a message saying to rebuild the image. Not run for
+  a machine itself.

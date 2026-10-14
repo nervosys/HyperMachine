@@ -96,7 +96,11 @@ pub(crate) async fn reverse_with(
         Err(error) => {
             return super::api_error(
                 StatusCode::BAD_GATEWAY,
-                format!("the guest could not listen on port {port}: {error}"),
+                format!(
+                    "the guest could not listen on port {port}: {error}. A guest image built \
+                     before reverse ports has an agent that does not know how to listen: \
+                     rebuild the image with a current agent"
+                ),
             );
         }
     };
