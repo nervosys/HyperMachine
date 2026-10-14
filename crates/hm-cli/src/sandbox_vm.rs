@@ -641,6 +641,20 @@ pub enum MachineCommand {
         name: String,
         id: Option<u64>,
     },
+    /// Make a port on this machine reachable from inside its guest: programs
+    /// there connect to 127.0.0.1:PORT and reach TO here
+    Reverse {
+        name: String,
+        /// The guest port its programs connect to
+        #[arg(long, value_parser = clap::value_parser!(u16).range(1..))]
+        port: u16,
+        /// Where each connection goes, from this machine
+        #[arg(long)]
+        to: String,
+        /// Connections kept waiting for the guest
+        #[arg(long, default_value_t = 4, value_parser = clap::value_parser!(u32).range(1..=32))]
+        waiting: u32,
+    },
     /// List every process in a machine's guest, as ps does
     Ps {
         #[arg(value_parser = machine_name)]
@@ -1297,26 +1311,25 @@ impl Api {
         } else {
             ("hv2-tcp/1", "tcp")
         };
-        self.upgrade(id, port, protocol, kind).await
+        let port = port.to_string();
+        self.upgrade(&["sandboxes", id, "ports", &port, kind], protocol)
+            .await
     }
 
     /// A connection waiting for a program in the guest to connect to its
-    /// `port`, carried here once one does.
-    async fn reverse(&self, id: &str, port: u16) -> Result<reqwest::Upgraded> {
-        self.upgrade(id, port, "hv2-reverse/1", "reverse").await
+    /// `port`, carried here once one does. `owner` is the path of what runs
+    /// it: `sandboxes/ID` or `machines/NAME`.
+    async fn reverse_at(&self, owner: &[String], port: u16) -> Result<reqwest::Upgraded> {
+        let port = port.to_string();
+        let mut path: Vec<&str> = owner.iter().map(String::as_str).collect();
+        path.extend(["ports", port.as_str(), "reverse"]);
+        self.upgrade(&path, "hv2-reverse/1").await
     }
 
-    async fn upgrade(
-        &self,
-        id: &str,
-        port: u16,
-        protocol: &str,
-        kind: &str,
-    ) -> Result<reqwest::Upgraded> {
-        let port = port.to_string();
+    async fn upgrade(&self, path: &[&str], protocol: &str) -> Result<reqwest::Upgraded> {
         let response = self
             .tcp_client
-            .get(self.url(&["sandboxes", id, "ports", &port, kind])?)
+            .get(self.url(path)?)
             .version(reqwest::Version::HTTP_11)
             .header("connection", "upgrade")
             .header("upgrade", protocol)
@@ -1827,6 +1840,15 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 api.request(Method::POST, &["machines", &name, "runs"], Some(body))
                     .await?
             }
+            MachineCommand::Reverse {
+                name,
+                port,
+                to,
+                waiting,
+            } => {
+                reverse_forward(api, vec!["machines".to_string(), name], port, to, waiting).await?;
+                return Ok(0);
+            }
             MachineCommand::Ps { name, all } => {
                 api.request_bounded_query(
                     Method::GET,
@@ -2333,7 +2355,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             to,
             waiting,
         } => {
-            reverse_forward(api, id, port, to, waiting).await?;
+            reverse_forward(api, vec!["sandboxes".to_string(), id], port, to, waiting).await?;
             return Ok(0);
         }
         VmCommand::Tcp {
@@ -2825,21 +2847,27 @@ async fn tcp_forward(
 
 /// Keep `waiting` connections open for programs in the guest to connect to
 /// its `port`; each that one does is carried to `to`, and another opened.
-async fn reverse_forward(api: Api, id: String, port: u16, to: String, waiting: u32) -> Result<()> {
+async fn reverse_forward(
+    api: Api,
+    owner: Vec<String>,
+    port: u16,
+    to: String,
+    waiting: u32,
+) -> Result<()> {
     use tokio::io::AsyncReadExt as _;
     // Fail authentication and refusals before reporting ready.
-    let first = api.reverse(&id, port).await?;
-    println!("{}", json!({"sandboxID": id, "guestPort": port, "to": to}));
+    let first = api.reverse_at(&owner, port).await?;
+    println!("{}", json!({"owner": owner, "guestPort": port, "to": to}));
     let mut slots = tokio::task::JoinSet::new();
     let mut first = Some(first);
     for _ in 0..waiting {
-        let (api, id, to, initial) = (api.clone(), id.clone(), to.clone(), first.take());
+        let (api, owner, to, initial) = (api.clone(), owner.clone(), to.clone(), first.take());
         slots.spawn(async move {
             let mut initial = initial;
             loop {
                 let opened = match initial.take() {
                     Some(tunnel) => Ok(tunnel),
-                    None => api.reverse(&id, port).await,
+                    None => api.reverse_at(&owner, port).await,
                 };
                 let mut tunnel = match opened {
                     Ok(tunnel) => tunnel,

@@ -61,6 +61,21 @@ pub(crate) async fn reverse_tunnel(
     let Some(vm) = vm else {
         return super::api_error(StatusCode::NOT_FOUND, "sandbox is not running on this node");
     };
+    reverse_with(state, sandbox, vm, port, request).await
+}
+
+/// The reverse connection for `owner` -- a sandbox's ID or a machine's --
+/// once its guest's agent `vm` is known: one waiting connection, listened
+/// for in the guest and paired when a program there connects. See
+/// [`reverse_tunnel`].
+pub(crate) async fn reverse_with(
+    state: Arc<AppState>,
+    sandbox: String,
+    vm: Arc<AgentVM>,
+    port: u16,
+    request: axum::extract::Request,
+) -> axum::response::Response {
+    use axum::http::StatusCode;
     let waiting = {
         let mut waiting = state.forwards.waiting.lock();
         let count = waiting.entry(sandbox.clone()).or_default();

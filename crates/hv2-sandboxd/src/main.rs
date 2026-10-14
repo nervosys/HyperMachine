@@ -6630,6 +6630,10 @@ async fn main() -> std::process::ExitCode {
             get(volumes::get).delete(volumes::delete),
         )
         .route("/sandboxes/{sandboxID}/exec", post(exec))
+        .route(
+            "/machines/{name}/ports/{hostPort}/reverse",
+            get(machines::reverse_tunnel),
+        )
         .route("/sandboxes/{sandboxID}/commands", get(history::list))
         .route("/sandboxes/{sandboxID}/commands/{n}", get(history::get))
         .route("/sandboxes/{sandboxID}/processes", get(sandbox_processes))
