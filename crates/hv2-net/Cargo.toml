@@ -22,7 +22,7 @@ hv2-tls = { path = "../hv2-tls", version = "1.1.0" }
 # that is how `VM::attach_net` hands it out.
 parking_lot = { workspace = true }
 zeroize = "1.9"
-base64 = "0.22"
+base64 = "0.23"
 bytes = "1"
 memchr = "2.8"
 http-body-util = "0.1"
