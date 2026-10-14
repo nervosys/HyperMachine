@@ -1,0 +1,47 @@
+{
+  "success": true,
+  "purpose": "functional verification of a reverse port forward from a machine on KVM; the times are the check's own stopwatch and not a benchmark",
+  "input_sha256": {
+    "daemon": "d8c449c0bd178769de6ce502accb2380e2960c2c8ffbd25f1933c70a408ecd32",
+    "hm": "bffad09a6c9484f9543b1ee0a1b282d0e134f8cebc78dcca56ccf2b05ac6e889",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "3105f73f4e2eb5470c94065097499a5ccce64c541e427763078612969ff900f7"
+  },
+  "cases": [
+    {
+      "name": "through the API: a machine program's connection reaches the caller, both ways",
+      "success": true,
+      "detail": {
+        "seconds_to_first_bytes": 0.008
+      }
+    },
+    {
+      "name": "through hm: wget in the machine fetches from the caller's server, several at once",
+      "success": true,
+      "detail": {
+        "fetches": 3,
+        "bytes_each": 524288,
+        "seconds": 0.039
+      }
+    },
+    {
+      "name": "with the caller gone, the machine's port is closed and refuses a program",
+      "success": true,
+      "detail": {
+        "after": "exit=1"
+      }
+    },
+    {
+      "name": "what cannot be done is refused",
+      "success": true,
+      "detail": {
+        "refused": {
+          "port 0": 400,
+          "no such machine": 404,
+          "not an upgrade": 400
+        }
+      }
+    }
+  ]
+}

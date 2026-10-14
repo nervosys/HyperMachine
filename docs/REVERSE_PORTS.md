@@ -12,6 +12,12 @@ hm sandbox vm reverse $SBX --port 7000 --to 127.0.0.1:8080
 curl http://127.0.0.1:7000/
 ```
 
+A machine does the same, with its name in place of the sandbox's ID:
+
+```sh
+hm sandbox vm machine reverse web-01 --port 7000 --to 127.0.0.1:8080
+```
+
 `--to` is any address your machine can reach. `--waiting N` (default 4, at
 most 32) is how many connections are kept waiting for the guest, and so how
 many it can make at once without one being turned away. Ctrl-C stops it.
@@ -33,7 +39,9 @@ port all the same, and nothing else can reach it.
   waiting connection for a port shares the guest's one listener.
 - **The guest's port is closed** 5 seconds after the last connection
   waiting on it goes. A program connecting after that is refused.
-- **Through the control plane** as through a node.
+- **Through the control plane:** a sandbox's reverse port is forwarded
+  like the TCP tunnel. A machine's is served by its node directly, as it
+  is not forwarded by the control plane yet.
 - **At most 64 connections waiting** for a sandbox, across its ports
   (429 past that). A sandbox's waiting and carried connections close when
   it pauses or ends.

@@ -1440,6 +1440,38 @@ pub(crate) async fn processes(
     }
 }
 
+/// `GET /machines/{name}/ports/{hostPort}/reverse`, upgraded to
+/// `hv2-reverse/1`: a port of the caller's, reached from inside the machine's
+/// guest. As [`super::forwards::reverse_tunnel`] does for a sandbox.
+pub(crate) async fn reverse_tunnel(
+    State(state): State<Arc<AppState>>,
+    Path((name, port)): Path<(String, u16)>,
+    request: axum::extract::Request,
+) -> Response {
+    if let Err(message) = hv2_api::tcp_tunnel::validate_reverse(&request) {
+        return api_error(StatusCode::BAD_REQUEST, message);
+    }
+    if port == 0 {
+        return api_error(StatusCode::BAD_REQUEST, "guest port must be nonzero");
+    }
+    let (id, vm) = match named(&state, request.headers(), &name) {
+        Ok(machine) => match running(&state, request.headers(), &name) {
+            Ok((vm, true)) => (machine.id, vm),
+            Ok((_, false)) => {
+                return api_error(
+                    StatusCode::CONFLICT,
+                    format!(
+                        "machine {name} has no guest agent answering, and a reverse port needs one"
+                    ),
+                )
+            }
+            Err(response) => return response,
+        },
+        Err(response) => return response,
+    };
+    super::forwards::reverse_with(state, id, vm, port, request).await
+}
+
 /// `GET /machines/{name}/network/decisions`: what its gateway allowed and
 /// refused, since this boot.
 pub(crate) async fn network_decisions(

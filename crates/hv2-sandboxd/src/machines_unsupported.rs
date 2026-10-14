@@ -40,6 +40,9 @@ pub(crate) async fn exec() -> Response {
 pub(crate) async fn processes() -> Response {
     refused()
 }
+pub(crate) async fn reverse_tunnel() -> Response {
+    refused()
+}
 pub(crate) async fn console() -> Response {
     refused()
 }
