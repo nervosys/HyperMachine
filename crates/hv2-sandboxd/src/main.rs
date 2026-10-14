@@ -339,6 +339,8 @@ struct Options {
     warm_pool: usize,
     /// How many templates at sizes not their own to keep. See sized.rs.
     sized_templates: usize,
+    /// The disk they may take together, in GiB of guest memory.
+    sized_template_disk_gb: u64,
     /// Sizes to build the base template at when the node starts.
     template_sizes: Vec<Sizes>,
     /// Boot template guests with a placeholder disk, so a sandbox that asks
@@ -423,6 +425,7 @@ fn parse_options() -> Result<Options, String> {
         evict_idle_after: None,
         warm_pool: 0,
         sized_templates: sized::DEFAULT_LIMIT,
+        sized_template_disk_gb: sized::DEFAULT_DISK_GB,
         template_sizes: Vec::new(),
         disk_slot: false,
         idle_pause_after: None,
@@ -586,6 +589,13 @@ fn parse_options() -> Result<Options, String> {
                 opts.sized_templates = most;
             }
             "--template-size" => opts.template_sizes.push(sized::parse(&value(&mut i)?)?),
+            "--sized-template-disk-gb" => {
+                let gb: u64 = value(&mut i)?.parse().map_err(|e| format!("{e}"))?;
+                if gb > 4096 {
+                    return Err("--sized-template-disk-gb is at most 4096".into());
+                }
+                opts.sized_template_disk_gb = gb;
+            }
             "--warm-pool" => {
                 let spares: usize = value(&mut i)?.parse().map_err(|e| format!("{e}"))?;
                 if spares > 64 {
@@ -608,7 +618,7 @@ fn parse_options() -> Result<Options, String> {
             "--help" | "-h" => {
                 println!(
                     "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N | --memory-mb N] [--cpu-cores N] \
-                     [--capacity N] [--guest-transport mmio|pci] [--cold-start-concurrency N] [--no-template | --require-template] [--prefault] [--sized-templates N] [--template-size CPUSxMB ...] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] [--idle-pause-after SECS] \
+                     [--capacity N] [--guest-transport mmio|pci] [--cold-start-concurrency N] [--no-template | --require-template] [--prefault] [--sized-templates N] [--sized-template-disk-gb N] [--template-size CPUSxMB ...] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] [--idle-pause-after SECS] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy] \
                      [--tenant-reserved-cidr CIDR]...] \
                      [--tls-cert F --tls-key F] \
