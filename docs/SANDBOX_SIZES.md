@@ -23,9 +23,14 @@ The node therefore builds the template again at each size it is asked for:
   the base template at that size when the node starts, so not even the
   first sandbox at that size boots.
 - **`--sized-templates N`** (default 4, at most 64) is how many such
-  snapshots a node keeps. Each takes as much disk as the guest's memory, in
-  the node's temporary directory. Once it holds that many, other sizes boot
-  every time. `0` turns this off.
+  snapshots a node keeps. Once it holds that many, other sizes boot every
+  time. `0` turns this off.
+- **`--sized-template-disk-gb N`** (default 16) bounds the disk they take
+  together. Each takes as much as the guest's memory, in the node's
+  temporary directory, so a size whose memory would take those held and
+  being built past N GiB is not built, and its sandboxes boot. Four 64 GiB
+  sizes would otherwise be 256 GiB. The node does not look at the disk's
+  free space itself: set N to what its temporary directory can spare.
 - One is built at a time, beside the node's sandboxes and outside its
   `--capacity`.
 - A template rebuilt under the same name forgets the sizes built from its

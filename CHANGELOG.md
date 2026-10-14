@@ -90,6 +90,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- `--sized-template-disk-gb N` (default 16) bounds the disk a node's sized
+  templates take together. Each is a snapshot as large as its guest's
+  memory, and four large sizes could fill a node's temporary directory; a
+  size that would go past the bound is not built, and its sandboxes boot.
 - Usage kept for good: as each lifecycle event is published, the cluster
   store folds it into a usage ledger of running stretches, kept in Redis with
   no limit (a lone node: in memory, the last 100,000). `GET /usage` reads the
