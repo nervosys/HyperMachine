@@ -23,7 +23,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use hv2_cluster::environments::{GuestFile, Repository};
+use hv2_cluster::environments::{GuestFile, Repository, RepositoryKind};
 
 /// How long one clone may take.
 const CLONE_TIMEOUT: Duration = Duration::from_secs(300);
@@ -156,25 +156,29 @@ async fn clone_and_pack(
                 .map_err(|e| format!("{}: branch {branch}: {e}", repo.remote))?;
         }
     }
+    pack(&tree, &repo.remote).await
+}
+
+/// A clone's tree, `.lit/` or `.git/` and all, as a tar archive: what goes
+/// into the guest, most of [`MOST_PACKED`].
+pub(crate) async fn pack(tree: &Path, remote: &str) -> Result<Vec<u8>, String> {
     let packed = tokio::process::Command::new("tar")
         .arg("-C")
-        .arg(&tree)
+        .arg(tree)
         .args(["-cf", "-", "."])
         .stdin(std::process::Stdio::null())
         .output()
         .await
-        .map_err(|e| format!("packing {}: {e}", repo.remote))?;
+        .map_err(|e| format!("packing {remote}: {e}"))?;
     if !packed.status.success() {
         return Err(format!(
-            "packing {}: {}",
-            repo.remote,
+            "packing {remote}: {}",
             String::from_utf8_lossy(&packed.stderr).trim()
         ));
     }
     if packed.stdout.len() > MOST_PACKED {
         return Err(format!(
-            "{} is over {} MiB packed; a sandbox's repositories are copied in whole",
-            repo.remote,
+            "{remote} is over {} MiB packed; a sandbox's repositories are copied in whole",
             MOST_PACKED >> 20
         ));
     }
@@ -186,6 +190,7 @@ async fn clone_and_pack(
 pub(crate) async fn prepare(
     binary: Option<&Path>,
     remotes: &[String],
+    git_remotes: &[String],
     http: &reqwest::Client,
     repos: &[Repository],
 ) -> Result<Vec<GuestFile>, (axum::http::StatusCode, String)> {
@@ -193,20 +198,17 @@ pub(crate) async fn prepare(
     if repos.is_empty() {
         return Ok(Vec::new());
     }
-    let Some(binary) = binary else {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "the environment has repositories, and this node has no --lit to clone them with"
-                .to_string(),
-        ));
-    };
     let mut files = Vec::with_capacity(repos.len());
     for (index, repo) in repos.iter().enumerate() {
-        if !allowed(&repo.remote, remotes) {
+        let (allowed_remotes, what) = match repo.kind {
+            RepositoryKind::Lit => (remotes, "Lit"),
+            RepositoryKind::Git => (git_remotes, "Git"),
+        };
+        if !allowed(&repo.remote, allowed_remotes) {
             return Err((
                 StatusCode::FORBIDDEN,
                 format!(
-                    "{}: this node clones only from the Lit remotes its operator allows",
+                    "{}: this node clones {what} repositories only from the remotes its operator allows",
                     repo.remote
                 ),
             ));
@@ -214,7 +216,20 @@ pub(crate) async fn prepare(
         let scratch = scratch_dir();
         std::fs::create_dir_all(&scratch)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-        let packed = clone_and_pack(binary, http, repo, &scratch).await;
+        let packed = match (repo.kind, binary) {
+            (RepositoryKind::Lit, Some(binary)) => {
+                clone_and_pack(binary, http, repo, &scratch).await
+            }
+            (RepositoryKind::Lit, None) => {
+                let _ = std::fs::remove_dir_all(&scratch);
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "the environment has a Lit repository, and this node has no --lit to clone it with"
+                        .to_string(),
+                ));
+            }
+            (RepositoryKind::Git, _) => crate::git_repos::clone_and_pack(repo, &scratch).await,
+        };
         let _ = std::fs::remove_dir_all(&scratch);
         let packed = packed.map_err(|e| (StatusCode::BAD_GATEWAY, e))?;
         files.push(GuestFile {

@@ -127,6 +127,7 @@ mod disks;
 // modes; see machines_unsupported.rs for other hosts.
 mod env_vars;
 mod forwards;
+mod git_repos;
 mod history;
 mod identity;
 mod idle;
@@ -316,6 +317,8 @@ struct Options {
     lit: Option<std::path::PathBuf>,
     /// The Lit remotes they may be cloned from. See lit_repos.rs.
     lit_remotes: Vec<String>,
+    /// Remotes a Git repository may be cloned from, by `--git-remote`.
+    git_remotes: Vec<String>,
     /// What the flags said about pushing metrics over OTLP; the environment
     /// is consulted when they are parsed. See hv2_cluster::otlp.
     otlp_flags: hv2_cluster::otlp::Flags,
@@ -406,6 +409,7 @@ fn parse_options() -> Result<Options, String> {
         image_dir: None,
         lit: None,
         lit_remotes: Vec::new(),
+        git_remotes: Vec::new(),
         otlp_flags: hv2_cluster::otlp::Flags::default(),
         otlp: None,
         allow_private_webhooks: false,
@@ -484,6 +488,11 @@ fn parse_options() -> Result<Options, String> {
                 let remote = value(&mut i)?;
                 reqwest::Url::parse(&remote).map_err(|e| format!("--lit-remote {remote}: {e}"))?;
                 opts.lit_remotes.push(remote);
+            }
+            "--git-remote" => {
+                let remote = value(&mut i)?;
+                reqwest::Url::parse(&remote).map_err(|e| format!("--git-remote {remote}: {e}"))?;
+                opts.git_remotes.push(remote);
             }
             "--otlp-endpoint" => opts.otlp_flags.endpoint = Some(value(&mut i)?),
             "--otlp-header" => opts.otlp_flags.headers.push(value(&mut i)?),
@@ -603,7 +612,7 @@ fn parse_options() -> Result<Options, String> {
                      [--tenant-reserved-cidr CIDR]...] \
                      [--tls-cert F --tls-key F] \
                      [--otlp-endpoint URL [--otlp-header KEY=VALUE]... [--otlp-interval SECS]] \
-                     [--lit BIN [--lit-remote URL]...] \
+                     [--lit BIN [--lit-remote URL]...] [--git-remote URL]... \
                      [--cluster-store redis://H:P --advertise-api URL --advertise-proxy H:P \
                      [--node-id ID] [--cluster-namespace NS] [--cluster-token T] [--node-ttl SECS] [--registration-reconcile-interval SECS]]\n\
                      HV2_KERNEL and HV2_INITRD name the guest; HV2_CLUSTER_TOKEN may carry the token."
@@ -2756,6 +2765,7 @@ async fn create_sandbox(
                 match lit_repos::prepare(
                     state.opts.lit.as_deref(),
                     &state.opts.lit_remotes,
+                    &state.opts.git_remotes,
                     &state.http,
                     &environment.repositories,
                 )
