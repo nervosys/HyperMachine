@@ -1,0 +1,62 @@
+{
+  "success": true,
+  "purpose": "functional verification of Git repositories in environments on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "9d18b14511750ef3fdabb050e6ffb3d68dfa611e5aec5fc2e68851b1670ff4be",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "8144ab993b5b410b8ffba66cc03b0eed8f8cbbd57c9b7011ad7c9ec697636513"
+  },
+  "git": "git version 2.47.3",
+  "cases": [
+    {
+      "name": "an environment with a Git repository twice is described without credentials",
+      "success": true,
+      "detail": {
+        "described": [
+          {
+            "branch": null,
+            "path": "/srv/app",
+            "remote": "http://127.0.0.1:42199/app.git",
+            "username": null
+          },
+          {
+            "branch": "feature",
+            "path": "/srv/feature",
+            "remote": "http://127.0.0.1:42199/app.git",
+            "username": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "a sandbox created with it has each tree, the right branch's files, owned by its user",
+      "success": true,
+      "detail": {
+        "main": [
+          "on",
+          "main",
+          "print('main')"
+        ],
+        "feature": [
+          "only",
+          "on",
+          "feature",
+          "on",
+          "main"
+        ]
+      }
+    },
+    {
+      "name": "what cannot be is refused before anything boots, and no sandbox is left",
+      "success": true,
+      "detail": {
+        "refused": {
+          "credentials on a Git repository": "a Git repository is cloned without credentials: give it neither username nor password",
+          "a remote the operator did not allow": "http://127.0.0.1:42199/elsewhere.git: this node clones Git repositories only from the remotes its operator allows",
+          "a remote that redirects out of what it allowed": "http://127.0.0.1:42199/go/app.git: git clone: fatal: unable to access 'http://127.0.0.1:42199/go/app.git/': The requested URL returned error: 302"
+        }
+      }
+    }
+  ]
+}

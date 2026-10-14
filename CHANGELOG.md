@@ -90,6 +90,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- An environment's Git repositories: a repository with `"kind": "git"` is
+  cloned by the node from an `http` or `https` Git remote the operator allows
+  with `--git-remote`, with `git` on its `PATH`. The clone takes only the web
+  protocols, follows no redirects, runs no hooks or submodules and reads no
+  system or global Git configuration; it is packed and placed in the guest as
+  a Lit clone is. A Git repository takes no credentials. See
+  `docs/ENVIRONMENTS.md`.
 - A port of the caller's reached from inside a machine or a sandbox, as
   `ssh -R` does: `hm sandbox vm reverse ID --port P --to HOST:PORT`, and
   `hm sandbox vm machine reverse NAME ...` for a machine, over

@@ -68,13 +68,33 @@ pub struct GuestFile {
     pub unpack_into: Option<String>,
 }
 
-/// A Lit repository an environment's sandboxes start with: cloned by the
-/// node from `remote` into `path` in the guest, `.lit/` and all.
+/// Which program clones a repository.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RepositoryKind {
+    /// A `lit server`'s repository, cloned with `lit`.
+    #[default]
+    Lit,
+    /// A Git repository over `http` or `https`, cloned with `git`.
+    Git,
+}
+
+impl RepositoryKind {
+    fn is_lit(&self) -> bool {
+        *self == Self::Lit
+    }
+}
+
+/// A repository an environment's sandboxes start with: cloned by the node
+/// from `remote` into `path` in the guest, its history and all.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Repository {
-    /// A `lit server`'s URL. The node clones only from remotes its operator
-    /// allows (`--lit-remote`).
+    /// The program that clones it: `lit`, the default, or `git`.
+    #[serde(default, skip_serializing_if = "RepositoryKind::is_lit")]
+    pub kind: RepositoryKind,
+    /// A `lit server`'s URL, or a Git remote's. The node clones only from
+    /// remotes its operator allows (`--lit-remote`, `--git-remote`).
     pub remote: String,
     /// Where in the guest: absolute, made if it is not there.
     pub path: String,
@@ -227,6 +247,12 @@ fn refused_repository(repo: &Repository, paths: &[&str]) -> Option<String> {
         })
     {
         return Some("a branch is a plain name".to_string());
+    }
+    if repo.kind == RepositoryKind::Git && (repo.username.is_some() || repo.password.is_some()) {
+        return Some(
+            "a Git repository is cloned without credentials: give it neither username nor password"
+                .to_string(),
+        );
     }
     match (&repo.username, &repo.password) {
         (Some(user), Some(password)) if plain(user) && !password.is_empty() => None,

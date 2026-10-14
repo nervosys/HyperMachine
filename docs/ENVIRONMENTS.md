@@ -53,7 +53,8 @@ place in the guest before the create answers.
 
 | Field | |
 |---|---|
-| `remote` | A `lit server`'s URL: `http`, `https` or `lit`, with no credentials in it |
+| `kind` | `lit` (the default) or `git`: which program clones it. A Git repository takes no `username` or `password` |
+| `remote` | A `lit server`'s URL, `http`, `https` or `lit`, with no credentials in it; or, for `git`, an `http` or `https` Git remote |
 | `path` | Where in the guest; made if it is not there, and the tree given to the user commands run as |
 | `branch` | Checked out after the clone; the remote's default unless given |
 | `username`, `password` | An account on the remote, logged in to for each clone; both or neither. The password is kept as the rest of an environment is and never returned |
@@ -93,8 +94,6 @@ not returned by the API and not written to the node's log.
 
 ## Not here
 
-- **Git repositories.** A repository is a Lit one; Lit imports Git
-  repositories, and a Git remote is not cloned directly.
 - **Setup commands** run at creation; a [template](../README.md) runs its
   steps when it is built.
 - **Machines.** A machine's guest takes `userData` for cloud-init.
