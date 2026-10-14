@@ -90,6 +90,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- Usage kept for good: as each lifecycle event is published, the cluster
+  store folds it into a usage ledger of running stretches, kept in Redis with
+  no limit (a lone node: in memory, the last 100,000). `GET /usage` reads the
+  ledger, and the event tail only for before the ledger began, so usage no
+  longer stops at the last 10,000 events. See `docs/USAGE.md`.
 - An environment's Git repositories: a repository with `"kind": "git"` is
   cloned by the node from an `http` or `https` Git remote the operator allows
   with `--git-remote`, with `git` on its `PATH`. The clone takes only the web

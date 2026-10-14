@@ -56,7 +56,7 @@ reason, and are listed once at the end rather than counted as gaps.
 | Webhooks | Signed, with a rotated secret; a `degraded` event | Signed and team-scoped, for sandboxes. The signature is a hash of the secret and the body, not an HMAC; the secret is replaced in one step with no overlap; machines send none |
 | Telemetry sent where the user says | OTLP over HTTP, set per account | **Per node, set by its operator.** A node [pushes its metrics over OTLP/HTTP](TELEMETRY.md) with JSON, configured by flags or OpenTelemetry's own variables, [checked against the OpenTelemetry Collector](benchmarks/2026-10-12/otlp-export/README.md); and serves them at `/metrics`. Metrics only, and only the node's: nothing per sandbox, nothing from the control plane, no logs or traces, and not set per team |
 | Teams | Organizations, members, a shared wallet | [Teams](TEAMS.md), partial: keys and sandboxes belong to one, with roles |
-| How much was used | Per sandbox and per key | **Per sandbox, team, template or key, for sandboxes.** [`GET /usage`](USAGE.md) adds up running time, vCPU-seconds and GiB-seconds in a window, paused time not counted, [checked on KVM against a stopwatch](benchmarks/2026-10-12/usage-kvm/README.md). It goes back only as far as the last 10,000 lifecycle events, which a lone node keeps in memory; machines, storage and network are not counted |
+| How much was used | Per sandbox and per key | **Per sandbox, team, template or key, for sandboxes.** [`GET /usage`](USAGE.md) adds up running time, vCPU-seconds and GiB-seconds in a window, paused time not counted, [checked on KVM against a stopwatch](benchmarks/2026-10-12/usage-kvm/README.md). **Kept for good in a cluster**: a [usage ledger](USAGE.md#what-it-is-counted-from-and-what-that-cannot-know) in the cluster store holds every stretch of running as it happens, so usage outlives the 10,000-event tail, [checked against Redis](benchmarks/2026-10-13/usage-ledger/README.md). A lone node keeps its usage in memory; machines, storage and network are not counted |
 | Client libraries | Python and TypeScript | E2B's own, unmodified, against E2B's API. [Python](../sdk/python/README.md) for machines, runs, prompts, files, ports, snapshots, usage and environments, with no dependencies, [checked against a node on KVM](benchmarks/2026-10-12/python-sdk-kvm/README.md). And [TypeScript](../sdk/typescript/README.md), the same in camelCase, [checked the same way](benchmarks/2026-10-12/typescript-sdk-kvm/README.md); `sdk/node` is for the [process sandbox](SANDBOXES.md). Neither is on PyPI or npm |
 | A command line | `boat`, with JSON output on every command | `hm sandbox vm` |
 | GPU | None | Partial: passthrough code, not wired to sandboxes |
@@ -117,10 +117,9 @@ In rough order of how much each matters to someone choosing between them:
    from remotes the operator allows, without credentials. A private Git
    remote needs a credential the node can use without keeping an admin
    password in the store; not done.
-8. **Usage kept for good, and telemetry a team sets for itself.**
-   [Usage](USAGE.md) is added up per sandbox, team and key now, from the
-   events a cluster keeps, so only as far back as they go; and a node's
-   operator can [push its metrics over OTLP](TELEMETRY.md).
+8. **Telemetry a team sets for itself.** A node's operator can
+   [push its metrics over OTLP](TELEMETRY.md); a team cannot send its own
+   anywhere. [Usage](USAGE.md) is kept for good in a cluster now.
 9. **Clients published to a registry.** [Python](../sdk/python/README.md)
    and [TypeScript](../sdk/typescript/README.md) clients are here, installed
    from a checkout, not from PyPI or npm.

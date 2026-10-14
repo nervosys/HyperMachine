@@ -205,10 +205,16 @@ async fn usage(
         Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
     };
     let truncated = events.len() >= crate::store::EVENT_TAIL;
+    // What ran since the ledger began, kept for good; ending in the window.
+    let ledger = match store.usage_ledger(from).await {
+        Ok(ledger) => ledger,
+        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+    };
     let team = team_of(team);
     Json(crate::usage::report(
         &events,
         truncated,
+        ledger.as_ref(),
         from,
         to,
         now,

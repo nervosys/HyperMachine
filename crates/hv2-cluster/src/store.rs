@@ -281,6 +281,14 @@ pub trait ClusterStore: Send + Sync {
     /// The most recent `count` events, newest first.
     async fn events(&self, count: usize) -> Result<Vec<ClusterEvent>>;
 
+    /// The usage ledger ([`crate::usage`]): when it began, every stretch
+    /// still running, and every closed one ending at or after
+    /// `ending_from_ms`. `None` for a store that keeps none, which leaves
+    /// usage to the event tail.
+    async fn usage_ledger(&self, _ending_from_ms: u64) -> Result<Option<crate::usage::Ledger>> {
+        Ok(None)
+    }
+
     /// Register or replace a webhook.
     async fn put_webhook(&self, hook: &Webhook) -> Result<()>;
     /// Every webhook, oldest first.
@@ -323,7 +331,19 @@ pub struct MemoryStore {
     webhooks: Mutex<Vec<Webhook>>,
     deliveries: Mutex<HashMap<String, std::collections::VecDeque<Delivery>>>,
     environments: Mutex<std::collections::BTreeMap<String, Environment>>,
+    usage: Mutex<UsageBook>,
 }
+
+/// A lone process's usage ledger: in memory, so a restart forgets it.
+#[derive(Default)]
+struct UsageBook {
+    since_ms: Option<u64>,
+    open: HashMap<String, crate::usage::Kept>,
+    closed: std::collections::VecDeque<crate::usage::Kept>,
+}
+
+/// The most closed stretches a lone process keeps; the oldest go first.
+const MEMORY_USAGE_KEPT: usize = 100_000;
 
 #[derive(Default)]
 struct SandboxState {
@@ -945,12 +965,51 @@ impl ClusterStore for MemoryStore {
     }
 
     async fn publish(&self, event: &ClusterEvent) -> Result<()> {
-        let mut events = self.events.lock();
-        if events.len() == EVENT_TAIL {
-            events.pop_front();
+        {
+            let mut events = self.events.lock();
+            if events.len() == EVENT_TAIL {
+                events.pop_front();
+            }
+            events.push_back(event.clone());
         }
-        events.push_back(event.clone());
+        let mut book = self.usage.lock();
+        let since = book.since_ms.unwrap_or(event.at_ms);
+        let Some(sandbox) = event.sandbox_id.clone() else {
+            return Ok(());
+        };
+        if let Some((opened, closed)) = crate::usage::step(book.open.get(&sandbox), event, since) {
+            book.since_ms = Some(since);
+            match opened {
+                Some(opened) => {
+                    book.open.insert(sandbox, opened);
+                }
+                None => {
+                    book.open.remove(&sandbox);
+                }
+            }
+            if let Some(closed) = closed {
+                if book.closed.len() == MEMORY_USAGE_KEPT {
+                    book.closed.pop_front();
+                }
+                book.closed.push_back(closed);
+            }
+        }
         Ok(())
+    }
+
+    async fn usage_ledger(&self, ending_from_ms: u64) -> Result<Option<crate::usage::Ledger>> {
+        let book = self.usage.lock();
+        let mut stretches: Vec<_> = book
+            .closed
+            .iter()
+            .filter(|k| k.to_ms.is_some_and(|to| to >= ending_from_ms))
+            .cloned()
+            .collect();
+        stretches.extend(book.open.values().cloned());
+        Ok(Some(crate::usage::Ledger {
+            since_ms: book.since_ms,
+            stretches,
+        }))
     }
 
     async fn events(&self, count: usize) -> Result<Vec<ClusterEvent>> {
@@ -1220,6 +1279,85 @@ return {1,encoded}
 
     fn key(&self, rest: &str) -> String {
         format!("{}:{rest}", self.prefix)
+    }
+
+    /// Fold `event` into the usage ledger: read the sandbox's open stretch,
+    /// step it, and write the result only if the open stretch is still what
+    /// was read -- a compare-and-set in one script, retried if another
+    /// event for the same sandbox got there first. The first event folded
+    /// sets when the ledger began.
+    async fn fold_usage(&self, event: &ClusterEvent) -> Result<()> {
+        const SET_IF_UNCHANGED: &str = r#"
+            local current = redis.call('HGET', KEYS[1], ARGV[1])
+            if (current or '') ~= ARGV[2] then return 0 end
+            if ARGV[3] == '' then
+                redis.call('HDEL', KEYS[1], ARGV[1])
+            else
+                redis.call('HSET', KEYS[1], ARGV[1], ARGV[3])
+            end
+            if ARGV[4] ~= '' then redis.call('ZADD', KEYS[2], ARGV[5], ARGV[4]) end
+            redis.call('SET', KEYS[3], ARGV[6], 'NX')
+            return 1
+        "#;
+        let Some(sandbox) = event.sandbox_id.as_deref() else {
+            return Ok(());
+        };
+        let mut c = self.connection.clone();
+        for _ in 0..8 {
+            let since: Option<u64> = redis::cmd("GET")
+                .arg(self.key("usage:since"))
+                .query_async(&mut c)
+                .await
+                .map_err(redis_error)?;
+            let current: Option<String> = redis::cmd("HGET")
+                .arg(self.key("usage:open"))
+                .arg(sandbox)
+                .query_async(&mut c)
+                .await
+                .map_err(redis_error)?;
+            let open: Option<crate::usage::Kept> = current
+                .as_deref()
+                .map(serde_json::from_str)
+                .transpose()
+                .map_err(json_error)?;
+            let since = since.unwrap_or(event.at_ms);
+            let Some((opened, closed)) = crate::usage::step(open.as_ref(), event, since) else {
+                return Ok(());
+            };
+            let opened = opened
+                .map(|k| serde_json::to_string(&k))
+                .transpose()
+                .map_err(json_error)?
+                .unwrap_or_default();
+            let (closed_json, closed_at) = match &closed {
+                Some(k) => (
+                    serde_json::to_string(k).map_err(json_error)?,
+                    k.to_ms.unwrap_or(event.at_ms),
+                ),
+                None => (String::new(), 0),
+            };
+            let applied: i64 = redis::cmd("EVAL")
+                .arg(SET_IF_UNCHANGED)
+                .arg(3)
+                .arg(self.key("usage:open"))
+                .arg(self.key("usage:closed"))
+                .arg(self.key("usage:since"))
+                .arg(sandbox)
+                .arg(current.unwrap_or_default())
+                .arg(opened)
+                .arg(closed_json)
+                .arg(closed_at)
+                .arg(since)
+                .query_async(&mut c)
+                .await
+                .map_err(redis_error)?;
+            if applied == 1 {
+                return Ok(());
+            }
+        }
+        Err(StoreError(format!(
+            "usage for {sandbox} changed under eight tries to record it"
+        )))
     }
 }
 
@@ -2363,7 +2501,37 @@ return {1,values}
             .query_async::<String>(&mut c)
             .await
             .map(|_| ())
-            .map_err(redis_error)
+            .map_err(redis_error)?;
+        self.fold_usage(event).await
+    }
+
+    async fn usage_ledger(&self, ending_from_ms: u64) -> Result<Option<crate::usage::Ledger>> {
+        let mut c = self.connection.clone();
+        let since: Option<u64> = redis::cmd("GET")
+            .arg(self.key("usage:since"))
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        let closed: Vec<String> = redis::cmd("ZRANGEBYSCORE")
+            .arg(self.key("usage:closed"))
+            .arg(ending_from_ms)
+            .arg("+inf")
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        let open: Vec<String> = redis::cmd("HVALS")
+            .arg(self.key("usage:open"))
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        let mut stretches = Vec::with_capacity(closed.len() + open.len());
+        for json in closed.iter().chain(&open) {
+            stretches.push(serde_json::from_str(json).map_err(json_error)?);
+        }
+        Ok(Some(crate::usage::Ledger {
+            since_ms: since,
+            stretches,
+        }))
     }
 
     async fn events(&self, count: usize) -> Result<Vec<ClusterEvent>> {
@@ -3425,6 +3593,96 @@ pub(crate) mod tests {
         );
         store.delete_sandbox(&record.sandbox_id).await.unwrap();
     }
+    /// A usage event for `sandbox`, as a node publishes one.
+    fn usage_event(
+        kind: &str,
+        sandbox: &str,
+        at_ms: u64,
+        vcpus: u64,
+        running: bool,
+    ) -> ClusterEvent {
+        let mut event = ClusterEvent::new(kind, "node-a", Some(sandbox));
+        event.at_ms = at_ms;
+        event.template_id = Some("base".into());
+        event.data = Some(serde_json::json!({"hm_usage": {
+            "vcpuCount": vcpus, "memoryMB": 512, "running": running}}));
+        event
+    }
+
+    #[tokio::test]
+    async fn redis_usage_ledger_outlives_the_events_and_a_reconnect() {
+        let Ok(url) = std::env::var("HV2_TEST_REDIS") else {
+            eprintln!("skipped: HV2_TEST_REDIS is unset");
+            return;
+        };
+        let namespace = format!("usage-test-{}", uuid::Uuid::new_v4());
+        let store = RedisStore::connect(&url, &namespace).await.unwrap();
+        for event in [
+            usage_event("sandbox-created", "s1", 10_000, 1, true),
+            usage_event("sandbox-resized", "s1", 15_000, 2, true),
+            usage_event("sandbox-deleted", "s1", 20_000, 2, true),
+            usage_event("sandbox-created", "s2", 12_000, 1, true),
+        ] {
+            store.publish(&event).await.unwrap();
+        }
+        // Eight sandboxes at once: each one's events still fold in order.
+        let mut tasks = Vec::new();
+        for i in 0..8 {
+            let url = url.clone();
+            let namespace = namespace.clone();
+            tasks.push(tokio::spawn(async move {
+                let store = RedisStore::connect(&url, &namespace).await.unwrap();
+                let id = format!("c{i}");
+                store
+                    .publish(&usage_event("sandbox-created", &id, 30_000, 1, true))
+                    .await
+                    .unwrap();
+                store
+                    .publish(&usage_event("sandbox-paused", &id, 31_000, 1, true))
+                    .await
+                    .unwrap();
+            }));
+        }
+        for task in tasks {
+            task.await.unwrap();
+        }
+        // Every event gone from the stream, as when the tail moves on.
+        let mut c = store.connection.clone();
+        let _: i64 = redis::cmd("XTRIM")
+            .arg(store.key("events"))
+            .arg("MAXLEN")
+            .arg(0)
+            .query_async(&mut c)
+            .await
+            .unwrap();
+        let reconnected = RedisStore::connect(&url, &namespace).await.unwrap();
+        assert!(reconnected.events(EVENT_TAIL).await.unwrap().is_empty());
+        let ledger = reconnected.usage_ledger(0).await.unwrap().unwrap();
+        assert_eq!(ledger.since_ms, Some(10_000));
+        let mut kept: Vec<(String, u64, Option<u64>, u64)> = ledger
+            .stretches
+            .iter()
+            .map(|k| (k.sandbox.clone(), k.from_ms, k.to_ms, k.vcpus))
+            .collect();
+        kept.sort();
+        let mut want = vec![
+            ("s1".to_string(), 10_000, Some(15_000), 1),
+            ("s1".to_string(), 15_000, Some(20_000), 2),
+            ("s2".to_string(), 12_000, None, 1),
+        ];
+        for i in 0..8 {
+            want.push((format!("c{i}"), 30_000, Some(31_000), 1));
+        }
+        want.sort();
+        assert_eq!(kept, want);
+        // Closed stretches ending before the window are not read.
+        let later = reconnected.usage_ledger(25_000).await.unwrap().unwrap();
+        assert!(
+            later.stretches.iter().all(|k| k.sandbox != "s1"),
+            "{later:?}"
+        );
+    }
+
     #[tokio::test]
     async fn memory_web_sharing_contract() {
         web_sharing_contract(&MemoryStore::new()).await;
