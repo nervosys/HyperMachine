@@ -90,6 +90,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- A reverse port on a guest whose agent is too old to listen now says so:
+  the 502 tells the caller to rebuild the guest image with a current agent,
+  instead of reporting only that the connection closed. The sandbox is
+  unaffected.
 - `--sized-template-disk-gb N` (default 16) bounds the disk a node's sized
   templates take together. Each is a snapshot as large as its guest's
   memory, and four large sizes could fill a node's temporary directory; a

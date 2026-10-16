@@ -1,0 +1,8 @@
+# An older guest agent, asked to listen
+# Image: guest-output-drain.cpio.gz (before reverse ports); node: this branch's release build.
+# Run 2026-10-14 under WSL2 with nested KVM by tools/probe-old-guest-agent-kvm.py.
+exec: 200 alive
+reverse status line: HTTP/1.1 502 Bad Gateway
+reverse body: {"code":502,"message":"the guest could not listen on port 7000: Script error: the connection to the guest agent closed before it answered. A guest image built before reverse ports has an agent that does not know how to listen: rebuild the image with a current agent"}
+exec after: 200 still-alive
+processes: 200 2
