@@ -98,6 +98,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   team telemetry is sent. A destination is checked when stored and at every
   push, follows no redirect, and takes no credentials in its URL. New API key
   scope `telemetry`. See `docs/TELEMETRY.md`.
+- A reverse port on a guest whose agent is too old to listen now says so:
+  the 502 tells the caller to rebuild the guest image with a current agent,
+  instead of reporting only that the connection closed. The sandbox is
+  unaffected.
 - `--sized-template-disk-gb N` (default 16) bounds the disk a node's sized
   templates take together. Each is a snapshot as large as its guest's
   memory, and four large sizes could fill a node's temporary directory; a

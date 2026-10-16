@@ -47,5 +47,7 @@ interface is backed by a device.
 - **A machine.** Only sandboxes have it.
 - **The control plane** forwarding it; that was built and is not run here.
 - **Many connections.** Three at once, with four waiting.
-- **An old guest agent,** which cannot listen and is refused (502); not
-  run.
+- **An old guest agent** was run afterwards, with the image from before
+  reverse ports. The request is refused with 502, the sandbox's `exec` and
+  process list go on working, and the message says to rebuild the image
+  (`docs/benchmarks/2026-10-13/old-agent-probe.txt`).

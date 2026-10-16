@@ -45,7 +45,10 @@ port all the same, and nothing else can reach it.
 - **At most 64 connections waiting** for a sandbox, across its ports
   (429 past that). A sandbox's waiting and carried connections close when
   it pauses or ends.
-- It needs the guest agent from this release or later; an older one cannot
-  listen (502).
+- It needs the guest agent from this release or later. An older one does not
+  know the operation and closes the connection, so the request is refused
+  with 502 and a message saying to rebuild the image. The sandbox is not
+  harmed: its commands and everything else go on working. A guest image has
+  its agent baked in, so images built before this need rebuilding.
 
 Evidence: [real KVM checks](benchmarks/2026-10-13/reverse-port-kvm/README.md).
