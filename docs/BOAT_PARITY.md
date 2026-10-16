@@ -54,7 +54,7 @@ reason, and are listed once at the end rather than counted as gaps.
 | Networks between sandboxes | Not described | By tag, partial: [same node and across two nodes](PRIVATE_VM_NETWORKS.md) |
 | Scoped, expiring API keys | Yes, with presets, rotation and usage per key | Yes on the control plane, with [reload and replacement](API_KEY_ROTATION.md); no usage per key |
 | Webhooks | Signed, with a rotated secret; a `degraded` event | Signed and team-scoped, for sandboxes. The signature is a hash of the secret and the body, not an HMAC; the secret is replaced in one step with no overlap; machines send none |
-| Telemetry sent where the user says | OTLP over HTTP, set per account | **Per node, set by its operator.** A node [pushes its metrics over OTLP/HTTP](TELEMETRY.md) with JSON, configured by flags or OpenTelemetry's own variables, [checked against the OpenTelemetry Collector](benchmarks/2026-10-12/otlp-export/README.md); and serves them at `/metrics`. Metrics only, and only the node's: nothing per sandbox, nothing from the control plane, no logs or traces, and not set per team |
+| Telemetry sent where the user says | OTLP over HTTP, set per account | **Per node, set by its operator.** A node [pushes its metrics over OTLP/HTTP](TELEMETRY.md) with JSON, configured by flags or OpenTelemetry's own variables, [checked against the OpenTelemetry Collector](benchmarks/2026-10-12/otlp-export/README.md); and serves them at `/metrics`. **Per team, too**: a team sets its own collector (`PUT /telemetry`), and the control plane [pushes that team's numbers](TELEMETRY.md#a-teams-own-telemetry) to it (running and paused counts, size, and the last day's usage), only under prefixes its operator allows, [checked on KVM](benchmarks/2026-10-14/team-telemetry-kvm/README.md). Metrics only: nothing per sandbox, no logs or traces, and a rolling day of usage rather than a total |
 | Teams | Organizations, members, a shared wallet | [Teams](TEAMS.md), partial: keys and sandboxes belong to one, with roles |
 | How much was used | Per sandbox and per key | **Per sandbox, team, template or key, for sandboxes.** [`GET /usage`](USAGE.md) adds up running time, vCPU-seconds and GiB-seconds in a window, paused time not counted, [checked on KVM against a stopwatch](benchmarks/2026-10-12/usage-kvm/README.md). **Kept for good in a cluster**: a [usage ledger](USAGE.md#what-it-is-counted-from-and-what-that-cannot-know) in the cluster store holds every stretch of running as it happens, so usage outlives the 10,000-event tail, [checked against Redis](benchmarks/2026-10-13/usage-ledger/README.md). A lone node keeps its usage in memory; machines, storage and network are not counted |
 | Client libraries | Python and TypeScript | E2B's own, unmodified, against E2B's API. [Python](../sdk/python/README.md) for machines, runs, prompts, files, ports, snapshots, usage and environments, with no dependencies, [checked against a node on KVM](benchmarks/2026-10-12/python-sdk-kvm/README.md). And [TypeScript](../sdk/typescript/README.md), the same in camelCase, [checked the same way](benchmarks/2026-10-12/typescript-sdk-kvm/README.md); `sdk/node` is for the [process sandbox](SANDBOXES.md). Neither is on PyPI or npm |
@@ -117,9 +117,10 @@ In rough order of how much each matters to someone choosing between them:
    from remotes the operator allows, without credentials. A private Git
    remote needs a credential the node can use without keeping an admin
    password in the store; not done.
-8. **Telemetry a team sets for itself.** A node's operator can
-   [push its metrics over OTLP](TELEMETRY.md); a team cannot send its own
-   anywhere. [Usage](USAGE.md) is kept for good in a cluster now.
+8. **Logs and traces, and usage as a total, in a team's telemetry.** A
+   team [sets its own metrics destination](TELEMETRY.md#a-teams-own-telemetry),
+   and [usage](USAGE.md) is kept for good in a cluster; what a team is sent
+   is metrics, with the last day's usage rather than a running total.
 9. **Clients published to a registry.** [Python](../sdk/python/README.md)
    and [TypeScript](../sdk/typescript/README.md) clients are packaged and
    [tested as installed](RELEASING_SDKS.md), with a publish workflow behind a

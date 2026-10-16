@@ -9,7 +9,9 @@ process.Process/Start. Checks:
 1. A command run through exec is kept: its command line, exit code and
    both streams.
 2. Commands run through the E2B SDK are kept the same way, as `process`,
-   with their PIDs; one killed through the SDK is kept as signalled.
+   with their PIDs; one killed through the SDK is kept as signalled. A
+   command line's secrets are masked before it is kept, and a sandbox
+   created with commandHistory off keeps none.
 3. A command that printed more than is kept: every byte counted, the
    newest 64 KiB kept.
 4. Paused and resumed on the same node, its commands are still there.
@@ -162,6 +164,33 @@ def main():
             return {"sdk_command": {k: kept[k] for k in ["n", "source", "cmd", "pid", "state"]},
                     "killed": {k: killed[k] for k in ["n", "state", "signal"]}}
         case("commands run through the E2B SDK are kept, a killed one as signalled", sdk_kept)
+
+        def masked():
+            status, value = request("a", "POST", f"/sandboxes/{sandbox}/exec", {
+                "cmd": "TOKEN=abc123 true --password hunter2 https://u:pw@h.example/x"})
+            assert status == 200, (status, value)
+            kept = commands("a", sandbox)[-1]
+            assert kept["cmd"] == "TOKEN=[redacted] true --password [redacted] https://[redacted]@h.example/x", kept
+            # The command prints nothing: output is kept as printed, not
+            # scanned, so a command that echoes a secret keeps it there.
+            raw = json.dumps(command("a", sandbox, kept["n"]))
+            for secret in ["abc123", "hunter2", "u:pw"]:
+                assert secret not in raw.replace("[redacted]", ""), (secret, raw)
+            return {"kept_as": kept["cmd"]}
+        case("a command line's secrets are masked before it is kept", masked)
+
+        def off():
+            status, made = request("a", "POST", "/sandboxes",
+                                   {"templateID": "base", "timeout": 300, "commandHistory": False})
+            assert status in (200, 201), (status, made)
+            quiet = made["sandboxID"]
+            status, value = request("a", "POST", f"/sandboxes/{quiet}/exec", {"cmd": "echo unseen"})
+            assert status == 200, (status, value)
+            status, value = request("a", "GET", f"/sandboxes/{quiet}/commands")
+            assert status == 409, (status, value)
+            request("a", "DELETE", f"/sandboxes/{quiet}")
+            return {"refused": value["message"]}
+        case("a sandbox created with commandHistory off keeps none", off)
 
         def long_output():
             size = 200 * 1024

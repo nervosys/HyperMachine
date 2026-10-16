@@ -1,0 +1,90 @@
+{
+  "success": true,
+  "purpose": "local KVM functional verification of teams' own telemetry; the intervals are the check's own waits and not a measurement",
+  "input_sha256": {
+    "daemon": "483378ecfd7cdffa6d56a2cc6e77a150080f530509c464c63c5b77f904b4c2d0",
+    "control": "a4a7973ee25d18ae9a1c52fd902afa2686711af4d6ce538ba44d2046663d85aa",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "3e1ae75f5076313c60b5d807d06b7c8a778004e666483302bf6c5c5372f1370c"
+  },
+  "cases": [
+    {
+      "name": "nothing set, an unlisted destination, a bad one and a key without the scope are refused",
+      "success": true,
+      "detail": {
+        "refused": {
+          "none set": 404,
+          "not listed": "http://127.0.0.1:38111/v1/metrics: not under a destination this control plane's operator allows",
+          "a query": 400,
+          "credentials": 400,
+          "a reserved header": 400,
+          "a quick interval": 400,
+          "no telemetry scope": 403
+        }
+      }
+    },
+    {
+      "name": "red runs one sandbox and pauses another, and blue runs one",
+      "success": true,
+      "detail": {
+        "red": [
+          "sbx-37adc709efc7420e8fff",
+          "sbx-6102e14dc97c464a91fb"
+        ],
+        "blue": [
+          "sbx-5d481b995e034f59acc8"
+        ]
+      }
+    },
+    {
+      "name": "each team sets a destination and is pushed to",
+      "success": true,
+      "detail": {
+        "red_endpoint": "http://127.0.0.1:44055/v1/metrics"
+      }
+    },
+    {
+      "name": "each collector is sent its own team's numbers, with its own header, and nothing of the other's",
+      "success": true,
+      "detail": {
+        "red": {
+          "running": 1,
+          "paused": 1
+        },
+        "blue": {
+          "running": 1,
+          "paused": 0
+        }
+      }
+    },
+    {
+      "name": "the numbers follow the sandboxes: a resumed one is counted, and usage is more than zero",
+      "success": true,
+      "detail": {
+        "running": 2,
+        "running_seconds_24h": 43.6,
+        "vcpu_seconds_24h": 43.6
+      }
+    },
+    {
+      "name": "a team reads its destination back, without its header, with how the last push went",
+      "success": true,
+      "detail": {
+        "red_last_push": {
+          "at": "2026-10-16T14:45:35.930Z",
+          "error": null,
+          "ok": true
+        }
+      }
+    },
+    {
+      "name": "deleting a destination stops its pushes and not the other team's",
+      "success": true,
+      "detail": {
+        "red_pushes_after": 0,
+        "blue_pushes_meanwhile": 2
+      }
+    }
+  ]
+}

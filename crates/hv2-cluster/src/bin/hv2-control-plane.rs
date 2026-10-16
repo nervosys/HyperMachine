@@ -37,6 +37,8 @@ struct Options {
     mtls_cert: Option<String>,
     mtls_key: Option<String>,
     mtls_node_name: String,
+    /// Prefixes teams' own telemetry may be sent under; see `team_telemetry`.
+    team_otlp_endpoints: Vec<String>,
     identity_issuer: Option<String>,
     /// Refuse to start unless TLS runs on AWS-LC's FIPS module.
     fips: bool,
@@ -83,6 +85,7 @@ fn parse() -> Result<Options, String> {
         mtls_cert: None,
         mtls_key: None,
         mtls_node_name: hv2_cluster::mtls::DEFAULT_NODE_NAME.to_string(),
+        team_otlp_endpoints: Vec::new(),
         identity_issuer: None,
         fips: false,
         sso: SsoOptions::default(),
@@ -141,6 +144,17 @@ fn parse() -> Result<Options, String> {
             "--mtls-cert" => opts.mtls_cert = Some(value()?),
             "--mtls-key" => opts.mtls_key = Some(value()?),
             "--mtls-node-name" => opts.mtls_node_name = value()?,
+            "--team-otlp-endpoint" => {
+                let prefix = value()?;
+                let parsed = reqwest::Url::parse(&prefix)
+                    .map_err(|e| format!("--team-otlp-endpoint {prefix}: {e}"))?;
+                if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
+                    return Err(format!(
+                        "--team-otlp-endpoint {prefix}: an http or https URL with a host"
+                    ));
+                }
+                opts.team_otlp_endpoints.push(prefix);
+            }
             "--identity-issuer" => opts.identity_issuer = Some(value()?),
             "--fips" => opts.fips = true,
             "--sso-issuer" => opts.sso.issuer = Some(value()?),
@@ -168,6 +182,7 @@ fn parse() -> Result<Options, String> {
                      [--tls-bundle-file F] [--api-tls-cert F --api-tls-key F] \
                      [--mtls-ca F --mtls-cert F --mtls-key F [--mtls-node-name N]] \
                      [--identity-issuer URL] [--web-access-file F] [--domain-verification-file F] \
+                     [--team-otlp-endpoint URL]... \
                      [--sso-issuer URL --sso-client-id ID --sso-redirect-url URL \
                      --sso-members-file F --sso-session-key-file F [--sso-client-secret-file F] \
                      [--sso-provider-ca F] [--sso-session-hours N] [--sso-guest-urls]]\n\
@@ -623,6 +638,10 @@ async fn main() -> std::process::ExitCode {
         }
     }
     tokio::spawn(control::reaper(Arc::clone(&control), opts.reap_interval));
+    if !opts.team_otlp_endpoints.is_empty() {
+        control.allow_team_telemetry(opts.team_otlp_endpoints.clone());
+        tokio::spawn(control::push_team_telemetry(Arc::clone(&control)));
+    }
     let addr = format!("0.0.0.0:{}", opts.port);
     let listener = match tokio::net::TcpListener::bind(&addr).await {
         Ok(listener) => listener,
