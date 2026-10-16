@@ -29,6 +29,28 @@ hm sandbox vm history $SBX [N]
 - **Not kept:** the environment a command was given, which is where a
   caller puts a key; and commands a guest's own shell started, which are
   [listed](PROCESSES.md) while they run.
+
+## Secrets
+
+A command line can carry a secret, and the history is returned to anyone
+who can reach the sandbox. So before a line is kept, the common shapes of
+one are masked as `[redacted]`:
+
+| Shape | Kept as |
+|---|---|
+| `NAME=VALUE`, for a name holding `TOKEN`, `SECRET`, `PASSWORD`, `PASSWD`, `KEY`, `CREDENTIAL`, `AUTH` or `COOKIE`, any case | `NAME=[redacted]` |
+| `--password`, `--token`, `--secret`, `--api-key` and their kind, then a value (or `=VALUE`) | `--password [redacted]` |
+| `Bearer` or `Basic`, then a value | `Bearer [redacted]` |
+| A URL with credentials, `https://user:pw@host/...` | `https://[redacted]@host/...` |
+
+- **A quoted value is masked whole**, spaces and all; the line's spacing and
+  any `;` or `&&` after a value are kept.
+- **It over-masks rather than under-masks**: `MONKEY=1` is masked too.
+- **It cannot know every secret**, and **output is not scanned**: a command
+  that prints a secret keeps it in its output. For either, keep no history:
+  - `"commandHistory": false` on a create keeps none for that sandbox, nor
+    its forks, and wherever it is resumed. Reading it is refused (409).
+  - `--no-command-history` keeps none on the node at all.
 - **The newest 64** are kept for a sandbox; the oldest finished one makes
   room.
 - **Kept through a pause,** on this node or, with a `--snapshot-store`, on
