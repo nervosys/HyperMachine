@@ -21,7 +21,7 @@ use hyper::{Request, Response, StatusCode};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use tokio::net::{TcpListener, TcpStream};
 
-use hv2_api::sandbox_proxy::{serve, PortMap};
+use hv2_api::sandbox_proxy::{serve_listener, PortMap};
 
 /// A backend that answers every request by describing what it received, so the
 /// test can assert on what actually arrived rather than on a status code.
@@ -150,26 +150,22 @@ async fn through_proxy(proxy: SocketAddr, authority: &str, path: &str) -> (Statu
 /// fall out of scope, so every proxy stopped before the test could connect and
 /// every test failed with a connection reset.
 async fn spawn_proxy(routes: Arc<PortMap>) -> (SocketAddr, tokio::sync::oneshot::Sender<()>) {
-    // Bind first to learn the port, drop, and let the proxy rebind it. A race
-    // in principle; in a test on loopback with an ephemeral port, the kernel
-    // does not hand the same one out again in the microseconds between.
-    let probe = TcpListener::bind("127.0.0.1:0").await.expect("probe bind");
-    let addr = probe.local_addr().expect("probe addr");
-    drop(probe);
+    // Bound once and handed to the proxy, so the port is held from the moment
+    // it is known. Binding to learn it, dropping and letting the proxy bind it
+    // again left a window in which a test running beside this one took the
+    // same port: the proxy that lost failed to bind, silently, and the test
+    // went on to talk to the other's proxy and its routes.
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let addr = listener.local_addr().expect("addr");
 
     let (tx, rx) = tokio::sync::oneshot::channel();
     tokio::spawn(async move {
-        let _ = serve(addr, routes, rx).await;
+        let _ = serve_listener(listener, routes, rx).await;
     });
 
-    // Wait for it to be accepting rather than sleeping a fixed time.
-    for _ in 0..100 {
-        if TcpStream::connect(addr).await.is_ok() {
-            return (addr, tx);
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    }
-    panic!("proxy never started listening on {addr}");
+    // Connections queue on the bound listener until the proxy accepts them,
+    // so there is nothing to wait for.
+    (addr, tx)
 }
 
 /// The whole point: a request for `{port}-{sandbox}` reaches that sandbox's
@@ -230,10 +226,11 @@ async fn a_hostname_with_no_sandbox_in_it_is_refused() {
 /// dying: the sandbox's VM may have gone away between the map and the dial.
 #[tokio::test]
 async fn a_sandbox_whose_listener_is_gone_answers_bad_gateway() {
-    // Bind and drop, so the address is real and refuses connections.
-    let dead = TcpListener::bind("127.0.0.1:0").await.expect("bind");
-    let dead_addr = dead.local_addr().expect("addr");
-    drop(dead);
+    // An address nothing can accept on: a connection to port 0 always fails
+    // (refused on Linux, invalid on Windows). Binding a listener and
+    // dropping it would leave a real port free for another test, running in
+    // parallel, to bind -- and answer 404 where this expects a failed dial.
+    let dead_addr: std::net::SocketAddr = "127.0.0.1:0".parse().expect("addr");
 
     let routes = Arc::new(PortMap::new());
     routes.insert("sbx_dead", 49983, dead_addr);
@@ -280,9 +277,8 @@ async fn a_grpc_client_is_refused_in_grpc_terms() {
 /// send it to create another one.
 #[tokio::test]
 async fn a_dead_listener_is_unavailable_not_missing() {
-    let dead = TcpListener::bind("127.0.0.1:0").await.expect("bind");
-    let dead_addr = dead.local_addr().expect("addr");
-    drop(dead);
+    // An address nothing can accept on; see the bad-gateway test above.
+    let dead_addr: std::net::SocketAddr = "127.0.0.1:0".parse().expect("addr");
 
     let routes = Arc::new(PortMap::new());
     routes.insert("sbx_dead", 49983, dead_addr);
