@@ -90,6 +90,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   itself off, as distinct from restarting. Ubuntu 24.04's cloud image runs as
   such a machine: its own 6.8 kernel on four processors, systemd started in
   full.
+- Telemetry a team sets for itself: `PUT`, `GET` and `DELETE /telemetry`
+  give a team a collector, and the control plane pushes that team's own
+  numbers to it over OTLP/HTTP (sandboxes running and paused, their vCPUs and
+  memory, and the last 24 hours of usage). The operator lists the collectors
+  teams may use with the control plane's `--team-otlp-endpoint`; with none, no
+  team telemetry is sent. A destination is checked when stored and at every
+  push, follows no redirect, and takes no credentials in its URL. New API key
+  scope `telemetry`. See `docs/TELEMETRY.md`.
 - A sandbox's command history masks secrets before it keeps a command line:
   `NAME=VALUE` for secret-looking names, `--password`/`--token` values,
   `Bearer`/`Basic` credentials and credentials in URLs. `"commandHistory":

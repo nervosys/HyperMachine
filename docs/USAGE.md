@@ -61,7 +61,9 @@ kept for good:
   forgets its usage, and it keeps the last 100,000 ended stretches. In a
   cluster they are in the cluster store.
 - **Machines are not counted**, and neither is storage, network or
-  requests. Usage is not sent anywhere: [TELEMETRY.md](TELEMETRY.md) pushes
-  the node's own metrics, which are not per team.
+  requests. Usage is not pushed as a total, but [a team can have it
+  pushed](TELEMETRY.md#a-teams-own-telemetry) to a collector it names as the
+  last 24 hours, with its sandboxes' counts; a node's own metrics are not per
+  team.
 
 [Checked on real KVM](benchmarks/2026-10-12/usage-kvm/README.md).

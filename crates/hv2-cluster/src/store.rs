@@ -29,6 +29,7 @@ use crate::web_sharing::{SharingAccess, SharingChange, WebSharingState};
 
 use crate::environments::Environment;
 use crate::model::{ClusterEvent, Delivery, NodeInfo, SandboxRecord, Webhook};
+use crate::team_telemetry::TeamTelemetry;
 
 /// A store error. Opaque on purpose: a caller's only decision is whether to
 /// retry, and the message is for the log.
@@ -312,6 +313,19 @@ pub trait ClusterStore: Send + Sync {
     async fn delete_environment(&self, _key: &str) -> Result<bool> {
         Ok(false)
     }
+
+    /// Make or replace a team's telemetry destination: a team has one.
+    async fn put_team_telemetry(&self, _config: &TeamTelemetry) -> Result<()> {
+        Err(StoreError("this store keeps no team telemetry".into()))
+    }
+    /// Every team's telemetry destination.
+    async fn team_telemetries(&self) -> Result<Vec<TeamTelemetry>> {
+        Ok(Vec::new())
+    }
+    /// Remove the destination [`TeamTelemetry::key`] names; whether there was one.
+    async fn delete_team_telemetry(&self, _key: &str) -> Result<bool> {
+        Ok(false)
+    }
 }
 
 /// Deliveries kept per webhook, at most.
@@ -331,6 +345,7 @@ pub struct MemoryStore {
     webhooks: Mutex<Vec<Webhook>>,
     deliveries: Mutex<HashMap<String, std::collections::VecDeque<Delivery>>>,
     environments: Mutex<std::collections::BTreeMap<String, Environment>>,
+    telemetry: Mutex<std::collections::BTreeMap<String, TeamTelemetry>>,
     usage: Mutex<UsageBook>,
 }
 
@@ -1036,6 +1051,21 @@ impl ClusterStore for MemoryStore {
 
     async fn delete_environment(&self, key: &str) -> Result<bool> {
         Ok(self.environments.lock().remove(key).is_some())
+    }
+
+    async fn put_team_telemetry(&self, config: &TeamTelemetry) -> Result<()> {
+        self.telemetry
+            .lock()
+            .insert(TeamTelemetry::key(config.team.as_ref()), config.clone());
+        Ok(())
+    }
+
+    async fn team_telemetries(&self) -> Result<Vec<TeamTelemetry>> {
+        Ok(self.telemetry.lock().values().cloned().collect())
+    }
+
+    async fn delete_team_telemetry(&self, key: &str) -> Result<bool> {
+        Ok(self.telemetry.lock().remove(key).is_some())
     }
 
     async fn put_webhook(&self, hook: &Webhook) -> Result<()> {
@@ -2592,6 +2622,44 @@ return {1,values}
         Ok(removed > 0)
     }
 
+    async fn put_team_telemetry(&self, config: &TeamTelemetry) -> Result<()> {
+        let json = serde_json::to_string(config).map_err(json_error)?;
+        let mut c = self.connection.clone();
+        redis::cmd("HSET")
+            .arg(self.key("team-telemetry"))
+            .arg(TeamTelemetry::key(config.team.as_ref()))
+            .arg(json)
+            .query_async::<()>(&mut c)
+            .await
+            .map_err(redis_error)
+    }
+
+    async fn team_telemetries(&self) -> Result<Vec<TeamTelemetry>> {
+        let mut c = self.connection.clone();
+        let all: HashMap<String, String> = redis::cmd("HGETALL")
+            .arg(self.key("team-telemetry"))
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        let mut found: Vec<TeamTelemetry> = all
+            .values()
+            .filter_map(|json| serde_json::from_str(json).ok())
+            .collect();
+        found.sort_by(|a, b| a.team.cmp(&b.team));
+        Ok(found)
+    }
+
+    async fn delete_team_telemetry(&self, key: &str) -> Result<bool> {
+        let mut c = self.connection.clone();
+        let removed: u64 = redis::cmd("HDEL")
+            .arg(self.key("team-telemetry"))
+            .arg(key)
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        Ok(removed > 0)
+    }
+
     async fn put_webhook(&self, hook: &Webhook) -> Result<()> {
         let json = serde_json::to_string(hook).map_err(json_error)?;
         let mut c = self.connection.clone();
@@ -3681,6 +3749,62 @@ pub(crate) mod tests {
             later.stretches.iter().all(|k| k.sandbox != "s1"),
             "{later:?}"
         );
+    }
+
+    /// What a store must do with teams' telemetry destinations.
+    async fn team_telemetry_contract(store: &dyn ClusterStore) {
+        let config = |team: Option<&str>, endpoint: &str| TeamTelemetry {
+            team: team.map(|t| crate::ownership::TeamId::parse(t).unwrap()),
+            endpoint: endpoint.into(),
+            headers: [("authorization".to_string(), "Bearer k".to_string())].into(),
+            interval_secs: 60,
+            created_ms: 1,
+            updated_ms: 2,
+        };
+        store
+            .put_team_telemetry(&config(Some("team-a"), "https://c.example/a"))
+            .await
+            .unwrap();
+        store
+            .put_team_telemetry(&config(Some("team-b"), "https://c.example/b"))
+            .await
+            .unwrap();
+        store
+            .put_team_telemetry(&config(None, "https://c.example/none"))
+            .await
+            .unwrap();
+        // A team has one: this replaces it.
+        store
+            .put_team_telemetry(&config(Some("team-a"), "https://c.example/a2"))
+            .await
+            .unwrap();
+        let all = store.team_telemetries().await.unwrap();
+        assert_eq!(all.len(), 3);
+        let a = all
+            .iter()
+            .find(|c| c.team.as_ref().map(|t| t.as_str()) == Some("team-a"))
+            .unwrap();
+        assert_eq!(a.endpoint, "https://c.example/a2");
+        assert_eq!(a.headers["authorization"], "Bearer k");
+        assert!(store.delete_team_telemetry("team-a").await.unwrap());
+        assert!(!store.delete_team_telemetry("team-a").await.unwrap());
+        assert!(store.delete_team_telemetry("-").await.unwrap());
+        let left = store.team_telemetries().await.unwrap();
+        assert_eq!(left.len(), 1);
+        assert_eq!(left[0].endpoint, "https://c.example/b");
+    }
+    #[tokio::test]
+    async fn memory_team_telemetry_contract() {
+        team_telemetry_contract(&MemoryStore::new()).await;
+    }
+    #[tokio::test]
+    async fn redis_team_telemetry_contract() {
+        let Ok(url) = std::env::var("HV2_TEST_REDIS") else {
+            eprintln!("skipped: HV2_TEST_REDIS is unset");
+            return;
+        };
+        let namespace = format!("team-telemetry-test-{}", uuid::Uuid::new_v4());
+        team_telemetry_contract(&RedisStore::connect(&url, &namespace).await.unwrap()).await;
     }
 
     #[tokio::test]

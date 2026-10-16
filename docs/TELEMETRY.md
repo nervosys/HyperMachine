@@ -25,8 +25,9 @@ once per scrape or push.
 
 `/metrics` needs no token: it says how many, never whose.
 
-**Not measured:** anything per sandbox or per machine, per API key or per
-team. Machines are not counted at all yet.
+**Not measured here:** anything per sandbox or per machine, or per API key.
+Machines are not counted at all yet. A node's numbers are the node's; a
+team's own are [pushed by the control plane](#a-teams-own-telemetry).
 
 ## Pushing over OTLP
 
@@ -68,9 +69,65 @@ Or with OpenTelemetry's own variables, which the flags override:
 what it then served as Prometheus was, sample for sample, what the node
 served at `/metrics`.
 
+## A team's own telemetry
+
+A team can have the control plane push *its* numbers to a collector it names,
+which a node's operator-set push above cannot do:
+
+```sh
+# The operator, once: the collectors teams may use.
+hv2-control-plane ... --team-otlp-endpoint https://collector.example/teams
+
+# A team (a key with the `telemetry` scope, or `admin`):
+curl -X PUT $CONTROL/telemetry -H "x-api-key: $KEY" -H 'content-type: application/json' -d '{
+  "endpoint": "https://collector.example/teams/red/v1/metrics",
+  "headers": {"Authorization": "Bearer ..."}, "intervalSeconds": 60}'
+curl $CONTROL/telemetry -H "x-api-key: $KEY"      # where, header names, how the last push went
+curl -X DELETE $CONTROL/telemetry -H "x-api-key: $KEY"
+```
+
+| Metric | What |
+|---|---|
+| `hm_team_sandboxes_running` | The team's sandboxes running now |
+| `hm_team_sandboxes_paused` | The team's sandboxes paused |
+| `hm_team_vcpus_running` | vCPUs they run with |
+| `hm_team_memory_mib_running` | MiB they run with |
+| `hm_team_running_seconds_24h` | Running time in the last 24 hours |
+| `hm_team_vcpu_seconds_24h` | vCPU-seconds in the last 24 hours |
+| `hm_team_memory_gib_seconds_24h` | GiB-seconds in the last 24 hours |
+
+All are gauges, sent as a resource with `service.name` `hypermachine`,
+`hypermachine.team` and `service.instance.id`. The usage figures are a
+rolling day, not a running total: a total would mean reading the whole
+[usage ledger](USAGE.md), which is never trimmed, on every push.
+
+- **The operator decides where.** The control plane makes the request, from
+  inside the operator's network, to an address a team chose. So a
+  destination is accepted only under a `--team-otlp-endpoint` prefix (the
+  same scheme, host and port, and a path at or below it), and with none
+  given a team cannot set one (403) and nothing is sent. It is checked when
+  stored and again at each push, so removing a prefix stops what was stored
+  under it. **No redirect is followed.**
+- **No credentials in the URL, no query.** A key goes in a header: up to 8,
+  not the ones that frame a request. Headers are kept as the rest of the
+  store is, **unencrypted**, and are never returned or logged; `GET` shows
+  their names.
+- **One destination a team**, 15 seconds to an hour between pushes (60
+  unless said). A push is sent within 5 seconds of a change, and failures
+  are logged when they start and stop, not each time. `GET /telemetry` says
+  how the last one went.
+- **Each team is sent its own and nobody else's.** A key without a team
+  (the operator's) has a destination of its own, for the sandboxes without
+  one, labelled `-`.
+- **Every control plane given the flag pushes.** With several, a collector
+  is sent each team once per instance, told apart by `service.instance.id`.
+
+[Checked on real KVM](benchmarks/2026-10-14/team-telemetry-kvm/README.md).
+
 ## Not here
 
-- **The control plane** serves `/metrics` and does not push.
+- **A node's numbers per team.** The control plane pushes a team's own;
+  `/metrics` on the control plane is still its own, and serves no team's.
 - **The `hv2` server and `hv2-core`'s exporter.** `hv2-core` has an OTLP
   exporter of its own behind its `remote-telemetry` feature, which no
   shipped binary turns on, and `config.example.toml`'s `[observability]`

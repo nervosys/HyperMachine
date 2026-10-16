@@ -43,6 +43,8 @@ pub enum ApiScope {
     Volumes,
     Events,
     Machines,
+    /// A team's own telemetry destination: `/telemetry`.
+    Telemetry,
 }
 
 /// A role limits capabilities independently of the resource scopes.
@@ -233,6 +235,7 @@ impl ApiKeyPolicy {
             ["v2" | "v3", "templates", ..] | ["templates" | "snapshots", ..] => ApiScope::Templates,
             ["volumes", ..] => ApiScope::Volumes,
             ["machines", ..] => ApiScope::Machines,
+            ["telemetry"] => ApiScope::Telemetry,
             ["events", ..] => ApiScope::Events,
             _ => return false,
         };
