@@ -1,0 +1,68 @@
+{
+  "success": true,
+  "purpose": "local KVM functional verification of sandbox routes through the control plane; no timing claim",
+  "input_sha256": {
+    "daemon": "cbc1226e543647eade0d2df2eb7ef5e6ef09c86953a656966a6c2e0d22db0914",
+    "control": "af5a3c61b94cd23a6ab6d2e5b72b8a2af6d148d8d3cdff903cdb7625c6f9c839",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "63e74d56505972091a46951aaf44c1593cbd7271d69b7fcabb5a637d8d4de8a1"
+  },
+  "cases": [
+    {
+      "name": "a sandbox is resized and forked at another size through the control plane",
+      "success": true,
+      "detail": {
+        "resized": {
+          "cpuCount": 2,
+          "memoryMB": 512,
+          "resized": true,
+          "sandboxID": "sbx-1d8bba8fd9c44dedb892"
+        },
+        "fork": "sbx-d42e5cc326324a0090f8"
+      }
+    },
+    {
+      "name": "its guest's processes are listed through the control plane",
+      "success": true,
+      "detail": {
+        "count": 2
+      }
+    },
+    {
+      "name": "its commands are kept and read again through the control plane",
+      "success": true,
+      "detail": {
+        "commands": 2
+      }
+    },
+    {
+      "name": "a checkpoint is listed and read from outside through the control plane",
+      "success": true,
+      "detail": {
+        "read": "as-taken\n"
+      }
+    },
+    {
+      "name": "a guest program reaches the caller's port, upgraded through the control plane",
+      "success": true,
+      "detail": {
+        "both_ways": true
+      }
+    },
+    {
+      "name": "another team reaches none of it",
+      "success": true,
+      "detail": {
+        "refused": {
+          "resize": 403,
+          "fork": 403,
+          "processes": 403,
+          "commands": 403,
+          "checkpoint file": 403,
+          "reverse": 403
+        }
+      }
+    }
+  ]
+}
