@@ -107,6 +107,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the 502 tells the caller to rebuild the guest image with a current agent,
   instead of reporting only that the connection closed. The sandbox is
   unaffected.
+- The Python and TypeScript SDKs are packaged for PyPI and npm and tested as
+  installed (`tools/check-sdk-packages.sh`): the licence texts are in each
+  package, the Python licence is a PEP 639 expression (needing setuptools 77),
+  and the npm package is public. `.github/workflows/sdk-packages.yml` builds and
+  tests them on every change and, for an `sdk-vX.Y.Z` tag approved in the
+  `sdk-release` environment, publishes to PyPI by trusted publishing and to npm
+  with provenance. Nothing is published yet; see `docs/RELEASING_SDKS.md`.
 - `--sized-template-disk-gb N` (default 16) bounds the disk a node's sized
   templates take together. Each is a snapshot as large as its guest's
   memory, and four large sizes could fill a node's temporary directory; a

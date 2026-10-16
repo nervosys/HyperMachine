@@ -3,10 +3,19 @@
   "version": "0.1.0",
   "description": "A client for HyperMachine's machine API, with no dependencies.",
   "license": "AGPL-3.0-only OR LicenseRef-Commercial",
+  "author": "NERVOSYS, LLC",
+  "keywords": ["hypermachine", "sandbox", "microvm", "agents"],
+  "homepage": "https://github.com/nervosys/HyperMachine/tree/master/sdk/typescript",
+  "bugs": {
+    "url": "https://github.com/nervosys/HyperMachine/issues"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/nervosys/HyperMachine.git",
     "directory": "sdk/typescript"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "type": "module",
   "main": "./index.js",
@@ -20,7 +29,9 @@
   "files": [
     "index.js",
     "index.d.ts",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "LICENSE-COMMERCIAL"
   ],
   "engines": {
     "node": ">=18"

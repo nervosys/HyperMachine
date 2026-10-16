@@ -122,8 +122,11 @@ In rough order of how much each matters to someone choosing between them:
    and [usage](USAGE.md) is kept for good in a cluster; what a team is sent
    is metrics, with the last day's usage rather than a running total.
 9. **Clients published to a registry.** [Python](../sdk/python/README.md)
-   and [TypeScript](../sdk/typescript/README.md) clients are here, installed
-   from a checkout, not from PyPI or npm.
+   and [TypeScript](../sdk/typescript/README.md) clients are packaged and
+   [tested as installed](RELEASING_SDKS.md), with a publish workflow behind a
+   tag and an approval; they are **not published**, which needs a PyPI
+   publisher, an npm scope and token, and a GitHub environment that only an
+   owner can set up.
 10. **An image with the tools already in it.**
 
 ## Where HyperMachine has something boat's documentation does not claim
