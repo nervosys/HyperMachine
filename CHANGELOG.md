@@ -95,6 +95,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Bearer`/`Basic` credentials and credentials in URLs. `"commandHistory":
   false` on a create, inherited by forks, or `--no-command-history` on a
   node, keeps none. Output is not scanned.
+- A reverse port on a guest whose agent is too old to listen now says so:
+  the 502 tells the caller to rebuild the guest image with a current agent,
+  instead of reporting only that the connection closed. The sandbox is
+  unaffected.
 - `--sized-template-disk-gb N` (default 16) bounds the disk a node's sized
   templates take together. Each is a snapshot as large as its guest's
   memory, and four large sizes could fill a node's temporary directory; a

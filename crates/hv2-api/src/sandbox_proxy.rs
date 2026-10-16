@@ -392,10 +392,29 @@ pub fn route_of_headers(headers: &hyper::HeaderMap) -> Option<(u16, &str)> {
 pub async fn serve(
     listen: SocketAddr,
     routes: Arc<dyn SandboxRoutes>,
-    mut shutdown: tokio::sync::oneshot::Receiver<()>,
+    shutdown: tokio::sync::oneshot::Receiver<()>,
 ) -> std::io::Result<()> {
     let listener = TcpListener::bind(listen).await?;
-    tracing::info!("sandbox proxy listening on {listen}");
+    serve_listener(listener, routes, shutdown).await
+}
+
+/// [`serve`] on a listener already bound.
+///
+/// For a caller that must hold the port from the moment it learns it: binding,
+/// reading the address and dropping the listener to bind it again leaves a
+/// window in which another process -- or another test -- takes the port.
+///
+/// # Errors
+///
+/// Fails if the listener cannot accept.
+pub async fn serve_listener(
+    listener: TcpListener,
+    routes: Arc<dyn SandboxRoutes>,
+    mut shutdown: tokio::sync::oneshot::Receiver<()>,
+) -> std::io::Result<()> {
+    if let Ok(listen) = listener.local_addr() {
+        tracing::info!("sandbox proxy listening on {listen}");
+    }
 
     loop {
         let (stream, peer) = tokio::select! {
