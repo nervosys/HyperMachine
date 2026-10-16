@@ -17,8 +17,19 @@
 //! - **A command running when its sandbox pauses** is recorded as ended
 //!   then, with what it had printed: the node stops watching it there,
 //!   though the guest's process goes on after the resume.
+//!
+//! # Secrets
+//!
+//! A command line can carry one. Before it is kept, [`redact`] masks the
+//! common shapes of one: `NAME=VALUE` for a name like `*TOKEN*`, `*SECRET*`,
+//! `*PASSWORD*` or `*KEY*`; the value after `--password`, `--token` and their
+//! kind; what follows `Bearer` or `Basic`; and the credentials in a URL. It
+//! cannot know every secret: a sandbox created with `"commandHistory": false`,
+//! or every sandbox on a node started with `--no-command-history`, keeps no
+//! history at all. Output is kept as printed, not scanned.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 
 use axum::extract::{Path, Query, State};
@@ -161,6 +172,167 @@ fn history<T>(f: impl FnOnce(&mut HashMap<String, Sandbox>) -> T) -> T {
     f(guard.get_or_insert_with(HashMap::new))
 }
 
+/// Whether this node keeps command history at all.
+static ENABLED: AtomicBool = AtomicBool::new(true);
+
+/// Sandboxes created with `"commandHistory": false`, and their forks.
+static OFF: StdMutex<Option<HashSet<String>>> = StdMutex::new(None);
+
+fn off<T>(f: impl FnOnce(&mut HashSet<String>) -> T) -> T {
+    let mut guard = OFF
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    f(guard.get_or_insert_with(HashSet::new))
+}
+
+/// Keep no history on this node: `--no-command-history`.
+pub(crate) fn disable_node() {
+    ENABLED.store(false, Ordering::Relaxed);
+}
+
+/// Keep no history for `sandbox_id`, and forget what was kept.
+pub(crate) fn turn_off(sandbox_id: &str) {
+    off(|set| set.insert(sandbox_id.to_string()));
+    history(|all| all.remove(sandbox_id));
+}
+
+/// Whether `sandbox_id` keeps no history, by its own choice or the node's.
+pub(crate) fn is_off(sandbox_id: &str) -> bool {
+    !ENABLED.load(Ordering::Relaxed) || off(|set| set.contains(sandbox_id))
+}
+
+/// A fork keeps no history if its source kept none.
+pub(crate) fn inherit_off(source: &str, fork: &str) {
+    if off(|set| set.contains(source)) {
+        turn_off(fork);
+    }
+}
+
+/// Names whose value is a secret, matched within a name, any case.
+const SECRET_NAMES: [&str; 8] = [
+    "TOKEN",
+    "SECRET",
+    "PASSWORD",
+    "PASSWD",
+    "KEY",
+    "CREDENTIAL",
+    "AUTH",
+    "COOKIE",
+];
+
+/// Flags whose next word is a secret.
+const SECRET_FLAGS: [&str; 10] = [
+    "--password",
+    "--passwd",
+    "--pass",
+    "--token",
+    "--secret",
+    "--api-key",
+    "--apikey",
+    "--access-key",
+    "--secret-key",
+    "--auth",
+];
+
+const MASK: &str = "[redacted]";
+
+fn secret_name(name: &str) -> bool {
+    let name = name.trim_start_matches('-').to_ascii_uppercase();
+    !name.is_empty() && SECRET_NAMES.iter().any(|secret| name.contains(secret))
+}
+
+/// The quote `value` opens and does not close, if any: what is masked
+/// runs on to it.
+fn unclosed_quote(value: &str) -> Option<char> {
+    let quote = value.chars().next().filter(|c| *c == '\'' || *c == '"')?;
+    (value.len() < 2 || !value.ends_with(quote)).then_some(quote)
+}
+
+/// `token`, masked if it is a secret by its shape or by the word before it.
+fn mask(token: &str, previous: Option<&str>, in_quote: &mut Option<char>) -> String {
+    // The rest of a quoted secret begun in an earlier word.
+    if let Some(quote) = *in_quote {
+        if token.ends_with(quote) {
+            *in_quote = None;
+        }
+        return String::new();
+    }
+    // Credentials in a URL: scheme://user:password@host, or a token as user.
+    if let Some(at_scheme) = token.find("://") {
+        let after = at_scheme + 3;
+        let host_end = token[after..].find('/').map_or(token.len(), |i| after + i);
+        if let Some(at) = token[after..host_end].rfind('@') {
+            return format!("{}{MASK}{}", &token[..after], &token[after + at..]);
+        }
+    }
+    // NAME=VALUE, or --name=VALUE.
+    if let Some((name, value)) = token.split_once('=') {
+        if secret_name(name) && !value.is_empty() {
+            *in_quote = unclosed_quote(value);
+            // Shell punctuation after the value is the line's, not the
+            // secret's: `TOKEN=x; next` stays two commands.
+            let tail: String = value
+                .chars()
+                .rev()
+                .take_while(|c| matches!(c, ';' | '&' | '|' | ')'))
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect();
+            return format!("{name}={MASK}{tail}");
+        }
+    }
+    let previous = previous.map(|p| {
+        p.trim_matches(|c| c == '\'' || c == '"')
+            .to_ascii_lowercase()
+    });
+    let after_flag = previous
+        .as_deref()
+        .is_some_and(|p| SECRET_FLAGS.contains(&p));
+    let after_scheme = previous
+        .as_deref()
+        .is_some_and(|p| p == "bearer" || p == "basic");
+    if after_flag || after_scheme {
+        *in_quote = unclosed_quote(token);
+        // A quote that closes the whole argument is kept, so the line reads
+        // as it was written.
+        let closing: String = token
+            .chars()
+            .rev()
+            .take_while(|c| *c == '\'' || *c == '"')
+            .collect();
+        return format!("{MASK}{closing}");
+    }
+    token.to_string()
+}
+
+/// `command` with the common shapes of a secret masked; its spacing kept.
+pub(crate) fn redact(command: &str) -> String {
+    let mut out = String::with_capacity(command.len());
+    let mut rest = command;
+    let mut previous: Option<&str> = None;
+    let mut in_quote = None;
+    loop {
+        let Some(start) = rest.find(|c: char| !c.is_whitespace()) else {
+            out.push_str(rest);
+            return out;
+        };
+        out.push_str(&rest[..start]);
+        rest = &rest[start..];
+        let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+        let token = &rest[..end];
+        // A word inside a masked quote goes, and the space before it.
+        let continuing = in_quote.is_some();
+        let masked = mask(token, previous, &mut in_quote);
+        if continuing {
+            out.truncate(out.trim_end().len());
+        }
+        out.push_str(&masked);
+        previous = Some(token);
+        rest = &rest[end..];
+    }
+}
+
 /// What a command is started as.
 pub(crate) struct Begun<'a> {
     pub(crate) source: &'a str,
@@ -172,8 +344,16 @@ pub(crate) struct Begun<'a> {
     pub(crate) pty: bool,
 }
 
-/// Record a command `sandbox_id` started; its number.
+/// Record a command `sandbox_id` started, its line redacted; its number,
+/// or 0 when the sandbox keeps no history.
 pub(crate) fn begin(sandbox_id: &str, begun: Begun<'_>) -> u64 {
+    if is_off(sandbox_id) {
+        return 0;
+    }
+    let begun = Begun {
+        cmd: redact(&begun.cmd),
+        ..begun
+    };
     history(|all| {
         let sandbox = all.entry(sandbox_id.to_string()).or_default();
         // The oldest that has ended makes room; one still running is kept,
@@ -242,6 +422,7 @@ pub(crate) fn ended(
 /// The sandbox ended: its commands go with it.
 pub(crate) fn forget(sandbox_id: &str) {
     history(|all| all.remove(sandbox_id));
+    off(|set| set.remove(sandbox_id));
 }
 
 /// Its commands, to go into a snapshot store with it when it pauses.
@@ -304,6 +485,22 @@ impl hv2_api::envd_process::ProcessObserver for Observer {
 }
 
 /// Whether `sandbox_id` is a sandbox here, running or paused.
+/// Why `sandbox_id`'s history cannot be read, when it is off.
+fn refused_off(sandbox_id: &str) -> Option<Response> {
+    if !ENABLED.load(Ordering::Relaxed) {
+        return Some(api_error(
+            StatusCode::CONFLICT,
+            "this node keeps no command history (--no-command-history)",
+        ));
+    }
+    off(|set| set.contains(sandbox_id)).then(|| {
+        api_error(
+            StatusCode::CONFLICT,
+            format!("{sandbox_id} was created with commandHistory off, and keeps none"),
+        )
+    })
+}
+
 fn known(state: &AppState, sandbox_id: &str) -> bool {
     state.sandboxes.lock().contains_key(sandbox_id) || state.paused.lock().contains_key(sandbox_id)
 }
@@ -316,6 +513,9 @@ pub(crate) async fn list(
 ) -> Response {
     if !known(&state, &sandbox_id) {
         return api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}"));
+    }
+    if let Some(refused) = refused_off(&sandbox_id) {
+        return refused;
     }
     let listed: Vec<Value> = history(|all| {
         all.get(&sandbox_id)
@@ -340,6 +540,9 @@ pub(crate) async fn get(
 ) -> Response {
     if !known(&state, &sandbox_id) {
         return api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}"));
+    }
+    if let Some(refused) = refused_off(&sandbox_id) {
+        return refused;
     }
     let found = history(|all| {
         let command = all.get(&sandbox_id)?.commands.get(&n)?;
@@ -381,6 +584,73 @@ mod tests {
             pid: None,
             pty: false,
         }
+    }
+
+    #[test]
+    fn the_shapes_of_a_secret_are_masked() {
+        for (given, kept) in [
+            ("TOKEN=abc123 make deploy", "TOKEN=[redacted] make deploy"),
+            (
+                "export GITHUB_TOKEN=ghp_x; git push",
+                "export GITHUB_TOKEN=[redacted]; git push",
+            ),
+            ("api_key=k1 run", "api_key=[redacted] run"),
+            (
+                "app --password hunter2 --user me",
+                "app --password [redacted] --user me",
+            ),
+            ("app --password=hunter2", "app --password=[redacted]"),
+            ("app --token 'a b c' next", "app --token [redacted] next"),
+            ("PASSWORD=\"two words\" run", "PASSWORD=[redacted] run"),
+            (
+                "curl -H \"Authorization: Bearer abc.def\" https://x",
+                "curl -H \"Authorization: Bearer [redacted]\" https://x",
+            ),
+            (
+                "git clone https://user:pw@git.example/r.git",
+                "git clone https://[redacted]@git.example/r.git",
+            ),
+            (
+                "git clone https://ghp_tok@github.com/o/r",
+                "git clone https://[redacted]@github.com/o/r",
+            ),
+            // Not a secret: kept as it is, spacing too.
+            ("echo  hello   world", "echo  hello   world"),
+            ("ls -la /srv/app", "ls -la /srv/app"),
+            (
+                "curl https://example.com/a@b",
+                "curl https://example.com/a@b",
+            ),
+        ] {
+            assert_eq!(redact(given), kept, "{given}");
+        }
+    }
+
+    #[test]
+    fn a_sandbox_with_history_off_keeps_none_and_its_fork_neither() {
+        let (id, fork) = ("sbx-history-off", "sbx-history-off-fork");
+        let n = begin(id, begun("before"));
+        assert!(n > 0);
+        turn_off(id);
+        assert!(
+            export(id).is_empty(),
+            "turning it off forgets what was kept"
+        );
+        assert_eq!(begin(id, begun("after")), 0);
+        assert!(export(id).is_empty());
+        inherit_off(id, fork);
+        assert_eq!(begin(fork, begun("in the fork")), 0);
+        forget(id);
+        forget(fork);
+        assert!(!is_off(id), "a sandbox that ended is forgotten, off or not");
+    }
+
+    #[test]
+    fn a_command_line_is_kept_redacted() {
+        let id = "sbx-history-redacted";
+        begin(id, begun("deploy --token s3cr3t"));
+        assert_eq!(export(id)[0].cmd, "deploy --token [redacted]");
+        forget(id);
     }
 
     #[test]

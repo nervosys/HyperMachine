@@ -98,6 +98,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   team telemetry is sent. A destination is checked when stored and at every
   push, follows no redirect, and takes no credentials in its URL. New API key
   scope `telemetry`. See `docs/TELEMETRY.md`.
+- A sandbox's command history masks secrets before it keeps a command line:
+  `NAME=VALUE` for secret-looking names, `--password`/`--token` values,
+  `Bearer`/`Basic` credentials and credentials in URLs. `"commandHistory":
+  false` on a create, inherited by forks, or `--no-command-history` on a
+  node, keeps none. Output is not scanned.
 - A reverse port on a guest whose agent is too old to listen now says so:
   the 502 tells the caller to rebuild the guest image with a current agent,
   instead of reporting only that the connection closed. The sandbox is

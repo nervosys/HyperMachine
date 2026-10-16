@@ -28,12 +28,19 @@ check links `/bin/bash` to its `sh` first, through `exec`.
 5. **Other node:** paused on `a` into the store, whose record of it holds
    the five commands, and resumed on `b`. On `b` the five commands read as
    they did on `a`. A command run there is numbered 6.
-6. **Refusals:** no such command and no such sandbox (404); once it is
+6. **Secrets and opt-out:**
+   - `TOKEN=abc123 true --password hunter2 https://u:pw@h.example/x` is
+     kept as `TOKEN=[redacted] true --password [redacted]
+     https://[redacted]@h.example/x`, and no secret is anywhere in the
+     record;
+   - a sandbox created with `"commandHistory": false` runs a command, and
+     reading its history is refused (409).
+7. **Refusals:** no such command and no such sandbox (404); once it is
    deleted on `b`, its commands are gone (404).
 
 ## Result
 
-All six cases passed on 2026-10-13, on Linux 6.18.33 under WSL2 with
+All eight cases passed on 2026-10-13, on Linux 6.18.33 under WSL2 with
 nested KVM, on the first run. From [`report.json`](report.json):
 
 | | |
