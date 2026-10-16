@@ -38,7 +38,7 @@ reason, and are listed once at the end rather than counted as gaps.
 | Sharing a snapshot with another account | Share codes; secrets and logins removed first | **No.** A snapshot belongs to its team, or to everyone when an operator made it |
 | systemd, and Docker, in the guest | Both | **Both, in a machine from a disk image**: [Ubuntu 24.04's image as published](benchmarks/2026-10-11/machine-docker-kvm/README.md) boots on its own 6.8 kernel with systemd started in full, installs Docker with `apt`, and runs containers. That run was typed at its serial console; such a machine can also [take `exec`](benchmarks/2026-10-11/machine-agent-kvm/README.md). **Neither in a sandbox**, whose first process is the project's own and whose kernel is built without what Docker needs |
 | `/dev/kvm` in the guest | Yes on its standard hosts, and said to be absent on its fallback hosts | **Not offered.** Not masked either, and never tested |
-| Installed for you | Docker, Chrome, VS Code, some twenty languages and runtimes, a dozen agent programs | What the template's image holds. No image is shipped with more than the guest agent needs. A machine from a distribution's image can be created with [Claude Code and Codex installed](MACHINES.md#agents-installed-at-first-boot) at its first boot, [checked on KVM](benchmarks/2026-10-12/machine-agents-kvm/README.md); nothing else is installed for you |
+| Installed for you | Docker, Chrome, VS Code, some twenty languages and runtimes, a dozen agent programs | The template shipped holds little beyond the guest agent. A sandbox template with [Ubuntu 24.04, git, Python, Node.js, npm, gcc and make in it](TOOLS_IMAGE.md) can be built (no Docker), and [ran on KVM](benchmarks/2026-10-16/tools-image-kvm/README.md); it needs 1.5 GB of guest memory and is not shipped. A machine from a distribution's image can be created with [Claude Code and Codex installed](MACHINES.md#agents-installed-at-first-boot) at its first boot, [checked on KVM](benchmarks/2026-10-12/machine-agents-kvm/README.md); no Docker, Chrome, VS Code or other languages are in either |
 | Commands and files from outside | `exec`, with detach, attach and kill; `scp`; SSH | A sandbox: `exec`, processes with a terminal and standard input, files in and out; SSH by name is partial. A machine: `exec`, and [runs](MACHINES.md#runs), started and left, read from any offset, written to and signalled; and [files](MACHINES.md#files) in and out by path, up to 64 MiB each. No directories or trees in one request, and no SSH |
 | Output of past commands | Stored, listed and replayed (`boat history`) | **For a machine's [runs](MACHINES.md#runs)**: listed, and each one's output kept and read again, [across a node restart](benchmarks/2026-10-13/machine-runs-durable-kvm/README.md), in the machine's directory; a run going when the node stopped is `lost`, with its output. **For a sandbox's commands**: every one run through `exec` or envd (E2B's `commands.run`) is [kept with its output](COMMAND_HISTORY.md), listed and read again, through a pause and onto the node that resumes it (`hm sandbox vm history`), [checked on KVM](benchmarks/2026-10-13/sandbox-history-kvm/README.md); in memory, so not across a node restart while it runs |
 | The guest's processes, listed from outside | `boat ps` | **Yes, every one**, for a sandbox or a machine: [`/processes`](PROCESSES.md) lists each with its parent, user, state, command line, memory, CPU time and age, read from the guest's `/proc` (`hm sandbox vm ps`, `machine ps`, `processes()` in both SDKs), [checked on KVM](benchmarks/2026-10-13/guest-processes-kvm/README.md). Needs the guest agent |
@@ -75,9 +75,10 @@ In rough order of how much each matters to someone choosing between them:
    [installs Docker and runs containers](benchmarks/2026-10-11/machine-docker-kvm/README.md).
    With `guestAgent` it [runs this project's agent](benchmarks/2026-10-11/machine-agent-kvm/README.md),
    installed by cloud-init, and takes `exec`, runs and
-   [files](MACHINES.md#files). What it still lacks: an image with tools
-   already in it. A sandbox, as distinct from a machine, is
-   unchanged. Most of the rows below stand on this one: an agent, a browser
+   [files](MACHINES.md#files). What it still lacks: a sandbox is
+   still a small guest unless you build [the template with the tools in
+   it](TOOLS_IMAGE.md), which is not shipped, and no machine image has tools
+   baked in. Most of the rows below stand on this one: an agent, a browser
    and a desktop are all things a distribution installs.
 2. **Coding agents that are already there, and proven.** A machine now
    [runs one on a prompt](MACHINES.md#prompts) and reports what it did, and
@@ -127,7 +128,11 @@ In rough order of how much each matters to someone choosing between them:
    tag and an approval; they are **not published**, which needs a PyPI
    publisher, an npm scope and token, and a GitHub environment that only an
    owner can set up.
-10. **An image with the tools already in it.**
+10. **An image with the tools already in it.** Done for a sandbox, as a
+    template you build: [Ubuntu 24.04 with git, Python, Node.js, npm, gcc and
+    make](TOOLS_IMAGE.md), checked offline on KVM. Not done: shipping it,
+    Docker or a browser in it, other languages, a machine image with tools
+    baked in, and network use (`apt`, `npm`, `git clone`) from inside it.
 
 ## Where HyperMachine has something boat's documentation does not claim
 
@@ -155,7 +160,7 @@ are set side by side only so that nobody has to go looking.
 
 | | boat says | HyperMachine measured, on its own host |
 |---|---|---|
-| A Node.js build-and-test loop, 1,000 runs, 4 vCPUs and 8 GB | 36 s (27.7 runs a second) on its standard hosts, an AMD Ryzen 9 9950X; 113 s on its fallback hosts. Medians over several machines, from [a public benchmark](https://github.com/AnicetNgrt/hpc-sandbox-benchmarks) | **Not run.** There is no guest image here with Node.js in it, and no sandbox can be created with that size by asking |
+| A Node.js build-and-test loop, 1,000 runs, 4 vCPUs and 8 GB | 36 s (27.7 runs a second) on its standard hosts, an AMD Ryzen 9 9950X; 113 s on its fallback hosts. Medians over several machines, from [a public benchmark](https://github.com/AnicetNgrt/hpc-sandbox-benchmarks) | **Not run.** A [guest image with Node.js in it](TOOLS_IMAGE.md) now exists and ran a two-assertion `node --test`, but not this loop, and no sandbox can be created with 4 vCPUs and 8 GB by asking |
 | Creating a sandbox | "usually under a second on a ready machine" | [0.65 ms at the median from the warm pool, 18.9 ms without](benchmarks/2026-10-08/warm-pool-kvm/README.md), for the base template, which is a far smaller guest than boat's |
 | Coming back from a stop | "usable within a few seconds", files only | [A command to a sandbox in standby: 3.30 ms at the median](benchmarks/2026-10-08/standby-kvm/README.md), memory kept |
 

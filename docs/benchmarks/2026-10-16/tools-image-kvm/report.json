@@ -1,0 +1,48 @@
+{
+  "success": true,
+  "purpose": "functional verification that a template holding the development tools runs them in a sandbox on KVM; times are the check's own stopwatch and not a benchmark",
+  "image": "Ubuntu 24.04 (noble) with git 2.43.0, Python 3.12.3, Node.js 18.19.1, npm 9.2.0, gcc 13.3.0, make 4.3, curl 8.5.0, jq 1.7; 654 MiB of files, 576 MB unpacked, 179 MB compressed; built by tools/guest-image/build-tools-image.sh",
+  "host": {
+    "kernel": "6.18.33.2-microsoft-standard-WSL2 (nested KVM)",
+    "cpu": "AMD Ryzen 9 9900X, 24 logical CPUs",
+    "guest_kernel": "bzImage-known-uart-irq"
+  },
+  "input_sha256": {
+    "daemon": "483378ecfd7cdffa6d56a2cc6e77a150080f530509c464c63c5b77f904b4c2d0",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "4415fbe17cc4fe08697a09cc8879f4b98328a18c093d6ea65c18e9b9fffeda5e",
+    "driver": "da02121748e08960baaf1e1584a7d7747fd1d3fdbf8996dcabcb310b26afbd78"
+  },
+  "runs_at_1536_mib": [
+    {
+      "file": "runs/1536mib-run1.json",
+      "success": true,
+      "create_seconds": 0.059,
+      "mem_available_kb": "MemTotal:        1509068 kB MemAvailable:     789948 kB"
+    },
+    {
+      "file": "runs/1536mib-run2.json",
+      "success": true,
+      "create_seconds": 0.066,
+      "mem_available_kb": "MemTotal:        1509068 kB MemAvailable:     788412 kB"
+    },
+    {
+      "file": "runs/1536mib-run3.json",
+      "success": true,
+      "create_seconds": 0.108,
+      "mem_available_kb": "MemTotal:        1509068 kB MemAvailable:     790540 kB"
+    }
+  ],
+  "other_sizes": {
+    "2048_mib": {
+      "file": "runs/2048mib.json",
+      "success": true,
+      "note": "ran on the first build of the image (same recipe, run by hand); not repeated"
+    },
+    "1024_mib": {
+      "file": "runs/1024mib-failed.json",
+      "success": false,
+      "note": "guest booted, `npm` was not found: the image did not unpack completely"
+    }
+  }
+}
