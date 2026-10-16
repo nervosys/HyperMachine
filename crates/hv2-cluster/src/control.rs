@@ -73,6 +73,8 @@ pub struct ControlPlane {
     native_port_range: parking_lot::RwLock<Option<crate::ports::PublicPortRange>>,
     /// Single sign-on, when an operator configured a provider.
     sso: parking_lot::RwLock<Option<Arc<crate::sso_login::SsoLogin>>>,
+    /// What teams' own telemetry may be sent to, and how it went.
+    team_telemetry: Arc<crate::team_telemetry::Shared>,
     metrics: ControlMetrics,
 }
 
@@ -208,9 +210,28 @@ impl ControlPlane {
             config,
             native_port_range: parking_lot::RwLock::new(None),
             sso: parking_lot::RwLock::new(None),
+            team_telemetry: Arc::default(),
             metrics: ControlMetrics::default(),
         })
     }
+}
+
+impl ControlPlane {
+    /// Let teams send their own telemetry to destinations under `prefixes`.
+    /// With none, a team cannot set a destination and nothing is sent.
+    pub fn allow_team_telemetry(&self, prefixes: Vec<String>) {
+        self.team_telemetry.allow(prefixes);
+    }
+}
+
+/// Push each team's numbers to the destination it set, for as long as this
+/// runs; see [`crate::team_telemetry`].
+pub async fn push_team_telemetry(control: Arc<ControlPlane>) {
+    crate::team_telemetry::run(
+        Arc::clone(&control.store),
+        Arc::clone(&control.team_telemetry),
+    )
+    .await;
 }
 
 /// E2B's error shape, which the SDK parses before it looks at the status.
@@ -290,6 +311,10 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/templates/aliases/{alias}", get(template_alias))
         .merge(crate::events::router(Arc::clone(&control.store)))
         .merge(crate::environments::router(Arc::clone(&control.store)))
+        .merge(crate::team_telemetry::router(
+            Arc::clone(&control.store),
+            Arc::clone(&control.team_telemetry),
+        ))
         .route("/volumes", get(list_volumes).post(to_volume_node))
         .route("/volumes/{id}", get(to_volume_node).delete(to_volume_node))
         .route("/machines", get(list_machines).post(create_machine))

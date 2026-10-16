@@ -32,22 +32,11 @@ const CLONE_TIMEOUT: Duration = Duration::from_secs(300);
 pub(crate) const MOST_PACKED: usize = 64 << 20;
 
 /// Whether `remote` is one of `allowed`, or under one: the same scheme, host
-/// and port, and a path at or below the allowed one's.
+/// and port, and a path at or below the allowed one's. See
+/// [`hv2_cluster::allowlist::allowed`], which the control plane's team
+/// telemetry uses for its own list.
 pub(crate) fn allowed(remote: &str, allowed: &[String]) -> bool {
-    let Ok(remote) = reqwest::Url::parse(remote) else {
-        return false;
-    };
-    allowed.iter().any(|prefix| {
-        let Ok(prefix) = reqwest::Url::parse(prefix) else {
-            return false;
-        };
-        let base = prefix.path().trim_end_matches('/');
-        remote.scheme() == prefix.scheme()
-            && remote.host_str() == prefix.host_str()
-            && remote.port_or_known_default() == prefix.port_or_known_default()
-            && (remote.path().trim_end_matches('/') == base
-                || remote.path().starts_with(&format!("{base}/")))
-    })
+    hv2_cluster::allowlist::allowed(remote, allowed)
 }
 
 /// A session token for `repo`'s account, from its remote.

@@ -7,6 +7,7 @@
 //! creations across nodes, forward per-sandbox calls to the owning node, and
 //! route envd traffic there.
 
+pub mod allowlist;
 pub mod audit;
 pub mod control;
 pub mod domain_verification;
@@ -36,6 +37,7 @@ pub mod sso;
 pub mod sso_guest;
 pub mod sso_login;
 pub mod store;
+pub mod team_telemetry;
 pub mod udp_socket;
 pub mod usage;
 pub mod web_access;
