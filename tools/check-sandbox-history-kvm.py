@@ -171,13 +171,39 @@ def main():
             assert status == 200, (status, value)
             kept = commands("a", sandbox)[-1]
             assert kept["cmd"] == "TOKEN=[redacted] true --password [redacted] https://[redacted]@h.example/x", kept
-            # The command prints nothing: output is kept as printed, not
-            # scanned, so a command that echoes a secret keeps it there.
+            # The command prints nothing, so there is no output to leak here.
             raw = json.dumps(command("a", sandbox, kept["n"]))
             for secret in ["abc123", "hunter2", "u:pw"]:
                 assert secret not in raw.replace("[redacted]", ""), (secret, raw)
             return {"kept_as": kept["cmd"]}
         case("a command line's secrets are masked before it is kept", masked)
+
+        def output_masked():
+            printed = (
+                "API_TOKEN=abc123\\nname: ann\\npassword: hunter2\\n"
+                "Authorization: Bearer s3cr3tvalue\\n"
+                "key ghp_abcdefghijklmnopqrstuvwxyz0123456789 here\\n"
+                "-----BEGIN RSA PRIVATE KEY-----\\nMIIEabcdef\\n-----END RSA PRIVATE KEY-----\\n"
+                "Basic usage: plain line\\n")
+            status, value = request("a", "POST", f"/sandboxes/{sandbox}/exec", {"cmd": f"printf '{printed}'"})
+            assert status == 200, (status, value)
+            # The guest really printed them.
+            assert "hunter2" in value["stdout"] and "BEGIN RSA PRIVATE KEY" in value["stdout"], value
+            kept = commands("a", sandbox)[-1]
+            read = command("a", sandbox, kept["n"])
+            text = read["stdout"]["text"]
+            for secret in ["abc123", "hunter2", "s3cr3tvalue", "ghp_abcdefghijklmnopqrstuvwxyz0123456789", "MIIEabcdef"]:
+                assert secret not in text, (secret, text)
+            for kept_text in ["API_TOKEN=[redacted]", "name: ann", "password: [redacted]",
+                              "Authorization: Bearer [redacted]", "key [redacted] here",
+                              "[redacted private key]", "Basic usage: plain line"]:
+                assert kept_text in text, (kept_text, text)
+            # Offsets are the stream's own: what was printed is counted, and
+            # reading on from `next` asks for nothing more.
+            assert read["stdoutBytes"] == len(value["stdout"].encode()), (read["stdoutBytes"], len(value["stdout"]))
+            assert read["stdout"]["next"] == read["stdoutBytes"], read["stdout"]
+            return {"masked_output": text}
+        case("a command's output is masked when read, with the stream's own offsets", output_masked)
 
         def off():
             status, made = request("a", "POST", "/sandboxes",

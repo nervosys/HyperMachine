@@ -1,0 +1,59 @@
+{
+  "success": true,
+  "purpose": "functional verification that a command's output is masked when read from the history, on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "bba9279e68cdedca1d5e94ea58c330750f0c323324a58da093969215d243ed8b",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "653f968803da421a1ae83d4224183cdd5273db4d412a30875f28cdad51c955fe"
+  },
+  "e2b_sdk": "2.51.0",
+  "runs": [
+    {
+      "file": "runs/run1.json",
+      "success": true,
+      "cases": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "file": "runs/run2.json",
+      "success": true,
+      "cases": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    {
+      "file": "runs/run3.json",
+      "success": true,
+      "cases": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ]
+    }
+  ],
+  "masked_output_read_back": "API_TOKEN=[redacted]\nname: ann\npassword: [redacted]\nAuthorization: Bearer [redacted]\nkey [redacted] here\n[redacted private key]\nBasic usage: plain line\n"
+}

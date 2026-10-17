@@ -32,7 +32,29 @@ hm sandbox vm history $SBX [N]
 
 ## Secrets
 
-A command line can carry a secret, and the history is returned to anyone
+**Output** is masked when it is read, not as it is kept, so the offsets you
+read from stay the stream's own (`stdoutBytes` and `next` count what was
+printed, not what is returned). What is kept in the node's memory, and in the
+store's record of a paused sandbox, is whole. The shapes masked in output:
+
+| Shape | Returned as |
+|---|---|
+| A PEM private key block, `-----BEGIN ... PRIVATE KEY-----` to its footer, or to the end of the text if it was cut off | `[redacted private key]` |
+| `NAME=VALUE`, `name: value` and `"name": "value"`, for the same secret words as above (so `env`, `cat .env`, a JSON or YAML config) | `NAME=[redacted]`, `name: [redacted]` |
+| The credential after `Bearer`, `Basic`, `Token` or `Digest` in a header (`Authorization: Bearer ...`) | `Authorization: Bearer [redacted]` |
+| A URL with credentials | `https://[redacted]@host/...` |
+| A token by its shape: AWS access key IDs, GitHub (`ghp_`, `github_pat_`), GitLab (`glpat-`), Slack (`xox`), Stripe live keys, Google (`AIza`), npm, `sk-` API keys, JWTs | `[redacted]` |
+
+- **It reads a line at a time**, except a key block and a quoted value that
+  runs on to a later word. A 64 KiB window that begins inside a key block
+  shows the rest of its body; the header that made it recognisable is gone.
+- **It over-masks**: a line `key: value` or `MONKEY=1` is masked, and a
+  secret-looking word in a log line may be. Plain prose ("Basic usage") is
+  left alone.
+- **It cannot know every secret**: one in a form it has no shape for, in a
+  binary or compressed stream, or split across lines, is returned as printed.
+
+**A command line** can carry a secret, and the history is returned to anyone
 who can reach the sandbox. So before a line is kept, the common shapes of
 one are masked as `[redacted]`:
 
@@ -46,8 +68,7 @@ one are masked as `[redacted]`:
 - **A quoted value is masked whole**, spaces and all; the line's spacing and
   any `;` or `&&` after a value are kept.
 - **It over-masks rather than under-masks**: `MONKEY=1` is masked too.
-- **It cannot know every secret**, and **output is not scanned**: a command
-  that prints a secret keeps it in its output. For either, keep no history:
+- **It cannot know every secret.** For one it misses, keep no history:
   - `"commandHistory": false` on a create keeps none for that sandbox, nor
     its forks, and wherever it is resumed. Reading it is refused (409).
   - `--no-command-history` keeps none on the node at all.

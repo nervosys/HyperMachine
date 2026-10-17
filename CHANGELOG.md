@@ -102,11 +102,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NAME=VALUE` for secret-looking names, `--password`/`--token` values,
   `Bearer`/`Basic` credentials and credentials in URLs. `"commandHistory":
   false` on a create, inherited by forks, or `--no-command-history` on a
-  node, keeps none. Output is not scanned.
+  node, keeps none. Output is masked separately, when read.
 - A reverse port on a guest whose agent is too old to listen now says so:
   the 502 tells the caller to rebuild the guest image with a current agent,
   instead of reporting only that the connection closed. The sandbox is
   unaffected.
+- A sandbox's command history masks secrets in what a command printed, when
+  it is read: PEM private key blocks, `NAME=VALUE` / `name: value` /
+  `"name": "value"` for secret-looking names (`env`, `.env`, JSON, YAML),
+  the credential after `Bearer`/`Basic` in a header, URL credentials, and
+  well-known tokens by shape (AWS, GitHub, GitLab, Slack, Stripe, Google, npm,
+  `sk-`, JWT). The stream is kept whole and its offsets are unchanged. It
+  over-masks, and cannot know every secret. See `docs/COMMAND_HISTORY.md`.
 - V8's Web Tooling Benchmark ran in a 4 vCPU, 8 GiB sandbox from the tools
   image on KVM (`tools/bench-node-tooling-kvm.py`): median 12.56 runs/s over 12
   runs, 9.33 to 15.26, on a host at 42 to 100% CPU. A rough placement against

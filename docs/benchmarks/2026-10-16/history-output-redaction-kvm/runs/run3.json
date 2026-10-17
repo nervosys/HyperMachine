@@ -1,0 +1,98 @@
+{
+  "success": true,
+  "purpose": "functional verification of a sandbox's command history on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "bba9279e68cdedca1d5e94ea58c330750f0c323324a58da093969215d243ed8b",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "653f968803da421a1ae83d4224183cdd5273db4d412a30875f28cdad51c955fe"
+  },
+  "e2b_sdk": "2.51.0",
+  "cases": [
+    {
+      "name": "a command run through exec is kept, with its exit code and output",
+      "success": true,
+      "detail": {
+        "command": {
+          "n": 1,
+          "source": "exec",
+          "state": "exited",
+          "exitCode": 4
+        }
+      }
+    },
+    {
+      "name": "commands run through the E2B SDK are kept, a killed one as signalled",
+      "success": true,
+      "detail": {
+        "sdk_command": {
+          "n": 3,
+          "source": "process",
+          "cmd": "/bin/bash -l -c echo from-sdk; sleep 0.2; echo done",
+          "pid": 66,
+          "state": "exited"
+        },
+        "killed": {
+          "n": 4,
+          "state": "signalled",
+          "signal": 9
+        }
+      }
+    },
+    {
+      "name": "a command line's secrets are masked before it is kept",
+      "success": true,
+      "detail": {
+        "kept_as": "TOKEN=[redacted] true --password [redacted] https://[redacted]@h.example/x"
+      }
+    },
+    {
+      "name": "a command's output is masked when read, with the stream's own offsets",
+      "success": true,
+      "detail": {
+        "masked_output": "API_TOKEN=[redacted]\nname: ann\npassword: [redacted]\nAuthorization: Bearer [redacted]\nkey [redacted] here\n[redacted private key]\nBasic usage: plain line\n"
+      }
+    },
+    {
+      "name": "a sandbox created with commandHistory off keeps none",
+      "success": true,
+      "detail": {
+        "refused": "sbx-9b025c3109824b1992c7 was created with commandHistory off, and keeps none"
+      }
+    },
+    {
+      "name": "a command that printed more than is kept: every byte counted, the newest kept",
+      "success": true,
+      "detail": {
+        "stdoutBytes": 204800,
+        "dropped": 139264
+      }
+    },
+    {
+      "name": "paused and resumed on the same node, its commands are still there",
+      "success": true,
+      "detail": {
+        "commands": 7
+      }
+    },
+    {
+      "name": "paused into the store and resumed on the other node, its commands come too",
+      "success": true,
+      "detail": {
+        "carried": 7,
+        "next": 8
+      }
+    },
+    {
+      "name": "what cannot be read is refused, and a deleted sandbox's commands go",
+      "success": true,
+      "detail": {
+        "refused": {
+          "no such command": "sandbox sbx-d70b0f76fd4345808cb6 has no command 9999",
+          "no such sandbox": "no sandbox sbx-absent",
+          "a deleted sandbox": "no sandbox sbx-d70b0f76fd4345808cb6"
+        }
+      }
+    }
+  ]
+}

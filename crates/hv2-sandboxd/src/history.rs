@@ -41,6 +41,8 @@ use serde_json::{json, Value};
 
 use super::{api_error, now_ms, AppState};
 
+mod output;
+
 /// The most commands kept for one sandbox.
 pub(crate) const MAX_COMMANDS: usize = 64;
 
@@ -554,7 +556,7 @@ pub(crate) async fn get(
             let (offset, text, next) = stream.from(asked.unwrap_or(0));
             reply[key] = json!({
                 "offset": offset,
-                "text": text,
+                "text": output::redact(text),
                 "next": next,
                 "dropped": stream.dropped,
             });
