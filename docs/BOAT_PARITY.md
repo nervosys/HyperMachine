@@ -110,8 +110,8 @@ In rough order of how much each matters to someone choosing between them:
 6. **A port back to the caller's machine, through the control plane.**
    [A machine and a sandbox have one](REVERSE_PORTS.md) on their node, and the
    control plane now forwards both ([checked on KVM](benchmarks/2026-10-16/machine-reverse-cluster-kvm/README.md)).
-   What it still lacks: a machine's waiting connections stay in the node's
-   table after the machine stops, until the node restarts. A machine's runs are kept
+   A machine's waiting connections now close when it stops ([checked on
+   KVM](benchmarks/2026-10-16/machine-reverse-stop-kvm/README.md)). A machine's runs are kept
    [across a node restart](MACHINES.md#runs), a sandbox's commands are
    [kept and read again](COMMAND_HISTORY.md), and a guest's processes are
    [listed](PROCESSES.md).

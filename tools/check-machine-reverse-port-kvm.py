@@ -15,6 +15,8 @@ booted from the guest initrd carrying this change's guest agent, and checks:
    program connecting to it is refused.
 4. Refusals: port 0 (400), a machine that is not there (404), a plain GET
    that is not an upgrade (400).
+5. A machine stopped while 64 connections wait: all 64 end, and after it is
+   started again a new one is accepted, not refused for the 64 it once had.
 
 Writes report.json and the daemon's log into --output.
 """
@@ -193,6 +195,48 @@ def main():
             refused["not an upgrade"] = status
             return {"refused": refused}
         case("what cannot be done is refused", refusals)
+
+        def stop_releases_waiting():
+            # A caller keeps connections waiting; the node allows 64 at once.
+            waiting = []
+            for _ in range(64):
+                sock, status, head = upgrade(7002)
+                assert status == 101, head
+                waiting.append(sock)
+            over, status, head = upgrade(7002)
+            over.close()
+            assert status == 429, ("the 65th was not refused", status, head)
+            status, value = request("POST", f"/machines/{NAME}/stop", {})
+            assert status in (200, 204), (status, value)
+            # Every waiting connection ends with the machine.
+            ended = 0
+            deadline = time.monotonic() + 20
+            for sock in waiting:
+                sock.settimeout(max(0.2, deadline - time.monotonic()))
+                try:
+                    if sock.recv(1) == b"":
+                        ended += 1
+                except socket.timeout:
+                    pass  # still open
+                except OSError:
+                    ended += 1  # reset
+                sock.close()
+            assert ended == 64, ("waiting connections still open after the stop", ended)
+            status, value = request("POST", f"/machines/{NAME}/start", {}, timeout=180)
+            assert status in (200, 204), (status, value)
+            deadline = time.monotonic() + 120
+            while True:
+                status, value = request("POST", f"/machines/{NAME}/exec", {"cmd": "true", "timeout_secs": 10})
+                if status == 200:
+                    break
+                assert time.monotonic() < deadline, (status, value)
+                time.sleep(0.5)
+            # The table forgot them: one more is accepted, not refused with 429.
+            again, status, head = upgrade(7002)
+            again.close()
+            assert status == 101, ("the stopped machine's waiting connections still count", status, head)
+            return {"waiting_closed": ended, "after_restart": status}
+        case("a stopped machine closes its waiting connections and forgets them", stop_releases_waiting)
 
         report["success"] = True
     finally:

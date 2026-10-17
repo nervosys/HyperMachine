@@ -1,0 +1,72 @@
+{
+  "success": true,
+  "purpose": "functional verification that a stopped machine closes the reverse connections waiting on it and forgets them; no performance comparison",
+  "before_the_fix": {
+    "file": "runs/before.json",
+    "success": false,
+    "failed_case": [
+      "a stopped machine closes its waiting connections and forgets them"
+    ],
+    "input_sha256": {
+      "daemon": "483378ecfd7cdffa6d56a2cc6e77a150080f530509c464c63c5b77f904b4c2d0",
+      "hm": "bffad09a6c9484f9543b1ee0a1b282d0e134f8cebc78dcca56ccf2b05ac6e889",
+      "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+      "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+      "driver": "dce938fda633dacc0a356641a97072e112020c9df9ad9b5c78880835aec049ce"
+    }
+  },
+  "after_the_fix": [
+    {
+      "file": "runs/after1.json",
+      "success": true,
+      "cases": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "last_case": {
+        "waiting_closed": 64,
+        "after_restart": 101
+      }
+    },
+    {
+      "file": "runs/after2.json",
+      "success": true,
+      "cases": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "last_case": {
+        "waiting_closed": 64,
+        "after_restart": 101
+      }
+    },
+    {
+      "file": "runs/after3.json",
+      "success": true,
+      "cases": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "last_case": {
+        "waiting_closed": 64,
+        "after_restart": 101
+      }
+    }
+  ],
+  "input_sha256_after": {
+    "daemon": "d4cc69748a84e4b3f0d025561edeb2609f66c14d427fdb32d46351d093504f51",
+    "hm": "bffad09a6c9484f9543b1ee0a1b282d0e134f8cebc78dcca56ccf2b05ac6e889",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "dce938fda633dacc0a356641a97072e112020c9df9ad9b5c78880835aec049ce"
+  }
+}

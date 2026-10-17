@@ -44,8 +44,9 @@ port all the same, and nothing else can reach it.
   routes (another team's is a 404) and carried the same way,
   [checked on KVM](benchmarks/2026-10-16/machine-reverse-cluster-kvm/README.md).
 - **At most 64 connections waiting** for a sandbox, across its ports
-  (429 past that). A sandbox's waiting and carried connections close when
-  it pauses or ends.
+  (429 past that), and the same for a machine. A sandbox's waiting and
+  carried connections close when it pauses or ends, and a machine's when it
+  stops ([checked on KVM](benchmarks/2026-10-16/machine-reverse-stop-kvm/README.md)).
 - It needs the guest agent from this release or later. An older one does not
   know the operation and closes the connection, so the request is refused
   with 502 and a message saying to rebuild the image. The sandbox is not

@@ -107,6 +107,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the 502 tells the caller to rebuild the guest image with a current agent,
   instead of reporting only that the connection closed. The sandbox is
   unaffected.
+- A stopped machine now closes the reverse connections waiting on it and
+  forgets them. They used to stay open and counted against its 64 until the
+  node restarted, so a machine stopped and started with 64 waiting refused the
+  next (429). Checked on KVM: 0 of 64 closed before, 64 of 64 after, three runs.
 - The control plane forwards a machine's reverse port,
   `GET /machines/{name}/ports/{hostPort}/reverse`, which it answered with 404
   before: the machine is found as for its other routes (another team's is a

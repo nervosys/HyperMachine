@@ -803,11 +803,13 @@ fn image_path(state: &AppState, name: &str) -> Result<PathBuf, String> {
 }
 
 /// Stop `id`'s VM, its filesystems synced first when its guest has an agent
-/// to ask. The caller holds [`OPS`].
-async fn halt(id: &str) {
+/// to ask. The caller holds [`OPS`]. Reverse connections waiting on or carried
+/// from its guest close with it: nothing else would end them.
+async fn halt(state: &AppState, id: &str) {
     let Some(running) = live(|l| l.remove(id)) else {
         return;
     };
+    super::forwards::stop(state, id);
     if running.agent {
         let _ = running
             .vm
@@ -869,6 +871,7 @@ pub(crate) async fn supervise(state: Arc<AppState>) {
                 continue;
             };
             live(|l| l.remove(&id));
+            super::forwards::stop(&state, &id);
             let Some(mut machine) = load(&state, &id) else {
                 continue;
             };
@@ -1253,7 +1256,7 @@ async fn set_running(state: &Arc<AppState>, id: &str, running: bool) -> Result<(
             .map_err(|e| api_error(StatusCode::SERVICE_UNAVAILABLE, format!("starting: {e}")))?;
         machine.desired = Desired::Running;
     } else {
-        halt(id).await;
+        halt(state, id).await;
         machine.desired = Desired::Stopped;
     }
     save(state, &machine).map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e))

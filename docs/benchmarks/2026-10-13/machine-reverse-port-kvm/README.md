@@ -44,9 +44,9 @@ machine stub, which was added; `cargo check` of it and `hm` is clean now.
 - **Through the control plane.** At the time, a machine's reverse port was not
   forwarded by the control plane and a cluster caller got 404. It is now:
   see [the cluster check](../../2026-10-16/machine-reverse-cluster-kvm/README.md).
-- **A machine stopped while a connection waits.** Its waiting connections
-  end with the VM, but their entries stay in the node's table until the
-  node restarts.
+- **A machine stopped while a connection waits.** At the time, its waiting
+  connections stayed open and counted until the node restarted. They now
+  close with the machine: see [the check](../../2026-10-16/machine-reverse-stop-kvm/README.md).
 - **Many connections** beyond the three at once.
 - **An old guest agent** was run for a sandbox, which shares the code: it
   is refused with 502 and a message saying to rebuild the image. Not run for
