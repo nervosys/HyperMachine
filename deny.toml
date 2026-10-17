@@ -45,6 +45,15 @@ ignore = [
     # -> owned_ttf_parser. Font parsing for the desktop GUI only; no known
     # vulnerability.
     "RUSTSEC-2026-0192",
+
+    # zvariant, zvariant_derive and zbus_names are marked unmaintained (first
+    # seen by CI on 2026-10-17, with no change to Cargo.lock). Transitive via
+    # zbus, atspi and ashpd, reached only through eframe and rfd in hm-gui
+    # (the Linux desktop accessibility and file-dialog stack). No known
+    # vulnerability, and "no safe upgrade is available".
+    "RUSTSEC-2026-0370",
+    "RUSTSEC-2026-0371",
+    "RUSTSEC-2026-0372",
 ]
 
 # ============================================================================
