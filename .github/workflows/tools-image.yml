@@ -41,7 +41,7 @@ jobs:
 
       - name: Build the image
         run: |
-          sudo tools/guest-image/build-tools-image.sh \
+          sudo bash tools/guest-image/build-tools-image.sh \
             -o "$RUNNER_TEMP/hm-tools.cpio.gz" \
             --busybox "$(command -v busybox)" \
             --agent target/x86_64-unknown-linux-gnu/release/hv2-guest-agentd \
