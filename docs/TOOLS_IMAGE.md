@@ -86,8 +86,10 @@ Three runs in a row passed. The network cases need the Internet, and
 
 ## Not checked
 
-- **A real build-and-test loop.** The Node.js test was two assertions. The
-  [parity table's](BOAT_PARITY.md) 1,000-run loop was not run.
+- **The parity table's 1,000-run loop.** The checks' Node.js test is two
+  assertions. A heavier workload, V8's Web Tooling Benchmark, ran in a 4 vCPU,
+  8 GiB sandbox from this image: [median 12.56 runs/s on a busy host](benchmarks/2026-10-16/node-web-tooling-kvm/README.md).
+  That is a different benchmark from the table's loop.
 - **Machines.** This is a sandbox template. A machine boots a distribution's
   disk image and can [install tools at first boot](MACHINES.md#agents-installed-at-first-boot);
   no machine image with tools baked in was built.

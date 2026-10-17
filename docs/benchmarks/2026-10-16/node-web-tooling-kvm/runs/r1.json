@@ -1,0 +1,86 @@
+{
+  "success": true,
+  "purpose": "V8 Web Tooling Benchmark inside a tools-image sandbox on KVM; the check's own stopwatch",
+  "input_sha256": {
+    "daemon": "d4cc69748a84e4b3f0d025561edeb2609f66c14d427fdb32d46351d093504f51",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "3e44f17e406c9485a9215d93a8db38ffdf0bceb43c729f658c6921e8a77a3258",
+    "driver": "b70b27234954c7b3540499647a3ade4c96b1b960debd3d62f052f6d686aaa5c5"
+  },
+  "vcpus": 4,
+  "memory_mb": 8192,
+  "host_cpus": 24,
+  "steps": [
+    {
+      "step": "clone",
+      "seconds": 2.42,
+      "exit_code": 0,
+      "output_tail": "4a12828c6a1eed02a70c011bd080445dd319a05f\n"
+    },
+    {
+      "step": "npm install",
+      "seconds": 66.98,
+      "exit_code": 0,
+      "output_tail": "         1 asset\n           [0] ../node_modules/html-webpack-plugin/lib/loader.js!./index.html 1.53 kB {0} [built]\n            + 3 hidden modules\n\nadded 1070 packages in 1m\n"
+    },
+    {
+      "step": "npm run build",
+      "seconds": 29.83,
+      "exit_code": 0,
+      "output_tail": "     @ ./bootstrap.js\n    Child html-webpack-plugin for \"index.html\":\n         1 asset\n           [0] ../node_modules/html-webpack-plugin/lib/loader.js!./index.html 1.53 kB {0} [built]\n            + 3 hidden modules\n"
+    },
+    {
+      "step": "run 1",
+      "seconds": 111.67,
+      "exit_code": 0,
+      "output_tail": "Running Web Tooling Benchmark v0.5.3\u2026\n-------------------------------------\n         acorn: 12.32 runs/s\n         babel:  9.19 runs/s\n  babel-minify: 16.95 runs/s\n       babylon: 16.97 runs/s\n         buble:  6.60 runs/s\n          chai: 23.91 runs/s\n  coffeescript:  2.16 runs/s\n        espree:  3.00 runs/s\n       esprima:  6.68 runs/s\n        jshint:  8.84 runs/s\n         lebab:  5.14 runs/s\n       postcss:  7.59 runs/s\n       prepack: 12.71 runs/s\n      prettier: 12.41 runs/s\n    source-map: 13.28 runs/s\n        terser: 21.55 runs/s\n    typescript: 16.88 runs/s\n     uglify-js: 11.48 runs/s\n-------------------------------------\nGeometric mean:  9.78 runs/s\n"
+    },
+    {
+      "step": "run 2",
+      "seconds": 86.73,
+      "exit_code": 0,
+      "output_tail": "Running Web Tooling Benchmark v0.5.3\u2026\n-------------------------------------\n         acorn: 13.13 runs/s\n         babel:  6.57 runs/s\n  babel-minify: 11.25 runs/s\n       babylon:  9.71 runs/s\n         buble:  5.62 runs/s\n          chai: 29.21 runs/s\n  coffeescript:  9.78 runs/s\n        espree:  3.79 runs/s\n       esprima: 11.26 runs/s\n        jshint: 18.55 runs/s\n         lebab: 12.34 runs/s\n       postcss: 10.88 runs/s\n       prepack: 14.73 runs/s\n      prettier: 12.85 runs/s\n    source-map:  4.60 runs/s\n        terser: 33.74 runs/s\n    typescript: 17.04 runs/s\n     uglify-js:  9.45 runs/s\n-------------------------------------\nGeometric mean: 11.19 runs/s\n"
+    },
+    {
+      "step": "run 3",
+      "seconds": 63.63,
+      "exit_code": 0,
+      "output_tail": "Running Web Tooling Benchmark v0.5.3\u2026\n-------------------------------------\n         acorn: 20.23 runs/s\n         babel: 13.94 runs/s\n  babel-minify: 21.71 runs/s\n       babylon: 18.54 runs/s\n         buble:  9.13 runs/s\n          chai: 30.85 runs/s\n  coffeescript: 12.45 runs/s\n        espree:  6.28 runs/s\n       esprima: 12.77 runs/s\n        jshint: 17.10 runs/s\n         lebab: 22.54 runs/s\n       postcss:  8.79 runs/s\n       prepack: 14.42 runs/s\n      prettier: 11.43 runs/s\n    source-map: 16.06 runs/s\n        terser: 37.73 runs/s\n    typescript: 17.40 runs/s\n     uglify-js: 10.35 runs/s\n-------------------------------------\nGeometric mean: 15.23 runs/s\n"
+    },
+    {
+      "step": "run 4",
+      "seconds": 66.4,
+      "exit_code": 0,
+      "output_tail": "Running Web Tooling Benchmark v0.5.3\u2026\n-------------------------------------\n         acorn: 15.05 runs/s\n         babel: 14.06 runs/s\n  babel-minify: 13.04 runs/s\n       babylon: 15.96 runs/s\n         buble:  8.64 runs/s\n          chai: 26.96 runs/s\n  coffeescript: 12.25 runs/s\n        espree:  6.35 runs/s\n       esprima: 11.31 runs/s\n        jshint: 18.00 runs/s\n         lebab: 22.12 runs/s\n       postcss: 12.22 runs/s\n       prepack: 11.75 runs/s\n      prettier: 11.95 runs/s\n    source-map: 16.22 runs/s\n        terser: 31.33 runs/s\n    typescript: 15.46 runs/s\n     uglify-js:  7.34 runs/s\n-------------------------------------\nGeometric mean: 13.86 runs/s\n"
+    },
+    {
+      "step": "run 5",
+      "seconds": 91.97,
+      "exit_code": 0,
+      "output_tail": "Running Web Tooling Benchmark v0.5.3\u2026\n-------------------------------------\n         acorn:  7.98 runs/s\n         babel:  5.35 runs/s\n  babel-minify: 11.74 runs/s\n       babylon: 15.40 runs/s\n         buble:  5.90 runs/s\n          chai: 29.44 runs/s\n  coffeescript: 10.39 runs/s\n        espree:  6.12 runs/s\n       esprima: 12.37 runs/s\n        jshint: 16.07 runs/s\n         lebab: 17.82 runs/s\n       postcss:  8.55 runs/s\n       prepack: 13.59 runs/s\n      prettier:  9.23 runs/s\n    source-map:  9.11 runs/s\n        terser: 10.93 runs/s\n    typescript:  6.49 runs/s\n     uglify-js:  8.59 runs/s\n-------------------------------------\nGeometric mean: 10.33 runs/s\n"
+    },
+    {
+      "step": "run 6",
+      "seconds": 71.87,
+      "exit_code": 0,
+      "output_tail": "Running Web Tooling Benchmark v0.5.3\u2026\n-------------------------------------\n         acorn: 17.54 runs/s\n         babel:  9.15 runs/s\n  babel-minify: 16.79 runs/s\n       babylon:  9.97 runs/s\n         buble:  6.39 runs/s\n          chai: 26.84 runs/s\n  coffeescript: 10.93 runs/s\n        espree:  5.45 runs/s\n       esprima: 11.20 runs/s\n        jshint: 16.62 runs/s\n         lebab: 24.25 runs/s\n       postcss: 10.50 runs/s\n       prepack: 15.39 runs/s\n      prettier: 12.96 runs/s\n    source-map: 15.43 runs/s\n        terser: 34.37 runs/s\n    typescript: 15.67 runs/s\n     uglify-js: 10.78 runs/s\n-------------------------------------\nGeometric mean: 13.53 runs/s\n"
+    }
+  ],
+  "runs_per_second": [
+    9.78,
+    11.19,
+    15.23,
+    13.86,
+    10.33,
+    13.53
+  ],
+  "guest": [
+    "4",
+    "MemTotal:        8142360 kB",
+    "v18.19.1",
+    "9.2.0",
+    ""
+  ],
+  "commit": "4a12828c6a1eed02a70c011bd080445dd319a05f",
+  "median_runs_per_second": 12.36
+}

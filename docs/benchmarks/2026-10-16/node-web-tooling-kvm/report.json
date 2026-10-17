@@ -1,0 +1,93 @@
+{
+  "success": true,
+  "purpose": "V8 Web Tooling Benchmark in a 4 vCPU, 8 GiB tools-image sandbox on KVM; the check's own stopwatch, on a host that was NOT quiet",
+  "commit": "4a12828c6a1eed02a70c011bd080445dd319a05f",
+  "guest": [
+    "4",
+    "MemTotal:        8142360 kB",
+    "v18.19.1",
+    "9.2.0",
+    ""
+  ],
+  "input_sha256": {
+    "daemon": "d4cc69748a84e4b3f0d025561edeb2609f66c14d427fdb32d46351d093504f51",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "3e44f17e406c9485a9215d93a8db38ffdf0bceb43c729f658c6921e8a77a3258",
+    "driver": "b70b27234954c7b3540499647a3ade4c96b1b960debd3d62f052f6d686aaa5c5"
+  },
+  "replicates": [
+    {
+      "file": "runs/r1.json",
+      "runs_per_second": [
+        9.78,
+        11.19,
+        15.23,
+        13.86,
+        10.33,
+        13.53
+      ],
+      "median": 12.36,
+      "setup_seconds": {
+        "clone": 2.42,
+        "npm install": 66.98,
+        "npm run build": 29.83
+      }
+    },
+    {
+      "file": "runs/r2.json",
+      "runs_per_second": [
+        9.33,
+        11.59,
+        14.25,
+        14.02,
+        15.26,
+        9.97
+      ],
+      "median": 12.805,
+      "setup_seconds": {
+        "clone": 2.52,
+        "npm install": 57.84,
+        "npm run build": 14.54
+      }
+    }
+  ],
+  "all_runs_per_second_sorted": [
+    9.33,
+    9.78,
+    9.97,
+    10.33,
+    11.19,
+    11.59,
+    13.53,
+    13.86,
+    14.02,
+    14.25,
+    15.23,
+    15.26
+  ],
+  "median_all": 12.559999999999999,
+  "min": 9.33,
+  "max": 15.26,
+  "host_cpu_load_percent_every_30s_during_first_10_min": [
+    45,
+    62,
+    76,
+    100,
+    57,
+    94,
+    90,
+    55,
+    74,
+    79,
+    68,
+    42,
+    72,
+    70,
+    88,
+    83,
+    79,
+    76,
+    60,
+    63
+  ]
+}

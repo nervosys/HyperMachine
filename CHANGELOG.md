@@ -107,6 +107,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the 502 tells the caller to rebuild the guest image with a current agent,
   instead of reporting only that the connection closed. The sandbox is
   unaffected.
+- V8's Web Tooling Benchmark ran in a 4 vCPU, 8 GiB sandbox from the tools
+  image on KVM (`tools/bench-node-tooling-kvm.py`): median 12.56 runs/s over 12
+  runs, 9.33 to 15.26, on a host at 42 to 100% CPU. A rough placement against
+  a public leaderboard, not a comparison; see
+  `docs/benchmarks/2026-10-16/node-web-tooling-kvm/README.md`.
 - A stopped machine now closes the reverse connections waiting on it and
   forgets them. They used to stay open and counted against its 64 until the
   node restarted, so a machine stopped and started with 64 waiting refused the

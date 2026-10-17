@@ -1,0 +1,58 @@
+{
+  "success": true,
+  "purpose": "V8 Web Tooling Benchmark inside a tools-image sandbox on KVM; the check's own stopwatch",
+  "input_sha256": {
+    "daemon": "d4cc69748a84e4b3f0d025561edeb2609f66c14d427fdb32d46351d093504f51",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "3e44f17e406c9485a9215d93a8db38ffdf0bceb43c729f658c6921e8a77a3258",
+    "driver": "b70b27234954c7b3540499647a3ade4c96b1b960debd3d62f052f6d686aaa5c5"
+  },
+  "vcpus": 4,
+  "memory_mb": 8192,
+  "host_cpus": 24,
+  "steps": [
+    {
+      "step": "clone",
+      "seconds": 2.51,
+      "exit_code": 0,
+      "output_tail": "4a12828c6a1eed02a70c011bd080445dd319a05f\n"
+    },
+    {
+      "step": "npm install",
+      "seconds": 53.87,
+      "exit_code": 0,
+      "output_tail": "         1 asset\n           [0] ../node_modules/html-webpack-plugin/lib/loader.js!./index.html 1.53 kB {0} [built]\n            + 3 hidden modules\n\nadded 1070 packages in 54s\n"
+    },
+    {
+      "step": "npm run build",
+      "seconds": 11.97,
+      "exit_code": 0,
+      "output_tail": "     @ ./bootstrap.js\n    Child html-webpack-plugin for \"index.html\":\n         1 asset\n           [0] ../node_modules/html-webpack-plugin/lib/loader.js!./index.html 1.53 kB {0} [built]\n            + 3 hidden modules\n"
+    },
+    {
+      "step": "run 1",
+      "seconds": 63.73,
+      "exit_code": 0,
+      "output_tail": "Running Web Tooling Benchmark v0.5.3\u2026\n-------------------------------------\n         acorn: 15.43 runs/s\n         babel: 13.86 runs/s\n  babel-minify: 20.49 runs/s\n       babylon: 18.72 runs/s\n         buble:  7.64 runs/s\n          chai: 29.95 runs/s\n  coffeescript: 13.23 runs/s\n        espree:  6.12 runs/s\n       esprima: 16.29 runs/s\n        jshint: 17.90 runs/s\n         lebab: 24.76 runs/s\n       postcss: 11.34 runs/s\n       prepack: 14.74 runs/s\n      prettier: 13.09 runs/s\n    source-map: 15.11 runs/s\n        terser: 35.12 runs/s\n    typescript: 18.09 runs/s\n     uglify-js: 10.66 runs/s\n-------------------------------------\nGeometric mean: 15.43 runs/s\n"
+    },
+    {
+      "step": "run 2",
+      "seconds": 70.69,
+      "exit_code": 0,
+      "output_tail": "Running Web Tooling Benchmark v0.5.3\u2026\n-------------------------------------\n         acorn: 21.08 runs/s\n         babel: 12.96 runs/s\n  babel-minify: 19.88 runs/s\n       babylon: 18.07 runs/s\n         buble:  8.16 runs/s\n          chai: 26.29 runs/s\n  coffeescript: 11.76 runs/s\n        espree:  6.90 runs/s\n       esprima: 15.67 runs/s\n        jshint: 19.10 runs/s\n         lebab: 21.29 runs/s\n       postcss: 12.41 runs/s\n       prepack: 14.24 runs/s\n      prettier: 13.47 runs/s\n    source-map: 14.41 runs/s\n        terser: 27.16 runs/s\n    typescript:  4.73 runs/s\n     uglify-js:  7.87 runs/s\n-------------------------------------\nGeometric mean: 13.90 runs/s\n"
+    }
+  ],
+  "runs_per_second": [
+    15.43,
+    13.9
+  ],
+  "guest": [
+    "4",
+    "MemTotal:        8142360 kB",
+    "v18.19.1",
+    "9.2.0",
+    ""
+  ],
+  "commit": "4a12828c6a1eed02a70c011bd080445dd319a05f",
+  "median_runs_per_second": 14.665
+}
