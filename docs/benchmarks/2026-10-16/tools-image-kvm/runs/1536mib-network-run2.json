@@ -1,0 +1,71 @@
+{
+  "success": true,
+  "purpose": "functional verification that a template holding the development tools runs them in a sandbox on KVM; the times are the check's own stopwatch and not a benchmark",
+  "input_sha256": {
+    "daemon": "483378ecfd7cdffa6d56a2cc6e77a150080f530509c464c63c5b77f904b4c2d0",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "3e44f17e406c9485a9215d93a8db38ffdf0bceb43c729f658c6921e8a77a3258",
+    "driver": "e972985513800313265324c33da07cd566d9d4c51978cfba8a5dde069d27d482"
+  },
+  "initrd_bytes": 187401737,
+  "memory_mb": 1536,
+  "network": true,
+  "host_cpus": 24,
+  "cases": [
+    {
+      "name": "an Ubuntu 24.04 guest with git, Python, Node.js, npm, gcc, make, curl and jq",
+      "success": true,
+      "detail": {
+        "create_seconds": 0.029,
+        "os": "NAME=\"Ubuntu\" VERSION_ID=\"24.04\"",
+        "versions": {
+          "git": "git version 2.43.0",
+          "python3": "Python 3.12.3",
+          "node": "v18.19.1",
+          "npm": "9.2.0",
+          "gcc": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+          "make": "GNU Make 4.3",
+          "curl": "curl 8.5.0 (x86_64-pc-linux-gnu) libcurl/8.5.0 OpenSSL/3.0.13 zlib/1.3 brotli/1.1.0 zstd/1.5.5 libidn2/2.3.7 libpsl/0.21.2 (+libidn2/2.3.7) libssh/0.10.6/openssl/zlib nghttp2/1.59.0 librtmp/2.3 OpenLDAP/2.6.10",
+          "jq": "jq-1.7"
+        }
+      }
+    },
+    {
+      "name": "work with the tools, offline: Python, a C build, node --test, a git commit",
+      "success": true,
+      "detail": {
+        "python": "5050 {\"a\": 1}",
+        "c": "42",
+        "node_test": "# tests 2 # pass 2 # fail 0",
+        "git_commits": "1"
+      }
+    },
+    {
+      "name": "from inside, with the network on: curl over HTTPS, git clone, npm install, apt install",
+      "success": true,
+      "detail": {
+        "curl_https_status": "200",
+        "git_clone": "1 README",
+        "npm_install": "added 2 packages in 1s true",
+        "apt_install": "tree v2.1.1 (c) 1996 - 2023 by Steve Baker, Thomas Moore, Francesc Rocher, Florian Sesser, Kyosuke Tokoro",
+        "root_filesystem": "rootfs           1358164 915960    442204  68% /"
+      }
+    },
+    {
+      "name": "a fork carries the files and the tools",
+      "success": true,
+      "detail": {
+        "fork_output": "kept 1 v18.19.1"
+      }
+    },
+    {
+      "name": "what it costs: create time and free memory",
+      "success": true,
+      "detail": {
+        "meminfo_kb": "MemTotal:        1509068 kB MemAvailable:     527576 kB",
+        "second_create_seconds": 0.051,
+        "initramfs_bytes": 187401737
+      }
+    }
+  ]
+}

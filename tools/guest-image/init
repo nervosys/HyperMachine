@@ -16,6 +16,11 @@ boot_trace core_mounts_ready
 mkdir -p /dev/pts /etc /tmp /root
 mount -t devpts devpts /dev/pts
 mount -t tmpfs tmpfs /tmp
+# The kernel caps the in-memory root at about half of RAM. A small image never
+# notices; one with a distribution in it (docs/TOOLS_IMAGE.md) fills the cap
+# and every write outside /tmp fails with "No space left on device". The cap
+# is a ceiling, not a reservation: memory is used as files are written.
+mount -o remount,size=90% / 2>/dev/null
 
 # The kernel configured the network from `ip=` on its command line and wrote
 # the nameserver to /proc/net/pnp, which is in resolv.conf's own format.

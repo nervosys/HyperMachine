@@ -130,9 +130,10 @@ In rough order of how much each matters to someone choosing between them:
    owner can set up.
 10. **An image with the tools already in it.** Done for a sandbox, as a
     template you build: [Ubuntu 24.04 with git, Python, Node.js, npm, gcc and
-    make](TOOLS_IMAGE.md), checked offline on KVM. Not done: shipping it,
-    Docker or a browser in it, other languages, a machine image with tools
-    baked in, and network use (`apt`, `npm`, `git clone`) from inside it.
+    make](TOOLS_IMAGE.md), checked on KVM offline and with the network
+    (`git clone`, `npm install`, `apt install` from inside it). Not done:
+    shipping it, Docker or a browser in it, other languages, and a machine
+    image with tools baked in.
 
 ## Where HyperMachine has something boat's documentation does not claim
 

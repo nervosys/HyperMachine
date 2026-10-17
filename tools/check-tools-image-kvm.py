@@ -34,6 +34,9 @@ def main():
     for name in ["daemon", "kernel", "initrd", "output"]:
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--memory-mb", type=int, default=2048)
+    parser.add_argument("--network", action="store_true",
+                        help="start the daemon with --network --egress-default allow and also check "
+                             "git clone, npm install, curl and apt from inside (needs the Internet)")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     report = {"success": False,
@@ -42,6 +45,7 @@ def main():
               "input_sha256": {k: digest(getattr(args, k)) for k in ["daemon", "kernel", "initrd"]},
               "initrd_bytes": args.initrd.stat().st_size,
               "memory_mb": args.memory_mb,
+              "network": args.network,
               "host_cpus": os.cpu_count(),
               "cases": []}
     report["input_sha256"]["driver"] = digest(__file__)
@@ -51,7 +55,8 @@ def main():
     log = (args.output / "daemon.log").open("wb")
     daemon = subprocess.Popen(
         [str(args.daemon), "--port", str(api), "--proxy-port", str(port()),
-         "--memory-mb", str(args.memory_mb), "--cpu-cores", "2", "--capacity", "4"],
+         "--memory-mb", str(args.memory_mb), "--cpu-cores", "2", "--capacity", "4"]
+        + (["--network", "--egress-default", "allow"] if args.network else []),
         env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
 
     def request(method, path, body=None, timeout=300):
@@ -135,6 +140,33 @@ def main():
             assert git == "1", git
             return {"python": py, "c": c, "node_test": node.replace("\n", " "), "git_commits": git}
         case("work with the tools, offline: Python, a C build, node --test, a git commit", work)
+
+        def internet():
+            sandbox = state["sandbox"]
+            seen = {}
+            head = sh(sandbox, "curl -sS -m 30 -o /dev/null -w '%{http_code}' https://archive.ubuntu.com/ubuntu/dists/noble/Release")
+            assert head == "200", head
+            seen["curl_https_status"] = head
+            clone = sh(sandbox, "cd /tmp && rm -rf hw && git clone -q --depth 1 https://github.com/octocat/Hello-World.git hw"
+                                " && git -C hw log --oneline | wc -l && ls hw", 180)
+            assert clone.splitlines()[0] == "1" and "README" in clone, clone
+            seen["git_clone"] = clone.replace("\n", " ")
+            npm = sh(sandbox, "mkdir -p /tmp/np && cd /tmp/np && npm init -y >/dev/null 2>&1"
+                              " && npm install --no-audit --no-fund is-odd@3.0.1 2>&1 | tail -2"
+                              " && node -e \"console.log(require('is-odd')(3))\"", 240)
+            assert npm.splitlines()[-1] == "true", npm
+            seen["npm_install"] = npm.replace("\n", " ")
+            apt = sh(sandbox, "apt-get update -qq 2>&1 | tail -2; DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tree 2>&1 | tail -2;"
+                              " tree --version", 300)
+            assert apt.splitlines()[-1].startswith("tree v"), apt
+            seen["apt_install"] = apt.splitlines()[-1]
+            # Writes outside /tmp: the root is a tmpfs, and was once full on arrival.
+            root = sh(sandbox, "echo kept > /root/note && cat /root/note; mkdir -p /home/u && echo ok > /home/u/f && cat /home/u/f; df -k / | tail -1")
+            assert root.splitlines()[:2] == ["kept", "ok"], root
+            seen["root_filesystem"] = root.splitlines()[-1]
+            return seen
+        if args.network:
+            case("from inside, with the network on: curl over HTTPS, git clone, npm install, apt install", internet)
 
         def forked():
             sandbox = state["sandbox"]

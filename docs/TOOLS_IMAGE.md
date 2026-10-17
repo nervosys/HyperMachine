@@ -3,8 +3,9 @@
 A sandbox boots from a template, and the template HyperMachine ships holds
 little beyond the guest agent. This is a second kind: Ubuntu 24.04 with the
 tools a coding agent reaches for already installed, so a sandbox can run
-`git`, `python3`, `node`, `npm`, `gcc` and `make` at once, with no network and
-nothing to install first.
+`git`, `python3`, `node`, `npm`, `gcc` and `make` at once, with nothing to
+install first. With the network on, `git clone`, `npm install` and `apt
+install` work from inside it too.
 
 | Tool | Version in the image checked |
 |---|---|
@@ -47,15 +48,23 @@ That is how the check ran it. The daemon's `--template NAME=INITRAMFS` flag
 (`--template tools=tools.cpio.gz`, then `templateID: "tools"` at create) keeps
 the small template beside it; **that form was not run with this image.**
 
+For the Internet, start the node with `--network` and an egress policy that
+allows it (`--egress-default allow`, or per sandbox `allowInternetAccess`).
+
 ### How much memory
 
 **At least 1536 MiB for the guest.** A sandbox's root filesystem is in
-memory, and this one is 576 MB before anything runs. At **1024 MiB the guest
-still boots and the unpacking stops short: `npm` was missing, and the
-daemon's log says nothing about it (the guest's own console was not read).** At 1536 MiB the guest sees
-1.5 GB and about 790 MB is free after it boots; at 2048 MiB, 2.0 GB and
-1.3 GB free. If you build a larger image, test its smallest size the same
-way: a tool missing from `PATH` is how too little memory shows.
+memory, and this one is 576 MB before anything runs. The kernel caps that
+filesystem at about 44% of the guest's memory (660,876 kB of 1,509,068 kB at
+1536 MiB), and the guest's `init` raises the cap to 90% once it is unpacked.
+At **1024 MiB the guest still boots and the unpacking stops short: `npm` was
+missing, and the daemon's log says nothing about it** (the guest's own
+console was not read; that the cap is the cause is inferred from the sizes).
+At 1536 MiB the guest sees 1.5 GB; after the whole network check, about
+530 MB was still available and the root held 916 MB of 1.36 GB. If you build
+a larger image, test its smallest size the same way: a tool missing from
+`PATH` is how too little memory shows. Installing more with `apt` inside a
+sandbox spends the same memory.
 
 ## What was checked
 
@@ -66,13 +75,17 @@ in [the evidence](benchmarks/2026-10-16/tools-image-kvm/README.md)):
 - the guest is Ubuntu 24.04, and each tool answers `--version`;
 - with no network: a Python program, a C program compiled and run, a Node.js
   test run with `node --test`, and a git repository with a commit;
+- with the network: `curl` over HTTPS, `git clone` of a public repository,
+  `npm install` of a package and `require` of it, `apt-get update` and
+  `apt-get install tree`, and files written under `/root` and `/home`;
 - a fork carries the files and the tools;
 - the create and free-memory figures above.
 
+Three runs in a row passed. The network cases need the Internet, and
+`archive.ubuntu.com`, `github.com` and the npm registry, to be up.
+
 ## Not checked
 
-- **Network use from inside.** `apt install`, `npm install` and `git clone`
-  were not run. The check is offline on purpose.
 - **A real build-and-test loop.** The Node.js test was two assertions. The
   [parity table's](BOAT_PARITY.md) 1,000-run loop was not run.
 - **Machines.** This is a sandbox template. A machine boots a distribution's

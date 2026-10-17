@@ -107,14 +107,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the 502 tells the caller to rebuild the guest image with a current agent,
   instead of reporting only that the connection closed. The sandbox is
   unaffected.
+- The guest `init` raises the in-memory root's size cap from the kernel's
+  default (about 44% of memory here) to 90% after boot. A guest image large
+  enough to fill the default, such as the one below, could write nowhere but
+  `/tmp` ("No space left on device"); small images are unaffected, and the
+  sized-templates check still passes with the new `init`.
 - A sandbox template with the development tools in it:
   `tools/guest-image/build-tools-image.sh` builds Ubuntu 24.04 with git,
   Python 3, Node.js, npm, gcc, make, curl and jq from the distribution's
-  archive (debootstrap and apt in a chroot, no Docker), and it ran on KVM
-  with no network: a C build, a Python program, `node --test` and a git
-  commit, and a fork kept the files. It needs 1536 MiB of guest memory: at
-  1024 MiB `npm` was missing from the unpacked image. Not shipped; see
-  `docs/TOOLS_IMAGE.md`.
+  archive (debootstrap and apt in a chroot, no Docker), and it ran on KVM:
+  a C build, a Python program, `node --test` and a git commit offline, and
+  with the network `curl`, `git clone`, `npm install` and `apt install`; a
+  fork kept the files. It needs 1536 MiB of guest memory: at 1024 MiB `npm`
+  was missing from the unpacked image. Not shipped; see `docs/TOOLS_IMAGE.md`.
 - The Python and TypeScript SDKs are packaged for PyPI and npm and tested as
   installed (`tools/check-sdk-packages.sh`): the licence texts are in each
   package, the Python licence is a PEP 639 expression (needing setuptools 77),

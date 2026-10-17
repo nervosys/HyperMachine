@@ -69,10 +69,14 @@ DEBIAN_FRONTEND=noninteractive chroot "$root" apt-get install -y -qq --no-instal
 chroot "$root" apt-get clean
 unmount
 trap - EXIT
-# Nothing the guest needs: documentation, apt's lists, and the host's resolver.
+# Nothing the guest needs: documentation, apt's lists, and the host's resolver
+# (removed, not emptied: init links /etc/resolv.conf to the kernel's own
+# nameserver file only when there is none).
 rm -rf "$root"/var/cache/apt/archives/*.deb "$root"/var/lib/apt/lists/* \
     "$root"/usr/share/doc/* "$root"/usr/share/man/* "$root"/usr/share/info/*
-: >"$root/etc/resolv.conf"
+rm -f "$root/etc/resolv.conf"
+# apt cannot write its cache without these.
+mkdir -p "$root/var/lib/apt/lists/partial" "$root/var/cache/apt/archives/partial"
 
 bash "$here/build.sh" -o "$out" --busybox "$busybox" --agent "$agent" --rootfs "$root"
 echo "build-tools-image.sh: rootfs $(du -sm "$root" | cut -f1) MiB; packages: $packages"
