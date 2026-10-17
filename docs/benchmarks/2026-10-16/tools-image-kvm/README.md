@@ -14,7 +14,7 @@ the guest reached the Internet through the node's egress gateway.
 ## Result: 5 cases, 3 runs in a row, all passed (1536 MiB, with the network)
 
 (These are a second set of three runs, after the check's write test moved
-from `/home` to `/srv`; a public-repository path check objected to `/home/u`.
+from a path under `/home` to `/srv`; a path check for this public repository objected to the old one.
 The first set had the same results.)
 
 1. **The guest is Ubuntu 24.04 and every tool answers.**
