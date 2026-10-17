@@ -161,7 +161,7 @@ def main():
             assert apt.splitlines()[-1].startswith("tree v"), apt
             seen["apt_install"] = apt.splitlines()[-1]
             # Writes outside /tmp: the root is a tmpfs, and was once full on arrival.
-            root = sh(sandbox, "echo kept > /root/note && cat /root/note; mkdir -p /home/u && echo ok > /home/u/f && cat /home/u/f; df -k / | tail -1")
+            root = sh(sandbox, "echo kept > /root/note && cat /root/note; mkdir -p /srv/w && echo ok > /srv/w/f && cat /srv/w/f; df -k / | tail -1")
             assert root.splitlines()[:2] == ["kept", "ok"], root
             seen["root_filesystem"] = root.splitlines()[-1]
             return seen

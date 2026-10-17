@@ -11,15 +11,15 @@
     "daemon": "483378ecfd7cdffa6d56a2cc6e77a150080f530509c464c63c5b77f904b4c2d0",
     "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
     "initrd": "3e44f17e406c9485a9215d93a8db38ffdf0bceb43c729f658c6921e8a77a3258",
-    "driver": "e972985513800313265324c33da07cd566d9d4c51978cfba8a5dde069d27d482"
+    "driver": "cabd14b8d0a61e3bc849b41d7b1700f4c3e3924a414403614828858a6c5c4692"
   },
   "runs_at_1536_mib_with_network": [
     {
       "file": "runs/1536mib-network-run1.json",
       "success": true,
-      "create_seconds": 0.022,
+      "create_seconds": 0.026,
       "second_create_seconds": 0.019,
-      "mem_available_kb": "MemTotal:        1509068 kB MemAvailable:     527816 kB",
+      "mem_available_kb": "MemTotal:        1509068 kB MemAvailable:     526668 kB",
       "inside": {
         "curl_https_status": "200",
         "git_clone": "1 README",
@@ -31,9 +31,9 @@
     {
       "file": "runs/1536mib-network-run2.json",
       "success": true,
-      "create_seconds": 0.029,
-      "second_create_seconds": 0.051,
-      "mem_available_kb": "MemTotal:        1509068 kB MemAvailable:     527576 kB",
+      "create_seconds": 0.019,
+      "second_create_seconds": 0.019,
+      "mem_available_kb": "MemTotal:        1509068 kB MemAvailable:     526972 kB",
       "inside": {
         "curl_https_status": "200",
         "git_clone": "1 README",
@@ -45,13 +45,13 @@
     {
       "file": "runs/1536mib-network-run3.json",
       "success": true,
-      "create_seconds": 0.043,
-      "second_create_seconds": 0.032,
-      "mem_available_kb": "MemTotal:        1509068 kB MemAvailable:     527216 kB",
+      "create_seconds": 0.019,
+      "second_create_seconds": 0.019,
+      "mem_available_kb": "MemTotal:        1509068 kB MemAvailable:     526476 kB",
       "inside": {
         "curl_https_status": "200",
         "git_clone": "1 README",
-        "npm_install": "added 2 packages in 2s true",
+        "npm_install": "added 2 packages in 1s true",
         "apt_install": "tree v2.1.1 (c) 1996 - 2023 by Steve Baker, Thomas Moore, Francesc Rocher, Florian Sesser, Kyosuke Tokoro",
         "root_filesystem": "rootfs           1358164 915960    442204  68% /"
       }

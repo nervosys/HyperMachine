@@ -13,6 +13,10 @@ the guest reached the Internet through the node's egress gateway.
 
 ## Result: 5 cases, 3 runs in a row, all passed (1536 MiB, with the network)
 
+(These are a second set of three runs, after the check's write test moved
+from `/home` to `/srv`; a public-repository path check objected to `/home/u`.
+The first set had the same results.)
+
 1. **The guest is Ubuntu 24.04 and every tool answers.**
 2. **Work offline, nothing installed:** `python3` summed 0..100 and printed
    JSON; `gcc -O2` built a C program that printed 42; `node --test` ran two
@@ -23,15 +27,15 @@ the guest reached the Internet through the node's egress gateway.
    `octocat/Hello-World` over HTTPS gave one commit and a README; `npm
    install is-odd@3.0.1` added 2 packages in 1 to 2 s and `require` of it
    returned true; `apt-get update` and `apt-get install tree` installed
-   `tree` 2.1.1; and `/root` and `/home` could be written.
+   `tree` 2.1.1; and `/root` and `/srv` could be written.
 4. **A fork carries the files and the tools.**
 5. **Cost.**
 
 | | run 1 | run 2 | run 3 |
 |---|---|---|---|
-| first create | 0.022 s | 0.029 s | 0.043 s |
-| second create | 0.019 s | 0.051 s | 0.032 s |
-| `MemAvailable` in the guest, after all of the above | 527,816 kB | 527,576 kB | 527,216 kB |
+| first create | 0.026 s | 0.019 s | 0.019 s |
+| second create | 0.019 s | 0.019 s | 0.019 s |
+| `MemAvailable` in the guest, after all of the above | 526,668 kB | 526,972 kB | 526,476 kB |
 | root filesystem after them (1K blocks, used, available) | 1,358,164, 915,960, 442,204 | same | same |
 
 The create times are one stopwatch reading each, not a benchmark. The image

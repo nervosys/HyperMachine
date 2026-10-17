@@ -77,7 +77,7 @@ in [the evidence](benchmarks/2026-10-16/tools-image-kvm/README.md)):
   test run with `node --test`, and a git repository with a commit;
 - with the network: `curl` over HTTPS, `git clone` of a public repository,
   `npm install` of a package and `require` of it, `apt-get update` and
-  `apt-get install tree`, and files written under `/root` and `/home`;
+  `apt-get install tree`, and files written under `/root` and `/srv`;
 - a fork carries the files and the tools;
 - the create and free-memory figures above.
 

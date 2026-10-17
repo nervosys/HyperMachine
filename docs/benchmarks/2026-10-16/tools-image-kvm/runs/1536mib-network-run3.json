@@ -5,7 +5,7 @@
     "daemon": "483378ecfd7cdffa6d56a2cc6e77a150080f530509c464c63c5b77f904b4c2d0",
     "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
     "initrd": "3e44f17e406c9485a9215d93a8db38ffdf0bceb43c729f658c6921e8a77a3258",
-    "driver": "e972985513800313265324c33da07cd566d9d4c51978cfba8a5dde069d27d482"
+    "driver": "cabd14b8d0a61e3bc849b41d7b1700f4c3e3924a414403614828858a6c5c4692"
   },
   "initrd_bytes": 187401737,
   "memory_mb": 1536,
@@ -16,7 +16,7 @@
       "name": "an Ubuntu 24.04 guest with git, Python, Node.js, npm, gcc, make, curl and jq",
       "success": true,
       "detail": {
-        "create_seconds": 0.043,
+        "create_seconds": 0.019,
         "os": "NAME=\"Ubuntu\" VERSION_ID=\"24.04\"",
         "versions": {
           "git": "git version 2.43.0",
@@ -46,7 +46,7 @@
       "detail": {
         "curl_https_status": "200",
         "git_clone": "1 README",
-        "npm_install": "added 2 packages in 2s true",
+        "npm_install": "added 2 packages in 1s true",
         "apt_install": "tree v2.1.1 (c) 1996 - 2023 by Steve Baker, Thomas Moore, Francesc Rocher, Florian Sesser, Kyosuke Tokoro",
         "root_filesystem": "rootfs           1358164 915960    442204  68% /"
       }
@@ -62,8 +62,8 @@
       "name": "what it costs: create time and free memory",
       "success": true,
       "detail": {
-        "meminfo_kb": "MemTotal:        1509068 kB MemAvailable:     527216 kB",
-        "second_create_seconds": 0.032,
+        "meminfo_kb": "MemTotal:        1509068 kB MemAvailable:     526476 kB",
+        "second_create_seconds": 0.019,
         "initramfs_bytes": 187401737
       }
     }
