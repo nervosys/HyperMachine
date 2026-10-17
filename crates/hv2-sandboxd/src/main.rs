@@ -319,6 +319,8 @@ struct Options {
     lit_remotes: Vec<String>,
     /// Remotes a Git repository may be cloned from, by `--git-remote`.
     git_remotes: Vec<String>,
+    /// What a private Git remote is cloned with, by `--git-credential`.
+    git_credentials: Vec<git_repos::Credential>,
     /// What the flags said about pushing metrics over OTLP; the environment
     /// is consulted when they are parsed. See hv2_cluster::otlp.
     otlp_flags: hv2_cluster::otlp::Flags,
@@ -412,6 +414,7 @@ fn parse_options() -> Result<Options, String> {
         lit: None,
         lit_remotes: Vec::new(),
         git_remotes: Vec::new(),
+        git_credentials: Vec::new(),
         otlp_flags: hv2_cluster::otlp::Flags::default(),
         otlp: None,
         allow_private_webhooks: false,
@@ -497,6 +500,18 @@ fn parse_options() -> Result<Options, String> {
                 let remote = value(&mut i)?;
                 reqwest::Url::parse(&remote).map_err(|e| format!("--git-remote {remote}: {e}"))?;
                 opts.git_remotes.push(remote);
+            }
+            "--git-credential" => {
+                let given = value(&mut i)?;
+                let (prefix, variable) = given
+                    .split_once('=')
+                    .ok_or("--git-credential takes PREFIX=ENVIRONMENT_VARIABLE")?;
+                reqwest::Url::parse(prefix)
+                    .map_err(|e| format!("--git-credential {prefix}: {e}"))?;
+                let userinfo = std::env::var(variable)
+                    .map_err(|_| format!("--git-credential: {variable} is not set"))?;
+                opts.git_credentials
+                    .push(git_repos::Credential::new(prefix, &userinfo)?);
             }
             "--otlp-endpoint" => opts.otlp_flags.endpoint = Some(value(&mut i)?),
             "--otlp-header" => opts.otlp_flags.headers.push(value(&mut i)?),
@@ -623,7 +638,7 @@ fn parse_options() -> Result<Options, String> {
                      [--tenant-reserved-cidr CIDR]...] \
                      [--tls-cert F --tls-key F] \
                      [--otlp-endpoint URL [--otlp-header KEY=VALUE]... [--otlp-interval SECS]] \
-                     [--lit BIN [--lit-remote URL]...] [--git-remote URL]... \
+                     [--lit BIN [--lit-remote URL]...] [--git-remote URL]... [--git-credential PREFIX=ENV]... \
                      [--cluster-store redis://H:P --advertise-api URL --advertise-proxy H:P \
                      [--node-id ID] [--cluster-namespace NS] [--cluster-token T] [--node-ttl SECS] [--registration-reconcile-interval SECS]]\n\
                      HV2_KERNEL and HV2_INITRD name the guest; HV2_CLUSTER_TOKEN may carry the token."
@@ -2780,6 +2795,7 @@ async fn create_sandbox(
                     state.opts.lit.as_deref(),
                     &state.opts.lit_remotes,
                     &state.opts.git_remotes,
+                    &state.opts.git_credentials,
                     &state.http,
                     &environment.repositories,
                 )

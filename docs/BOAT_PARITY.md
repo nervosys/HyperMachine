@@ -117,9 +117,12 @@ In rough order of how much each matters to someone choosing between them:
    [listed](PROCESSES.md).
 7. **Git repositories with credentials.** An environment's
    [Git repositories](ENVIRONMENTS.md#repositories) are cloned on the node
-   from remotes the operator allows, without credentials. A private Git
-   remote needs a credential the node can use without keeping an admin
-   password in the store; not done.
+   from remotes the operator allows. A [private remote](ENVIRONMENTS.md#private-git-remotes)
+   is cloned with a `user:token` the operator gave the node
+   (`--git-credential`), sent only under its prefix and never stored or put
+   in the guest ([checked on KVM](benchmarks/2026-10-17/git-private-kvm/README.md)).
+   One token per node and prefix, not per team or environment; a clone made
+   from inside a sandbox has no credential.
 8. **Logs and traces, and usage as a total, in a team's telemetry.** A
    team [sets its own metrics destination](TELEMETRY.md#a-teams-own-telemetry),
    and [usage](USAGE.md) is kept for good in a cluster; what a team is sent

@@ -180,6 +180,7 @@ pub(crate) async fn prepare(
     binary: Option<&Path>,
     remotes: &[String],
     git_remotes: &[String],
+    git_credentials: &[crate::git_repos::Credential],
     http: &reqwest::Client,
     repos: &[Repository],
 ) -> Result<Vec<GuestFile>, (axum::http::StatusCode, String)> {
@@ -217,7 +218,10 @@ pub(crate) async fn prepare(
                         .to_string(),
                 ));
             }
-            (RepositoryKind::Git, _) => crate::git_repos::clone_and_pack(repo, &scratch).await,
+            (RepositoryKind::Git, _) => {
+                let credential = crate::git_repos::credential_for(git_credentials, &repo.remote);
+                crate::git_repos::clone_and_pack(repo, &scratch, credential).await
+            }
         };
         let _ = std::fs::remove_dir_all(&scratch);
         let packed = packed.map_err(|e| (StatusCode::BAD_GATEWAY, e))?;

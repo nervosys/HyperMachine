@@ -1,0 +1,57 @@
+{
+  "success": true,
+  "purpose": "functional verification of a private Git remote cloned with a node credential on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "14d4063bf782e71c7cdf38c69e9148e32b3cff2ca0868fff770214a14441ec28",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "213a9347971d951acc9febec8ccf4de09a047b39236438bbcd90bba23fe82116"
+  },
+  "git": "git version 2.47.3",
+  "cases": [
+    {
+      "name": "a private remote is cloned with the node's credential, which the server saw",
+      "success": true,
+      "detail": {
+        "private requests": 5,
+        "all with the credential": true
+      }
+    },
+    {
+      "name": "the token is nowhere in the guest, nor in the clone's config",
+      "success": true,
+      "detail": {
+        "searched": [
+          "/srv",
+          "/root",
+          "/tmp",
+          "/etc",
+          "/home",
+          "/proc/*/environ"
+        ]
+      }
+    },
+    {
+      "name": "a remote outside the credential's prefix is sent no Authorization header",
+      "success": true,
+      "detail": {
+        "public requests": 5,
+        "with an Authorization header": 0
+      }
+    },
+    {
+      "name": "a wrong token is refused with 502 before anything boots",
+      "success": true,
+      "detail": {
+        "refused with a wrong token": "http://127.0.0.1:33149/private/app.git: git clone: fatal: could not read Username for 'http://127.0.0.1:33149': terminal prompts disabled"
+      }
+    },
+    {
+      "name": "a node with no credential for the remote is refused with 502",
+      "success": true,
+      "detail": {
+        "refused with no credential": "http://127.0.0.1:33149/private/app.git: git clone: fatal: could not read Username for 'http://127.0.0.1:33149': terminal prompts disabled"
+      }
+    }
+  ]
+}

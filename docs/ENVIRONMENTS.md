@@ -53,7 +53,7 @@ place in the guest before the create answers.
 
 | Field | |
 |---|---|
-| `kind` | `lit` (the default) or `git`: which program clones it. A Git repository takes no `username` or `password` |
+| `kind` | `lit` (the default) or `git`: which program clones it. A Git repository takes no `username` or `password`; a private one is reached with [the node's credential](#private-git-remotes) |
 | `remote` | A `lit server`'s URL, `http`, `https` or `lit`, with no credentials in it; or, for `git`, an `http` or `https` Git remote |
 | `path` | Where in the guest; made if it is not there, and the tree given to the user commands run as |
 | `branch` | Checked out after the clone; the remote's default unless given |
@@ -71,6 +71,34 @@ place in the guest before the create answers.
 - **Refused before anything boots**: a remote not allowed, a login refused,
   a branch the remote does not have. A sandbox is not left behind.
 - **At most 8 an environment, 64 MiB each** once packed.
+
+### Private Git remotes
+
+An environment never holds a Git password, so the store holds none. The
+operator gives the *node* a credential instead:
+
+```
+export GIT_TOKEN='ci-bot:ghp_...'          # user:token
+hv2-sandboxd --git-remote https://git.example/team/ \
+             --git-credential https://git.example/team/=GIT_TOKEN
+```
+
+- The value is read from the node's own environment variable at start-up
+  (the flag names the variable, so the token is not in `ps` or a unit file's
+  `ExecStart`). A node that cannot read it, or finds no `user:token`, does
+  not start.
+- It is sent, as HTTP Basic, only to remotes under the flag's prefix (same
+  scheme, host and port, and a path at or below it). Redirects are not
+  followed, so it cannot be led off that prefix. The first matching
+  `--git-credential` wins; the remote must also be allowed by `--git-remote`.
+- It reaches `git` in the process's environment, not its arguments, so it is
+  not written into the clone's `.git/config`, and it never enters the guest.
+  A failed clone's message has it removed.
+- For GitHub, use a fine-grained token with read access to the repository
+  and any user name; for GitLab, `oauth2` and a token.
+
+[Checked on KVM](benchmarks/2026-10-17/git-private-kvm/README.md) against
+a local server that wants the credential.
 
 What [Lit 1.8.0](benchmarks/2026-10-12/lit-repositories-kvm/README.md)
 needs today: the account must be an **admin**, since its server lets no other

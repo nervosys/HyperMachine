@@ -54,6 +54,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   also boot with `panic=1`.
 
 ### Added
+- A node can clone a private Git remote for an environment. `--git-credential
+  PREFIX=ENV` names an environment variable holding `user:token`, sent as
+  Basic only to remotes under `PREFIX`. It goes to `git` in the process's
+  environment, not its arguments or the clone's config, and never into the
+  guest or the store; a failed clone's message has it removed. See
+  [ENVIRONMENTS.md](docs/ENVIRONMENTS.md#private-git-remotes).
 - A FIPS build (`--features …/fips`): every TLS endpoint and HTTPS client in
   the control plane, node daemon and `hm` runs on AWS-LC's FIPS 140-3 validated
   module, chosen in one place (the new `hv2-tls` crate). `--fips` / `HV2_FIPS=1`
