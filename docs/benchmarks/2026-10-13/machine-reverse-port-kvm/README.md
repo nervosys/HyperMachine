@@ -41,8 +41,9 @@ machine stub, which was added; `cargo check` of it and `hm` is clean now.
 
 ## What this does not show
 
-- **Through the control plane.** A machine's reverse port is not forwarded
-  by the control plane; a cluster caller would get 404.
+- **Through the control plane.** At the time, a machine's reverse port was not
+  forwarded by the control plane and a cluster caller got 404. It is now:
+  see [the cluster check](../../2026-10-16/machine-reverse-cluster-kvm/README.md).
 - **A machine stopped while a connection waits.** Its waiting connections
   end with the VM, but their entries stay in the node's table until the
   node restarts.

@@ -107,6 +107,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the 502 tells the caller to rebuild the guest image with a current agent,
   instead of reporting only that the connection closed. The sandbox is
   unaffected.
+- The control plane forwards a machine's reverse port,
+  `GET /machines/{name}/ports/{hostPort}/reverse`, which it answered with 404
+  before: the machine is found as for its other routes (another team's is a
+  404), the node is sent the machine's team and the cluster token and not the
+  caller's team header, and the node's stream is carried through. Checked on
+  KVM through a control plane, three runs in a row, and by a unit test against
+  a fake node.
 - The guest `init` raises the in-memory root's size cap from the kernel's
   default (about 44% of memory here) to 90% after boot. A guest image large
   enough to fill the default, such as the one below, could write nowhere but

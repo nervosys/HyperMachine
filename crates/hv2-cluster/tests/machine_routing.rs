@@ -321,3 +321,214 @@ async fn machines_are_placed_found_and_kept_to_their_team_across_nodes() {
         )]
     );
 }
+
+/// A machine's reverse port through the control plane: found as the
+/// machine's other routes are, carried as the node's upgraded stream, and
+/// sent to the node as the machine's team and no one else.
+#[tokio::test]
+async fn a_machines_reverse_port_is_carried_to_its_node_as_its_team() {
+    use axum::extract::{Path, Request};
+    use axum::response::IntoResponse;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    // What the node saw of each reverse call: the name, the teams and the
+    // token sent.
+    type Seen = Arc<Mutex<Vec<(String, Vec<String>, Option<String>)>>>;
+    let seen: Seen = Arc::new(Mutex::new(Vec::new()));
+    let machines = json!([
+        {"machineID":"vm-0000000000000001","name":"web-01","teamID":"red"},
+        {"machineID":"vm-0000000000000002","name":"web-01","teamID":"blue"},
+    ]);
+    let app = Router::new()
+        .route(
+            "/machines",
+            axum::routing::get({
+                let machines = machines.clone();
+                move || {
+                    let machines = machines.clone();
+                    async move { Json(machines) }
+                }
+            }),
+        )
+        .route(
+            "/machines/{name}/ports/{port}/reverse",
+            axum::routing::get({
+                let seen = seen.clone();
+                move |Path((name, port)): Path<(String, u16)>, request: Request| {
+                    let seen = seen.clone();
+                    async move {
+                        seen.lock().push((
+                            name,
+                            request
+                                .headers()
+                                .get_all(TEAM_HEADER)
+                                .iter()
+                                .map(|v| v.to_str().unwrap().to_owned())
+                                .collect(),
+                            request
+                                .headers()
+                                .get(hv2_cluster::control::CLUSTER_TOKEN_HEADER)
+                                .map(|v| v.to_str().unwrap().to_owned()),
+                        ));
+                        hv2_api::tcp_tunnel::validate_reverse(&request).unwrap();
+                        if port == 9001 {
+                            return StatusCode::CONFLICT.into_response();
+                        }
+                        let (relay, mut service) = tokio::io::duplex(4096);
+                        tokio::spawn(async move {
+                            // As the node does: one byte when a program has
+                            // connected, then the bytes both ways.
+                            service.write_all(b"+").await.unwrap();
+                            let mut bytes = Vec::new();
+                            service.read_to_end(&mut bytes).await.unwrap();
+                            service.write_all(&bytes).await.unwrap();
+                            service.shutdown().await.unwrap();
+                        });
+                        hv2_api::tcp_tunnel::accept_reverse(request, relay)
+                    }
+                }
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let _node = Owned(tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    }));
+    store
+        .put_node(
+            &NodeInfo {
+                id: "only".into(),
+                api: format!("http://{address}"),
+                proxy: address,
+                capacity: 8,
+                running: 0,
+                heartbeat_ms: now_ms(),
+                version: "fixture".into(),
+                jwk: None,
+                templates: vec!["base".into()],
+                template_metadata: Default::default(),
+            },
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
+    let digest = |key: &str| {
+        Sha256::digest(key.as_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    };
+    let expires = chrono::Utc::now().timestamp() + 60;
+    let policies = json!([
+        {"sha256":digest("red-key"),"expires_at":expires,"scopes":["machines"],
+         "principal_id":"alice","team_id":"red"},
+        {"sha256":digest("sandbox-key"),"expires_at":expires,"scopes":["sandboxes"],
+         "principal_id":"bob","team_id":"red"},
+    ]);
+    let control = ControlPlane::new(
+        store.clone(),
+        ControlConfig {
+            api_key: None,
+            api_keys: hv2_cluster::keys::ApiKeyPolicy::from_json(&policies.to_string()).unwrap(),
+            access_audit: None,
+            cluster_token: Some(TOKEN.into()),
+            proxy_port: 3000,
+            create_timeout: Duration::from_secs(5),
+            identity_issuer: None,
+        },
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let router = control::router(control.clone());
+    let _server = Owned(tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    }));
+    let http = reqwest::Client::builder().http1_only().build().unwrap();
+    // Every request also claims to be blue: the control plane must not
+    // forward a client's team.
+    let upgrade = |path: &str, key: &str| {
+        http.get(format!("{base}{path}"))
+            .header("x-api-key", key)
+            .header(TEAM_HEADER, "blue")
+            .header("connection", "upgrade")
+            .header("upgrade", hv2_api::tcp_tunnel::REVERSE_PROTOCOL)
+    };
+
+    // Refused before any node is asked.
+    for (path, key, status) in [
+        ("/machines/web-01/ports/9000/reverse", "wrong", 401),
+        ("/machines/web-01/ports/9000/reverse", "sandbox-key", 403),
+        ("/machines/web-01/ports/0/reverse", "red-key", 400),
+    ] {
+        assert_eq!(
+            upgrade(path, key).send().await.unwrap().status(),
+            status,
+            "{path} {key}"
+        );
+    }
+    assert_eq!(
+        http.get(format!("{base}/machines/web-01/ports/9000/reverse"))
+            .header("x-api-key", "red-key")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        400,
+        "no upgrade asked for"
+    );
+    assert!(seen.lock().is_empty(), "{:?}", seen.lock());
+
+    // Another team's machine, by its ID, and a machine that is not there.
+    for path in [
+        "/machines/vm-0000000000000002/ports/9000/reverse",
+        "/machines/nothing/ports/9000/reverse",
+    ] {
+        assert_eq!(
+            upgrade(path, "red-key").send().await.unwrap().status(),
+            404,
+            "{path}"
+        );
+    }
+    assert!(seen.lock().is_empty(), "{:?}", seen.lock());
+
+    // The team's own, by name: the node sees red and the cluster's token,
+    // and the stream carries the node's first byte and then both ways.
+    let response = upgrade("/machines/web-01/ports/9000/reverse", "red-key")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 101);
+    let mut stream = response.upgrade().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        let mut first = [0u8; 1];
+        stream.read_exact(&mut first).await.unwrap();
+        assert_eq!(&first, b"+");
+        let bytes: Vec<u8> = (0..65536).map(|n| (n % 251) as u8).collect();
+        stream.write_all(&bytes).await.unwrap();
+        stream.shutdown().await.unwrap();
+        let mut reply = Vec::new();
+        stream.read_to_end(&mut reply).await.unwrap();
+        assert_eq!(reply, bytes);
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        *seen.lock(),
+        vec![(
+            "web-01".to_owned(),
+            vec!["red".to_owned()],
+            Some(TOKEN.to_owned())
+        )]
+    );
+
+    // A machine that is not running answers as the node does.
+    assert_eq!(
+        upgrade("/machines/web-01/ports/9001/reverse", "red-key")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        409
+    );
+}

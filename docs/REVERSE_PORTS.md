@@ -40,8 +40,9 @@ port all the same, and nothing else can reach it.
 - **The guest's port is closed** 5 seconds after the last connection
   waiting on it goes. A program connecting after that is refused.
 - **Through the control plane:** a sandbox's reverse port is forwarded
-  like the TCP tunnel. A machine's is served by its node directly, as it
-  is not forwarded by the control plane yet.
+  like the TCP tunnel, and a machine's is found like the machine's other
+  routes (another team's is a 404) and carried the same way,
+  [checked on KVM](benchmarks/2026-10-16/machine-reverse-cluster-kvm/README.md).
 - **At most 64 connections waiting** for a sandbox, across its ports
   (429 past that). A sandbox's waiting and carried connections close when
   it pauses or ends.

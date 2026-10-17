@@ -1,0 +1,68 @@
+{
+  "success": true,
+  "purpose": "functional verification of a machine's reverse port through the control plane on KVM; times are the check's own stopwatch and not a benchmark",
+  "host": {
+    "kernel": "6.18.33.2-microsoft-standard-WSL2 (nested KVM)",
+    "guest_kernel": "bzImage-known-uart-irq"
+  },
+  "input_sha256": {
+    "daemon": "483378ecfd7cdffa6d56a2cc6e77a150080f530509c464c63c5b77f904b4c2d0",
+    "control": "9b0e954d7cf21813e50ee28294b4d5fb18c8f13a0fd678de0ead22e973e632a6",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "b9df4dfa8ea586a597139f0c6e7d042c19cc265f179c3b8c387f7eb85781a3d4"
+  },
+  "runs": [
+    {
+      "file": "runs/run1.json",
+      "success": true,
+      "seconds_to_first_bytes": 0.051,
+      "refusals": {
+        "wrong_key": 401,
+        "without_scope": 403,
+        "port_zero": 400,
+        "not_an_upgrade": 400,
+        "other_team_by_name": 404,
+        "other_team_by_id": 404,
+        "no_such_machine": 404
+      },
+      "stopped": {
+        "status": 409
+      }
+    },
+    {
+      "file": "runs/run2.json",
+      "success": true,
+      "seconds_to_first_bytes": 0.007,
+      "refusals": {
+        "wrong_key": 401,
+        "without_scope": 403,
+        "port_zero": 400,
+        "not_an_upgrade": 400,
+        "other_team_by_name": 404,
+        "other_team_by_id": 404,
+        "no_such_machine": 404
+      },
+      "stopped": {
+        "status": 409
+      }
+    },
+    {
+      "file": "runs/run3.json",
+      "success": true,
+      "seconds_to_first_bytes": 0.008,
+      "refusals": {
+        "wrong_key": 401,
+        "without_scope": 403,
+        "port_zero": 400,
+        "not_an_upgrade": 400,
+        "other_team_by_name": 404,
+        "other_team_by_id": 404,
+        "no_such_machine": 404
+      },
+      "stopped": {
+        "status": 409
+      }
+    }
+  ]
+}

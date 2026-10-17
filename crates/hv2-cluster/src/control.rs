@@ -382,6 +382,10 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
             axum::routing::delete(to_machine_node),
         )
         .route(
+            "/machines/{name}/ports/{hostPort}/reverse",
+            get(machine_reverse_tunnel),
+        )
+        .route(
             "/machines/{name}/console",
             get(to_machine_node).post(to_machine_node),
         )
@@ -2052,15 +2056,43 @@ async fn port_tunnel(
         }
         Err(error) => return api_error(StatusCode::SERVICE_UNAVAILABLE, error),
     };
-    let path = request.uri().path();
+    let url = format!("{}{}", node.api, request.uri().path());
+    let stream = match upgrade_to_node(&control, url, protocol, None, &id).await {
+        Ok(stream) => stream,
+        Err((status, message)) => return api_error(status, message),
+    };
+    if reverse {
+        hv2_api::tcp_tunnel::accept_reverse(request, stream)
+    } else if ipv6 {
+        hv2_api::udp_tunnel::accept_ipv6(request, stream)
+    } else if udp {
+        hv2_api::udp_tunnel::accept(request, stream)
+    } else {
+        hv2_api::tcp_tunnel::accept(request, stream)
+    }
+}
+
+/// Opens `url` on a node as an HTTP upgrade to `protocol`, as a port tunnel
+/// does, and gives back the raw stream. `team` is sent for a node route that
+/// reads it (a machine's). The error is the status and message to answer with.
+async fn upgrade_to_node(
+    control: &ControlPlane,
+    url: String,
+    protocol: &'static str,
+    team: Option<&crate::ownership::TeamId>,
+    what: &str,
+) -> Result<reqwest::Upgraded, (StatusCode, &'static str)> {
     let mut upstream = control
         .tcp_http
-        .get(format!("{}{path}", node.api))
+        .get(url)
         .version(reqwest::Version::HTTP_11)
         .header("connection", "upgrade")
         .header("upgrade", protocol);
     if let Some(token) = &control.config.cluster_token {
         upstream = upstream.header(CLUSTER_TOKEN_HEADER, token);
+    }
+    if let Some(team) = team {
+        upstream = upstream.header(crate::ownership::TEAM_HEADER, team.as_str());
     }
     let result = tokio::time::timeout(Duration::from_secs(15), async {
         let response = upstream.send().await?;
@@ -2080,29 +2112,64 @@ async fn port_tunnel(
     })
     .await;
     match result {
-        Ok(Ok(Ok(stream))) => {
-            if reverse {
-                hv2_api::tcp_tunnel::accept_reverse(request, stream)
-            } else if ipv6 {
-                hv2_api::udp_tunnel::accept_ipv6(request, stream)
-            } else if udp {
-                hv2_api::udp_tunnel::accept(request, stream)
-            } else {
-                hv2_api::tcp_tunnel::accept(request, stream)
-            }
-        }
-        Ok(Ok(Err(status))) => api_error(status, "node could not open the guest port"),
+        Ok(Ok(Ok(stream))) => Ok(stream),
+        Ok(Ok(Err(status))) => Err((status, "node could not open the guest port")),
         Ok(Err(error)) => {
-            tracing::debug!(%id, %error, "port tunnel node connection failed");
-            api_error(
+            tracing::debug!(%what, %error, "port tunnel node connection failed");
+            Err((
                 StatusCode::BAD_GATEWAY,
                 "port tunnel node connection failed",
-            )
+            ))
         }
-        Err(_) => api_error(
+        Err(_) => Err((
             StatusCode::GATEWAY_TIMEOUT,
             "port tunnel node connection timed out",
-        ),
+        )),
+    }
+}
+
+/// `GET /machines/{name}/ports/{hostPort}/reverse`: a guest program's
+/// connection out to the caller, from a machine on whichever node holds it.
+/// Found as the machine's other routes are, so another team's machine is one
+/// that does not exist.
+async fn machine_reverse_tunnel(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(team): Extension<crate::ownership::RequestTeam>,
+    Path((name, port)): Path<(String, u16)>,
+    request: Request,
+) -> Response {
+    if let Err(message) = hv2_api::tcp_tunnel::validate_reverse(&request) {
+        return api_error(StatusCode::BAD_REQUEST, message);
+    }
+    if port == 0 {
+        return api_error(StatusCode::BAD_REQUEST, "guest port must be nonzero");
+    }
+    let inventory = match machine_inventory(&control).await {
+        Ok(inventory) => inventory,
+        Err((status, message)) => return api_error(status, message),
+    };
+    let Some(node) = inventory.locate(&team, &name) else {
+        return if inventory.complete {
+            api_error(StatusCode::NOT_FOUND, format!("no machine {name}"))
+        } else {
+            api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "a node is not answering; the machine may be there",
+            )
+        };
+    };
+    let url = format!("{}{}", node.api, request.uri().path());
+    match upgrade_to_node(
+        &control,
+        url,
+        hv2_api::tcp_tunnel::REVERSE_PROTOCOL,
+        team.0.as_ref(),
+        &name,
+    )
+    .await
+    {
+        Ok(stream) => hv2_api::tcp_tunnel::accept_reverse(request, stream),
+        Err((status, message)) => api_error(status, message),
     }
 }
 
