@@ -1,0 +1,87 @@
+name: Tools image
+
+# Builds the sandbox template with the development tools in it
+# (docs/TOOLS_IMAGE.md) and keeps it as a workflow artifact with its SHA-256.
+# Run it by hand (workflow_dispatch). A tag named tools-image-vX.Y.Z also
+# attaches the image to a GitHub release of that name. It does not boot the
+# image: that needs KVM, which docs/benchmarks/2026-10-16/tools-image-kvm
+# records on a developer machine.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["tools-image-v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tools-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the tools image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install the build's tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debootstrap ubuntu-keyring busybox-static cpio
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+
+      - name: Build the static guest agent
+        env:
+          RUSTFLAGS: "-C target-feature=+crt-static"
+        run: cargo build --release --target x86_64-unknown-linux-gnu -p hv2-guest-agent
+
+      - name: Build the image
+        run: |
+          sudo tools/guest-image/build-tools-image.sh \
+            -o "$RUNNER_TEMP/hm-tools.cpio.gz" \
+            --busybox "$(command -v busybox)" \
+            --agent target/x86_64-unknown-linux-gnu/release/hv2-guest-agentd \
+            --work "$RUNNER_TEMP/hm-tools-work"
+
+      - name: Look inside it
+        run: |
+          cd "$RUNNER_TEMP"
+          zcat hm-tools.cpio.gz | cpio -it 2>/dev/null | sed 's|^\./||' > listing.txt
+          for want in init bin/hv2-guest-agentd etc/os-release usr/bin/git usr/bin/python3 usr/bin/node usr/bin/npm usr/bin/gcc; do
+            grep -qx "$want" listing.txt || { echo "missing from the image: $want"; exit 1; }
+          done
+          zcat hm-tools.cpio.gz | cpio -i --to-stdout etc/os-release 2>/dev/null | grep -q 'VERSION_ID="24.04"'
+          sha256sum hm-tools.cpio.gz | tee hm-tools.cpio.gz.sha256
+          ls -l hm-tools.cpio.gz
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hm-tools-image
+          path: |
+            ${{ runner.temp }}/hm-tools.cpio.gz
+            ${{ runner.temp }}/hm-tools.cpio.gz.sha256
+          retention-days: 30
+          if-no-files-found: error
+
+  release:
+    name: Attach it to the release
+    if: startsWith(github.ref, 'refs/tags/tools-image-v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: hm-tools-image
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" --notes "The tools image of docs/TOOLS_IMAGE.md. SHA-256 is in the .sha256 file." \
+            hm-tools.cpio.gz hm-tools.cpio.gz.sha256

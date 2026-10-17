@@ -38,6 +38,15 @@ The result was 654 MiB of files, 576 MB unpacked and 179 MB compressed.
 The image is not byte-for-byte reproducible: it is whatever the archive held
 the day it was built. Record the archive date, or keep the file.
 
+### Building it in CI
+
+The `Tools image` workflow (`.github/workflows/tools-image.yml`) runs the same
+script on a GitHub runner, checks the result holds the agent, Ubuntu 24.04 and
+git, Python, Node.js, npm and gcc, and keeps `hm-tools.cpio.gz` with its
+`.sha256` as a workflow artifact for 30 days. Start it from the Actions tab.
+Pushing a tag named `tools-image-vX.Y.Z` also attaches both files to a release
+of that name. The workflow does not boot the image.
+
 ## Using it
 
 ```sh
