@@ -3383,6 +3383,8 @@ async fn pause_sandbox(
         ));
     }
     let _ = live.process_shutdown.send(());
+    // What was running is ended here, before the history is copied anywhere.
+    history::pausing(sandbox_id);
     let tokens = live
         .network_request
         .as_ref()

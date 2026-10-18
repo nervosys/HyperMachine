@@ -79,11 +79,21 @@ one are masked as `[redacted]`:
   kept through a reboot, a resize and a restored checkpoint. It is readable
   while the sandbox is paused, and gone when the sandbox ends. A fork starts
   with none.
-- **A command running when its sandbox pauses** is kept as ended there,
-  with what it had printed: the node stops watching it then, though the
-  guest's process goes on after the resume.
+- **A command running when its sandbox pauses** is recorded as ended there:
+  state `lost`, `endedAt` the pause, `error` "the sandbox paused while it
+  ran". The node stops watching it then, though the guest's process goes on
+  after the resume, and nothing that arrives later rewrites the record.
+  Before 2026-10-18 the code did not do this and the command stayed
+  `running` for good. A command started through envd (E2B's `commands.run`)
+  keeps what it had printed; one run through `exec` has no output yet, as its
+  output is kept when it ends.
 - Kept in the node's memory, and in the store's record of a paused
-  sandbox, which is written owner-only. Not across a node's restart while
-  the sandbox runs.
+  sandbox, which is written owner-only. Not on the node's disk while the
+  sandbox runs. A running or standby sandbox does not survive a node restart
+  either ([STANDBY.md](STANDBY.md)), so there is no sandbox left whose history
+  a restart could lose; a paused one is in the store, and its history with it.
+  Keeping the history of a sandbox that is gone, as a machine's runs are kept,
+  would put every command's output on the node's disk after the sandbox is
+  over; it was not built.
 
 Evidence: [real KVM checks](benchmarks/2026-10-13/sandbox-history-kvm/README.md).

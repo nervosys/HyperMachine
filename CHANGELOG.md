@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   program starts, the bounding set included.
 
 ### Fixed
+- A command still running when its sandbox paused stayed `running` in the
+  history for good, though the docs said it was recorded as ended. Pausing
+  now records it as `lost` ("the sandbox paused while it ran"), with what an
+  envd command had printed, and a later completion does not rewrite it.
+  Checked on KVM with an envd and an exec command.
 - `config.example.toml` no longer describes an `[observability]` section that
   nothing reads, and the disk module's header now says what a sandbox with a
   disk can do (pause, fork, reboot) and cannot (checkpoint, start from a

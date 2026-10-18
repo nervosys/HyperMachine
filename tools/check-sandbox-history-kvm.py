@@ -21,7 +21,7 @@ process.Process/Start. Checks:
 
 Writes report.json and both daemons' logs into --output.
 """
-import argparse, hashlib, json, os, shutil, signal, socket, subprocess, tempfile, time
+import argparse, hashlib, json, os, shutil, signal, socket, subprocess, tempfile, threading, time
 import urllib.error, urllib.request
 from pathlib import Path
 
@@ -228,6 +228,42 @@ def main():
             assert kept["stdout"]["dropped"] == size - KEPT and len(kept["stdout"]["text"]) == KEPT
             return {"stdoutBytes": kept["stdoutBytes"], "dropped": kept["stdout"]["dropped"]}
         case("a command that printed more than is kept: every byte counted, the newest kept", long_output)
+
+        def running_at_pause():
+            # One command through envd and one through exec, both still going.
+            sdk.commands.run("echo process-started; sleep 120", background=True, timeout=0)
+            threading.Thread(target=lambda: request(
+                "a", "POST", f"/sandboxes/{sandbox}/exec", {"cmd": "echo exec-started; sleep 120", "timeout_secs": 200}),
+                daemon=True).start()
+            deadline = time.monotonic() + 30
+            while True:
+                running = [c for c in commands("a", sandbox) if c["state"] == "running"
+                           and "sleep 120" in c["cmd"]]
+                # An exec command's output is kept when it ends, so only the
+                # envd one has printed anything yet.
+                if len(running) == 2 and all(
+                        c["source"] == "exec" or command("a", sandbox, c["n"])["stdout"]["text"] == "process-started\n"
+                        for c in running):
+                    break
+                assert time.monotonic() < deadline, running
+                time.sleep(0.3)
+            status, value = request("a", "POST", f"/sandboxes/{sandbox}/pause", {})
+            assert status in (200, 204), (status, value)
+            seen = {}
+            for c in running:
+                kept = command("a", sandbox, c["n"])
+                assert kept["state"] == "lost" and kept["endedAt"], kept
+                assert kept["error"] == "the sandbox paused while it ran", kept
+                said = "" if c["source"] == "exec" else "process-started\n"
+                assert kept["stdout"]["text"] == said, kept
+                seen[c["source"]] = kept["state"]
+            status, value = request("a", "POST", f"/sandboxes/{sandbox}/resume", {})
+            assert status == 201, (status, value)
+            time.sleep(3)  # a late completion would land about now
+            for c in running:
+                assert command("a", sandbox, c["n"])["state"] == "lost", c
+            return {"ended at the pause": seen}
+        case("a command running when its sandbox pauses is recorded as ended, and stays so", running_at_pause)
 
         def local_pause():
             before = commands("a", sandbox)

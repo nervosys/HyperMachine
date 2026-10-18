@@ -15,8 +15,10 @@
 //!   node that resumes it; and through a reboot, a resize and a restored
 //!   checkpoint. Gone when the sandbox ends.
 //! - **A command running when its sandbox pauses** is recorded as ended
-//!   then, with what it had printed: the node stops watching it there,
-//!   though the guest's process goes on after the resume.
+//!   then (`pausing`: `lost`, with why), with what it had printed (an `exec`
+//!   command's output is kept only when it ends, so it has none yet): the node
+//!   stops watching it there, though the guest's process goes on after the
+//!   resume.
 //!
 //! # Secrets
 //!
@@ -421,6 +423,23 @@ pub(crate) fn ended(
     with(sandbox_id, n, |c| c.end(exit_code, signal, error));
 }
 
+/// What a command that was running when its sandbox paused is told.
+const PAUSED_WHILE_RUNNING: &str = "the sandbox paused while it ran";
+
+/// The sandbox is pausing: each command still running is recorded as ended
+/// (`lost`, with why) and what it printed so far is kept. The node stops
+/// watching it here; a completion that arrives after the resume finds it
+/// ended already and changes nothing.
+pub(crate) fn pausing(sandbox_id: &str) {
+    history(|all| {
+        if let Some(sandbox) = all.get_mut(sandbox_id) {
+            for command in sandbox.commands.values_mut() {
+                command.end(None, None, Some(PAUSED_WHILE_RUNNING));
+            }
+        }
+    });
+}
+
 /// The sandbox ended: its commands go with it.
 pub(crate) fn forget(sandbox_id: &str) {
     history(|all| all.remove(sandbox_id));
@@ -586,6 +605,32 @@ mod tests {
             pid: None,
             pty: false,
         }
+    }
+
+    #[test]
+    fn a_command_running_at_a_pause_is_ended_and_stays_so() {
+        let id = "pause-test-sandbox";
+        let running = begin(id, begun("sleep 300"));
+        let finished = begin(id, begun("true"));
+        printed(id, running, "so far\n", "", (0, 0));
+        ended(id, finished, Some(0), None, None);
+
+        pausing(id);
+        let after = export(id);
+        let one = after.iter().find(|c| c.n == running).unwrap();
+        assert_eq!(one.state, "lost");
+        assert_eq!(one.error.as_deref(), Some(PAUSED_WHILE_RUNNING));
+        assert!(one.ended_at.is_some());
+        assert_eq!(one.stdout.kept, "so far\n");
+        let other = after.iter().find(|c| c.n == finished).unwrap();
+        assert_eq!((other.state.as_str(), other.exit_code), ("exited", Some(0)));
+
+        // A completion that arrives after the resume does not rewrite it.
+        ended(id, running, Some(0), None, None);
+        let again = export(id);
+        let one = again.iter().find(|c| c.n == running).unwrap();
+        assert_eq!((one.state.as_str(), one.exit_code), ("lost", None));
+        forget(id);
     }
 
     #[test]
