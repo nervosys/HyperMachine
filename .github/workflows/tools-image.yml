@@ -54,8 +54,8 @@ jobs:
           for want in init usr/bin/hv2-guest-agentd etc/os-release usr/bin/git usr/bin/python3 usr/bin/node usr/bin/npm usr/bin/gcc; do
             grep -qx "$want" listing.txt || { echo "missing from the image: $want"; exit 1; }
           done
-          # etc/os-release is a symlink to this; cpio patterns carry the ./ prefix.
-          zcat hm-tools.cpio.gz | cpio -i --to-stdout ./usr/lib/os-release 2>/dev/null > os-release
+          # etc/os-release is a symlink to this file, which cpio cannot extract.
+          zcat hm-tools.cpio.gz | cpio -i --to-stdout usr/lib/os-release 2>/dev/null > os-release
           grep 'VERSION_ID' os-release
           grep -q 'VERSION_ID="24.04"' os-release
           sha256sum hm-tools.cpio.gz | tee hm-tools.cpio.gz.sha256
