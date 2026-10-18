@@ -44,25 +44,10 @@ enabled = true
 script_timeout_seconds = 300
 max_memory_mb = 512
 
-[observability]
-tracing = true
-metrics = true
-otlp_endpoint = "http://localhost:4317"
-
-[observability.remote]
-# Enable remote OTLP export (requires `remote-telemetry` feature)
-enabled = false
-# OTLP endpoint — set via config or OTEL_EXPORTER_OTLP_ENDPOINT env var
-endpoint = "http://localhost:4317"
-# Service name — set via config or OTEL_SERVICE_NAME env var
-service_name = "hypermachine"
-# Request timeout in seconds
-timeout_seconds = 10
-# Background flush interval in seconds
-flush_interval_seconds = 15
-# Max retry attempts for transient failures
-max_retries = 3
-# Max buffered metric batches before oldest are dropped
-max_queue_size = 4096
-# Headers — prefer OTEL_EXPORTER_OTLP_HEADERS env var for secrets
-# headers = "Authorization=Bearer <token>"
+# No [observability] section: nothing in this repository loads this file into
+# hv2-core's Config, and no shipped binary turns on its `remote-telemetry`
+# exporter, so those settings were read by nothing. A node and the control
+# plane export OTLP metrics from OTEL_EXPORTER_OTLP_ENDPOINT,
+# OTEL_EXPORTER_OTLP_HEADERS, OTEL_METRIC_EXPORT_INTERVAL and
+# OTEL_SERVICE_NAME, or --otlp-endpoint, --otlp-header and --otlp-interval:
+# see docs/TELEMETRY.md.

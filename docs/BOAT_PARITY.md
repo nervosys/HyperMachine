@@ -194,9 +194,13 @@ independently of boat:
   more than 32, so such a machine was created and then could not boot; and a
   machine from a disk image was given one processor whatever it asked for,
   without being told. Both are now refused when the machine is created.
-- `config.example.toml` describes telemetry export settings that no shipped
-  binary reads.
-- The header of `hv2-sandboxd`'s disk module says a sandbox with a disk
-  cannot be paused, forked or restored from a template. It can.
+- `config.example.toml` described telemetry export settings that no shipped
+  binary reads. The section is removed, with a note pointing at the settings
+  that are read.
+- The header of `hv2-sandboxd`'s disk module said a sandbox with a disk
+  cannot be paused, forked or restored from a template. It can pause and fork
+  (a fork copies the disk), and restores from a template with `--disk-slot`;
+  the header now says what the code does. Checkpoints and starting from a
+  snapshot are still refused.
 - [The boxd matrix](PLATFORM_PARITY.md) says API keys are for a "single
   team" one row below saying that keys belong to teams.

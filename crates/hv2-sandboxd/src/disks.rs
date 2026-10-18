@@ -20,13 +20,22 @@
 //! directory would each think the other's claims stale; a disk directory is
 //! one node's, which is why it is not the shared snapshot store.
 //!
-//! # What a sandbox with a disk cannot do yet
+//! # What a sandbox with a disk can and cannot do
 //!
-//! - Restore from a template. virtio-mmio has no hot-plug, and a template's
-//!   guest booted without a disk has no driver bound to one, so a sandbox
-//!   with a disk cold-boots.
-//! - Pause, fork or checkpoint. Its memory would be restored against a disk
-//!   that may have moved on since, which is how a filesystem is corrupted.
+//! - Pause and resume: it can. Its own snapshot is taken with the disk
+//!   attached and the disk stays claimed; it resumes only on this node, so it
+//!   is kept out of the shared store.
+//! - Fork: it can, into at most `MAX_DISK_FORKS` at a time; each child gets a
+//!   copy of the disk ([`fork_for`]).
+//! - Reboot: it can; the disk is reattached.
+//! - Restore from a template: only as a cold boot, unless the node runs with
+//!   `--disk-slot`, in which case the template's guest (booted with a
+//!   placeholder disk) is restored and the placeholder swapped for the disk.
+//!   virtio-mmio has no hot-plug, and a template's guest booted without a
+//!   disk has no driver bound to one.
+//! - Checkpoint, automatic or manual, and start from a snapshot: it cannot.
+//!   Memory would be restored against a disk that may have moved on since,
+//!   which is how a filesystem is corrupted.
 
 use std::collections::HashSet;
 use std::path::PathBuf;

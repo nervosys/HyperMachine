@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   program starts, the bounding set included.
 
 ### Fixed
+- `config.example.toml` no longer describes an `[observability]` section that
+  nothing reads, and the disk module's header now says what a sandbox with a
+  disk can do (pause, fork, reboot) and cannot (checkpoint, start from a
+  snapshot), as the code does.
 - A machine run that printed faster than it was polled lost output without
   saying so. The guest agent holds at most 1 MiB of a stream between polls
   and dropped the oldest beyond that uncounted, so a run of 9 MiB reported

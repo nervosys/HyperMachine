@@ -130,5 +130,6 @@ rolling day, not a running total: a total would mean reading the whole
   `/metrics` on the control plane is still its own, and serves no team's.
 - **The `hv2` server and `hv2-core`'s exporter.** `hv2-core` has an OTLP
   exporter of its own behind its `remote-telemetry` feature, which no
-  shipped binary turns on, and `config.example.toml`'s `[observability]`
-  settings are read by nothing. What is described here is the node's.
+  shipped binary turns on. `hv2-core`'s `[observability]` table is
+  parsed by nothing either, so `config.example.toml` no longer has one. What is described here is
+  the node's.
