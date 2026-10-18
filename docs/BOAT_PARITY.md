@@ -136,8 +136,11 @@ In rough order of how much each matters to someone choosing between them:
 10. **An image with the tools already in it.** Done for a sandbox, as a
     template you build: [Ubuntu 24.04 with git, Python, Node.js, npm, gcc and
     make](TOOLS_IMAGE.md), checked on KVM offline and with the network
-    (`git clone`, `npm install`, `apt install` from inside it). Not done:
-    shipping it, Docker or a browser in it, other languages, and a machine
+    (`git clone`, `npm install`, `apt install` from inside it). A [workflow
+    builds it in CI](TOOLS_IMAGE.md#building-it-in-ci) and the image it built passed the
+    same KVM checks ([evidence](benchmarks/2026-10-18/tools-image-ci-kvm/README.md)).
+    Not done: publishing it (no release is tagged; where to host a 179 MiB
+    image is the owner's call), Docker or a browser in it, other languages, and a machine
     image with tools baked in.
 
 ## Where HyperMachine has something boat's documentation does not claim

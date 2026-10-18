@@ -45,7 +45,10 @@ script on a GitHub runner, checks the result holds the agent, Ubuntu 24.04 and
 git, Python, Node.js, npm and gcc, and keeps `hm-tools.cpio.gz` with its
 `.sha256` as a workflow artifact for 30 days. Start it from the Actions tab.
 Pushing a tag named `tools-image-vX.Y.Z` also attaches both files to a release
-of that name. The workflow does not boot the image.
+of that name. The workflow does not boot the image, but the one it built
+(run 39098263037, 187,467,551 bytes) was downloaded and [booted on KVM through
+the same checks](benchmarks/2026-10-18/tools-image-ci-kvm/README.md); all five
+passed. No release has been tagged, so nothing is published for anyone else.
 
 ## Using it
 

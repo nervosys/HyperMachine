@@ -56,7 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - A `Tools image` workflow builds the tools-image template on a GitHub runner,
   checks what is in it, and keeps it with a SHA-256 as an artifact; a
-  `tools-image-v*` tag attaches it to a release. It does not boot the image.
+  `tools-image-v*` tag attaches it to a release. It does not boot the image,
+  but the one it built passed the KVM checks when downloaded and run.
   See [TOOLS_IMAGE.md](docs/TOOLS_IMAGE.md#building-it-in-ci).
 - A node can clone a private Git remote for an environment. `--git-credential
   PREFIX=ENV` names an environment variable holding `user:token`, sent as
