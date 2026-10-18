@@ -51,7 +51,7 @@ jobs:
         run: |
           cd "$RUNNER_TEMP"
           zcat hm-tools.cpio.gz | cpio -it 2>/dev/null | sed 's|^\./||' > listing.txt
-          for want in init bin/hv2-guest-agentd etc/os-release usr/bin/git usr/bin/python3 usr/bin/node usr/bin/npm usr/bin/gcc; do
+          for want in init usr/bin/hv2-guest-agentd etc/os-release usr/bin/git usr/bin/python3 usr/bin/node usr/bin/npm usr/bin/gcc; do
             grep -qx "$want" listing.txt || { echo "missing from the image: $want"; exit 1; }
           done
           zcat hm-tools.cpio.gz | cpio -i --to-stdout etc/os-release 2>/dev/null | grep -q 'VERSION_ID="24.04"'
