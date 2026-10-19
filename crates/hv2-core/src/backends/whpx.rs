@@ -377,13 +377,7 @@ impl HypervisorBackend for WhpxBackend {
                 .cloned()
                 .ok_or_else(|| Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id)))?
         };
-        // Mask data by access size and write into RAX
-        let masked = match size {
-            1 => u64::from(data & 0xFF),
-            2 => u64::from(data & 0xFFFF),
-            _ => u64::from(data),
-        };
-        whpx_vcpu.set_rax(masked)
+        whpx_vcpu.set_in_result(data, size)
     }
 
     async fn load_boot(&self, vcpu: &VCpu, boot: &crate::boot::source::LoadedBoot) -> Result<()> {
@@ -1608,7 +1602,7 @@ impl WhpxVcpu {
 
                     // For IN instructions, we need to write the result back to RAX
                     if !is_write {
-                        self.set_rax(data_mut as u64)?;
+                        self.set_in_result(data_mut, *size)?;
                     }
 
                     // Continue execution automatically
@@ -1748,7 +1742,7 @@ impl WhpxVcpu {
 
                     // For IN instructions, write result back to RAX
                     if !is_write {
-                        self.set_rax(data_mut as u64)?;
+                        self.set_in_result(data_mut, *size)?;
                     }
 
                     continue;
@@ -1797,12 +1791,36 @@ impl WhpxVcpu {
         ))
     }
 
-    /// Helper to set RAX register (for IN instruction results)
+    /// Set RAX alone. Not through `get_register_set` / `set_register_set`:
+    /// that pair rewrites all six segment registers as real-mode segments, so
+    /// in a protected- or long-mode guest it cleared CS.L, D and G and the
+    /// instruction after an IN ran as 16-bit code (a triple fault).
     #[cfg(target_os = "windows")]
     fn set_rax(&self, value: u64) -> Result<()> {
-        let mut regs = self.get_register_set()?;
-        regs.rax = value;
-        self.set_register_set(&regs)
+        self.set_registers_64(&[(WHV_REGISTER_NAME::WHvX64RegisterRax, value)])
+    }
+
+    /// Complete an IN: merge `data` into RAX as the processor does. IN AL
+    /// replaces bits 0-7 and IN AX bits 0-15, leaving the rest alone; IN EAX
+    /// writes the low 32 bits and clears the high 32.
+    #[cfg(target_os = "windows")]
+    fn set_in_result(&self, data: u32, size: u8) -> Result<()> {
+        let current = self.get_registers(&[WHV_REGISTER_NAME::WHvX64RegisterRax])?;
+        // SAFETY: RAX is a 64-bit register, so Reg64 is the field written.
+        let old = unsafe { current[0].Reg64 };
+        let merged = match size {
+            1 => (old & !0xFF) | u64::from(data & 0xFF),
+            2 => (old & !0xFFFF) | u64::from(data & 0xFFFF),
+            _ => u64::from(data),
+        };
+        self.set_rax(merged)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    fn set_in_result(&self, _data: u32, _size: u8) -> Result<()> {
+        Err(Error::VM(
+            "WHPX backend is only available on Windows".into(),
+        ))
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -6659,6 +6677,103 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// A flat 32-bit protected-mode guest does IN, then OUT, then HLT. The IN's
+    /// result must reach AL without disturbing the segments or the rest of
+    /// RAX: before, completing an IN rewrote every segment as a real-mode one,
+    /// the next instruction ran as 16-bit code and the guest triple-faulted.
+    #[tokio::test]
+    async fn an_in_completes_without_resetting_the_segments() {
+        let Ok(_backend) = WhpxBackend::new() else {
+            eprintln!("WHPX not available - skipping");
+            return;
+        };
+        let Ok(vm) = WhpxVm::new(1, 16 * 1024 * 1024) else {
+            eprintln!("WHPX partition unavailable - skipping");
+            return;
+        };
+        let vcpu = vm.create_vcpu(0).expect("a vCPU");
+
+        let output = Arc::new(RwLock::new(Vec::new()));
+        let seen = output.clone();
+        vm.register_io_handler(
+            0x3FD,
+            Box::new(|_port, is_write, _size, data| {
+                if !is_write {
+                    *data = 0x60; // a 16550's LSR with THR empty
+                }
+                Ok(())
+            }),
+        );
+        vm.register_io_handler(
+            0xE9,
+            Box::new(move |_port, is_write, _size, data| {
+                if is_write {
+                    seen.write().push((*data & 0xFF) as u8);
+                }
+                Ok(())
+            }),
+        );
+
+        // 32-bit code: mov edx,0x3fd ; mov eax,0x11223300 ; in al,dx ;
+        // out 0xe9,al ; hlt
+        let code = [
+            0xBA, 0xFD, 0x03, 0x00, 0x00, // mov edx, 0x3fd
+            0xB8, 0x00, 0x33, 0x22, 0x11, // mov eax, 0x11223300
+            0xEC, // in al, dx
+            0xE6, 0xE9, // out 0xe9, al
+            0xF4, // hlt
+        ];
+        vm.write_guest_memory(0x1000, &code)
+            .expect("write guest code");
+        vcpu.enable_protected_mode().expect("protected mode");
+        vcpu.configure_boot_segments(0x08, 0x10, false)
+            .expect("flat 32-bit segments");
+        vcpu.set_instruction_pointer(0x1000).expect("rip");
+        let cs_attributes = |vcpu: &WhpxVcpu| unsafe {
+            vcpu.get_registers(&[WHV_REGISTER_NAME::WHvX64RegisterCs])
+                .expect("cs")[0]
+                .Segment
+                .Attributes
+        };
+        // WHP clears the granularity bit (0x8000) once the vCPU has run, folding
+        // it into the limit, so CS is compared without it.
+        let flat_cs = cs_attributes(&vcpu) & !0x8000;
+        assert_ne!(flat_cs & 0x4000, 0, "the 32-bit CS has D set: {flat_cs:#x}");
+
+        let exit = vcpu.run_with_handlers(&vm).expect("run to HLT");
+        assert!(
+            matches!(exit, crate::exit::VmExit::Hlt),
+            "the guest should reach HLT, got {exit:?}"
+        );
+        assert_eq!(output.read().as_slice(), &[0x60], "AL after the IN");
+
+        assert_eq!(
+            cs_attributes(&vcpu) & !0x8000,
+            flat_cs,
+            "the IN left CS as it was"
+        );
+
+        // IN AL merges into the low byte; IN AX the low word; IN EAX replaces it.
+        vcpu.set_registers_64(&[(WHV_REGISTER_NAME::WHvX64RegisterRax, 0x1122_3344_5566_7788)])
+            .expect("rax");
+        vcpu.set_in_result(0xAB, 1).expect("in al");
+        let rax = |vcpu: &WhpxVcpu| unsafe {
+            vcpu.get_registers(&[WHV_REGISTER_NAME::WHvX64RegisterRax])
+                .expect("rax")[0]
+                .Reg64
+        };
+        assert_eq!(rax(&vcpu), 0x1122_3344_5566_77AB);
+        vcpu.set_in_result(0xCDEF, 2).expect("in ax");
+        assert_eq!(rax(&vcpu), 0x1122_3344_5566_CDEF);
+        vcpu.set_in_result(0xDEAD_BEEF, 4).expect("in eax");
+        assert_eq!(rax(&vcpu), 0xDEAD_BEEF);
+        assert_eq!(
+            cs_attributes(&vcpu) & !0x8000,
+            flat_cs,
+            "the merges left CS as it was"
+        );
     }
 
     #[tokio::test]

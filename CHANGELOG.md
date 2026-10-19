@@ -59,6 +59,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tests asserted nothing before, and three were wrong (they expected 64-bit
   mode with a 32-bit CS, or counted injections that never happened) and are
   corrected; two ran a guest that never exits and now use `kick`.
+- Completing a port `IN` on WHPX rewrote every segment register as a real-mode
+  segment, so a protected- or long-mode guest lost CS.L, D and G and the next
+  instruction ran as 16-bit code (a triple fault). Found by running a custom
+  kernel's boot; a test that runs a 32-bit guest through `IN`, `OUT` and `HLT`
+  failed with the old code (CS attributes 0x409B became 0x9B) and passes now.
+  `IN AL` and `IN AX` also zeroed the rest of RAX; they now merge as hardware
+  does.
 - A command still running when its sandbox paused stayed `running` in the
   history for good, though the docs said it was recorded as ended. Pausing
   now records it as `lost` ("the sandbox paused while it ran"), with what an
