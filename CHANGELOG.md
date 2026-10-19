@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   program starts, the bounding set included.
 
 ### Fixed
+- On Windows (WHPX), setting a partition's processor count failed with
+  `0x80370302` (`WHV_E_UNKNOWN_PROPERTY`): the property code was 0x1000, and
+  the SDK's is 0x1fff. 0x1001, named `ProcessorRoot`, is `ProcessorFeatures`.
+  Found by running a guest on this host; a test now pins these codes to the SDK
+  header. Nothing past this call has been run on WHPX.
 - A command still running when its sandbox paused stayed `running` in the
   history for good, though the docs said it was recorded as ended. Pausing
   now records it as `lost` ("the sandbox paused while it ran"), with what an

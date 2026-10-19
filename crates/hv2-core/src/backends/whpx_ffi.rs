@@ -173,8 +173,10 @@ pub enum WHV_PARTITION_PROPERTY_CODE {
     WHvPartitionPropertyCodeProcessorFrequencyCap = 0x0000000B,
     WHvPartitionPropertyCodeAllowDeviceAssignment = 0x0000000C,
     WHvPartitionPropertyCodeDisableSmt = 0x0000000D,
-    WHvPartitionPropertyCodeProcessorCount = 0x00001000,
-    WHvPartitionPropertyCodeProcessorRoot = 0x00001001,
+    // Not 0x1000: the SDK (WinHvPlatformDefs.h) puts the count at 0x1fff, and 0x1000
+    // is no property at all (WHV_E_UNKNOWN_PROPERTY, 0x80370302).
+    WHvPartitionPropertyCodeProcessorCount = 0x00001fff,
+    WHvPartitionPropertyCodeProcessorFeatures = 0x00001001,
     WHvPartitionPropertyCodeProcessorClFlushSize = 0x00001002,
 }
 
@@ -1071,4 +1073,22 @@ pub unsafe fn WHvSetVirtualProcessorRegisters(
     _: *const WHV_REGISTER_VALUE,
 ) -> HRESULT {
     E_FAIL
+}
+
+#[cfg(test)]
+mod property_code_tests {
+    use super::WHV_PARTITION_PROPERTY_CODE as C;
+
+    /// The values in the Windows SDK's WinHvPlatformDefs.h. A wrong one makes
+    /// WHvSetPartitionProperty fail with WHV_E_UNKNOWN_PROPERTY.
+    #[test]
+    fn property_codes_match_the_sdk() {
+        assert_eq!(C::WHvPartitionPropertyCodeProcessorCount as u32, 0x1fff);
+        assert_eq!(C::WHvPartitionPropertyCodeProcessorFeatures as u32, 0x1001);
+        assert_eq!(
+            C::WHvPartitionPropertyCodeProcessorClFlushSize as u32,
+            0x1002
+        );
+        assert_eq!(C::WHvPartitionPropertyCodeDisableSmt as u32, 0x0d);
+    }
 }
