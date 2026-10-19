@@ -28,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   program starts, the bounding set included.
 
 ### Fixed
+- A Multiboot guest was told it had 127 MiB above 1 MiB whatever the VM's
+  memory size, so a guest that trusted `mem_upper` or the memory map would use
+  memory that does not exist. The map and `mem_upper` now come from the VM's
+  size. Found by running a custom kernel (64 MiB VM, 130048 KiB reported).
 - On Windows (WHPX), setting a partition's processor count failed with
   `0x80370302` (`WHV_E_UNKNOWN_PROPERTY`): the property code was 0x1000, and
   the SDK's is 0x1fff. 0x1001, named `ProcessorRoot`, is `ProcessorFeatures`.

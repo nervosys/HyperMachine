@@ -416,12 +416,23 @@ impl LoadedBoot {
     /// is built from this and it has no other source of one, so a VM must set
     /// it before asking for the memory regions.
     ///
-    /// Does nothing for protocols that do not carry a memory map.
+    /// Does nothing for protocols that do not carry a memory map. A Multiboot
+    /// guest's map and `mem_upper` are rebuilt from it.
     pub fn set_memory_size(&mut self, bytes: u64) {
         match self {
             Self::Linux(params) => params.memory_size = bytes,
             Self::Pvh(boot) => boot.memory_size = bytes,
-            Self::Multiboot(_) | Self::Raw { .. } => {}
+            // The default map claims 127 MiB above 1 MiB whatever the VM has,
+            // so a guest that trusted it would use memory that is not there.
+            Self::Multiboot(info) => {
+                const MIB: u64 = 1024 * 1024;
+                info.memory_map = if bytes > MIB {
+                    vec![(0, 640 * 1024), (MIB, bytes - MIB)]
+                } else {
+                    vec![(0, bytes.min(640 * 1024))]
+                };
+            }
+            Self::Raw { .. } => {}
         }
     }
 
@@ -826,6 +837,25 @@ mod tests {
         assert_eq!(loaded.highest_address().unwrap(), 0x7C03);
 
         let _ = std::fs::remove_file(image);
+    }
+
+    #[test]
+    fn a_multiboot_guest_is_told_the_vms_memory_not_a_default() {
+        use crate::boot::multiboot::MultibootProtocol;
+
+        let mut loaded = LoadedBoot::Multiboot(Box::default());
+        loaded.set_memory_size(64 * 1024 * 1024);
+        let LoadedBoot::Multiboot(info) = &loaded else {
+            unreachable!()
+        };
+        assert_eq!(
+            info.memory_map,
+            vec![(0, 640 * 1024), (1024 * 1024, 63 * 1024 * 1024)]
+        );
+
+        let data = MultibootProtocol::create_multiboot_info(info, 0x9000, 0x9400, None, 0x9500);
+        let mem_upper = u32::from_le_bytes(data[8..12].try_into().unwrap());
+        assert_eq!(mem_upper, 63 * 1024, "KiB above 1 MiB for a 64 MiB VM");
     }
 
     #[test]
