@@ -49,10 +49,18 @@ Docker anywhere ([evidence](benchmarks/2026-10-19/hm-run-kvm/README.md)):
   sandbox.
 - `--keep` leaves the sandbox running.
 
+## Private registries
+
+`run` and `build` take `--registry-user NAME` and `--registry-password-env VAR`.
+Both are needed together; the password is read from the environment variable,
+never from an argument, so it stays out of the process list and shell history.
+An unset or empty variable fails before anything is sent. The node does not
+store or echo the password. [Checked on KVM](benchmarks/2026-10-19/hm-registry-auth-kvm/README.md)
+against a Basic-auth registry on localhost (6 cases, 3 runs); a real registry
+is not tested.
+
 ## Not done
 
-- **Private registries**: the node's template API takes a username and
-  password, but `hm run` has no flag for them yet.
 - **A moved tag**: a template is kept by the reference, so `python:3.12` is
   not pulled again when the registry's tag moves. Delete the template to
   refresh it.

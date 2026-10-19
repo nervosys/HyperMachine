@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `hm sandbox vm run --template NAME` runs it with its ENTRYPOINT and CMD. The
   build API accepts `ENTRYPOINT` and `CMD` steps and records them in the
   template. Checked on KVM (6 cases, 3 runs); multi-stage builds are refused.
+- `hm sandbox vm run` and `build` take `--registry-user` and
+  `--registry-password-env VAR` to pull from a private registry; the password
+  comes from the environment and is never echoed or logged. Checked on KVM
+  against a Basic-auth registry on localhost (6 cases, 3 runs).
 
 ### Security
 - A sandboxed Linux program could write through a read-only mount. It ran as

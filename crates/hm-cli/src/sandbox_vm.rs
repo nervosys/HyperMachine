@@ -226,6 +226,8 @@ pub enum VmCommand {
         /// Seconds to wait for the build
         #[arg(long, default_value_t = 1800, value_parser = clap::value_parser!(u64).range(1..))]
         build_wait: u64,
+        #[command(flatten)]
+        registry: RegistryArgs,
     },
     /// Run a container image in a VM of its own, as `docker run` would:
     /// pull it into a template (once), create a sandbox, run the image's
@@ -258,6 +260,8 @@ pub enum VmCommand {
         /// Memory of its own, in MiB
         #[arg(long, value_parser = clap::value_parser!(u64).range(256..))]
         memory_mb: Option<u64>,
+        #[command(flatten)]
+        registry: RegistryArgs,
         /// Replaces the image's CMD; the ENTRYPOINT, if it has one, stays
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         command: Vec<String>,
@@ -2674,6 +2678,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             cpus,
             memory_mb,
             build_wait,
+            registry,
         } => {
             return build_image(
                 &api,
@@ -2686,6 +2691,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                     cpus,
                     memory_mb,
                     build_wait,
+                    registry,
                 },
             )
             .await;
@@ -2699,6 +2705,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             build_wait,
             cpus,
             memory_mb,
+            registry,
             command,
         } => {
             if timeout >= args.request_timeout {
@@ -2715,6 +2722,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                     build_wait,
                     cpus,
                     memory_mb,
+                    registry,
                     command,
                 },
             )
@@ -3493,6 +3501,55 @@ struct BuildImage {
     cpus: Option<u32>,
     memory_mb: Option<u64>,
     build_wait: u64,
+    registry: RegistryArgs,
+}
+
+/// Where to log in to a private registry. The password is never an argument:
+/// it is read from the environment variable `--registry-password-env` names,
+/// so it stays out of the process list and the shell history.
+#[derive(clap::Args, Clone, Debug, Default)]
+pub struct RegistryArgs {
+    /// A username for the image's registry (needs --registry-password-env)
+    #[arg(long, value_name = "USER")]
+    registry_user: Option<String>,
+    /// The environment variable holding that user's password or token
+    #[arg(long, value_name = "VAR")]
+    registry_password_env: Option<String>,
+}
+
+impl RegistryArgs {
+    /// The login to send the node, or none. Both flags or neither; the
+    /// variable must be set and non-empty. `lookup` reads the environment.
+    fn login(
+        &self,
+        lookup: impl FnOnce(&str) -> Option<String>,
+    ) -> Result<Option<(String, String)>> {
+        match (&self.registry_user, &self.registry_password_env) {
+            (None, None) => Ok(None),
+            (Some(_), None) | (None, Some(_)) => {
+                bail!("--registry-user and --registry-password-env go together")
+            }
+            (Some(user), Some(variable)) => {
+                let mut chars = variable.bytes();
+                if !chars
+                    .next()
+                    .is_some_and(|c| c.is_ascii_alphabetic() || c == b'_')
+                    || !chars.all(|c| c.is_ascii_alphanumeric() || c == b'_')
+                {
+                    bail!(
+                        "--registry-password-env: {variable:?} is not an environment variable name"
+                    );
+                }
+                if user.is_empty() {
+                    bail!("--registry-user is empty");
+                }
+                let password = lookup(variable)
+                    .filter(|v| !v.is_empty())
+                    .with_context(|| format!("${variable} is unset or empty"))?;
+                Ok(Some((user.clone(), password)))
+            }
+        }
+    }
 }
 
 /// Parse the Dockerfile, upload the context its COPYs read, run the build on
@@ -3511,6 +3568,7 @@ async fn build_image(api: &Api, build: BuildImage) -> Result<i32> {
             .with_context(|| format!("--build-arg {pair}: expected NAME=VALUE"))?;
         args.insert(name.to_string(), value.to_string());
     }
+    let login = build.registry.login(|v| std::env::var(v).ok())?;
     let plan = crate::dockerfile::parse(&text, &args)?;
     for warning in &plan.warnings {
         eprintln!("warning: {warning}");
@@ -3569,10 +3627,15 @@ async fn build_image(api: &Api, build: BuildImage) -> Result<i32> {
         .iter()
         .map(|s| s.to_json(hash.as_deref()))
         .collect();
+    let mut start = json!({"fromImage": plan.image, "steps": steps, "force": build.no_cache});
+    if let Some((username, password)) = &login {
+        start["fromImageRegistry"] =
+            json!({"type": "registry", "username": username, "password": password});
+    }
     api.request(
         Method::POST,
         &["v2", "templates", &template, "builds", &build_id],
-        Some(json!({"fromImage": plan.image, "steps": steps, "force": build.no_cache})),
+        Some(start),
     )
     .await?;
 
@@ -3627,6 +3690,7 @@ struct RunImage {
     build_wait: u64,
     cpus: Option<u32>,
     memory_mb: Option<u64>,
+    registry: RegistryArgs,
     command: Vec<String>,
 }
 
@@ -3692,17 +3756,19 @@ async fn run_image(api: &Api, run: RunImage) -> Result<i32> {
             })
         })
     };
+    let login = run.registry.login(|v| std::env::var(v).ok())?;
     let listed = api.request(Method::GET, &["templates"], None).await?;
     let mut status = status_of(&listed);
     if !run.named && !matches!(&status, Some((s, _)) if s == "ready" || s == "building") {
         eprintln!("pulling {} ...", run.image);
-        api.request(
-            Method::POST,
-            &["templates"],
-            Some(json!({"templateID": template, "image": run.image,
-                        "cpuCount": run.cpus, "memoryMB": run.memory_mb})),
-        )
-        .await?;
+        let mut body = json!({"templateID": template, "image": run.image,
+                              "cpuCount": run.cpus, "memoryMB": run.memory_mb});
+        if let Some((username, password)) = &login {
+            body["username"] = json!(username);
+            body["password"] = json!(password);
+        }
+        api.request(Method::POST, &["templates"], Some(body))
+            .await?;
         status = None;
     }
     let deadline = std::time::Instant::now() + Duration::from_secs(run.build_wait);
@@ -3970,6 +4036,37 @@ async fn benchmark(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_registry_login_needs_both_flags_and_a_set_variable() {
+        let args = |user: Option<&str>, var: Option<&str>| RegistryArgs {
+            registry_user: user.map(String::from),
+            registry_password_env: var.map(String::from),
+        };
+        let set = |_: &str| Some("s3cret".to_string());
+        assert_eq!(args(None, None).login(set).unwrap(), None);
+        assert_eq!(
+            args(Some("bob"), Some("REG_PW")).login(set).unwrap(),
+            Some(("bob".to_string(), "s3cret".to_string()))
+        );
+        assert!(args(Some("bob"), None).login(set).is_err());
+        assert!(args(None, Some("REG_PW")).login(set).is_err());
+        assert!(args(Some("bob"), Some("1BAD")).login(set).is_err());
+        assert!(args(Some("bob"), Some("A-B")).login(set).is_err());
+        assert!(args(Some(""), Some("REG_PW")).login(set).is_err());
+        let unset = args(Some("bob"), Some("REG_PW"))
+            .login(|_| None)
+            .unwrap_err();
+        let empty = args(Some("bob"), Some("REG_PW"))
+            .login(|_| Some(String::new()))
+            .unwrap_err();
+        assert!(unset.to_string().contains("unset or empty"), "{unset}");
+        assert!(empty.to_string().contains("unset or empty"), "{empty}");
+        // The password is never in an error.
+        for e in [unset, empty] {
+            assert!(!format!("{e:#}").contains("s3cret"));
+        }
+    }
+
     #[test]
     fn an_images_template_name_is_valid_and_distinct() {
         let a = image_template("python:3.12-slim");

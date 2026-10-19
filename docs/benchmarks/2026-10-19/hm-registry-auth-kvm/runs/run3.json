@@ -1,0 +1,67 @@
+{
+  "success": true,
+  "purpose": "hm run/build against a registry that needs a password, on KVM",
+  "input_sha256": {
+    "daemon": "17a06f93c99438157df267356836feb77efd0c4ffe29e45e6b0bdba59bde5d8c",
+    "hm": "8b39c1b2584bcca4142249ddcef3ec0e9cf5cb963dafc9bddbe198b8a4d0204e",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "43aa1faf7b5b6dd4c5ee1be5a5544bc8eed1bc9035f4c0d0796e0938af67bb21"
+  },
+  "cases": [
+    {
+      "name": "without credentials, run fails and the registry saw no authorised request",
+      "success": true,
+      "detail": {
+        "exit": 1,
+        "stderr": "pulling localhost:52409/private/marker:1 ...\nError: building localhost:52409/private/marker:1: localhost:52409/private/marker:1: http://localhost:52409/v2/private/marker/manifests/1: the registry wants a username and password",
+        "registry_saw": 1
+      }
+    },
+    {
+      "name": "with the wrong password, run fails",
+      "success": true,
+      "detail": {
+        "exit": 1,
+        "stderr": "pulling localhost:52409/private/marker:1 ...\nError: building localhost:52409/private/marker:1: localhost:52409/private/marker:1: http://localhost:52409/v2/private/marker/manifests/1: 401 Unauthorized"
+      }
+    },
+    {
+      "name": "with --registry-user and --registry-password-env, run pulls the image and prints its marker",
+      "success": true,
+      "detail": {
+        "stdout": "from-the-private-registry\n"
+      }
+    },
+    {
+      "name": "the password is in no daemon log line, no template listing and no argument",
+      "success": true,
+      "detail": {
+        "checked": [
+          "GET /templates",
+          "daemon.log",
+          "3 hm command lines"
+        ]
+      }
+    },
+    {
+      "name": "a missing, empty or malformed flag set fails before the registry is contacted",
+      "success": true,
+      "detail": {
+        "user only": "Error: --registry-user and --registry-password-env go together",
+        "variable only": "Error: --registry-user and --registry-password-env go together",
+        "variable unset": "Error: $REG_PW is unset or empty",
+        "variable empty": "Error: $REG_PW is unset or empty",
+        "bad variable name": "Error: --registry-password-env: \"1-BAD\" is not an environment variable name"
+      }
+    },
+    {
+      "name": "build FROM the private image needs and uses the same flags",
+      "success": true,
+      "detail": {
+        "without_flags": "Pulling localhost:52409/private/marker:1\nbuild failed at step base: http://localhost:52409/v2/private/marker/manifests/1: the registry wants a username and password",
+        "stdout": "from-the-private-registry\n"
+      }
+    }
+  ]
+}
