@@ -7,6 +7,8 @@
 #![allow(dead_code)]
 
 pub mod agentic;
+pub mod build_context;
+pub mod dockerfile;
 pub mod jobs_cmd;
 pub mod jobs_profile;
 pub mod jobs_vm_dispatch;

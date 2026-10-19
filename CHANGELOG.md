@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `hm sandbox vm build -t NAME [CONTEXT]` builds a Dockerfile (FROM, ARG, ENV,
+  WORKDIR, COPY, RUN, USER, ENTRYPOINT, CMD) into a template with no Docker,
+  uploading the context with `.dockerignore` honoured, and
+  `hm sandbox vm run --template NAME` runs it with its ENTRYPOINT and CMD. The
+  build API accepts `ENTRYPOINT` and `CMD` steps and records them in the
+  template. Checked on KVM (6 cases, 3 runs); multi-stage builds are refused.
+
 ### Security
 - A sandboxed Linux program could write through a read-only mount. It ran as
   root in its user namespace with that namespace's capabilities, and

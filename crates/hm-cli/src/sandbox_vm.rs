@@ -198,14 +198,48 @@ pub enum VmCommand {
         #[arg(long, value_parser = clap::value_parser!(u64).range(256..))]
         memory_mb: Option<u64>,
     },
+    /// Build a template from a Dockerfile, as `docker build` would: the node
+    /// pulls the FROM image, runs the steps in a VM, and keeps the result as
+    /// the template TAG, which `run --template TAG` then runs
+    Build {
+        /// The directory holding the Dockerfile and the files it copies
+        #[arg(default_value = ".")]
+        context: std::path::PathBuf,
+        /// The template's name
+        #[arg(short = 't', long = "tag", value_name = "NAME")]
+        tag: String,
+        /// The Dockerfile, when it is not CONTEXT/Dockerfile
+        #[arg(short = 'f', long = "file")]
+        file: Option<std::path::PathBuf>,
+        /// A value for an ARG: NAME=VALUE
+        #[arg(long = "build-arg", value_name = "NAME=VALUE")]
+        build_arg: Vec<String>,
+        /// Run every step again, ignoring the node's cache of an identical build
+        #[arg(long)]
+        no_cache: bool,
+        /// Processors of its own
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
+        cpus: Option<u32>,
+        /// Memory of its own, in MiB
+        #[arg(long, value_parser = clap::value_parser!(u64).range(256..))]
+        memory_mb: Option<u64>,
+        /// Seconds to wait for the build
+        #[arg(long, default_value_t = 1800, value_parser = clap::value_parser!(u64).range(1..))]
+        build_wait: u64,
+    },
     /// Run a container image in a VM of its own, as `docker run` would:
     /// pull it into a template (once), create a sandbox, run the image's
     /// ENTRYPOINT and CMD (or COMMAND after the ENTRYPOINT), print its
     /// output, delete the sandbox and exit with the command's code
     #[command(disable_version_flag = true)]
     Run {
-        /// An image: `[registry/]repository[:tag|@digest]`
+        /// An image: `[registry/]repository[:tag|@digest]`; with `--template`,
+        /// the name of a template instead
         image: String,
+        /// IMAGE names a template (from `build`, or one the node has), not
+        /// an image to pull
+        #[arg(long)]
+        template: bool,
         /// A variable for the command: NAME=VALUE
         #[arg(short = 'e', long = "env", value_name = "NAME=VALUE")]
         env: Vec<String>,
@@ -2631,8 +2665,34 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             std::io::stderr().write_all(stderr.as_bytes())?;
             return Ok(code);
         }
+        VmCommand::Build {
+            context,
+            tag,
+            file,
+            build_arg,
+            no_cache,
+            cpus,
+            memory_mb,
+            build_wait,
+        } => {
+            return build_image(
+                &api,
+                BuildImage {
+                    context,
+                    tag,
+                    file,
+                    build_arg,
+                    no_cache,
+                    cpus,
+                    memory_mb,
+                    build_wait,
+                },
+            )
+            .await;
+        }
         VmCommand::Run {
             image,
+            template: named,
             env,
             keep,
             timeout,
@@ -2648,6 +2708,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 &api,
                 RunImage {
                     image,
+                    named,
                     env,
                     keep,
                     timeout,
@@ -3422,9 +3483,144 @@ async fn follow_prompt(api: &Api, name: &str, id: &str) -> Result<i32> {
     }
 }
 
+/// What `hm sandbox vm build` was asked.
+struct BuildImage {
+    context: std::path::PathBuf,
+    tag: String,
+    file: Option<std::path::PathBuf>,
+    build_arg: Vec<String>,
+    no_cache: bool,
+    cpus: Option<u32>,
+    memory_mb: Option<u64>,
+    build_wait: u64,
+}
+
+/// Parse the Dockerfile, upload the context its COPYs read, run the build on
+/// the node and follow its log. Exits 0 when the template is ready.
+async fn build_image(api: &Api, build: BuildImage) -> Result<i32> {
+    let dockerfile = build
+        .file
+        .clone()
+        .unwrap_or_else(|| build.context.join("Dockerfile"));
+    let text = std::fs::read_to_string(&dockerfile)
+        .with_context(|| format!("reading {}", dockerfile.display()))?;
+    let mut args = std::collections::BTreeMap::new();
+    for pair in &build.build_arg {
+        let (name, value) = pair
+            .split_once('=')
+            .with_context(|| format!("--build-arg {pair}: expected NAME=VALUE"))?;
+        args.insert(name.to_string(), value.to_string());
+    }
+    let plan = crate::dockerfile::parse(&text, &args)?;
+    for warning in &plan.warnings {
+        eprintln!("warning: {warning}");
+    }
+
+    let packed = if plan.copies_from_context() {
+        Some(crate::build_context::pack(&build.context)?)
+    } else {
+        None
+    };
+    let hash = packed.as_ref().map(|(_, hash)| hash.clone());
+
+    let mut body = json!({"name": build.tag});
+    if let Some(cpus) = build.cpus {
+        body["cpuCount"] = json!(cpus);
+    }
+    if let Some(memory_mb) = build.memory_mb {
+        body["memoryMB"] = json!(memory_mb);
+    }
+    let made = api
+        .request(Method::POST, &["v3", "templates"], Some(body))
+        .await?;
+    let template = made["templateID"]
+        .as_str()
+        .context("the node's answer had no templateID")?
+        .to_string();
+    let build_id = made["buildID"]
+        .as_str()
+        .context("the node's answer had no buildID")?
+        .to_string();
+
+    if let (Some((bytes, hash)), true) = (packed, plan.copies_from_context()) {
+        let link = api
+            .request(Method::GET, &["templates", &template, "files", &hash], None)
+            .await?;
+        if link["present"].as_bool() != Some(true) {
+            // Only the path and token of the link are used: the upload goes
+            // to the node this command was pointed at.
+            let given = Url::parse(link["url"].as_str().context("no upload url")?)?;
+            let mut target = api.base.clone();
+            target.set_path(given.path());
+            target.set_query(given.query());
+            eprintln!(
+                "uploading the build context ({} KiB) ...",
+                bytes.len() >> 10
+            );
+            let sent = api.client.put(target).body(bytes).send().await?;
+            if !sent.status().is_success() {
+                bail!("uploading the context: {}", sent.status());
+            }
+        }
+    }
+
+    let steps: Vec<Value> = plan
+        .steps
+        .iter()
+        .map(|s| s.to_json(hash.as_deref()))
+        .collect();
+    api.request(
+        Method::POST,
+        &["v2", "templates", &template, "builds", &build_id],
+        Some(json!({"fromImage": plan.image, "steps": steps, "force": build.no_cache})),
+    )
+    .await?;
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(build.build_wait);
+    let mut offset = 0usize;
+    loop {
+        let status = api
+            .request_bounded_query(
+                Method::GET,
+                &["templates", &template, "builds", &build_id, "status"],
+                None,
+                4 << 20,
+                &[("logsOffset", &offset.to_string())],
+            )
+            .await?;
+        if let Some(entries) = status["logEntries"].as_array() {
+            for entry in entries {
+                if let Some(message) = entry["message"].as_str() {
+                    eprintln!("{message}");
+                }
+            }
+            offset += entries.len();
+        }
+        match status["status"].as_str() {
+            Some("ready") => {
+                println!("{template}");
+                return Ok(0);
+            }
+            Some("error") => {
+                let why = status["reason"]["message"].as_str().unwrap_or("it failed");
+                let at = status["reason"]["step"].as_str().unwrap_or("?");
+                eprintln!("build failed at step {at}: {why}");
+                return Ok(1);
+            }
+            _ => {}
+        }
+        if std::time::Instant::now() >= deadline {
+            bail!("the build was not done after {} s", build.build_wait);
+        }
+        tokio::time::sleep(Duration::from_millis(700)).await;
+    }
+}
+
 /// What `hm sandbox vm run` was asked.
 struct RunImage {
     image: String,
+    /// `image` is a template's name.
+    named: bool,
     env: Vec<String>,
     keep: bool,
     timeout: u64,
@@ -3481,7 +3677,11 @@ fn launch_command(launch: &Value, given: &[String]) -> Result<Vec<String>> {
 
 /// Pull `image` into a template if the node has none, run it, clean up.
 async fn run_image(api: &Api, run: RunImage) -> Result<i32> {
-    let template = image_template(&run.image);
+    let template = if run.named {
+        run.image.clone()
+    } else {
+        image_template(&run.image)
+    };
     let status_of = |listed: &Value| -> Option<(String, String)> {
         listed.as_array()?.iter().find_map(|t| {
             (t["templateID"] == template.as_str()).then(|| {
@@ -3494,7 +3694,7 @@ async fn run_image(api: &Api, run: RunImage) -> Result<i32> {
     };
     let listed = api.request(Method::GET, &["templates"], None).await?;
     let mut status = status_of(&listed);
-    if !matches!(&status, Some((s, _)) if s == "ready" || s == "building") {
+    if !run.named && !matches!(&status, Some((s, _)) if s == "ready" || s == "building") {
         eprintln!("pulling {} ...", run.image);
         api.request(
             Method::POST,
@@ -3506,17 +3706,22 @@ async fn run_image(api: &Api, run: RunImage) -> Result<i32> {
         status = None;
     }
     let deadline = std::time::Instant::now() + Duration::from_secs(run.build_wait);
-    loop {
-        match &status {
-            Some((s, _)) if s == "ready" => break,
-            Some((s, detail)) if s == "error" => bail!("building {}: {detail}", run.image),
-            _ => {}
+    // A named template is used as it is: a template built from a Dockerfile is
+    // a snapshot the list does not show, and the node's create says if it is
+    // not there.
+    if !run.named {
+        loop {
+            match &status {
+                Some((s, _)) if s == "ready" => break,
+                Some((s, detail)) if s == "error" => bail!("building {}: {detail}", run.image),
+                _ => {}
+            }
+            if std::time::Instant::now() >= deadline {
+                bail!("{} was not ready after {} s", run.image, run.build_wait);
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            status = status_of(&api.request(Method::GET, &["templates"], None).await?);
         }
-        if std::time::Instant::now() >= deadline {
-            bail!("{} was not ready after {} s", run.image, run.build_wait);
-        }
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        status = status_of(&api.request(Method::GET, &["templates"], None).await?);
     }
 
     let mut envs = serde_json::Map::new();

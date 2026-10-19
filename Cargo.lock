@@ -2586,6 +2586,8 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sha2",
+ "tar",
  "tempfile",
  "tokio",
  "tower-http 0.7.1",

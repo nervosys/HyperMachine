@@ -654,6 +654,12 @@ struct Context {
     /// The guest's own environment when the build began -- the image's
     /// `ENV` among it -- which an `ENV` value's `$PATH` refers to.
     base_env: BTreeMap<String, String>,
+    /// A Dockerfile's `ENTRYPOINT` and `CMD`, as argument vectors, kept for
+    /// `hm run` in the guest's `/etc/hv2/image.json`.
+    #[serde(default)]
+    entrypoint: Option<Vec<String>>,
+    #[serde(default)]
+    cmd: Option<Vec<String>>,
 }
 
 /// Where a build's context is kept in its guest, for a step cache.
@@ -705,6 +711,8 @@ async fn steps_then_snapshot(
         cwd: inherited.cwd.unwrap_or_else(|| "/".into()),
         user: "root".into(),
         base_env,
+        entrypoint: None,
+        cmd: None,
     };
 
     for (index, step) in spec.steps.iter().enumerate() {
@@ -774,6 +782,9 @@ async fn steps_then_snapshot(
                     .await
                     .map_err(&fail)?;
             }
+            // The program an image runs by default, argv in `args`.
+            "ENTRYPOINT" => context.entrypoint = Some(step.args.clone()),
+            "CMD" => context.cmd = Some(step.args.clone()),
             other => return Err(fail(format!("a step of type {other:?} is not supported"))),
         }
     }
@@ -839,6 +850,31 @@ async fn finalize(
     vm.write_file_in_guest(TEMPLATE_DEFAULTS_PATH, bytes, AGENT_TIMEOUT)
         .await
         .map_err(|e| finalize(e.to_string()))?;
+    // What `hm run` starts: the base image's launch settings (when it was
+    // pulled) with this Dockerfile's `ENTRYPOINT`, `CMD` and `USER` over them.
+    let launch_path = "/etc/hv2/image.json";
+    let mut launch: serde_json::Value = vm
+        .read_file_in_guest(launch_path, 1 << 20, AGENT_TIMEOUT)
+        .await
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    if context.entrypoint.is_some() || context.cmd.is_some() || context.user != "root" {
+        if let Some(entrypoint) = &context.entrypoint {
+            launch["entrypoint"] = serde_json::json!(entrypoint);
+            // As in Docker, a new ENTRYPOINT drops the base image's CMD.
+            launch["cmd"] = serde_json::json!(context.cmd.clone().unwrap_or_default());
+        } else if let Some(cmd) = &context.cmd {
+            launch["cmd"] = serde_json::json!(cmd);
+        }
+        if context.user != "root" {
+            launch["user"] = serde_json::json!(context.user);
+        }
+        let bytes = serde_json::to_vec(&launch).map_err(|e| finalize(e.to_string()))?;
+        vm.write_file_in_guest(launch_path, bytes, AGENT_TIMEOUT)
+            .await
+            .map_err(|e| finalize(e.to_string()))?;
+    }
 
     // The start command's output goes to the build's log as it comes, and
     // its end, if it ends, is noticed: a server that exits is a readiness

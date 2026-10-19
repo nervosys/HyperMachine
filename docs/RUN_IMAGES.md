@@ -63,8 +63,30 @@ Docker anywhere ([evidence](benchmarks/2026-10-19/hm-run-kvm/README.md)):
   or `uid:gid` USER** was not tried. Only `linux/amd64` images.
 - **An image without a shell** was not tried: the command is run through
   `/bin/sh`, and the guest kit adds a static busybox when the image has none.
-- **`docker build` and `docker compose`**: see
-  [BOAT_PARITY.md](BOAT_PARITY.md); not built.
+- **`docker compose`**: not built; it needs sandbox networks, which are
+  only partial (see [BOAT_PARITY.md](BOAT_PARITY.md)).
 - **Old guest agents**: a template built before this change has an agent that
   ignores the exec `user` field, so the command would run as root. Rebuild
   such a template.
+
+## Building from a Dockerfile: `hm sandbox vm build`
+
+```
+hm sandbox vm build -t myapp ./context            # prints "myapp"
+hm sandbox vm build -t myapp --build-arg MODE=test -f ci/Dockerfile .
+hm sandbox vm run --template myapp                # ENTRYPOINT + CMD
+hm sandbox vm run --template myapp other args     # replaces CMD
+```
+
+`hm` parses the Dockerfile, packs the context (honouring `.dockerignore`, in a
+reproducible tar) and uploads it once, then the node pulls the `FROM` image
+and runs the steps in a VM. Supported: `FROM`, `ARG`, `ENV`, `WORKDIR`,
+`COPY`, `RUN`, `USER`, `ENTRYPOINT`, `CMD`. The node caches by the whole step
+prefix, so a repeat build is quick; `--no-cache` runs every step again. A
+failing step ends the build at that step with a non-zero exit and no template.
+
+Checked on KVM, 6 cases on 3 runs
+([evidence](benchmarks/2026-10-19/hm-build-kvm/README.md)). Not done:
+multi-stage builds and `COPY --from` (refused up front), `ADD` of a URL or
+archive, `SHELL`, `ONBUILD`; `LABEL`, `EXPOSE`, `HEALTHCHECK` and `VOLUME` are
+accepted with a warning and ignored. See the evidence's "Not verified" list.

@@ -1,0 +1,64 @@
+{
+  "success": true,
+  "purpose": "hm sandbox vm build on KVM; functional, times are the check's stopwatch",
+  "input_sha256": {
+    "daemon": "17a06f93c99438157df267356836feb77efd0c4ffe29e45e6b0bdba59bde5d8c",
+    "hm": "e7d1d22fad888abd6b0107ba6fe6bc2453b62f3fa211bbc8c1416c229423e8af",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "bf8081cee91ea46b79be7e3fead4c7c5ae695265d0e4aa602fbed3bb64a7efe8"
+  },
+  "cases": [
+    {
+      "name": "a Dockerfile builds, and the template runs its ENTRYPOINT with CMD, ENV, WORKDIR, USER and COPY",
+      "success": true,
+      "detail": {
+        "build_seconds": 7.78,
+        "stdout": "args=default-arg env=prod user=runner cwd=/srv/app greeting=hello data=one.txt,\n"
+      }
+    },
+    {
+      "name": "a command replaces CMD and the ENTRYPOINT stays",
+      "success": true,
+      "detail": {
+        "stdout": "args=other args env=prod user=runner cwd=/srv/app greeting=hello data=one.txt,\n"
+      }
+    },
+    {
+      "name": "--build-arg changes what the build wrote",
+      "success": true,
+      "detail": {
+        "stdout": "args=default-arg env=prod user=runner cwd=/srv/app greeting=howdy data=one.txt,\n"
+      }
+    },
+    {
+      "name": ".dockerignore keeps ignored files out and COPY . copies the rest",
+      "success": true,
+      "detail": {
+        "files": [
+          "./.dockerignore",
+          "./Dockerfile",
+          "./keep.txt"
+        ]
+      }
+    },
+    {
+      "name": "building the same thing again is quicker",
+      "success": true,
+      "detail": {
+        "first_seconds": 5.0,
+        "second_seconds": 0.73
+      }
+    },
+    {
+      "name": "a failing RUN fails the build at its step, and a multi-stage Dockerfile is refused",
+      "success": true,
+      "detail": {
+        "failed_step": [
+          "build failed at step 2: \"echo boom >&2; exit 3\" exited 3"
+        ],
+        "refused": "Error: Dockerfile line 3: multi-stage builds are not supported (a second FROM)"
+      }
+    }
+  ]
+}
