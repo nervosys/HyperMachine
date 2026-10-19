@@ -516,7 +516,7 @@ mod tests {
         let mut given = BTreeMap::new();
         given.insert("VERSION".to_string(), "3.20".to_string());
         let p = parse(
-            "ARG VERSION=latest\nFROM alpine:${VERSION}\nARG MODE=dev\nENV HOME_DIR=/home/$MODE\nWORKDIR ${HOME_DIR}/app\nRUN echo $MODE\nENV X=${NOPE:-fallback} Y=${MODE:+set}\n",
+            "ARG VERSION=latest\nFROM alpine:${VERSION}\nARG MODE=dev\nENV HOME_DIR=/srv/$MODE\nWORKDIR ${HOME_DIR}/app\nRUN echo $MODE\nENV X=${NOPE:-fallback} Y=${MODE:+set}\n",
             &given,
         )
         .unwrap();
