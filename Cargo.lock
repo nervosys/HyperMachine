@@ -2568,7 +2568,7 @@ version = "1.1.0"
 dependencies = [
  "anyhow",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "chrono",
  "clap",
  "clap_complete",
@@ -2806,7 +2806,7 @@ version = "1.1.0"
 dependencies = [
  "async-trait",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "chrono",
  "form_urlencoded",
  "hmac",
@@ -2959,7 +2959,7 @@ version = "1.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "base64 0.22.1",
+ "base64 0.23.1",
  "bytes",
  "http-body-util",
  "hv2-core",
