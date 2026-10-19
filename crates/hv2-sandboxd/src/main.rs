@@ -1460,6 +1460,9 @@ struct ExecRequest {
     #[serde(default)]
     args: Vec<String>,
     timeout_secs: Option<u64>,
+    /// Run it as this user, by name or number; root if absent.
+    #[serde(default)]
+    user: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -5824,12 +5827,13 @@ async fn exec(
     // meant as a shell line, which is the common case for a code-exec
     // endpoint (E2B's own run_code passes a whole script, not argv).
     let result = vm
-        .exec_in_guest(
+        .exec_in_guest_as(
             "/bin/sh",
             &["-c".to_string(), req.cmd]
                 .into_iter()
                 .chain(req.args)
                 .collect::<Vec<_>>(),
+            req.user.as_deref(),
             timeout,
         )
         .await;

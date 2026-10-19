@@ -455,6 +455,19 @@ impl GuestAgent {
         stdin: Option<&str>,
         timeout: Duration,
     ) -> Result<GuestExec> {
+        self.exec_as(program, args, cwd, stdin, None, timeout)
+    }
+
+    /// [`Self::exec_with`] as `user`, by name or number (root if `None`).
+    pub fn exec_as(
+        &mut self,
+        program: &str,
+        args: &[String],
+        cwd: Option<&str>,
+        stdin: Option<&str>,
+        user: Option<&str>,
+        timeout: Duration,
+    ) -> Result<GuestExec> {
         // The guest is given a shorter deadline than the host waits, so a
         // program that overruns comes back as a reported timeout with whatever
         // it printed, rather than as host-side silence.
@@ -466,6 +479,7 @@ impl GuestAgent {
             cwd: cwd.map(str::to_string),
             stdin: stdin.map(str::to_string),
             timeout_ms: guest_timeout.as_millis() as u64,
+            user: user.map(str::to_string),
         };
 
         match self.request(op, timeout)? {

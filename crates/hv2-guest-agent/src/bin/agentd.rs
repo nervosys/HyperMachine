@@ -820,12 +820,14 @@ mod linux {
                 cwd,
                 stdin,
                 timeout_ms,
+                user,
             } => exec(
                 &program,
                 &args,
                 cwd.as_deref(),
                 stdin.as_deref(),
                 timeout_ms,
+                user.as_deref(),
             ),
             Operation::Start {
                 program,
@@ -1652,6 +1654,7 @@ mod linux {
         cwd: Option<&str>,
         stdin: Option<&str>,
         timeout_ms: u64,
+        user: Option<&str>,
     ) -> OpResult {
         let mut command = Command::new(program);
         default_signals(&mut command);
@@ -1661,9 +1664,41 @@ mod linux {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         let defaults = template_defaults();
+        // Only the user the caller names: the template's is for programs a
+        // person starts, and the host's own commands need to be root's.
+        let account = match user.map(Account::of).transpose() {
+            Ok(account) => account.filter(|a| a.uid != 0),
+            Err(message) => return OpResult::Failed { message },
+        };
+        if let Some(account) = &account {
+            command
+                .env("HOME", &account.home)
+                .env("USER", &account.name)
+                .env("LOGNAME", &account.name);
+        }
         command.envs(&defaults.env);
-        if let Some(dir) = cwd.or(defaults.cwd.as_deref()) {
+        let home = account.as_ref().map(|a| a.home.as_str());
+        if let Some(dir) = cwd
+            .or(defaults.cwd.as_deref())
+            .or(home.filter(|h| std::path::Path::new(h).is_dir()))
+        {
             command.current_dir(dir);
+        }
+        if let Some(account) = account {
+            let (uid, gid, groups) = (account.uid, account.gid, account.groups);
+            // SAFETY: as in `start`: only async-signal-safe calls between
+            // fork and exec, groups before the gid, the gid before the uid.
+            unsafe {
+                command.pre_exec(move || {
+                    if libc::setgroups(groups.len(), groups.as_ptr()) < 0
+                        || libc::setgid(gid) < 0
+                        || libc::setuid(uid) < 0
+                    {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    Ok(())
+                });
+            }
         }
 
         let mut child = match command.spawn() {
@@ -1929,6 +1964,7 @@ mod linux {
                 None,
                 None,
                 5_000,
+                None,
             ) else {
                 panic!("could not run test process")
             };

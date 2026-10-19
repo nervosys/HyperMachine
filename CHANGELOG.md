@@ -63,6 +63,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   also boot with `panic=1`.
 
 ### Added
+- `hm sandbox vm run IMAGE [-e N=V] [--keep] [COMMAND...]` runs a container
+  image in a VM of its own, like `docker run` with no daemon: the node pulls
+  the image, builds a template once (named from the reference), and each run
+  is a fresh sandbox that is deleted afterwards. The image's `ENTRYPOINT`,
+  `CMD`, `ENV`, `WORKDIR` and `USER` are honoured, and the exit code is the
+  command's. The node now reads `Entrypoint`, `Cmd`, `WorkingDir` and `User`
+  from an image's config (it read only `Env`), and `POST /sandboxes/{id}/exec`
+  and the guest agent's exec take an optional `user`. Checked on KVM against
+  `alpine`, `curlimages/curl` and `golang`. See [RUN_IMAGES.md](docs/RUN_IMAGES.md).
 - A `Tools image` workflow builds the tools-image template on a GitHub runner,
   checks what is in it, and keeps it with a SHA-256 as an artifact; a
   `tools-image-v*` tag attaches it to a release. It does not boot the image,

@@ -99,6 +99,28 @@ pub fn build(image: &Image, kit: &GuestKit) -> Result<Vec<u8>, String> {
             data: env.into_bytes(),
         },
     );
+    // The image's `WORKDIR` and `USER`, which the agent applies to every
+    // program started without its own, and its `ENTRYPOINT` and `CMD`, which
+    // a client reads to run the image as `docker run` would.
+    if image.workdir.is_some() || image.user.is_some() {
+        let defaults = serde_json::json!({"cwd": image.workdir, "user": image.user});
+        entries.insert(
+            "etc/hv2/defaults.json".into(),
+            Entry::File {
+                mode: 0o644,
+                data: defaults.to_string().into_bytes(),
+            },
+        );
+    }
+    let launch =
+        serde_json::json!({"entrypoint": image.entrypoint, "cmd": image.cmd, "user": image.user});
+    entries.insert(
+        "etc/hv2/image.json".into(),
+        Entry::File {
+            mode: 0o644,
+            data: launch.to_string().into_bytes(),
+        },
+    );
     // Docker's per-container files, which the gateway and kernel supply.
     for gone in ["etc/resolv.conf", "etc/hostname", "etc/hosts", ".dockerenv"] {
         entries.remove(gone);

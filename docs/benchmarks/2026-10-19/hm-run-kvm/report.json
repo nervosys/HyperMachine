@@ -1,0 +1,66 @@
+{
+  "success": true,
+  "purpose": "hm sandbox vm run on KVM; functional, times are the check's stopwatch",
+  "input_sha256": {
+    "daemon": "8ca4efac0839d5b8d881876c6c5ad2f36ec9fc6cd8ba17158398d865f27b9e08",
+    "hm": "75f53eff5596392bbe1f38cd168152e3d8172d84ed08c470347d7b54f16f65fd",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "9c9d76ce7272995b4b1a42c629ed00691dd8a753826f92058f1747c65118a0e4"
+  },
+  "cases": [
+    {
+      "name": "pulls an image, runs a command, prints, exits 0, leaves nothing; a second run reuses the template",
+      "success": true,
+      "detail": {
+        "first_run_seconds": 5.29,
+        "second_run_seconds": 0.25,
+        "template": "oci-alpine-3.20-f5f95933"
+      }
+    },
+    {
+      "name": "the command's exit code and streams are the process's own",
+      "success": true,
+      "detail": {
+        "exit": 7
+      }
+    },
+    {
+      "name": "-e variables reach the command",
+      "success": true,
+      "detail": {
+        "stdout": "hi there 2\n"
+      }
+    },
+    {
+      "name": "an image's ENTRYPOINT stays under a command, its CMD runs alone, and its USER applies",
+      "success": true,
+      "detail": {
+        "uid": "100",
+        "version": "curl 8.23.0 (x86_64-pc-linux-musl) libcurl/8.23.0 OpenSSL/3.5.9 zlib/1.3.2 brotli/1.2.0 zstd/1.5.7 libidn2/2.3.8 libpsl/0.21.5 libssh2/1.11.1 nghttp2/1.70.0 mit-krb5/1.22.2",
+        "no command": "curl: try 'curl --help' or 'curl --manual' for more information"
+      }
+    },
+    {
+      "name": "an image's WORKDIR is the working directory",
+      "success": true,
+      "detail": {
+        "pwd": "/go"
+      }
+    },
+    {
+      "name": "an image that does not exist fails with the registry's error and leaves nothing",
+      "success": true,
+      "detail": {
+        "stderr": "pulling alpine:no-such-tag-xyz ...\nError: building alpine:no-such-tag-xyz: alpine:no-such-tag-xyz: https://registry-1.docker.io/v2/library/alpine/manifests/no-such-tag-xyz: 404 Not Found"
+      }
+    },
+    {
+      "name": "--keep leaves the sandbox running and says its ID",
+      "success": true,
+      "detail": {
+        "stderr": "kept sandbox sbx-c5427c530fad4c1fadd0"
+      }
+    }
+  ]
+}

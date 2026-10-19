@@ -46,12 +46,21 @@ pub enum Entry {
     },
 }
 
-/// A pulled image: its filesystem, and its `ENV`.
+/// A pulled image: its filesystem, and its `ENV`, `ENTRYPOINT`, `CMD`,
+/// `WORKDIR` and `USER`.
 #[derive(Debug, Default)]
 pub struct Image {
     /// Paths without a leading slash (`usr/bin/python3`).
     pub entries: BTreeMap<String, Entry>,
     pub env: Vec<String>,
+    /// The image's `ENTRYPOINT`, as an argument vector.
+    pub entrypoint: Vec<String>,
+    /// The image's `CMD`: the entrypoint's arguments, or the command itself.
+    pub cmd: Vec<String>,
+    /// The image's `WORKDIR`, when it sets one.
+    pub workdir: Option<String>,
+    /// The image's `USER`, when it sets one.
+    pub user: Option<String>,
     /// The manifest's digest, which names exactly what was pulled.
     pub digest: String,
 }
@@ -315,12 +324,18 @@ pub async fn pull(
         })
         .unwrap_or_default();
 
+    let (entrypoint, cmd, workdir, user) = launch_of(&config);
+
     let layers = manifest["layers"]
         .as_array()
         .ok_or_else(|| format!("{image}: a manifest without layers"))?
         .clone();
     let mut pulled = Image {
         env,
+        entrypoint,
+        cmd,
+        workdir,
+        user,
         digest,
         ..Image::default()
     };
@@ -333,6 +348,32 @@ pub async fn pull(
             .map_err(|e| format!("{image}: layer {digest}: {e}"))?;
     }
     Ok(pulled)
+}
+
+/// The image config's `Entrypoint`, `Cmd`, `WorkingDir` and `User`.
+fn launch_of(config: &Value) -> (Vec<String>, Vec<String>, Option<String>, Option<String>) {
+    let words = |key: &str| -> Vec<String> {
+        config["config"][key]
+            .as_array()
+            .map(|all| {
+                all.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let text = |key: &str| -> Option<String> {
+        config["config"][key]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+    };
+    (
+        words("Entrypoint"),
+        words("Cmd"),
+        text("WorkingDir"),
+        text("User"),
+    )
 }
 
 /// HTTPS, but for a registry on this host -- as Docker, which lets
@@ -448,6 +489,26 @@ fn apply_layer(entries: &mut BTreeMap<String, Entry>, layer: impl Read) -> Resul
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn an_images_launch_settings_are_read_from_its_config() {
+        let config = serde_json::json!({"config": {
+            "Entrypoint": ["python", "-m"], "Cmd": ["http.server"],
+            "WorkingDir": "/app", "User": "nobody"}});
+        assert_eq!(
+            launch_of(&config),
+            (
+                vec!["python".to_string(), "-m".to_string()],
+                vec!["http.server".to_string()],
+                Some("/app".to_string()),
+                Some("nobody".to_string())
+            )
+        );
+        // An image that sets none (null Entrypoint, empty strings) gets none.
+        let bare =
+            serde_json::json!({"config": {"Entrypoint": null, "WorkingDir": "", "User": ""}});
+        assert_eq!(launch_of(&bare), (vec![], vec![], None, None));
+    }
+
     use super::*;
 
     #[test]

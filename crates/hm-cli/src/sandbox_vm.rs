@@ -198,6 +198,36 @@ pub enum VmCommand {
         #[arg(long, value_parser = clap::value_parser!(u64).range(256..))]
         memory_mb: Option<u64>,
     },
+    /// Run a container image in a VM of its own, as `docker run` would:
+    /// pull it into a template (once), create a sandbox, run the image's
+    /// ENTRYPOINT and CMD (or COMMAND after the ENTRYPOINT), print its
+    /// output, delete the sandbox and exit with the command's code
+    #[command(disable_version_flag = true)]
+    Run {
+        /// An image: `[registry/]repository[:tag|@digest]`
+        image: String,
+        /// A variable for the command: NAME=VALUE
+        #[arg(short = 'e', long = "env", value_name = "NAME=VALUE")]
+        env: Vec<String>,
+        /// Keep the sandbox afterwards and print its ID on stderr
+        #[arg(long)]
+        keep: bool,
+        /// Seconds the command may run
+        #[arg(long, default_value_t = 60, value_parser = clap::value_parser!(u64).range(1..))]
+        timeout: u64,
+        /// Seconds to wait for the image to be pulled and built
+        #[arg(long, default_value_t = 600, value_parser = clap::value_parser!(u64).range(1..))]
+        build_wait: u64,
+        /// Processors of its own
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
+        cpus: Option<u32>,
+        /// Memory of its own, in MiB
+        #[arg(long, value_parser = clap::value_parser!(u64).range(256..))]
+        memory_mb: Option<u64>,
+        /// Replaces the image's CMD; the ENTRYPOINT, if it has one, stays
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<String>,
+    },
     /// Assign or inspect a reserved alias for an existing VM
     Alias {
         #[command(subcommand)]
@@ -2601,6 +2631,34 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             std::io::stderr().write_all(stderr.as_bytes())?;
             return Ok(code);
         }
+        VmCommand::Run {
+            image,
+            env,
+            keep,
+            timeout,
+            build_wait,
+            cpus,
+            memory_mb,
+            command,
+        } => {
+            if timeout >= args.request_timeout {
+                bail!("--request-timeout must exceed the guest command's --timeout");
+            }
+            return run_image(
+                &api,
+                RunImage {
+                    image,
+                    env,
+                    keep,
+                    timeout,
+                    build_wait,
+                    cpus,
+                    memory_mb,
+                    command,
+                },
+            )
+            .await;
+        }
         VmCommand::Domain { command } => match command {
             DomainCommand::Bind {
                 id,
@@ -3364,6 +3422,169 @@ async fn follow_prompt(api: &Api, name: &str, id: &str) -> Result<i32> {
     }
 }
 
+/// What `hm sandbox vm run` was asked.
+struct RunImage {
+    image: String,
+    env: Vec<String>,
+    keep: bool,
+    timeout: u64,
+    build_wait: u64,
+    cpus: Option<u32>,
+    memory_mb: Option<u64>,
+    command: Vec<String>,
+}
+
+/// The template an image is kept as: its reference, made into a name the node
+/// accepts, and a hash of the whole reference so two never share one.
+fn image_template(image: &str) -> String {
+    let readable: String = image
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .take(40)
+        .collect();
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in image.bytes() {
+        hash = (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("oci-{readable}-{:08x}", hash as u32)
+}
+
+/// What to run: the image's ENTRYPOINT, then `given` or else its CMD.
+fn launch_command(launch: &Value, given: &[String]) -> Result<Vec<String>> {
+    let words = |key: &str| -> Vec<String> {
+        launch[key]
+            .as_array()
+            .map(|all| {
+                all.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let mut command = words("entrypoint");
+    command.extend(if given.is_empty() {
+        words("cmd")
+    } else {
+        given.to_vec()
+    });
+    if command.is_empty() {
+        bail!("the image has no ENTRYPOINT or CMD; give a command after the image");
+    }
+    Ok(command)
+}
+
+/// Pull `image` into a template if the node has none, run it, clean up.
+async fn run_image(api: &Api, run: RunImage) -> Result<i32> {
+    let template = image_template(&run.image);
+    let status_of = |listed: &Value| -> Option<(String, String)> {
+        listed.as_array()?.iter().find_map(|t| {
+            (t["templateID"] == template.as_str()).then(|| {
+                (
+                    t["buildStatus"].as_str().unwrap_or("").to_string(),
+                    t["detail"].as_str().unwrap_or("").to_string(),
+                )
+            })
+        })
+    };
+    let listed = api.request(Method::GET, &["templates"], None).await?;
+    let mut status = status_of(&listed);
+    if !matches!(&status, Some((s, _)) if s == "ready" || s == "building") {
+        eprintln!("pulling {} ...", run.image);
+        api.request(
+            Method::POST,
+            &["templates"],
+            Some(json!({"templateID": template, "image": run.image,
+                        "cpuCount": run.cpus, "memoryMB": run.memory_mb})),
+        )
+        .await?;
+        status = None;
+    }
+    let deadline = std::time::Instant::now() + Duration::from_secs(run.build_wait);
+    loop {
+        match &status {
+            Some((s, _)) if s == "ready" => break,
+            Some((s, detail)) if s == "error" => bail!("building {}: {detail}", run.image),
+            _ => {}
+        }
+        if std::time::Instant::now() >= deadline {
+            bail!("{} was not ready after {} s", run.image, run.build_wait);
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        status = status_of(&api.request(Method::GET, &["templates"], None).await?);
+    }
+
+    let mut envs = serde_json::Map::new();
+    for pair in &run.env {
+        let (name, value) = pair
+            .split_once('=')
+            .with_context(|| format!("-e {pair}: expected NAME=VALUE"))?;
+        envs.insert(name.to_string(), json!(value));
+    }
+    let mut body = json!({"templateID": template, "timeout": run.timeout + 120, "envVars": envs});
+    if let Some(cpus) = run.cpus {
+        body["cpuCount"] = json!(cpus);
+    }
+    if let Some(memory_mb) = run.memory_mb {
+        body["memoryMB"] = json!(memory_mb);
+    }
+    let created = api
+        .request(Method::POST, &["v2", "sandboxes"], Some(body))
+        .await?;
+    let id = created["sandboxID"]
+        .as_str()
+        .context("the node's answer had no sandboxID")?
+        .to_string();
+    let outcome = run_in(api, &id, &run).await;
+    if run.keep {
+        eprintln!("kept sandbox {id}");
+    } else if let Err(e) = api.request(Method::DELETE, &["sandboxes", &id], None).await {
+        eprintln!("could not delete sandbox {id}: {e}");
+    }
+    outcome
+}
+
+async fn guest_exec(
+    api: &Api,
+    id: &str,
+    cmd: &str,
+    timeout: u64,
+    user: Option<&str>,
+) -> Result<Value> {
+    api.request(
+        Method::POST,
+        &["sandboxes", id, "exec"],
+        Some(json!({"cmd": cmd, "timeout_secs": timeout, "user": user})),
+    )
+    .await
+}
+
+async fn run_in(api: &Api, id: &str, run: &RunImage) -> Result<i32> {
+    let launch = guest_exec(api, id, "cat /etc/hv2/image.json", 10, None).await?;
+    let launch: Value = serde_json::from_str(launch["stdout"].as_str().unwrap_or("{}"))
+        .context("the image's launch settings did not parse")?;
+    let command = launch_command(&launch, &run.command)?;
+    let value = guest_exec(
+        api,
+        id,
+        &shell_exec(&command)?,
+        run.timeout,
+        launch["user"].as_str(),
+    )
+    .await?;
+    let timed_out = value["timed_out"].as_bool().unwrap_or(false);
+    let code = exec_exit_code(&value, timed_out)?;
+    use std::io::Write;
+    std::io::stdout().write_all(value["stdout"].as_str().unwrap_or("").as_bytes())?;
+    std::io::stderr().write_all(value["stderr"].as_str().unwrap_or("").as_bytes())?;
+    Ok(code)
+}
+
 pub(crate) fn shell_exec(command: &[String]) -> Result<String> {
     if command.is_empty() {
         bail!("a guest command is required");
@@ -3544,6 +3765,37 @@ async fn benchmark(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn an_images_template_name_is_valid_and_distinct() {
+        let a = image_template("python:3.12-slim");
+        let b = image_template("python:3.12_slim");
+        assert!(a.starts_with("oci-python-3.12-slim-"), "{a}");
+        assert_ne!(a, b, "the hash keeps look-alikes apart");
+        for name in [&a, &image_template("ghcr.io/org/app@sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789")] {
+            assert!(name.len() <= 64 && name.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c)), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_command_replaces_cmd_and_keeps_the_entrypoint() {
+        let words = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let launch = json!({"entrypoint": ["python", "-m"], "cmd": ["http.server"]});
+        assert_eq!(
+            launch_command(&launch, &[]).unwrap(),
+            words(&["python", "-m", "http.server"])
+        );
+        assert_eq!(
+            launch_command(&launch, &words(&["pip"])).unwrap(),
+            words(&["python", "-m", "pip"])
+        );
+        let cmd_only = json!({"entrypoint": [], "cmd": ["sh"]});
+        assert_eq!(
+            launch_command(&cmd_only, &words(&["echo", "hi"])).unwrap(),
+            words(&["echo", "hi"])
+        );
+        assert!(launch_command(&json!({"entrypoint": [], "cmd": []}), &[]).is_err());
+    }
+
     use super::*;
     #[test]
     fn pending_discovery_cli_requires_node_and_accepts_cursor() {

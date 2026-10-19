@@ -533,6 +533,17 @@ impl AgentVM {
         args: &[String],
         timeout: Duration,
     ) -> Result<GuestExec> {
+        self.exec_in_guest_as(program, args, None, timeout).await
+    }
+
+    /// [`Self::exec_in_guest`] as `user`, by name or number (root if `None`).
+    pub async fn exec_in_guest_as(
+        &self,
+        program: &str,
+        args: &[String],
+        user: Option<&str>,
+        timeout: Duration,
+    ) -> Result<GuestExec> {
         if !self.capabilities.has(Capability::GuestExec) {
             return Err(AgentError::PermissionDenied(
                 "running a command inside the guest requires the GuestExec capability".to_string(),
@@ -552,9 +563,10 @@ impl AgentVM {
         // stops one slow guest from stalling every other task.
         let program = program.to_string();
         let args = args.to_vec();
+        let user = user.map(str::to_string);
         tokio::task::spawn_blocking(move || {
             let mut agent = GuestAgent::over_vsock(device, timeout)?;
-            agent.exec(&program, &args, timeout)
+            agent.exec_as(&program, &args, None, None, user.as_deref(), timeout)
         })
         .await
         .map_err(|e| AgentError::Script(format!("guest exec task failed: {e}")))?

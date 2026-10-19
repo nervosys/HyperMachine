@@ -97,6 +97,11 @@ pub enum Operation {
         stdin: Option<String>,
         /// How long the agent will wait before killing the program.
         timeout_ms: u64,
+        /// Run it as this user, by name or number. Root if absent: a plain
+        /// exec does not take the template's user, as the host's own
+        /// commands need to be root's.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        user: Option<String>,
     },
 
     /// Start a program and leave it running.
@@ -565,6 +570,7 @@ mod tests {
                 cwd: None,
                 stdin: None,
                 timeout_ms: 5_000,
+                user: None,
             },
         }
     }
