@@ -2182,14 +2182,11 @@ impl WhpxVcpu {
         // before passing to WHvSetVirtualProcessorRegisters. All handles are valid.
         unsafe {
             // Build pending interruption register
-            let mut pending_int = std::mem::zeroed::<WHV_X64_PENDING_INTERRUPTION_REGISTER>();
-            pending_int.InterruptionPending = 1; // TRUE
-            pending_int.InterruptionType =
-                WHV_X64_PENDING_INTERRUPTION_TYPE::WHvX64PendingInterrupt;
-            pending_int.DeliverErrorCode = 0; // No error code
-            pending_int.InstructionLength = 0; // Not used for hardware interrupts
-            pending_int.InterruptionVector = vector as UINT32;
-            pending_int.ErrorCode = 0;
+            let pending_int = WHV_X64_PENDING_INTERRUPTION_REGISTER::pending(
+                WHV_X64_PENDING_INTERRUPTION_TYPE::WHvX64PendingInterrupt,
+                vector,
+                None,
+            );
 
             // Create register value union with PendingInterruption
             let mut reg_value = std::mem::zeroed::<WHV_REGISTER_VALUE>();
@@ -2264,9 +2261,7 @@ impl WhpxVcpu {
         // passing to WHvSetVirtualProcessorRegisters with valid handles.
         unsafe {
             // Set the interrupt window request bit
-            let mut deliverability =
-                std::mem::zeroed::<WHV_X64_DELIVERABILITY_NOTIFICATIONS_REGISTER>();
-            deliverability.InterruptNotification = 1; // Request notification
+            let deliverability = WHV_X64_DELIVERABILITY_NOTIFICATIONS_REGISTER::interrupt_window();
 
             let mut reg_value = std::mem::zeroed::<WHV_REGISTER_VALUE>();
             reg_value.DeliverabilityNotifications = deliverability;
@@ -2336,13 +2331,11 @@ impl WhpxVcpu {
         // SAFETY: Building a zeroed pending NMI register and passing to
         // WHvSetVirtualProcessorRegisters with valid partition/vp_index handles.
         unsafe {
-            let mut pending_int = std::mem::zeroed::<WHV_X64_PENDING_INTERRUPTION_REGISTER>();
-            pending_int.InterruptionPending = 1;
-            pending_int.InterruptionType = WHV_X64_PENDING_INTERRUPTION_TYPE::WHvX64PendingNmi;
-            pending_int.DeliverErrorCode = 0;
-            pending_int.InstructionLength = 0;
-            pending_int.InterruptionVector = 2; // NMI vector
-            pending_int.ErrorCode = 0;
+            let pending_int = WHV_X64_PENDING_INTERRUPTION_REGISTER::pending(
+                WHV_X64_PENDING_INTERRUPTION_TYPE::WHvX64PendingNmi,
+                2, // NMI vector
+                None,
+            );
 
             let mut reg_value = std::mem::zeroed::<WHV_REGISTER_VALUE>();
             reg_value.PendingInterruption = pending_int;
@@ -2435,14 +2428,11 @@ impl WhpxVcpu {
         // validated above (0-31). Passed to WHvSetVirtualProcessorRegisters
         // with valid handles.
         unsafe {
-            let mut pending_int = std::mem::zeroed::<WHV_X64_PENDING_INTERRUPTION_REGISTER>();
-            pending_int.InterruptionPending = 1;
-            pending_int.InterruptionType =
-                WHV_X64_PENDING_INTERRUPTION_TYPE::WHvX64PendingException;
-            pending_int.DeliverErrorCode = if error_code.is_some() { 1 } else { 0 };
-            pending_int.InstructionLength = 0;
-            pending_int.InterruptionVector = vector as UINT32;
-            pending_int.ErrorCode = error_code.unwrap_or(0);
+            let pending_int = WHV_X64_PENDING_INTERRUPTION_REGISTER::pending(
+                WHV_X64_PENDING_INTERRUPTION_TYPE::WHvX64PendingException,
+                vector,
+                error_code,
+            );
 
             let mut reg_value = std::mem::zeroed::<WHV_REGISTER_VALUE>();
             reg_value.PendingInterruption = pending_int;

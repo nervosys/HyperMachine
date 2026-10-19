@@ -271,23 +271,23 @@ pub enum WHV_REGISTER_NAME {
     WHvX64RegisterXCr0 = 0x00000027,
 
     // MSRs
-    WHvX64RegisterEfer = 0x00000029,
-    WHvX64RegisterKernelGsBase = 0x0000002A,
-    WHvX64RegisterApicBase = 0x0000002B,
-    WHvX64RegisterPat = 0x0000002C,
-    WHvX64RegisterSysenterCs = 0x0000002D,
-    WHvX64RegisterSysenterEip = 0x0000002E,
-    WHvX64RegisterSysenterEsp = 0x0000002F,
-    WHvX64RegisterStar = 0x00000030,
-    WHvX64RegisterLstar = 0x00000031,
-    WHvX64RegisterCstar = 0x00000032,
-    WHvX64RegisterSfmask = 0x00000033,
+    WHvX64RegisterEfer = 0x00002001,
+    WHvX64RegisterKernelGsBase = 0x00002002,
+    WHvX64RegisterApicBase = 0x00002003,
+    WHvX64RegisterPat = 0x00002004,
+    WHvX64RegisterSysenterCs = 0x00002005,
+    WHvX64RegisterSysenterEip = 0x00002006,
+    WHvX64RegisterSysenterEsp = 0x00002007,
+    WHvX64RegisterStar = 0x00002008,
+    WHvX64RegisterLstar = 0x00002009,
+    WHvX64RegisterCstar = 0x0000200A,
+    WHvX64RegisterSfmask = 0x0000200B,
 
     // Internal registers (for interrupt/state management)
-    WHvX64RegisterPendingInterruption = 0x00010002,
-    WHvX64RegisterInterruptState = 0x00010003,
-    WHvX64RegisterPendingEvent = 0x00010005,
-    WHvX64RegisterDeliverabilityNotifications = 0x00010006,
+    WHvX64RegisterPendingInterruption = 0x80000000,
+    WHvX64RegisterInterruptState = 0x80000001,
+    WHvX64RegisterPendingEvent = 0x80000002,
+    WHvX64RegisterDeliverabilityNotifications = 0x80000004,
 }
 
 // WHV_REGISTER_VALUE - Register value (union of all possible types)
@@ -548,7 +548,9 @@ pub const RFLAGS_VIP: u64 = 1 << 20;
 pub const RFLAGS_ID: u64 = 1 << 21;
 
 // WHV_UINT128 - 128-bit integer
-#[repr(C)]
+// DECLSPEC_ALIGN(16) in the SDK: the platform reads registers with aligned
+// 128-bit loads, so a value at an address that is 8 mod 16 faults the host.
+#[repr(C, align(16))]
 #[derive(Debug, Copy, Clone)]
 pub struct WHV_UINT128 {
     pub Low64: UINT64,
@@ -606,20 +608,44 @@ pub struct WHV_X64_TABLE_REGISTER {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct WHV_X64_INTERRUPT_STATE_REGISTER {
-    pub InterruptShadow: BOOL,
-    pub NmiMasked: BOOL,
+    /// bit 0 InterruptShadow, bit 1 NmiMasked (the SDK's bitfields).
+    pub AsUINT64: UINT64,
+}
+
+impl WHV_X64_INTERRUPT_STATE_REGISTER {
+    pub fn interrupt_shadow(&self) -> bool {
+        self.AsUINT64 & 1 != 0
+    }
+    pub fn nmi_masked(&self) -> bool {
+        self.AsUINT64 & 2 != 0
+    }
 }
 
 // WHV_X64_PENDING_INTERRUPTION_REGISTER - Pending interrupt
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct WHV_X64_PENDING_INTERRUPTION_REGISTER {
-    pub InterruptionPending: BOOL,
-    pub InterruptionType: WHV_X64_PENDING_INTERRUPTION_TYPE,
-    pub DeliverErrorCode: BOOL,
-    pub InstructionLength: UINT32,
-    pub InterruptionVector: UINT32,
-    pub ErrorCode: UINT32,
+    /// Low 32 bits: pending (bit 0), type (bits 1-3), deliver error code
+    /// (bit 4), instruction length (bits 5-8), nested event (bit 9), vector
+    /// (bits 16-31). High 32 bits: the error code.
+    pub AsUINT64: UINT64,
+}
+
+impl WHV_X64_PENDING_INTERRUPTION_REGISTER {
+    /// A pending interruption of `kind` with `vector`, and an error code when
+    /// `error_code` is given. The instruction length is 0, as for hardware
+    /// interrupts, NMIs and exceptions.
+    pub fn pending(
+        kind: WHV_X64_PENDING_INTERRUPTION_TYPE,
+        vector: u8,
+        error_code: Option<u32>,
+    ) -> Self {
+        let mut bits = 1u64 | ((kind as u64) & 0x7) << 1 | (vector as u64) << 16;
+        if let Some(code) = error_code {
+            bits |= 1 << 4 | (code as u64) << 32;
+        }
+        Self { AsUINT64: bits }
+    }
 }
 
 // WHV_X64_PENDING_INTERRUPTION_TYPE - Interrupt type
@@ -638,9 +664,15 @@ pub enum WHV_X64_PENDING_INTERRUPTION_TYPE {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct WHV_X64_DELIVERABILITY_NOTIFICATIONS_REGISTER {
-    pub NmiNotification: BOOL,
-    pub InterruptNotification: BOOL,
-    pub InterruptPriority: u8,
+    /// bit 0 NmiNotification, bit 1 InterruptNotification, bits 2-5 priority.
+    pub AsUINT64: UINT64,
+}
+
+impl WHV_X64_DELIVERABILITY_NOTIFICATIONS_REGISTER {
+    /// Ask to be told when an interrupt can be delivered.
+    pub fn interrupt_window() -> Self {
+        Self { AsUINT64: 1 << 1 }
+    }
 }
 
 // WHV_RUN_VP_EXIT_REASON - VM exit reasons
@@ -1090,5 +1122,73 @@ mod property_code_tests {
             0x1002
         );
         assert_eq!(C::WHvPartitionPropertyCodeDisableSmt as u32, 0x0d);
+    }
+
+    /// The register names the SDK gives values to: the MSRs sit at 0x2000 and
+    /// up, and the interrupt state at 0x80000000 and up.
+    #[test]
+    fn register_names_match_the_sdk() {
+        use super::WHV_REGISTER_NAME as R;
+        assert_eq!(R::WHvX64RegisterEfer as u32, 0x2001);
+        assert_eq!(R::WHvX64RegisterKernelGsBase as u32, 0x2002);
+        assert_eq!(R::WHvX64RegisterApicBase as u32, 0x2003);
+        assert_eq!(R::WHvX64RegisterPat as u32, 0x2004);
+        assert_eq!(R::WHvX64RegisterSysenterCs as u32, 0x2005);
+        assert_eq!(R::WHvX64RegisterSysenterEip as u32, 0x2006);
+        assert_eq!(R::WHvX64RegisterSysenterEsp as u32, 0x2007);
+        assert_eq!(R::WHvX64RegisterStar as u32, 0x2008);
+        assert_eq!(R::WHvX64RegisterLstar as u32, 0x2009);
+        assert_eq!(R::WHvX64RegisterCstar as u32, 0x200a);
+        assert_eq!(R::WHvX64RegisterSfmask as u32, 0x200b);
+        assert_eq!(R::WHvX64RegisterPendingInterruption as u32, 0x8000_0000);
+        assert_eq!(R::WHvX64RegisterInterruptState as u32, 0x8000_0001);
+        assert_eq!(R::WHvX64RegisterPendingEvent as u32, 0x8000_0002);
+        assert_eq!(
+            R::WHvX64RegisterDeliverabilityNotifications as u32,
+            0x8000_0004
+        );
+    }
+
+    /// The interrupt registers are one 64-bit word each in the SDK, with the
+    /// flags as bits; as structs of BOOLs they were 12 and 24 bytes wide and
+    /// made WHV_REGISTER_VALUE larger than the platform's 16 bytes.
+    #[test]
+    fn interrupt_registers_are_one_word_with_the_sdk_bits() {
+        use super::*;
+        assert_eq!(std::mem::size_of::<WHV_X64_INTERRUPT_STATE_REGISTER>(), 8);
+        assert_eq!(
+            std::mem::size_of::<WHV_X64_PENDING_INTERRUPTION_REGISTER>(),
+            8
+        );
+        assert_eq!(
+            std::mem::size_of::<WHV_X64_DELIVERABILITY_NOTIFICATIONS_REGISTER>(),
+            8
+        );
+        let nmi = WHV_X64_PENDING_INTERRUPTION_REGISTER::pending(
+            WHV_X64_PENDING_INTERRUPTION_TYPE::WHvX64PendingNmi,
+            2,
+            None,
+        );
+        assert_eq!(nmi.AsUINT64, 1 | 2 << 1 | 2 << 16);
+        let gp = WHV_X64_PENDING_INTERRUPTION_REGISTER::pending(
+            WHV_X64_PENDING_INTERRUPTION_TYPE::WHvX64PendingException,
+            13,
+            Some(0xabcd),
+        );
+        assert_eq!(gp.AsUINT64, 1 | 3 << 1 | 1 << 4 | 13 << 16 | 0xabcd << 32);
+        assert_eq!(
+            WHV_X64_DELIVERABILITY_NOTIFICATIONS_REGISTER::interrupt_window().AsUINT64,
+            2
+        );
+        assert!(WHV_X64_INTERRUPT_STATE_REGISTER { AsUINT64: 3 }.nmi_masked());
+    }
+
+    /// The SDK's WHV_UINT128 is 16-aligned, and so is the register value that
+    /// holds one; an array of them is passed to the platform by pointer.
+    #[test]
+    fn a_register_value_is_16_aligned_and_16_wide() {
+        assert_eq!(std::mem::align_of::<super::WHV_UINT128>(), 16);
+        assert_eq!(std::mem::align_of::<super::WHV_REGISTER_VALUE>(), 16);
+        assert_eq!(std::mem::size_of::<super::WHV_REGISTER_VALUE>(), 16);
     }
 }

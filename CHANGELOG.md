@@ -29,6 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the SDK's is 0x1fff. 0x1001, named `ProcessorRoot`, is `ProcessorFeatures`.
   Found by running a guest on this host; a test now pins these codes to the SDK
   header. Nothing past this call has been run on WHPX.
+- More WHPX definitions differed from the Windows SDK, found by comparing every
+  constant in `whpx_ffi.rs` with `WinHvPlatformDefs.h`: the MSR register names
+  (EFER, STAR, LSTAR and the rest are 0x2001..0x200b, not 0x29..0x33), the
+  pending-interruption, interrupt-state and deliverability registers (0x8000_0000
+  and up, and one 64-bit word of bits each, not structs of 4-byte flags), and
+  `WHV_UINT128` (16-aligned). The register value union was 24 bytes wide, not 16,
+  so a register array had the wrong stride. Tests pin all of it to the SDK.
 - A command still running when its sandbox paused stayed `running` in the
   history for good, though the docs said it was recorded as ended. Pausing
   now records it as `lost` ("the sandbox paused while it ran"), with what an
