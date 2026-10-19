@@ -102,6 +102,18 @@ pub struct WhpxBackend {
     vcpu_map: Arc<RwLock<std::collections::HashMap<u32, Arc<WhpxVcpu>>>>,
 }
 
+/// A backend dropped without `shutdown` must release in the same order:
+/// the vCPUs in `vcpu_map` first, then the partition. Left to the fields'
+/// declaration order the partition is deleted first, and each vCPU then calls
+/// `WHvDeleteVirtualProcessor` on a partition handle that no longer exists,
+/// which crashed the process intermittently.
+impl Drop for WhpxBackend {
+    fn drop(&mut self) {
+        self.vcpu_map.write().clear();
+        *self.vm.write() = None;
+    }
+}
+
 impl WhpxBackend {
     /// Create a new WHPX backend
     ///
@@ -537,14 +549,29 @@ impl WhpxVm {
                     return Err(Error::Memory("Failed to allocate guest memory".into()));
                 }
 
-                // Map guest memory into WHPX partition
-                let hr = WHvMapGpaRange(
-                    partition,
-                    ptr as *const VOID,
-                    0, // Guest physical address 0
-                    memory_size,
-                    WHvMapGpaRangeFlagRead | WHvMapGpaRangeFlagWrite | WHvMapGpaRangeFlagExecute,
-                );
+                // Map guest memory into WHPX partition. A partition deleted a
+                // moment ago may still hold the pages of the block the
+                // allocator hands back, and the map is then refused with
+                // 0xC0370008 (invalid parameter) until the hypervisor lets go.
+                // Measured: it happened in about 1 in 4 parallel runs of the
+                // create / shutdown / create test, and a bounded retry clears it.
+                let mut attempts = 0;
+                let hr = loop {
+                    let hr = WHvMapGpaRange(
+                        partition,
+                        ptr as *const VOID,
+                        0, // Guest physical address 0
+                        memory_size,
+                        WHvMapGpaRangeFlagRead
+                            | WHvMapGpaRangeFlagWrite
+                            | WHvMapGpaRangeFlagExecute,
+                    );
+                    if hr as u32 != 0xC037_0008 || attempts >= 50 {
+                        break hr;
+                    }
+                    attempts += 1;
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                };
 
                 if hr != S_OK {
                     std::alloc::dealloc(ptr, layout);
@@ -931,23 +958,25 @@ impl Drop for WhpxVm {
             // vCPUs will be dropped first (RAII order)
             self.vcpus.write().clear();
 
-            // Free guest memory
-            if let Some(ptr) = self.guest_memory {
-                // Unmap from partition
-                if self.memory_size > 0 {
-                    let hr = WHvUnmapGpaRange(self.partition, 0, self.memory_size);
-                    if hr != 0 {
-                        tracing::warn!(hresult = hr, "WHvUnmapGpaRange failed during Drop");
-                    }
+            // Unmap, then delete the partition, and only then give the memory
+            // back: the hypervisor holds the pages until the partition is
+            // gone, and a freed page that another thread's allocation reuses
+            // and maps into its own partition fails with an invalid-parameter
+            // HRESULT.
+            if self.guest_memory.is_some() && self.memory_size > 0 {
+                let hr = WHvUnmapGpaRange(self.partition, 0, self.memory_size);
+                if hr != 0 {
+                    tracing::warn!(hresult = hr, "WHvUnmapGpaRange failed during Drop");
                 }
+            }
 
+            WHvDeletePartition(self.partition);
+
+            if let Some(ptr) = self.guest_memory {
                 let layout =
                     std::alloc::Layout::from_size_align_unchecked(self.memory_size as usize, 4096);
                 std::alloc::dealloc(ptr, layout);
             }
-
-            // Delete partition
-            WHvDeletePartition(self.partition);
         }
     }
 
@@ -1153,6 +1182,21 @@ impl WhpxVcpu {
                 )));
             }
 
+            // WHP leaves RIP on the instruction that caused a port access:
+            // the monitor must step over it, or the guest executes the same
+            // IN/OUT again for ever. RAX of an IN is written by the caller
+            // afterwards, which does not depend on RIP. String and REP forms
+            // would need to be emulated, so they are left alone.
+            if exit_context.ExitReason == WHV_RUN_VP_EXIT_REASON::WHvRunVpExitReasonX64IoPortAccess
+            {
+                let io = &exit_context.ExitData.IoPortAccess;
+                let string_form = io.AccessInfo.AsUINT32 & 0b11_0000 != 0;
+                let length = (exit_context.VpContext.InstructionLengthAndCr8 & 0x0F) as u64;
+                if !string_form && length != 0 {
+                    self.set_instruction_pointer(exit_context.VpContext.Rip + length)?;
+                }
+            }
+
             // Convert WHPX exit reason to VmExit
             self.convert_exit(&exit_context)
         }
@@ -1209,9 +1253,9 @@ impl WhpxVcpu {
             WHvRunVpExitReasonX64IoPortAccess => unsafe {
                 let io = &ctx.ExitData.IoPortAccess;
                 let port = io.PortNumber;
-                let size = io.AccessInfo.AccessSize as u8;
+                let size = io.AccessInfo.access_size() as u8;
 
-                if io.AccessInfo.IsWrite != 0 {
+                if io.AccessInfo.is_write() {
                     // OUT instruction
                     let data = match size {
                         1 => (io.Rax & 0xFF) as u32,
@@ -1233,20 +1277,17 @@ impl WhpxVcpu {
                 let mem = &ctx.ExitData.MemoryAccess;
                 let addr = mem.Gpa;
 
-                match mem.AccessInfo.AccessType {
-                    WHV_MEMORY_ACCESS_TYPE::WHvMemoryAccessRead => {
+                match mem.AccessInfo.access_type() {
+                    x if x == WHV_MEMORY_ACCESS_TYPE::WHvMemoryAccessRead as u32 => {
                         // For read, use mmio_read helper which creates appropriate structure
                         Ok(VmExit::mmio_read(addr, 4))
                     }
-                    WHV_MEMORY_ACCESS_TYPE::WHvMemoryAccessWrite => {
+                    x if x == WHV_MEMORY_ACCESS_TYPE::WHvMemoryAccessWrite as u32 => {
                         // For write, extract data from instruction bytes
                         let data = &mem.InstructionBytes[0..4];
                         Ok(VmExit::mmio_write(addr, data))
                     }
-                    _ => Err(Error::VM(format!(
-                        "Unknown memory access type: {:?}",
-                        mem.AccessInfo.AccessType
-                    ))),
+                    other => Err(Error::VM(format!("Unknown memory access type: {other}"))),
                 }
             },
 
@@ -1275,9 +1316,9 @@ impl WhpxVcpu {
             // ExitReason is WHvRunVpExitReasonException.
             WHvRunVpExitReasonException => unsafe {
                 let exception = &ctx.ExitData.Exception;
-                let vector = exception.ExceptionInfo.ExceptionType as u8;
-                let error_code = if exception.ExceptionInfo.ErrorCodeValid != 0 {
-                    Some(exception.ExceptionParameter as u32)
+                let vector = exception.ExceptionType;
+                let error_code = if exception.ExceptionInfo.error_code_valid() {
+                    Some(exception.ErrorCode)
                 } else {
                     None
                 };
@@ -1289,7 +1330,7 @@ impl WhpxVcpu {
             // ExitReason is WHvRunVpExitReasonX64MsrAccess.
             WHvRunVpExitReasonX64MsrAccess => unsafe {
                 let msr = &ctx.ExitData.MsrAccess;
-                if msr.IsWrite != 0 {
+                if msr.is_write() {
                     let data = ((msr.Rdx & 0xFFFF_FFFF) << 32) | (msr.Rax & 0xFFFF_FFFF);
                     Ok(VmExit::Wrmsr {
                         index: msr.MsrNumber,
@@ -2059,12 +2100,18 @@ impl WhpxVcpu {
             values.push(rflags_val);
 
             // Segment registers (set selector only, base/limit/attributes set to reasonable defaults)
-            for &selector in &[regs.cs, regs.ds, regs.es, regs.fs, regs.gs, regs.ss] {
+            for (i, &selector) in [regs.cs, regs.ds, regs.es, regs.fs, regs.gs, regs.ss]
+                .iter()
+                .enumerate()
+            {
                 let mut seg_val = std::mem::zeroed::<WHV_REGISTER_VALUE>();
                 seg_val.Segment.Selector = selector as u16;
                 seg_val.Segment.Base = 0;
                 seg_val.Segment.Limit = 0xFFFF; // 64KB limit for real mode
-                seg_val.Segment.Attributes = 0x93; // Present, read/write, data segment
+                                                // Present, accessed; CS (index 0) is an execute/read code
+                                                // segment, the rest read/write data segments. A data-type CS
+                                                // is not a state the processor can run code in.
+                seg_val.Segment.Attributes = if i == 0 { 0x9B } else { 0x93 };
                 values.push(seg_val);
             }
         }
@@ -3700,8 +3747,9 @@ impl WhpxVcpu {
             let cs_values = self.get_registers(&[WHvX64RegisterCs])?;
             // SAFETY: Accessing .Segment.Attributes is valid for a CS register value.
             let cs_attrs = unsafe { cs_values[0].Segment.Attributes };
-            // CS.L is bit 9 (0x200) in the WHPX segment attribute format
-            if cs_attrs & 0x200 != 0 {
+            // CS.L is bit 13 (0x2000) in the WHPX segment attribute format:
+            // type 0-3, S 4, DPL 5-6, P 7, reserved 8-11, AVL 12, L 13, D 14, G 15.
+            if cs_attrs & 0x2000 != 0 {
                 Ok(CpuMode::LongMode64Bit)
             } else {
                 Ok(CpuMode::LongModeCompatibility)
@@ -4308,12 +4356,15 @@ impl WhpxVcpu {
     ) -> Result<()> {
         // Access rights for different segment types
         // For 64-bit: CS needs L bit set (bit 21 in full descriptor, bit 13 in attributes)
+        // The layout is WHV_X64_SEGMENT_REGISTER's: a 32-bit segment needs D
+        // (0x4000) or the CPU runs it with 16-bit operands, and a flat 4 GiB
+        // one needs G (0x8000) to match its limit.
         let cs_access = if is_64bit {
-            0x209A // Execute/Read, Accessed, L=1 (64-bit), P=1
+            0x209B // Execute/Read, Accessed, L=1 (64-bit), D=0, P=1
         } else {
-            0x9A // Execute/Read, Accessed, P=1 (32-bit)
+            0xC09B // Execute/Read, Accessed, D=1, G=1, P=1 (32-bit)
         };
-        let data_access = 0x92; // Read/Write, Accessed, P=1
+        let data_access = 0xC093; // Read/Write, Accessed, D=1, G=1, P=1
 
         // Flat memory model: base=0, limit=0xFFFFFFFF
         let base = 0u64;
@@ -5276,8 +5327,16 @@ mod tests {
                     // Attempt long mode (may fail without valid page tables)
                     if vcpu.enable_long_mode(0x10000).is_ok() {
                         if let Ok(mode) = vcpu.get_cpu_mode() {
-                            assert_eq!(mode, CpuMode::LongMode64Bit, "Should be in long mode");
-                            println!("✓ After long mode: Long Mode 64-Bit");
+                            // EFER.LMA is set, but CS is still the 32-bit code
+                            // segment from protected mode (CS.L=0), so the
+                            // processor is in compatibility mode until a far
+                            // jump loads a 64-bit CS.
+                            assert_eq!(
+                                mode,
+                                CpuMode::LongModeCompatibility,
+                                "Long mode active with a 32-bit CS is compatibility mode"
+                            );
+                            println!("✓ After long mode: Long Mode compatibility");
                         }
                     }
                 }
@@ -6294,23 +6353,36 @@ mod tests {
                         regs.rflags = 0x2; // IF flag will be set by STI
                         let _ = vcpu.set_register_set(&regs);
 
-                        // Execute a few iterations
-                        let mut success = false;
-                        for i in 0..5 {
-                            match vcpu.run() {
-                                Ok(exit) => {
-                                    println!("  Exit {}: {:?}", i + 1, exit_type_name(&exit));
-                                    success = true;
-
-                                    // Try injecting an interrupt
-                                    let _ = vcpu.inject_interrupt(0x20);
+                        // The guest loops without ever exiting, so a helper
+                        // thread cancels each run, as the VM's own run loop
+                        // does with `kick`.
+                        let stop = std::sync::atomic::AtomicBool::new(false);
+                        let success = std::thread::scope(|scope| {
+                            scope.spawn(|| {
+                                while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                                    std::thread::sleep(std::time::Duration::from_millis(2));
+                                    let _ = vcpu.kick();
                                 }
-                                Err(e) => {
-                                    println!("  Exit {} error: {}", i + 1, e);
-                                    break;
+                            });
+                            let mut success = false;
+                            for i in 0..5 {
+                                match vcpu.run() {
+                                    Ok(exit) => {
+                                        println!("  Exit {}: {:?}", i + 1, exit_type_name(&exit));
+                                        success = true;
+
+                                        // Try injecting an interrupt
+                                        let _ = vcpu.inject_interrupt(0x20);
+                                    }
+                                    Err(e) => {
+                                        println!("  Exit {} error: {}", i + 1, e);
+                                        break;
+                                    }
                                 }
                             }
-                        }
+                            stop.store(true, std::sync::atomic::Ordering::Relaxed);
+                            success
+                        });
 
                         if success {
                             println!("✓ Execution loop with interrupts completed");
@@ -6401,8 +6473,22 @@ mod tests {
                         regs.rip = 0x1000;
                         let _ = vcpu.set_register_set(&regs);
 
-                        // Run for limited iterations to measure performance
-                        match vcpu.run_with_stats(100) {
+                        // Run for limited iterations to measure performance. The
+                        // guest loops without exiting, so a helper thread
+                        // cancels the run repeatedly.
+                        let stop = std::sync::atomic::AtomicBool::new(false);
+                        let measured = std::thread::scope(|scope| {
+                            scope.spawn(|| {
+                                while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                                    std::thread::sleep(std::time::Duration::from_millis(2));
+                                    let _ = vcpu.kick();
+                                }
+                            });
+                            let measured = vcpu.run_with_stats(100);
+                            stop.store(true, std::sync::atomic::Ordering::Relaxed);
+                            measured
+                        });
+                        match measured {
                             Ok(stats) => {
                                 println!("✓ Performance benchmark completed:");
                                 println!("  Total exits: {}", stats.total_exits);
@@ -6892,9 +6978,11 @@ mod tests {
 
                     let stats = vcpu.get_interrupt_stats();
 
-                    // Test total_attempts()
+                    // is_interrupt_enabled() counts IF reads, not injections, so
+                    // no injection has been attempted yet.
+                    assert_eq!(stats.if_enabled_count + stats.if_disabled_count, 20);
                     let total = stats.total_attempts();
-                    assert!(total > 0, "Total attempts should be > 0");
+                    assert_eq!(total, 0, "no injection was attempted");
                     println!("✓ total_attempts() = {}", total);
 
                     // Test success_rate() - returns 0.0 if no injections yet

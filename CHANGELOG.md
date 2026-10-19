@@ -36,6 +36,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and up, and one 64-bit word of bits each, not structs of 4-byte flags), and
   `WHV_UINT128` (16-aligned). The register value union was 24 bytes wide, not 16,
   so a register array had the wrong stride. Tests pin all of it to the SDK.
+- WHPX crashed the Windows CI test jobs with `STATUS_STACK_BUFFER_OVERRUN`:
+  `WHV_RUN_VP_EXIT_CONTEXT` was 184 bytes where the SDK's is 224, so
+  `WHvRunVirtualProcessor` wrote past the caller's stack buffer. It and four
+  other structs (`WHV_VP_EXIT_CONTEXT`, the memory-access and I/O-port
+  contexts, `WHV_X64_VP_EXECUTION_STATE`) now have the SDK's sizes, checked by a
+  test. The crash only showed once the partition property above was fixed,
+  because until then no test got as far as running a guest.
+- WHPX guests could not make progress: a port `IN` or `OUT` exit left RIP on the
+  instruction, so the guest repeated it for ever. `run` now steps over it
+  (string and REP forms are still not emulated). Boot segments had no D or G
+  bit, which ran a 32-bit entry as 16-bit code; and the long-mode check read the
+  wrong attribute bit. The Multiboot and Linux boot paths no longer reset the
+  segments they had just set.
+- Dropping a WHPX backend without `shutdown` deleted the partition before its
+  vCPUs, so each vCPU called `WHvDeleteVirtualProcessor` on a dead handle and
+  the process crashed in about half of the single-threaded test runs (5 in 8).
+  A VM's memory is now freed after its partition, and mapping it is retried for
+  up to half a second when the hypervisor still holds a recycled block, which
+  failed in 5 of 20 parallel runs. After both, on the final tree: 8 of 8
+  serial and 20 of 20 parallel runs of the 60 WHPX unit tests pass on this host. Several of those
+  tests asserted nothing before, and three were wrong (they expected 64-bit
+  mode with a 32-bit CS, or counted injections that never happened) and are
+  corrected; two ran a guest that never exits and now use `kick`.
 - A command still running when its sandbox paused stayed `running` in the
   history for good, though the docs said it was recorded as ended. Pausing
   now records it as `lost` ("the sandbox paused while it ran"), with what an

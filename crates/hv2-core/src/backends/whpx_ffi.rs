@@ -710,14 +710,26 @@ pub struct WHV_RUN_VP_EXIT_CONTEXT {
     pub ExitData: WHV_RUN_VP_EXIT_DATA,
 }
 
+impl WHV_RUN_VP_EXIT_CONTEXT {
+    /// An all-zero context for `WHvRunVirtualProcessor` to fill. The SDK's is
+    /// 224 bytes (C_ASSERT in WinHvPlatformDefs.h); the platform writes all of
+    /// them, so this struct must be at least that large.
+    pub fn zeroed() -> Self {
+        // SAFETY: every field is an integer, an array of integers or a union of
+        // them, and the exit-reason enum has a variant with the value 0.
+        unsafe { std::mem::zeroed() }
+    }
+}
+
 // WHV_VP_EXIT_CONTEXT - vCPU context at exit
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct WHV_VP_EXIT_CONTEXT {
     pub ExecutionState: WHV_X64_VP_EXECUTION_STATE,
-    pub InstructionLength: u8,
-    pub Cr8: u8,
-    pub Reserved: [u8; 6],
+    /// InstructionLength in bits 0-3, Cr8 in bits 4-7.
+    pub InstructionLengthAndCr8: u8,
+    pub Reserved: u8,
+    pub Reserved2: UINT32,
     pub Cs: WHV_X64_SEGMENT_REGISTER,
     pub Rip: UINT64,
     pub Rflags: UINT64,
@@ -727,13 +739,18 @@ pub struct WHV_VP_EXIT_CONTEXT {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct WHV_X64_VP_EXECUTION_STATE {
-    pub Cpl: u16,
-    pub Reserved1: u16,
-    pub Reserved2: UINT32,
-    pub EferLma: u16,
-    pub DebugActive: u16,
-    pub InterruptionPending: u16,
-    pub Reserved3: [u16; 5],
+    /// Cpl bits 0-1, Cr0Pe 2, Cr0Am 3, EferLma 4, DebugActive 5,
+    /// InterruptionPending 6, InterruptShadow 10 (the SDK's bitfields).
+    pub AsUINT16: u16,
+}
+
+impl WHV_X64_VP_EXECUTION_STATE {
+    pub fn cpl(&self) -> u16 {
+        self.AsUINT16 & 3
+    }
+    pub fn efer_lma(&self) -> bool {
+        self.AsUINT16 & (1 << 4) != 0
+    }
 }
 
 // WHV_RUN_VP_EXIT_DATA - Exit data (union of all exit types)
@@ -748,6 +765,9 @@ pub union WHV_RUN_VP_EXIT_DATA {
     pub InterruptWindow: WHV_X64_INTERRUPT_WINDOW_CONTEXT,
     pub ApicEoi: WHV_X64_APIC_EOI_CONTEXT,
     pub Halt: WHV_X64_HALT_CONTEXT,
+    /// The SDK's union is 22 words (the largest member is padded to that), and
+    /// the platform may write all of them.
+    pub AsUINT64: [UINT64; 22],
 }
 
 // WHV_MEMORY_ACCESS_CONTEXT - MMIO access context
@@ -766,9 +786,15 @@ pub struct WHV_MEMORY_ACCESS_CONTEXT {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct WHV_MEMORY_ACCESS_INFO {
-    pub AccessType: WHV_MEMORY_ACCESS_TYPE,
-    pub GpaUnmapped: BOOL,
-    pub GvaValid: BOOL,
+    /// AccessType bits 0-1 (0 read, 1 write, 2 execute), GpaUnmapped bit 2,
+    /// GvaValid bit 3.
+    pub AsUINT32: UINT32,
+}
+
+impl WHV_MEMORY_ACCESS_INFO {
+    pub fn access_type(&self) -> u32 {
+        self.AsUINT32 & 3
+    }
 }
 
 // WHV_MEMORY_ACCESS_TYPE - Memory access type
@@ -802,20 +828,35 @@ pub struct WHV_X64_IO_PORT_ACCESS_CONTEXT {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct WHV_X64_IO_PORT_ACCESS_INFO {
-    pub IsWrite: BOOL,
-    pub AccessSize: UINT32,
-    pub StringOp: BOOL,
-    pub RepPrefix: BOOL,
+    /// IsWrite bit 0, AccessSize bits 1-3 (bytes), StringOp bit 4, RepPrefix
+    /// bit 5.
+    pub AsUINT32: UINT32,
+}
+
+impl WHV_X64_IO_PORT_ACCESS_INFO {
+    pub fn is_write(&self) -> bool {
+        self.AsUINT32 & 1 != 0
+    }
+    pub fn access_size(&self) -> u32 {
+        (self.AsUINT32 >> 1) & 7
+    }
 }
 
 // WHV_X64_MSR_ACCESS_CONTEXT - MSR access context
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct WHV_X64_MSR_ACCESS_CONTEXT {
+    /// IsWrite is bit 0 (WHV_X64_MSR_ACCESS_INFO).
+    pub AccessInfo: UINT32,
     pub MsrNumber: UINT32,
-    pub IsWrite: BOOL,
     pub Rax: UINT64,
     pub Rdx: UINT64,
+}
+
+impl WHV_X64_MSR_ACCESS_CONTEXT {
+    pub fn is_write(&self) -> bool {
+        self.AccessInfo & 1 != 0
+    }
 }
 
 // WHV_X64_CPUID_ACCESS_CONTEXT - CPUID access context
@@ -840,6 +881,9 @@ pub struct WHV_VP_EXCEPTION_CONTEXT {
     pub Reserved: [u8; 3],
     pub InstructionBytes: [u8; 16],
     pub ExceptionInfo: WHV_VP_EXCEPTION_INFO,
+    pub ExceptionType: u8,
+    pub Reserved2: [u8; 3],
+    pub ErrorCode: UINT32,
     pub ExceptionParameter: UINT64,
 }
 
@@ -847,9 +891,14 @@ pub struct WHV_VP_EXCEPTION_CONTEXT {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct WHV_VP_EXCEPTION_INFO {
-    pub ExceptionType: WHV_EXCEPTION_TYPE,
-    pub ErrorCodeValid: BOOL,
-    pub SoftwareException: BOOL,
+    /// ErrorCodeValid bit 0, SoftwareException bit 1.
+    pub AsUINT32: UINT32,
+}
+
+impl WHV_VP_EXCEPTION_INFO {
+    pub fn error_code_valid(&self) -> bool {
+        self.AsUINT32 & 1 != 0
+    }
 }
 
 // WHV_EXCEPTION_TYPE - Exception type
@@ -1182,6 +1231,80 @@ mod property_code_tests {
             2
         );
         assert!(WHV_X64_INTERRUPT_STATE_REGISTER { AsUINT64: 3 }.nmi_masked());
+    }
+
+    /// The sizes the SDK asserts with C_ASSERT. WHvRunVirtualProcessor writes
+    /// a WHV_RUN_VP_EXIT_CONTEXT through a pointer, so a Rust struct smaller
+    /// than the platform's overruns the caller's stack.
+    #[test]
+    fn exit_context_sizes_match_the_sdk() {
+        use super::*;
+        use std::mem::size_of;
+        let sizes = [
+            (
+                "WHV_RUN_VP_EXIT_CONTEXT",
+                size_of::<WHV_RUN_VP_EXIT_CONTEXT>(),
+                224,
+            ),
+            (
+                "WHV_MEMORY_ACCESS_INFO",
+                size_of::<WHV_MEMORY_ACCESS_INFO>(),
+                4,
+            ),
+            (
+                "WHV_X64_IO_PORT_ACCESS_INFO",
+                size_of::<WHV_X64_IO_PORT_ACCESS_INFO>(),
+                4,
+            ),
+            (
+                "WHV_VP_EXCEPTION_INFO",
+                size_of::<WHV_VP_EXCEPTION_INFO>(),
+                4,
+            ),
+            ("WHV_VP_EXIT_CONTEXT", size_of::<WHV_VP_EXIT_CONTEXT>(), 40),
+            (
+                "WHV_MEMORY_ACCESS_CONTEXT",
+                size_of::<WHV_MEMORY_ACCESS_CONTEXT>(),
+                40,
+            ),
+            (
+                "WHV_X64_IO_PORT_ACCESS_CONTEXT",
+                size_of::<WHV_X64_IO_PORT_ACCESS_CONTEXT>(),
+                96,
+            ),
+            (
+                "WHV_X64_MSR_ACCESS_CONTEXT",
+                size_of::<WHV_X64_MSR_ACCESS_CONTEXT>(),
+                24,
+            ),
+            (
+                "WHV_X64_CPUID_ACCESS_CONTEXT",
+                size_of::<WHV_X64_CPUID_ACCESS_CONTEXT>(),
+                64,
+            ),
+            (
+                "WHV_VP_EXCEPTION_CONTEXT",
+                size_of::<WHV_VP_EXCEPTION_CONTEXT>(),
+                40,
+            ),
+            (
+                "WHV_X64_VP_EXECUTION_STATE",
+                size_of::<WHV_X64_VP_EXECUTION_STATE>(),
+                2,
+            ),
+            (
+                "WHV_X64_SEGMENT_REGISTER",
+                size_of::<WHV_X64_SEGMENT_REGISTER>(),
+                16,
+            ),
+            (
+                "WHV_X64_TABLE_REGISTER",
+                size_of::<WHV_X64_TABLE_REGISTER>(),
+                16,
+            ),
+        ];
+        let wrong: Vec<_> = sizes.iter().filter(|(_, got, want)| got != want).collect();
+        assert!(wrong.is_empty(), "name, ours, SDK: {wrong:?}");
     }
 
     /// The SDK's WHV_UINT128 is 16-aligned, and so is the register value that

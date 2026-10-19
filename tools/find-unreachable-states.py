@@ -138,6 +138,16 @@ ACCEPTED = {
         'hm sandbox run --report none: clap builds it from the command line '
         '(ValueEnum), which this script cannot see.'
     ),
+    ('WHV_RUN_VP_EXIT_REASON', 'WHvRunVpExitReasonX64IoPortAccess'): (
+        'FFI: WHvRunVirtualProcessor writes the exit reason into the exit '
+        'context, so Rust never constructs it. The guard compares the context '
+        'the platform filled in; whpx_boot_example runs a guest that does OUT.'
+    ),
+    ('WHV_MEMORY_ACCESS_TYPE', 'WHvMemoryAccessRead'): (
+        'FFI: the access type is two bits of an info word the platform writes '
+        '(WHV_MEMORY_ACCESS_INFO), compared as a number. Rust never builds it.'
+    ),
+    ('WHV_MEMORY_ACCESS_TYPE', 'WHvMemoryAccessWrite'): 'As WHvMemoryAccessRead.',
     ('MigrationStage', 'PostCopy'): (
         'Post-copy migration is declared and unimplemented. The controller drives '
         'Idle -> Setup -> PreCopy -> StopAndCopy -> Completed and never enters it. '
