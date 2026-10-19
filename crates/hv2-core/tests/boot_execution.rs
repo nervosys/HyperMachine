@@ -294,7 +294,11 @@ async fn test_boot_state_validation() {
                     if let Ok(regs) = vcpu.get_register_set() {
                         assert_eq!(regs.rip, 0x100000, "RIP incorrect");
                         assert_eq!(regs.rsi, 0x90000, "RSI incorrect");
-                        assert_eq!(regs.rsp, 0x00400000, "RSP incorrect");
+                        // The stack every backend gives a booting guest; the
+                        // constant lives with the shared boot setup.
+                        let (_, _, _, stack) =
+                            hv2_core::boot::BootSetup::allocate_standard_tables();
+                        assert_eq!(regs.rsp, stack, "RSP incorrect");
                         println!("  ✓ General registers configured correctly");
                     }
                 }
@@ -330,7 +334,7 @@ async fn test_memory_layout_validation() {
                     println!("  boot_params: 0x90000");
                     println!("  kernel: 0x100000");
                     println!("  initrd: 0x800000");
-                    println!("  stack: 0x400000");
+                    println!("  stack: 0x8000");
                 }
 
                 // Test Multiboot with modules
@@ -352,7 +356,7 @@ async fn test_memory_layout_validation() {
                     println!("  multiboot_info: 0x9000");
                     println!("  kernel: 0x100000");
                     println!("  modules: 0x200000");
-                    println!("  stack: 0x400000");
+                    println!("  stack: 0x8000");
                 }
             }
         }
