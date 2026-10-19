@@ -214,8 +214,9 @@ pub const WHvMapGpaRangeFlagRead: WHV_MAP_GPA_RANGE_FLAGS = 0x00000001;
 pub const WHvMapGpaRangeFlagWrite: WHV_MAP_GPA_RANGE_FLAGS = 0x00000002;
 pub const WHvMapGpaRangeFlagExecute: WHV_MAP_GPA_RANGE_FLAGS = 0x00000004;
 
-// WHV_REGISTER_NAME - vCPU register names
-#[repr(C)]
+// WHV_REGISTER_NAME - vCPU register names. 32 bits wide; the interrupt-state names
+// start at 0x8000_0000, which a repr(C) enum cannot hold portably.
+#[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum WHV_REGISTER_NAME {
     // General purpose registers (64-bit)

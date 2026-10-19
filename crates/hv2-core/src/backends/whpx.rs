@@ -1917,6 +1917,25 @@ impl WhpxVcpu {
         }
     }
 
+    /// Set only the named 64-bit registers. Unlike `set_register_set`, which
+    /// writes every general register and rewrites all six segments as 64 KiB
+    /// data segments, this leaves everything else, segments included, as it is.
+    #[cfg(target_os = "windows")]
+    pub fn set_registers_64(&self, edits: &[(WHV_REGISTER_NAME, u64)]) -> Result<()> {
+        let names: Vec<WHV_REGISTER_NAME> = edits.iter().map(|(name, _)| *name).collect();
+        let values: Vec<WHV_REGISTER_VALUE> = edits
+            .iter()
+            .map(|(_, value)| {
+                // SAFETY: an all-zero register value is valid; Reg64 is the
+                // field these 64-bit registers use.
+                let mut register = unsafe { std::mem::zeroed::<WHV_REGISTER_VALUE>() };
+                register.Reg64 = *value;
+                register
+            })
+            .collect();
+        self.set_registers(&names, &values)
+    }
+
     /// Get all general-purpose registers as RegisterSet
     #[cfg(target_os = "windows")]
     pub fn get_register_set(&self) -> Result<crate::vcpu::RegisterSet> {
@@ -4513,14 +4532,13 @@ impl WhpxVcpu {
         tracing::debug!("✓ RIP set to entry point: 0x{:016X}", entry_point);
 
         // Step 11: Set RSI to boot_params address (Linux protocol requirement)
-        // Use the register set method to set RSI
-        let mut regs = self.get_register_set()?;
-        regs.rsi = boot_params_addr;
-        self.set_register_set(&regs)?;
+        // Only RSI and RSP are written: a full register-set write would reset
+        // the flat 64-bit segments configured above.
+        self.set_registers_64(&[(WHV_REGISTER_NAME::WHvX64RegisterRsi, boot_params_addr)])?;
         tracing::debug!("✓ RSI set to boot_params: 0x{:016X}", boot_params_addr);
 
         // Step 12: Configure stack
-        self.set_stack_pointer(ds_selector, stack_pointer as u16)?;
+        self.set_registers_64(&[(WHV_REGISTER_NAME::WHvX64RegisterRsp, stack_pointer)])?;
         tracing::debug!("✓ Stack configured: 0x{:016X}", stack_pointer);
 
         tracing::info!(
@@ -4697,20 +4715,23 @@ impl WhpxVcpu {
         tracing::debug!("✓ EIP set to entry point: 0x{:016X}", entry_point);
 
         // Step 10: Set EAX to Multiboot magic (0x2BADB002)
-        let mut regs = self.get_register_set()?;
-        regs.rax = MultibootProtocol::bootloader_magic() as u64;
-        tracing::debug!("✓ EAX set to Multiboot magic: 0x{:08X}", regs.rax);
+        let magic = MultibootProtocol::bootloader_magic() as u64;
+        tracing::debug!("✓ EAX set to Multiboot magic: 0x{:08X}", magic);
 
-        // Step 11: Set EBX to multiboot_info address
-        regs.rbx = multiboot_info_addr;
-        self.set_register_set(&regs)?;
+        // Step 11: Set EBX to multiboot_info address. Only these registers are
+        // written: a full register-set write would reset the flat 32-bit
+        // segments configured above to 64 KiB data segments.
+        self.set_registers_64(&[
+            (WHV_REGISTER_NAME::WHvX64RegisterRax, magic),
+            (WHV_REGISTER_NAME::WHvX64RegisterRbx, multiboot_info_addr),
+        ])?;
         tracing::debug!(
             "✓ EBX set to multiboot_info: 0x{:016X}",
             multiboot_info_addr
         );
 
         // Step 12: Configure stack
-        self.set_stack_pointer(ds_selector, stack_pointer as u16)?;
+        self.set_registers_64(&[(WHV_REGISTER_NAME::WHvX64RegisterRsp, stack_pointer)])?;
         tracing::debug!("✓ Stack configured: 0x{:016X}", stack_pointer);
 
         tracing::info!(
