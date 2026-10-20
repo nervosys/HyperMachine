@@ -4311,6 +4311,13 @@ impl VM {
         // is the scheduler here, the thread is descheduled inside the ioctl
         // rather than spinning, and an idle guest costs a parked thread.
         let queued_at = std::time::Instant::now();
+        // Where interrupts come from a userspace PIC, a pending one is only
+        // seen when the vCPU next exits, and a guest spinning on a tick (a
+        // kernel calibrating its delay loop) never does. Cancel its run
+        // whenever a request is raised, so the loop looks.
+        let kicker = self
+            .userspace_irq()
+            .then(|| (self.pic.raised(), self.backend.clone(), vcpu.clone()));
         tokio::spawn(async move {
             let dispatched_at = std::time::Instant::now();
             let (done_tx, done_rx) = tokio::sync::oneshot::channel();
@@ -4369,8 +4376,28 @@ impl VM {
                     "failed to spawn vCPU {vcpu_id} thread: {e}"
                 )));
             }
-            done_rx.await.unwrap_or(Ok(()))
+            let Some((raised, backend, vcpu)) = kicker else {
+                return done_rx.await.unwrap_or(Ok(()));
+            };
+            let kick = async {
+                loop {
+                    raised.notified().await;
+                    let _ = backend.kick_vcpu(&vcpu).await;
+                }
+            };
+            tokio::select! {
+                done = done_rx => done.unwrap_or(Ok(())),
+                () = kick => Ok(()),
+            }
         })
+    }
+
+    /// Whether this VM's interrupts come from the userspace PIC rather than a
+    /// controller inside the hypervisor: a backend that runs guests and is not
+    /// KVM.
+    fn userspace_irq(&self) -> bool {
+        self.backend.executes_guest_code()
+            && self.backend.platform() != crate::hypervisor::HypervisorPlatform::Kvm
     }
 
     /// The vCPU execution loop, run via `block_on` on the dedicated OS thread
@@ -4395,6 +4422,8 @@ impl VM {
         tracing::info!("vCPU {} task started", vcpu.id());
         let mut paused = false;
         let mut first_run = true;
+        let userspace_irq = backend.executes_guest_code()
+            && backend.platform() != crate::hypervisor::HypervisorPlatform::Kvm;
 
         loop {
             // Check for control messages (non-blocking)
@@ -4451,6 +4480,26 @@ impl VM {
             // Check if VM should stop
             if !running.load(Ordering::SeqCst) {
                 break;
+            }
+
+            // An interrupt that became pending while the guest ran, or that the
+            // guest has just unmasked, goes in now if the guest can take it;
+            // if it cannot, ask to be told when it can. Waiting for a halt or
+            // an I/O exit instead leaves a spinning guest without its tick.
+            if userspace_irq && pic.get_pending_interrupt().is_some() {
+                if backend.interrupts_deliverable(&vcpu).await? {
+                    Self::handle_interrupt_window_static(
+                        &vcpu,
+                        &stats,
+                        &vm_name,
+                        &pic,
+                        backend.as_ref(),
+                        &event_bus,
+                    )
+                    .await?;
+                } else {
+                    backend.request_interrupt_window(&vcpu).await?;
+                }
             }
 
             // Run vCPU until exit

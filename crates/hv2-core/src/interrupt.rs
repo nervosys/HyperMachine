@@ -142,6 +142,11 @@ impl PicChip {
 pub struct Pic8259 {
     master: Arc<Mutex<PicChip>>,
     slave: Arc<Mutex<PicChip>>,
+    /// Signalled on every raised request. A vCPU running guest code does not
+    /// look at the PIC until it exits, and a guest that waits for a tick by
+    /// spinning never exits; whoever owns the vCPU waits on this to cancel
+    /// the run and look.
+    raised: Arc<tokio::sync::Notify>,
 }
 
 impl Pic8259 {
@@ -150,11 +155,23 @@ impl Pic8259 {
         Self {
             master: Arc::new(Mutex::new(PicChip::new(0x20))),
             slave: Arc::new(Mutex::new(PicChip::new(0x28))),
+            raised: Arc::new(tokio::sync::Notify::new()),
         }
+    }
+
+    /// The signal that fires whenever an interrupt request is raised.
+    pub fn raised(&self) -> Arc<tokio::sync::Notify> {
+        Arc::clone(&self.raised)
     }
 
     /// Raise an interrupt request
     pub fn raise_irq(&self, irq: u8) -> Result<()> {
+        self.raise_irq_line(irq)?;
+        self.raised.notify_one();
+        Ok(())
+    }
+
+    fn raise_irq_line(&self, irq: u8) -> Result<()> {
         if irq < 8 {
             // Master PIC
             self.master.lock().raise_irq(irq);

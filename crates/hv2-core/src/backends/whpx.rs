@@ -394,6 +394,17 @@ impl HypervisorBackend for WhpxBackend {
         whpx_vcpu.interrupts_deliverable()
     }
 
+    async fn request_interrupt_window(&self, vcpu: &VCpu) -> Result<()> {
+        let vcpu_id = vcpu.id();
+        let whpx_vcpu = {
+            let map = self.vcpu_map.read();
+            map.get(&vcpu_id)
+                .cloned()
+                .ok_or_else(|| Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id)))?
+        };
+        whpx_vcpu.request_interrupt_window()
+    }
+
     async fn inject_interrupt(&self, vcpu: &VCpu, vector: u8) -> Result<()> {
         let vcpu_id = vcpu.id();
         let whpx_vcpu = {
@@ -446,7 +457,7 @@ impl HypervisorBackend for WhpxBackend {
 
         match boot {
             crate::boot::source::LoadedBoot::Linux(params) => {
-                whpx_vcpu.boot_linux(&whpx_vm, params, params.kernel_addr)
+                whpx_vcpu.boot_linux_protected(&whpx_vm, boot, params)
             }
             crate::boot::source::LoadedBoot::Multiboot(info) => {
                 whpx_vcpu.boot_multiboot(&whpx_vm, info, boot.entry_point()?)
@@ -4815,6 +4826,73 @@ impl WhpxVcpu {
         _vm: &WhpxVm,
         _params: &LinuxBootParams,
         _entry_point: u64,
+    ) -> Result<()> {
+        Err(Error::VM(
+            "WHPX backend is only available on Windows".into(),
+        ))
+    }
+
+    /// Enter a Linux kernel the way the 32-bit boot protocol says to, which is
+    /// what the images in `boot` are laid out for.
+    ///
+    /// Paging off, flat 4 GiB protected-mode segments, ESI pointing at
+    /// `boot_params`, and EBP, EDI and EBX zero (Documentation/x86/boot.rst).
+    /// The kernel image, `boot_params`, command line and initrd are written
+    /// from the same regions every other backend writes; nothing here builds a
+    /// second copy of them. [`Self::boot_linux`] enters the same address in
+    /// 64-bit mode, which is the `startup_64` convention and not the address
+    /// this loader hands out, so a real kernel faults on its first instruction.
+    #[cfg(target_os = "windows")]
+    pub fn boot_linux_protected(
+        &self,
+        vm: &WhpxVm,
+        boot: &crate::boot::source::LoadedBoot,
+        params: &LinuxBootParams,
+    ) -> Result<()> {
+        let (gdt_base, _idt_base, _page_table_base, stack_pointer) =
+            BootSetup::allocate_standard_tables();
+        let gdt = GdtBuilder::new()
+            .add_null()
+            .add_code_32bit(0, 0xFFFF_FFFF, 0)
+            .add_data_32bit(0, 0xFFFF_FFFF, 0)
+            .build();
+        let (cs_selector, ds_selector) = self.load_gdt(vm, &gdt, gdt_base)?;
+
+        for (addr, data) in boot.data_regions_borrowed()? {
+            vm.write_guest_memory(addr, &data)?;
+        }
+        for (addr, len) in boot.zero_ranges()? {
+            vm.write_guest_memory(addr, &vec![0u8; len as usize])?;
+        }
+
+        self.enable_protected_mode()?;
+        self.configure_boot_segments(cs_selector, ds_selector, false)?;
+        self.set_instruction_pointer(params.kernel_addr)?;
+        // Only these registers are written: a full register-set write would
+        // reset the flat segments configured above to 64 KiB ones.
+        self.set_registers_64(&[
+            (WHV_REGISTER_NAME::WHvX64RegisterRsi, params.setup_addr),
+            (WHV_REGISTER_NAME::WHvX64RegisterRsp, stack_pointer),
+            (WHV_REGISTER_NAME::WHvX64RegisterRbp, 0),
+            (WHV_REGISTER_NAME::WHvX64RegisterRdi, 0),
+            (WHV_REGISTER_NAME::WHvX64RegisterRbx, 0),
+            (WHV_REGISTER_NAME::WHvX64RegisterRflags, 0x2),
+        ])?;
+        tracing::info!(
+            "vCPU {}: Linux kernel at {:#x}, boot_params at {:#x}",
+            self.vp_index,
+            params.kernel_addr,
+            params.setup_addr
+        );
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn boot_linux_protected(
+        &self,
+        _vm: &WhpxVm,
+        _boot: &crate::boot::source::LoadedBoot,
+        _params: &LinuxBootParams,
     ) -> Result<()> {
         Err(Error::VM(
             "WHPX backend is only available on Windows".into(),

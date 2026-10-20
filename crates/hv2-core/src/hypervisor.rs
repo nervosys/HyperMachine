@@ -247,6 +247,14 @@ pub trait HypervisorBackend: Send + Sync {
         Ok(true)
     }
 
+    /// Ask to be told, with a `VmExit::InterruptWindow`, when the guest can
+    /// take an interrupt. For a caller that has one pending and was told
+    /// [`Self::interrupts_deliverable`] is false. Backends that deliver
+    /// through a controller of their own have nothing to ask.
+    async fn request_interrupt_window(&self, _vcpu: &VCpu) -> Result<()> {
+        Ok(())
+    }
+
     /// Map `size` bytes of fresh host memory into the guest at `gpa`, outside
     /// RAM, for a linear framebuffer: the guest writes it without exiting and
     /// [`Self::read_framebuffer`] reads the same bytes. Must follow

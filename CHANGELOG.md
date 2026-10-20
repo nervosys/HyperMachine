@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A Linux kernel boots to userspace on WHPX (`tests/linux_whpx_boot.rs`, 1 vCPU,
+  1 GiB, `nolapic noapic`; KVM and 30 hv2-core test binaries unaffected). WHPX
+  now enters Linux through the 32-bit boot protocol the loader lays the images
+  out for (it used the 64-bit entry, which faulted on the first instruction),
+  and a pending PIC interrupt now cancels a running vCPU so a guest spinning on
+  a timer tick gets it. Block root, network, SMP and RAM above 3 GiB on WHPX
+  are not done.
 - `hm sandbox vm compose` accepts named volumes: a top-level `volumes:` declares
   them, a service mounts one with `name:/path`. They are created as
   `PROJECT-NAME`, mounted over 9P, and survive `down`. Bind mounts, `:ro` and
