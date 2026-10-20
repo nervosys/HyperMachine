@@ -20,7 +20,8 @@
 //! backend and `HV2_TEST_KERNEL` names a bzImage with
 //! `CONFIG_SERIAL_8250_CONSOLE=y`. `HV2_TEST_INITRD` adds an initramfs, in
 //! which case `/init` running is the end of the boot instead of the panic for
-//! want of a root filesystem.
+//! want of a root filesystem. `HV2_TEST_INITRD_MARKER` names a string that init
+//! prints, which proves output from userspace (not just the kernel) arrives.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -103,6 +104,18 @@ async fn a_real_linux_kernel_boots_on_a_userspace_pic_backend() {
         }
         tokio::time::sleep(POLL).await;
     }
+    // Whatever the initramfs prints once it is running reaches the console
+    // through the tty layer, which waits on the UART's transmit interrupt
+    // (IRQ 4) after every byte. Kernel messages do not prove that works --
+    // printk polls the line-status register -- so the test asks for a marker
+    // only userspace can have written.
+    let marker = std::env::var("HV2_TEST_INITRD_MARKER").ok();
+    if let Some(marker) = &marker {
+        while started.elapsed() < BOOT_DEADLINE && !console.contains(marker.as_str()) {
+            tokio::time::sleep(POLL).await;
+            console = vm.console_output().await;
+        }
+    }
     let elapsed = started.elapsed();
     let _ = vm.stop().await;
     println!("linux whpx boot: userspace handoff after {elapsed:?}");
@@ -132,6 +145,14 @@ async fn a_real_linux_kernel_boots_on_a_userspace_pic_backend() {
         "the kernel never finished calibrating its delay loop: timer interrupts do not reach a \
          guest that is spinning.\nconsole:\n{console}"
     );
+    if let Some(marker) = &marker {
+        assert!(
+            console.contains(marker.as_str()),
+            "userspace printed nothing ({marker:?} never appeared): the UART's transmit              interrupt does not reach the guest.
+console:
+{console}"
+        );
+    }
     assert!(
         reached_userspace_handoff(&console),
         "the guest never reached userspace handoff within {BOOT_DEADLINE:?}.\nconsole:\n{console}"

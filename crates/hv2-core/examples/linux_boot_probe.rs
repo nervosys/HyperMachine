@@ -148,6 +148,22 @@ async fn main() {
         }
     }
 
+    // A raw disk image behind virtio-blk over PCI, found by enumerating the
+    // bus. `HV2_DISK_RO` attaches it read-only.
+    if let Ok(disk) = std::env::var("HV2_DISK") {
+        let read_only = std::env::var("HV2_DISK_RO").is_ok();
+        match vm
+            .attach_block_pci(std::path::Path::new(&disk), read_only, "probe0")
+            .await
+        {
+            Ok(_) => println!("disk          : {disk} attached over PCI (read_only={read_only})"),
+            Err(e) => {
+                println!("disk          : FAILED — {e}");
+                return;
+            }
+        }
+    }
+
     match vm.provision().await {
         Ok(()) => {
             println!("provision     : OK");

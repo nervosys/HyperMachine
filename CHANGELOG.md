@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Device interrupts reach a WHPX guest. Port-I/O devices (the UART's IRQ 4
+  transmit interrupt, and anything else behind `IoOutcome.interrupt` or the
+  interrupt sink) were driven through `set_irq_line`, which does nothing on a
+  backend without an in-kernel controller, so a guest's userspace console
+  output never arrived (kernel printk polls and was unaffected). They now raise
+  the userspace 8259 there. Verified on WHPX with an initramfs that prints from
+  `/init` and runs a shell (`HV2_TEST_INITRD_MARKER` in `tests/linux_whpx_boot.rs`;
+  fails without the change). KVM is untouched (its tests pass); IRQ delivery on
+  HVF is NOT verified.
 - A Linux kernel boots to userspace on WHPX (`tests/linux_whpx_boot.rs`, 1 vCPU,
   1 GiB, `nolapic noapic`; KVM and 30 hv2-core test binaries unaffected). WHPX
   now enters Linux through the 32-bit boot protocol the loader lays the images

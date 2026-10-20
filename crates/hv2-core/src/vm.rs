@@ -1357,13 +1357,30 @@ impl VM {
                         handle.block_on(async {
                             match level {
                                 IrqLevel::Pulse => {
-                                    Self::pulse_irq(vm.backend.as_ref(), irq).await;
+                                    Self::pulse_irq(
+                                        vm.backend.as_ref(),
+                                        Self::userspace_pic(vm.backend.as_ref(), &vm.pic),
+                                        irq,
+                                    )
+                                    .await;
                                 }
                                 IrqLevel::High => {
-                                    Self::set_irq(vm.backend.as_ref(), irq, true).await;
+                                    Self::set_irq(
+                                        vm.backend.as_ref(),
+                                        Self::userspace_pic(vm.backend.as_ref(), &vm.pic),
+                                        irq,
+                                        true,
+                                    )
+                                    .await;
                                 }
                                 IrqLevel::Low => {
-                                    Self::set_irq(vm.backend.as_ref(), irq, false).await;
+                                    Self::set_irq(
+                                        vm.backend.as_ref(),
+                                        Self::userspace_pic(vm.backend.as_ref(), &vm.pic),
+                                        irq,
+                                        false,
+                                    )
+                                    .await;
                                 }
                             }
                         });
@@ -4395,6 +4412,14 @@ impl VM {
     /// Whether this VM's interrupts come from the userspace PIC rather than a
     /// controller inside the hypervisor: a backend that runs guests and is not
     /// KVM.
+    /// The userspace PIC, when it (not the hypervisor) delivers this guest's
+    /// device interrupts.
+    fn userspace_pic<'a>(backend: &dyn HypervisorBackend, pic: &'a Pic8259) -> Option<&'a Pic8259> {
+        (backend.executes_guest_code()
+            && backend.platform() != crate::hypervisor::HypervisorPlatform::Kvm)
+            .then_some(pic)
+    }
+
     fn userspace_irq(&self) -> bool {
         self.backend.executes_guest_code()
             && self.backend.platform() != crate::hypervisor::HypervisorPlatform::Kvm
@@ -4708,7 +4733,7 @@ impl VM {
                 }
 
                 if let Some(irq) = io_result.interrupt {
-                    Self::pulse_irq(backend, irq).await;
+                    Self::pulse_irq(backend, Self::userspace_pic(backend, pic), irq).await;
                 }
 
                 Ok(true)
@@ -4914,7 +4939,13 @@ impl VM {
     /// for -- it means this guest gets no device interrupts, which is the
     /// situation that already existed -- so it is logged once per access at
     /// debug level and the guest runs on.
-    async fn pulse_irq(backend: &dyn HypervisorBackend, irq: u8) {
+    async fn pulse_irq(backend: &dyn HypervisorBackend, pic: Option<&Pic8259>, irq: u8) {
+        if let Some(pic) = pic {
+            // The guest's controller is the userspace 8259; the raise also
+            // wakes the vCPU if it is spinning.
+            let _ = pic.raise_irq(irq);
+            return;
+        }
         let line = u32::from(irq);
         tracing::trace!("pulsing IRQ {line}");
         if let Err(e) = backend.set_irq_line(line, true).await {
@@ -4931,7 +4962,15 @@ impl VM {
     /// The level-triggered half of the sink. A virtio device holds its line
     /// until the driver writes `InterruptACK`; releasing it earlier, as a
     /// pulse does, can drop the interrupt between one delivery and the next.
-    async fn set_irq(backend: &dyn HypervisorBackend, irq: u8, level: bool) {
+    async fn set_irq(backend: &dyn HypervisorBackend, pic: Option<&Pic8259>, irq: u8, level: bool) {
+        if let Some(pic) = pic {
+            let _ = if level {
+                pic.raise_irq(irq)
+            } else {
+                pic.lower_irq(irq)
+            };
+            return;
+        }
         let line = u32::from(irq);
         tracing::trace!("IRQ {line} -> {}", u8::from(level));
         if let Err(e) = backend.set_irq_line(line, level).await {
@@ -5306,7 +5345,12 @@ impl VM {
                     let offset = (port - device.base_port()) as u64;
                     device.write_register(offset, data, size).await?;
                     if let Some(irq) = device.pending_interrupt().await {
-                        Self::pulse_irq(self.backend.as_ref(), irq).await;
+                        Self::pulse_irq(
+                            self.backend.as_ref(),
+                            Self::userspace_pic(self.backend.as_ref(), &self.pic),
+                            irq,
+                        )
+                        .await;
                     }
                 } else {
                     tracing::debug!("IO OUT to unhandled port: {:#x}", port);
@@ -5328,7 +5372,12 @@ impl VM {
                     let offset = (port - device.base_port()) as u64;
                     data = device.read_register(offset, size).await?;
                     if let Some(irq) = device.pending_interrupt().await {
-                        Self::pulse_irq(self.backend.as_ref(), irq).await;
+                        Self::pulse_irq(
+                            self.backend.as_ref(),
+                            Self::userspace_pic(self.backend.as_ref(), &self.pic),
+                            irq,
+                        )
+                        .await;
                     }
                 } else {
                     tracing::debug!("IO IN from unhandled port: {:#x}", port);
