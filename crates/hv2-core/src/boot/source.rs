@@ -436,6 +436,20 @@ impl LoadedBoot {
         }
     }
 
+    /// Describe a linear framebuffer to a Multiboot kernel (info flag bit 12).
+    ///
+    /// Returns `false`, doing nothing, for protocols that carry no such
+    /// description: the caller should say so rather than map a framebuffer
+    /// the guest was never told about.
+    pub fn set_framebuffer(&mut self, fb: crate::boot::multiboot::FramebufferInfo) -> bool {
+        if let Self::Multiboot(info) = self {
+            info.framebuffer = Some(fb);
+            true
+        } else {
+            false
+        }
+    }
+
     /// Tell PVH firmware where the ACPI RSDP is, for it to hand to the
     /// operating system it starts.
     ///

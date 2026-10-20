@@ -172,6 +172,7 @@ async fn test_multiboot_boot_complete() {
             (0, 640 * 1024),                  // Lower memory
             (1024 * 1024, 127 * 1024 * 1024), // Upper memory
         ],
+        framebuffer: None,
     };
 
     // Validate parameters
@@ -349,6 +350,7 @@ async fn test_memory_layout_validation() {
                     modules: vec![module],
                     cmdline: "test".to_string(),
                     memory_map: vec![(0, 640 * 1024), (1024 * 1024, 127 * 1024 * 1024)],
+                    framebuffer: None,
                 };
 
                 if vcpu.boot_multiboot(&vm, &info, 0x100000).is_ok() {
@@ -396,6 +398,7 @@ async fn test_segment_configuration() {
                     modules: vec![],
                     cmdline: String::new(),
                     memory_map: vec![(0, 640 * 1024), (1024 * 1024, 127 * 1024 * 1024)],
+                    framebuffer: None,
                 };
 
                 if vcpu.boot_multiboot(&vm, &info, 0x100000).is_ok() {
@@ -456,6 +459,7 @@ async fn test_boot_error_handling() {
                     modules: vec![],
                     cmdline: String::new(),
                     memory_map: vec![(0, 640 * 1024)],
+                    framebuffer: None,
                 };
 
                 match MultibootProtocol::validate_params(&info) {
@@ -523,6 +527,7 @@ async fn test_boot_performance() {
                     modules: vec![],
                     cmdline: "test".to_string(),
                     memory_map: vec![(0, 640 * 1024), (1024 * 1024, 127 * 1024 * 1024)],
+                    framebuffer: None,
                 };
 
                 let start = Instant::now();

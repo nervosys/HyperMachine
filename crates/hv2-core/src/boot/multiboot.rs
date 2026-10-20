@@ -65,6 +65,58 @@ pub struct MultibootInfo {
 
     /// Memory map entries: (start_address, length)
     pub memory_map: Vec<(u64, u64)>,
+
+    /// A linear framebuffer to describe to the kernel (info flag bit 12).
+    pub framebuffer: Option<FramebufferInfo>,
+}
+
+/// A linear framebuffer as the Multiboot 1 info structure describes it
+/// (`framebuffer_*` fields at offsets 88-115).
+///
+/// Always direct RGB (type 1). The channel positions are bit shifts within a
+/// pixel, and a 32 bpp `XRGB8888` pixel is `red (16, 8)`, `green (8, 8)`,
+/// `blue (0, 8)`: bytes B, G, R, X in memory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FramebufferInfo {
+    /// Guest physical address of the first pixel.
+    pub addr: u64,
+    /// Bytes from the start of one row to the next.
+    pub pitch: u32,
+    /// Pixels per row.
+    pub width: u32,
+    /// Rows.
+    pub height: u32,
+    /// Bits per pixel.
+    pub bpp: u8,
+    /// Red channel: `(field position, mask size)`, both in bits.
+    pub red: (u8, u8),
+    /// Green channel.
+    pub green: (u8, u8),
+    /// Blue channel.
+    pub blue: (u8, u8),
+}
+
+impl FramebufferInfo {
+    /// `XRGB8888` at `width` x `height`, rows packed.
+    #[must_use]
+    pub fn xrgb8888(addr: u64, width: u32, height: u32) -> Self {
+        Self {
+            addr,
+            pitch: width * 4,
+            width,
+            height,
+            bpp: 32,
+            red: (16, 8),
+            green: (8, 8),
+            blue: (0, 8),
+        }
+    }
+
+    /// Bytes the framebuffer occupies.
+    #[must_use]
+    pub fn size_bytes(&self) -> u64 {
+        u64::from(self.pitch) * u64::from(self.height)
+    }
 }
 
 impl Default for MultibootInfo {
@@ -77,6 +129,7 @@ impl Default for MultibootInfo {
                 (0, 640 * 1024),                  // Lower memory (0-640KB)
                 (1024 * 1024, 127 * 1024 * 1024), // Upper memory (1MB-128MB)
             ],
+            framebuffer: None,
         }
     }
 }
@@ -440,6 +493,9 @@ impl MultibootProtocol {
         if !info.modules.is_empty() {
             flags |= 1 << 3; // mods valid
         }
+        if info.framebuffer.is_some() {
+            flags |= 1 << 12; // framebuffer_* valid
+        }
 
         data[0..4].copy_from_slice(&flags.to_le_bytes());
 
@@ -471,6 +527,23 @@ impl MultibootProtocol {
         let mmap_length = info.memory_map.len() * 24; // Each entry is 24 bytes
         data[44..48].copy_from_slice(&(mmap_length as u32).to_le_bytes());
         data[48..52].copy_from_slice(&(mmap_addr as u32).to_le_bytes());
+
+        // framebuffer_addr u64 @88, pitch @96, width @100, height @104, bpp
+        // @108, type @109 (1 = direct RGB), then the colour fields @110-115.
+        if let Some(fb) = &info.framebuffer {
+            data[88..96].copy_from_slice(&fb.addr.to_le_bytes());
+            data[96..100].copy_from_slice(&fb.pitch.to_le_bytes());
+            data[100..104].copy_from_slice(&fb.width.to_le_bytes());
+            data[104..108].copy_from_slice(&fb.height.to_le_bytes());
+            data[108] = fb.bpp;
+            data[109] = 1;
+            data[110] = fb.red.0;
+            data[111] = fb.red.1;
+            data[112] = fb.green.0;
+            data[113] = fb.green.1;
+            data[114] = fb.blue.0;
+            data[115] = fb.blue.1;
+        }
 
         data
     }
@@ -1351,6 +1424,7 @@ mod tests {
             modules: Vec::new(),
             cmdline: "root=/dev/sda1".to_string(),
             memory_map: vec![(0, 640 * 1024), (1024 * 1024, 127 * 1024 * 1024)],
+            framebuffer: None,
         };
 
         let data = MultibootProtocol::create_multiboot_info(
@@ -1405,6 +1479,7 @@ mod tests {
             modules: Vec::new(),
             cmdline: "root=/dev/sda1".to_string(),
             memory_map: vec![(0, 640 * 1024), (1024 * 1024, 127 * 1024 * 1024)],
+            framebuffer: None,
         };
 
         assert!(MultibootProtocol::validate_params(&info).is_ok());

@@ -78,6 +78,7 @@ fn multiboot_unikernel_config() {
             (0, 640 * 1024),                  // Lower memory
             (1024 * 1024, 127 * 1024 * 1024), // Upper memory (127 MB)
         ],
+        framebuffer: None,
     };
 
     assert!(!info.kernel_image.is_empty());

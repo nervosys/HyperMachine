@@ -193,6 +193,7 @@ fn multiboot_with_model_weight_modules() {
         ],
         cmdline: "gpu=passthrough inference_engine=tensorrt".to_string(),
         memory_map: vec![(0, 640 * 1024), (1024 * 1024, 256 * 1024 * 1024)],
+        framebuffer: None,
     };
 
     MultibootProtocol::validate_params(&info).unwrap();
@@ -262,6 +263,7 @@ fn guest_memory_multiboot_info_roundtrip() {
         modules: Vec::new(),
         cmdline: "root=/dev/vda".to_string(),
         memory_map: vec![(0, 640 * 1024), (1024 * 1024, 127 * 1024 * 1024)],
+        framebuffer: None,
     };
 
     let mb_data = MultibootProtocol::create_multiboot_info(&info, 0x10000, 0x11000, None, 0x12000);
@@ -468,6 +470,7 @@ fn multiboot_unikernel_with_gpu_config() {
         }],
         cmdline: format!("gpu=passthrough device={}", placement.gpu_ids[0]),
         memory_map: vec![(0, 640 * 1024), (1024 * 1024, 256 * 1024 * 1024)],
+        framebuffer: None,
     };
 
     MultibootProtocol::validate_params(&info).unwrap();

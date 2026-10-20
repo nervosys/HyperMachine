@@ -247,6 +247,31 @@ pub trait HypervisorBackend: Send + Sync {
         Ok(true)
     }
 
+    /// Map `size` bytes of fresh host memory into the guest at `gpa`, outside
+    /// RAM, for a linear framebuffer: the guest writes it without exiting and
+    /// [`Self::read_framebuffer`] reads the same bytes. Must follow
+    /// `create_vm` and precede the first run.
+    ///
+    /// # Errors
+    ///
+    /// A backend that cannot map one says so; the default does.
+    async fn attach_framebuffer(&self, gpa: u64, size: u64) -> Result<()> {
+        let _ = (gpa, size);
+        Err(Error::VM(format!(
+            "the {} backend cannot map a framebuffer",
+            self.platform()
+        )))
+    }
+
+    /// Copy the first `len` bytes of the attached framebuffer.
+    async fn read_framebuffer(&self, len: u64) -> Result<Vec<u8>> {
+        let _ = len;
+        Err(Error::VM(format!(
+            "the {} backend has no framebuffer",
+            self.platform()
+        )))
+    }
+
     /// Initialize the hypervisor
     async fn init(&mut self) -> Result<()>;
 

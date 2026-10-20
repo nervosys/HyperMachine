@@ -610,6 +610,31 @@ pub struct IoOutcome {
     pub interrupt: Option<u8>,
 }
 
+/// What [`VM::screendump`] returns: a copy of the guest's framebuffer.
+///
+/// A pixel is `bits_per_pixel` wide; a channel is `(shift, size)` in bits, so
+/// for the usual `XRGB8888` the red byte of pixel (x, y) is at
+/// `bytes[y * pitch + x * 4 + 2]`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Screendump {
+    /// Pixels per row.
+    pub width: u32,
+    /// Rows.
+    pub height: u32,
+    /// Bytes from one row to the next.
+    pub pitch: u32,
+    /// Bits per pixel.
+    pub bits_per_pixel: u8,
+    /// Red channel: `(shift, size)` in bits.
+    pub red: (u8, u8),
+    /// Green channel.
+    pub green: (u8, u8),
+    /// Blue channel.
+    pub blue: (u8, u8),
+    /// `pitch * height` bytes.
+    pub bytes: Vec<u8>,
+}
+
 /// Virtual Machine
 pub struct VM {
     config: VMConfig,
@@ -630,6 +655,9 @@ pub struct VM {
     virtio_mmio_windows: parking_lot::Mutex<Vec<crate::boot::acpi_tables::MmioDevice>>,
     /// Set by [`VM::use_hw_reduced_acpi`].
     hw_reduced_acpi: std::sync::atomic::AtomicBool,
+    /// The linear framebuffer to map at provisioning, if one was asked for
+    /// with [`VM::attach_framebuffer`].
+    framebuffer: parking_lot::Mutex<Option<crate::boot::multiboot::FramebufferInfo>>,
     /// Each PCI device attached and the interrupt input it raises, for the
     /// routing table a firmware-booted guest is given.
     pci_intx: parking_lot::Mutex<Vec<crate::boot::acpi_tables::PciIntx>>,
@@ -890,6 +918,7 @@ impl VM {
             extra_cmdline: parking_lot::Mutex::new(Vec::new()),
             virtio_mmio_windows: parking_lot::Mutex::new(Vec::new()),
             hw_reduced_acpi: std::sync::atomic::AtomicBool::new(false),
+            framebuffer: parking_lot::Mutex::new(None),
             pci_intx: parking_lot::Mutex::new(Vec::new()),
             powered_off: Arc::new(AtomicBool::new(false)),
             pci_root: Arc::new(parking_lot::RwLock::new(crate::pci::PciRootComplex::new())),
@@ -983,6 +1012,20 @@ impl VM {
                 // The kernel's memory map is built from this and has no other
                 // source: a guest booted this way runs no BIOS to ask.
                 loaded.set_memory_size(self.config.memory_size);
+
+                // A framebuffer is described to the kernel here and mapped
+                // after the partition exists. A protocol that cannot describe
+                // one is an error: mapping memory the guest was never told
+                // about would be a silent no-op.
+                if let Some(fb) = *self.framebuffer.lock() {
+                    if !loaded.set_framebuffer(fb) {
+                        return Err(Error::VM(format!(
+                            "VM '{}': a framebuffer needs a Multiboot kernel, this is {}",
+                            self.config.name,
+                            loaded.protocol()
+                        )));
+                    }
+                }
 
                 // Devices attached after the boot source was described get
                 // their arguments on now. Without this a caller has to attach a
@@ -1136,6 +1179,16 @@ impl VM {
                 "VM '{}': device model now shares the backend's guest pages at {host_addr:#x}",
                 self.config.name
             );
+        }
+
+        // Map the framebuffer now that the backend has a partition and before
+        // anything runs: the guest writes it with plain stores, and a store to
+        // an unmapped address is an MMIO exit that is dropped.
+        let framebuffer = *self.framebuffer.lock();
+        if let Some(fb) = framebuffer {
+            self.backend
+                .attach_framebuffer(fb.addr, fb.size_bytes())
+                .await?;
         }
 
         tracing::info!(
@@ -2693,6 +2746,92 @@ impl VM {
             .ok_or_else(|| Error::Device("this VM has no keyboard controller".to_string()))?;
         let result = keyboard.write().await.console_input(scancodes);
         result
+    }
+
+    /// Give the guest a linear framebuffer: `width` x `height` pixels of
+    /// `XRGB8888` (bytes B, G, R, X in memory), rows packed, at guest address
+    /// `gpa`. It is host memory mapped into the guest outside RAM, so the guest
+    /// draws with ordinary stores and no VM exits, and [`VM::screendump`]
+    /// reads the same bytes.
+    ///
+    /// The guest is told through the Multiboot information structure (flag bit
+    /// 12), so the kernel must be booted by Multiboot; provisioning refuses
+    /// anything else. Must be called before provisioning.
+    ///
+    /// `gpa` must be page aligned, above this VM's RAM and below 4 GiB, and
+    /// clear of the devices' windows: `0xFD00_0000` is the usual choice.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::VM`] for a size or address that cannot work, or if the VM is
+    /// already provisioned.
+    pub fn attach_framebuffer(&self, width: u32, height: u32, gpa: u64) -> Result<()> {
+        use crate::boot::multiboot::FramebufferInfo;
+
+        if self.hv_vm.read().is_some() {
+            return Err(Error::VM(
+                "a framebuffer must be attached before the VM is provisioned".into(),
+            ));
+        }
+        if width == 0 || height == 0 || width > 8192 || height > 8192 {
+            return Err(Error::VM(format!(
+                "framebuffer {width}x{height}: each side must be 1 to 8192 pixels"
+            )));
+        }
+        let fb = FramebufferInfo::xrgb8888(gpa, width, height);
+        let end = gpa.saturating_add(fb.size_bytes());
+        let windows: [(u64, u64, &str); 3] = [
+            (0xD000_0000, 0xE000_0000, "the virtio and PCI windows"),
+            (0xFEC0_0000, 0xFEC0_1000, "the I/O APIC"),
+            (0xFEE0_0000, 0xFEE0_1000, "the local APIC"),
+        ];
+        if !gpa.is_multiple_of(4096) {
+            return Err(Error::VM(format!(
+                "framebuffer at {gpa:#x} is not page aligned"
+            )));
+        }
+        if gpa < self.config.memory_size.max(crate::memory::RAM_HOLE_START) || end > 1 << 32 {
+            return Err(Error::VM(format!(
+                "framebuffer {gpa:#x}..{end:#x} must lie above RAM and the {:#x} hole start,                  and below 4 GiB",
+                crate::memory::RAM_HOLE_START
+            )));
+        }
+        if let Some((_, _, what)) = windows.iter().find(|(lo, hi, _)| gpa < *hi && end > *lo) {
+            return Err(Error::VM(format!(
+                "framebuffer {gpa:#x}..{end:#x} overlaps {what}"
+            )));
+        }
+        *self.framebuffer.lock() = Some(fb);
+        Ok(())
+    }
+
+    /// The framebuffer as the guest has drawn it so far: raw bytes plus the
+    /// layout needed to read them.
+    ///
+    /// The guest keeps drawing while this reads, so a frame it is in the middle
+    /// of can be seen half done. Lossless: PPM or PNG is the caller's job.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::VM`] if no framebuffer was attached or the VM is not
+    /// provisioned.
+    pub async fn screendump(&self) -> Result<Screendump> {
+        let fb = (*self.framebuffer.lock())
+            .ok_or_else(|| Error::VM("this VM has no framebuffer".into()))?;
+        if self.hv_vm.read().is_none() {
+            return Err(Error::VM("the VM is not provisioned".into()));
+        }
+        let bytes = self.backend.read_framebuffer(fb.size_bytes()).await?;
+        Ok(Screendump {
+            width: fb.width,
+            height: fb.height,
+            pitch: fb.pitch,
+            bits_per_pixel: fb.bpp,
+            red: fb.red,
+            green: fb.green,
+            blue: fb.blue,
+            bytes,
+        })
     }
 
     /// Console output per device, as raw bytes, without consuming it.

@@ -1287,6 +1287,26 @@ impl HypervisorBackend for KvmBackend {
         })
     }
 
+    async fn attach_framebuffer(&self, gpa: u64, size: u64) -> Result<()> {
+        let vm = self
+            .vm
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .ok_or_else(|| Error::Hypervisor("create_vm must run before a framebuffer".into()))?;
+        vm.attach_framebuffer(gpa, size)
+    }
+
+    async fn read_framebuffer(&self, len: u64) -> Result<Vec<u8>> {
+        let vm = self
+            .vm
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .ok_or_else(|| Error::Hypervisor("no KVM VM".into()))?;
+        vm.read_framebuffer(len)
+    }
+
     async fn set_irq_line(&self, irq: u32, level: bool) -> Result<()> {
         let kvm_vm = self
             .vm
@@ -1352,6 +1372,9 @@ pub struct KvmVm {
     /// layers below whoever made the choice. See
     /// [`KvmVcpu::inject_interrupt`].
     irqchip_in_kernel: bool,
+    /// A linear framebuffer mapped outside RAM: host address and size.
+    /// `munmap`ed in Drop; the slot is dropped with the VM fd.
+    framebuffer: std::sync::Mutex<Option<(usize, u64)>>,
 }
 
 /// Transparent huge page size on x86-64.
@@ -1538,6 +1561,7 @@ impl KvmVm {
                 vcpus: RwLock::new(Vec::new()),
                 run_mmap_size,
                 irqchip_in_kernel,
+                framebuffer: std::sync::Mutex::new(None),
             })
         }
     }
@@ -1889,6 +1913,76 @@ impl KvmVm {
         }
     }
 
+    /// Memory slot for the framebuffer: slots 0 and 1 are RAM.
+    const FRAMEBUFFER_SLOT: u32 = 2;
+
+    /// Map `size` bytes of fresh anonymous host memory into the guest at
+    /// `gpa`, outside RAM, so the guest draws without exits and
+    /// [`Self::read_framebuffer`] reads the same bytes.
+    ///
+    /// # Errors
+    ///
+    /// If the range is not page aligned, overlaps RAM, a framebuffer is
+    /// already attached, or the kernel refuses the mapping.
+    pub fn attach_framebuffer(&self, gpa: u64, size: u64) -> Result<()> {
+        if size == 0 || !gpa.is_multiple_of(4096) || !size.is_multiple_of(4096) {
+            return Err(Error::Memory(format!(
+                "framebuffer {gpa:#x}+{size:#x} must be page aligned and non-empty"
+            )));
+        }
+        if gpa < self.memory_size.min(crate::memory::RAM_HOLE_START) {
+            return Err(Error::Memory(format!(
+                "framebuffer at {gpa:#x} overlaps RAM"
+            )));
+        }
+        let mut slot = self.framebuffer.lock().unwrap_or_else(|e| e.into_inner());
+        if slot.is_some() {
+            return Err(Error::Memory("a framebuffer is already attached".into()));
+        }
+        // SAFETY: an anonymous private mapping of `size` bytes; the result is
+        // checked, handed to KVM, and unmapped only in Drop.
+        unsafe {
+            let ptr = libc::mmap(
+                std::ptr::null_mut(),
+                size as usize,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+                -1,
+                0,
+            );
+            if ptr == libc::MAP_FAILED {
+                return Err(Error::Memory(format!(
+                    "failed to allocate the framebuffer: {}",
+                    std::io::Error::last_os_error()
+                )));
+            }
+            if let Err(e) =
+                self.map_memory_with_flags(Self::FRAMEBUFFER_SLOT, gpa, size, ptr as u64, 0)
+            {
+                libc::munmap(ptr, size as usize);
+                return Err(e);
+            }
+            *slot = Some((ptr as usize, size));
+        }
+        Ok(())
+    }
+
+    /// Copy the first `len` bytes of the attached framebuffer. The guest keeps
+    /// writing while this reads, so a frame it is drawing can be seen half
+    /// done.
+    pub fn read_framebuffer(&self, len: u64) -> Result<Vec<u8>> {
+        let slot = self.framebuffer.lock().unwrap_or_else(|e| e.into_inner());
+        let (ptr, size) = slot
+            .as_ref()
+            .ok_or_else(|| Error::Memory("no framebuffer is attached".into()))?;
+        let len = len.min(*size) as usize;
+        let mut out = vec![0u8; len];
+        // SAFETY: `ptr` is a live mapping of `size` bytes, unmapped only in
+        // Drop (which needs `&mut self`); `len <= size`.
+        unsafe { std::ptr::copy_nonoverlapping(*ptr as *const u8, out.as_mut_ptr(), len) };
+        Ok(out)
+    }
+
     /// Get the VM file descriptor
     #[must_use]
     pub fn vm_fd(&self) -> RawFd {
@@ -1915,8 +2009,17 @@ impl Drop for KvmVm {
                 libc::munmap(ptr.as_ptr() as *mut libc::c_void, self.memory_size as usize);
             }
 
-            // Close VM fd
+            // Close the VM fd first so KVM lets go of the framebuffer's pages,
+            // then unmap them.
+            let framebuffer = self
+                .framebuffer
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take();
             libc::close(self.vm_fd);
+            if let Some((ptr, size)) = framebuffer {
+                libc::munmap(ptr as *mut libc::c_void, size as usize);
+            }
         }
     }
 }

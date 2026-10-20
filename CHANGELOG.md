@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A VM can have a linear framebuffer: `VM::attach_framebuffer(width, height,
+  gpa)` before provisioning maps host memory into the guest outside RAM
+  (`XRGB8888`, rows packed), so a guest draws with plain stores and no VM exits,
+  and `VM::screendump()` returns the raw bytes with width, height, pitch and the
+  channel shifts. The guest is told through the Multiboot information structure
+  (flag bit 12, fields at offsets 88-115); a kernel not booted by Multiboot is
+  refused. A guest read the address and size from the info, drew the first and
+  last pixels, and the host read them back exactly, on WHPX and on KVM; the test
+  fails when the buffer is mapped at the wrong address. Not done: a graphics mode
+  the kernel's header asks for is ignored (the size is the caller's), the
+  framebuffer is not in snapshots, and a frame read while the guest draws can be
+  half done. `MultibootInfo` gained a `framebuffer` field.
 - `VM::send_key(&[u8])` sends PS/2 set-1 scancodes (a press is `0x1E`, its
   release `0x9E`, extended keys carry `0xE0`) to the guest's keyboard
   controller; up to 16 bytes at once, all or nothing. On WHPX and HVF the

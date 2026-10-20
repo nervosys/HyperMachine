@@ -298,6 +298,7 @@ async fn test_multiboot_validation() -> Result<()> {
         modules: Vec::new(),
         cmdline: "root=/dev/sda1".to_string(),
         memory_map: vec![(0, 640 * 1024), (1024 * 1024, 127 * 1024 * 1024)],
+        framebuffer: None,
     };
 
     // Validate

@@ -45,6 +45,7 @@
 //!     modules: Vec::new(),
 //!     cmdline: "root=/dev/sda1".to_string(),
 //!     memory_map: vec![(0, 640 * 1024), (1024 * 1024, 63 * 1024 * 1024)],
+//!     framebuffer: None,
 //! };
 //!
 //! // The layout says where the kernel and its information structure go; the

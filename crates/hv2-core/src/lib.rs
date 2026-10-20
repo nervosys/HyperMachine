@@ -381,7 +381,7 @@ pub use usb::{
     UsbMouse, UsbSpeed, UsbTablet, XhciController, XhciPort,
 };
 pub use vcpu::{ControlRegisters, RegisterSet, VCpu, VCpuState};
-pub use vm::{VMConfig, VMState, VM};
+pub use vm::{Screendump, VMConfig, VMState, VM};
 
 /// Version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

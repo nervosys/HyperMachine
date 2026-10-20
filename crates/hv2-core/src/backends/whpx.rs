@@ -366,6 +366,23 @@ impl HypervisorBackend for WhpxBackend {
         whpx_vcpu.kick()
     }
 
+    async fn attach_framebuffer(&self, gpa: u64, size: u64) -> Result<()> {
+        let vm =
+            self.vm.read().clone().ok_or_else(|| {
+                Error::VM("create_vm must run before a framebuffer is mapped".into())
+            })?;
+        vm.attach_framebuffer(gpa, size)
+    }
+
+    async fn read_framebuffer(&self, len: u64) -> Result<Vec<u8>> {
+        let vm = self
+            .vm
+            .read()
+            .clone()
+            .ok_or_else(|| Error::VM("no WHPX partition".into()))?;
+        vm.read_framebuffer(len)
+    }
+
     async fn interrupts_deliverable(&self, vcpu: &VCpu) -> Result<bool> {
         let vcpu_id = vcpu.id();
         let whpx_vcpu = {
@@ -514,6 +531,9 @@ pub struct WhpxVm {
     io_handlers: RwLock<std::collections::HashMap<u16, Arc<IoPortHandler>>>,
     /// MMIO handlers (address range start -> (end, handler))
     mmio_handlers: RwLock<std::collections::BTreeMap<u64, (u64, Arc<MmioHandler>)>>,
+    /// A linear framebuffer mapped outside RAM: host pointer (as an address),
+    /// guest address and size. Freed after the partition, like RAM.
+    framebuffer: RwLock<Option<(usize, u64, u64)>>,
 }
 
 impl WhpxVm {
@@ -624,8 +644,103 @@ impl WhpxVm {
                 vcpus: RwLock::new(Vec::new()),
                 io_handlers: RwLock::new(std::collections::HashMap::new()),
                 mmio_handlers: RwLock::new(std::collections::BTreeMap::new()),
+                framebuffer: RwLock::new(None),
             })
         }
+    }
+
+    /// Map `size` bytes of fresh zeroed host memory into the guest at `gpa`,
+    /// outside RAM, so the guest writes it without leaving the hypervisor
+    /// (a framebuffer: an MMIO region would exit on every store).
+    ///
+    /// # Errors
+    ///
+    /// If the range is not page aligned, overlaps RAM, a framebuffer is
+    /// already attached, or the hypervisor refuses the mapping.
+    #[cfg(target_os = "windows")]
+    pub fn attach_framebuffer(&self, gpa: u64, size: u64) -> Result<()> {
+        if size == 0 || !gpa.is_multiple_of(4096) || !size.is_multiple_of(4096) {
+            return Err(Error::Memory(format!(
+                "framebuffer {gpa:#x}+{size:#x} must be page aligned and non-empty"
+            )));
+        }
+        if gpa < self.memory_size {
+            return Err(Error::Memory(format!(
+                "framebuffer at {gpa:#x} overlaps RAM (0..{:#x})",
+                self.memory_size
+            )));
+        }
+        let mut slot = self.framebuffer.write();
+        if slot.is_some() {
+            return Err(Error::Memory("a framebuffer is already attached".into()));
+        }
+        let layout = std::alloc::Layout::from_size_align(size as usize, 4096)
+            .map_err(|e| Error::Memory(format!("invalid framebuffer layout: {e}")))?;
+        // SAFETY: the layout is non-zero sized; a null result is checked. The
+        // pointer is mapped, then owned by `framebuffer` until Drop.
+        unsafe {
+            let ptr = std::alloc::alloc_zeroed(layout);
+            if ptr.is_null() {
+                return Err(Error::Memory("failed to allocate the framebuffer".into()));
+            }
+            // The same bounded retry as RAM: 0xC0370008 while the hypervisor
+            // still holds a recycled block.
+            let mut attempts = 0;
+            let hr = loop {
+                let hr = WHvMapGpaRange(
+                    self.partition,
+                    ptr as *const VOID,
+                    gpa,
+                    size,
+                    WHvMapGpaRangeFlagRead | WHvMapGpaRangeFlagWrite,
+                );
+                if hr as u32 != 0xC037_0008 || attempts >= 50 {
+                    break hr;
+                }
+                attempts += 1;
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            };
+            if hr != S_OK {
+                std::alloc::dealloc(ptr, layout);
+                return Err(Error::VM(format!(
+                    "failed to map the framebuffer at {gpa:#x}: HRESULT 0x{hr:08X}"
+                )));
+            }
+            *slot = Some((ptr as usize, gpa, size));
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn attach_framebuffer(&self, _gpa: u64, _size: u64) -> Result<()> {
+        Err(Error::VM(
+            "WHPX backend is only available on Windows".into(),
+        ))
+    }
+
+    /// Copy the first `len` bytes of the attached framebuffer.
+    ///
+    /// The guest keeps writing while this reads, so a frame it is drawing can
+    /// be seen half done; each byte is a plain load.
+    #[cfg(target_os = "windows")]
+    pub fn read_framebuffer(&self, len: u64) -> Result<Vec<u8>> {
+        let slot = self.framebuffer.read();
+        let (ptr, _, size) = slot
+            .as_ref()
+            .ok_or_else(|| Error::Memory("no framebuffer is attached".into()))?;
+        let len = len.min(*size) as usize;
+        let mut out = vec![0u8; len];
+        // SAFETY: `ptr` is a live allocation of `size` bytes owned by this VM
+        // (freed only in Drop, which needs `&mut self`); `len <= size`.
+        unsafe { std::ptr::copy_nonoverlapping(*ptr as *const u8, out.as_mut_ptr(), len) };
+        Ok(out)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn read_framebuffer(&self, _len: u64) -> Result<Vec<u8>> {
+        Err(Error::VM(
+            "WHPX backend is only available on Windows".into(),
+        ))
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -999,7 +1114,23 @@ impl Drop for WhpxVm {
                 }
             }
 
+            let framebuffer = self.framebuffer.write().take();
+            if let Some((_, gpa, size)) = framebuffer {
+                let hr = WHvUnmapGpaRange(self.partition, gpa, size);
+                if hr != 0 {
+                    tracing::warn!(
+                        hresult = hr,
+                        "WHvUnmapGpaRange (framebuffer) failed during Drop"
+                    );
+                }
+            }
+
             WHvDeletePartition(self.partition);
+
+            if let Some((ptr, _, size)) = framebuffer {
+                let layout = std::alloc::Layout::from_size_align_unchecked(size as usize, 4096);
+                std::alloc::dealloc(ptr as *mut u8, layout);
+            }
 
             if let Some(ptr) = self.guest_memory {
                 let layout =
@@ -4744,6 +4875,7 @@ impl WhpxVcpu {
     ///     modules: vec![],
     ///     cmdline: "--test".to_string(),
     ///     memory_map: vec![(0, 640 * 1024), (1024 * 1024, 127 * 1024 * 1024)],
+    ///     framebuffer: None,
     /// };
     ///
     /// let vm = WhpxVm::new(1, 16 * 1024 * 1024)?;
@@ -5816,6 +5948,7 @@ mod tests {
                 (0, 640 * 1024),                  // Lower memory
                 (1024 * 1024, 127 * 1024 * 1024), // Upper memory
             ],
+            framebuffer: None,
         };
 
         if let Ok(_backend) = WhpxBackend::new() {
@@ -5894,6 +6027,7 @@ mod tests {
             modules: vec![module1, module2],
             cmdline: "--test --modules".to_string(),
             memory_map: vec![(0, 640 * 1024), (1024 * 1024, 127 * 1024 * 1024)],
+            framebuffer: None,
         };
 
         if let Ok(_backend) = WhpxBackend::new() {
