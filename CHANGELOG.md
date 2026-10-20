@@ -35,6 +35,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   program starts, the bounding set included.
 
 ### Fixed
+- A guest on WHPX or HVF had no interval timer. The legacy machine attached
+  COM1, the RTC and the keyboard controller but no PIT, so a kernel's writes to
+  ports 0x40-0x43 hit an unhandled port and its IRQ 0 never came; one that did
+  STI and HLT to wait for a tick waited forever. A PIT is now attached off KVM
+  (KVM keeps its in-kernel one). The PIT also ignored the divisor a guest
+  programmed and ticked at a fixed 18.2 Hz; it now follows it (divisor 11932 is
+  about 100 Hz), re-timing at once when the counter is written. A pending
+  vector is injected only when the guest's interrupt flag is set and there is no
+  interrupt shadow, and WHPX asks Windows for 1 ms timer resolution so a 10 ms
+  tick is not rounded to 15.6 ms. A 32-bit guest that programs the 8259 and PIT
+  and halts counts 20 ticks in about 204 ms on WHPX and 201 ms on KVM, and the
+  test fails without the change. Mode 3 (square wave) still fires at half its
+  rate; mode 2, which Linux and Botnix use, is exact.
 - A Multiboot guest was told it had 127 MiB above 1 MiB whatever the VM's
   memory size, so a guest that trusted `mem_upper` or the memory map would use
   memory that does not exist. The map and `mem_upper` now come from the VM's

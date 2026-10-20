@@ -68,6 +68,29 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 
+/// Ask Windows for 1 ms timer resolution, once for the process.
+///
+/// The default is about 15.6 ms. Every wait the VMM makes -- the halted vCPU's
+/// 1 ms sleep, the PIT task's deadlines -- is rounded up to it, so a guest
+/// that programs a 10 ms timer tick gets about 64 interrupts a second instead
+/// of 100 (measured from a guest that counted them). Emulators do the same.
+/// The request lasts until the process exits; it is never undone because the
+/// next VM needs it and a process holding a WHPX partition is a VMM.
+#[cfg(target_os = "windows")]
+fn raise_timer_resolution() {
+    #[link(name = "winmm")]
+    extern "system" {
+        fn timeBeginPeriod(period_ms: u32) -> u32;
+    }
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        // SAFETY: timeBeginPeriod takes a plain integer and has no
+        // preconditions; a non-zero return means the period is unsupported,
+        // which only leaves the default resolution in place.
+        let _ = unsafe { timeBeginPeriod(1) };
+    });
+}
+
 /// WHPX hypervisor backend
 ///
 /// This backend uses the Windows Hypervisor Platform (WHPX) API
@@ -125,6 +148,7 @@ impl WhpxBackend {
     /// - Hardware virtualization is not supported
     #[cfg(target_os = "windows")]
     pub fn new() -> Result<Self> {
+        raise_timer_resolution();
         // SAFETY: WHvGetCapability is a well-defined Windows Hypervisor Platform FFI call.
         // We pass a properly-sized zeroed buffer and check the HRESULT before using the result.
         unsafe {
@@ -340,6 +364,17 @@ impl HypervisorBackend for WhpxBackend {
                 .ok_or_else(|| Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id)))?
         };
         whpx_vcpu.kick()
+    }
+
+    async fn interrupts_deliverable(&self, vcpu: &VCpu) -> Result<bool> {
+        let vcpu_id = vcpu.id();
+        let whpx_vcpu = {
+            let map = self.vcpu_map.read();
+            map.get(&vcpu_id)
+                .cloned()
+                .ok_or_else(|| Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id)))?
+        };
+        whpx_vcpu.interrupts_deliverable()
     }
 
     async fn inject_interrupt(&self, vcpu: &VCpu, vector: u8) -> Result<()> {
@@ -2252,6 +2287,30 @@ impl WhpxVcpu {
         }
 
         Ok(enabled)
+    }
+
+    /// Whether an external interrupt would be taken now: RFLAGS.IF set and no
+    /// interrupt shadow. See `HypervisorBackend::interrupts_deliverable`.
+    #[cfg(target_os = "windows")]
+    pub fn interrupts_deliverable(&self) -> Result<bool> {
+        use super::whpx_ffi::*;
+
+        let regs = self.get_registers(&[
+            WHV_REGISTER_NAME::WHvX64RegisterRflags,
+            WHV_REGISTER_NAME::WHvX64RegisterInterruptState,
+        ])?;
+        // SAFETY: RFLAGS is a 64-bit register and the interrupt state is the
+        // register-sized bitfield `InterruptState`; both were just read.
+        let (rflags, shadow) =
+            unsafe { (regs[0].Reg64, regs[1].InterruptState.interrupt_shadow()) };
+        Ok(rflags & (1 << 9) != 0 && !shadow)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn interrupts_deliverable(&self) -> Result<bool> {
+        Err(Error::VM(
+            "WHPX backend is only available on Windows".into(),
+        ))
     }
 
     /// Inject an interrupt into the vCPU

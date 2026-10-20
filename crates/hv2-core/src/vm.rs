@@ -1072,6 +1072,28 @@ impl VM {
                      control port as every bit set, sleep-enable included",
                 ));
             }
+            // The interval timer, where the hypervisor does not provide one.
+            // KVM is asked for an in-kernel PIT and the guest's port 0x40-0x43
+            // accesses never leave the kernel; WHPX and HVF have none, so
+            // without this the guest's programming of the PIT hit an unhandled
+            // port, nothing ever raised IRQ 0, and a kernel that did STI and
+            // HLT to wait for its tick waited forever.
+            if self.backend.executes_guest_code()
+                && self.backend.platform() != crate::hypervisor::HypervisorPlatform::Kvm
+            {
+                let mut pit = crate::devices::TimerDevice::new("PIT".to_string(), 0x40);
+                pit.set_pic(Arc::clone(&self.pic));
+                machine = machine.with_device(
+                    crate::machine::MachineDevice::new(
+                        "PIT",
+                        Arc::new(tokio::sync::RwLock::new(pit)),
+                        0x40,
+                        0x43,
+                        "no PIT means a kernel's timer programming hits an absent port and its                          tick never comes",
+                    )
+                    .with_irq(0),
+                );
+            }
             machine.attach_absent(&self.devices).await?;
         }
 
@@ -4711,7 +4733,11 @@ impl VM {
     ) -> Result<()> {
         tracing::debug!("HLT: vCPU {} halted, checking for interrupts", vcpu.id());
 
-        if let Some(vector) = pic.get_pending_interrupt() {
+        // A guest that halted with interrupts masked is not woken by one; the
+        // vector stays pending until it enables them.
+        let deliverable = backend.interrupts_deliverable(vcpu).await?;
+        let pending = pic.get_pending_interrupt().filter(|_| deliverable);
+        if let Some(vector) = pending {
             tracing::debug!("Injecting pending interrupt: vector {:#x}", vector);
             backend.inject_interrupt(vcpu, vector).await?;
             pic.acknowledge_interrupt(vector)?;
@@ -4739,7 +4765,9 @@ impl VM {
     ) -> Result<()> {
         tracing::debug!("Interrupt window opened for vCPU {}", vcpu.id());
 
-        if let Some(vector) = pic.get_pending_interrupt() {
+        let deliverable = backend.interrupts_deliverable(vcpu).await?;
+        let pending = pic.get_pending_interrupt().filter(|_| deliverable);
+        if let Some(vector) = pending {
             tracing::debug!("Injecting interrupt: vector {:#x}", vector);
             backend.inject_interrupt(vcpu, vector).await?;
             pic.acknowledge_interrupt(vector)?;

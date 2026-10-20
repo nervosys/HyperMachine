@@ -236,6 +236,17 @@ pub trait HypervisorBackend: Send + Sync {
         true
     }
 
+    /// Whether the guest could take an external interrupt right now: RFLAGS.IF
+    /// set and no interrupt shadow (the instruction after STI or MOV SS).
+    ///
+    /// Injecting an event ignores the guest's interrupt flag, so a caller that
+    /// injects whenever a device has a vector pending delivers it into code
+    /// that has interrupts masked. Backends that cannot read the state say
+    /// `true`, which is what every caller did before this was asked.
+    async fn interrupts_deliverable(&self, _vcpu: &VCpu) -> Result<bool> {
+        Ok(true)
+    }
+
     /// Initialize the hypervisor
     async fn init(&mut self) -> Result<()>;
 

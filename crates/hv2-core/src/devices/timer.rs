@@ -37,6 +37,14 @@ impl PitMode {
     }
 }
 
+/// The PIT's input clock in hertz.
+const PIT_HZ: u64 = 1_193_182;
+
+/// How long `ticks` PIT clock cycles take.
+fn pit_duration(ticks: u64) -> Duration {
+    Duration::from_nanos(ticks * 1_000_000_000 / PIT_HZ)
+}
+
 /// PIT channel state
 struct PitChannel {
     /// Reload value
@@ -112,7 +120,21 @@ impl PitChannel {
         }
 
         // PIT frequency is 1.193182 MHz
-        let ticks = (elapsed.as_micros() as u64 * 1193182) / 1_000_000;
+        let ticks = (elapsed.as_micros() as u64 * PIT_HZ) / 1_000_000;
+        self.advance_ticks(ticks)
+    }
+
+    /// Update the counter by exactly `ticks` PIT clock cycles. Returns `true`
+    /// when the channel fires.
+    ///
+    /// The periodic task steps by whole reload periods in these units. Going
+    /// through microseconds truncated a 10 ms period (11932 ticks) to 11931,
+    /// so a rate generator programmed for 100 Hz missed its terminal count
+    /// every time and fired at half the rate.
+    fn advance_ticks(&mut self, ticks: u64) -> bool {
+        if !self.gate || !self.active {
+            return false;
+        }
         if ticks == 0 {
             return false;
         }
@@ -201,6 +223,19 @@ impl PitChannel {
         }
     }
 
+    /// PIT clock cycles between this channel's terminal counts: the reload
+    /// value, where 0 means 65536. Held to between 1 ms and the 54.9 ms a
+    /// power-on channel takes, so a guest programming a tiny divisor cannot
+    /// spin the host and a large one cannot starve a later reprogramming.
+    fn period_ticks(&self) -> u64 {
+        let reload = if self.reload_value == 0 {
+            65_536
+        } else {
+            u64::from(self.reload_value)
+        };
+        reload.clamp(PIT_HZ / 1000, 65_536)
+    }
+
     fn read_count(&mut self) -> u16 {
         self.update_count();
         self.latch.unwrap_or(self.count)
@@ -237,6 +272,8 @@ pub struct TimerDevice {
     pic: Option<Arc<Pic8259>>,
     /// Timer task running flag
     timer_running: Arc<AtomicBool>,
+    /// Woken when the guest writes a counter or control word
+    reprogrammed: Arc<tokio::sync::Notify>,
 }
 
 impl TimerDevice {
@@ -255,6 +292,7 @@ impl TimerDevice {
             total_ticks: Arc::new(AtomicU64::new(0)),
             pic: None,
             timer_running: Arc::new(AtomicBool::new(false)),
+            reprogrammed: Arc::new(tokio::sync::Notify::new()),
         }
     }
 
@@ -264,7 +302,16 @@ impl TimerDevice {
         self.start_timer_task();
     }
 
-    /// Start background timer task that generates interrupts at 18.2 Hz
+    /// Start the background task that raises IRQ 0 each time channel 0 reaches
+    /// its terminal count.
+    ///
+    /// The step is the channel's own reload period, so a guest that programs
+    /// divisor 11932 gets about 100 Hz and a channel nobody has programmed
+    /// keeps the 18.2 Hz of a power-on reset. Deadlines are kept as absolute
+    /// times (`next += period`) rather than "now + period", which is what stops
+    /// the timer's rounding to the host clock's granularity from accumulating.
+    /// A guest writing the counter wakes the task, so a new divisor takes
+    /// effect after one period of it and not after the old, longer one.
     fn start_timer_task(&self) {
         // Only start if not already running
         if self.timer_running.swap(true, Ordering::Relaxed) {
@@ -275,31 +322,40 @@ impl TimerDevice {
         let pic = self.pic.as_ref().map(Arc::clone);
         let total_ticks = Arc::clone(&self.total_ticks);
         let running = Arc::clone(&self.timer_running);
-
-        // 18.2 Hz = 54.925 ms period
-        let interval_micros = 54925;
-        let period = Duration::from_micros(interval_micros);
+        let reprogrammed = Arc::clone(&self.reprogrammed);
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(period);
-            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            // The first step is immediate, as an interval's first tick is.
+            let mut next = tokio::time::Instant::now();
 
             while running.load(Ordering::Relaxed) {
-                interval.tick().await;
+                tokio::select! {
+                    () = tokio::time::sleep_until(next) => {}
+                    () = reprogrammed.notified() => {
+                        let step = channels.lock()[0].period_ticks();
+                        next = tokio::time::Instant::now() + pit_duration(step);
+                        continue;
+                    }
+                }
 
                 // Advance by the period, not by however long the executor took
                 // to deliver the tick. The guest's timer should measure guest
                 // time; measuring scheduling delay instead is how an emulated
                 // PIT ends up reporting the host's load.
-                let mut chans = channels.lock();
-                if chans[0].advance_by(period) {
-                    total_ticks.fetch_add(1, Ordering::Relaxed);
+                let step = {
+                    let mut chans = channels.lock();
+                    let step = chans[0].period_ticks();
+                    if chans[0].advance_ticks(step) {
+                        total_ticks.fetch_add(1, Ordering::Relaxed);
 
-                    // Raise IRQ 0 if PIC available
-                    if let Some(ref pic) = pic {
-                        let _ = pic.raise_irq(0);
+                        // Raise IRQ 0 if PIC available
+                        if let Some(ref pic) = pic {
+                            let _ = pic.raise_irq(0);
+                        }
                     }
-                }
+                    step
+                };
+                next += pit_duration(step);
             }
         });
     }
@@ -389,6 +445,12 @@ impl TimerDevice {
 
     /// Write one byte-wide register.
     fn write_register(&self, offset: u64, byte: u8) {
+        self.write_register_locked(offset, byte);
+        // After the lock is released: the task takes it to read the new period.
+        self.reprogrammed.notify_one();
+    }
+
+    fn write_register_locked(&self, offset: u64, byte: u8) {
         let mut channels = self.channels.lock();
 
         match offset {
@@ -620,6 +682,33 @@ mod tests {
             "the PIT should tick 19 times in this virtual second"
         );
 
+        timer.stop_timer_task();
+    }
+
+    /// A guest that programs divisor 11932 in mode 2 -- what Botnix does -- gets
+    /// about 100 interrupts a second, not the 18.2 a power-on channel makes.
+    #[tokio::test(start_paused = true)]
+    async fn a_programmed_divisor_sets_the_tick_rate() {
+        let pic = Arc::new(Pic8259::new());
+        let mut timer = TimerDevice::new("PIT".to_string(), 0x40);
+        timer.set_pic(Arc::clone(&pic));
+        tokio::time::sleep(Duration::from_millis(1)).await;
+
+        // OUT 0x43,0x34 ; OUT 0x40,0x9C ; OUT 0x40,0x2E  (divisor 0x2E9C = 11932)
+        timer.write(3, &[0x34]).await.unwrap();
+        timer.write(0, &[0x9C]).await.unwrap();
+        timer.write(0, &[0x2E]).await.unwrap();
+        tokio::task::yield_now().await;
+
+        let before = timer.total_ticks();
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let fired = timer.total_ticks() - before;
+
+        // 1 s of virtual time at 11932 / 1.193182 MHz = 10.0003 ms: 99 or 100.
+        assert!(
+            (99..=101).contains(&fired),
+            "divisor 11932 should tick about 100 times a second, got {fired}"
+        );
         timer.stop_timer_task();
     }
 
