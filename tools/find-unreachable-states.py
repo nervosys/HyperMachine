@@ -138,6 +138,12 @@ ACCEPTED = {
         'hm sandbox run --report none: clap builds it from the command line '
         '(ValueEnum), which this script cannot see.'
     ),
+    ('WHV_RUN_VP_EXIT_REASON', 'WHvRunVpExitReasonMemoryAccess'): (
+        'FFI: WHvRunVirtualProcessor writes the exit reason into the exit '
+        'context, so Rust never constructs it. The guard compares the context '
+        'the platform filled in; the linux_whpx_boot root-disk test runs a '
+        'guest whose virtio driver makes MMIO accesses.'
+    ),
     ('WHV_RUN_VP_EXIT_REASON', 'WHvRunVpExitReasonX64IoPortAccess'): (
         'FFI: WHvRunVirtualProcessor writes the exit reason into the exit '
         'context, so Rust never constructs it. The guard compares the context '

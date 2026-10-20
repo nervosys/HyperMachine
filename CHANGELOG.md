@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A root filesystem on a virtio-blk disk over PCI mounts on WHPX
+  (`a_root_filesystem_mounts_from_a_virtio_blk_disk_on_pci`, `HV2_TEST_DISK`:
+  Debian 13's 6.12 kernel and initramfs mount `/dev/vda1` read-only and start
+  systemd in about 1.2 s). Three things were missing, each alone enough to stall
+  it: an MMIO exit now decodes the instruction behind it (`backends/x86_mmio.rs`:
+  `mov`/`movzx`/`movsx`/`movsxd` loads and stores, length computed because WHP
+  reports none) so a load gets the device's answer and RIP steps over the
+  instruction (before, the access carried the instruction's first bytes as data
+  and the guest re-executed it); the device model now shares the partition's RAM
+  (`guest_memory_host_addr`), so a virtio device reads the rings the guest
+  wrote; and the probe stops attaching a second `Machine` whose PCI root is not
+  the VM's. Not handled: `rep movs` and read-modify-write forms (refused with
+  their bytes), RAM above the PCI window (guest RAM is one block at GPA 0), and
+  a guest clock that runs about 15x slow, so a full boot takes minutes.
 - A WHPX guest that goes idle is woken again. `interrupts_deliverable` ignored
   an interruption already queued in the vCPU's single pending-interruption
   slot (injected on an earlier entry, the run cancelled before the guest took

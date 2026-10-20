@@ -366,6 +366,17 @@ impl HypervisorBackend for WhpxBackend {
         whpx_vcpu.kick()
     }
 
+    fn guest_memory_host_addr(&self) -> Option<u64> {
+        // The pages the partition runs the guest in. Without this the device
+        // model keeps a buffer of its own and a virtio device reads rings that
+        // the guest never wrote.
+        self.vm
+            .read()
+            .as_ref()
+            .and_then(|vm| vm.guest_memory)
+            .map(|ptr| ptr as u64)
+    }
+
     async fn attach_framebuffer(&self, gpa: u64, size: u64) -> Result<()> {
         let vm =
             self.vm.read().clone().ok_or_else(|| {
@@ -441,6 +452,17 @@ impl HypervisorBackend for WhpxBackend {
                 .ok_or_else(|| Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id)))?
         };
         whpx_vcpu.set_in_result(data, size)
+    }
+
+    async fn set_mmio_result(&self, vcpu: &VCpu, data: &[u8]) -> Result<()> {
+        let vcpu_id = vcpu.id();
+        let whpx_vcpu = {
+            let map = self.vcpu_map.read();
+            map.get(&vcpu_id)
+                .cloned()
+                .ok_or_else(|| Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id)))?
+        };
+        whpx_vcpu.set_mmio_result(data)
     }
 
     async fn load_boot(&self, vcpu: &VCpu, boot: &crate::boot::source::LoadedBoot) -> Result<()> {
@@ -1298,7 +1320,46 @@ pub struct WhpxVcpu {
     vp_index: u32,
     /// Interrupt delivery statistics
     stats: Arc<RwLock<InterruptStats>>,
+    /// An MMIO load whose device has not answered yet: where the answer goes
+    /// and where the guest resumes once it has.
+    pending_mmio_load: parking_lot::Mutex<Option<PendingMmioLoad>>,
 }
+
+/// An MMIO load waiting for its data. See [`WhpxVcpu::set_mmio_result`].
+#[derive(Debug, Clone, Copy)]
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+struct PendingMmioLoad {
+    index: u8,
+    high8: bool,
+    size: u8,
+    reg_size: u8,
+    extend: super::x86_mmio::Extend,
+    next_rip: u64,
+}
+
+/// The sixteen general registers, in encoding order.
+#[cfg(target_os = "windows")]
+const GPRS: [WHV_REGISTER_NAME; 16] = {
+    use WHV_REGISTER_NAME::*;
+    [
+        WHvX64RegisterRax,
+        WHvX64RegisterRcx,
+        WHvX64RegisterRdx,
+        WHvX64RegisterRbx,
+        WHvX64RegisterRsp,
+        WHvX64RegisterRbp,
+        WHvX64RegisterRsi,
+        WHvX64RegisterRdi,
+        WHvX64RegisterR8,
+        WHvX64RegisterR9,
+        WHvX64RegisterR10,
+        WHvX64RegisterR11,
+        WHvX64RegisterR12,
+        WHvX64RegisterR13,
+        WHvX64RegisterR14,
+        WHvX64RegisterR15,
+    ]
+};
 
 impl WhpxVcpu {
     /// Create a new WHPX vCPU
@@ -1320,6 +1381,7 @@ impl WhpxVcpu {
                 partition,
                 vp_index,
                 stats: Arc::new(RwLock::new(InterruptStats::new())),
+                pending_mmio_load: parking_lot::Mutex::new(None),
             })
         }
     }
@@ -1368,9 +1430,133 @@ impl WhpxVcpu {
                 }
             }
 
+            // An MMIO access leaves RIP on the instruction too, and what the
+            // exit carries is the instruction's bytes, not the data.
+            if exit_context.ExitReason == WHV_RUN_VP_EXIT_REASON::WHvRunVpExitReasonMemoryAccess {
+                return self.memory_access_exit(&exit_context);
+            }
+
             // Convert WHPX exit reason to VmExit
             self.convert_exit(&exit_context)
         }
+    }
+
+    /// Turn a memory-access exit into an MMIO exit by decoding the instruction.
+    ///
+    /// A store has everything it needs now: the value is in a register or an
+    /// immediate, so RIP steps over it here and the exit only reports the
+    /// write. A load cannot finish until the device has answered, so what is
+    /// needed to finish it is kept for [`Self::set_mmio_result`], and RIP stays
+    /// where it is until then.
+    #[cfg(target_os = "windows")]
+    fn memory_access_exit(&self, ctx: &WHV_RUN_VP_EXIT_CONTEXT) -> Result<VmExit> {
+        use super::x86_mmio::{decode, store_bytes, Access, Source};
+
+        // SAFETY: the exit reason is MemoryAccess, so that union field is the
+        // one WHP filled in.
+        let mem = unsafe { &ctx.ExitData.MemoryAccess };
+        let gpa = mem.Gpa;
+        let is_write = match mem.AccessInfo.access_type() {
+            x if x == WHV_MEMORY_ACCESS_TYPE::WHvMemoryAccessRead as u32 => false,
+            x if x == WHV_MEMORY_ACCESS_TYPE::WHvMemoryAccessWrite as u32 => true,
+            other => {
+                return Err(Error::VM(format!(
+                    "unsupported memory access type {other} at {gpa:#x}"
+                )))
+            }
+        };
+
+        let length = usize::from(ctx.VpContext.InstructionLengthAndCr8 & 0x0F);
+        let available = usize::from(mem.InstructionByteCount).min(mem.InstructionBytes.len());
+        let bytes = &mem.InstructionBytes[..available];
+        let refuse = |why: &str| {
+            Error::VM(format!(
+                "cannot emulate the {} at {gpa:#x} (rip {:#x}): {why}; instruction bytes {:02x?}, length {length}",
+                if is_write { "MMIO write" } else { "MMIO read" },
+                ctx.VpContext.Rip,
+                bytes,
+            ))
+        };
+        let decoded = decode(bytes, length)
+            .ok_or_else(|| refuse("not a plain mov, movzx, movsx or movsxd"))?;
+        let next_rip = ctx.VpContext.Rip + decoded.length as u64;
+
+        match (decoded.access, is_write) {
+            (Access::Store { src, size }, true) => {
+                let reg = match src {
+                    Source::Reg { index, .. } => {
+                        let regs = self.get_registers(&[GPRS[usize::from(index)]])?;
+                        // SAFETY: a general register is read through Reg64.
+                        unsafe { regs[0].Reg64 }
+                    }
+                    Source::Imm(_) => 0,
+                };
+                let data = store_bytes(src, size, reg);
+                self.set_instruction_pointer(next_rip)?;
+                Ok(VmExit::mmio_write(gpa, &data))
+            }
+            (
+                Access::Load {
+                    index,
+                    high8,
+                    size,
+                    reg_size,
+                    extend,
+                },
+                false,
+            ) => {
+                *self.pending_mmio_load.lock() = Some(PendingMmioLoad {
+                    index,
+                    high8,
+                    size,
+                    reg_size,
+                    extend,
+                    next_rip,
+                });
+                Ok(VmExit::mmio_read(gpa, u32::from(size)))
+            }
+            _ => Err(refuse(
+                "the instruction's direction disagrees with the access",
+            )),
+        }
+    }
+
+    /// Finish an MMIO load: put the device's answer in the destination
+    /// register and step over the instruction.
+    #[cfg(target_os = "windows")]
+    pub fn set_mmio_result(&self, data: &[u8]) -> Result<()> {
+        let Some(load) = self.pending_mmio_load.lock().take() else {
+            return Err(Error::VM(
+                "an MMIO result arrived with no load waiting for it".into(),
+            ));
+        };
+        let mut raw = 0u64;
+        for (n, byte) in data.iter().take(8).enumerate() {
+            raw |= u64::from(*byte) << (8 * n);
+        }
+        let name = GPRS[usize::from(load.index)];
+        let old = self.get_registers(&[name])?;
+        // SAFETY: a general register is read through Reg64.
+        let old = unsafe { old[0].Reg64 };
+        let value = super::x86_mmio::load_value(
+            old,
+            raw,
+            load.size,
+            load.reg_size,
+            load.high8,
+            load.extend,
+        );
+        self.set_registers_64(&[
+            (name, value),
+            (WHV_REGISTER_NAME::WHvX64RegisterRip, load.next_rip),
+        ])
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn set_mmio_result(&self, _data: &[u8]) -> Result<()> {
+        Err(Error::VM(
+            "WHPX backend is only available on Windows".into(),
+        ))
     }
 
     #[cfg(not(target_os = "windows"))]

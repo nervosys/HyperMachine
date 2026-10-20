@@ -19,6 +19,9 @@
 //! Fallback→ TCG   (software emulation, in hypervisor.rs)
 //! ```
 
+/// Decoding of the instruction behind an MMIO exit (platform independent).
+pub mod x86_mmio;
+
 // Linux KVM backend
 #[cfg(target_os = "linux")]
 pub mod kvm_ffi;

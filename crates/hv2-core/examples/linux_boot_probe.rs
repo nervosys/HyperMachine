@@ -122,11 +122,18 @@ async fn main() {
     // set) and the i8042 at 0x60-0x64 (same failure, keyboard-controller
     // status port). Each of those was a separate hang before it was a line in
     // `Machine::legacy_pc`.
-    if let Err(e) = Machine::legacy_pc().attach(&vm.devices()).await {
-        println!("devices       : FAILED — {e}");
-        return;
+    //
+    // Not with a PCI disk: `provision` builds the legacy set itself, around the
+    // VM's own PCI root, and skips what is already present. This probe's
+    // `legacy_pc()` has a different root, so attaching it first leaves the
+    // disk on a bus the guest cannot enumerate.
+    if std::env::var("HV2_DISK").is_err() {
+        if let Err(e) = Machine::legacy_pc().attach(&vm.devices()).await {
+            println!("devices       : FAILED — {e}");
+            return;
+        }
+        println!("devices       : legacy PC set attached (COM1, RTC, i8042)");
     }
-    println!("devices       : legacy PC set attached (COM1, RTC, i8042)");
 
     if let Some(cid) = vsock_cid {
         match vm.attach_vsock(cid).await {

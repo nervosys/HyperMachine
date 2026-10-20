@@ -191,3 +191,80 @@ console:
         "the guest never reached userspace handoff within {BOOT_DEADLINE:?}.\nconsole:\n{console}"
     );
 }
+
+/// A root filesystem on a virtio-blk disk behind PCI, mounted by the guest.
+///
+/// What it takes, each a separate way to see nothing: the guest enumerating a
+/// bus at all (the VM's own PCI root, not another `Machine`'s), the device's
+/// registers being readable and writable through the instruction behind each
+/// MMIO exit, and the device seeing the rings the guest wrote (it reads the
+/// pages the partition runs the guest in). Needs `HV2_TEST_DISK`, a raw image
+/// whose first partition is the root, and an `HV2_TEST_INITRD` that loads
+/// `virtio_blk` (a distribution initramfs does); the disk is attached
+/// read-only.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_root_filesystem_mounts_from_a_virtio_blk_disk_on_pci() {
+    if let Some(why) = unavailable() {
+        eprintln!("skipping: {why}");
+        return;
+    }
+    let (Ok(disk), Ok(initrd)) = (
+        std::env::var("HV2_TEST_DISK"),
+        std::env::var("HV2_TEST_INITRD"),
+    ) else {
+        eprintln!("skipping: HV2_TEST_DISK and HV2_TEST_INITRD are not both set");
+        return;
+    };
+    let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
+    let cmdline = format!("{CMDLINE} root=/dev/vda1 ro");
+    let config = VMConfig {
+        name: "linux-whpx-root-test".to_string(),
+        vcpu_count: 1,
+        memory_size: MEMORY_MIB * 1024 * 1024,
+        boot: Some(
+            BootSource::linux(&kernel)
+                .with_cmdline(cmdline)
+                .with_initrd(initrd),
+        ),
+        ..Default::default()
+    };
+    let Ok(vm) = VM::new(config) else {
+        eprintln!("skipping: a VM could not be created here");
+        return;
+    };
+    if !vm.executes_guest_code() {
+        eprintln!("skipping: no backend on this host executes guest code");
+        return;
+    }
+    let vm = Arc::new(vm);
+    vm.attach_block_pci(std::path::Path::new(&disk), true, "root0")
+        .await
+        .expect("the disk attaches");
+    if let Err(e) = vm.provision().await {
+        eprintln!("skipping: provision failed ({e})");
+        return;
+    }
+    vm.launch().await.expect("the vCPU loop starts");
+
+    let started = Instant::now();
+    let mut console = String::new();
+    while started.elapsed() < BOOT_DEADLINE {
+        console = vm.console_output().await;
+        if console.contains("EXT4-fs (vda1): mounted filesystem") {
+            break;
+        }
+        tokio::time::sleep(POLL).await;
+    }
+    let elapsed = started.elapsed();
+    let _ = vm.stop().await;
+    println!("linux whpx root: mounted after {elapsed:?}");
+
+    assert!(
+        console.contains("virtio_blk virtio0: [vda]"),
+        "the guest never found the disk.\nconsole:\n{console}"
+    );
+    assert!(
+        console.contains("EXT4-fs (vda1): mounted filesystem"),
+        "the root filesystem never mounted within {BOOT_DEADLINE:?}.\nconsole:\n{console}"
+    );
+}
