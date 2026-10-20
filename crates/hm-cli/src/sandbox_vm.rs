@@ -4013,6 +4013,7 @@ async fn compose(
                     existing.len()
                 );
             }
+            ensure_volumes(api, &project, &parsed).await?;
             let base = file
                 .parent()
                 .filter(|p| !p.as_os_str().is_empty())
@@ -4120,6 +4121,15 @@ async fn compose_start(
         "templateID": template, "timeout": lifetime, "envVars": envs,
         "metadata": {"hm.name": name, COMPOSE_PROJECT: project, COMPOSE_SERVICE: svc.name},
     });
+    if !svc.mounts.is_empty() {
+        body["volumeMounts"] = svc
+            .mounts
+            .iter()
+            .map(|(volume, path)| {
+                json!({"name": crate::compose::volume_name(project, volume), "path": path})
+            })
+            .collect();
+    }
     if let Some(cpus) = cpus {
         body["cpuCount"] = json!(cpus);
     }
@@ -4142,6 +4152,37 @@ async fn compose_start(
         return Err(e);
     }
     Ok((id, template))
+}
+
+/// Create the project's declared volumes that do not exist yet. A volume
+/// outlives `down` (it holds data), and is reused by the next `up`.
+async fn ensure_volumes(api: &Api, project: &str, parsed: &crate::compose::Compose) -> Result<()> {
+    if parsed.volumes.is_empty() {
+        return Ok(());
+    }
+    let listed = api
+        .request_bounded(Method::GET, &["volumes"], None, 1024 * 1024)
+        .await?;
+    let have: std::collections::BTreeSet<&str> = listed
+        .as_array()
+        .map(|a| a.iter().filter_map(|v| v["name"].as_str()).collect())
+        .unwrap_or_default();
+    for volume in &parsed.volumes {
+        let name = crate::compose::volume_name(project, volume);
+        if have.contains(name.as_str()) {
+            continue;
+        }
+        api.request_bounded(
+            Method::POST,
+            &["volumes"],
+            Some(json!({"name": name})),
+            65536,
+        )
+        .await
+        .with_context(|| format!("creating volume {name:?}"))?;
+        eprintln!("created volume {name}");
+    }
+    Ok(())
 }
 
 /// Reserve a public port for each of the service's `ports:`. The gateway

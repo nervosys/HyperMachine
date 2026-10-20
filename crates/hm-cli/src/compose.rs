@@ -4,7 +4,8 @@
 //! v1 covers `image`, `build`, `command`, `environment`, `depends_on` and
 //! `ports` (each container port becomes a public-port reservation; the
 //! gateway picks the public number, so a requested host port is not honoured).
-//! `volumes` is refused with an error rather than ignored, and
+//! `volumes` (named volumes only; a bind mount is refused). Anything else is
+//! refused with an error rather than ignored, and
 //! services cannot reach one another over a network yet: `depends_on` only
 //! orders start-up.
 
@@ -26,6 +27,9 @@ struct RawFile {
     version: Option<Value>,
     #[serde(default)]
     services: BTreeMap<String, RawService>,
+    /// Named volumes. Only names: a body (driver, external, ...) is refused.
+    #[serde(default)]
+    volumes: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -95,6 +99,106 @@ pub struct Service {
     /// Container ports to publish, by port number; the protocol is `tcp`,
     /// `udp`, or `both` when the file lists the port for each.
     pub ports: BTreeMap<u16, &'static str>,
+    /// Named volumes to mount: `(volume, guest path)`, by path.
+    pub mounts: Vec<(String, String)>,
+}
+
+/// A name a volume can carry: what the node accepts, 1-64 of `[A-Za-z0-9_-]`.
+fn valid_volume_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= MAX_NAME
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+}
+
+/// The volumes a compose file declares at its top level: names only.
+fn parse_declared_volumes(value: &Option<Value>) -> Result<BTreeSet<String>> {
+    let mut out = BTreeSet::new();
+    let map = match value {
+        None | Some(Value::Null) => return Ok(out),
+        Some(Value::Mapping(m)) => m,
+        Some(_) => bail!("top-level `volumes:` must be a mapping of names"),
+    };
+    for (key, body) in map {
+        let Value::String(name) = key else {
+            bail!("top-level `volumes:` has a name that is not a string");
+        };
+        let empty = match body {
+            Value::Null => true,
+            Value::Mapping(m) => m.is_empty(),
+            _ => false,
+        };
+        if !empty {
+            bail!(
+                "volume {name:?}: options (driver, external, ...) are not supported; \
+                 declare it as `{name}:` with nothing under it"
+            );
+        }
+        if !valid_volume_name(name) {
+            bail!("volume name {name:?} must be 1-64 of letters, digits, `_` and `-`");
+        }
+        out.insert(name.clone());
+    }
+    Ok(out)
+}
+
+/// A service's `volumes:` list (short syntax, named volumes only) as
+/// `(volume, guest path)`. Bind mounts, `:ro`, and volumes the file does not
+/// declare are refused, not guessed at.
+fn parse_mounts(
+    service: &str,
+    value: &Option<Value>,
+    declared: &BTreeSet<String>,
+) -> Result<Vec<(String, String)>> {
+    let items = match value {
+        None | Some(Value::Null) => return Ok(Vec::new()),
+        Some(Value::Sequence(items)) => items,
+        Some(_) => bail!("service {service:?}: `volumes:` must be a list"),
+    };
+    let mut out: Vec<(String, String)> = Vec::new();
+    for item in items {
+        let Value::String(text) = item else {
+            bail!(
+                "service {service:?}: only the short `volumes:` syntax (\"data:/path\") is supported"
+            );
+        };
+        let parts: Vec<&str> = text.split(':').collect();
+        let (source, path) = match parts.as_slice() {
+            [s, p] => (*s, *p),
+            [s, p, "rw"] => (*s, *p),
+            [_, _, mode] => bail!(
+                "service {service:?}: volume mode {mode:?} in {text:?} is not supported \
+                 (a mount is always read-write)"
+            ),
+            _ => bail!("service {service:?}: cannot read volume entry {text:?}"),
+        };
+        if source.starts_with('.') || source.starts_with('/') || source.starts_with('~') {
+            bail!(
+                "service {service:?}: {text:?} is a bind mount; a guest cannot see a host \
+                 directory, use a named volume"
+            );
+        }
+        if !declared.contains(source) {
+            bail!(
+                "service {service:?}: volume {source:?} is not declared under top-level `volumes:`"
+            );
+        }
+        if !path.starts_with('/') || path == "/" {
+            bail!("service {service:?}: guest path {path:?} in {text:?} must be absolute, not `/`");
+        }
+        if out.iter().any(|(_, p)| p == path) {
+            bail!("service {service:?}: two volumes at {path:?}");
+        }
+        out.push((source.to_string(), path.to_string()));
+    }
+    Ok(out)
+}
+
+/// The name a compose volume has on the node: the project's, so two projects
+/// can both declare `data`.
+pub fn volume_name(project: &str, volume: &str) -> String {
+    format!("{project}-{volume}")
 }
 
 /// Parse a compose `ports:` list (short syntax only) into container ports.
@@ -160,6 +264,8 @@ fn parse_ports(service: &str, value: &Option<Value>) -> Result<BTreeMap<u16, &'s
 pub struct Compose {
     /// By name.
     pub services: BTreeMap<String, Service>,
+    /// Declared volume names (without the project prefix).
+    pub volumes: BTreeSet<String>,
 }
 
 /// A project name a sandbox name can carry: lower case, `[a-z0-9_-]`, no
@@ -263,22 +369,6 @@ fn scalar(service: &str, key: &str, value: &Value) -> Result<String> {
     }
 }
 
-fn refuse_nonempty(service: &str, key: &str, value: &Option<Value>) -> Result<()> {
-    let empty = match value {
-        None | Some(Value::Null) => true,
-        Some(Value::Sequence(s)) => s.is_empty(),
-        Some(Value::Mapping(m)) => m.is_empty(),
-        Some(_) => false,
-    };
-    if !empty {
-        bail!(
-            "service {service:?}: `{key}:` is not supported yet by `hm sandbox vm compose` \
-             (v1 has no mounts or service-to-service networking)"
-        );
-    }
-    Ok(())
-}
-
 fn check_service_name(name: &str) -> Result<()> {
     let ok = name
         .bytes()
@@ -299,11 +389,12 @@ pub fn parse(text: &str) -> Result<Compose> {
     if raw.services.is_empty() {
         bail!("the compose file defines no services");
     }
+    let volumes = parse_declared_volumes(&raw.volumes)?;
     let mut services = BTreeMap::new();
     for (name, svc) in raw.services {
         check_service_name(&name)?;
         let ports = parse_ports(&name, &svc.ports)?;
-        refuse_nonempty(&name, "volumes", &svc.volumes)?;
+        let mounts = parse_mounts(&name, &svc.volumes, &volumes)?;
         let source = match (svc.image, svc.build) {
             (Some(_), Some(_)) => bail!("service {name:?}: give `image` or `build`, not both"),
             (None, None) => bail!("service {name:?}: needs `image` or `build`"),
@@ -368,10 +459,11 @@ pub fn parse(text: &str) -> Result<Compose> {
                 env: env.into_iter().map(|(k, v)| format!("{k}={v}")).collect(),
                 depends_on,
                 ports,
+                mounts,
             },
         );
     }
-    let compose = Compose { services };
+    let compose = Compose { services, volumes };
     compose.start_order()?;
     Ok(compose)
 }
@@ -423,6 +515,16 @@ impl Compose {
     /// Check that every sandbox name `project` gives a service is one the
     /// node accepts.
     pub fn check_names(&self, project: &str) -> Result<()> {
+        for name in &self.volumes {
+            let full = volume_name(project, name);
+            if full.len() > MAX_NAME {
+                bail!(
+                    "volume name {full:?} is {} bytes; the limit is {MAX_NAME}. \
+                     Shorten the project (-p) or the volume name",
+                    full.len()
+                );
+            }
+        }
         for name in self.services.keys() {
             let full = vm_name(project, name);
             if full.len() > MAX_NAME {
@@ -558,11 +660,54 @@ services:
     }
 
     #[test]
-    fn volumes_are_refused() {
-        let e = err("services:\n  a:\n    image: x\n    volumes: [\"./d:/d\"]\n");
-        assert!(e.contains("`volumes:` is not supported yet"), "{e}");
-        // Empty ones say nothing and are fine.
+    fn named_volumes_become_mounts() {
+        let c = parse(
+            "services:\n  a:\n    image: x\n    volumes: [\"data:/var/lib/x\", \"logs:/logs:rw\"]\n\
+             volumes:\n  data:\n  logs: {}\n",
+        )
+        .unwrap();
+        assert_eq!(
+            c.services["a"].mounts,
+            [
+                ("data".to_string(), "/var/lib/x".to_string()),
+                ("logs".to_string(), "/logs".to_string())
+            ]
+        );
+        assert_eq!(c.volumes.len(), 2);
+        assert_eq!(volume_name("proj", "data"), "proj-data");
+        // Empty lists say nothing and are fine.
         assert!(parse("services:\n  a:\n    image: x\n    volumes: []\n").is_ok());
+    }
+
+    #[test]
+    fn volumes_that_cannot_work_are_errors() {
+        let svc = |entry: &str, top: &str| {
+            err(&format!(
+                "services:\n  a:\n    image: x\n    volumes: [{entry}]\n{top}"
+            ))
+        };
+        let declared = "volumes:\n  data:\n";
+        assert!(svc("\"./d:/d\"", declared).contains("bind mount"));
+        assert!(svc("\"/srv/d:/d\"", declared).contains("bind mount"));
+        assert!(svc("\"data:/d\"", "").contains("not declared"));
+        assert!(svc("\"data:/d:ro\"", declared).contains("mode"));
+        assert!(svc("\"data:rel\"", declared).contains("absolute"));
+        assert!(svc("\"data:/\"", declared).contains("absolute"));
+        assert!(svc("\"data:/d\", \"data:/d\"", declared).contains("two volumes"));
+        assert!(svc("{type: volume}", declared).contains("short"));
+        let e = err("services:\n  a: {image: x}\nvolumes:\n  data: {driver: local}\n");
+        assert!(e.contains("options"), "{e}");
+        let e = err("services:\n  a: {image: x}\nvolumes:\n  \"bad.name\":\n");
+        assert!(e.contains("bad.name"), "{e}");
+    }
+
+    #[test]
+    fn a_long_project_name_overflows_a_volume_name() {
+        let c = parse("services:\n  a: {image: x}\nvolumes:\n  data:\n").unwrap();
+        assert!(c.check_names("proj").is_ok());
+        let long = "p".repeat(62);
+        let e = format!("{:#}", c.check_names(&long).unwrap_err());
+        assert!(e.contains("volume name"), "{e}");
     }
 
     fn ports_of(list: &str) -> BTreeMap<u16, &'static str> {

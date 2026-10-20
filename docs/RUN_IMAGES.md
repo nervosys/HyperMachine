@@ -85,10 +85,13 @@ control plane's `--native-port-range`; the gateway picks the public number, whic
 `up` prints, so a requested host port is not honoured, and the command fails
 (and deletes what it started) when the control plane has no port range.
 `ports:` is NOT verified end to end through compose (the parsing is unit tested;
-the reservation call is the one `public-ports expose` makes). `volumes:` and
-unknown keys are refused rather than ignored, and the
+the reservation call is the one `public-ports expose` makes). A top-level
+`volumes:` declares named volumes (created as `PROJECT-NAME`, 9P mounts, they
+survive `down`; delete one with `hm sandbox vm volume delete`); a service mounts
+one with `data:/path`. Bind mounts, `:ro` and options are refused, volumes need a
+Linux host, and unknown keys are refused rather than ignored, and the
 services cannot reach one another over a network: `depends_on` is start order
-only. [Checked on KVM](benchmarks/2026-10-19/hm-compose-kvm/README.md) (7 cases,
+only. [Checked on KVM](benchmarks/2026-10-19/hm-compose-kvm/README.md) (8 cases,
 3 runs).
 
 ## Not done
@@ -103,7 +106,7 @@ only. [Checked on KVM](benchmarks/2026-10-19/hm-compose-kvm/README.md) (7 cases,
   or `uid:gid` USER** was not tried. Only `linux/amd64` images.
 - **An image without a shell** was not tried: the command is run through
   `/bin/sh`, and the guest kit adds a static busybox when the image has none.
-- **`compose` beyond a first slice**: no `volumes`, health checks or
+- **`compose` beyond a first slice**: no bind mounts, health checks or
   restarts, and no network between services; see
   [Compose](#compose).
 - **Old guest agents**: a template built before this change has an agent that

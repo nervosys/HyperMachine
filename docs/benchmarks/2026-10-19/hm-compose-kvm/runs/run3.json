@@ -3,10 +3,10 @@
   "purpose": "hm sandbox vm compose up/down on KVM",
   "input_sha256": {
     "daemon": "17a06f93c99438157df267356836feb77efd0c4ffe29e45e6b0bdba59bde5d8c",
-    "hm": "9241e8cc54c456411b77287c0763a731688bfbb8be4b1b59dfa68b03d5d7ad77",
+    "hm": "8910f52e0dbd60dbd5d16c5c02f199012304d30a15722e1dab9020bd5ce00e56",
     "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
     "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
-    "driver": "46191ad3aebdac683ee9174a6ffff96b98d26911b70efb603ecaa6a83398e4a3"
+    "driver": "869eb9cb85c7f93154d228fca643f4456f9716384f8e34025a078f177258857a"
   },
   "cases": [
     {
@@ -16,13 +16,13 @@
         "services": [
           {
             "name": "stack-db",
-            "sandboxID": "sbx-e535d0e9070d442494b1",
+            "sandboxID": "sbx-a1e4cbe34e364394a74a",
             "service": "db",
             "template": "oci-alpine-3.20-f5f95933"
           },
           {
             "name": "stack-app",
-            "sandboxID": "sbx-e015b45241d749119c18",
+            "sandboxID": "sbx-fc6d58e5133f4099bf43",
             "service": "app",
             "template": "oci-alpine-3.20-f5f95933"
           }
@@ -34,6 +34,14 @@
       "success": true,
       "detail": {
         "app_greeting": "hello"
+      }
+    },
+    {
+      "name": "a named volume is mounted over 9p, outlives down, and the next up sees its data",
+      "success": true,
+      "detail": {
+        "mount": "hv2-volume /data 9p rw,relatime,access=user,msize=524288,trans=fd,rfd=4,wfd=4 0 0",
+        "volume": "vol-data"
       }
     },
     {
@@ -49,8 +57,8 @@
       "success": true,
       "detail": {
         "deleted": [
-          "sbx-e015b45241d749119c18",
-          "sbx-e535d0e9070d442494b1"
+          "sbx-a1e4cbe34e364394a74a",
+          "sbx-fc6d58e5133f4099bf43"
         ]
       }
     },
@@ -61,7 +69,7 @@
         "cycle": "Error: depends_on has a cycle among: a, b",
         "unknown": "Error: service \"a\" depends_on \"ghost\", which is not a service in the file",
         "ports": "Error: service \"a\": port \"8000-8010\" in \"8000-8010:80\" is not a single port 1-65535 (ranges are not supported)",
-        "volumes": "Error: service \"a\": `volumes:` is not supported yet by `hm sandbox vm compose` (v1 has no mounts or service-to-service networking)"
+        "volumes": "Error: service \"a\": \"./d:/d\" is a bind mount; a guest cannot see a host directory, use a named volume"
       }
     },
     {
@@ -69,8 +77,8 @@
       "success": true,
       "detail": {
         "ids": [
-          "sbx-405ddc46529b436ca419",
-          "sbx-df1202d9975b4bcda211"
+          "sbx-4eb5232fd8a9406f8431",
+          "sbx-8d914360f0874fecb7dc"
         ],
         "refusal": "Error: project twice already has 2 sandbox(es); run `compose down` first"
       }
@@ -81,7 +89,7 @@
       "detail": {
         "service": {
           "name": "built-web",
-          "sandboxID": "sbx-2ddc61dc25cb49ebb0a6",
+          "sandboxID": "sbx-599f133da1d84d58b90e",
           "service": "web",
           "template": "built-web"
         }

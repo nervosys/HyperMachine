@@ -27,6 +27,26 @@ from pathlib import Path
 
 SLEEP = "sleep 600"
 
+VOL_WRITER = """\
+services:
+  w:
+    image: alpine:3.20
+    command: ["sh", "-c", "echo persisted > /data/note; sleep 600"]
+    volumes: ["data:/data"]
+volumes:
+  data:
+"""
+
+VOL_READER = """\
+services:
+  r:
+    image: alpine:3.20
+    command: ["sh", "-c", "sleep 600"]
+    volumes: ["data:/data"]
+volumes:
+  data:
+"""
+
 TWO = """\
 services:
   app:
@@ -67,7 +87,8 @@ def main():
     log = (args.output / "daemon.log").open("wb")
     daemon = subprocess.Popen(
         [str(args.daemon), "--port", str(api), "--proxy-port", str(port()), "--guest-kit", str(args.kit),
-         "--memory-mb", "512", "--cpu-cores", "1", "--capacity", "8"],
+         "--memory-mb", "512", "--cpu-cores", "1", "--capacity", "8",
+         "--volume-dir", str(args.output / "volumes")],
         env=dict(os.environ, HV2_KERNEL=str(args.kernel), HV2_INITRD=str(args.initrd), RUST_LOG="info"),
         stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
 
@@ -169,6 +190,39 @@ def main():
             assert greeting.returncode == 0 and greeting.stdout.strip() == "hello", greeting
             return {"app_greeting": greeting.stdout.strip()}
         case("the commands are still running after up returned, and app has its environment", still_running)
+
+        def volume_survives_down():
+            writer = write_compose("vol-writer", VOL_WRITER)
+            reader = write_compose("vol-reader", VOL_READER)
+            done = up(writer, "vol")
+            assert done.returncode == 0, (done.returncode, done.stdout, done.stderr[-800:])
+            sid = services_of(done)[0]["sandboxID"]
+
+            def note():
+                out = exec_in(sid, "cat", "/data/note")
+                return True if out.returncode == 0 and out.stdout.strip() == "persisted" else (out.returncode, out.stdout, out.stderr[-200:])
+            wait_for(note, "the writer's file is in its volume")
+            mounts = exec_in(sid, "sh", "-c", "grep ' /data ' /proc/mounts")
+            assert mounts.returncode == 0 and "9p" in mounts.stdout, mounts
+            assert down(writer, "vol").returncode == 0
+            volumes = json.loads(hm("volume", "list").stdout)
+            ours = [v for v in volumes if v["name"] == "vol-data"]
+            assert len(ours) == 1, volumes
+            try:
+                done = up(reader, "vol")
+                assert done.returncode == 0, (done.returncode, done.stdout, done.stderr[-800:])
+                sid = services_of(done)[0]["sandboxID"]
+
+                def again():
+                    out = exec_in(sid, "cat", "/data/note")
+                    return True if out.returncode == 0 and out.stdout.strip() == "persisted" else (out.returncode, out.stdout, out.stderr[-200:])
+                wait_for(again, "a later project run sees the file")
+                assert down(reader, "vol").returncode == 0
+                return {"mount": mounts.stdout.strip(), "volume": ours[0]["name"]}
+            finally:
+                down(reader, "vol")
+                hm("volume", "delete", ours[0]["volumeID"])
+        case("a named volume is mounted over 9p, outlives down, and the next up sees its data", volume_survives_down)
 
         def logs_show_each_service():
             assert len(started) == 2, "case 1 did not start the services"

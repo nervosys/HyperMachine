@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `hm sandbox vm compose` accepts named volumes: a top-level `volumes:` declares
+  them, a service mounts one with `name:/path`. They are created as
+  `PROJECT-NAME`, mounted over 9P, and survive `down`. Bind mounts, `:ro` and
+  volume options are refused. Checked on KVM (8 of 8 cases, 3 of 3 runs).
 - `hm sandbox vm compose logs [SERVICE] [--tail N]` prints the tail of each
   service's command output (`/tmp/hm-compose.log`). Checked on KVM (3 of 3 runs).
 - `hm sandbox vm compose` accepts `ports:` (short syntax): each container port
