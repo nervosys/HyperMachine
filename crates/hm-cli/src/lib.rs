@@ -8,6 +8,7 @@
 
 pub mod agentic;
 pub mod build_context;
+pub mod compose;
 pub mod dockerfile;
 pub mod jobs_cmd;
 pub mod jobs_profile;

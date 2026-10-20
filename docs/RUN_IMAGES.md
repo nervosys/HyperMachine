@@ -59,6 +59,32 @@ store or echo the password. [Checked on KVM](benchmarks/2026-10-19/hm-registry-a
 against a Basic-auth registry on localhost (6 cases, 3 runs); a real registry
 is not tested.
 
+## Compose
+
+`hm sandbox vm compose -f compose.yaml [-p NAME] up` starts each service of the
+file in a VM of its own, detached, in `depends_on` order; `down` deletes them.
+
+```yaml
+services:
+  db:
+    image: alpine:3.20
+    command: ["sh", "-c", "echo up; sleep 600"]
+  app:
+    build: ./app          # or {context: ./app, dockerfile: Dockerfile}
+    depends_on: [db]
+    environment: {GREETING: hello}
+```
+
+Sandboxes are named `PROJECT-SERVICE` and carry the metadata
+`hm.compose.project` and `hm.compose.service`, which `down` finds them by. The
+project defaults to the compose file's directory. `up` refuses a project that
+already has sandboxes, and deletes what it started if a service fails to
+start. A command's output goes to `/tmp/hm-compose.log` in the guest.
+`ports:`, `volumes:` and unknown keys are refused rather than ignored, and the
+services cannot reach one another over a network: `depends_on` is start order
+only. [Checked on KVM](benchmarks/2026-10-19/hm-compose-kvm/README.md) (6 cases,
+3 runs).
+
 ## Not done
 
 - **A moved tag**: a template is kept by the reference, so `python:3.12` is
@@ -71,8 +97,9 @@ is not tested.
   or `uid:gid` USER** was not tried. Only `linux/amd64` images.
 - **An image without a shell** was not tried: the command is run through
   `/bin/sh`, and the guest kit adds a static busybox when the image has none.
-- **`docker compose`**: not built; it needs sandbox networks, which are
-  only partial (see [BOAT_PARITY.md](BOAT_PARITY.md)).
+- **`compose` beyond a first slice**: no `ports`, `volumes`, health checks,
+  restarts or `logs`, and no network between services; see
+  [Compose](#compose).
 - **Old guest agents**: a template built before this change has an agent that
   ignores the exec `user` field, so the command would run as root. Rebuild
   such a template.

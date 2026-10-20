@@ -54,6 +54,13 @@ ignore = [
     "RUSTSEC-2026-0370",
     "RUSTSEC-2026-0371",
     "RUSTSEC-2026-0372",
+
+    # unsafe-libyaml is unmaintained (a C libyaml transliteration, unsafe).
+    # Via serde_yaml_ng, which hm-cli uses only to read the compose file the
+    # user names on the command line. No known vulnerability; the input is a
+    # local file, but a compose file taken from an untrusted repository is
+    # parsed by it, so replace it if a maintained pure-Rust parser appears.
+    "RUSTSEC-2024-0449",
 ]
 
 # ============================================================================

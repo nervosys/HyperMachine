@@ -1,0 +1,83 @@
+{
+  "success": true,
+  "purpose": "hm sandbox vm compose up/down on KVM",
+  "input_sha256": {
+    "daemon": "17a06f93c99438157df267356836feb77efd0c4ffe29e45e6b0bdba59bde5d8c",
+    "hm": "c993571c86762ffc45c25ab894eeaf5d7761d7d2edcdabefdb41a4ef4efa3121",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "4b3101c0a88152d0a62b13b07df897d406ac856ddee28db606f1272f10ca4b6d"
+  },
+  "cases": [
+    {
+      "name": "up starts db before app, each with a sandbox ID",
+      "success": true,
+      "detail": {
+        "services": [
+          {
+            "name": "stack-db",
+            "sandboxID": "sbx-c5680ad17d684cd7a69e",
+            "service": "db",
+            "template": "oci-alpine-3.20-f5f95933"
+          },
+          {
+            "name": "stack-app",
+            "sandboxID": "sbx-2a1cb7f382bf47bc9fc2",
+            "service": "app",
+            "template": "oci-alpine-3.20-f5f95933"
+          }
+        ]
+      }
+    },
+    {
+      "name": "the commands are still running after up returned, and app has its environment",
+      "success": true,
+      "detail": {
+        "app_greeting": "hello"
+      }
+    },
+    {
+      "name": "down deletes both, list shows neither, and a second down deletes nothing",
+      "success": true,
+      "detail": {
+        "deleted": [
+          "sbx-2a1cb7f382bf47bc9fc2",
+          "sbx-c5680ad17d684cd7a69e"
+        ]
+      }
+    },
+    {
+      "name": "a cycle, an unknown dependency, ports and volumes fail and create no sandbox",
+      "success": true,
+      "detail": {
+        "cycle": "Error: depends_on has a cycle among: a, b",
+        "unknown": "Error: service \"a\" depends_on \"ghost\", which is not a service in the file",
+        "ports": "Error: service \"a\": `ports:` is not supported yet by `hm sandbox vm compose` (v1 has no published ports, mounts, or service-to-service networking)",
+        "volumes": "Error: service \"a\": `volumes:` is not supported yet by `hm sandbox vm compose` (v1 has no published ports, mounts, or service-to-service networking)"
+      }
+    },
+    {
+      "name": "a second up without down is refused and leaves the first project alone",
+      "success": true,
+      "detail": {
+        "ids": [
+          "sbx-2c3dbe9d767541638b08",
+          "sbx-c5d19ee75e7f4008a44a"
+        ],
+        "refusal": "Error: project twice already has 2 sandbox(es); run `compose down` first"
+      }
+    },
+    {
+      "name": "a build: service builds, runs its CMD, and goes away with down",
+      "success": true,
+      "detail": {
+        "service": {
+          "name": "built-web",
+          "sandboxID": "sbx-c3a64d5ee401483b8677",
+          "service": "web",
+          "template": "built-web"
+        }
+      }
+    }
+  ]
+}

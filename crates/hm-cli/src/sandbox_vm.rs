@@ -44,6 +44,30 @@ fn parse_owner_label(value: &str) -> std::result::Result<String, String> {
     Ok(value.to_owned())
 }
 
+/// What to do with a compose project.
+#[derive(Debug, Subcommand)]
+pub enum ComposeCommand {
+    /// Start every service, dependencies first, and print their sandbox IDs
+    Up {
+        /// Sandbox lifetime in seconds
+        #[arg(long, default_value_t = 86400, value_parser = clap::value_parser!(u64).range(1..))]
+        lifetime: u64,
+        /// Seconds to wait for each image to be pulled or built
+        #[arg(long, default_value_t = 1800, value_parser = clap::value_parser!(u64).range(1..))]
+        build_wait: u64,
+        /// Processors of its own, for every service
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
+        cpus: Option<u32>,
+        /// Memory of its own, in MiB, for every service
+        #[arg(long, value_parser = clap::value_parser!(u64).range(256..))]
+        memory_mb: Option<u64>,
+        #[command(flatten)]
+        registry: RegistryArgs,
+    },
+    /// Delete every sandbox of the project; nothing to delete is success
+    Down,
+}
+
 /// VM sandbox lifecycle commands. Responses are JSON for shell automation.
 #[derive(Debug, Subcommand)]
 pub enum VmCommand {
@@ -265,6 +289,20 @@ pub enum VmCommand {
         /// Replaces the image's CMD; the ENTRYPOINT, if it has one, stays
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         command: Vec<String>,
+    },
+    /// Run the services of a compose file, each in a VM of its own, detached.
+    /// v1 starts them in `depends_on` order and nothing more: no `ports`, no
+    /// `volumes`, and the services cannot reach one another over a network
+    Compose {
+        /// The compose file
+        #[arg(short = 'f', long = "file", default_value = "compose.yaml")]
+        file: std::path::PathBuf,
+        /// The project name; its sandboxes are `PROJECT-SERVICE`. Defaults to
+        /// the compose file's directory
+        #[arg(short = 'p', long = "project-name", value_name = "NAME")]
+        project: Option<String>,
+        #[command(subcommand)]
+        command: ComposeCommand,
     },
     /// Assign or inspect a reserved alias for an existing VM
     Alias {
@@ -2728,6 +2766,11 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             )
             .await;
         }
+        VmCommand::Compose {
+            file,
+            project,
+            command,
+        } => compose(&api, &file, project, command).await?,
         VmCommand::Domain { command } => match command {
             DomainCommand::Bind {
                 id,
@@ -3555,6 +3598,18 @@ impl RegistryArgs {
 /// Parse the Dockerfile, upload the context its COPYs read, run the build on
 /// the node and follow its log. Exits 0 when the template is ready.
 async fn build_image(api: &Api, build: BuildImage) -> Result<i32> {
+    Ok(match build_template(api, build).await? {
+        Some(template) => {
+            println!("{template}");
+            0
+        }
+        None => 1,
+    })
+}
+
+/// The build itself: the template's ID once it is ready, or `None` after
+/// the failure has been reported on stderr.
+async fn build_template(api: &Api, build: BuildImage) -> Result<Option<String>> {
     let dockerfile = build
         .file
         .clone()
@@ -3661,14 +3716,13 @@ async fn build_image(api: &Api, build: BuildImage) -> Result<i32> {
         }
         match status["status"].as_str() {
             Some("ready") => {
-                println!("{template}");
-                return Ok(0);
+                return Ok(Some(template));
             }
             Some("error") => {
                 let why = status["reason"]["message"].as_str().unwrap_or("it failed");
                 let at = status["reason"]["step"].as_str().unwrap_or("?");
                 eprintln!("build failed at step {at}: {why}");
-                return Ok(1);
+                return Ok(None);
             }
             _ => {}
         }
@@ -3739,8 +3793,9 @@ fn launch_command(launch: &Value, given: &[String]) -> Result<Vec<String>> {
     Ok(command)
 }
 
-/// Pull `image` into a template if the node has none, run it, clean up.
-async fn run_image(api: &Api, run: RunImage) -> Result<i32> {
+/// Pull `image` into a template if the node has none and wait until it is
+/// ready; returns the template's name.
+async fn ensure_template(api: &Api, run: &RunImage) -> Result<String> {
     let template = if run.named {
         run.image.clone()
     } else {
@@ -3789,7 +3844,12 @@ async fn run_image(api: &Api, run: RunImage) -> Result<i32> {
             status = status_of(&api.request(Method::GET, &["templates"], None).await?);
         }
     }
+    Ok(template)
+}
 
+/// Pull `image` into a template if the node has none, run it, clean up.
+async fn run_image(api: &Api, run: RunImage) -> Result<i32> {
+    let template = ensure_template(api, &run).await?;
     let mut envs = serde_json::Map::new();
     for pair in &run.env {
         let (name, value) = pair
@@ -3818,6 +3878,279 @@ async fn run_image(api: &Api, run: RunImage) -> Result<i32> {
         eprintln!("could not delete sandbox {id}: {e}");
     }
     outcome
+}
+
+const COMPOSE_PROJECT: &str = "hm.compose.project";
+const COMPOSE_SERVICE: &str = "hm.compose.service";
+
+/// The project a compose command acts on: `-p`, else the compose file's
+/// directory.
+fn compose_project(file: &std::path::Path, given: Option<&str>) -> Result<String> {
+    if let Some(name) = given {
+        return crate::compose::sanitize_project(name);
+    }
+    let dir = file
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let dir = std::fs::canonicalize(dir)
+        .with_context(|| format!("finding the directory of {}", file.display()))?;
+    let name = dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .context("the compose file's directory has no name; give one with -p")?;
+    crate::compose::sanitize_project(name)
+}
+
+/// The project's sandboxes, as the node lists them: `(sandbox ID, service)`.
+async fn compose_members(api: &Api, project: &str) -> Result<Vec<(String, String)>> {
+    let response = api
+        .client
+        .get(api.url(&["sandboxes"])?)
+        .query(&[("metadata", format!("{COMPOSE_PROJECT}={project}"))])
+        .send()
+        .await
+        .context("listing the project's sandboxes failed")?;
+    if !response.status().is_success() {
+        bail!(
+            "listing the project's sandboxes returned {}",
+            response.status()
+        );
+    }
+    let rows: Value = response
+        .json()
+        .await
+        .context("invalid sandbox listing response")?;
+    let rows = rows
+        .as_array()
+        .context("the sandbox listing is not an array")?;
+    // The filter is the node's; check it again here so a node that ignores
+    // it can never have another project's sandboxes deleted.
+    Ok(rows
+        .iter()
+        .filter(|row| row["metadata"][COMPOSE_PROJECT].as_str() == Some(project))
+        .filter_map(|row| {
+            Some((
+                row["sandboxID"].as_str()?.to_string(),
+                row["metadata"][COMPOSE_SERVICE]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string(),
+            ))
+        })
+        .collect())
+}
+
+async fn compose(
+    api: &Api,
+    file: &std::path::Path,
+    project: Option<String>,
+    command: ComposeCommand,
+) -> Result<Value> {
+    let project = compose_project(file, project.as_deref())?;
+    match command {
+        ComposeCommand::Down => {
+            let mut deleted = Vec::new();
+            let mut failed = Vec::new();
+            for (id, service) in compose_members(api, &project).await? {
+                match api.request(Method::DELETE, &["sandboxes", &id], None).await {
+                    Ok(_) => deleted.push(json!({"service": service, "sandboxID": id})),
+                    Err(e) => failed.push(json!({"service": service, "sandboxID": id,
+                                                 "error": format!("{e:#}")})),
+                }
+            }
+            if !failed.is_empty() {
+                bail!(
+                    "could not delete every sandbox of project {project}: {}",
+                    Value::Array(failed)
+                );
+            }
+            Ok(json!({"project": project, "deleted": deleted}))
+        }
+        ComposeCommand::Up {
+            lifetime,
+            build_wait,
+            cpus,
+            memory_mb,
+            registry,
+        } => {
+            let text = std::fs::read_to_string(file)
+                .with_context(|| format!("reading {}", file.display()))?;
+            let parsed = crate::compose::parse(&text)?;
+            parsed.check_names(&project)?;
+            let order = parsed.start_order()?;
+            let existing = compose_members(api, &project).await?;
+            if !existing.is_empty() {
+                bail!(
+                    "project {project} already has {} sandbox(es); run `compose down` first",
+                    existing.len()
+                );
+            }
+            let base = file
+                .parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or_else(|| std::path::Path::new("."));
+            let mut started: Vec<Value> = Vec::new();
+            let mut ids: Vec<String> = Vec::new();
+            for service in order {
+                let svc = &parsed.services[&service];
+                let step = compose_start(
+                    api, base, &project, svc, lifetime, build_wait, cpus, memory_mb, &registry,
+                )
+                .await;
+                match step {
+                    Ok((id, template)) => {
+                        ids.push(id.clone());
+                        started.push(json!({"service": service, "sandboxID": id,
+                                            "name": crate::compose::vm_name(&project, &service),
+                                            "template": template}));
+                    }
+                    Err(e) => {
+                        // Half a project is worse than none: take back what
+                        // this call started (a sandbox that was created but
+                        // whose command did not start is among them).
+                        for id in &ids {
+                            let _ = api.request(Method::DELETE, &["sandboxes", id], None).await;
+                        }
+                        return Err(e.context(format!(
+                            "starting service {service:?}; the {} already started were deleted",
+                            ids.len()
+                        )));
+                    }
+                }
+            }
+            Ok(json!({"project": project, "services": started}))
+        }
+    }
+}
+
+/// Make the service's template, create its sandbox and start its command
+/// detached. Returns the sandbox ID and the template. A sandbox created
+/// before a later step fails is deleted here.
+#[allow(clippy::too_many_arguments)]
+async fn compose_start(
+    api: &Api,
+    base: &std::path::Path,
+    project: &str,
+    svc: &crate::compose::Service,
+    lifetime: u64,
+    build_wait: u64,
+    cpus: Option<u32>,
+    memory_mb: Option<u64>,
+    registry: &RegistryArgs,
+) -> Result<(String, String)> {
+    let name = crate::compose::vm_name(project, &svc.name);
+    let template = match &svc.source {
+        crate::compose::Source::Image(image) => {
+            let run = RunImage {
+                image: image.clone(),
+                named: false,
+                env: Vec::new(),
+                keep: true,
+                timeout: 1,
+                build_wait,
+                cpus,
+                memory_mb,
+                registry: registry.clone(),
+                command: Vec::new(),
+            };
+            ensure_template(api, &run).await?
+        }
+        crate::compose::Source::Build {
+            context,
+            dockerfile,
+        } => {
+            let context = base.join(context);
+            let file = dockerfile.as_ref().map(|d| context.join(d));
+            eprintln!("building {name} ...");
+            build_template(
+                api,
+                BuildImage {
+                    context,
+                    tag: name.clone(),
+                    file,
+                    build_arg: Vec::new(),
+                    no_cache: false,
+                    cpus,
+                    memory_mb,
+                    build_wait,
+                    registry: registry.clone(),
+                },
+            )
+            .await?
+            .with_context(|| format!("building the image of service {:?} failed", svc.name))?
+        }
+    };
+
+    let mut envs = serde_json::Map::new();
+    for pair in &svc.env {
+        // The parser guarantees NAME=VALUE.
+        if let Some((k, v)) = pair.split_once('=') {
+            envs.insert(k.to_string(), json!(v));
+        }
+    }
+    let mut body = json!({
+        "templateID": template, "timeout": lifetime, "envVars": envs,
+        "metadata": {"hm.name": name, COMPOSE_PROJECT: project, COMPOSE_SERVICE: svc.name},
+    });
+    if let Some(cpus) = cpus {
+        body["cpuCount"] = json!(cpus);
+    }
+    if let Some(memory_mb) = memory_mb {
+        body["memoryMB"] = json!(memory_mb);
+    }
+    let created = api
+        .request(Method::POST, &["v2", "sandboxes"], Some(body))
+        .await?;
+    let id = created["sandboxID"]
+        .as_str()
+        .context("the node's answer had no sandboxID")?
+        .to_string();
+    if let Err(e) = start_detached(api, &id, &svc.command).await {
+        let _ = api.request(Method::DELETE, &["sandboxes", &id], None).await;
+        return Err(e);
+    }
+    Ok((id, template))
+}
+
+/// `cmd` as a shell line that starts it in the background and returns at
+/// once: its output goes to a log file, so the exec request has no pipe of
+/// the command's to wait on.
+fn detached_line(words: &[String]) -> Result<String> {
+    let inner = shell_exec(words)?;
+    Ok(format!(
+        "nohup sh -c '{}' >/tmp/hm-compose.log 2>&1 </dev/null &",
+        inner.replace('\'', "'\\''")
+    ))
+}
+
+/// Run the image's ENTRYPOINT and `given` (or its CMD) in the guest without
+/// waiting for it to end.
+async fn start_detached(api: &Api, id: &str, given: &[String]) -> Result<()> {
+    let launch = guest_exec(api, id, "cat /etc/hv2/image.json", 10, None).await?;
+    // A template with no launch settings (a build, say) has no ENTRYPOINT or
+    // CMD; the service's own command is then all there is.
+    let stdout = launch["stdout"].as_str().filter(|s| !s.trim().is_empty());
+    let launch: Value = serde_json::from_str(stdout.unwrap_or("{}"))
+        .context("the image's launch settings did not parse")?;
+    let command = launch_command(&launch, given)?;
+    let value = guest_exec(
+        api,
+        id,
+        &detached_line(&command)?,
+        10,
+        launch["user"].as_str(),
+    )
+    .await?;
+    let timed_out = value["timed_out"].as_bool().unwrap_or(false);
+    let code = exec_exit_code(&value, timed_out)?;
+    if code != 0 {
+        bail!(
+            "starting the command in {id} exited {code}: {}",
+            value["stderr"].as_str().unwrap_or("")
+        );
+    }
+    Ok(())
 }
 
 async fn guest_exec(
@@ -4036,6 +4369,18 @@ async fn benchmark(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_detached_line_backgrounds_and_quotes_the_command() {
+        let line = detached_line(&["sh".into(), "-c".into(), "echo 'hi'".into()]).unwrap();
+        assert!(line.starts_with("nohup sh -c 'exec "), "{line}");
+        assert!(
+            line.ends_with(">/tmp/hm-compose.log 2>&1 </dev/null &"),
+            "{line}"
+        );
+        assert!(line.contains(r"'\''hi'\''"), "{line}");
+        assert!(detached_line(&[]).is_err());
+    }
+
     #[test]
     fn a_registry_login_needs_both_flags_and_a_set_variable() {
         let args = |user: Option<&str>, var: Option<&str>| RegistryArgs {

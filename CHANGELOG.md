@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--registry-password-env VAR` to pull from a private registry; the password
   comes from the environment and is never echoed or logged. Checked on KVM
   against a Basic-auth registry on localhost (6 cases, 3 runs).
+- `hm sandbox vm compose -f FILE [-p NAME] up|down` starts the services of a
+  compose file (`image` or `build`, `command`, `environment`, `depends_on`),
+  each in a VM of its own, detached and in dependency order, and removes them.
+  No `ports`, `volumes`, networks between services or health checks yet (the
+  first two are refused). Checked on KVM (6 cases, 3 runs). Adds
+  `serde_yaml_ng`; its `unsafe-libyaml` is unmaintained and is accepted in
+  `deny.toml` with a reason.
 
 ### Security
 - A sandboxed Linux program could write through a read-only mount. It ran as
