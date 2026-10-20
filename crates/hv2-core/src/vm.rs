@@ -1095,6 +1095,17 @@ impl VM {
                 );
             }
             machine.attach_absent(&self.devices).await?;
+
+            // Where the hypervisor has no interrupt controller of its own,
+            // the keyboard has to raise IRQ 1 on ours: its other path goes to
+            // the hypervisor and does nothing on WHPX or HVF.
+            if self.backend.executes_guest_code()
+                && self.backend.platform() != crate::hypervisor::HypervisorPlatform::Kvm
+            {
+                if let Some(keyboard) = self.devices.get_device("i8042").await {
+                    keyboard.read().await.connect_pic(Arc::clone(&self.pic));
+                }
+            }
         }
 
         // A boot source on a backend that cannot execute is the one case where
@@ -2659,6 +2670,29 @@ impl VM {
             out.push_str(&String::from_utf8_lossy(&bytes));
         }
         out
+    }
+
+    /// Send PS/2 scancodes (set 1) to the guest's keyboard controller.
+    ///
+    /// `0x1E` is the press of A and `0x9E` its release; extended keys carry an
+    /// `0xE0` prefix. The bytes wait at port 0x60 and raise IRQ 1 for each, if
+    /// the guest has enabled keyboard interrupts. A guest halted with
+    /// interrupts on is woken at its next halt exit; one that never halts and
+    /// never touches a port sees the key when it next does.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Device`] if the VM has no keyboard controller (it has no boot
+    /// source), the guest has disabled the keyboard, or the controller's
+    /// 16-byte buffer cannot hold all of `scancodes`: none are queued then.
+    pub async fn send_key(&self, scancodes: &[u8]) -> Result<()> {
+        let keyboard = self
+            .devices
+            .get_device("i8042")
+            .await
+            .ok_or_else(|| Error::Device("this VM has no keyboard controller".to_string()))?;
+        let result = keyboard.write().await.console_input(scancodes);
+        result
     }
 
     /// Console output per device, as raw bytes, without consuming it.

@@ -160,13 +160,18 @@ impl KeyboardState {
             // PIC below is a userspace model that a guest with an in-kernel
             // interrupt controller never reads, so raising only there is
             // indistinguishable from raising nothing.
-            if (self.ccb & CCB_INT_KBD) != 0 {
-                if let Some(ref pic) = self.pic {
-                    let _ = pic.raise_irq(KBD_IRQ);
-                }
-                if let Some(sink) = &self.interrupt_sink {
-                    sink.raise(KBD_IRQ);
-                }
+            self.raise_irq();
+        }
+    }
+
+    /// Raise IRQ 1 if keyboard interrupts are enabled in the command byte.
+    fn raise_irq(&self) {
+        if (self.ccb & CCB_INT_KBD) != 0 {
+            if let Some(ref pic) = self.pic {
+                let _ = pic.raise_irq(KBD_IRQ);
+            }
+            if let Some(sink) = &self.interrupt_sink {
+                sink.raise(KBD_IRQ);
             }
         }
     }
@@ -175,6 +180,23 @@ impl KeyboardState {
     fn pop_output(&mut self) -> Option<u8> {
         let data = self.output_buffer.pop_front();
         self.update_status();
+        // The controller loads the next byte into the output buffer as soon as
+        // the guest has read one, and that raises IRQ 1 again. Without this a
+        // guest that reads one byte per interrupt, as a handler does, saw the
+        // first byte of a make/break sequence and never the rest: they were
+        // queued, with no interrupt left to announce them.
+        //
+        // Only on the userspace PIC. The interrupt sink queues its pulses for a
+        // delivery task, so a pulse raised here can reach an in-kernel
+        // controller after the guest has drained the buffer, and every such
+        // stale pulse is an interrupt that reads an empty buffer (seen on KVM:
+        // a seventh IRQ 1 for six bytes). The userspace PIC latches the edge
+        // at once, so there the count is exact.
+        if data.is_some() && self.output_buffer_full() && (self.ccb & CCB_INT_KBD) != 0 {
+            if let Some(ref pic) = self.pic {
+                let _ = pic.raise_irq(KBD_IRQ);
+            }
+        }
         data
     }
 
@@ -384,6 +406,37 @@ impl Device for KeyboardDevice {
         self.state.lock().interrupt_sink = Some(sink);
     }
 
+    fn connect_pic(&self, pic: Arc<Pic8259>) {
+        self.set_pic(pic);
+    }
+
+    /// Host input is PS/2 scancodes (set 1, make and break), queued for the
+    /// guest to read at port 0x60. A press is `0x1E`, its release `0x9E`; an
+    /// extended key such as the left Super key is `E0 5B` and `E0 DB`.
+    ///
+    /// All or nothing: the controller's output buffer holds 16 bytes and the
+    /// guest drains it one interrupt at a time, so bytes that do not fit are
+    /// refused rather than dropped, and a caller can send the rest later.
+    fn console_input(&mut self, data: &[u8]) -> Result<()> {
+        let mut state = self.state.lock();
+        if !state.kbd_enabled {
+            return Err(crate::Error::Device(
+                "the keyboard is disabled by the guest".to_string(),
+            ));
+        }
+        let room = 16 - state.output_buffer.len();
+        if data.len() > room {
+            return Err(crate::Error::Device(format!(
+                "the keyboard buffer has room for {room} more byte(s), {} were sent",
+                data.len()
+            )));
+        }
+        for &byte in data {
+            state.push_output(byte);
+        }
+        Ok(())
+    }
+
     fn name(&self) -> &str {
         "Intel 8042 Keyboard"
     }
@@ -441,6 +494,80 @@ impl Device for KeyboardDevice {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Counts the pulses a device raises.
+    #[derive(Debug, Default)]
+    struct CountingSink(std::sync::atomic::AtomicUsize);
+
+    impl crate::device::InterruptSink for CountingSink {
+        fn raise(&self, irq: u8) {
+            assert_eq!(irq, KBD_IRQ);
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    /// A guest reads one byte per interrupt. Four bytes queued at once must
+    /// therefore leave IRQ 1 pending again after each read until the buffer is
+    /// empty, or the last three wait for a keypress that may never come. On the
+    /// userspace PIC, where the edge is latched at once and the count is exact.
+    #[tokio::test]
+    async fn each_byte_read_leaves_irq1_pending_until_the_buffer_is_empty() {
+        let pic = Arc::new(Pic8259::new());
+        // The sequence a kernel sends: master base 0x20, only IRQ 1 open.
+        for (port, value) in [
+            (0x20, 0x11),
+            (0x21, 0x20),
+            (0x21, 0x04),
+            (0x21, 0x01),
+            (0x21, 0xFD),
+        ] {
+            pic.write_port(port, value).await.unwrap();
+        }
+        let mut kbd = KeyboardDevice::new();
+        kbd.set_pic(Arc::clone(&pic));
+
+        // Left Super down, Return down, Return up, Super up.
+        kbd.console_input(&[0xE0, 0x5B, 0x1C, 0x9C]).unwrap();
+
+        let mut seen = Vec::new();
+        let mut interrupts = 0;
+        while let Some(vector) = pic.get_pending_interrupt() {
+            assert_eq!(vector, 0x21, "IRQ 1 with base 0x20");
+            pic.acknowledge_interrupt(vector).unwrap();
+            seen.push(kbd.read_data());
+            pic.send_eoi(vector).unwrap();
+            interrupts += 1;
+            assert!(interrupts <= 8, "no more interrupts than bytes");
+        }
+        assert_eq!(seen, [0xE0, 0x5B, 0x1C, 0x9C], "in order, none lost");
+        assert_eq!(interrupts, 4, "one interrupt per byte, none left over");
+    }
+
+    /// The sink queues its pulses for a task that delivers them later, so a
+    /// re-raise through it can arrive after the buffer is empty and read as an
+    /// interrupt with nothing behind it. Only the pushes pulse it.
+    #[tokio::test]
+    async fn the_interrupt_sink_gets_one_pulse_per_queued_byte() {
+        let mut kbd = KeyboardDevice::new();
+        let sink = Arc::new(CountingSink::default());
+        kbd.set_interrupt_sink(sink.clone());
+        kbd.console_input(&[0xE0, 0x5B, 0x1C, 0x9C]).unwrap();
+        for _ in 0..4 {
+            kbd.read_data();
+        }
+        assert_eq!(sink.0.load(std::sync::atomic::Ordering::SeqCst), 4);
+    }
+
+    #[tokio::test]
+    async fn host_input_is_all_or_nothing() {
+        let mut kbd = KeyboardDevice::new();
+        kbd.console_input(&[0x1E; 10]).unwrap();
+        let refused = kbd.console_input(&[0x30; 7]);
+        assert!(refused.is_err(), "7 more do not fit in the 16-byte buffer");
+        // Nothing of the refused call was queued: 6 more still fit.
+        kbd.console_input(&[0x30; 6]).unwrap();
+        assert!(kbd.console_input(&[0x30]).is_err(), "now full");
+    }
 
     #[tokio::test]
     async fn test_keyboard_creation() {

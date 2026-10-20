@@ -68,6 +68,17 @@ pub trait Device: Send + Sync {
         None
     }
 
+    /// Give this device the VM's userspace interrupt controller.
+    ///
+    /// For a backend with no in-kernel interrupt controller (WHPX, HVF): the
+    /// device's own interrupt path goes through the hypervisor and does
+    /// nothing there, so a device that wants IRQs delivered has to raise them
+    /// on this PIC, which the run loop polls. Does nothing by default; a
+    /// device that raises its own IRQs overrides it.
+    fn connect_pic(&self, pic: Arc<crate::interrupt::Pic8259>) {
+        let _ = pic;
+    }
+
     /// Deliver input from the host to this device.
     ///
     /// The other direction from [`Self::console_output`]: what someone types

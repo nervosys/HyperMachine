@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `VM::send_key(&[u8])` sends PS/2 set-1 scancodes (a press is `0x1E`, its
+  release `0x9E`, extended keys carry `0xE0`) to the guest's keyboard
+  controller; up to 16 bytes at once, all or nothing. On WHPX and HVF the
+  keyboard now raises IRQ 1 on the VM's interrupt controller (before, it only
+  tried the hypervisor's, which does nothing there), and raises it again as the
+  guest drains each byte: a guest that reads one byte per interrupt used to see
+  the first byte of a make/break sequence and never the rest. A halted guest
+  receives six bytes in 3 to 7 ms on WHPX, and the test fails without the
+  re-raise. On KVM the interrupt goes through the queued sink, which cannot
+  re-raise exactly (a stale pulse read an empty buffer, a seventh IRQ 1 for six
+  bytes), so it is not done there; six bytes arrived intact in 6 of 6 runs, but
+  a coalesced pulse could lose one. No REST route or CLI command yet.
 - `hm sandbox vm build -t NAME [CONTEXT]` builds a Dockerfile (FROM, ARG, ENV,
   WORKDIR, COPY, RUN, USER, ENTRYPOINT, CMD) into a template with no Docker,
   uploading the context with `.dockerignore` honoured, and
