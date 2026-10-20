@@ -428,7 +428,7 @@ impl Device for SerialDevice {
         Ok(())
     }
 
-    /// Host input to the receive buffer, at most [`HOST_INPUT_LIMIT`] bytes
+    /// Host input to the receive buffer, at most `HOST_INPUT_LIMIT` bytes
     /// unread. A guest that never reads its UART would otherwise let a host
     /// that keeps sending grow the buffer without bound; the bytes that do not
     /// fit are refused, none of them queued.
