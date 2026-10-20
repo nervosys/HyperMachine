@@ -21,7 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   wrote; and the probe stops attaching a second `Machine` whose PCI root is not
   the VM's. Not handled: `rep movs` and read-modify-write forms (refused with
   their bytes), RAM above the PCI window (guest RAM is one block at GPA 0), and
-  a guest clock that runs about 15x slow, so a full boot takes minutes.
+  a guest clock that runs slow (see the next entry).
+- A WHPX guest's clock runs about 2x slow instead of about 15x: on Windows 11
+  a timer-resolution request can be ignored for a process with no window, which
+  left every wait at about 15.6 ms, so the process now says (power-throttling
+  class, `IGNORE_TIMER_RESOLUTION` clear) that it must be honoured, and a
+  halted vCPU wakes when a line is raised instead of waiting out its poll.
+  Measured on WHPX: `sleep 1` in the guest takes 2.2 s of host time (it took
+  14.5 s). The guest still falls back to the jiffies clocksource because TSC
+  calibration against the PIT fails, and ticks raised while one is waiting are
+  merged, which is the remaining slowness.
 - A WHPX guest that goes idle is woken again. `interrupts_deliverable` ignored
   an interruption already queued in the vCPU's single pending-interruption
   slot (injected on an earlier entry, the run cancelled before the guest took

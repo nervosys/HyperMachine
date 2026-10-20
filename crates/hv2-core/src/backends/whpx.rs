@@ -82,8 +82,48 @@ fn raise_timer_resolution() {
     extern "system" {
         fn timeBeginPeriod(period_ms: u32) -> u32;
     }
+    /// `PROCESS_POWER_THROTTLING_STATE`.
+    #[repr(C)]
+    struct PowerThrottling {
+        version: u32,
+        control_mask: u32,
+        state_mask: u32,
+    }
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetCurrentProcess() -> isize;
+        fn SetProcessInformation(
+            process: isize,
+            class: i32,
+            info: *const PowerThrottling,
+            size: u32,
+        ) -> i32;
+    }
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
+        // Since Windows 11 a process's timer-resolution request can be
+        // ignored (a process with no visible window is a candidate), which
+        // leaves its waits at about 15.6 ms whatever it asked for. Saying that
+        // it must not be ignored (control bit set, state bit clear) is what
+        // makes the request below count.
+        const PROCESS_POWER_THROTTLING: i32 = 4;
+        const IGNORE_TIMER_RESOLUTION: u32 = 0x4;
+        let state = PowerThrottling {
+            version: 1,
+            control_mask: IGNORE_TIMER_RESOLUTION,
+            state_mask: 0,
+        };
+        // SAFETY: the pseudo-handle for this process is always valid and the
+        // structure matches the class; failure (an older Windows that has no
+        // such class) only means there was nothing to opt out of.
+        let _ = unsafe {
+            SetProcessInformation(
+                GetCurrentProcess(),
+                PROCESS_POWER_THROTTLING,
+                &state,
+                std::mem::size_of::<PowerThrottling>() as u32,
+            )
+        };
         // SAFETY: timeBeginPeriod takes a plain integer and has no
         // preconditions; a non-zero return means the period is unsupported,
         // which only leaves the default resolution in place.

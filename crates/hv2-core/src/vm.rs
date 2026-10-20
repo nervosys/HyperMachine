@@ -5064,7 +5064,15 @@ impl VM {
                 vector as u32,
             ));
         } else {
-            tokio::time::sleep(Duration::from_millis(1)).await;
+            // Wake when a line is raised, not only when the poll lapses: the
+            // poll bounds how late a tick can be, and a raise makes it
+            // immediate. Lines raised while the guest could not take them are
+            // still found by the poll.
+            let raised = pic.raised();
+            tokio::select! {
+                () = raised.notified() => {}
+                () = tokio::time::sleep(Duration::from_millis(1)) => {}
+            }
         }
 
         Ok(())
