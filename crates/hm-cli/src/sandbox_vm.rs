@@ -66,6 +66,14 @@ pub enum ComposeCommand {
     },
     /// Delete every sandbox of the project; nothing to delete is success
     Down,
+    /// Print the tail of each service's command output (`/tmp/hm-compose.log`)
+    Logs {
+        /// Only this service
+        service: Option<String>,
+        /// Lines to show from the end of each log
+        #[arg(long, default_value_t = 200, value_parser = clap::value_parser!(u32).range(1..=5000))]
+        tail: u32,
+    },
 }
 
 /// VM sandbox lifecycle commands. Responses are JSON for shell automation.
@@ -3949,6 +3957,25 @@ async fn compose(
 ) -> Result<Value> {
     let project = compose_project(file, project.as_deref())?;
     match command {
+        ComposeCommand::Logs { service, tail } => {
+            let members = compose_members(api, &project).await?;
+            if let Some(wanted) = &service {
+                if !members.iter().any(|(_, s)| s == wanted) {
+                    bail!("project {project} has no running service {wanted:?}");
+                }
+            }
+            let mut logs = Vec::new();
+            for (id, name) in members {
+                if service.as_ref().is_some_and(|wanted| *wanted != name) {
+                    continue;
+                }
+                let cmd = format!("tail -n {tail} /tmp/hm-compose.log");
+                let out = guest_exec(api, &id, &cmd, 30, None).await?;
+                logs.push(json!({"service": name, "sandboxID": id,
+                                 "log": out["stdout"], "error": out["stderr"]}));
+            }
+            Ok(json!({"project": project, "logs": logs}))
+        }
         ComposeCommand::Down => {
             let mut deleted = Vec::new();
             let mut failed = Vec::new();

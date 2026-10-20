@@ -3,10 +3,10 @@
   "purpose": "hm sandbox vm compose up/down on KVM",
   "input_sha256": {
     "daemon": "17a06f93c99438157df267356836feb77efd0c4ffe29e45e6b0bdba59bde5d8c",
-    "hm": "c993571c86762ffc45c25ab894eeaf5d7761d7d2edcdabefdb41a4ef4efa3121",
+    "hm": "9241e8cc54c456411b77287c0763a731688bfbb8be4b1b59dfa68b03d5d7ad77",
     "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
     "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
-    "driver": "4b3101c0a88152d0a62b13b07df897d406ac856ddee28db606f1272f10ca4b6d"
+    "driver": "46191ad3aebdac683ee9174a6ffff96b98d26911b70efb603ecaa6a83398e4a3"
   },
   "cases": [
     {
@@ -16,13 +16,13 @@
         "services": [
           {
             "name": "stack-db",
-            "sandboxID": "sbx-d7c099a6d8154e1aa967",
+            "sandboxID": "sbx-cf401a8445c04ed9893b",
             "service": "db",
             "template": "oci-alpine-3.20-f5f95933"
           },
           {
             "name": "stack-app",
-            "sandboxID": "sbx-46bdfd24ad124210bdd6",
+            "sandboxID": "sbx-19536b7ef5bb40549d5e",
             "service": "app",
             "template": "oci-alpine-3.20-f5f95933"
           }
@@ -37,23 +37,31 @@
       }
     },
     {
+      "name": "logs shows each service's own output, one service on request, and refuses an unknown one",
+      "success": true,
+      "detail": {
+        "app": "log-app",
+        "db": "log-db"
+      }
+    },
+    {
       "name": "down deletes both, list shows neither, and a second down deletes nothing",
       "success": true,
       "detail": {
         "deleted": [
-          "sbx-46bdfd24ad124210bdd6",
-          "sbx-d7c099a6d8154e1aa967"
+          "sbx-19536b7ef5bb40549d5e",
+          "sbx-cf401a8445c04ed9893b"
         ]
       }
     },
     {
-      "name": "a cycle, an unknown dependency, ports and volumes fail and create no sandbox",
+      "name": "a cycle, an unknown dependency, a port range and volumes fail and create no sandbox",
       "success": true,
       "detail": {
         "cycle": "Error: depends_on has a cycle among: a, b",
         "unknown": "Error: service \"a\" depends_on \"ghost\", which is not a service in the file",
-        "ports": "Error: service \"a\": `ports:` is not supported yet by `hm sandbox vm compose` (v1 has no published ports, mounts, or service-to-service networking)",
-        "volumes": "Error: service \"a\": `volumes:` is not supported yet by `hm sandbox vm compose` (v1 has no published ports, mounts, or service-to-service networking)"
+        "ports": "Error: service \"a\": port \"8000-8010\" in \"8000-8010:80\" is not a single port 1-65535 (ranges are not supported)",
+        "volumes": "Error: service \"a\": `volumes:` is not supported yet by `hm sandbox vm compose` (v1 has no mounts or service-to-service networking)"
       }
     },
     {
@@ -61,8 +69,8 @@
       "success": true,
       "detail": {
         "ids": [
-          "sbx-3fa24525639941e18081",
-          "sbx-483f475d2c99498c9a6d"
+          "sbx-abadc0ebd96945b59941",
+          "sbx-d24c9986420c4d7482aa"
         ],
         "refusal": "Error: project twice already has 2 sandbox(es); run `compose down` first"
       }
@@ -73,7 +81,7 @@
       "detail": {
         "service": {
           "name": "built-web",
-          "sandboxID": "sbx-5e92077abd5640658a69",
+          "sandboxID": "sbx-1fdbfc2caada44549844",
           "service": "web",
           "template": "built-web"
         }

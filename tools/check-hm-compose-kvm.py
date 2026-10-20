@@ -32,12 +32,12 @@ services:
   app:
     image: alpine:3.20
     depends_on: [db]
-    command: ["sh", "-c", "echo app-up > /tmp/state; sleep 600"]
+    command: ["sh", "-c", "echo app-up > /tmp/state; echo log-app; sleep 600"]
     environment:
       GREETING: hello
   db:
     image: alpine:3.20
-    command: ["sh", "-c", "echo db-up > /tmp/state; sleep 600"]
+    command: ["sh", "-c", "echo db-up > /tmp/state; echo log-db; sleep 600"]
 """
 
 
@@ -170,6 +170,28 @@ def main():
             return {"app_greeting": greeting.stdout.strip()}
         case("the commands are still running after up returned, and app has its environment", still_running)
 
+        def logs_show_each_service():
+            assert len(started) == 2, "case 1 did not start the services"
+
+            def logs(*extra):
+                done = hm("compose", "-f", str(two), "-p", "stack", "logs", *extra)
+                assert done.returncode == 0, (done.returncode, done.stdout, done.stderr[-400:])
+                return {row["service"]: row["log"] for row in json.loads(done.stdout)["logs"]}
+            seen = {}
+
+            def both():
+                seen.update(logs())
+                ok = "log-app" in seen.get("app", "") and "log-db" in seen.get("db", "")
+                return True if ok else seen
+            wait_for(both, "compose logs shows each service's output")
+            assert "log-db" not in seen["app"] and "log-app" not in seen["db"], seen
+            only = logs("db")
+            assert list(only) == ["db"] and "log-db" in only["db"], only
+            missing = hm("compose", "-f", str(two), "-p", "stack", "logs", "ghost")
+            assert missing.returncode != 0 and "ghost" in missing.stderr, missing.stderr[-300:]
+            return {"app": seen["app"].strip(), "db": seen["db"].strip()}
+        case("logs shows each service's own output, one service on request, and refuses an unknown one", logs_show_each_service)
+
         def down_removes():
             before = sandbox_ids()
             assert all(sid in before for sid in started.values()), (before, started)
@@ -190,7 +212,7 @@ def main():
             files = {
                 "cycle": base + "  a:\n    image: alpine:3.20\n    depends_on: [b]\n  b:\n    image: alpine:3.20\n    depends_on: [a]\n",
                 "unknown": base + "  a:\n    image: alpine:3.20\n    depends_on: [ghost]\n",
-                "ports": base + "  a:\n    image: alpine:3.20\n    ports: [\"8080:80\"]\n",
+                "ports": base + "  a:\n    image: alpine:3.20\n    ports: [\"8000-8010:80\"]\n",
                 "volumes": base + "  a:\n    image: alpine:3.20\n    volumes: [\"./d:/d\"]\n",
             }
             before = sandbox_ids()
@@ -206,7 +228,7 @@ def main():
                     down(path, project)
                 assert sandbox_ids() == before, (label, sandbox_ids(), before)
             return rows
-        case("a cycle, an unknown dependency, ports and volumes fail and create no sandbox", refused_files)
+        case("a cycle, an unknown dependency, a port range and volumes fail and create no sandbox", refused_files)
 
         def twice():
             file = write_compose("twice", TWO)
