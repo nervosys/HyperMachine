@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `hm sandbox vm compose` accepts `ports:` (short syntax): each container port
+  becomes a public-port reservation, printed as `service: container port N/tcp
+  is public port M`. The gateway chooses the public number, so a requested host
+  port is not honoured; ranges and the long syntax are refused. Parsing is unit
+  tested; the compose-to-gateway path is NOT verified end to end.
 - `VM::send_pointer(dx, dy, buttons)` moves the guest's PS/2 mouse. The i8042
   now has an auxiliary port: `0xA7`/`0xA8`/`0xA9`, `0xD4` forwarding to the
   mouse, status bit 5 on mouse bytes, and IRQ 12 when the guest sets bit 1 of

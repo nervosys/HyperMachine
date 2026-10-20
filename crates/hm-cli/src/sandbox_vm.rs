@@ -4110,7 +4110,46 @@ async fn compose_start(
         let _ = api.request(Method::DELETE, &["sandboxes", &id], None).await;
         return Err(e);
     }
+    if let Err(e) = expose_service_ports(api, &id, svc).await {
+        let _ = api.request(Method::DELETE, &["sandboxes", &id], None).await;
+        return Err(e);
+    }
     Ok((id, template))
+}
+
+/// Reserve a public port for each of the service's `ports:`. The gateway
+/// picks the public number, so it is reported rather than chosen.
+async fn expose_service_ports(api: &Api, id: &str, svc: &crate::compose::Service) -> Result<()> {
+    for (&port, &protocol) in &svc.ports {
+        let protocol = match protocol {
+            "udp" => PublicPortProtocol::Udp,
+            "both" => PublicPortProtocol::Both,
+            _ => PublicPortProtocol::Tcp,
+        };
+        let reserved = public_ports(
+            api,
+            PublicPortCommand::Expose {
+                id: id.to_string(),
+                port,
+                protocol,
+            },
+        )
+        .await
+        .with_context(|| {
+            format!(
+                "publishing port {port} of service {:?} (public ports need the control plane's \
+                 --native-port-range and an API key with a principal_id)",
+                svc.name
+            )
+        })?;
+        eprintln!(
+            "{}: container port {port}/{} is public port {}",
+            svc.name,
+            protocol.as_str(),
+            reserved["publicPort"]
+        );
+    }
+    Ok(())
 }
 
 /// `cmd` as a shell line that starts it in the background and returns at

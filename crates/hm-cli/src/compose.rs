@@ -1,8 +1,10 @@
 //! `hm sandbox vm compose`: the pure half. Parsing a compose file, checking
 //! it, and ordering its services; nothing here talks to a node.
 //!
-//! v1 covers `image`, `build`, `command`, `environment` and `depends_on`.
-//! `ports` and `volumes` are refused with an error rather than ignored, and
+//! v1 covers `image`, `build`, `command`, `environment`, `depends_on` and
+//! `ports` (each container port becomes a public-port reservation; the
+//! gateway picks the public number, so a requested host port is not honoured).
+//! `volumes` is refused with an error rather than ignored, and
 //! services cannot reach one another over a network yet: `depends_on` only
 //! orders start-up.
 
@@ -90,6 +92,67 @@ pub struct Service {
     /// `NAME=VALUE`, sorted by name.
     pub env: Vec<String>,
     pub depends_on: Vec<String>,
+    /// Container ports to publish, by port number; the protocol is `tcp`,
+    /// `udp`, or `both` when the file lists the port for each.
+    pub ports: BTreeMap<u16, &'static str>,
+}
+
+/// Parse a compose `ports:` list (short syntax only) into container ports.
+///
+/// Accepted entries: `80`, `"8080:80"`, `"127.0.0.1:8080:80"`, and a
+/// `/tcp` or `/udp` suffix. The host side is checked and dropped: the
+/// gateway chooses the public port. Ranges and the long mapping syntax are
+/// refused, not guessed at.
+fn parse_ports(service: &str, value: &Option<Value>) -> Result<BTreeMap<u16, &'static str>> {
+    let mut out: BTreeMap<u16, &'static str> = BTreeMap::new();
+    let items = match value {
+        None | Some(Value::Null) => return Ok(out),
+        Some(Value::Sequence(items)) => items,
+        Some(_) => bail!("service {service:?}: `ports:` must be a list"),
+    };
+    for item in items {
+        let text = match item {
+            Value::String(s) => s.clone(),
+            Value::Number(n) => n.to_string(),
+            _ => bail!(
+                "service {service:?}: only the short `ports:` syntax (\"8080:80\") is supported"
+            ),
+        };
+        let (spec, protocol) = match text.rsplit_once('/') {
+            Some((spec, "tcp")) => (spec, "tcp"),
+            Some((spec, "udp")) => (spec, "udp"),
+            Some((_, other)) => {
+                bail!("service {service:?}: port protocol {other:?} is not tcp or udp")
+            }
+            None => (text.as_str(), "tcp"),
+        };
+        let parts: Vec<&str> = spec.split(':').collect();
+        let (host, container) = match parts.as_slice() {
+            [c] => (None, *c),
+            [h, c] => (Some(*h), *c),
+            [_ip, h, c] => (Some(*h), *c),
+            _ => bail!("service {service:?}: cannot read port entry {text:?}"),
+        };
+        let number = |s: &str| -> Result<u16> {
+            match s.parse::<u16>() {
+                Ok(n) if n != 0 => Ok(n),
+                _ => bail!(
+                    "service {service:?}: port {s:?} in {text:?} is not a single port 1-65535 \
+                     (ranges are not supported)"
+                ),
+            }
+        };
+        if let Some(host) = host.filter(|h| !h.is_empty()) {
+            number(host)?;
+        }
+        let container = number(container)?;
+        let merged = match out.get(&container) {
+            Some(&seen) if seen != protocol => "both",
+            _ => protocol,
+        };
+        out.insert(container, merged);
+    }
+    Ok(out)
 }
 
 /// A compose file that has been parsed and checked.
@@ -210,7 +273,7 @@ fn refuse_nonempty(service: &str, key: &str, value: &Option<Value>) -> Result<()
     if !empty {
         bail!(
             "service {service:?}: `{key}:` is not supported yet by `hm sandbox vm compose` \
-             (v1 has no published ports, mounts, or service-to-service networking)"
+             (v1 has no mounts or service-to-service networking)"
         );
     }
     Ok(())
@@ -239,7 +302,7 @@ pub fn parse(text: &str) -> Result<Compose> {
     let mut services = BTreeMap::new();
     for (name, svc) in raw.services {
         check_service_name(&name)?;
-        refuse_nonempty(&name, "ports", &svc.ports)?;
+        let ports = parse_ports(&name, &svc.ports)?;
         refuse_nonempty(&name, "volumes", &svc.volumes)?;
         let source = match (svc.image, svc.build) {
             (Some(_), Some(_)) => bail!("service {name:?}: give `image` or `build`, not both"),
@@ -304,6 +367,7 @@ pub fn parse(text: &str) -> Result<Compose> {
                 command,
                 env: env.into_iter().map(|(k, v)| format!("{k}={v}")).collect(),
                 depends_on,
+                ports,
             },
         );
     }
@@ -494,13 +558,49 @@ services:
     }
 
     #[test]
-    fn ports_and_volumes_are_refused() {
-        let e = err("services:\n  a:\n    image: x\n    ports: [\"8080:80\"]\n");
-        assert!(e.contains("`ports:` is not supported yet"), "{e}");
+    fn volumes_are_refused() {
         let e = err("services:\n  a:\n    image: x\n    volumes: [\"./d:/d\"]\n");
         assert!(e.contains("`volumes:` is not supported yet"), "{e}");
         // Empty ones say nothing and are fine.
-        assert!(parse("services:\n  a:\n    image: x\n    ports: []\n").is_ok());
+        assert!(parse("services:\n  a:\n    image: x\n    volumes: []\n").is_ok());
+    }
+
+    fn ports_of(list: &str) -> BTreeMap<u16, &'static str> {
+        let text = format!("services:\n  a:\n    image: x\n    ports: {list}\n");
+        parse(&text).unwrap().services["a"].ports.clone()
+    }
+
+    #[test]
+    fn ports_keep_the_container_side_and_the_protocol() {
+        assert!(ports_of("[]").is_empty());
+        let got = ports_of("[80, \"8080:81\", \"127.0.0.1:9000:82\", \"53:53/udp\"]");
+        assert_eq!(
+            got,
+            BTreeMap::from([(53, "udp"), (80, "tcp"), (81, "tcp"), (82, "tcp")])
+        );
+        // The same port for both protocols is one `both` reservation.
+        assert_eq!(
+            ports_of("[\"53:53/udp\", \"53:53\"]"),
+            BTreeMap::from([(53, "both")])
+        );
+    }
+
+    #[test]
+    fn ports_that_cannot_be_published_faithfully_are_errors() {
+        for bad in [
+            "[\"8000-8010:80\"]",
+            "[\"0\"]",
+            "[\"70000\"]",
+            "[\"80/sctp\"]",
+            "[\"a:b:c:d\"]",
+        ] {
+            let e = err(&format!(
+                "services:\n  a:\n    image: x\n    ports: {bad}\n"
+            ));
+            assert!(e.contains("service \"a\""), "{bad}: {e}");
+        }
+        let e = err("services:\n  a:\n    image: x\n    ports: [{target: 80}]\n");
+        assert!(e.contains("short `ports:` syntax"), "{e}");
     }
 
     #[test]

@@ -80,7 +80,13 @@ Sandboxes are named `PROJECT-SERVICE` and carry the metadata
 project defaults to the compose file's directory. `up` refuses a project that
 already has sandboxes, and deletes what it started if a service fails to
 start. A command's output goes to `/tmp/hm-compose.log` in the guest.
-`ports:`, `volumes:` and unknown keys are refused rather than ignored, and the
+`ports:` (short syntax) reserves a public port per container port through the
+control plane's `--native-port-range`; the gateway picks the public number, which
+`up` prints, so a requested host port is not honoured, and the command fails
+(and deletes what it started) when the control plane has no port range.
+`ports:` is NOT verified end to end through compose (the parsing is unit tested;
+the reservation call is the one `public-ports expose` makes). `volumes:` and
+unknown keys are refused rather than ignored, and the
 services cannot reach one another over a network: `depends_on` is start order
 only. [Checked on KVM](benchmarks/2026-10-19/hm-compose-kvm/README.md) (6 cases,
 3 runs).
@@ -97,7 +103,7 @@ only. [Checked on KVM](benchmarks/2026-10-19/hm-compose-kvm/README.md) (6 cases,
   or `uid:gid` USER** was not tried. Only `linux/amd64` images.
 - **An image without a shell** was not tried: the command is run through
   `/bin/sh`, and the guest kit adds a static busybox when the image has none.
-- **`compose` beyond a first slice**: no `ports`, `volumes`, health checks,
+- **`compose` beyond a first slice**: no `volumes`, health checks,
   restarts or `logs`, and no network between services; see
   [Compose](#compose).
 - **Old guest agents**: a template built before this change has an agent that
