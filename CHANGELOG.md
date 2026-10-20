@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `VM::send_serial(&[u8])` sends bytes to the guest's COM1 as if typed at its
+  serial console; the guest reads them from port 0x3F8 when line-status bit 0
+  is set, and its replies come back through `console_output`. A host may leave
+  at most 4096 bytes unread (it grew without bound before); more is refused and
+  none of the call is queued. A guest polling COM1 got `abc
+` echoed as `bcd
+`
+  and 600 more bytes in order, none lost, on WHPX and KVM; the test fails
+  without the limit. The receive interrupt (IRQ 4) is not delivered on WHPX or
+  HVF, so a guest there polls.
 - A VM can have a linear framebuffer: `VM::attach_framebuffer(width, height,
   gpa)` before provisioning maps host memory into the guest outside RAM
   (`XRGB8888`, rows packed), so a guest draws with plain stores and no VM exits,

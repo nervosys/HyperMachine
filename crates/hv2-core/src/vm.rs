@@ -2834,6 +2834,31 @@ impl VM {
         })
     }
 
+    /// Send bytes to the guest's COM1, as if typed at its serial console.
+    ///
+    /// They wait in the UART's receive buffer: a guest polling the line status
+    /// register (port 0x3FD, bit 0, data ready) reads them from port 0x3F8.
+    /// The UART raises IRQ 4 for them only if the guest enabled the
+    /// receive-data interrupt, and on WHPX and HVF that interrupt is not
+    /// delivered, so a guest on those backends has to poll.
+    ///
+    /// The reply, if any, is what the guest writes to COM1:
+    /// [`VM::console_output`].
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Device`] if the VM has no COM1 (it has no boot source), or if
+    /// 4096 bytes are already unread: none of `bytes` is queued then.
+    pub async fn send_serial(&self, bytes: &[u8]) -> Result<()> {
+        let com1 = self
+            .devices
+            .get_device("COM1")
+            .await
+            .ok_or_else(|| Error::Device("this VM has no COM1".to_string()))?;
+        let result = com1.write().await.console_input(bytes);
+        result
+    }
+
     /// Console output per device, as raw bytes, without consuming it.
     ///
     /// The structured form of [`Self::console_output`], for a caller that

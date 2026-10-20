@@ -50,6 +50,10 @@ const IIR_FIFO_ENABLED: u8 = 0xC0; // Bits 6-7 set when FIFOs are enabled
 /// FCR (FIFO Control Register) bits
 const FCR_FIFO_ENABLE: u8 = 1 << 0;
 const FCR_RX_FIFO_RESET: u8 = 1 << 1;
+
+/// Most bytes the host may leave unread in the receive buffer through
+/// [`Device::console_input`](crate::device::Device::console_input).
+const HOST_INPUT_LIMIT: usize = 4096;
 const FCR_TX_FIFO_RESET: u8 = 1 << 2;
 
 /// Serial console device (16550 UART emulation)
@@ -424,7 +428,18 @@ impl Device for SerialDevice {
         Ok(())
     }
 
+    /// Host input to the receive buffer, at most [`HOST_INPUT_LIMIT`] bytes
+    /// unread. A guest that never reads its UART would otherwise let a host
+    /// that keeps sending grow the buffer without bound; the bytes that do not
+    /// fit are refused, none of them queued.
     fn console_input(&mut self, data: &[u8]) -> Result<()> {
+        let queued = self.rx_buffer.lock().len();
+        if queued + data.len() > HOST_INPUT_LIMIT {
+            return Err(crate::Error::Device(format!(
+                "the serial receive buffer holds {queued} of {HOST_INPUT_LIMIT} bytes,                  {} more do not fit",
+                data.len()
+            )));
+        }
         self.input(data)
     }
 
