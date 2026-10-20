@@ -10,6 +10,7 @@
 //! - 0x60: Data port (read/write)
 //! - 0x64: Status register (read) / Command register (write)
 
+use crate::input::ps2_mouse::{MouseButtons, Ps2Mouse};
 use crate::interrupt::Pic8259;
 use crate::{Device, DeviceType, Result};
 use async_trait::async_trait;
@@ -51,6 +52,7 @@ const CMD_READ_INPUT: u8 = 0xC0; // Read input port
 const CMD_READ_OUTPUT: u8 = 0xD0; // Read output port
 const CMD_WRITE_OUTPUT: u8 = 0xD1; // Write output port
 const CMD_PULSE_OUTPUT: u8 = 0xF0; // Pulse output port
+const CMD_WRITE_AUX: u8 = 0xD4; // Send the next data byte to the auxiliary device
 
 /// Keyboard commands (written to port 0x60)
 const KBD_SET_LED: u8 = 0xED; // Set LEDs
@@ -82,10 +84,20 @@ const CCB_TRANSLATE: u8 = 0x40; // Translate scancodes to Set 1
 /// The keyboard controller's line on a PC.
 const KBD_IRQ: u8 = 1;
 
+/// The auxiliary (mouse) port's line.
+const AUX_IRQ: u8 = 12;
+
+/// Bytes the controller's output buffer holds, from either device.
+const OUTPUT_LIMIT: usize = 16;
+
 #[derive(Debug)]
 struct KeyboardState {
-    /// Output buffer (keyboard to CPU)
-    output_buffer: VecDeque<u8>,
+    /// Output buffer (devices to CPU), in arrival order. The flag marks a byte
+    /// from the auxiliary device, which is what status bit 5 reports for the
+    /// byte at the head.
+    output_buffer: VecDeque<(u8, bool)>,
+    /// The mouse on the auxiliary port.
+    mouse: Ps2Mouse,
     /// Input buffer (CPU to keyboard)
     input_buffer: Option<u8>,
     /// Status register
@@ -114,8 +126,13 @@ struct KeyboardState {
 
 impl KeyboardState {
     fn new() -> Self {
+        // A PS/2 mouse powers up with reporting off; the guest turns it on
+        // with 0xF4. `Ps2Mouse::new` starts with it on.
+        let mut mouse = Ps2Mouse::new();
+        mouse.reset();
         Self {
             output_buffer: VecDeque::new(),
+            mouse,
             input_buffer: None,
             status: STATUS_SYS | STATUS_UNLOCKED, // System initialized, not locked
             ccb: CCB_INT_KBD | CCB_TRANSLATE,     // Interrupts enabled, translation on
@@ -141,6 +158,13 @@ impl KeyboardState {
             self.status &= !STATUS_OBF;
         }
 
+        // Bit 5 says the byte at the head came from the auxiliary device.
+        if matches!(self.output_buffer.front(), Some((_, true))) {
+            self.status |= STATUS_AUX_OBF;
+        } else {
+            self.status &= !STATUS_AUX_OBF;
+        }
+
         if self.input_buffer.is_some() {
             self.status |= STATUS_IBF;
         } else {
@@ -150,36 +174,64 @@ impl KeyboardState {
 
     /// Push data to output buffer
     fn push_output(&mut self, data: u8) {
-        if self.output_buffer.len() < 16 {
-            self.output_buffer.push_back(data);
+        self.push_entry(data, false);
+    }
+
+    /// Push a byte from the keyboard (`aux` false) or the mouse (`aux` true).
+    fn push_entry(&mut self, data: u8, aux: bool) {
+        if self.output_buffer.len() < OUTPUT_LIMIT {
+            self.output_buffer.push_back((data, aux));
             self.update_status();
 
-            // Raise IRQ 1 if keyboard interrupts are enabled.
+            // Raise the device's IRQ if its interrupt is enabled.
             //
             // Both places, and the second is the one that reaches a guest: the
             // PIC below is a userspace model that a guest with an in-kernel
             // interrupt controller never reads, so raising only there is
             // indistinguishable from raising nothing.
-            self.raise_irq();
+            self.raise_irq(aux);
         }
     }
 
-    /// Raise IRQ 1 if keyboard interrupts are enabled in the command byte.
-    fn raise_irq(&self) {
-        if (self.ccb & CCB_INT_KBD) != 0 {
+    /// Move what the mouse has to say into the output buffer, as far as there
+    /// is room; the rest stays with the mouse until the guest drains some.
+    fn pump_aux(&mut self) {
+        while self.output_buffer.len() < OUTPUT_LIMIT && self.mouse.has_data() {
+            if let Some(byte) = self.mouse.read() {
+                self.push_entry(byte, true);
+            }
+        }
+    }
+
+    /// IRQ and command-byte enable bit for a byte from `aux`'s device.
+    fn irq_for(aux: bool) -> (u8, u8) {
+        if aux {
+            (AUX_IRQ, CCB_INT_AUX)
+        } else {
+            (KBD_IRQ, CCB_INT_KBD)
+        }
+    }
+
+    /// Raise the IRQ of the device a byte came from, if its interrupt is
+    /// enabled in the command byte.
+    fn raise_irq(&self, aux: bool) {
+        let (irq, enable) = Self::irq_for(aux);
+        if (self.ccb & enable) != 0 {
             if let Some(ref pic) = self.pic {
-                let _ = pic.raise_irq(KBD_IRQ);
+                let _ = pic.raise_irq(irq);
             }
             if let Some(sink) = &self.interrupt_sink {
-                sink.raise(KBD_IRQ);
+                sink.raise(irq);
             }
         }
     }
 
     /// Pop data from output buffer
     fn pop_output(&mut self) -> Option<u8> {
-        let data = self.output_buffer.pop_front();
+        let data = self.output_buffer.pop_front().map(|(byte, _)| byte);
         self.update_status();
+        // Mouse bytes that did not fit move in now that there is room.
+        self.pump_aux();
         // The controller loads the next byte into the output buffer as soon as
         // the guest has read one, and that raises IRQ 1 again. Without this a
         // guest that reads one byte per interrupt, as a handler does, saw the
@@ -192,9 +244,12 @@ impl KeyboardState {
         // stale pulse is an interrupt that reads an empty buffer (seen on KVM:
         // a seventh IRQ 1 for six bytes). The userspace PIC latches the edge
         // at once, so there the count is exact.
-        if data.is_some() && self.output_buffer_full() && (self.ccb & CCB_INT_KBD) != 0 {
-            if let Some(ref pic) = self.pic {
-                let _ = pic.raise_irq(KBD_IRQ);
+        if let (Some(_), Some(&(_, aux))) = (data, self.output_buffer.front()) {
+            let (irq, enable) = Self::irq_for(aux);
+            if (self.ccb & enable) != 0 {
+                if let Some(ref pic) = self.pic {
+                    let _ = pic.raise_irq(irq);
+                }
             }
         }
         data
@@ -207,6 +262,19 @@ impl KeyboardState {
                 self.push_output(self.ccb);
             }
             CMD_WRITE_CCB => {
+                self.current_command = Some(cmd);
+            }
+            CMD_ENABLE_AUX => {
+                self.ccb &= !CCB_DISABLE_AUX;
+            }
+            CMD_DISABLE_AUX => {
+                self.ccb |= CCB_DISABLE_AUX;
+            }
+            CMD_TEST_AUX => {
+                // Auxiliary interface test always passes
+                self.push_output(0x00);
+            }
+            CMD_WRITE_AUX => {
                 self.current_command = Some(cmd);
             }
             CMD_DISABLE_KBD => {
@@ -270,7 +338,9 @@ impl KeyboardState {
                 self.push_output(KBD_ACK);
             }
             KBD_RESET => {
-                self.output_buffer.clear();
+                // A keyboard reset does not touch what the mouse has said.
+                self.output_buffer.retain(|&(_, aux)| aux);
+                self.update_status();
                 self.push_output(KBD_ACK);
                 self.push_output(KBD_SELF_TEST_PASS);
             }
@@ -289,6 +359,15 @@ impl KeyboardState {
                     self.ccb = data;
                     self.kbd_enabled = (data & CCB_DISABLE_KBD) == 0;
                     self.current_command = None;
+                }
+                CMD_WRITE_AUX => {
+                    // The byte goes to the mouse, not the keyboard. A guest
+                    // that disabled the auxiliary port gets no answer.
+                    self.current_command = None;
+                    if (self.ccb & CCB_DISABLE_AUX) == 0 {
+                        self.mouse.write(data);
+                        self.pump_aux();
+                    }
                 }
                 CMD_WRITE_OUTPUT => {
                     // Writing to output port (usually for A20 gate or reset)
@@ -382,7 +461,10 @@ impl KeyboardDevice {
     /// Check if keyboard has pending interrupt (IRQ 1)
     pub fn has_pending_interrupt(&self) -> bool {
         let state = self.state.lock();
-        state.output_buffer_full() && (state.ccb & CCB_INT_KBD) != 0
+        match state.output_buffer.front() {
+            Some(&(_, aux)) => (state.ccb & KeyboardState::irq_for(aux).1) != 0,
+            None => false,
+        }
     }
 }
 
@@ -399,7 +481,64 @@ impl Device for KeyboardDevice {
         // did not, so the dispatch layer could never see this device's
         // interrupt -- the same defect the RTC carried, and for the same
         // reason: a public check nothing on the delivery path called.
-        self.has_pending_interrupt().then_some(KBD_IRQ)
+        if !self.has_pending_interrupt() {
+            return None;
+        }
+        let aux = matches!(self.state.lock().output_buffer.front(), Some((_, true)));
+        Some(if aux { AUX_IRQ } else { KBD_IRQ })
+    }
+
+    /// Host pointer motion as PS/2 packets on the auxiliary port.
+    ///
+    /// A move larger than one packet can carry (-255 to 255 on an axis) is
+    /// split into several, all with `buttons`. All or nothing, like
+    /// [`Self::console_input`]: the controller's 16-byte output buffer has to
+    /// hold every packet, or none is queued.
+    fn pointer_input(&mut self, dx: i32, dy: i32, buttons: u8) -> Result<()> {
+        if buttons > 0x07 {
+            return Err(crate::Error::Device(format!(
+                "pointer buttons {buttons:#x}: only bits 0 to 2 (left, right, middle) exist"
+            )));
+        }
+        let mut state = self.state.lock();
+        if (state.ccb & CCB_DISABLE_AUX) != 0 {
+            return Err(crate::Error::Device(
+                "the mouse port is disabled by the guest".to_string(),
+            ));
+        }
+        if !state.mouse.is_reporting_enabled() {
+            return Err(crate::Error::Device(
+                "the guest has not enabled mouse reporting (0xF4)".to_string(),
+            ));
+        }
+        let changed = buttons != state.mouse.buttons().to_byte();
+        if dx == 0 && dy == 0 && !changed {
+            return Ok(());
+        }
+        const STEP: i32 = 255;
+        let packets = ((dx.unsigned_abs().div_ceil(STEP as u32))
+            .max(dy.unsigned_abs().div_ceil(STEP as u32))
+            .max(1)) as usize;
+        let size = state.mouse.protocol().packet_size();
+        let room = OUTPUT_LIMIT
+            .saturating_sub(state.output_buffer.len())
+            .saturating_sub(state.mouse.output_len());
+        if packets * size > room {
+            return Err(crate::Error::Device(format!(
+                "the mouse buffer has room for {room} more byte(s), {} were needed",
+                packets * size
+            )));
+        }
+        let (mut rx, mut ry) = (dx, dy);
+        let held = MouseButtons::from_byte(buttons);
+        for _ in 0..packets {
+            let (sx, sy) = (rx.clamp(-STEP, STEP), ry.clamp(-STEP, STEP));
+            state.mouse.move_with_buttons(sx as i16, sy as i16, held);
+            rx -= sx;
+            ry -= sy;
+        }
+        state.pump_aux();
+        Ok(())
     }
 
     fn set_interrupt_sink(&mut self, sink: Arc<dyn crate::device::InterruptSink>) {
@@ -424,7 +563,9 @@ impl Device for KeyboardDevice {
                 "the keyboard is disabled by the guest".to_string(),
             ));
         }
-        let room = 16 - state.output_buffer.len();
+        let room = OUTPUT_LIMIT
+            .saturating_sub(state.output_buffer.len())
+            .saturating_sub(state.mouse.output_len());
         if data.len() > room {
             return Err(crate::Error::Device(format!(
                 "the keyboard buffer has room for {room} more byte(s), {} were sent",
@@ -567,6 +708,109 @@ mod tests {
         // Nothing of the refused call was queued: 6 more still fit.
         kbd.console_input(&[0x30; 6]).unwrap();
         assert!(kbd.console_input(&[0x30]).is_err(), "now full");
+    }
+
+    /// Write `byte` to the mouse the way a guest does: 0xD4 on 0x64, then the
+    /// byte on 0x60.
+    fn to_mouse(kbd: &KeyboardDevice, byte: u8) {
+        kbd.write_command(CMD_WRITE_AUX);
+        kbd.write_data(byte);
+    }
+
+    /// Read one byte as a polling guest does, returning it with status bit 5.
+    fn poll_byte(kbd: &KeyboardDevice) -> (u8, bool) {
+        let status = kbd.read_status();
+        assert_ne!(status & STATUS_OBF, 0, "a byte should be waiting");
+        (kbd.read_data(), status & STATUS_AUX_OBF != 0)
+    }
+
+    #[tokio::test]
+    async fn the_mouse_answers_commands_sent_through_0xd4() {
+        let kbd = KeyboardDevice::new();
+        kbd.write_command(CMD_ENABLE_AUX);
+        to_mouse(&kbd, 0xF6); // defaults
+        assert_eq!(poll_byte(&kbd), (0xFA, true), "an ACK, flagged as aux");
+        to_mouse(&kbd, 0xF4); // enable reporting
+        assert_eq!(poll_byte(&kbd), (0xFA, true));
+        // A byte for the keyboard is not a byte for the mouse.
+        kbd.write_data(KBD_ECHO);
+        assert_eq!(poll_byte(&kbd), (KBD_ECHO, false), "no aux flag");
+    }
+
+    #[tokio::test]
+    async fn a_pointer_move_arrives_as_a_three_byte_packet() {
+        let mut kbd = KeyboardDevice::new();
+        assert!(
+            kbd.pointer_input(5, 5, 0).is_err(),
+            "reporting is off until the guest turns it on"
+        );
+        to_mouse(&kbd, 0xF4);
+        poll_byte(&kbd);
+        // Right 10, down 3 (PS/2 y is up), left button held.
+        kbd.pointer_input(10, -3, 1).unwrap();
+        let packet: Vec<_> = (0..3).map(|_| poll_byte(&kbd)).collect();
+        assert!(packet.iter().all(|&(_, aux)| aux));
+        assert_eq!(packet[0].0, 0x08 | 0x01 | 0x20, "bit 3, left, y negative");
+        assert_eq!(packet[1].0, 10);
+        assert_eq!(packet[2].0, (-3i8) as u8);
+    }
+
+    #[tokio::test]
+    async fn a_large_move_is_split_and_a_full_buffer_refuses_all_of_it() {
+        let mut kbd = KeyboardDevice::new();
+        to_mouse(&kbd, 0xF4);
+        poll_byte(&kbd);
+        // 600 right is three packets: 255 + 255 + 90.
+        kbd.pointer_input(600, 0, 0).unwrap();
+        let bytes: Vec<u8> = (0..9).map(|_| poll_byte(&kbd).0).collect();
+        assert_eq!([bytes[1], bytes[4], bytes[7]], [255, 255, 90]);
+        // 16 bytes hold five packets, not six; the refusal queues nothing.
+        assert!(kbd.pointer_input(6 * 255, 0, 0).is_err());
+        assert_eq!(kbd.read_status() & STATUS_OBF, 0, "nothing was queued");
+        kbd.pointer_input(5 * 255, 0, 0).unwrap();
+    }
+
+    #[tokio::test]
+    async fn the_mouse_interrupt_is_irq_12_and_only_when_enabled() {
+        let mut kbd = KeyboardDevice::new();
+        #[derive(Debug, Default)]
+        struct Recorder(std::sync::Mutex<Vec<u8>>);
+        impl crate::device::InterruptSink for Recorder {
+            fn raise(&self, irq: u8) {
+                self.0.lock().unwrap().push(irq);
+            }
+        }
+        let sink = Arc::new(Recorder::default());
+        kbd.set_interrupt_sink(sink.clone());
+        to_mouse(&kbd, 0xF4);
+        poll_byte(&kbd);
+        kbd.pointer_input(1, 1, 0).unwrap();
+        assert!(
+            sink.0.lock().unwrap().is_empty(),
+            "the aux interrupt is off in the default command byte"
+        );
+        for _ in 0..3 {
+            poll_byte(&kbd);
+        }
+        kbd.write_command(CMD_WRITE_CCB);
+        kbd.write_data(CCB_INT_KBD | CCB_INT_AUX | CCB_TRANSLATE);
+        kbd.pointer_input(1, 1, 0).unwrap();
+        assert_eq!(
+            *sink.0.lock().unwrap(),
+            [AUX_IRQ; 3],
+            "IRQ 12, one pulse per packet byte"
+        );
+        assert_eq!(kbd.pending_interrupt(), Some(AUX_IRQ));
+    }
+
+    #[tokio::test]
+    async fn a_disabled_mouse_port_takes_no_pointer_input() {
+        let mut kbd = KeyboardDevice::new();
+        to_mouse(&kbd, 0xF4);
+        poll_byte(&kbd);
+        kbd.write_command(CMD_DISABLE_AUX);
+        assert!(kbd.pointer_input(1, 1, 0).is_err());
+        assert!(kbd.pointer_input(0, 0, 8).is_err(), "no fourth button");
     }
 
     #[tokio::test]

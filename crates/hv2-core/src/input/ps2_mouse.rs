@@ -367,6 +367,7 @@ pub struct MouseStatsSnapshot {
 }
 
 /// PS/2 Mouse device
+#[derive(Debug)]
 pub struct Ps2Mouse {
     /// Current protocol
     protocol: MouseProtocol,
@@ -689,7 +690,9 @@ impl Ps2Mouse {
         let dy = dy.clamp(-256, 255);
 
         // Byte 1: buttons, signs, overflow
-        let mut byte1 = self.buttons.to_byte();
+        // Bit 3 is always set in a movement packet; a driver uses it to find
+        // the first byte of a packet again after losing its place.
+        let mut byte1 = self.buttons.to_byte() | 0x08;
         if dx < 0 {
             byte1 |= 0x10;
         }
@@ -802,6 +805,18 @@ impl Ps2Mouse {
         if self.reporting_enabled && self.stream_mode {
             self.send_packet(0, 0, 0);
         }
+    }
+
+    /// Move and set the button state in one packet, as a pointing device that
+    /// reports a position and its buttons together does. Nothing is queued
+    /// while the guest has reporting off.
+    pub fn move_with_buttons(&mut self, dx: i16, dy: i16, buttons: MouseButtons) {
+        self.buttons = buttons;
+        if !self.reporting_enabled || !self.stream_mode {
+            return;
+        }
+        self.stats.record_movement(dx, dy);
+        self.send_packet(dx, dy, 0);
     }
 
     /// Set buttons directly

@@ -2748,6 +2748,36 @@ impl VM {
         result
     }
 
+    /// Move the guest's PS/2 mouse by `dx`, `dy` and set its buttons, as
+    /// packets on the i8042's auxiliary port.
+    ///
+    /// `dx` is positive to the right and `dy` positive *up*, which is the PS/2
+    /// convention (a host with screen coordinates negates `dy`). `buttons`
+    /// holds bit 0 left, bit 1 right, bit 2 middle, and is the state after the
+    /// move, so a release is a call with the bit clear. A move larger than a
+    /// packet carries (255 on an axis) becomes several packets.
+    ///
+    /// The guest has to have turned the mouse on first: `0x64 <- 0xA8`, then
+    /// `0x64 <- 0xD4`, `0x60 <- 0xF4`. Packets wait at port 0x60 with status
+    /// bit 5 set, and raise IRQ 12 if the guest set bit 1 of the controller's
+    /// command byte; a guest that polls needs neither.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Device`] if the VM has no keyboard controller, the guest has
+    /// disabled the mouse port or not enabled reporting, `buttons` has bits
+    /// beyond the third, or the 16-byte output buffer cannot hold every
+    /// packet: none are queued then.
+    pub async fn send_pointer(&self, dx: i32, dy: i32, buttons: u8) -> Result<()> {
+        let controller = self
+            .devices
+            .get_device("i8042")
+            .await
+            .ok_or_else(|| Error::Device("this VM has no keyboard controller".to_string()))?;
+        let result = controller.write().await.pointer_input(dx, dy, buttons);
+        result
+    }
+
     /// Give the guest a linear framebuffer: `width` x `height` pixels of
     /// `XRGB8888` (bytes B, G, R, X in memory), rows packed, at guest address
     /// `gpa`. It is host memory mapped into the guest outside RAM, so the guest

@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `VM::send_pointer(dx, dy, buttons)` moves the guest's PS/2 mouse. The i8042
+  now has an auxiliary port: `0xA7`/`0xA8`/`0xA9`, `0xD4` forwarding to the
+  mouse, status bit 5 on mouse bytes, and IRQ 12 when the guest sets bit 1 of
+  its command byte. `dy` is positive up (PS/2); a move over 255 on an axis is
+  split into packets, and a move that does not fit the 16-byte output buffer
+  is refused whole. Refused too until the guest enables reporting (`0xF4`).
+  Verified by a polling guest on WHPX and KVM (`tests/pointer_delivery.rs`, 6 of
+  6 KVM runs). IRQ 12 delivery to a guest is NOT verified on WHPX/HVF.
 - `VM::send_serial(&[u8])` sends bytes to the guest's COM1 as if typed at its
   serial console; the guest reads them from port 0x3F8 when line-status bit 0
   is set, and its replies come back through `console_output`. A host may leave
@@ -69,6 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   program starts, the bounding set included.
 
 ### Fixed
+- PS/2 mouse movement packets now set byte 0 bit 3, which a driver uses to
+  resynchronise; they never did.
 - A guest on WHPX or HVF had no interval timer. The legacy machine attached
   COM1, the RTC and the keyboard controller but no PIT, so a kernel's writes to
   ports 0x40-0x43 hit an unhandled port and its IRQ 0 never came; one that did

@@ -98,6 +98,23 @@ pub trait Device: Send + Sync {
         )))
     }
 
+    /// Deliver relative pointer motion and the button state from the host.
+    ///
+    /// `dx` is positive to the right and `dy` positive *up*, as in a PS/2
+    /// packet; `buttons` has bit 0 left, bit 1 right, bit 2 middle. Refuses,
+    /// like [`Self::console_input`], rather than dropping.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Device`] when this device has no pointer.
+    fn pointer_input(&mut self, dx: i32, dy: i32, buttons: u8) -> Result<()> {
+        let _ = (dx, dy, buttons);
+        Err(Error::Device(format!(
+            "device '{}' accepts no pointer input",
+            self.name()
+        )))
+    }
+
     /// Console bytes this device has buffered for the host to read, if it is
     /// the kind of device a guest writes a console to.
     ///
