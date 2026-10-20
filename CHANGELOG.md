@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A WHPX guest that goes idle is woken again. `interrupts_deliverable` ignored
+  an interruption already queued in the vCPU's single pending-interruption
+  slot (injected on an earlier entry, the run cancelled before the guest took
+  it), so the next injection overwrote it. The lost vector's 8259 in-service
+  bit stayed set and masked that line for good; when it was IRQ 0 the guest's
+  timer stopped and `sleep 1` never returned. Verified on WHPX by
+  `tests/linux_whpx_boot.rs` (`HV2_TEST_INITRD_SHELL`: `sleep 1` then an
+  echo; fails without the change). NOT fixed: guest time runs about 12x slow
+  (TSC calibration against the PIT fails, so the clocksource is `jiffies`, and
+  ticks arrive at the host's coarse timer rate), so `sleep 1` takes about 12 s.
 - Device interrupts reach a WHPX guest. Port-I/O devices (the UART's IRQ 4
   transmit interrupt, and anything else behind `IoOutcome.interrupt` or the
   interrupt sink) were driven through `set_irq_line`, which does nothing on a

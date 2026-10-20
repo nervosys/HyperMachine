@@ -21,7 +21,9 @@
 //! `CONFIG_SERIAL_8250_CONSOLE=y`. `HV2_TEST_INITRD` adds an initramfs, in
 //! which case `/init` running is the end of the boot instead of the panic for
 //! want of a root filesystem. `HV2_TEST_INITRD_MARKER` names a string that init
-//! prints, which proves output from userspace (not just the kernel) arrives.
+//! prints, which proves output from userspace (not just the kernel) arrives;
+//! `HV2_TEST_INITRD_SHELL` says init leaves a shell on the console, and the test
+//! then has it `sleep 1` to prove a halted guest is woken by the timer.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -116,6 +118,29 @@ async fn a_real_linux_kernel_boots_on_a_userspace_pic_backend() {
             console = vm.console_output().await;
         }
     }
+    // A shell that is asked to sleep puts the guest into HLT with nothing
+    // runnable, and only the PIT's tick can wake it. The reply is computed
+    // (`$((6*7))`) so the echo of the typed line cannot satisfy the check.
+    // Needs a shell on the console, which `HV2_TEST_INITRD_SHELL` promises.
+    let sleeper = std::env::var("HV2_TEST_INITRD_SHELL").is_ok();
+    if sleeper && marker.is_some() {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let sent = Instant::now();
+        vm.send_serial(
+            b"sleep 1; echo hv2-woke-$((6*7))
+",
+        )
+        .await
+        .expect("the serial input is accepted");
+        while started.elapsed() < BOOT_DEADLINE && !console.contains("hv2-woke-42") {
+            tokio::time::sleep(POLL).await;
+            console = vm.console_output().await;
+        }
+        println!(
+            "linux whpx boot: `sleep 1` took {:?} of host time",
+            sent.elapsed()
+        );
+    }
     let elapsed = started.elapsed();
     let _ = vm.stop().await;
     println!("linux whpx boot: userspace handoff after {elapsed:?}");
@@ -149,6 +174,14 @@ async fn a_real_linux_kernel_boots_on_a_userspace_pic_backend() {
         assert!(
             console.contains(marker.as_str()),
             "userspace printed nothing ({marker:?} never appeared): the UART's transmit              interrupt does not reach the guest.
+console:
+{console}"
+        );
+    }
+    if sleeper && marker.is_some() {
+        assert!(
+            console.contains("hv2-woke-42"),
+            "a guest that slept never woke: the timer tick never reached it: an interruption injected over a still-queued one is lost, and its in-service bit then masks the line for good.
 console:
 {console}"
         );

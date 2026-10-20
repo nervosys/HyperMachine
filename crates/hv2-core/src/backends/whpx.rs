@@ -2440,12 +2440,25 @@ impl WhpxVcpu {
         let regs = self.get_registers(&[
             WHV_REGISTER_NAME::WHvX64RegisterRflags,
             WHV_REGISTER_NAME::WHvX64RegisterInterruptState,
+            WHV_REGISTER_NAME::WHvX64RegisterPendingInterruption,
         ])?;
-        // SAFETY: RFLAGS is a 64-bit register and the interrupt state is the
-        // register-sized bitfield `InterruptState`; both were just read.
-        let (rflags, shadow) =
-            unsafe { (regs[0].Reg64, regs[1].InterruptState.interrupt_shadow()) };
-        Ok(rflags & (1 << 9) != 0 && !shadow)
+        // SAFETY: RFLAGS is a 64-bit register, the interrupt state is the
+        // register-sized bitfield `InterruptState`, and the pending
+        // interruption is a 64-bit register; all were just read.
+        let (rflags, shadow, queued) = unsafe {
+            (
+                regs[0].Reg64,
+                regs[1].InterruptState.interrupt_shadow(),
+                regs[2].PendingInterruption.AsUINT64 & 1 != 0,
+            )
+        };
+        // There is one pending-interruption slot. An interruption injected on
+        // an earlier entry that the guest has not taken yet (the run was
+        // cancelled first) still occupies it, and writing another over it
+        // loses the first -- whose 8259 in-service bit is already set, so its
+        // line never fires again. A lost timer tick is a guest whose clock
+        // stops.
+        Ok(rflags & (1 << 9) != 0 && !shadow && !queued)
     }
 
     #[cfg(not(target_os = "windows"))]
