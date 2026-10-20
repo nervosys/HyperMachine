@@ -1026,6 +1026,12 @@ mod tests {
         assert_eq!(sink.lock().len(), 2);
 
         // Changing it sends at once; deleting it stops.
+        //
+        // A change is noticed by its `updated_ms` differing, and that is a
+        // millisecond clock: a second edit inside the millisecond of the first
+        // is the same destination as far as the schedule can tell. This test
+        // is fast enough to do exactly that (1 run in 30), so it waits one out.
+        tokio::time::sleep(Duration::from_millis(3)).await;
         let (status, _) = call(
             &app,
             "PUT",
