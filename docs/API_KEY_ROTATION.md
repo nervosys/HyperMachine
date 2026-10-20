@@ -16,8 +16,8 @@ A real HTTP integration test checks old-key revocation, replacement-key access, 
 
 Policies accept an optional `role`: `operator` (the default for existing policies)
 or `observer`. Unknown values and explicit null are rejected by startup and
-atomic replacement. Roles apply to the configured single team, without tenant
-isolation. Public-port management separately requires matching creator ownership.
+atomic replacement. Roles apply to the configured team; without a `team_id` on the keys there is
+no tenant isolation (see below for `team_id`). Public-port management separately requires matching creator ownership.
 
 An observer can only GET/HEAD `/sandboxes`, `/v2/sandboxes`, `/templates`,
 `/sandboxes/metrics` and `/cluster/nodes`, and only where its scopes also allow
