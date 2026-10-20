@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A second, read-only disk reaches a WHPX guest: `attach_seed_pci` (existing) adds
+  a virtio-blk device at PCI slot 6, `/dev/vdb` beside a root disk, and the
+  guest reads it (`tar -xOf` a tar stream with no filesystem prints the file;
+  `HV2_TEST_SEED` in `tests/linux_whpx_boot.rs`). Debian's kernel reports
+  `[vdb]` with the right size next to the root `[vda]`. One extra disk only;
+  writable and further disks are NOT supported, and nothing was verified on HVF.
 - A root filesystem on a virtio-blk disk over PCI mounts on WHPX
   (`a_root_filesystem_mounts_from_a_virtio_blk_disk_on_pci`, `HV2_TEST_DISK`:
   Debian 13's 6.12 kernel and initramfs mount `/dev/vda1` read-only and start

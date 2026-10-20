@@ -171,6 +171,20 @@ async fn main() {
         }
     }
 
+    // A second, read-only disk (the seed disk): `/dev/vdb` after the root.
+    if let Ok(seed) = std::env::var("HV2_SEED") {
+        match vm
+            .attach_seed_pci(std::path::Path::new(&seed), "seed0")
+            .await
+        {
+            Ok(_) => println!("seed          : {seed} attached over PCI (read-only)"),
+            Err(e) => {
+                println!("seed          : FAILED — {e}");
+                return;
+            }
+        }
+    }
+
     match vm.provision().await {
         Ok(()) => {
             println!("provision     : OK");

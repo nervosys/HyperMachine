@@ -24,6 +24,8 @@
 //! prints, which proves output from userspace (not just the kernel) arrives;
 //! `HV2_TEST_INITRD_SHELL` says init leaves a shell on the console, and the test
 //! then has it `sleep 1` to prove a halted guest is woken by the timer.
+//! `HV2_TEST_SEED` names a second, read-only disk (a tar stream) and
+//! `HV2_TEST_SEED_MARKER` a string in it that reading the disk as a tar stream must print (it is `/dev/vda` here, with no root disk).
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -91,6 +93,12 @@ async fn a_real_linux_kernel_boots_on_a_userspace_pic_backend() {
         return;
     }
     let vm = Arc::new(vm);
+    let seed = std::env::var("HV2_TEST_SEED").ok();
+    if let Some(seed) = &seed {
+        vm.attach_seed_pci(std::path::Path::new(seed), "seed0")
+            .await
+            .expect("the seed disk attaches");
+    }
     if let Err(e) = vm.provision().await {
         eprintln!("skipping: provision failed ({e})");
         return;
@@ -141,6 +149,21 @@ async fn a_real_linux_kernel_boots_on_a_userspace_pic_backend() {
             sent.elapsed()
         );
     }
+    // A second disk, read by the guest: a tar stream with no filesystem on it,
+    // as the host would write one. `HV2_TEST_SEED_MARKER` is a string in it.
+    let seed_marker = std::env::var("HV2_TEST_SEED_MARKER").ok();
+    if let (true, Some(marker), true) = (sleeper, &seed_marker, seed.is_some()) {
+        vm.send_serial(
+            b"for d in /dev/vd?; do tar -xOf $d; done
+",
+        )
+        .await
+        .expect("the serial input is accepted");
+        while started.elapsed() < BOOT_DEADLINE && !console.contains(marker.as_str()) {
+            tokio::time::sleep(POLL).await;
+            console = vm.console_output().await;
+        }
+    }
     let elapsed = started.elapsed();
     let _ = vm.stop().await;
     println!("linux whpx boot: userspace handoff after {elapsed:?}");
@@ -174,6 +197,14 @@ async fn a_real_linux_kernel_boots_on_a_userspace_pic_backend() {
         assert!(
             console.contains(marker.as_str()),
             "userspace printed nothing ({marker:?} never appeared): the UART's transmit              interrupt does not reach the guest.
+console:
+{console}"
+        );
+    }
+    if let (true, Some(marker), true) = (sleeper, &seed_marker, seed.is_some()) {
+        assert!(
+            console.contains(marker.as_str()),
+            "the guest could not read the seed disk.
 console:
 {console}"
         );
