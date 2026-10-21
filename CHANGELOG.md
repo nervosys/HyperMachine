@@ -211,6 +211,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   program starts, the bounding set included.
 
 ### Fixed
+- A keystroke on WHPX or HVF could be followed by an interrupt for an empty
+  keyboard buffer (a stray `0x00` read from port 0x60, about one
+  `key_delivery` run in fifteen). The i8042 raised IRQ 1 on the userspace PIC
+  and also through the interrupt sink, whose queued pulse reached the same PIC
+  later, sometimes after the guest had read the byte. It now raises on the PIC
+  alone when it has one. 0 failures in 200 runs afterwards; KVM, which has no
+  userspace PIC, is unchanged and was not run.
 - PS/2 mouse movement packets now set byte 0 bit 3, which a driver uses to
   resynchronise; they never did.
 - A guest on WHPX or HVF had no interval timer. The legacy machine attached

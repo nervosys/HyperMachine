@@ -188,10 +188,9 @@ impl KeyboardState {
 
             // Raise the device's IRQ if its interrupt is enabled.
             //
-            // Both places, and the second is the one that reaches a guest: the
-            // PIC below is a userspace model that a guest with an in-kernel
-            // interrupt controller never reads, so raising only there is
-            // indistinguishable from raising nothing.
+            // On the userspace PIC when there is one; otherwise through the
+            // sink, which is the path that reaches a guest with an in-kernel
+            // interrupt controller (it never reads the PIC).
             self.raise_irq(aux);
         }
     }
@@ -221,9 +220,14 @@ impl KeyboardState {
         let (irq, enable) = Self::irq_for(aux);
         if (self.ccb & enable) != 0 {
             if let Some(ref pic) = self.pic {
+                // The userspace PIC is the guest's controller, and the sink's
+                // pulse would arrive at this same PIC, but queued: late
+                // enough that the guest may already have read the byte it
+                // announces, and then it takes an interrupt for an empty
+                // buffer (a stray 0x00 on COM1, one run in about fifteen, in
+                // `key_delivery`). So here the raise is the only one.
                 let _ = pic.raise_irq(irq);
-            }
-            if let Some(sink) = &self.interrupt_sink {
+            } else if let Some(sink) = &self.interrupt_sink {
                 sink.raise(irq);
             }
         }
