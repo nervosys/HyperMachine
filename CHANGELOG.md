@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A team's telemetry destination ending in `/v1/metrics` is now also sent
+  the team's sandbox events (created, paused, resumed, deleted, expired, lost,
+  forked) as OTLP logs, to `/v1/logs` under the same operator prefix and
+  headers: oldest first, at most 500 a push, once each (a cursor on time plus
+  the ids at that millisecond), again after a refused push, and nothing from
+  before the destination or the control plane began. Tested against a
+  loopback collector (`team_telemetry::tests`, 4 new tests: the path swap, the
+  cursor, per-team filtering with oldest-first order and no repeat, retry
+  after a 503). NOT VERIFIED: against a real OpenTelemetry Collector or
+  backend, a Redis-backed store's event tail across control planes, a team
+  with more than 500 new events in one interval under load, and traces or
+  command output (not built).
 - `GET /sandboxes/{id}/checkpoints/{name}/archive?path=` downloads a
   directory of a sandbox's checkpoint (`/` for everything) as a gzipped tar,
   built in the same reader guest as `/files` and `/file`, so the sandbox and

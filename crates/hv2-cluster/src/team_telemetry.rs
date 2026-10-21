@@ -16,6 +16,18 @@
 //! | `hm_team_vcpu_seconds_24h` | vCPU-seconds in the last 24 hours |
 //! | `hm_team_memory_gib_seconds_24h` | GiB-seconds in the last 24 hours |
 //!
+//! # Logs
+//!
+//! A destination whose URL ends in `/v1/metrics` is also sent the team's
+//! sandbox events as OTLP logs, to the same URL with `/v1/logs` in its
+//! place, under the same operator prefix and with the same headers: one log
+//! record for each `sandbox-created`, `-paused`, `-resumed`, `-deleted`,
+//! `-expired`, `-lost` and `-forked` that happened to one of the team's
+//! sandboxes. Records go out oldest first, at most [`MOST_LOG_RECORDS`] to a
+//! push, and a record that could not be delivered is sent again by the next
+//! push. Nothing before the control plane started, or before the destination
+//! was stored, is sent: a restart does not replay what a collector has.
+//!
 //! The usage figures are a rolling 24 hours, not an all-time total: a total
 //! would mean reading the whole usage ledger, which never shrinks, on every
 //! push. Each push is a resource of its own with `hypermachine.team` on it,
@@ -71,6 +83,8 @@ const TICK: Duration = Duration::from_secs(5);
 const SEND_TIMEOUT: Duration = Duration::from_secs(10);
 /// Pushes in flight at once.
 const AT_ONCE: usize = 16;
+/// The most log records one push carries; the rest wait for the next.
+pub const MOST_LOG_RECORDS: usize = 500;
 
 /// Headers the control plane sets itself or that change how a request is
 /// framed; a team cannot override them.
@@ -152,6 +166,114 @@ pub struct Push {
 pub struct Shared {
     allowed: parking_lot::RwLock<Vec<String>>,
     last: parking_lot::Mutex<HashMap<String, Push>>,
+    /// How far each team's logs have been sent.
+    logs: parking_lot::Mutex<HashMap<String, LogCursor>>,
+}
+
+/// How far a team's event log has been sent: the time of the newest record
+/// delivered, and the ids of those at that very millisecond, so that two
+/// events in one millisecond are neither skipped nor sent twice.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LogCursor {
+    since_ms: u64,
+    at_since: HashSet<String>,
+}
+
+impl LogCursor {
+    fn starting(at_ms: u64) -> Self {
+        Self {
+            since_ms: at_ms,
+            at_since: HashSet::new(),
+        }
+    }
+
+    fn is_after(&self, event: &ClusterEvent) -> bool {
+        event.at_ms > self.since_ms
+            || (event.at_ms == self.since_ms && !self.at_since.contains(&event.id))
+    }
+
+    fn advanced_over(&self, sent: &[ClusterEvent]) -> Self {
+        let mut next = self.clone();
+        for event in sent {
+            if event.at_ms > next.since_ms {
+                next.since_ms = event.at_ms;
+                next.at_since.clear();
+            }
+            if event.at_ms == next.since_ms {
+                next.at_since.insert(event.id.clone());
+            }
+        }
+        next
+    }
+}
+
+/// Where a destination's logs go: its URL with `/v1/logs` where `/v1/metrics`
+/// is, or nowhere when it does not end that way.
+#[must_use]
+pub fn logs_endpoint(endpoint: &str) -> Option<String> {
+    endpoint
+        .strip_suffix("/v1/metrics")
+        .map(|base| format!("{base}/v1/logs"))
+}
+
+/// The events of `team` that are new to `cursor`, oldest first, at most
+/// [`MOST_LOG_RECORDS`].
+fn new_events(
+    events: &[ClusterEvent],
+    team: Option<&TeamId>,
+    cursor: &LogCursor,
+) -> Vec<ClusterEvent> {
+    let mut mine: Vec<ClusterEvent> = events
+        .iter()
+        .filter(|e| e.team_id.as_ref() == team && cursor.is_after(e))
+        .cloned()
+        .collect();
+    mine.sort_by(|a, b| a.at_ms.cmp(&b.at_ms).then_with(|| a.id.cmp(&b.id)));
+    mine.truncate(MOST_LOG_RECORDS);
+    mine
+}
+
+/// `events` as an OTLP/HTTP JSON logs request.
+fn otlp_logs(resource: &[(&str, &str)], events: &[ClusterEvent]) -> Value {
+    let attribute = |key: &str, value: &str| json!({"key": key, "value": {"stringValue": value}});
+    let records: Vec<Value> = events
+        .iter()
+        .map(|event| {
+            let mut attributes = vec![
+                attribute("event.name", &event.kind),
+                attribute("event.id", &event.id),
+                attribute("hypermachine.node", &event.node_id),
+            ];
+            if let Some(sandbox) = &event.sandbox_id {
+                attributes.push(attribute("hypermachine.sandbox", sandbox));
+            }
+            if let Some(template) = &event.template_id {
+                attributes.push(attribute("hypermachine.template", template));
+            }
+            if let Some(detail) = &event.detail {
+                attributes.push(attribute("hypermachine.detail", detail));
+            }
+            let at = (u128::from(event.at_ms) * 1_000_000).to_string();
+            let (number, text) =
+                if event.kind.ends_with("-lost") || event.kind.ends_with("-expired") {
+                    (13, "WARN")
+                } else {
+                    (9, "INFO")
+                };
+            json!({
+                "timeUnixNano": at,
+                "observedTimeUnixNano": at,
+                "severityNumber": number,
+                "severityText": text,
+                "body": {"stringValue": event.kind},
+                "attributes": attributes,
+            })
+        })
+        .collect();
+    json!({"resourceLogs": [{
+        "resource": {"attributes": resource.iter().map(|(k, v)| attribute(k, v)).collect::<Vec<_>>()},
+        "scopeLogs": [{"scope": {"name": "hypermachine.sandbox-events"}, "logRecords": records}],
+    }]})
 }
 
 impl Shared {
@@ -178,6 +300,20 @@ impl Shared {
 
     fn forget(&self, key: &str) {
         self.last.lock().remove(key);
+        self.logs.lock().remove(key);
+    }
+
+    /// Where `key`'s logs were sent up to, starting at `from_ms` when never.
+    fn log_cursor(&self, key: &str, from_ms: u64) -> LogCursor {
+        self.logs
+            .lock()
+            .entry(key.to_string())
+            .or_insert_with(|| LogCursor::starting(from_ms))
+            .clone()
+    }
+
+    fn set_log_cursor(&self, key: &str, cursor: LogCursor) {
+        self.logs.lock().insert(key.to_string(), cursor);
     }
 
     /// Keep `push` as the last for `key`; whether the one before it was ok.
@@ -386,13 +522,19 @@ async fn delete(State(ctx): State<Ctx>, team: Option<Extension<RequestTeam>>) ->
 struct Snapshot {
     records: Vec<SandboxRecord>,
     events: Vec<ClusterEvent>,
+    /// The tail of the event stream, for the destinations that take logs.
+    log_events: Vec<ClusterEvent>,
     truncated: bool,
     ledger: Option<usage::Ledger>,
     from_ms: u64,
     now_ms: u64,
 }
 
-async fn snapshot(store: &dyn ClusterStore, now_ms: u64) -> Result<Snapshot, String> {
+async fn snapshot(
+    store: &dyn ClusterStore,
+    now_ms: u64,
+    want_events: bool,
+) -> Result<Snapshot, String> {
     let from_ms = now_ms.saturating_sub(WINDOW_MS);
     let records = store.sandboxes().await.map_err(|e| e.to_string())?;
     let ledger = store
@@ -405,16 +547,25 @@ async fn snapshot(store: &dyn ClusterStore, now_ms: u64) -> Result<Snapshot, Str
         .as_ref()
         .and_then(|l| l.since_ms)
         .is_none_or(|since| since > from_ms);
-    let (events, truncated) = if needs_events {
-        let events = store.events(EVENT_TAIL).await.map_err(|e| e.to_string())?;
-        let truncated = events.len() >= EVENT_TAIL;
-        (events, truncated)
+    let read = if needs_events || want_events {
+        store.events(EVENT_TAIL).await.map_err(|e| e.to_string())?
     } else {
-        (Vec::new(), false)
+        Vec::new()
     };
+    let truncated = needs_events && read.len() >= EVENT_TAIL;
+    // The usage report is given the events only when the ledger does not
+    // cover its window; the logs are given them whenever a destination takes
+    // logs.
+    let log_events = if want_events {
+        read.clone()
+    } else {
+        Vec::new()
+    };
+    let events = if needs_events { read } else { Vec::new() };
     Ok(Snapshot {
         records,
         events,
+        log_events,
         truncated,
         ledger,
         from_ms,
@@ -493,13 +644,14 @@ fn now_ns() -> u64 {
 async fn send(
     client: &reqwest::Client,
     config: &TeamTelemetry,
+    url: &str,
     allowed: &[String],
     body: &Value,
 ) -> Result<(), String> {
-    if !crate::allowlist::allowed(&config.endpoint, allowed) {
+    if !crate::allowlist::allowed(url, allowed) {
         return Err("not sent: the destination is no longer under one the operator allows".into());
     }
-    let mut request = client.post(&config.endpoint).json(body);
+    let mut request = client.post(url).json(body);
     for (name, value) in &config.headers {
         request = request.header(name, value);
     }
@@ -569,7 +721,8 @@ pub async fn round(
         );
     }
     let at = now_ms();
-    let snapshot = match snapshot(store.as_ref(), at).await {
+    let want_events = due.iter().any(|c| logs_endpoint(&c.endpoint).is_some());
+    let snapshot = match snapshot(store.as_ref(), at, want_events).await {
         Ok(snapshot) => snapshot,
         Err(why) => {
             for config in &due {
@@ -600,17 +753,47 @@ pub async fn round(
             start_ns,
             now_ns(),
         );
+        // The events not yet sent, from when the destination began or this
+        // control plane did.
+        let (cursor, batch) = if logs_endpoint(&config.endpoint).is_some() {
+            let cursor = shared.log_cursor(&key, config.created_ms.max(start_ns / 1_000_000));
+            let batch = new_events(&snapshot.log_events, config.team.as_ref(), &cursor);
+            (cursor, batch)
+        } else {
+            (LogCursor::default(), Vec::new())
+        };
+        let resource: Vec<(String, String)> = vec![
+            ("service.name".into(), "hypermachine".into()),
+            ("hypermachine.team".into(), label.clone()),
+            ("service.instance.id".into(), instance.to_string()),
+        ];
         let (client, allowed, permits) = (client.clone(), allowed.clone(), Arc::clone(&permits));
         sends.spawn(async move {
             let _permit = permits.acquire_owned().await;
-            let outcome = send(&client, &config, &allowed, &body).await;
-            (key, outcome)
+            let mut outcome = send(&client, &config, &config.endpoint, &allowed, &body).await;
+            let mut advanced = None;
+            if let (Some(url), false) = (logs_endpoint(&config.endpoint), batch.is_empty()) {
+                let pairs: Vec<(&str, &str)> = resource
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), v.as_str()))
+                    .collect();
+                let logs = otlp_logs(&pairs, &batch);
+                match send(&client, &config, &url, &allowed, &logs).await {
+                    Ok(()) => advanced = Some(cursor.advanced_over(&batch)),
+                    Err(why) if outcome.is_ok() => outcome = Err(format!("logs: {why}")),
+                    Err(_) => {}
+                }
+            }
+            (key, outcome, advanced)
         });
     }
     while let Some(done) = sends.join_next().await {
-        let Ok((key, outcome)) = done else {
+        let Ok((key, outcome, advanced)) = done else {
             continue;
         };
+        if let Some(cursor) = advanced {
+            shared.set_log_cursor(&key, cursor);
+        }
         let (ok, error) = match outcome {
             Ok(()) => (true, None),
             Err(why) => (false, Some(why)),
@@ -685,21 +868,18 @@ mod tests {
     /// A collector on loopback: what it was POSTed, and where it is.
     async fn collector() -> (String, Sink) {
         let sink: Sink = Arc::default();
+        let take = |State(sink): State<Sink>,
+                    headers: axum::http::HeaderMap,
+                    body: axum::body::Bytes| async move {
+            sink.lock().push((
+                headers,
+                serde_json::from_slice(&body).unwrap_or(Value::Null),
+            ));
+            StatusCode::OK
+        };
         let app = Router::new()
-            .route(
-                "/v1/metrics",
-                post(
-                    |State(sink): State<Sink>,
-                     headers: axum::http::HeaderMap,
-                     body: axum::body::Bytes| async move {
-                        sink.lock().push((
-                            headers,
-                            serde_json::from_slice(&body).unwrap_or(Value::Null),
-                        ));
-                        StatusCode::OK
-                    },
-                ),
-            )
+            .route("/v1/metrics", post(take))
+            .route("/v1/logs", post(take))
             .with_state(Arc::clone(&sink));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
@@ -1221,5 +1401,249 @@ mod tests {
                 .starts_with("307"),
             "{shown}"
         );
+    }
+
+    /// The log records a collector was sent, as (event name, sandbox).
+    fn log_records(sink: &Sink) -> Vec<(String, String)> {
+        let attr = |record: &Value, key: &str| {
+            record["attributes"]
+                .as_array()
+                .and_then(|all| all.iter().find(|a| a["key"] == key))
+                .and_then(|a| a["value"]["stringValue"].as_str())
+                .unwrap_or("")
+                .to_string()
+        };
+        sink.lock()
+            .iter()
+            .flat_map(|(_, body)| {
+                body["resourceLogs"][0]["scopeLogs"][0]["logRecords"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default()
+            })
+            .map(|record| {
+                (
+                    attr(&record, "event.name"),
+                    attr(&record, "hypermachine.sandbox"),
+                )
+            })
+            .collect()
+    }
+
+    fn event_of(kind: &str, id: &str, team: &str, at_ms: u64) -> ClusterEvent {
+        let mut event = ClusterEvent::new(kind, "n", Some(id));
+        event.id = format!("{kind}/{id}/{at_ms}");
+        event.at_ms = at_ms;
+        event.team_id = Some(TeamId::parse(team).unwrap());
+        event
+    }
+
+    #[test]
+    fn logs_go_where_metrics_do_with_the_path_swapped() {
+        assert_eq!(
+            logs_endpoint("https://c.example/teams/a/v1/metrics").as_deref(),
+            Some("https://c.example/teams/a/v1/logs")
+        );
+        assert_eq!(logs_endpoint("https://c.example/teams/a/metrics"), None);
+        assert_eq!(logs_endpoint("https://c.example/v1/metrics/extra"), None);
+    }
+
+    #[test]
+    fn a_cursor_neither_skips_nor_repeats_events_in_one_millisecond() {
+        let (a, b) = (
+            event_of("sandbox-created", "a", "t", 100),
+            event_of("sandbox-paused", "b", "t", 100),
+        );
+        let cursor = LogCursor::starting(100);
+        let first = new_events(
+            &[a.clone(), b.clone()],
+            TeamId::parse("t").ok().as_ref(),
+            &cursor,
+        );
+        assert_eq!(first.len(), 2);
+        let after_a = cursor.advanced_over(std::slice::from_ref(&a));
+        let rest = new_events(
+            &[a.clone(), b.clone()],
+            TeamId::parse("t").ok().as_ref(),
+            &after_a,
+        );
+        assert_eq!(rest.len(), 1);
+        assert_eq!(rest[0].id, b.id);
+        let after_both = after_a.advanced_over(&rest);
+        assert!(new_events(&[a, b], TeamId::parse("t").ok().as_ref(), &after_both).is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_team_is_sent_its_own_sandbox_events_as_logs_once() {
+        let (base, sink) = collector().await;
+        let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::default());
+        let shared = Arc::new(Shared::default());
+        shared.allow(list(&base));
+        let app = serve(Arc::clone(&store), Arc::clone(&shared)).await;
+        // Before the destination exists: not sent.
+        store
+            .publish(&event_of(
+                "sandbox-created",
+                "old",
+                "team-a",
+                now_ms() - 60_000,
+            ))
+            .await
+            .unwrap();
+        let (status, made) = call(
+            &app,
+            "PUT",
+            "team-a",
+            Some(json!({"endpoint": format!("{base}/v1/metrics"), "intervalSeconds": 15})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED, "{made}");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        let at = now_ms();
+        for event in [
+            event_of("sandbox-created", "a1", "team-a", at),
+            event_of("sandbox-paused", "a1", "team-a", at + 1),
+            event_of("sandbox-created", "b1", "team-b", at + 1),
+        ] {
+            store.publish(&event).await.unwrap();
+        }
+
+        let (client, mut schedule) = (client(), Schedule::new());
+        let start = Instant::now();
+        round(&store, &shared, &client, &mut schedule, start, "test", 0).await;
+        assert_eq!(
+            log_records(&sink),
+            vec![
+                ("sandbox-created".to_string(), "a1".to_string()),
+                ("sandbox-paused".to_string(), "a1".to_string()),
+            ],
+            "the team's two, oldest first; not the other team's, not the old one"
+        );
+        let logs_body = sink
+            .lock()
+            .iter()
+            .find(|(_, body)| body.get("resourceLogs").is_some())
+            .map(|(_, body)| body.clone())
+            .unwrap();
+        let resource_team = logs_body["resourceLogs"][0]["resource"]["attributes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|a| a["key"] == "hypermachine.team")
+            .map(|a| a["value"]["stringValue"].clone());
+        assert_eq!(resource_team, Some(json!("team-a")));
+
+        // Nothing new: the next push carries metrics and no logs.
+        round(
+            &store,
+            &shared,
+            &client,
+            &mut schedule,
+            start + Duration::from_secs(16),
+            "test",
+            0,
+        )
+        .await;
+        assert_eq!(log_records(&sink).len(), 2, "not sent twice");
+        // One more.
+        store
+            .publish(&event_of("sandbox-deleted", "a1", "team-a", now_ms() + 1))
+            .await
+            .unwrap();
+        round(
+            &store,
+            &shared,
+            &client,
+            &mut schedule,
+            start + Duration::from_secs(40),
+            "test",
+            0,
+        )
+        .await;
+        let all = log_records(&sink);
+        assert_eq!(all.len(), 3, "{all:?}");
+        assert_eq!(all[2].0, "sandbox-deleted");
+    }
+
+    #[tokio::test]
+    async fn logs_that_could_not_be_delivered_are_sent_again() {
+        // A collector that refuses logs the first time it is asked.
+        let hits: Sink = Arc::default();
+        let refused = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let app = Router::new()
+            .route("/v1/metrics", post(|| async { StatusCode::OK }))
+            .route(
+                "/v1/logs",
+                post(
+                    |State((hits, refused)): State<(Sink, Arc<std::sync::atomic::AtomicBool>)>,
+                     headers: axum::http::HeaderMap,
+                     body: axum::body::Bytes| async move {
+                        hits.lock().push((
+                            headers,
+                            serde_json::from_slice(&body).unwrap_or(Value::Null),
+                        ));
+                        if refused.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                            StatusCode::SERVICE_UNAVAILABLE
+                        } else {
+                            StatusCode::OK
+                        }
+                    },
+                ),
+            )
+            .with_state((Arc::clone(&hits), refused));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::default());
+        let shared = Arc::new(Shared::default());
+        shared.allow(list(&base));
+        let ui = serve(Arc::clone(&store), Arc::clone(&shared)).await;
+        let (status, made) = call(
+            &ui,
+            "PUT",
+            "team-a",
+            Some(json!({"endpoint": format!("{base}/v1/metrics"), "intervalSeconds": 15})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED, "{made}");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        store
+            .publish(&event_of("sandbox-lost", "a1", "team-a", now_ms()))
+            .await
+            .unwrap();
+
+        let (client, mut schedule) = (client(), Schedule::new());
+        let start = Instant::now();
+        round(&store, &shared, &client, &mut schedule, start, "test", 0).await;
+        let (_, shown) = call(&ui, "GET", "team-a", None).await;
+        assert_eq!(shown["lastPush"]["ok"], false, "{shown}");
+        assert!(
+            shown["lastPush"]["error"]
+                .as_str()
+                .unwrap()
+                .starts_with("logs: 503"),
+            "{shown}"
+        );
+        round(
+            &store,
+            &shared,
+            &client,
+            &mut schedule,
+            start + Duration::from_secs(16),
+            "test",
+            0,
+        )
+        .await;
+        let sent = log_records(&hits);
+        assert_eq!(sent.len(), 2, "the same record, offered again: {sent:?}");
+        assert_eq!(sent[0], sent[1]);
+        let (_, shown) = call(&ui, "GET", "team-a", None).await;
+        assert_eq!(shown["lastPush"]["ok"], true, "{shown}");
+        // And a WARN: it is a loss.
+        let severity = hits.lock()[1].1["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0]
+            ["severityText"]
+            .clone();
+        assert_eq!(severity, json!("WARN"));
     }
 }

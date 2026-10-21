@@ -128,7 +128,10 @@ In rough order of how much each matters to someone choosing between them:
 8. **Logs and traces, and usage as a total, in a team's telemetry.** A
    team [sets its own metrics destination](TELEMETRY.md#a-teams-own-telemetry),
    and [usage](USAGE.md) is kept for good in a cluster; what a team is sent
-   is metrics, with the last day's usage rather than a running total.
+   is metrics, with the last day's usage rather than a running total, and
+   [its sandboxes' events as logs](TELEMETRY.md#a-teams-own-telemetry)
+   (tested against a loopback collector, not a real one). No command output
+   and no traces.
 9. **Clients published to a registry.** [Python](../sdk/python/README.md)
    and [TypeScript](../sdk/typescript/README.md) clients are packaged and
    [tested as installed](RELEASING_SDKS.md), with a publish workflow behind a

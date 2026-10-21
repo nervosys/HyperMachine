@@ -63,7 +63,8 @@ Or with OpenTelemetry's own variables, which the flags override:
   Prometheus puts both back, so the names there are the ones in the table.
 - **Header values are not logged**, nor shown when the configuration is.
   Credentials in the URL are refused, since the URL is logged.
-- **Only metrics.** No logs and no traces are pushed.
+- **Only metrics from a node.** A node pushes no logs and no traces. A
+  team's destination can also be sent its sandbox events as logs, below.
 
 [Checked against the OpenTelemetry Collector](benchmarks/2026-10-12/otlp-export/README.md):
 what it then served as Prometheus was, sample for sample, what the node
@@ -112,6 +113,20 @@ rolling day, not a running total: a total would mean reading the whole
   not the ones that frame a request. Headers are kept as the rest of the
   store is, **unencrypted**, and are never returned or logged; `GET` shows
   their names.
+- **Sandbox events as logs.** A destination whose URL ends in `/v1/metrics`
+  is also sent the team's sandbox events as OTLP logs, to the same URL with
+  `/v1/logs`, under the same operator prefix and with the same headers.
+  There is one record for each `sandbox-created`, `-paused`, `-resumed`,
+  `-deleted`, `-expired`, `-lost` and `-forked` of the team's sandboxes: its
+  `body` and `event.name` the event, its time the event's, `severityText`
+  `WARN` for a loss or an expiry and `INFO` otherwise, with
+  `hypermachine.sandbox`, `.node`, `.template` and `.detail` where there are
+  any. Oldest first, at most 500 a push. A push whose logs were refused is
+  shown as failed (`logs: 503 ...`) and the same records go again with the
+  next. **Nothing from before the destination was stored, or this control
+  plane started, is sent**, so a restart replays nothing, and a record
+  published while no control plane ran is not sent. Command output is not
+  sent, and no traces.
 - **One destination a team**, 15 seconds to an hour between pushes (60
   unless said). A push is sent within 5 seconds of a change, and failures
   are logged when they start and stop, not each time. `GET /telemetry` says
