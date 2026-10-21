@@ -185,6 +185,21 @@ async fn main() {
         }
     }
 
+    // A third, writable disk (the data disk): the guest's way to hand results
+    // back. The file must exist at the size wanted.
+    if let Ok(data) = std::env::var("HV2_DATA") {
+        match vm
+            .attach_data_pci(std::path::Path::new(&data), "data0")
+            .await
+        {
+            Ok(_) => println!("data          : {data} attached over PCI (writable)"),
+            Err(e) => {
+                println!("data          : FAILED — {e}");
+                return;
+            }
+        }
+    }
+
     match vm.provision().await {
         Ok(()) => {
             println!("provision     : OK");

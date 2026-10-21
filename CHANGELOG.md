@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `VM::attach_data_pci`: a third, writable virtio-blk disk on PCI (slot 7, BAR
+  0xd0070000, IRQ 7), `/dev/vdc` after the root and seed disks, for a guest to
+  hand results back through a raw image the host reads once the guest has
+  synced and the VM is stopped. Verified on WHPX with a busybox guest that
+  writes a computed line and syncs (`HV2_TEST_DATA`; probe: `HV2_DATA`). NOT
+  VERIFIED: on KVM or HVF, with a Debian root disk, and a guest killed before
+  `sync` (its page cache is lost, by design of the guest, not the device).
 - A WHPX guest can have more than 3 GiB of RAM: the partition maps the ranges of
   `memory::ram_ranges` (RAM below the 0xC0000000 device hole, the rest from
   4 GiB) from one host buffer, as the KVM backend does, and host-side reads and

@@ -26,6 +26,9 @@
 //! then has it `sleep 1` to prove a halted guest is woken by the timer.
 //! `HV2_TEST_SEED` names a second, read-only disk (a tar stream) and
 //! `HV2_TEST_SEED_MARKER` a string in it that reading the disk as a tar stream must print (it is `/dev/vda` here, with no root disk).
+//! `HV2_TEST_DATA` names a blank, writable disk image: the guest writes a
+//! line to the last `/dev/vd?`, syncs, and the test reads it back from the
+//! file once the VM is stopped.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -108,6 +111,12 @@ async fn a_real_linux_kernel_boots_on_a_userspace_pic_backend() {
             .await
             .expect("the seed disk attaches");
     }
+    let data = std::env::var("HV2_TEST_DATA").ok();
+    if let Some(data) = &data {
+        vm.attach_data_pci(std::path::Path::new(data), "data0")
+            .await
+            .expect("the data disk attaches");
+    }
     if let Err(e) = vm.provision().await {
         eprintln!("skipping: provision failed ({e})");
         return;
@@ -177,9 +186,33 @@ async fn a_real_linux_kernel_boots_on_a_userspace_pic_backend() {
             console = vm.console_output().await;
         }
     }
+    // A writable disk: the guest puts a computed line on the last disk and
+    // syncs; the host reads it from the image after the VM is stopped.
+    if let (true, Some(_)) = (sleeper && marker.is_some(), &data) {
+        vm.send_serial(
+            b"d=$(ls /dev/vd? | tail -1); printf 'hv2-data-%s\\n' $((6*7)) > $d; sync; echo hv2-synced-$((6*7))
+",
+        )
+        .await
+        .expect("the serial input is accepted");
+        while started.elapsed() < BOOT_DEADLINE && !console.contains("hv2-synced-42") {
+            tokio::time::sleep(POLL).await;
+            console = vm.console_output().await;
+        }
+    }
     let elapsed = started.elapsed();
     let _ = vm.stop().await;
     println!("linux whpx boot: userspace handoff after {elapsed:?}");
+    if let Some(data) = &data {
+        if sleeper && marker.is_some() {
+            let image = std::fs::read(data).expect("the data image is readable");
+            assert!(
+                image.starts_with(b"hv2-data-42\n"),
+                "the guest's write never reached the data image (first bytes {:?}).\nconsole:\n{console}",
+                &image[..image.len().min(16)]
+            );
+        }
+    }
 
     assert!(
         !console.is_empty(),

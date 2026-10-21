@@ -722,6 +722,8 @@ pub struct VM {
     block_pci: RwLock<Option<AttachedBlockPci>>,
     /// A second, read-only disk on the PCI bus. See [`VM::attach_seed_pci`].
     seed_pci: RwLock<Option<AttachedBlockPci>>,
+    /// A third, writable disk on the PCI bus. See [`VM::attach_data_pci`].
+    data_pci: RwLock<Option<AttachedBlockPci>>,
     /// A network device over PCI, for a guest that finds its hardware by
     /// enumerating the bus. Kept apart from `net`: it is not snapshotted.
     net_pci: RwLock<Option<AttachedNetPci>>,
@@ -939,6 +941,7 @@ impl VM {
             block: RwLock::new(None),
             block_pci: RwLock::new(None),
             seed_pci: RwLock::new(None),
+            data_pci: RwLock::new(None),
             net_pci: RwLock::new(None),
             standby: AtomicBool::new(false),
             standby_wakes: AtomicU64::new(0),
@@ -3872,6 +3875,83 @@ impl VM {
             "VM '{}': seed disk attached over PCI at slot {}, BAR {bar_base:#x} (IRQ {irq}, read-only)",
             self.config.name,
             Self::SEED_PCI_SLOT,
+        );
+        Ok(device)
+    }
+
+    /// Guest physical address of the data disk's BAR.
+    pub const DATA_PCI_BAR_BASE: u64 = 0xd007_0000;
+
+    /// PCI slot of the data disk on bus 0: after the root and seed disks, so
+    /// it is `/dev/vdc` to a Linux guest that has both.
+    pub const DATA_PCI_SLOT: u8 = 7;
+
+    /// Interrupt line the data disk raises: its own, like the seed disk's.
+    pub const DATA_PCI_IRQ: u8 = 7;
+
+    /// Attach a third, writable virtio-blk device over PCI: the disk a guest
+    /// writes its results to, for the host to read once the guest is done.
+    ///
+    /// Beside [`Self::attach_block_pci`] and [`Self::attach_seed_pci`]. The
+    /// image must already exist at the size wanted; it is never grown.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a data disk is already attached, if the BAR
+    /// window would overlap guest RAM, or if the image cannot be opened.
+    pub async fn attach_data_pci(
+        self: &Arc<Self>,
+        path: &std::path::Path,
+        serial: &str,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_blk_mmio::VirtioBlockMmio>>> {
+        use crate::devices::virtio_blk_mmio::VirtioBlockMmio;
+        use crate::devices::virtio_pci::{VirtioPciTransport, VIRTIO_PCI_BAR_SIZE};
+
+        let (bar_base, irq) = (Self::DATA_PCI_BAR_BASE, Self::DATA_PCI_IRQ);
+        if self.data_pci.read().is_some() {
+            return Err(Error::Device("this VM already has a data disk".to_string()));
+        }
+        if self.memory.host_offset(bar_base).is_some() {
+            return Err(Error::Device(format!(
+                "data disk BAR window at {bar_base:#x} overlaps {} bytes of guest RAM",
+                self.memory.total_size()
+            )));
+        }
+        self.pci_root.write().ensure_host_bridge()?;
+
+        let device = Arc::new(parking_lot::Mutex::new(VirtioBlockMmio::open(
+            path, false, serial,
+        )?));
+        let transport = Arc::new(tokio::sync::RwLock::new(
+            VirtioPciTransport::new("virtio-data-pci", bar_base, self.memory(), device.clone())
+                .with_interrupt(self.pic(), irq),
+        ));
+        let mut config = transport.read().await.config_space();
+        config.set_interrupt_line(irq);
+        config.set_interrupt_pin(crate::pci::InterruptPin::IntA);
+        self.pci_root
+            .write()
+            .add_device(Self::DATA_PCI_SLOT, 0, config);
+        self.pci_intx
+            .lock()
+            .push(crate::boot::acpi_tables::PciIntx {
+                slot: Self::DATA_PCI_SLOT,
+                gsi: irq,
+            });
+        self.devices
+            .register_device("virtio-data-pci", transport.clone())
+            .await?;
+        self.devices
+            .register_mmio_region("virtio-data-pci".to_string(), bar_base, VIRTIO_PCI_BAR_SIZE)
+            .await?;
+        *self.data_pci.write() = Some(AttachedBlockPci {
+            device: device.clone(),
+            _transport: transport,
+        });
+        tracing::info!(
+            "VM '{}': data disk attached over PCI at slot {}, BAR {bar_base:#x} (IRQ {irq}, writable)",
+            self.config.name,
+            Self::DATA_PCI_SLOT,
         );
         Ok(device)
     }
