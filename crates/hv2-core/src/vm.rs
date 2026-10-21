@@ -1070,15 +1070,26 @@ impl VM {
                 // and ran at half speed. Telling it the frequency skips the
                 // measurement. The TSC is not scaled for a guest, so the
                 // host's rate is the guest's.
+                //
+                // `tsc=reliable` goes with it: the clocksource watchdog
+                // compares the TSC with the tick, and on this backend the
+                // tick is the clock that is wrong (it loses interrupts), so
+                // the watchdog condemned the right clock 1.7 s into boot and
+                // left the guest on the tick, about 5% slow. The cost is that
+                // nothing checks the TSC: it relies on the host's being
+                // invariant and the guest staying on this host.
                 if loaded.protocol() == "linux"
                     && self.backend.executes_guest_code()
                     && self.backend.platform() != crate::hypervisor::HypervisorPlatform::Kvm
-                    && !loaded
-                        .cmdline()
-                        .is_some_and(|c| c.contains("tsc_early_khz") || c.contains("tsc="))
                 {
-                    if let Some(khz) = host_tsc_khz() {
-                        loaded.append_cmdline(&format!("tsc_early_khz={khz}"));
+                    let cmdline = loaded.cmdline().unwrap_or_default().to_string();
+                    if !cmdline.contains("tsc_early_khz") {
+                        if let Some(khz) = host_tsc_khz() {
+                            loaded.append_cmdline(&format!("tsc_early_khz={khz}"));
+                            if !cmdline.contains("tsc=") {
+                                loaded.append_cmdline("tsc=reliable");
+                            }
+                        }
                     }
                 }
                 if acpi {

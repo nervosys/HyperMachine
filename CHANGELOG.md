@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the root mounts at guest 5.03 s after 6.76 s of host time including VM
   setup. NOT VERIFIED: a long-running guest's drift against the host (the
   frequency is a 100 ms measurement), HVF, and a host whose TSC is not invariant.
+  `tsc=reliable` is appended with it (unless `tsc=` is set): the watchdog's
+  only reference is the tick, which loses interrupts here, and it marked the
+  TSC unstable 1.7 s into boot. Measured by the Botnix session on Debian 13
+  with both flags: guest time within 10 ms of host time over a 30 s busy loop
+  and seven `sleep 10` (9.998 to 10.022 s); with the frequency alone, 5% slow.
+  The cost: nothing checks the TSC, so the host's must be invariant.
 - `VM::attach_data_pci`: a third, writable virtio-blk disk on PCI (slot 7, BAR
   0xd0070000, IRQ 7), `/dev/vdc` after the root and seed disks, for a guest to
   hand results back through a raw image the host reads once the guest has
