@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A WHPX guest can have more than 3 GiB of RAM: the partition maps the ranges of
+  `memory::ram_ranges` (RAM below the 0xC0000000 device hole, the rest from
+  4 GiB) from one host buffer, as the KVM backend does, and host-side reads and
+  writes follow the same map. Debian 13 boots with 4, 8 and 16 GiB (e820 shows
+  the two ranges; `HV2_TEST_MEMORY_MIB` in `tests/linux_whpx_boot.rs`). Before,
+  one block was mapped at GPA 0 across the PCI window. Boot images are placed
+  below the hole; one vCPU only; HVF NOT verified.
 - A WHPX guest calibrates its TSC and runs on the `tsc` clocksource: port 0x61
   (PIT channel 2's gate and output, the speaker bit, the refresh toggle) now
   exists, so the kernel's calibration against channel 2 measures real time

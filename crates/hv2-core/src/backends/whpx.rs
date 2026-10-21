@@ -677,31 +677,40 @@ impl WhpxVm {
                 // 0xC0370008 (invalid parameter) until the hypervisor lets go.
                 // Measured: it happened in about 1 in 4 parallel runs of the
                 // create / shutdown / create test, and a bounded retry clears it.
-                let mut attempts = 0;
-                let hr = loop {
-                    let hr = WHvMapGpaRange(
-                        partition,
-                        ptr as *const VOID,
-                        0, // Guest physical address 0
-                        memory_size,
-                        WHvMapGpaRangeFlagRead
-                            | WHvMapGpaRangeFlagWrite
-                            | WHvMapGpaRangeFlagExecute,
-                    );
-                    if hr as u32 != 0xC037_0008 || attempts >= 50 {
-                        break hr;
-                    }
-                    attempts += 1;
-                    std::thread::sleep(std::time::Duration::from_millis(10));
-                };
+                //
+                // One host buffer, mapped as the ranges of
+                // `crate::memory::ram_ranges`: a guest above 3 GiB has RAM
+                // below the device hole and the rest from 4 GiB, consecutive
+                // in the buffer.
+                let mut host_offset = 0u64;
+                for (gpa, len) in crate::memory::ram_ranges(memory_size) {
+                    let mut attempts = 0;
+                    let hr = loop {
+                        let hr = WHvMapGpaRange(
+                            partition,
+                            ptr.add(host_offset as usize) as *const VOID,
+                            gpa,
+                            len,
+                            WHvMapGpaRangeFlagRead
+                                | WHvMapGpaRangeFlagWrite
+                                | WHvMapGpaRangeFlagExecute,
+                        );
+                        if hr as u32 != 0xC037_0008 || attempts >= 50 {
+                            break hr;
+                        }
+                        attempts += 1;
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    };
 
-                if hr != S_OK {
-                    std::alloc::dealloc(ptr, layout);
-                    WHvDeletePartition(partition);
-                    return Err(Error::VM(format!(
-                        "Failed to map guest memory: HRESULT 0x{:08X}",
-                        hr
-                    )));
+                    if hr != S_OK {
+                        std::alloc::dealloc(ptr, layout);
+                        WHvDeletePartition(partition);
+                        return Err(Error::VM(format!(
+                            "Failed to map guest memory at {gpa:#x}: HRESULT 0x{:08X}",
+                            hr
+                        )));
+                    }
+                    host_offset += len;
                 }
 
                 Some(ptr)
@@ -737,9 +746,12 @@ impl WhpxVm {
                 "framebuffer {gpa:#x}+{size:#x} must be page aligned and non-empty"
             )));
         }
-        if gpa < self.memory_size {
+        if crate::memory::ram_ranges(self.memory_size)
+            .iter()
+            .any(|(start, len)| gpa < start + len && gpa + size > *start)
+        {
             return Err(Error::Memory(format!(
-                "framebuffer at {gpa:#x} overlaps RAM (0..{:#x})",
+                "framebuffer at {gpa:#x} overlaps RAM ({:#x} bytes)",
                 self.memory_size
             )));
         }
@@ -879,32 +891,43 @@ impl WhpxVm {
     /// # Ok(())
     /// # }
     /// ```
+    /// Where `len` bytes at guest address `addr` start in the host buffer,
+    /// when they lie inside one RAM range.
+    #[cfg(target_os = "windows")]
+    fn ram_offset(&self, addr: u64, len: u64, what: &str) -> Result<u64> {
+        let Some(offset) = crate::memory::host_offset(self.memory_size, addr) else {
+            return Err(Error::Memory(format!(
+                "Address 0x{:X} is not RAM (memory size: 0x{:X})",
+                addr, self.memory_size
+            )));
+        };
+        // The end must be RAM in the same range: the buffer is contiguous
+        // across the hole, the guest's addresses are not.
+        let last_ok = len == 0
+            || crate::memory::host_offset(self.memory_size, addr + len - 1)
+                .is_some_and(|end| end == offset + len - 1);
+        if !last_ok {
+            return Err(Error::Memory(format!(
+                "{what} at 0x{:X} with length {} leaves RAM (size: 0x{:X})",
+                addr, len, self.memory_size
+            )));
+        }
+        Ok(offset)
+    }
+
     #[cfg(target_os = "windows")]
     pub fn write_guest_memory(&self, addr: u64, data: &[u8]) -> Result<()> {
         let guest_ptr = self
             .guest_memory
             .ok_or_else(|| Error::Memory("Guest memory not allocated".into()))?;
 
-        if addr >= self.memory_size {
-            return Err(Error::Memory(format!(
-                "Address 0x{:X} out of bounds (memory size: 0x{:X})",
-                addr, self.memory_size
-            )));
-        }
+        let offset = self.ram_offset(addr, data.len() as u64, "Write")?;
 
-        if addr + data.len() as u64 > self.memory_size {
-            return Err(Error::Memory(format!(
-                "Write at 0x{:X} with length {} would overflow memory (size: 0x{:X})",
-                addr,
-                data.len(),
-                self.memory_size
-            )));
-        }
-
-        // SAFETY: Bounds were checked above ensuring addr + data.len() <= memory_size.
-        // guest_ptr is valid for the full memory region allocated in WhpxVm::new.
+        // SAFETY: `ram_offset` checked that addr..addr+len lies inside one
+        // RAM range, so offset + len <= memory_size. guest_ptr is valid for
+        // the full buffer allocated in WhpxVm::new.
         unsafe {
-            let dest = guest_ptr.add(addr as usize);
+            let dest = guest_ptr.add(offset as usize);
             std::ptr::copy_nonoverlapping(data.as_ptr(), dest, data.len());
         }
 
@@ -954,25 +977,14 @@ impl WhpxVm {
             .guest_memory
             .ok_or_else(|| Error::Memory("Guest memory not allocated".into()))?;
 
-        if addr >= self.memory_size {
-            return Err(Error::Memory(format!(
-                "Address 0x{:X} out of bounds (memory size: 0x{:X})",
-                addr, self.memory_size
-            )));
-        }
-
-        if addr + len as u64 > self.memory_size {
-            return Err(Error::Memory(format!(
-                "Read at 0x{:X} with length {} would overflow memory (size: 0x{:X})",
-                addr, len, self.memory_size
-            )));
-        }
+        let offset = self.ram_offset(addr, len as u64, "Read")?;
 
         let mut buffer = vec![0u8; len];
-        // SAFETY: Bounds were checked above ensuring addr + len <= memory_size.
-        // guest_ptr is valid for the full memory region allocated in WhpxVm::new.
+        // SAFETY: `ram_offset` checked that addr..addr+len lies inside one
+        // RAM range, so offset + len <= memory_size. guest_ptr is valid for
+        // the full buffer allocated in WhpxVm::new.
         unsafe {
-            let src = guest_ptr.add(addr as usize);
+            let src = guest_ptr.add(offset as usize);
             std::ptr::copy_nonoverlapping(src, buffer.as_mut_ptr(), len);
         }
 
@@ -1181,9 +1193,11 @@ impl Drop for WhpxVm {
             // and maps into its own partition fails with an invalid-parameter
             // HRESULT.
             if self.guest_memory.is_some() && self.memory_size > 0 {
-                let hr = WHvUnmapGpaRange(self.partition, 0, self.memory_size);
-                if hr != 0 {
-                    tracing::warn!(hresult = hr, "WHvUnmapGpaRange failed during Drop");
+                for (gpa, len) in crate::memory::ram_ranges(self.memory_size) {
+                    let hr = WHvUnmapGpaRange(self.partition, gpa, len);
+                    if hr != 0 {
+                        tracing::warn!(hresult = hr, "WHvUnmapGpaRange failed during Drop");
+                    }
                 }
             }
 

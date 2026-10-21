@@ -34,6 +34,15 @@ use hv2_core::{BootSource, HypervisorPlatform, VMConfig, VM};
 
 const MEMORY_MIB: u64 = 1024;
 
+/// Guest RAM for the first test: `HV2_TEST_MEMORY_MIB`, or [`MEMORY_MIB`].
+/// Above 3 GiB the RAM is in two ranges either side of the device hole.
+fn memory_mib() -> u64 {
+    std::env::var("HV2_TEST_MEMORY_MIB")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(MEMORY_MIB)
+}
+
 /// No local APIC or I/O APIC exists on this backend; saying so is what stops
 /// the kernel probing 0xFEE00000 for ever.
 const CMDLINE: &str = "console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 panic=1 nolapic noapic";
@@ -80,7 +89,7 @@ async fn a_real_linux_kernel_boots_on_a_userspace_pic_backend() {
     let config = VMConfig {
         name: "linux-whpx-boot-test".to_string(),
         vcpu_count: 1,
-        memory_size: MEMORY_MIB * 1024 * 1024,
+        memory_size: memory_mib() * 1024 * 1024,
         boot: Some(source),
         ..Default::default()
     };
@@ -176,12 +185,31 @@ async fn a_real_linux_kernel_boots_on_a_userspace_pic_backend() {
         !console.is_empty(),
         "the kernel wrote nothing to COM1 in {elapsed:?}: it never ran its first instruction"
     );
-    let top_of_ram = MEMORY_MIB * 1024 * 1024 - 1;
-    for expected in [
+    let ram = memory_mib() * 1024 * 1024;
+    const HOLE: u64 = 0xC000_0000;
+    const ABOVE_4G: u64 = 0x1_0000_0000;
+    // One range up to the top of RAM, or two either side of the device hole.
+    let ranges: Vec<String> = if ram <= HOLE {
+        vec![format!(
+            "BIOS-e820: [mem 0x0000000000100000-{:#018x}] usable",
+            ram - 1
+        )]
+    } else {
+        vec![
+            format!(
+                "BIOS-e820: [mem 0x0000000000100000-{:#018x}] usable",
+                HOLE - 1
+            ),
+            format!(
+                "BIOS-e820: [mem {ABOVE_4G:#018x}-{:#018x}] usable",
+                ABOVE_4G + (ram - HOLE) - 1
+            ),
+        ]
+    };
+    for expected in ranges.into_iter().chain([
         "BIOS-e820: [mem 0x0000000000000000-0x000000000009fbff] usable".to_string(),
-        format!("BIOS-e820: [mem 0x0000000000100000-{top_of_ram:#018x}] usable"),
         format!("Kernel command line: {CMDLINE}"),
-    ] {
+    ]) {
         assert!(
             console.contains(&expected),
             "the console lacks {expected:?}.\nconsole:\n{console}"
