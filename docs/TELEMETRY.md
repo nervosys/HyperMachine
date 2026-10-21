@@ -126,7 +126,17 @@ rolling day, not a running total: a total would mean reading the whole
   next. **Nothing from before the destination was stored, or this control
   plane started, is sent**, so a restart replays nothing, and a record
   published while no control plane ran is not sent. Command output is not
-  sent, and no traces.
+  sent.
+- **Sandbox lifetimes as traces.** The same destination is sent a span for
+  each sandbox that has ended, to `/v1/traces`: named `sandbox`, from its
+  `sandbox-created` or `-forked` event to its `-deleted`, `-expired` or
+  `-lost`, with its pauses and resumes as the span's events and
+  `hypermachine.sandbox`, `.node`, `.template` and `.end` as attributes. A
+  sandbox is a trace of its own (the trace ID is a hash of its ID); the
+  status is OK, or ERROR for a loss. A span goes out when the sandbox ends,
+  once, and again after a refused push (`traces: 503 ...`); one whose start
+  has aged out of the event tail is not sent. Nothing inside a sandbox
+  (commands, requests) is traced.
 - **One destination a team**, 15 seconds to an hour between pushes (60
   unless said). A push is sent within 5 seconds of a change, and failures
   are logged when they start and stop, not each time. `GET /telemetry` says

@@ -28,6 +28,16 @@
 //! push. Nothing before the control plane started, or before the destination
 //! was stored, is sent: a restart does not replay what a collector has.
 //!
+//! # Traces
+//!
+//! The same destinations are sent a span for each sandbox that has ended, to
+//! `/v1/traces` where `/v1/metrics` is: from its `sandbox-created` or
+//! `-forked` event to its `-deleted`, `-expired` or `-lost`, named `sandbox`,
+//! with its pauses and resumes as the span's events. A sandbox is a trace of
+//! its own (the trace ID is a hash of the sandbox ID). A span is sent when
+//! the sandbox ends, once, and not at all when the start has aged out of the
+//! event tail.
+//!
 //! The usage figures are a rolling 24 hours, not an all-time total: a total
 //! would mean reading the whole usage ledger, which never shrinks, on every
 //! push. Each push is a resource of its own with `hypermachine.team` on it,
@@ -216,6 +226,101 @@ pub fn logs_endpoint(endpoint: &str) -> Option<String> {
         .map(|base| format!("{base}/v1/logs"))
 }
 
+/// Where a destination's traces go, as [`logs_endpoint`] says for logs.
+#[must_use]
+pub fn traces_endpoint(endpoint: &str) -> Option<String> {
+    endpoint
+        .strip_suffix("/v1/metrics")
+        .map(|base| format!("{base}/v1/traces"))
+}
+
+/// The kinds of event that end a sandbox.
+fn ends_a_sandbox(kind: &str) -> bool {
+    matches!(kind, "sandbox-deleted" | "sandbox-expired" | "sandbox-lost")
+}
+
+/// The first `bytes` bytes of SHA-256 of `text`, as lower-case hex.
+fn hash_hex(text: &str, bytes: usize) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(text.as_bytes())
+        .iter()
+        .take(bytes)
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// A span for each of `ended`, from the start found for it in `all`, as an
+/// OTLP/HTTP JSON traces request; `None` when none has a start.
+fn otlp_spans(
+    resource: &[(&str, &str)],
+    all: &[ClusterEvent],
+    ended: &[ClusterEvent],
+) -> Option<Value> {
+    let attribute = |key: &str, value: &str| json!({"key": key, "value": {"stringValue": value}});
+    let nanos = |ms: u64| (u128::from(ms) * 1_000_000).to_string();
+    let spans: Vec<Value> = ended
+        .iter()
+        .filter_map(|end| {
+            let sandbox = end.sandbox_id.as_deref()?;
+            let mine = |e: &&ClusterEvent| {
+                e.sandbox_id.as_deref() == Some(sandbox) && e.team_id == end.team_id
+            };
+            let start = all
+                .iter()
+                .filter(mine)
+                .filter(|e| {
+                    matches!(e.kind.as_str(), "sandbox-created" | "sandbox-forked")
+                        && e.at_ms <= end.at_ms
+                })
+                .max_by_key(|e| e.at_ms)?;
+            let mut between: Vec<&ClusterEvent> = all
+                .iter()
+                .filter(mine)
+                .filter(|e| {
+                    matches!(e.kind.as_str(), "sandbox-paused" | "sandbox-resumed")
+                        && e.at_ms >= start.at_ms
+                        && e.at_ms <= end.at_ms
+                })
+                .collect();
+            between.sort_by_key(|e| e.at_ms);
+            let lost = end.kind.ends_with("-lost");
+            let mut attributes = vec![
+                attribute("hypermachine.sandbox", sandbox),
+                attribute("hypermachine.node", &end.node_id),
+                attribute("hypermachine.end", &end.kind),
+            ];
+            if let Some(template) = start.template_id.as_ref().or(end.template_id.as_ref()) {
+                attributes.push(attribute("hypermachine.template", template));
+            }
+            Some(json!({
+                "traceId": hash_hex(&format!("trace/{sandbox}"), 16),
+                "spanId": hash_hex(&format!("span/{}", end.id), 8),
+                "name": "sandbox",
+                "kind": 1,
+                "startTimeUnixNano": nanos(start.at_ms),
+                "endTimeUnixNano": nanos(end.at_ms),
+                "attributes": attributes,
+                "events": between.iter().map(|e| json!({
+                    "timeUnixNano": nanos(e.at_ms),
+                    "name": e.kind,
+                })).collect::<Vec<_>>(),
+                "status": if lost {
+                    json!({"code": 2, "message": "the sandbox was lost"})
+                } else {
+                    json!({"code": 1})
+                },
+            }))
+        })
+        .collect();
+    if spans.is_empty() {
+        return None;
+    }
+    Some(json!({"resourceSpans": [{
+        "resource": {"attributes": resource.iter().map(|(k, v)| attribute(k, v)).collect::<Vec<_>>()},
+        "scopeSpans": [{"scope": {"name": "hypermachine.sandbox-events"}, "spans": spans}],
+    }]}))
+}
+
 /// The events of `team` that are new to `cursor`, oldest first, at most
 /// [`MOST_LOG_RECORDS`].
 fn new_events(
@@ -300,7 +405,9 @@ impl Shared {
 
     fn forget(&self, key: &str) {
         self.last.lock().remove(key);
-        self.logs.lock().remove(key);
+        let mut logs = self.logs.lock();
+        logs.remove(key);
+        logs.remove(&format!("{key}#traces"));
     }
 
     /// Where `key`'s logs were sent up to, starting at `from_ms` when never.
@@ -762,6 +869,26 @@ pub async fn round(
         } else {
             (LogCursor::default(), Vec::new())
         };
+        // And the sandboxes that have ended since, as spans.
+        let trace_key = format!("{key}#traces");
+        let (trace_cursor, ended, all_for_spans) = if traces_endpoint(&config.endpoint).is_some() {
+            let cursor = shared.log_cursor(&trace_key, config.created_ms.max(start_ns / 1_000_000));
+            let endings: Vec<ClusterEvent> = snapshot
+                .log_events
+                .iter()
+                .filter(|e| ends_a_sandbox(&e.kind))
+                .cloned()
+                .collect();
+            let ended = new_events(&endings, config.team.as_ref(), &cursor);
+            let all = if ended.is_empty() {
+                Vec::new()
+            } else {
+                snapshot.log_events.clone()
+            };
+            (cursor, ended, all)
+        } else {
+            (LogCursor::default(), Vec::new(), Vec::new())
+        };
         let resource: Vec<(String, String)> = vec![
             ("service.name".into(), "hypermachine".into()),
             ("hypermachine.team".into(), label.clone()),
@@ -784,15 +911,35 @@ pub async fn round(
                     Err(_) => {}
                 }
             }
-            (key, outcome, advanced)
+            let mut advanced_traces = None;
+            if let (Some(url), false) = (traces_endpoint(&config.endpoint), ended.is_empty()) {
+                let pairs: Vec<(&str, &str)> = resource
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), v.as_str()))
+                    .collect();
+                match otlp_spans(&pairs, &all_for_spans, &ended) {
+                    // Ended, but with no start to be found: nothing to send
+                    // now or ever, so it is passed over.
+                    None => advanced_traces = Some(trace_cursor.advanced_over(&ended)),
+                    Some(spans) => match send(&client, &config, &url, &allowed, &spans).await {
+                        Ok(()) => advanced_traces = Some(trace_cursor.advanced_over(&ended)),
+                        Err(why) if outcome.is_ok() => outcome = Err(format!("traces: {why}")),
+                        Err(_) => {}
+                    },
+                }
+            }
+            (key, outcome, advanced, advanced_traces, trace_key)
         });
     }
     while let Some(done) = sends.join_next().await {
-        let Ok((key, outcome, advanced)) = done else {
+        let Ok((key, outcome, advanced, advanced_traces, trace_key)) = done else {
             continue;
         };
         if let Some(cursor) = advanced {
             shared.set_log_cursor(&key, cursor);
+        }
+        if let Some(cursor) = advanced_traces {
+            shared.set_log_cursor(&trace_key, cursor);
         }
         let (ok, error) = match outcome {
             Ok(()) => (true, None),
@@ -880,6 +1027,7 @@ mod tests {
         let app = Router::new()
             .route("/v1/metrics", post(take))
             .route("/v1/logs", post(take))
+            .route("/v1/traces", post(take))
             .with_state(Arc::clone(&sink));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
@@ -1645,5 +1793,188 @@ mod tests {
             ["severityText"]
             .clone();
         assert_eq!(severity, json!("WARN"));
+    }
+
+    /// The spans a collector was sent.
+    fn spans(sink: &Sink) -> Vec<Value> {
+        sink.lock()
+            .iter()
+            .flat_map(|(_, body)| {
+                body["resourceSpans"][0]["scopeSpans"][0]["spans"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn traces_go_where_metrics_do_with_the_path_swapped() {
+        assert_eq!(
+            traces_endpoint("https://c.example/teams/a/v1/metrics").as_deref(),
+            Some("https://c.example/teams/a/v1/traces")
+        );
+        assert_eq!(traces_endpoint("https://c.example/teams/a/metrics"), None);
+    }
+
+    #[tokio::test]
+    async fn a_sandbox_that_ended_is_sent_as_one_span_with_its_pauses() {
+        let (base, sink) = collector().await;
+        let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::default());
+        let shared = Arc::new(Shared::default());
+        shared.allow(list(&base));
+        let app = serve(Arc::clone(&store), Arc::clone(&shared)).await;
+        let (status, made) = call(
+            &app,
+            "PUT",
+            "team-a",
+            Some(json!({"endpoint": format!("{base}/v1/metrics"), "intervalSeconds": 15})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED, "{made}");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        let at = now_ms();
+        for event in [
+            event_of("sandbox-created", "a1", "team-a", at),
+            event_of("sandbox-paused", "a1", "team-a", at + 10),
+            event_of("sandbox-resumed", "a1", "team-a", at + 20),
+            // Still running: no span yet.
+            event_of("sandbox-created", "a2", "team-a", at + 1),
+            // Another team's.
+            event_of("sandbox-created", "b1", "team-b", at),
+            event_of("sandbox-deleted", "b1", "team-b", at + 30),
+        ] {
+            store.publish(&event).await.unwrap();
+        }
+        let (client, mut schedule) = (client(), Schedule::new());
+        let start = Instant::now();
+        round(&store, &shared, &client, &mut schedule, start, "test", 0).await;
+        assert!(spans(&sink).is_empty(), "nothing has ended");
+
+        store
+            .publish(&event_of("sandbox-deleted", "a1", "team-a", at + 40))
+            .await
+            .unwrap();
+        round(
+            &store,
+            &shared,
+            &client,
+            &mut schedule,
+            start + Duration::from_secs(16),
+            "test",
+            0,
+        )
+        .await;
+        let sent = spans(&sink);
+        assert_eq!(sent.len(), 1, "{sent:?}");
+        let span = &sent[0];
+        assert_eq!(span["name"], "sandbox");
+        assert_eq!(span["traceId"].as_str().unwrap().len(), 32);
+        assert_eq!(span["spanId"].as_str().unwrap().len(), 16);
+        let nanos = |ms: u64| (u128::from(ms) * 1_000_000).to_string();
+        assert_eq!(span["startTimeUnixNano"], json!(nanos(at)));
+        assert_eq!(span["endTimeUnixNano"], json!(nanos(at + 40)));
+        assert_eq!(span["status"]["code"], 1);
+        let names: Vec<&str> = span["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(names, ["sandbox-paused", "sandbox-resumed"]);
+
+        // Not sent twice.
+        round(
+            &store,
+            &shared,
+            &client,
+            &mut schedule,
+            start + Duration::from_secs(40),
+            "test",
+            0,
+        )
+        .await;
+        assert_eq!(spans(&sink).len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_lost_sandbox_is_an_error_span_and_a_refused_one_is_sent_again() {
+        let hits: Sink = Arc::default();
+        let refused = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let app = Router::new()
+            .route("/v1/metrics", post(|| async { StatusCode::OK }))
+            .route("/v1/logs", post(|| async { StatusCode::OK }))
+            .route(
+                "/v1/traces",
+                post(
+                    |State((hits, refused)): State<(Sink, Arc<std::sync::atomic::AtomicBool>)>,
+                     headers: axum::http::HeaderMap,
+                     body: axum::body::Bytes| async move {
+                        hits.lock().push((
+                            headers,
+                            serde_json::from_slice(&body).unwrap_or(Value::Null),
+                        ));
+                        if refused.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                            StatusCode::SERVICE_UNAVAILABLE
+                        } else {
+                            StatusCode::OK
+                        }
+                    },
+                ),
+            )
+            .with_state((Arc::clone(&hits), refused));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::default());
+        let shared = Arc::new(Shared::default());
+        shared.allow(list(&base));
+        let ui = serve(Arc::clone(&store), Arc::clone(&shared)).await;
+        let (status, made) = call(
+            &ui,
+            "PUT",
+            "team-a",
+            Some(json!({"endpoint": format!("{base}/v1/metrics"), "intervalSeconds": 15})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED, "{made}");
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        let at = now_ms();
+        store
+            .publish(&event_of("sandbox-created", "a1", "team-a", at))
+            .await
+            .unwrap();
+        store
+            .publish(&event_of("sandbox-lost", "a1", "team-a", at + 5))
+            .await
+            .unwrap();
+
+        let (client, mut schedule) = (client(), Schedule::new());
+        let start = Instant::now();
+        round(&store, &shared, &client, &mut schedule, start, "test", 0).await;
+        let (_, shown) = call(&ui, "GET", "team-a", None).await;
+        assert_eq!(shown["lastPush"]["ok"], false, "{shown}");
+        assert!(
+            shown["lastPush"]["error"]
+                .as_str()
+                .unwrap()
+                .starts_with("traces: 503"),
+            "{shown}"
+        );
+        round(
+            &store,
+            &shared,
+            &client,
+            &mut schedule,
+            start + Duration::from_secs(16),
+            "test",
+            0,
+        )
+        .await;
+        let sent = spans(&hits);
+        assert_eq!(sent.len(), 2, "offered again: {sent:?}");
+        assert_eq!(sent[0]["spanId"], sent[1]["spanId"]);
+        assert_eq!(sent[1]["status"]["code"], 2);
     }
 }

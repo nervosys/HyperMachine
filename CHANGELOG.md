@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   backend, a Redis-backed store's event tail across control planes, a team
   with more than 500 new events in one interval under load, and traces or
   command output (not built).
+- A team's telemetry destination ending in `/v1/metrics` is also sent a
+  span to `/v1/traces` for each sandbox that has ended (created or forked to
+  deleted, expired or lost; pauses and resumes as span events; ERROR for a
+  loss), once each, kept on a cursor apart from the logs' so one signal's
+  failure neither repeats nor drops the other. Tested against a loopback
+  collector (3 new `team_telemetry` tests). NOT VERIFIED: a real
+  OpenTelemetry Collector or tracing backend, spans inside a sandbox, and a
+  sandbox whose start has left the event tail (not sent).
 - `GET /sandboxes/{id}/checkpoints/{name}/archive?path=` downloads a
   directory of a sandbox's checkpoint (`/` for everything) as a gzipped tar,
   built in the same reader guest as `/files` and `/file`, so the sandbox and
