@@ -105,8 +105,10 @@ In rough order of how much each matters to someone choosing between them:
    [listed and read file by file](MACHINES.md#snapshots), or downloaded as
    a raw disk; a sandbox's checkpoint is
    [listed and read file by file](CHECKPOINTS.md#reading-one-from-outside).
-   boat downloads all or part of a snapshot's tree as an archive; nothing
-   here does.
+   boat downloads all or part of a snapshot's tree as an archive; here a
+   sandbox's checkpoint now does, a directory or `/` as a gzipped tar
+   ([checked on KVM](benchmarks/2026-10-21/checkpoint-archive-kvm/README.md)).
+   A machine's snapshot does not.
 6. **A port back to the caller's machine, through the control plane.**
    [A machine and a sandbox have one](REVERSE_PORTS.md) on their node, and the
    control plane now forwards both ([checked on KVM](benchmarks/2026-10-16/machine-reverse-cluster-kvm/README.md)).

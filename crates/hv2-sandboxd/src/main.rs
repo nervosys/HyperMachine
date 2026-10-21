@@ -6544,6 +6544,10 @@ async fn main() -> std::process::ExitCode {
             "/sandboxes/{sandboxID}/checkpoints/{name}/file",
             get(checkpoint_files::file),
         )
+        .route(
+            "/sandboxes/{sandboxID}/checkpoints/{name}/archive",
+            get(checkpoint_files::archive),
+        )
         .route("/snapshots", get(snapshots::list))
         .route(
             "/templates/{templateID}",

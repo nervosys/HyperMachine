@@ -1,6 +1,7 @@
 //! Reading a sandbox's checkpoint from outside, without touching the
 //! sandbox: `GET /sandboxes/{id}/checkpoints/{name}/files?path=` lists a
-//! directory in it, and `.../file?path=` reads a file.
+//! directory in it, `.../file?path=` reads a file, and `.../archive?path=`
+//! downloads a directory's tree as a gzipped tar.
 //!
 //! A sandbox's filesystem is in its memory, and a checkpoint is that memory,
 //! layered over its template's. There is no disk image to open, as there is
@@ -36,6 +37,13 @@ use super::{api_error, new_vm, AppState, Sizes, TEMPLATE_CID, TEMPLATE_MAC};
 /// The largest file read out of a checkpoint, as for a machine's snapshot.
 const MAX_FILE: u64 = 64 << 20;
 
+/// The largest archive downloaded: the compressed tar, as built in the
+/// reader's guest, whose memory it takes.
+const MAX_ARCHIVE: u64 = 64 << 20;
+
+/// Where the reader's guest builds an archive. In memory, like all of it.
+const ARCHIVE_AT: &str = "/dev/shm/.hv2-checkpoint-archive.tgz";
+
 /// The most entries a listing returns.
 const MAX_ENTRIES: usize = 10_000;
 
@@ -69,6 +77,32 @@ done"#;
 const SIZE: &str = r#"[ -e "$1" ] || [ -L "$1" ] || exit 4
 [ -f "$1" ] && [ ! -L "$1" ] || exit 5
 stat -c %s -- "$1""#;
+
+/// Build `ARCHIVE_AT` from the directory `$1`, its contents at the top of the
+/// tar. Exit 4: no such path; 5: not a directory; 6: nothing was written.
+/// Only plain `tar`, `gzip` and shell, which a minimal userland has: no long
+/// options. A file that changed or vanished while it was read is not a
+/// failure -- the archive is still whole for what it holds. An archive of `/`
+/// leaves out what the kernel makes up: `/proc`, `/sys`, `/dev` (which holds
+/// the archive itself) and `/run`.
+const ARCHIVE: &str = r#"[ -e "$1" ] || [ -L "$1" ] || exit 4
+[ -d "$1" ] && [ ! -L "$1" ] || exit 5
+cd -- "$1" || exit 5
+mkdir -p /dev/shm 2>/dev/null
+rm -f "$ARCHIVE_AT"
+if [ "$(pwd -P)" = / ]; then
+  set --
+  for f in * .[!.]* ..?*; do
+    case $f in proc|sys|dev|run) continue;; esac
+    [ -e "$f" ] || [ -L "$f" ] || continue
+    set -- "$@" "$f"
+  done
+else
+  set -- .
+fi
+tar -cf - "$@" 2>/dev/null | gzip -c > "$ARCHIVE_AT"
+[ -s "$ARCHIVE_AT" ] || exit 6
+stat -c %s -- "$ARCHIVE_AT""#;
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct At {
@@ -358,6 +392,84 @@ pub(crate) async fn file(
     }
 }
 
+/// `GET /sandboxes/{id}/checkpoints/{name}/archive?path=`: the directory's
+/// tree as a gzipped tar, with the directory's contents at its top.
+pub(crate) async fn archive(
+    State(state): State<Arc<AppState>>,
+    Path((sandbox_id, name)): Path<(String, String)>,
+    Query(at): Query<At>,
+) -> Response {
+    if let Some(why) = refused_path(&at.path) {
+        return api_error(StatusCode::BAD_REQUEST, why);
+    }
+    let reader = match open(&state, &sandbox_id, &name).await {
+        Ok(reader) => reader,
+        Err((status, why)) => return api_error(status, why),
+    };
+    let read = async {
+        // The script's `$ARCHIVE_AT` is the constant above, put into its text.
+        let script = ARCHIVE.replace("$ARCHIVE_AT", ARCHIVE_AT);
+        let size = match reader.sh(&script, &at.path).await? {
+            (Some(0), out) => out.trim().parse::<u64>().map_err(|e| {
+                refused(
+                    StatusCode::BAD_GATEWAY,
+                    format!("the size of the archive of {:?}: {e}", at.path),
+                )
+            })?,
+            (code, _) => return Err(refusal(code, &at.path, "a directory")),
+        };
+        if size > MAX_ARCHIVE {
+            return Err(refused(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                format!(
+                    "the archive of {:?} is {size} bytes; at most {MAX_ARCHIVE} are downloaded",
+                    at.path
+                ),
+            ));
+        }
+        reader
+            .vm
+            .read_file_in_guest(ARCHIVE_AT, MAX_ARCHIVE, READ_TIMEOUT)
+            .await
+            .map_err(|e| {
+                refused(
+                    StatusCode::BAD_GATEWAY,
+                    format!("reading the archive of {:?}: {e}", at.path),
+                )
+            })
+    }
+    .await;
+    reader.close().await;
+    match read {
+        Ok(bytes) => (
+            [
+                (header::CONTENT_TYPE, "application/gzip".to_string()),
+                (
+                    header::CONTENT_DISPOSITION,
+                    format!("attachment; filename=\"{}.tar.gz\"", archive_name(&name)),
+                ),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Err((status, why)) => api_error(status, why),
+    }
+}
+
+/// A checkpoint's name as a file name: anything outside letters, digits,
+/// `-`, `_` and `.` becomes `_`, so it cannot close the header's quotes.
+fn archive_name(name: &str) -> String {
+    name.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -382,6 +494,21 @@ mod tests {
     fn a_malformed_entry_is_skipped() {
         assert!(entries("nonsense\0name\0").is_empty());
         assert!(entries("").is_empty());
+    }
+
+    #[test]
+    fn an_archive_is_named_safely() {
+        assert_eq!(archive_name("before-upgrade_1.0"), "before-upgrade_1.0");
+        assert_eq!(archive_name("a\"b\r\nc/d"), "a_b__c_d");
+    }
+
+    #[test]
+    fn the_archive_script_names_its_file_once() {
+        // The script is a template over one placeholder; a second spelling
+        // would be left unreplaced and tar a file called "".
+        let script = ARCHIVE.replace("$ARCHIVE_AT", ARCHIVE_AT);
+        assert!(!script.contains("ARCHIVE_AT"), "{script}");
+        assert!(script.contains(ARCHIVE_AT));
     }
 
     #[test]

@@ -1,0 +1,137 @@
+{
+  "success": true,
+  "purpose": "functional verification of reading files out of a sandbox's checkpoint on KVM; the times are the check's own stopwatch and not a benchmark",
+  "input_sha256": {
+    "daemon": "1eb80c28f57c48e1b6a64330abfdd0ad69f2583ab9d246fc95314d0cfacd0cc6",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "987fe6b60aab582b566b4794aa3295eac9a52c1dbf0ada9e8df814c4d0fa852e"
+  },
+  "host_cpus": 24,
+  "cases": [
+    {
+      "name": "a directory in a checkpoint lists each entry's type, mode, owner and size",
+      "success": true,
+      "detail": {
+        "seconds": 0.064,
+        "entries": [
+          {
+            "gid": 0,
+            "mode": "644",
+            "name": "a b\nc",
+            "size": 3,
+            "type": "file",
+            "uid": 0
+          },
+          {
+            "gid": 0,
+            "mode": "600",
+            "name": "a.txt",
+            "size": 6,
+            "type": "file",
+            "uid": 0
+          },
+          {
+            "gid": 1000,
+            "mode": "644",
+            "name": "big.bin",
+            "size": 1048576,
+            "type": "file",
+            "uid": 1000
+          },
+          {
+            "gid": 0,
+            "mode": "777",
+            "name": "link",
+            "size": 5,
+            "type": "symlink",
+            "uid": 0
+          },
+          {
+            "gid": 0,
+            "mode": "755",
+            "name": "sub",
+            "size": null,
+            "type": "directory",
+            "uid": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "a file read from a checkpoint is as it was taken, though the sandbox changed it",
+      "success": true,
+      "detail": {
+        "seconds": 0.06,
+        "megabyte_seconds": 0.105
+      }
+    },
+    {
+      "name": "a directory is downloaded whole as a tar, as it was taken",
+      "success": true,
+      "detail": {
+        "seconds": 0.141,
+        "archive_bytes": 1049120,
+        "entries": [
+          "a b\nc",
+          "a.txt",
+          "big.bin",
+          "link",
+          "sub"
+        ],
+        "whole_filesystem": {
+          "seconds": 0.383,
+          "archive_bytes": 2920804,
+          "entries": 289
+        },
+        "refused": {
+          "a file": "\"/root/notes/a.txt\" is not a directory",
+          "no such path": "no \"/root/nothing\" in the checkpoint",
+          "a relative path": "path must be absolute"
+        }
+      }
+    },
+    {
+      "name": "the sandbox is untouched: its files as it left them, its program running",
+      "success": true,
+      "detail": {
+        "ticker_lines": {
+          "sandbox_before": 3,
+          "sandbox_after": 6,
+          "checkpoint_read_1": 2,
+          "checkpoint_read_2": 2
+        }
+      }
+    },
+    {
+      "name": "a paused sandbox's checkpoint is read, and it stays paused",
+      "success": true,
+      "detail": {
+        "seconds": 0.095
+      }
+    },
+    {
+      "name": "three reads at once all answer",
+      "success": true,
+      "detail": {
+        "seconds": 0.176
+      }
+    },
+    {
+      "name": "what cannot be read is refused, each with why",
+      "success": true,
+      "detail": {
+        "refused": {
+          "no such checkpoint": "sbx-85fbd19bcdbd4a479a78 has no checkpoint \"absent\"",
+          "no such sandbox": "sbx-absent has no checkpoint \"one\"",
+          "no such path": "no \"/root/nothing\" in the checkpoint",
+          "a file listed": "\"/root/notes/a.txt\" is not a directory",
+          "a directory read": "\"/root/notes\" is not a regular file",
+          "a symlink read": "\"/root/notes/link\" is not a regular file",
+          "a relative path": "path must be absolute",
+          "over 64 MiB": "\"/root/huge\" is 68157440 bytes; at most 67108864 are read"
+        }
+      }
+    }
+  ]
+}

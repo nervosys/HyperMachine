@@ -16,10 +16,16 @@ checks through its API:
 6. What cannot be read is refused, each with why: no such checkpoint,
    sandbox or path; a file listed or a directory read; a symlink read; a
    relative path; a file over 64 MiB.
+7. A directory downloaded whole as a gzipped tar holds every entry as it
+   was taken, with its modes, owners, symlink and odd name, and none of
+   what the sandbox changed or added since; a subdirectory is downloaded
+   alone; `/` downloads the whole filesystem without `/proc`, `/sys`,
+   `/dev` and `/run`; a file, a missing path and a relative path are
+   refused.
 
 Writes report.json and the daemon's log into --output.
 """
-import argparse, concurrent.futures, hashlib, json, os, shutil, signal, socket, subprocess, tempfile, time
+import argparse, concurrent.futures, hashlib, io, json, os, shutil, signal, socket, subprocess, tarfile, tempfile, time
 import urllib.error, urllib.parse, urllib.request
 from pathlib import Path
 
@@ -102,6 +108,13 @@ def main():
         assert status == want, (path, status, value)
         return value, round(time.monotonic() - began, 3)
 
+    def archive(sandbox, name, path, want=200):
+        began = time.monotonic()
+        status, value = request("GET", f"/sandboxes/{sandbox}/checkpoints/{name}/archive?"
+                                + urllib.parse.urlencode({"path": path}), raw=True)
+        assert status == want, (path, status, value)
+        return value, round(time.monotonic() - began, 3)
+
     try:
         deadline = time.monotonic() + 180
         while True:
@@ -153,6 +166,40 @@ def main():
             assert odd == b"odd", odd
             return {"seconds": took, "megabyte_seconds": took_big}
         case("a file read from a checkpoint is as it was taken, though the sandbox changed it", as_taken)
+
+        def downloaded():
+            data, took = archive(sandbox, "one", "/root/notes")
+            tar = tarfile.open(fileobj=io.BytesIO(data), mode="r:gz")
+            members = {m.name.removeprefix("./"): m for m in tar.getmembers()}
+            members.pop(".", None)
+            assert set(members) == {"a.txt", "a b\nc", "link", "big.bin", "sub"}, sorted(members)
+            assert tar.extractfile(members["a.txt"]).read() == b"hello\n"
+            assert members["a.txt"].mode & 0o777 == 0o600, oct(members["a.txt"].mode)
+            big = tar.extractfile(members["big.bin"]).read()
+            assert hashlib.sha256(big).hexdigest() == state["big_sum"] and members["big.bin"].uid == 1000
+            assert tar.extractfile(members["a b\nc"]).read() == b"odd"
+            assert members["link"].issym() and members["link"].linkname == "a.txt"
+            assert members["sub"].isdir()
+            # Only the subtree asked for, with nothing in it.
+            sub, _ = archive(sandbox, "one", "/root/notes/sub")
+            inner = [m.name for m in tarfile.open(fileobj=io.BytesIO(sub), mode="r:gz").getmembers()]
+            assert [n.removeprefix("./") for n in inner] in ([], ["."], [""]), inner
+            # The whole filesystem: the notes are in it, as taken, and what
+            # the kernel makes up is not.
+            whole, took_whole = archive(sandbox, "one", "/")
+            names = [m.name.removeprefix("./") for m in tarfile.open(fileobj=io.BytesIO(whole), mode="r:gz").getmembers()]
+            assert "root/notes/a.txt" in names and "root/notes/big.bin" in names, names[:20]
+            assert not [n for n in names if n.split("/")[0] in ("proc", "sys", "dev", "run")], names[:20]
+            refused = {}
+            for label, path, want in [("a file", "/root/notes/a.txt", 400),
+                                      ("no such path", "/root/nothing", 404),
+                                      ("a relative path", "root/notes", 400)]:
+                value, _ = archive(sandbox, "one", path, want)
+                refused[label] = value["message"]
+            return {"seconds": took, "archive_bytes": len(data), "entries": sorted(members),
+                    "whole_filesystem": {"seconds": took_whole, "archive_bytes": len(whole), "entries": len(names)},
+                    "refused": refused}
+        case("a directory is downloaded whole as a tar, as it was taken", downloaded)
 
         def untouched():
             assert sh(sandbox, "cat /root/notes/a.txt") == "changed\n"

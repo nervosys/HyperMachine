@@ -297,6 +297,7 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/sandboxes/{id}/checkpoints/{name}/restore", post(forward))
         .route("/sandboxes/{id}/checkpoints/{name}/files", get(forward))
         .route("/sandboxes/{id}/checkpoints/{name}/file", get(forward))
+        .route("/sandboxes/{id}/checkpoints/{name}/archive", get(forward))
         .route("/sandboxes/{id}/snapshots", post(forward))
         .route("/sandboxes/metrics", get(sandboxes_metrics))
         .route("/sandboxes/{id}/metrics", get(forward))

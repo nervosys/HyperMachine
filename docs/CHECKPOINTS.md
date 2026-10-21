@@ -36,6 +36,8 @@ curl -s "localhost:3980/sandboxes/$SBX/checkpoints/before-upgrade/files?path=/ro
 # → {"path":"/root","checkpoint":"before-upgrade","entries":[
 #     {"name":"notes","type":"directory","mode":"755","uid":0,"gid":0,"size":null}, …]}
 curl -s "localhost:3980/sandboxes/$SBX/checkpoints/before-upgrade/file?path=/root/notes/a.txt"
+# A whole directory, as a gzipped tar with its contents at the top:
+curl -s -o notes.tar.gz "localhost:3980/sandboxes/$SBX/checkpoints/before-upgrade/archive?path=/root/notes"
 
 hm sandbox vm checkpoint ls $SBX before-upgrade /root
 hm sandbox vm checkpoint cat $SBX before-upgrade /root/notes/a.txt
@@ -59,6 +61,12 @@ stops every program in it except the agent, reads, and stops it.
   reading.
 - **At most 64 MiB a file**; larger is refused (413). A listing returns at
   most 10,000 entries.
+- **A tree downloads as one archive.** `archive?path=` takes a directory
+  (`/` for everything) and answers a gzipped tar of its contents, with
+  modes, owners and symlinks kept. The archive is built in the reading
+  guest's memory, so it is at most 64 MiB compressed (413 beyond that); for
+  `/` the kernel's own `/proc`, `/sys`, `/dev` and `/run` are left out. A
+  file or a path that does not exist is refused (400, 404) as for a listing.
 - **Not read:** a volume's files, which are on the volume and read through
   [it](VOLUMES.md).
 - **Two readers at a time** on a node, each a guest the sandbox's size for

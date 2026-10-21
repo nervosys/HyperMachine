@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `GET /sandboxes/{id}/checkpoints/{name}/archive?path=` downloads a
+  directory of a sandbox's checkpoint (`/` for everything) as a gzipped tar,
+  built in the same reader guest as `/files` and `/file`, so the sandbox and
+  the checkpoint are untouched. Modes, owners and symlinks are kept; for `/`
+  the kernel's `/proc`, `/sys`, `/dev` and `/run` are left out; at most 64 MiB
+  compressed (413). The control plane forwards the route. Verified on KVM
+  (WSL2) in a busybox guest: [`tools/check-checkpoint-files-kvm.py`](tools/check-checkpoint-files-kvm.py),
+  7 cases, [evidence](docs/benchmarks/2026-10-21/checkpoint-archive-kvm/README.md).
+  NOT VERIFIED: GNU tar in the distribution template, an archive over 64 MiB,
+  the route through a running control plane, and a machine snapshot's archive
+  (not built).
 - A Linux guest on a non-KVM backend is told its TSC frequency
   (`tsc_early_khz=`, measured once on the host over 100 ms) unless the command
   line already sets `tsc_early_khz` or `tsc=`. Before, the guest timed its TSC
