@@ -144,9 +144,13 @@ async fn a_real_linux_kernel_boots_on_a_userspace_pic_backend() {
             tokio::time::sleep(POLL).await;
             console = vm.console_output().await;
         }
-        println!(
-            "linux whpx boot: `sleep 1` took {:?} of host time",
-            sent.elapsed()
+        let slept = sent.elapsed();
+        println!("linux whpx boot: `sleep 1` took {slept:?} of host time");
+        // The guest's clock follows the host's: it was 14.5 s while the tick
+        // was its only clock. The bound is loose for a loaded host.
+        assert!(
+            slept < Duration::from_secs(6),
+            "`sleep 1` took {slept:?} of host time: the guest's clock runs slow"
         );
     }
     // A second disk, read by the guest: a tar stream with no filesystem on it,

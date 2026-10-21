@@ -79,6 +79,12 @@ pub trait Device: Send + Sync {
         let _ = pic;
     }
 
+    /// Give this device the system-control port (0x61), which lives in the
+    /// same I/O range as the keyboard controller. Does nothing by default.
+    fn connect_system_control(&self, port: Arc<crate::devices::timer::SystemControlPort>) {
+        let _ = port;
+    }
+
     /// Deliver input from the host to this device.
     ///
     /// The other direction from [`Self::console_output`]: what someone types

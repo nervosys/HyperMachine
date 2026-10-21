@@ -465,6 +465,7 @@ impl TimerDevice {
                         channel.count = channel.reload_value;
                         channel.active = true;
                         channel.output = false;
+                        channel.last_update = Instant::now();
                     }
                     2 => {
                         // MSB only
@@ -472,6 +473,7 @@ impl TimerDevice {
                         channel.count = channel.reload_value;
                         channel.active = true;
                         channel.output = false;
+                        channel.last_update = Instant::now();
                     }
                     3 => {
                         // LSB then MSB
@@ -481,6 +483,7 @@ impl TimerDevice {
                             channel.write_latch = None;
                             channel.active = true;
                             channel.output = false;
+                            channel.last_update = Instant::now();
                         } else {
                             channel.write_latch = Some(byte);
                         }
@@ -544,6 +547,110 @@ impl TimerDevice {
     }
 }
 
+impl TimerDevice {
+    /// The system-control port (0x61) that goes with this timer: channel 2's
+    /// gate, the speaker bit, and channel 2's output as a guest reads it.
+    ///
+    /// A kernel measures its TSC against channel 2 -- gate it on, load a
+    /// count, spin on the output bit in this port -- and without the port the
+    /// read comes back 0xFF, the output is "already high", and the
+    /// measurement reads zero time: the calibration fails and the guest falls
+    /// back to the tick as its only clock.
+    #[must_use]
+    pub fn system_control(&self) -> Arc<SystemControlPort> {
+        Arc::new(SystemControlPort {
+            channels: Arc::clone(&self.channels),
+            value: Mutex::new(0),
+            toggle: AtomicBool::new(false),
+        })
+    }
+}
+
+/// Port 0x61: PC speaker and timer-2 control, plus the refresh toggle.
+pub struct SystemControlPort {
+    channels: Arc<Mutex<[PitChannel; 3]>>,
+    /// Bits 0 (timer 2 gate) and 1 (speaker data), the two the guest writes.
+    value: Mutex<u8>,
+    /// Bit 4 flips on every read, standing in for the DRAM refresh signal
+    /// that some delay loops wait on.
+    toggle: AtomicBool,
+}
+
+impl std::fmt::Debug for SystemControlPort {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SystemControlPort").finish_non_exhaustive()
+    }
+}
+
+impl SystemControlPort {
+    /// What a read of the port returns.
+    #[must_use]
+    pub fn read_byte(&self) -> u8 {
+        let mut value = *self.value.lock() & 0x03;
+        let output2 = {
+            let mut channels = self.channels.lock();
+            channels[2].update_count();
+            channels[2].output
+        };
+        if output2 {
+            value |= 0x20;
+        }
+        if self.toggle.fetch_xor(true, Ordering::Relaxed) {
+            value |= 0x10;
+        }
+        value
+    }
+
+    /// A write to the port: the gate and the speaker bit.
+    pub fn write_byte(&self, byte: u8) {
+        *self.value.lock() = byte & 0x03;
+        let mut channels = self.channels.lock();
+        // Count up to the moment of the change, then change the gate: time
+        // spent gated off must not count.
+        channels[2].update_count();
+        channels[2].gate = byte & 0x01 != 0;
+    }
+}
+
+#[async_trait]
+impl Device for SystemControlPort {
+    fn device_type(&self) -> DeviceType {
+        DeviceType::Timer
+    }
+
+    fn name(&self) -> &str {
+        "system-control-port-b"
+    }
+
+    async fn init(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    async fn read(&self, _offset: u64, data: &mut [u8]) -> Result<()> {
+        let value = self.read_byte();
+        for byte in data.iter_mut() {
+            *byte = value;
+        }
+        Ok(())
+    }
+
+    async fn write(&mut self, _offset: u64, data: &[u8]) -> Result<()> {
+        if let Some(&byte) = data.first() {
+            self.write_byte(byte);
+        }
+        Ok(())
+    }
+
+    async fn reset(&mut self) -> Result<()> {
+        *self.value.lock() = 0;
+        Ok(())
+    }
+
+    async fn shutdown(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
 #[async_trait]
 impl Device for TimerDevice {
     fn device_type(&self) -> DeviceType {
@@ -601,6 +708,38 @@ impl Device for TimerDevice {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn timer_two_output_rises_when_its_count_runs_out() {
+        let timer = TimerDevice::new("PIT".to_string(), 0x40);
+        let port = timer.system_control();
+        // Gate on, speaker off; channel 2, LSB+MSB, mode 0; count 1193 (~1 ms).
+        port.write_byte(0x01);
+        timer.write_register(3, 0b1011_0000);
+        timer.write_register(2, 0xA9);
+        timer.write_register(2, 0x04);
+        assert_eq!(
+            port.read_byte() & 0x20,
+            0,
+            "the output is low while counting"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+        let byte = port.read_byte();
+        assert_eq!(byte & 0x20, 0x20, "and high once the count has run out");
+        assert_eq!(byte & 0x01, 0x01, "the gate reads back");
+    }
+
+    #[tokio::test]
+    async fn a_gated_off_channel_does_not_count() {
+        let timer = TimerDevice::new("PIT".to_string(), 0x40);
+        let port = timer.system_control();
+        port.write_byte(0x00);
+        timer.write_register(3, 0b1011_0000);
+        timer.write_register(2, 0xA9);
+        timer.write_register(2, 0x04);
+        std::thread::sleep(Duration::from_millis(5));
+        assert_eq!(port.read_byte() & 0x20, 0, "no gate, no count, no output");
+    }
 
     #[tokio::test]
     async fn test_timer_device() {

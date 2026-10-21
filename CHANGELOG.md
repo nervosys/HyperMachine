@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A WHPX guest calibrates its TSC and runs on the `tsc` clocksource: port 0x61
+  (PIT channel 2's gate and output, the speaker bit, the refresh toggle) now
+  exists, so the kernel's calibration against channel 2 measures real time
+  ("tsc: Using PIT calibration value", "Switched to clocksource tsc"). The port
+  sits inside the i8042's range, so the keyboard device carries it. Debian
+  13 reaches its login prompt in under 20 s of host time. Verified on WHPX only;
+  KVM has an in-kernel PIT and port 0x61 and is untouched. HVF NOT verified.
 - A second, read-only disk reaches a WHPX guest: `attach_seed_pci` (existing) adds
   a virtio-blk device at PCI slot 6, `/dev/vdb` beside a root disk, and the
   guest reads it (`tar -xOf` a tar stream with no filesystem prints the file;

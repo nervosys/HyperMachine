@@ -38,6 +38,9 @@ pub const KEYBOARD_DATA_OFFSET: u64 = 0;
 /// Status (read) and command (write) port, relative to the base port.
 pub const KEYBOARD_STATUS_OFFSET: u64 = 4;
 
+/// Offset of the system-control port (0x61) from the controller's base port.
+const SYSTEM_CONTROL_OFFSET: u64 = 1;
+
 /// Controller commands (written to port 0x64)
 const CMD_READ_CCB: u8 = 0x20; // Read Controller Command Byte
 const CMD_WRITE_CCB: u8 = 0x60; // Write Controller Command Byte
@@ -410,6 +413,9 @@ impl KeyboardState {
 #[derive(Debug)]
 pub struct KeyboardDevice {
     state: Arc<Mutex<KeyboardState>>,
+    /// Port 0x61, inside this controller's range but a different chip. Set by
+    /// the VM where the hypervisor does not provide the timer behind it.
+    system_control: Mutex<Option<Arc<crate::devices::timer::SystemControlPort>>>,
 }
 
 impl KeyboardDevice {
@@ -418,6 +424,7 @@ impl KeyboardDevice {
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(KeyboardState::new())),
+            system_control: Mutex::new(None),
         }
     }
 
@@ -549,6 +556,10 @@ impl Device for KeyboardDevice {
         self.set_pic(pic);
     }
 
+    fn connect_system_control(&self, port: Arc<crate::devices::timer::SystemControlPort>) {
+        *self.system_control.lock() = Some(port);
+    }
+
     /// Host input is PS/2 scancodes (set 1, make and break), queued for the
     /// guest to read at port 0x60. A press is `0x1E`, its release `0x9E`; an
     /// extended key such as the left Super key is `E0 5B` and `E0 DB`.
@@ -604,6 +615,11 @@ impl Device for KeyboardDevice {
             *byte = match offset + index as u64 {
                 KEYBOARD_DATA_OFFSET => self.read_data(),
                 KEYBOARD_STATUS_OFFSET => self.read_status(),
+                SYSTEM_CONTROL_OFFSET => self
+                    .system_control
+                    .lock()
+                    .as_ref()
+                    .map_or(0xFF, |port| port.read_byte()),
                 _ => 0xFF,
             };
         }
@@ -615,6 +631,11 @@ impl Device for KeyboardDevice {
             match offset + index as u64 {
                 KEYBOARD_DATA_OFFSET => self.write_data(*byte),
                 KEYBOARD_STATUS_OFFSET => self.write_command(*byte),
+                SYSTEM_CONTROL_OFFSET => {
+                    if let Some(port) = self.system_control.lock().as_ref() {
+                        port.write_byte(*byte);
+                    }
+                }
                 _ => {}
             }
         }

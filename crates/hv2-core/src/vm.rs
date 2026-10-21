@@ -1121,11 +1121,16 @@ impl VM {
             // without this the guest's programming of the PIT hit an unhandled
             // port, nothing ever raised IRQ 0, and a kernel that did STI and
             // HLT to wait for its tick waited forever.
+            let mut system_control = None;
             if self.backend.executes_guest_code()
                 && self.backend.platform() != crate::hypervisor::HypervisorPlatform::Kvm
             {
                 let mut pit = crate::devices::TimerDevice::new("PIT".to_string(), 0x40);
                 pit.set_pic(Arc::clone(&self.pic));
+                // Port 0x61 sits inside the i8042's range, so the keyboard
+                // device is handed it below rather than a second device
+                // registering on a port the first already claims.
+                system_control = Some(pit.system_control());
                 machine = machine.with_device(
                     crate::machine::MachineDevice::new(
                         "PIT",
@@ -1147,6 +1152,13 @@ impl VM {
             {
                 if let Some(keyboard) = self.devices.get_device("i8042").await {
                     keyboard.read().await.connect_pic(Arc::clone(&self.pic));
+                    // And port 0x61, which a kernel measures its TSC with:
+                    // without it the read is 0xFF, channel 2's output looks
+                    // permanently high, the measurement reads no time, and
+                    // the guest's only clock is the tick.
+                    if let Some(port) = system_control {
+                        keyboard.read().await.connect_system_control(port);
+                    }
                 }
             }
         }
