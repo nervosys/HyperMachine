@@ -1062,6 +1062,25 @@ impl VM {
                     }
                     loaded.append_cmdline(arg);
                 }
+                // A guest on a backend that does not describe the machine's
+                // clocks (no hypervisor CPUID leaves, no HPET or PM timer)
+                // times its TSC against the PIT, and that measurement is only
+                // as steady as the exits it is made through: Debian logged
+                // "Unable to calibrate against PIT", fell back to the tick,
+                // and ran at half speed. Telling it the frequency skips the
+                // measurement. The TSC is not scaled for a guest, so the
+                // host's rate is the guest's.
+                if loaded.protocol() == "linux"
+                    && self.backend.executes_guest_code()
+                    && self.backend.platform() != crate::hypervisor::HypervisorPlatform::Kvm
+                    && !loaded
+                        .cmdline()
+                        .is_some_and(|c| c.contains("tsc_early_khz") || c.contains("tsc="))
+                {
+                    if let Some(khz) = host_tsc_khz() {
+                        loaded.append_cmdline(&format!("tsc_early_khz={khz}"));
+                    }
+                }
                 if acpi {
                     loaded.set_hw_reduced_acpi(self.virtio_mmio_windows.lock().clone());
                     // On a hardware-reduced platform Linux reboots through
@@ -5564,6 +5583,33 @@ impl VM {
     pub fn backend(&self) -> Arc<dyn HypervisorBackend> {
         Arc::clone(&self.backend)
     }
+}
+
+/// The host's TSC frequency in kHz, measured over a tenth of a second the
+/// first time it is asked for, or `None` where there is no TSC to read.
+///
+/// Measured against the monotonic clock rather than read from a register,
+/// because no portable one holds it; a tenth of a second puts the error well
+/// under a tenth of a percent, which is what a guest's clock then drifts by.
+#[cfg(target_arch = "x86_64")]
+fn host_tsc_khz() -> Option<u64> {
+    static KHZ: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
+    *KHZ.get_or_init(|| {
+        // SAFETY: RDTSC exists on every x86_64 processor and reads no memory.
+        let read = || unsafe { core::arch::x86_64::_rdtsc() };
+        let (t0, c0) = (std::time::Instant::now(), read());
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let (t1, c1) = (std::time::Instant::now(), read());
+        let micros = t1.duration_since(t0).as_micros() as u64;
+        let khz = c1.checked_sub(c0)?.checked_mul(1000)? / micros.max(1);
+        // Sanity: 100 MHz to 10 GHz.
+        (100_000..=10_000_000).contains(&khz).then_some(khz)
+    })
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+fn host_tsc_khz() -> Option<u64> {
+    None
 }
 
 #[cfg(test)]

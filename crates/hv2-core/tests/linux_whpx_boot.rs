@@ -48,7 +48,21 @@ fn memory_mib() -> u64 {
 
 /// No local APIC or I/O APIC exists on this backend; saying so is what stops
 /// the kernel probing 0xFEE00000 for ever.
-const CMDLINE: &str = "console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 panic=1 nolapic noapic";
+const DEFAULT_CMDLINE: &str =
+    "console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 panic=1 nolapic noapic";
+
+/// The kernel command line: `HV2_TEST_CMDLINE`, or [`DEFAULT_CMDLINE`].
+fn cmdline_base() -> String {
+    std::env::var("HV2_TEST_CMDLINE").unwrap_or_else(|_| DEFAULT_CMDLINE.to_string())
+}
+
+/// Virtual processors: `HV2_TEST_VCPUS`, or one.
+fn vcpus() -> u32 {
+    std::env::var("HV2_TEST_VCPUS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1)
+}
 
 const BOOT_DEADLINE: Duration = Duration::from_secs(120);
 const POLL: Duration = Duration::from_millis(200);
@@ -85,13 +99,13 @@ async fn a_real_linux_kernel_boots_on_a_userspace_pic_backend() {
         return;
     }
     let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
-    let mut source = BootSource::linux(&kernel).with_cmdline(CMDLINE.to_string());
+    let mut source = BootSource::linux(&kernel).with_cmdline(cmdline_base());
     if let Ok(initrd) = std::env::var("HV2_TEST_INITRD") {
         source = source.with_initrd(initrd);
     }
     let config = VMConfig {
         name: "linux-whpx-boot-test".to_string(),
-        vcpu_count: 1,
+        vcpu_count: vcpus(),
         memory_size: memory_mib() * 1024 * 1024,
         boot: Some(source),
         ..Default::default()
@@ -241,7 +255,7 @@ async fn a_real_linux_kernel_boots_on_a_userspace_pic_backend() {
     };
     for expected in ranges.into_iter().chain([
         "BIOS-e820: [mem 0x0000000000000000-0x000000000009fbff] usable".to_string(),
-        format!("Kernel command line: {CMDLINE}"),
+        format!("Kernel command line: {}", cmdline_base()),
     ]) {
         assert!(
             console.contains(&expected),
@@ -312,7 +326,7 @@ async fn a_root_filesystem_mounts_from_a_virtio_blk_disk_on_pci() {
         return;
     };
     let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
-    let cmdline = format!("{CMDLINE} root=/dev/vda1 ro");
+    let cmdline = format!("{} root=/dev/vda1 ro", cmdline_base());
     let config = VMConfig {
         name: "linux-whpx-root-test".to_string(),
         vcpu_count: 1,
@@ -354,6 +368,14 @@ async fn a_root_filesystem_mounts_from_a_virtio_blk_disk_on_pci() {
     let elapsed = started.elapsed();
     let _ = vm.stop().await;
     println!("linux whpx root: mounted after {elapsed:?}");
+    // The guest's own account of its clocks, and of when it mounted: the
+    // stamp on that line against `elapsed` is the guest's clock against the
+    // host's.
+    for line in console.lines().filter(|l| {
+        l.contains("tsc") || l.contains("clocksource") || l.contains("EXT4-fs (vda1): mounted")
+    }) {
+        println!("linux whpx root: guest: {line}");
+    }
 
     assert!(
         console.contains("virtio_blk virtio0: [vda]"),

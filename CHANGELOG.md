@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A Linux guest on a non-KVM backend is told its TSC frequency
+  (`tsc_early_khz=`, measured once on the host over 100 ms) unless the command
+  line already sets `tsc_early_khz` or `tsc=`. Before, the guest timed its TSC
+  against the PIT through port-I/O exits, failed ("Unable to calibrate against
+  PIT") whenever the exits were slow, fell back to the tick as its only clock and
+  ran at about half speed (a 30 s busy loop took 65 s of host time). Verified on
+  WHPX with a Debian 13 cloud kernel: `Switched to clocksource tsc-early`, and
+  the root mounts at guest 5.03 s after 6.76 s of host time including VM
+  setup. NOT VERIFIED: a long-running guest's drift against the host (the
+  frequency is a 100 ms measurement), HVF, and a host whose TSC is not invariant.
 - `VM::attach_data_pci`: a third, writable virtio-blk disk on PCI (slot 7, BAR
   0xd0070000, IRQ 7), `/dev/vdc` after the root and seed disks, for a guest to
   hand results back through a raw image the host reads once the guest has
