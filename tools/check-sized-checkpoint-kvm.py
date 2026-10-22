@@ -14,6 +14,9 @@ checks through its API and from inside each guest:
    the size of the checkpoint again.
 4. The files of a sized checkpoint are read (the reader boots at the size
    the checkpoint was taken at).
+5. A sized sandbox is snapshotted into a template (it used to be refused);
+   a sandbox started from it has that size and the memory it was taken with,
+   and a different size asked on the create is refused.
 
 Writes report.json and the daemon's log into --output.
 """
@@ -186,6 +189,33 @@ def main():
             assert "before" in text, text
             return {"read_seconds": took}
         case("the files of a sized checkpoint are read at its size", files_of_a_sized_checkpoint)
+
+        def snapshot_of_a_sized_sandbox():
+            sandbox = create(cpuCount=2, memoryMB=1024)
+            sh(sandbox, "echo snapped > /tmp/mark")
+            began = time.monotonic()
+            status, value = request("POST", f"/sandboxes/{sandbox}/snapshots", {"name": "sized-snap"})
+            assert status in (200, 201), (status, value)
+            took = round(time.monotonic() - began, 3)
+            # A sandbox started from it is that size, with that memory.
+            began = time.monotonic()
+            status, made = request("POST", "/sandboxes", {"templateID": "sized-snap", "timeout": 1200})
+            assert status in (200, 201), (status, made)
+            started = round(time.monotonic() - began, 3)
+            child = made["sandboxID"]
+            cpus, mem_kb = seen(child)
+            assert cpus == 2 and big(mem_kb, 1024), (cpus, mem_kb)
+            assert record(child) == (2, 1024), record(child)
+            assert sh(child, "cat /tmp/mark") == "snapped"
+            # A size that is not the snapshot's is refused.
+            status, value = request("POST", "/sandboxes",
+                                    {"templateID": "sized-snap", "cpuCount": 1, "memoryMB": 256})
+            assert status == 400, (status, value)
+            # And it is a size of its own: it can be checkpointed.
+            checkpoint(child, "child")
+            return {"snapshot_seconds": took, "start_seconds": started, "refused": value}
+        case("a sized sandbox is snapshotted into a template that starts sandboxes of its size",
+             snapshot_of_a_sized_sandbox)
 
         report["success"] = True
     finally:

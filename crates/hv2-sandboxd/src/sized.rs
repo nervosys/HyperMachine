@@ -18,8 +18,8 @@
 //! # What a sandbox restored from one is
 //!
 //! It is still a size of its own: its pause and its checkpoints write its
-//! memory whole, and it cannot be made a template, as a sandbox of another
-//! size that booted cannot. Only how fast it starts changes. A sandbox with a
+//! memory whole, as a sandbox of another size that booted does. Only how
+//! fast it starts changes. A sandbox with a
 //! disk boots, as it does at its template's size.
 
 use std::collections::BTreeMap;

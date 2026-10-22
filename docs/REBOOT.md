@@ -60,7 +60,8 @@ hm sandbox vm resume $SBX --cpus 2 --memory-mb 2048
   any reboot is. At another size it is restored from
   [the template built at that size](SANDBOX_SIZES.md#a-fast-start-at-any-size)
   when the node has one, and otherwise boots. It can then be paused and
-  forked, but not checkpointed or made a template.
+  forked, [checkpointed](CHECKPOINTS.md) (restored at the size it was
+  taken at) or [made a template](SANDBOX_SIZES.md#snapshots-of-a-size-of-its-own).
 - **Refused:** a size no guest here can be, which is 1 vCPU up to this
   host's, and 256 MiB to 64 GiB in even numbers. Also refused: a resize of
   a paused sandbox (resume it at a size instead). A resume at a size that

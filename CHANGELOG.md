@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A sandbox of a size of its own can now be snapshotted into a template
+  (`POST /sandboxes/{id}/snapshots`); it was refused. The snapshot keeps the
+  size beside its base, in the store record too (`cpuCount`, `memoryMB`,
+  absent on older records), and a sandbox started from it is that size; the
+  node advertises it at that size for placement. Asking for another size on
+  that create is refused, and a template build on such a snapshot is
+  refused. Checked on real KVM with the sized-checkpoint script (case 5) and
+  a unit test of the record. NOT VERIFIED: a store shared between nodes
+  (another node reading the new fields), a control plane placing by the
+  advertised size, and a snapshot above 1 GiB.
 - A sandbox of a size of its own (`cpuCount`, `memoryMB`, or resized) can now
   be checkpointed, by hand or automatically; it was refused. Its memory is
   written whole, as a pause writes it. A checkpoint records the size it was

@@ -29,6 +29,9 @@ pub(crate) struct Snapshot {
     /// The team of the sandbox it was taken from: the only team that may
     /// use it. `None` for an operator's, which every team may use.
     pub team: Option<TeamId>,
+    /// The size of the guest it was taken from, when that is not its base
+    /// template's: a sandbox started from it is that size.
+    pub sizes: Option<crate::Sizes>,
     /// Deleted with the last reference: one taken on a node with no store.
     /// A store's are deleted by `DELETE /templates/{id}` only.
     owned: bool,
@@ -54,6 +57,28 @@ struct Record {
     created_ms: u64,
     #[serde(rename = "teamID", default, skip_serializing_if = "Option::is_none")]
     team: Option<TeamId>,
+    /// Both or neither: the size, where it is not the base template's.
+    #[serde(rename = "cpuCount", default, skip_serializing_if = "Option::is_none")]
+    cpu_count: Option<u32>,
+    #[serde(rename = "memoryMB", default, skip_serializing_if = "Option::is_none")]
+    memory_mb: Option<u64>,
+}
+
+impl Record {
+    fn sizes(&self) -> Option<crate::Sizes> {
+        Some(crate::Sizes {
+            cpus: self.cpu_count?,
+            memory_mb: self.memory_mb?,
+        })
+    }
+}
+
+/// The size of a guest started from `snapshot`: its own where it has one,
+/// and otherwise its base template's.
+pub(crate) fn size_of(state: &AppState, snapshot: &Snapshot) -> crate::Sizes {
+    snapshot
+        .sizes
+        .unwrap_or_else(|| crate::sizes_of(state, &snapshot.base))
 }
 
 pub(crate) use hv2_cluster::model::untagged;
@@ -103,21 +128,12 @@ pub(crate) async fn create(
             format!("sandbox {sandbox_id} holds a disk, and a sandbox with a disk cannot be snapshotted"),
         );
     }
-    if super::resized_sandbox(&state, &sandbox_id) {
-        return api_error(
-            StatusCode::CONFLICT,
-            format!(
-                "sandbox {sandbox_id} is a size of its own, not its template's, and such a sandbox \
-                 cannot be snapshotted into a template"
-            ),
-        );
-    }
     let file = match new_file(&state, &name) {
         Ok(file) => file,
         Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     };
 
-    let (base, team) = {
+    let (base, team, sizes) = {
         let lock = transition_lock(&state, &sandbox_id);
         let _held = lock.lock().await;
         let source = state.sandboxes.lock().get(&sandbox_id).map(|live| {
@@ -125,9 +141,16 @@ pub(crate) async fn create(
                 Arc::clone(&live.vm),
                 live.record.template_id.clone(),
                 live.record.team_id.clone(),
+                // A size of its own is kept with the snapshot, and its
+                // memory is written whole: what it changed is not against
+                // its template's image.
+                super::resized(&state, &live.record).then_some(crate::Sizes {
+                    cpus: live.record.cpu_count,
+                    memory_mb: live.record.memory_mb,
+                }),
             )
         });
-        let Some((vm, base, team)) = source else {
+        let Some((vm, base, team, sizes)) = source else {
             return if state.paused.lock().contains_key(&sandbox_id) {
                 api_error(
                     StatusCode::CONFLICT,
@@ -153,7 +176,13 @@ pub(crate) async fn create(
             );
         }
         let started = std::time::Instant::now();
-        if let Err(e) = vm.checkpoint_to(&file).await {
+        let written = if sizes.is_some() {
+            vm.checkpoint_with(&file, true, || Ok::<(), String>(()))
+                .await
+        } else {
+            vm.checkpoint_to(&file).await
+        };
+        if let Err(e) = written {
             let _ = std::fs::remove_file(&file);
             return api_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -161,9 +190,9 @@ pub(crate) async fn create(
             );
         }
         state.metrics.checkpoint_latency.observe(started.elapsed());
-        (base, team)
+        (base, team, sizes)
     };
-    if let Err(e) = keep(&state, &name, base, file, sandbox_id, team).await {
+    if let Err(e) = keep(&state, &name, base, file, sandbox_id, team, sizes).await {
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, e);
     }
     tracing::info!("snapshot {name} taken");
@@ -191,6 +220,7 @@ pub(crate) async fn keep(
     file: std::path::PathBuf,
     sandbox_id: String,
     team: Option<TeamId>,
+    sizes: Option<crate::Sizes>,
 ) -> Result<(), String> {
     let snapshot = Snapshot {
         base,
@@ -198,6 +228,7 @@ pub(crate) async fn keep(
         sandbox_id,
         created_ms: now_ms(),
         team,
+        sizes,
         owned: state.store.is_none(),
     };
     if let (Some(_), Some(dir)) = (&state.store, snapshot.file.parent()) {
@@ -211,6 +242,8 @@ pub(crate) async fn keep(
             sandbox_id: snapshot.sandbox_id.clone(),
             created_ms: snapshot.created_ms,
             team: snapshot.team.clone(),
+            cpu_count: snapshot.sizes.map(|s| s.cpus),
+            memory_mb: snapshot.sizes.map(|s| s.memory_mb),
         };
         if let Err(e) = publish(dir, name, &record) {
             let _ = std::fs::remove_file(&snapshot.file);
@@ -330,12 +363,14 @@ pub(crate) fn lookup(state: &AppState, name: &str) -> Option<Arc<Snapshot>> {
     let record: Record = std::fs::read(dir.join(format!("{name}.json")))
         .ok()
         .and_then(|b| serde_json::from_slice(&b).ok())?;
+    let sizes = record.sizes();
     let snapshot = Arc::new(Snapshot {
         base: record.base,
         file: dir.join(&record.file),
         sandbox_id: record.sandbox_id,
         created_ms: record.created_ms,
         team: record.team,
+        sizes,
         owned: false,
     });
     state
@@ -386,6 +421,7 @@ pub(crate) async fn follow_store(state: Arc<AppState>) {
                 if snapshots.get(&name).is_some_and(|s| s.file == file) {
                     continue;
                 }
+                let sizes = record.sizes();
                 snapshots.insert(
                     name,
                     Arc::new(Snapshot {
@@ -394,6 +430,7 @@ pub(crate) async fn follow_store(state: Arc<AppState>) {
                         sandbox_id: record.sandbox_id,
                         created_ms: record.created_ms,
                         team: record.team,
+                        sizes,
                         owned: false,
                     }),
                 );
@@ -429,5 +466,32 @@ mod tests {
         assert!(written.contains(r#""teamID":"red""#));
         let back: Record = serde_json::from_str(&written).unwrap();
         assert_eq!(back.team, red.team);
+    }
+
+    /// A size is kept with a snapshot of a sandbox of its own, and a record
+    /// without one is the base template's.
+    #[test]
+    fn a_snapshot_record_carries_a_size_of_its_own_and_older_ones_have_none() {
+        let old: Record = serde_json::from_str(
+            r#"{"base":"base","file":"a.snap","sandboxID":"sbx","createdAt":1}"#,
+        )
+        .unwrap();
+        assert!(old.sizes().is_none());
+        let sized = Record {
+            cpu_count: Some(2),
+            memory_mb: Some(1024),
+            ..old
+        };
+        let written = serde_json::to_string(&sized).unwrap();
+        assert!(written.contains(r#""cpuCount":2"#) && written.contains(r#""memoryMB":1024"#));
+        let back: Record = serde_json::from_str(&written).unwrap();
+        let size = back.sizes().unwrap();
+        assert_eq!((size.cpus, size.memory_mb), (2, 1024));
+        // Half a size is none: it cannot say what the guest was.
+        let half = Record {
+            memory_mb: None,
+            ..back
+        };
+        assert!(half.sizes().is_none());
     }
 }

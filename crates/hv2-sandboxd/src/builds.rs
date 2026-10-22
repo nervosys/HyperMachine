@@ -548,6 +548,12 @@ async fn run(state: &Arc<AppState>, build: &Arc<Build>, spec: StartBuild) -> Res
         let requested = spec.from_template.as_deref().unwrap_or_default();
         let name = snapshots::untagged(requested);
         match snapshots::lookup(state, name) {
+            Some(snapshot) if snapshot.sizes.is_some() => {
+                return Err(base_step(format!(
+                    "{requested:?} is a size of its own, and a template built on it would be too; \
+                     to size one, build it from an image"
+                )));
+            }
             Some(snapshot) => (snapshot.base.clone(), Some(snapshot)),
             None if state.initrds.read().contains_key(name) => (name.to_string(), None),
             None => return Err(base_step(format!("no template {requested:?}"))),
@@ -807,6 +813,7 @@ async fn steps_then_snapshot(
                 file,
                 sandbox_id.to_string(),
                 None,
+                None,
             )
             .await?;
             Ok::<_, String>(started.elapsed())
@@ -996,6 +1003,7 @@ async fn finalize(
         base.to_string(),
         file,
         sandbox_id.to_string(),
+        None,
         None,
     )
     .await

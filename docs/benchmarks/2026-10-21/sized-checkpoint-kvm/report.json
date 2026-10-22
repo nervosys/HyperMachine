@@ -2,26 +2,26 @@
   "success": true,
   "purpose": "functional verification of checkpointing a sandbox of its own size on KVM; the times are the check's own stopwatch and not a benchmark",
   "input_sha256": {
-    "daemon": "f1e25847c9c370816c51d8879fde5661fd43e3bfe113b5241abadfa354242bc8",
+    "daemon": "fd996b386279cbe40887e45bbdc57756d9f829218690d182056534453d3df0c5",
     "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
     "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
-    "driver": "3b9dee415c4ddc66fc7b52cc596b271a1c6167229a359af35160eff0b40e0aeb"
+    "driver": "e5bda52d7d532130071a75a2d6964c6e00446d58e652a5335f7ac3ed1f12165b"
   },
   "host_cpus": 24,
   "cases": [
     {
       "name": "a sandbox of its own size is checkpointed and restored at it",
       "success": true,
-      "seconds": 1.455,
+      "seconds": 1.344,
       "detail": {
-        "checkpoint_seconds": 0.71,
-        "restore_seconds": 0.163
+        "checkpoint_seconds": 0.545,
+        "restore_seconds": 0.198
       }
     },
     {
       "name": "a restore is at the checkpoint's size, not the size the sandbox became",
       "success": true,
-      "seconds": 0.339,
+      "seconds": 0.284,
       "detail": {
         "seen": {
           "cpus": 1,
@@ -32,7 +32,7 @@
     {
       "name": "a sized checkpoint is restored at its size after another resize",
       "success": true,
-      "seconds": 0.769,
+      "seconds": 0.556,
       "detail": {
         "seen": {
           "cpus": 2,
@@ -43,9 +43,22 @@
     {
       "name": "the files of a sized checkpoint are read at its size",
       "success": true,
-      "seconds": 0.131,
+      "seconds": 0.156,
       "detail": {
-        "read_seconds": 0.131
+        "read_seconds": 0.156
+      }
+    },
+    {
+      "name": "a sized sandbox is snapshotted into a template that starts sandboxes of its size",
+      "success": true,
+      "seconds": 2.474,
+      "detail": {
+        "snapshot_seconds": 1.74,
+        "start_seconds": 0.086,
+        "refused": {
+          "code": 400,
+          "message": "a sandbox started from a snapshot is the snapshot's size; leave out cpuCount and memoryMB"
+        }
       }
     }
   ]

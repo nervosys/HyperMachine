@@ -36,12 +36,24 @@ The node therefore builds the template again at each size it is asked for:
 - A template rebuilt under the same name forgets the sizes built from its
   old guest; they are built again as they are asked for.
 
+### Snapshots of a size of its own
+
+A sandbox of a size of its own can be snapshotted into a template
+(`POST /sandboxes/{id}/snapshots`). The snapshot keeps the guest's vCPUs and
+memory beside its base template, and **a sandbox started from it is that
+size** (the same record, the same guest), where one started from any other
+snapshot is its template's. Asking for a different `cpuCount` or `memoryMB`
+on that create is refused, as it is for any snapshot. Its memory is written
+whole, so the file is as large as the guest's used memory. A template built
+*on* such a snapshot is refused; build a sized template from an image. The
+node advertises the snapshot at its own size, so a control plane places it
+by that.
+
 ### What it does not change
 
 - **Its own size.** A sandbox not its template's size is still a size of
-  its own, however it started. Its pause and its
-  [checkpoints](CHECKPOINTS.md) write its memory whole, and it cannot be
-  made into a template.
+  its own, however it started. Its pause, its
+  [checkpoints](CHECKPOINTS.md) and its snapshots write its memory whole.
 - **A sandbox with a disk** boots, as it does at its template's size.
 - **The [warm pool](WARM_POOL.md)** holds sandboxes of the base template's
   size only.

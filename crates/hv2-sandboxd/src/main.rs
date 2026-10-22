@@ -985,8 +985,8 @@ struct NewSandbox {
     env_vars: BTreeMap<String, String>,
     /// Processors and memory of its own, where the template's are not what
     /// is wanted. A sandbox of a size its template was not snapshotted at
-    /// is booted rather than restored, which takes longer than a restore,
-    /// and cannot be made a template. Not E2B's.
+    /// is booted rather than restored, which takes longer than a restore.
+    /// Not E2B's.
     #[serde(rename = "cpuCount")]
     cpu_count: Option<u32>,
     #[serde(rename = "memoryMB")]
@@ -2819,10 +2819,18 @@ async fn create_sandbox(
     }
     // A size of its own, when one is asked for that is not the template's:
     // the sandbox boots that size rather than being restored.
+    // A snapshot of a size of its own starts a sandbox that size.
+    let snap_size = from_snapshot
+        .as_ref()
+        .and_then(|s| s.sizes)
+        .filter(|s| *s != sizes_of(&state, &template_id));
     let size = if req.cpu_count.is_some() || req.memory_mb.is_some() {
-        let template_size = sizes_of(&state, &template_id);
+        let template_size = from_snapshot.as_ref().map_or_else(
+            || sizes_of(&state, &template_id),
+            |s| snapshots::size_of(&state, s),
+        );
         match Sizes::requested(req.cpu_count, req.memory_mb, template_size) {
-            Ok(asked) if asked == template_size => None,
+            Ok(asked) if asked == template_size => snap_size,
             Ok(_) if from_snapshot.is_some() => {
                 return api_error(
                     StatusCode::BAD_REQUEST,
@@ -2833,7 +2841,7 @@ async fn create_sandbox(
             Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
         }
     } else {
-        None
+        snap_size
     };
     // A disk rules out starting from a snapshot, which would restore a
     // guest's memory against a disk it never had. It can pause: its own
@@ -5047,15 +5055,6 @@ fn resized(state: &AppState, record: &SandboxRecord) -> bool {
     } != sizes_of(state, &record.template_id)
 }
 
-/// Whether the running sandbox `sandbox_id` is a size of its own.
-fn resized_sandbox(state: &AppState, sandbox_id: &str) -> bool {
-    state
-        .sandboxes
-        .lock()
-        .get(sandbox_id)
-        .is_some_and(|live| resized(state, &live.record))
-}
-
 /// The size of `template`'s sandboxes: its own, or the node's.
 fn sizes_of(state: &AppState, template: &str) -> Sizes {
     state
@@ -5180,10 +5179,17 @@ fn advertise_templates(state: &AppState) {
             .snapshots
             .read()
             .iter()
-            .map(|(name, snapshot)| (name.clone(), snapshot.base.clone(), snapshot.team.clone()))
+            .map(|(name, snapshot)| {
+                (
+                    name.clone(),
+                    snapshot.base.clone(),
+                    snapshot.team.clone(),
+                    snapshot.sizes,
+                )
+            })
             .collect();
-        for (name, base, team) in snapshots {
-            let sizes = sizes_of(state, &base);
+        for (name, base, team, own) in snapshots {
+            let sizes = own.unwrap_or_else(|| sizes_of(state, &base));
             metadata.insert(
                 name,
                 hv2_cluster::model::TemplateInfo {
