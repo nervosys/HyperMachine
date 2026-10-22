@@ -84,6 +84,10 @@ pub(crate) fn due(now: u64, last: u64, every_secs: u64, has_one: bool, used_sinc
 pub(crate) struct Checkpoint {
     pub(crate) path: std::path::PathBuf,
     created_ms: u64,
+    /// The size of the guest it was taken from, which is the size it can be
+    /// restored at: not the sandbox's size now, which a resize may have
+    /// changed since.
+    pub(crate) sizes: super::Sizes,
 }
 
 /// Every sandbox's checkpoints on this node, by sandbox then name.
@@ -167,24 +171,22 @@ async fn save(state: &Arc<AppState>, sandbox_id: &str, name: &str) -> Result<u64
             ),
         ));
     }
-    if super::resized_sandbox(state, sandbox_id) {
-        return Err(Refused::Because(
-            StatusCode::CONFLICT,
-            format!(
-                "sandbox {sandbox_id} is a size of its own, not its template's, and such a sandbox \
-                 cannot be checkpointed; it can be paused"
-            ),
-        ));
-    }
 
     let lock = transition_lock(state, sandbox_id);
     let _held = lock.lock().await;
-    let Some(vm) = state
-        .sandboxes
-        .lock()
-        .get(sandbox_id)
-        .map(|live| Arc::clone(&live.vm))
-    else {
+    // A sandbox of a size of its own booted it, or was restored from a
+    // template built for it: either way what it changed is not against its
+    // template's image, so its memory is written whole, as a pause does.
+    let Some((vm, sizes, whole)) = state.sandboxes.lock().get(sandbox_id).map(|live| {
+        (
+            Arc::clone(&live.vm),
+            super::Sizes {
+                cpus: live.record.cpu_count,
+                memory_mb: live.record.memory_mb,
+            },
+            super::resized(state, &live.record),
+        )
+    }) else {
         return Err(Refused::NotRunning);
     };
     if !automatic {
@@ -215,7 +217,13 @@ async fn save(state: &Arc<AppState>, sandbox_id: &str, name: &str) -> Result<u64
         path.clone()
     };
     let started = std::time::Instant::now();
-    if let Err(e) = vm.checkpoint_to(&writing).await {
+    let written = if whole {
+        vm.checkpoint_with(&writing, true, || Ok::<(), String>(()))
+            .await
+    } else {
+        vm.checkpoint_to(&writing).await
+    };
+    if let Err(e) = written {
         let _ = std::fs::remove_file(&writing);
         return Err(failed(format!("checkpointing {sandbox_id}: {e}")));
     }
@@ -234,7 +242,14 @@ async fn save(state: &Arc<AppState>, sandbox_id: &str, name: &str) -> Result<u64
         .lock()
         .entry(sandbox_id.to_string())
         .or_default()
-        .insert(name.to_string(), Checkpoint { path, created_ms });
+        .insert(
+            name.to_string(),
+            Checkpoint {
+                path,
+                created_ms,
+                sizes,
+            },
+        );
     telemetry::log(
         state,
         sandbox_id,
@@ -402,10 +417,7 @@ pub(crate) async fn restore(
         &BTreeMap::new(),
         &[],
         &descriptor.envd_access_token,
-        Some(super::Sizes {
-            cpus: record.cpu_count,
-            memory_mb: record.memory_mb,
-        }),
+        Some(checkpoint.sizes),
     )
     .await
     {
@@ -433,6 +445,10 @@ pub(crate) async fn restore(
     let mut descriptor = old.descriptor;
     descriptor.process_port = running.process_addr.port();
     let mut record = old.record;
+    // The guest is the size the checkpoint was taken at, whatever the
+    // sandbox was made since.
+    record.cpu_count = checkpoint.sizes.cpus;
+    record.memory_mb = checkpoint.sizes.memory_mb;
     record.descriptor = serde_json::to_value(&descriptor).unwrap_or_default();
     if let Err((status, error)) = register(
         &state,

@@ -1,0 +1,52 @@
+{
+  "success": true,
+  "purpose": "functional verification of checkpointing a sandbox of its own size on KVM; the times are the check's own stopwatch and not a benchmark",
+  "input_sha256": {
+    "daemon": "f1e25847c9c370816c51d8879fde5661fd43e3bfe113b5241abadfa354242bc8",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "3b9dee415c4ddc66fc7b52cc596b271a1c6167229a359af35160eff0b40e0aeb"
+  },
+  "host_cpus": 24,
+  "cases": [
+    {
+      "name": "a sandbox of its own size is checkpointed and restored at it",
+      "success": true,
+      "seconds": 1.455,
+      "detail": {
+        "checkpoint_seconds": 0.71,
+        "restore_seconds": 0.163
+      }
+    },
+    {
+      "name": "a restore is at the checkpoint's size, not the size the sandbox became",
+      "success": true,
+      "seconds": 0.339,
+      "detail": {
+        "seen": {
+          "cpus": 1,
+          "mem_kb": 221732
+        }
+      }
+    },
+    {
+      "name": "a sized checkpoint is restored at its size after another resize",
+      "success": true,
+      "seconds": 0.769,
+      "detail": {
+        "seen": {
+          "cpus": 2,
+          "mem_kb": 994508
+        }
+      }
+    },
+    {
+      "name": "the files of a sized checkpoint are read at its size",
+      "success": true,
+      "seconds": 0.131,
+      "detail": {
+        "read_seconds": 0.131
+      }
+    }
+  ]
+}

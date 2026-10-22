@@ -986,7 +986,7 @@ struct NewSandbox {
     /// Processors and memory of its own, where the template's are not what
     /// is wanted. A sandbox of a size its template was not snapshotted at
     /// is booted rather than restored, which takes longer than a restore,
-    /// and cannot be checkpointed or made a template. Not E2B's.
+    /// and cannot be made a template. Not E2B's.
     #[serde(rename = "cpuCount")]
     cpu_count: Option<u32>,
     #[serde(rename = "memoryMB")]

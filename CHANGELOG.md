@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A sandbox of a size of its own (`cpuCount`, `memoryMB`, or resized) can now
+  be checkpointed, by hand or automatically; it was refused. Its memory is
+  written whole, as a pause writes it. A checkpoint records the size it was
+  taken at and a restore is at that size, so a sandbox resized after a
+  checkpoint is restored to the checkpoint's size and its record updated (it
+  was restored at the sandbox's size at the time, whatever the checkpoint
+  held); the checkpoint file reader boots at that size too. Checked on real
+  KVM in WSL2, 4 cases (`tools/check-sized-checkpoint-kvm.py`,
+  `docs/benchmarks/2026-10-21/sized-checkpoint-kvm/`). Still refused: a
+  sandbox with a data disk, and making a sized sandbox a template. NOT
+  VERIFIED: a checkpoint of a sandbox restored from a sized template, memory
+  sizes beyond 1 GiB, and a checkpoint index surviving a node restart (it
+  never did).
 - A team's telemetry destination ending in `/v1/metrics` is now also sent
   the team's sandbox events (created, paused, resumed, deleted, expired, lost,
   forked) as OTLP logs, to `/v1/logs` under the same operator prefix and

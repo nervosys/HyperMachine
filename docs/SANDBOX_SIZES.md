@@ -39,8 +39,9 @@ The node therefore builds the template again at each size it is asked for:
 ### What it does not change
 
 - **Its own size.** A sandbox not its template's size is still a size of
-  its own, however it started. Its pause writes its memory whole, and it
-  cannot be checkpointed or made into a template.
+  its own, however it started. Its pause and its
+  [checkpoints](CHECKPOINTS.md) write its memory whole, and it cannot be
+  made into a template.
 - **A sandbox with a disk** boots, as it does at its template's size.
 - **The [warm pool](WARM_POOL.md)** holds sandboxes of the base template's
   size only.

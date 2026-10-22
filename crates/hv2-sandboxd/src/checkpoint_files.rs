@@ -32,7 +32,7 @@ use hv2_agent::AgentVM;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use super::{api_error, new_vm, AppState, Sizes, TEMPLATE_CID, TEMPLATE_MAC};
+use super::{api_error, new_vm, AppState, TEMPLATE_CID, TEMPLATE_MAC};
 
 /// The largest file read out of a checkpoint, as for a machine's snapshot.
 const MAX_FILE: u64 = 64 << 20;
@@ -200,11 +200,8 @@ async fn open(state: &AppState, sandbox_id: &str, name: &str) -> Result<Reader, 
             "checkpoint readers unavailable",
         )
     })?;
-    let size = Sizes {
-        cpus: record.cpu_count,
-        memory_mb: record.memory_mb,
-    };
-    let opts = size.applied(&state.opts);
+    // The size it was taken at, which the sandbox may no longer be.
+    let opts = checkpoint.sizes.applied(&state.opts);
     let initrd = state
         .initrds
         .read()
