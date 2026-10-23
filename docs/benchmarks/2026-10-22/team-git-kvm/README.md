@@ -17,6 +17,8 @@ owned HTTPS server recording each request's Authorization. All 4 cases pass
 4. No token, nor its base64, is in any file or process environment of any
    guest.
 
-NOT VERIFIED: the request through a running control plane (the team header was
-sent to the node directly, as the control plane would), a Redis store, a real
-GitHub or GitLab, `git push`, and a server-side environment clone.
+The request through a running control plane and Redis is checked
+[separately](../../2026-10-23/team-git-cluster-kvm/README.md).
+
+NOT VERIFIED: a real GitHub or GitLab, `git push`, and a server-side
+environment clone.

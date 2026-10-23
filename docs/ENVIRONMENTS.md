@@ -132,7 +132,8 @@ hv2-sandboxd --network --git-credential https://git.example/team/=GIT_TOKEN \
   token. Two teams can hold different tokens for the same prefix. A team's
   credential serves only that team's sandboxes' own `git`; it does not
   apply to a server-side environment clone, which uses `--git-credential`.
-  [Checked on KVM](benchmarks/2026-10-22/team-git-kvm/README.md).
+  Checked on KVM [on a node](benchmarks/2026-10-22/team-git-kvm/README.md)
+  and [through a control plane](benchmarks/2026-10-23/team-git-cluster-kvm/README.md).
 - Only `https` prefixes (the gateway sets it inside TLS), and the node must
   have `--network`. The gateway verifies the server's certificate against the
   public roots and `--egress-upstream-ca`, as for any intercepted host. The

@@ -14,11 +14,14 @@ administrator. Then, through the control plane's API only:
 3. A key without the machines scope is refused (403); a second machine of a
    name in one team is refused (409).
 4. Stop and start through the control plane keep the machine's disk.
-5. Red deletes its machine once stopped; blue's of the same name remains.
+5. Red snapshots its stopped machine and downloads a directory of the
+   snapshot as a gzipped tar through the control plane (the archive route);
+   blue cannot reach the snapshot or its archive (404).
+6. Red deletes its machine once stopped; blue's of the same name remains.
 
 Writes report.json and each service's log into --output.
 """
-import argparse, hashlib, http.client, json, socket, ssl, subprocess, tempfile, time, uuid
+import argparse, hashlib, http.client, io, json, socket, tarfile, ssl, subprocess, tempfile, time, uuid
 from pathlib import Path
 
 
@@ -73,7 +76,7 @@ def main():
                          headers={"x-api-key": keys[key], "content-type": "application/json"})
             response = conn.getresponse()
             data = response.read(1 << 20)
-            assert response.status == status, f"{key} {method} {path}: {response.status}, expected {status}: {data[:300]!r}"
+            assert response.status in ((status,) if isinstance(status, int) else status), f"{key} {method} {path}: {response.status}, expected {status}: {data[:300]!r}"
             return json.loads(data) if data else None
         finally:
             conn.close()
@@ -226,6 +229,34 @@ def main():
                 assert run("web-01", "cat /root/note") == "red-only"
                 return {"note": "red-only"}
             case("stop and start through the control plane keep its disk", keeps_its_disk)
+
+            def archived():
+                assert api("POST", "/machines/web-01/stop")["state"] == "stopped"
+                snap = api("POST", "/machines/web-01/snapshots", {"name": "for archive"}, status=201)["snapshotID"]
+                path = f"/machines/web-01/snapshots/{snap}/archive?path=/root"
+
+                def fetch(key):
+                    conn = http.client.HTTPSConnection("127.0.0.1", state["api_port"], context=state["context"], timeout=300)
+                    try:
+                        conn.request("GET", path, headers={"x-api-key": keys[key]})
+                        response = conn.getresponse()
+                        return response.status, dict(response.getheaders()), response.read()
+                    finally:
+                        conn.close()
+                status, headers, body = fetch("red_b")
+                assert status == 200, (status, body[:200])
+                assert {k.lower(): v for k, v in headers.items()}.get("content-type") == "application/gzip", headers
+                tar = tarfile.open(fileobj=io.BytesIO(body), mode="r:gz")
+                names = {m.name.removeprefix("./") for m in tar.getmembers()}
+                assert "note" in names, sorted(names)
+                member = [m for m in tar.getmembers() if m.name.removeprefix("./") == "note"][0]
+                assert tar.extractfile(member).read().strip() == b"red-only"
+                status, _, _ = fetch("blue")
+                assert status == 404, status
+                api("DELETE", f"/machines/web-01/snapshots/{snap}", status=(200, 204))
+                assert api("POST", "/machines/web-01/start")["state"] == "running"
+                return {"archive_bytes": len(body), "entries": len(names)}
+            case("a directory of a machine's snapshot is archived through the control plane, for its team only", archived)
 
             def deleted():
                 api("DELETE", "/machines/web-01", status=409)

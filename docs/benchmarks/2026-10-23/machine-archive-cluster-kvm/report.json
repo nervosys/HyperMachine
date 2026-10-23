@@ -1,0 +1,60 @@
+{
+  "success": true,
+  "purpose": "local KVM functional verification of machines through the control plane; no performance comparison",
+  "input_sha256": {
+    "daemon": "0cc2df72a1c95f3b351b0fddae64adcb56a265981bb82d912f7f2a07b1c9c5f1",
+    "control": "d4633288b7d98ba9f85f4248021ed373d997aceef7d1f1913a746b90e92e31c4",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "01ed884dc809506db7bd55766d2f551e2d5ee814b6dd5eee81a921493753f600"
+  },
+  "cases": [
+    {
+      "name": "a team's machine is placed on a node and reached by the whole team",
+      "success": true,
+      "detail": {
+        "machineID": "vm-6228791797760cdf",
+        "nodeID": "machines-kvm-node"
+      }
+    },
+    {
+      "name": "another team sees and reaches none of it, and has its own machine of the name",
+      "success": true,
+      "detail": {
+        "red": "vm-6228791797760cdf",
+        "blue": "vm-cf6e2d8b06d6fe15"
+      }
+    },
+    {
+      "name": "a key without the scope, a taken name and an unknown node are refused",
+      "success": true,
+      "detail": {
+        "without_scope": 403,
+        "duplicate": 409,
+        "unknown_node": 503
+      }
+    },
+    {
+      "name": "stop and start through the control plane keep its disk",
+      "success": true,
+      "detail": {
+        "note": "red-only"
+      }
+    },
+    {
+      "name": "a directory of a machine's snapshot is archived through the control plane, for its team only",
+      "success": true,
+      "detail": {
+        "archive_bytes": 153,
+        "entries": 2
+      }
+    },
+    {
+      "name": "a team deletes its machine and the other team's remains",
+      "success": true,
+      "detail": {
+        "remaining": "vm-cf6e2d8b06d6fe15"
+      }
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "success": true,
+  "cases": [
+    {
+      "name": "each team's sandbox, made through the control plane, clones with its own credential",
+      "success": true,
+      "seconds": 0.64,
+      "detail": {
+        "red": 6,
+        "blue": 6
+      }
+    },
+    {
+      "name": "a sandbox with no team is given neither team's credential",
+      "success": true,
+      "seconds": 0.115,
+      "detail": {
+        "stderr": "/share/git-core/templates\nfatal: could not read Username for 'https://git.example.test:43279': terminal prompts disabled"
+      }
+    },
+    {
+      "name": "no token is anywhere in any guest",
+      "success": true,
+      "seconds": 0.08
+    }
+  ],
+  "host_cpus": 24,
+  "purpose": "functional verification of team Git credentials through a control plane; no timing claim",
+  "input_sha256": {
+    "daemon": "0cc2df72a1c95f3b351b0fddae64adcb56a265981bb82d912f7f2a07b1c9c5f1",
+    "control": "d4633288b7d98ba9f85f4248021ed373d997aceef7d1f1913a746b90e92e31c4",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "b6f33665643cd5490f9fcba236757d3ee71c2f30af4936b81695c80f41af4cb8",
+    "combined_initrd": "3aaaa324558a1cef59343f3b8a9ba414abfd76de8ec18836d17deadc67779b30"
+  }
+}

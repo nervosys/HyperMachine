@@ -25,8 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   KVM (4 cases, `tools/check-machine-snapshot-archive-kvm.py`) and 2 unit
   tests on a `mkfs.ext4 -d` image. NOT VERIFIED: a partitioned disk image or
   Ubuntu's cloud image (the fixtures are gone), a filesystem that was not
-  cleanly unmounted, the archive over 64 MiB, a non-root node's ownership,
-  and the route through a running control plane.
+  cleanly unmounted, the archive over 64 MiB, and a non-root node's
+  ownership on KVM (a non-root unit-test run passes). The route through a
+  control plane and Redis is checked, for its team only
+  (`docs/benchmarks/2026-10-23/machine-archive-cluster-kvm/`).
 - `--team-git-credential TEAM=PREFIX=VAR` (repeatable): a team's sandboxes'
   own `git` is given the team's credential by the gateway, before the
   node's `--git-credential-in-sandbox` ones; other teams' sandboxes and ones
@@ -34,10 +36,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   prefix. Held only on the host. Needs a clustered node and a cluster token
   (attribution), and `--network`. Checked on real KVM, 4 cases
   (`tools/check-team-git-kvm.py`, `docs/benchmarks/2026-10-22/team-git-kvm/`)
-  and a unit test. NOT VERIFIED: through a running control plane (the check
-  sends the team header to the node directly), a Redis store, a real GitHub
-  or GitLab, and a server-side environment clone (it does not use the team's
-  credential).
+  and a unit test. Also checked through a real control plane and Redis, the
+  team coming from the API key (3 cases,
+  `tools/check-team-git-cluster-kvm.py`,
+  `docs/benchmarks/2026-10-23/team-git-cluster-kvm/`). NOT VERIFIED: a real
+  GitHub or GitLab, and a server-side environment clone (it does not use the
+  team's credential).
 - A sandbox's own `git` can use the node's `--git-credential` without the
   guest holding it: with `--git-credential-in-sandbox`, the gateway sets
   `Authorization: Basic` on a guest's HTTPS request whose scheme, host, port
