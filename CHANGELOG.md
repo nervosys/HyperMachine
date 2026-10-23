@@ -15,11 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it, and only then swaps, letting go the disk the sandbox held, unchanged;
   a restore that fails deletes the new disk and the sandbox keeps what it had.
   Automatic checkpoints and templates from a sandbox with a disk stay
-  refused. Checked on real KVM, 8 cases (`tools/check-disk-checkpoint-kvm.py`,
-  `docs/benchmarks/2026-10-23/disk-checkpoint-kvm/`). NOT VERIFIED: a disk
-  larger than the 64 MiB tested, a filesystem without reflinks (the copy ran
-  on whatever WSL's ext4 gives), `--disk-slot` nodes, and a checkpoint of a
-  sandbox that was itself restored from one.
+  refused. Checked on real KVM, 10 cases (`tools/check-disk-checkpoint-kvm.py`,
+  `docs/benchmarks/2026-10-23/disk-checkpoint-kvm/`), including a restored
+  sandbox checkpointed again and a 1 GiB disk with 400 MiB of data restored
+  byte for byte. NOT VERIFIED: a filesystem with reflinks (WSL's ext4 has
+  none, so the copies were full), `--disk-slot` nodes, and disks much beyond
+  1 GiB.
 - Checked on real KVM with Ubuntu 24.04's cloud image (a GPT disk with four
   partitions): a machine's snapshot is listed and archived from its root
   partition without one being named, the archive equal file for file to the

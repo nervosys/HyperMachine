@@ -2,7 +2,7 @@
 
 `tools/check-disk-checkpoint-kvm.py` on WSL2's KVM (24 host CPUs), running as
 root, a template guest on the 6.6.52 kernel and busybox initrd, a 64 MiB disk
-named `data`. All 8 cases pass (`report.json`, which has the request times and
+named `data`. All 10 cases pass (`report.json`, which has the request times and
 digests).
 
 1. A sandbox holding the disk, running a counter, with a synced file, one
@@ -24,8 +24,16 @@ digests).
 8. Deleting a checkpoint removed its copy of the disk, and so did the sandbox
    ending.
 
-NOT VERIFIED: a disk larger than 64 MiB, a filesystem with reflinks (here a
-full sparse copy was taken), a node with `--disk-slot`, a sandbox that was
-itself restored from a checkpoint and then checkpointed, the route through a
-control plane (disks are node-local and the control plane does not forward
-`/disks`), and the cost of the pause for a large disk.
+9. A sandbox that had been restored (so on a disk made by a restore) was
+   checkpointed again and restored from the newer checkpoint and then the
+   older one, each with the right contents.
+10. A 1 GiB disk holding 400 MiB of random data was checkpointed
+   (request 1.18 s) and, after 50 MiB of it was overwritten, restored
+   (request 0.82 s) with every byte back, by SHA-256. The files were on WSL's ext4,
+   which has no reflinks, so these are full sparse copies: the guest waits
+   for the copy during a checkpoint. A one-off measurement on a busy
+   development host, not a claim.
+
+NOT VERIFIED: a filesystem with reflinks, a node with `--disk-slot`, the
+route through a control plane (disks are node-local and the control plane
+does not forward `/disks`), and disks much beyond 1 GiB.

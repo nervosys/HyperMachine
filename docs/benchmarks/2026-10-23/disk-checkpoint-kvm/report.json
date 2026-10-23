@@ -5,15 +5,15 @@
     "daemon": "2579cf15638d1354d3c5504e6fd6f8737314a49ac25ff9ea3b6413360ff44617",
     "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
     "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
-    "driver": "44999942c22b52aafbdc64478ffad210510ca6a331b6e1236dd2ba041d4dbd1d"
+    "driver": "118b253c4702e2cf665580aab7f57a9f56e988a1ab9286c88f9007b883012880"
   },
   "cases": [
     {
       "name": "a sandbox holding a disk is checkpointed, and the node keeps a copy of the disk",
       "success": true,
       "detail": {
-        "checkpoint_request_seconds": 2.412,
-        "copy_on_node": "store/paused/checkpoints/sbx-fcdb5c7309e44bfdb3e9/cp1.disk.img"
+        "checkpoint_request_seconds": 0.249,
+        "copy_on_node": "store/paused/checkpoints/sbx-0f51f2015fd54df2b651/cp1.disk.img"
       }
     },
     {
@@ -22,7 +22,7 @@
       "detail": {
         "counter": [
           11,
-          34
+          32
         ]
       }
     },
@@ -30,23 +30,23 @@
       "name": "restoring gives the sandbox, and its disk, back as they were at the checkpoint",
       "success": true,
       "detail": {
-        "restore_request_seconds": 0.797,
-        "counter_after_restore": 15,
-        "disk_now": "data-restored-61241152"
+        "restore_request_seconds": 0.095,
+        "counter_after_restore": 11,
+        "disk_now": "data-restored-09172328"
       }
     },
     {
       "name": "the disk it held before is let go as it was, with the later writes",
       "success": true,
       "detail": {
-        "read_by": "sbx-2add042d766b460f8579"
+        "read_by": "sbx-8a891b1b2cb746eabe5e"
       }
     },
     {
       "name": "restoring again returns the checkpointed disk, not the second life's",
       "success": true,
       "detail": {
-        "second_disk": "data-restored-18837404"
+        "second_disk": "data-restored-68298288"
       }
     },
     {
@@ -54,7 +54,24 @@
       "success": true,
       "detail": {
         "status": 500,
-        "message": "restoring sbx-fcdb5c7309e44bfdb3e9 to cp1: launching: VM error: Configuration error: opening /var/tmp/hm-disk-checkpoint-check-n_xiwnrl/store/paused/checkpoints/sbx-fcdb5c7309e44bfdb3e9/cp1.snap: No such file or directory (os error 2)"
+        "message": "restoring sbx-0f51f2015fd54df2b651 to cp1: launching: VM error: Configuration error: opening /var/tmp/hm-disk-checkpoint-check-yfxlnitd/store/paused/checkpoints/sbx-0f51f2015fd54df2b651/cp1.snap: No such file or directory (os error 2)"
+      }
+    },
+    {
+      "name": "a sandbox that was restored can be checkpointed, and restored from either",
+      "success": true,
+      "detail": {
+        "restored_twice_from_a_restored_sandbox": true
+      }
+    },
+    {
+      "name": "a 1 GiB disk holding 400 MiB of random data is checkpointed and restored byte for byte",
+      "success": true,
+      "detail": {
+        "disk_mib": 1024,
+        "written_mib": 400,
+        "checkpoint_request_seconds": 1.18,
+        "restore_request_seconds": 0.82
       }
     },
     {

@@ -23,6 +23,10 @@ through its API:
 7. Deleting the checkpoint removes the copy of the disk it kept, and a
    sandbox ending removes the rest.
 8. Still refused: a template made from a sandbox with a disk.
+9. A sandbox that was restored (so on a disk made by a restore) is
+   checkpointed again, and restored from the newer or the older one.
+10. A 1 GiB disk holding 400 MiB of random data is checkpointed and restored
+   with every byte back (SHA-256), with the request times recorded.
 
 Writes report.json and the daemon's log into --output.
 """
@@ -217,6 +221,51 @@ def main():
             assert execute(box, sha.format("/data/synced")) == state["synced"]
             return {"status": status, "message": value.get("message") if isinstance(value, dict) else value}
         case("a restore that fails leaves the sandbox on the disk it had", failed_restore)
+
+        def chained():
+            # The sandbox now runs on a disk made by a restore. It is checkpointed
+            # again and restored again, and that is its disk too.
+            execute(box, "echo generation-two > /data/gen && sync")
+            status, value = request("POST", f"/sandboxes/{box}/checkpoints", {"name": "cp-gen2"})
+            assert status == 201, (status, value)
+            execute(box, "echo generation-three > /data/gen && sync")
+            status, value = request("POST", f"/sandboxes/{box}/checkpoints/cp-gen2/restore")
+            assert status == 200, (status, value)
+            assert execute(box, "cat /data/gen") == "generation-two"
+            assert execute(box, sha.format("/data/synced")) == state["synced"]
+            status, value = request("POST", f"/sandboxes/{box}/checkpoints/cp1/restore")
+            assert status == 200, (status, value)
+            assert execute(box, "ls /data/gen 2>/dev/null || echo absent") == "absent"
+            for name in ("cp-gen2",):
+                status, _ = request("DELETE", f"/sandboxes/{box}/checkpoints/{name}")
+                assert status == 204, status
+            return {"restored_twice_from_a_restored_sandbox": True}
+        case("a sandbox that was restored can be checkpointed, and restored from either", chained)
+
+        def larger_disk():
+            status, value = request("POST", "/disks", {"name": "big", "sizeMiB": 1024})
+            assert status == 201, (status, value)
+            status, value = request("POST", "/sandboxes",
+                                    {"timeout": 1800, "diskMount": {"name": "big", "path": "/big"}})
+            assert status == 201, (status, value)
+            other = value["sandboxID"]
+            execute(other, "dd if=/dev/urandom of=/big/blob bs=1M count=400 2>/dev/null && sync")
+            digest_before = execute(other, sha.format("/big/blob"))
+            started = time.monotonic()
+            status, value = request("POST", f"/sandboxes/{other}/checkpoints", {"name": "big1"})
+            took = round(time.monotonic() - started, 3)
+            assert status == 201, (status, value)
+            execute(other, "dd if=/dev/zero of=/big/blob bs=1M count=50 conv=notrunc 2>/dev/null && sync")
+            assert execute(other, sha.format("/big/blob")) != digest_before
+            started = time.monotonic()
+            status, value = request("POST", f"/sandboxes/{other}/checkpoints/big1/restore")
+            restore_took = round(time.monotonic() - started, 3)
+            assert status == 200, (status, value)
+            assert execute(other, sha.format("/big/blob")) == digest_before
+            request("DELETE", f"/sandboxes/{other}")
+            return {"disk_mib": 1024, "written_mib": 400, "checkpoint_request_seconds": took,
+                    "restore_request_seconds": restore_took}
+        case("a 1 GiB disk holding 400 MiB of random data is checkpointed and restored byte for byte", larger_disk)
 
         def refusals():
             status, value = request("POST", f"/sandboxes/{box}/snapshots", {"name": "from-disk"})
