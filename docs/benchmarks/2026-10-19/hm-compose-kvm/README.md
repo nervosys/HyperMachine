@@ -37,7 +37,8 @@ run 1). The inputs' SHA-256 sums are in each report.
   only, with no health check.
 - Bind mounts (`./dir:/x`) and `:ro` are refused. `ports:` (a public-port reservation per
   container port) is NOT exercised here: it needs the control plane's
-  `--native-port-range` and the gateway cluster, so only its parsing is tested.
+  `--native-port-range` and the gateway cluster; see
+  [`compose-ports-cluster-kvm`](../../2026-10-23/compose-ports-cluster-kvm/README.md).
 - A service whose command exits or crashes is not restarted; its output goes
   to `/tmp/hm-compose.log` in the guest, which `compose logs` reads.
 - A compose file taken from an untrusted source: the YAML parser

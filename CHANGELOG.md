@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Compose `ports:` checked on real KVM through a real control plane and
+  `hv2-native-gateway` (`tools/check-compose-ports-cluster-kvm.py`,
+  `docs/benchmarks/2026-10-23/compose-ports-cluster-kvm/`): `up` reserves the
+  container port and prints the public one, a TCP client of it reaches the
+  service's listener in the guest, another principal cannot see the
+  reservation, `down` closes the port, and a key with no `principal_id` fails
+  naming the port and leaves no sandbox. 6 cases, 3 runs in a row. Found on the
+  way: a team-scoped key is refused (403) the template build `compose` makes for
+  an `image:` service. NOT VERIFIED: UDP/`both` through compose, several nodes,
+  more than one published port.
 - A sandbox that holds a data disk can be checkpointed by name (it was
   refused with 409). The node copies the disk's image beside the memory file
   while the guest is paused, so the two are of one moment. Restoring makes a

@@ -84,8 +84,12 @@ start. A command's output goes to `/tmp/hm-compose.log` in the guest; `compose l
 control plane's `--native-port-range`; the gateway picks the public number, which
 `up` prints, so a requested host port is not honoured, and the command fails
 (and deletes what it started) when the control plane has no port range.
-`ports:` is NOT verified end to end through compose (the parsing is unit tested;
-the reservation call is the one `public-ports expose` makes). A top-level
+`ports:` is [checked on KVM](benchmarks/2026-10-23/compose-ports-cluster-kvm/README.md)
+through a control plane and the native gateway for TCP: `up` prints the public
+port, a client of it reaches the service's listener, and `down` closes it. UDP and
+`both` through compose are NOT verified. The key needs a `principal_id`, and a
+**team-scoped key is refused** (403) at the template build that an `image:`
+service starts with, so a team needs an operator to have built the template. A top-level
 `volumes:` declares named volumes (created as `PROJECT-NAME`, 9P mounts, they
 survive `down`; delete one with `hm sandbox vm volume delete`); a service mounts
 one with `data:/path`. Bind mounts, `:ro` and options are refused, volumes need a

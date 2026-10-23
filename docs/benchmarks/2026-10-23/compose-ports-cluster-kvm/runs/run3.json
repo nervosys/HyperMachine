@@ -1,0 +1,70 @@
+{
+  "success": true,
+  "cases": [
+    {
+      "name": "up reserves the container port, and the API and the CLI show the same reservation",
+      "success": true,
+      "seconds": 6.149,
+      "detail": {
+        "public_port": 41000,
+        "reservation": [
+          {
+            "machinePort": 8080,
+            "protocol": "tcp",
+            "publicPort": 41000
+          }
+        ]
+      }
+    },
+    {
+      "name": "a TCP client of the public port reaches the service's listener and gets its bytes back",
+      "success": true,
+      "seconds": 0.22,
+      "detail": {
+        "bytes": 19
+      }
+    },
+    {
+      "name": "another principal's key cannot see the reservation",
+      "success": true,
+      "seconds": 0.005,
+      "detail": {
+        "blue_status": 403
+      }
+    },
+    {
+      "name": "down removes the sandbox and its reservation, and the public port closes",
+      "success": true,
+      "seconds": 0.292,
+      "detail": {
+        "after_down_status": 404
+      }
+    },
+    {
+      "name": "up with a key that has no principal fails naming the port and leaves no sandbox",
+      "success": true,
+      "seconds": 0.135,
+      "detail": {
+        "stderr": "    1: sandbox API returned 403 Forbidden"
+      }
+    },
+    {
+      "name": "no API key or cluster token is in anything hm printed",
+      "success": true,
+      "seconds": 0.0,
+      "detail": {
+        "hm_output_bytes": 753
+      }
+    }
+  ],
+  "purpose": "functional verification of compose ports: through the control plane and native gateway; no timing claim",
+  "input_sha256": {
+    "daemon": "2579cf15638d1354d3c5504e6fd6f8737314a49ac25ff9ea3b6413360ff44617",
+    "control": "d4633288b7d98ba9f85f4248021ed373d997aceef7d1f1913a746b90e92e31c4",
+    "gateway": "884db165e52121ae8c8072c6846397a18ad3de0afd08219197258666d8a1d026",
+    "hm": "691cbc5d8d9f296fc4127558133cc281c2bba5e5ad42cf6a3af108ab1c47b000",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "84a00a024979eb7efc30c825abf6769734814aabfe3066f33fe9e7f183bba3b5"
+  }
+}
