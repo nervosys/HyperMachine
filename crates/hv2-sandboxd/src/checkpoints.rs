@@ -88,6 +88,8 @@ pub(crate) struct Checkpoint {
     /// restored at: not the sandbox's size now, which a resize may have
     /// changed since.
     pub(crate) sizes: super::Sizes,
+    /// The disk the sandbox held, as it was at that moment.
+    pub(crate) disk: Option<crate::disks::DiskCopy>,
 }
 
 /// Every sandbox's checkpoints on this node, by sandbox then name.
@@ -163,11 +165,16 @@ async fn save(state: &Arc<AppState>, sandbox_id: &str, name: &str) -> Result<u64
             "checkpoints need sandboxes restored from a template, and this node boots them".into(),
         ));
     }
-    if crate::disks::holds_one(sandbox_id) {
+    // A sandbox with a disk is checkpointed with a copy of it, taken while it
+    // is paused. That copy can be large, and the node takes its own
+    // checkpoints unasked, so it takes none of these.
+    let with_disk = crate::disks::holds_one(sandbox_id);
+    if with_disk && automatic {
         return Err(Refused::Because(
             StatusCode::CONFLICT,
             format!(
-                "sandbox {sandbox_id} holds a disk, and a sandbox with a disk cannot be checkpointed"
+                "sandbox {sandbox_id} holds a disk, and the node does not copy a disk on its own; \
+                 checkpoint it by name"
             ),
         ));
     }
@@ -217,16 +224,30 @@ async fn save(state: &Arc<AppState>, sandbox_id: &str, name: &str) -> Result<u64
         path.clone()
     };
     let started = std::time::Instant::now();
-    let written = if whole {
-        vm.checkpoint_with(&writing, true, || Ok::<(), String>(()))
-            .await
+    let disk_file = dir.join(format!("{name}.disk.img"));
+    // A guest that booted with its disk has memory that is a change against
+    // no template, so it is written whole, as a fork of one is.
+    let whole = whole || (with_disk && crate::disks::cold_booted(state, sandbox_id));
+    let written = if whole || with_disk {
+        vm.checkpoint_with(&writing, whole, || {
+            if with_disk {
+                crate::disks::copy_out(state, sandbox_id, &disk_file).map(Some)
+            } else {
+                Ok(None)
+            }
+        })
+        .await
     } else {
-        vm.checkpoint_to(&writing).await
+        vm.checkpoint_to(&writing).await.map(|()| None)
     };
-    if let Err(e) = written {
-        let _ = std::fs::remove_file(&writing);
-        return Err(failed(format!("checkpointing {sandbox_id}: {e}")));
-    }
+    let disk = match written {
+        Ok(disk) => disk,
+        Err(e) => {
+            let _ = std::fs::remove_file(&writing);
+            let _ = std::fs::remove_file(&disk_file);
+            return Err(failed(format!("checkpointing {sandbox_id}: {e}")));
+        }
+    };
     if automatic {
         if let Err(e) = std::fs::rename(&writing, &path) {
             let _ = std::fs::remove_file(&writing);
@@ -248,6 +269,7 @@ async fn save(state: &Arc<AppState>, sandbox_id: &str, name: &str) -> Result<u64
                 path,
                 created_ms,
                 sizes,
+                disk,
             },
         );
     telemetry::log(
@@ -345,6 +367,9 @@ pub(crate) async fn delete(
     match removed {
         Some(checkpoint) => {
             let _ = std::fs::remove_file(&checkpoint.path);
+            if let Some(disk) = &checkpoint.disk {
+                let _ = std::fs::remove_file(&disk.file);
+            }
             StatusCode::NO_CONTENT.into_response()
         }
         None => api_error(
@@ -403,7 +428,21 @@ pub(crate) async fn restore(
         );
     }
 
-    // The replacement first: until it is up, the sandbox is untouched.
+    // A disk the checkpoint kept comes back as a new disk made from its copy,
+    // beside the one the sandbox holds, which is not written to: until the
+    // replacement is up, the sandbox is untouched.
+    let new_disk = match &checkpoint.disk {
+        Some(copy) => match crate::disks::restore_copy(&state, &sandbox_id, copy) {
+            Ok(claim) => Some(claim),
+            Err(e) => {
+                return api_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("restoring {sandbox_id}'s disk: {e}"),
+                )
+            }
+        },
+        None => None,
+    };
     let started = std::time::Instant::now();
     let running = match bring_up(
         &state,
@@ -413,7 +452,7 @@ pub(crate) async fn restore(
         network,
         &record.volume_mounts,
         record.team_id.as_ref(),
-        None,
+        new_disk.as_ref(),
         &BTreeMap::new(),
         &[],
         &descriptor.envd_access_token,
@@ -423,13 +462,19 @@ pub(crate) async fn restore(
     {
         Ok(running) => running,
         Err((status, e)) => {
-            return api_error(status, format!("restoring {sandbox_id} to {name}: {e}"))
+            if let Some(claim) = &new_disk {
+                crate::disks::abandon_restore(&state, &claim.serial);
+            }
+            return api_error(status, format!("restoring {sandbox_id} to {name}: {e}"));
         }
     };
 
     // Then the swap, still under the transition lock.
     let Some(old) = state.sandboxes.lock().remove(&sandbox_id) else {
         let _ = running.vm.stop().await;
+        if let Some(claim) = &new_disk {
+            crate::disks::abandon_restore(&state, &claim.serial);
+        }
         return not_running(&state, &sandbox_id);
     };
     forwards::stop(&state, &sandbox_id);
@@ -466,6 +511,20 @@ pub(crate) async fn restore(
     .await
     {
         return api_error(status, error);
+    }
+    if let Some(claim) = &new_disk {
+        let let_go = crate::disks::finish_restore(&state, &sandbox_id, &claim.serial);
+        telemetry::log(
+            &state,
+            &sandbox_id,
+            "info",
+            format!(
+                "disk {} is now {}; {} was let go as it was",
+                claim.serial,
+                claim.path,
+                let_go.join(", ")
+            ),
+        );
     }
     telemetry::log(
         &state,

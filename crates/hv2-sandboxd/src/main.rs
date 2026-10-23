@@ -2920,7 +2920,7 @@ async fn create_sandbox(
         if req.disk_mount.is_some() {
             return api_error(
                 StatusCode::BAD_REQUEST,
-                "autoCheckpoint and diskMount: a sandbox with a disk cannot be checkpointed",
+                "autoCheckpoint and diskMount: the node does not copy a disk on a timer; checkpoint it by name",
             );
         }
     }

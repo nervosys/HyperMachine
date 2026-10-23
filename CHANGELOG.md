@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A sandbox that holds a data disk can be checkpointed by name (it was
+  refused with 409). The node copies the disk's image beside the memory file
+  while the guest is paused, so the two are of one moment. Restoring makes a
+  new disk from the copy (`NAME-restored-NNNNNNNN`), starts the replacement on
+  it, and only then swaps, letting go the disk the sandbox held, unchanged;
+  a restore that fails deletes the new disk and the sandbox keeps what it had.
+  Automatic checkpoints and templates from a sandbox with a disk stay
+  refused. Checked on real KVM, 8 cases (`tools/check-disk-checkpoint-kvm.py`,
+  `docs/benchmarks/2026-10-23/disk-checkpoint-kvm/`). NOT VERIFIED: a disk
+  larger than the 64 MiB tested, a filesystem without reflinks (the copy ran
+  on whatever WSL's ext4 gives), `--disk-slot` nodes, and a checkpoint of a
+  sandbox that was itself restored from one.
 - Checked on real KVM with Ubuntu 24.04's cloud image (a GPT disk with four
   partitions): a machine's snapshot is listed and archived from its root
   partition without one being named, the archive equal file for file to the

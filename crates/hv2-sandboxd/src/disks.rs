@@ -423,6 +423,159 @@ pub(crate) fn claim(
     })
 }
 
+/// A disk as a checkpoint kept it: a copy of its image, taken while the
+/// guest was paused just after its memory was written, so that the two
+/// describe the same moment. Restoring the checkpoint gives the sandbox a new
+/// disk made from the copy and never writes to the disk it holds now.
+#[derive(Debug, Clone)]
+pub(crate) struct DiskCopy {
+    /// The copy, beside the checkpoint's memory.
+    pub(crate) file: PathBuf,
+    name: String,
+    size_mib: u64,
+    mount_path: String,
+    guest_cid: Option<u64>,
+}
+
+/// Copy the disk `sandbox_id` holds to `file`, for a checkpoint. Called with
+/// its guest paused. The copy is sparse, and a reflink where the filesystem
+/// has them; elsewhere it reads every allocated block while the guest waits.
+pub(crate) fn copy_out(
+    state: &AppState,
+    sandbox_id: &str,
+    file: &std::path::Path,
+) -> Result<DiskCopy, String> {
+    if !held(sandbox_id) {
+        return Err(format!("sandbox {sandbox_id} holds no disk"));
+    }
+    let _lock = LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let source = all(state)
+        .into_iter()
+        .find(|m| m.attached_to.as_deref() == Some(sandbox_id))
+        .ok_or_else(|| format!("sandbox {sandbox_id} holds no disk"))?;
+    let mount_path = source
+        .mount_path
+        .clone()
+        .ok_or("the disk has no recorded mount path")?;
+    let out = std::process::Command::new("cp")
+        .args(["--reflink=auto", "--sparse=always"])
+        .arg(image(state, &source.id))
+        .arg(file)
+        .output()
+        .map_err(|e| format!("running cp: {e}"))?;
+    if !out.status.success() {
+        let _ = std::fs::remove_file(file);
+        return Err(format!(
+            "copying disk {}: {}",
+            source.name,
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    Ok(DiskCopy {
+        file: file.to_path_buf(),
+        name: source.name,
+        size_mib: source.size_mib,
+        mount_path,
+        guest_cid: source.guest_cid,
+    })
+}
+
+/// A new disk made from a checkpoint's copy, named for the disk it came
+/// from, to attach to the replacement guest of `sandbox_id`. The sandbox
+/// still holds its present disk until [`finish_restore`] hands it over, or
+/// [`abandon_restore`] throws the new one away.
+pub(crate) fn restore_copy(
+    state: &Arc<AppState>,
+    sandbox_id: &str,
+    copy: &DiskCopy,
+) -> Result<Claim, String> {
+    let _lock = LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let tag = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.subsec_nanos() % 100_000_000);
+    let tag = format!("{tag:08}");
+    let stem: String = copy.name.chars().take(64 - 10 - tag.len()).collect();
+    let name = format!("{stem}-restored-{tag}");
+    let meta = Meta {
+        id: disk_id(&name),
+        name,
+        size_mib: copy.size_mib,
+        attached_to: Some(sandbox_id.to_string()),
+        mount_path: Some(copy.mount_path.clone()),
+        guest_cid: copy.guest_cid,
+    };
+    let dir = root(state).join(&meta.id);
+    std::fs::create_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let made = (|| {
+        let out = std::process::Command::new("cp")
+            .args(["--reflink=auto", "--sparse=always"])
+            .arg(&copy.file)
+            .arg(dir.join("disk.img"))
+            .output()
+            .map_err(|e| format!("running cp: {e}"))?;
+        if !out.status.success() {
+            return Err(format!(
+                "copying the checkpoint's disk: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+        }
+        write_meta(state, &meta).map_err(|e| format!("recording disk {}: {e}", meta.name))
+    })();
+    if let Err(e) = made {
+        let _ = std::fs::remove_dir_all(&dir);
+        return Err(e);
+    }
+    set_held(sandbox_id, true);
+    Ok(Claim {
+        state: Arc::clone(state),
+        sandbox_id: sandbox_id.to_string(),
+        image: image(state, &meta.id),
+        serial: meta.id,
+        path: copy.mount_path.clone(),
+        guest_cid: copy.guest_cid,
+        kept: true,
+    })
+}
+
+/// The replacement guest is up with disk `keep`: every other disk
+/// `sandbox_id` held is let go, whole and unchanged, for its owner to attach
+/// elsewhere or delete. Returns the names of those it let go.
+pub(crate) fn finish_restore(state: &AppState, sandbox_id: &str, keep: &str) -> Vec<String> {
+    let _lock = LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut let_go = Vec::new();
+    for mut meta in all(state) {
+        if meta.attached_to.as_deref() == Some(sandbox_id) && meta.id != keep {
+            meta.attached_to = None;
+            meta.mount_path = None;
+            meta.guest_cid = None;
+            match write_meta(state, &meta) {
+                Ok(()) => let_go.push(meta.name),
+                Err(e) => tracing::warn!("letting go of disk {}: {e}", meta.name),
+            }
+        }
+    }
+    let_go
+}
+
+/// The replacement guest did not come up: the new disk goes, and the sandbox
+/// keeps the one it had.
+pub(crate) fn abandon_restore(state: &AppState, new_disk: &str) {
+    let _lock = LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(mut meta) = by_id(state, new_disk) {
+        meta.attached_to = None;
+        let _ = write_meta(state, &meta);
+        let _ = std::fs::remove_dir_all(root(state).join(new_disk));
+    }
+}
+
 /// Copy the disk `parent` holds into a new disk held by `child`: what a fork
 /// of a sandbox with a disk mounts.
 ///

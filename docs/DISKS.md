@@ -133,6 +133,35 @@ disk mounted, and writes it had not yet flushed still in its page cache.
 
 Evidence: [real KVM: a sandbox forked with its disk, unflushed writes included](benchmarks/2026-10-08/disk-fork-kvm/README.md).
 
+## Checkpoints of a sandbox with a disk
+
+`POST /sandboxes/{id}/checkpoints` with a `name` works for a sandbox that
+holds a disk. While its guest is paused, just after its memory is written,
+the node copies the disk's image beside the checkpoint (a reflink where the
+filesystem has them, which costs nothing until the two diverge; elsewhere
+every allocated block, with the guest waiting). Memory and disk are of the
+same moment.
+
+Restoring (`POST .../checkpoints/{name}/restore`) **never writes to the disk
+the sandbox holds**. It makes a **new disk** from the copy, named for the old
+(`NAME-restored-NNNNNNNN`), starts the replacement guest on it, and only then
+swaps. The disk the sandbox held until then is let go, unchanged and with
+everything written since the checkpoint, to attach to another sandbox by name
+or delete. If the replacement does not come up, the new disk is deleted and
+the sandbox keeps what it had. Restoring the same checkpoint again makes
+another new disk from the same copy.
+
+So: a checkpoint of a sandbox with a disk costs the disk's allocated size
+again on the node, up to the limit per sandbox; deleting the checkpoint, or
+the sandbox ending, removes the copy; restoring leaves the earlier disks
+behind for you to delete. The copy is as after a power cut for anything the
+guest had not flushed, as a fork's is: run `sync` first. Checkpoints are kept
+in the node's memory, as they are for any sandbox, so a node restart forgets
+them.
+
+Evidence: [real KVM, memory and disk back as they were, the old disk kept, a
+failed restore leaving nothing](benchmarks/2026-10-23/disk-checkpoint-kvm/README.md).
+
 ## What a sandbox with a disk cannot do
 
 - **Restore from a template, unless the node has `--disk-slot`.** virtio-mmio
@@ -140,8 +169,10 @@ Evidence: [real KVM: a sandbox forked with its disk, unflushed writes included](
   bound to one. Without the [disk slot](#the-disk-slot-restoring-a-sandbox-with-a-disk)
   a sandbox with a disk cold-boots, which is slower to create than a template
   restore. Sandboxes without a disk are unaffected.
-- **Snapshot or checkpoint.** Each would later run an older guest against a
-  disk that has moved on. The routes answer 409.
+- **Snapshot, or an automatic checkpoint.** A template baked from it would
+  boot guests against a disk that has moved on, and the node will not copy a
+  disk on a timer. Both answer 409. A checkpoint **by name** is allowed; see
+  below.
 - **Start from a snapshot.** This is refused with 400 for the same reason.
 
 ## Limits
