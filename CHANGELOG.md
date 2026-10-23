@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Checked on real KVM with Ubuntu 24.04's cloud image (a GPT disk with four
+  partitions): a machine's snapshot is listed and archived from its root
+  partition without one being named, the archive equal file for file to the
+  disk mounted through a loop device, and a partition that is not the root
+  filesystem refused. In the same guest, `/dev/kvm` works: a program created
+  a VM and ran a toy real-mode program under nested virtualization (AMD host,
+  WSL2); sandboxes, whose template kernel has no KVM, have none
+  (`tools/check-machine-snapshot-ubuntu-kvm.py`,
+  `docs/benchmarks/2026-10-23/machine-ubuntu-snapshot-kvm/`). NOT VERIFIED:
+  an Intel host, a larger nested guest.
 - `tools/check-team-telemetry-kvm.py --otelcol PATH` runs the team telemetry
   check with the real OpenTelemetry Collector (contrib 0.163.2, bearer-token
   auth) as red's destination: 7 cases pass on KVM, metrics read back from the

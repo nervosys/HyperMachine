@@ -1,0 +1,86 @@
+{
+  "success": true,
+  "cases": [
+    {
+      "name": "the root filesystem of the partitioned disk is listed with no partition named",
+      "success": true,
+      "seconds": 0.006,
+      "detail": {
+        "entries": 135
+      }
+    },
+    {
+      "name": "an archive of /etc/cloud equals the mounted disk, file for file",
+      "success": true,
+      "seconds": 0.041,
+      "detail": {
+        "files": 57,
+        "archive_bytes": 18336
+      }
+    },
+    {
+      "name": "naming the root partition (number 1) gives the same archive",
+      "success": true,
+      "seconds": 0.038,
+      "detail": {
+        "files": 57,
+        "archive_bytes": 18336
+      }
+    },
+    {
+      "name": "a partition that is not the root filesystem, or absent, is refused",
+      "success": true,
+      "seconds": 0.002,
+      "detail": {
+        "another partition": 400,
+        "no such partition": 400
+      }
+    },
+    {
+      "name": "what the guest saw of /dev/kvm on first boot was read back through the snapshot",
+      "success": true,
+      "seconds": 0.0,
+      "detail": {
+        "ioctls": "KVM_GET_API_VERSION 12\nKVM_CREATE_VM fd 4\nKVM_CREATE_VCPU fd 5\nKVM_RUN exit_reason 2 (2 is KVM_EXIT_IO) port 0x10 byte 0x42\nKVM_RUN second exit_reason 5 (5 is KVM_EXIT_HLT)",
+        "svm_in_guest": true,
+        "dev_kvm_before": "crw-rw---- 1 root kvm 10, 232 Oct 23 20:02 /dev/kvm",
+        "dev_kvm_after": "crw-rw---- 1 root kvm 10, 232 Oct 23 20:02 /dev/kvm\n== kvm ioctls\nKVM_GET_API_VERSION 12\nKVM_CREATE_VM fd 4\nKVM_CREATE_VCPU fd 5\nKVM_RUN exit_reason 2 (2 is KVM_EXIT_IO) port 0x10 byte 0x42\nKVM_RUN second exit_reason 5 (5 is KVM_EXIT_HLT)"
+      }
+    }
+  ],
+  "purpose": "functional verification of reading a partitioned Ubuntu disk's snapshot; no timing claim",
+  "input_sha256": {
+    "daemon": "0cc2df72a1c95f3b351b0fddae64adcb56a265981bb82d912f7f2a07b1c9c5f1",
+    "firmware": "4a0a1e977368f6b15d2198a216bdedf9a350bf5e5ae07e29e695373ec16ad958",
+    "image": "766dc9fdcde1039f502ffcb59471e0082c2d39e6e538a1d4f8fbd7a1f1c36cdb",
+    "driver": "8bef74e14fb9207703e166e78a0a88990fb653431f4a9619b26975dab4a7ac8d"
+  },
+  "partitions": [
+    {
+      "device": "loop0p1",
+      "type": "ext4",
+      "label": "cloudimg-rootfs"
+    },
+    {
+      "device": "loop0p14",
+      "type": "",
+      "label": ""
+    },
+    {
+      "device": "loop0p15",
+      "type": "vfat",
+      "label": "UEFI"
+    },
+    {
+      "device": "loop0p16",
+      "type": "ext4",
+      "label": "BOOT"
+    }
+  ],
+  "dev_kvm_in_guest": {
+    "ioctls": "KVM_GET_API_VERSION 12\nKVM_CREATE_VM fd 4\nKVM_CREATE_VCPU fd 5\nKVM_RUN exit_reason 2 (2 is KVM_EXIT_IO) port 0x10 byte 0x42\nKVM_RUN second exit_reason 5 (5 is KVM_EXIT_HLT)",
+    "svm_in_guest": true,
+    "dev_kvm_before": "crw-rw---- 1 root kvm 10, 232 Oct 23 20:02 /dev/kvm",
+    "dev_kvm_after": "crw-rw---- 1 root kvm 10, 232 Oct 23 20:02 /dev/kvm\n== kvm ioctls\nKVM_GET_API_VERSION 12\nKVM_CREATE_VM fd 4\nKVM_CREATE_VCPU fd 5\nKVM_RUN exit_reason 2 (2 is KVM_EXIT_IO) port 0x10 byte 0x42\nKVM_RUN second exit_reason 5 (5 is KVM_EXIT_HLT)"
+  }
+}

@@ -1,0 +1,35 @@
+== cpuinfo
+svm
+== /dev/kvm before
+crw-rw---- 1 root kvm 10, 232 Oct 23 20:02 /dev/kvm
+== modprobe
+modprobe: ERROR: could not insert 'kvm_intel': Operation not supported
+== /dev/kvm after
+crw-rw---- 1 root kvm 10, 232 Oct 23 20:02 /dev/kvm
+== kvm ioctls
+KVM_GET_API_VERSION 12
+KVM_CREATE_VM fd 4
+KVM_CREATE_VCPU fd 5
+KVM_RUN exit_reason 2 (2 is KVM_EXIT_IO) port 0x10 byte 0x42
+KVM_RUN second exit_reason 5 (5 is KVM_EXIT_HLT)
+== dmesg
+[    0.000000] Hypervisor detected: KVM
+[    0.000000] kvm-clock: Using msrs 4b564d01 and 4b564d00
+[    0.000001] kvm-clock: using sched offset of 13872438391 cycles
+[    0.000003] clocksource: kvm-clock: mask: 0xffffffffffffffff max_cycles: 0x1cd42e4dffb, max_idle_ns: 881590591483 ns
+[    0.015401] kvm-guest: APIC: eoi() replaced with kvm_guest_apic_eoi_write()
+[    0.015433] kvm-guest: KVM setup pv remote TLB flush
+[    0.015443] kvm-guest: setup PV sched yield
+[    0.015464] Booting paravirtualized kernel on KVM
+[    0.016776] kvm-guest: PV spinlocks enabled
+[    0.157720] kvm-guest: APIC: send_IPI_mask() replaced with kvm_send_ipi_mask()
+[    0.158818] kvm-guest: APIC: send_IPI_mask_allbutself() replaced with kvm_send_ipi_mask_allbutself()
+[    0.160342] kvm-guest: setup PV IPIs
+[    0.313562] clocksource: Switched to clocksource kvm-clock
+[    0.861835] systemd[1]: Detected virtualization kvm.
+[    2.545137] kvm_amd: TSC scaling supported
+[    2.545363] kvm_amd: Nested Virtualization enabled
+[    2.545367] kvm_amd: Nested Paging enabled
+[    2.545420] kvm_amd: Virtual VMLOAD VMSAVE supported
+[  157.819095] kvm_intel: VMX not supported by CPU 0
+== done
