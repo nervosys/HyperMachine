@@ -320,7 +320,10 @@ where
     G: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     U: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    intercept_policy(guest, upstream, name, headers, tokens, server, client, None).await
+    intercept_policy(
+        guest, upstream, name, headers, tokens, server, client, None, None,
+    )
+    .await
 }
 
 /// Intercept using the same verified upstream TLS handshake before enabling
@@ -349,6 +352,47 @@ where
         server,
         client,
         Some(secrets),
+        None,
+    )
+    .await
+}
+
+/// The host's own credentials for this destination, set on each request that
+/// is under a credential's URL. See [`crate::host_credentials`].
+#[derive(Clone)]
+pub struct CredentialScope {
+    pub port: u16,
+    pub credentials: Arc<crate::host_credentials::HostCredentials>,
+}
+
+/// [`intercept`] with whichever of host-bound secrets and host credentials
+/// apply. Failed upstream authentication sends no HTTP request.
+#[allow(clippy::too_many_arguments)]
+pub async fn intercept_with<G, U>(
+    guest: G,
+    upstream: U,
+    name: &str,
+    headers: &Headers,
+    tokens: Option<TokenSource>,
+    server: Arc<ServerConfig>,
+    client: Arc<ClientConfig>,
+    secrets: Option<Arc<crate::secret_substitution::Store>>,
+    credentials: Option<CredentialScope>,
+) -> io::Result<()>
+where
+    G: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    U: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    intercept_policy(
+        guest,
+        upstream,
+        name,
+        headers,
+        tokens,
+        server,
+        client,
+        secrets,
+        credentials,
     )
     .await
 }
@@ -363,6 +407,7 @@ async fn intercept_policy<G, U>(
     server: Arc<ServerConfig>,
     client: Arc<ClientConfig>,
     secrets: Option<Arc<crate::secret_substitution::Store>>,
+    credentials: Option<CredentialScope>,
 ) -> io::Result<()>
 where
     G: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -389,11 +434,16 @@ where
     .await
     .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "upstream TLS handshake"))??;
     tracing::debug!("egress intercept: upstream handshake for {name} done");
-    if let Some(secrets) = secrets {
-        relay_http_with_secrets(guest, upstream, headers, tokens, name.to_string(), secrets).await
-    } else {
-        relay_http(guest, upstream, headers, tokens).await
-    }
+    let credentials = credentials.map(|scope| (name.to_string(), scope));
+    relay_http_policy(
+        guest,
+        upstream,
+        headers,
+        tokens,
+        secrets.map(|store| (name.to_string(), store)),
+        credentials,
+    )
+    .await
 }
 
 /// Relay HTTP/1 requests from `guest` to `upstream`, setting `headers` on
@@ -418,7 +468,7 @@ where
     G: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     U: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    relay_http_policy(guest, upstream, headers, tokens, None).await
+    relay_http_policy(guest, upstream, headers, tokens, None, None).await
 }
 
 /// Opt-in host-bound substitution. The caller must establish verified upstream
@@ -436,7 +486,15 @@ where
     G: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     U: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    relay_http_policy(guest, upstream, headers, tokens, Some((hostname, secrets))).await
+    relay_http_policy(
+        guest,
+        upstream,
+        headers,
+        tokens,
+        Some((hostname, secrets)),
+        None,
+    )
+    .await
 }
 
 async fn relay_http_policy<G, U>(
@@ -445,6 +503,7 @@ async fn relay_http_policy<G, U>(
     headers: &Headers,
     tokens: Option<TokenSource>,
     secrets: Option<(String, Arc<crate::secret_substitution::Store>)>,
+    credentials: Option<(String, CredentialScope)>,
 ) -> io::Result<()>
 where
     G: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -480,7 +539,17 @@ where
         let inject = Arc::clone(&inject);
         let tokens = tokens.clone();
         let secrets = secrets.clone();
+        let credentials = credentials.clone();
         async move {
+            // The host's own credential, last of the headers a rule sets so
+            // that it is the one sent; a request the guest signed itself is
+            // replaced, not added to. A request outside every credential's
+            // URL goes as the guest wrote it, with no credential.
+            let host_credential = credentials.as_ref().and_then(|(host, scope)| {
+                scope
+                    .credentials
+                    .authorization_for(host, scope.port, request.uri().path())
+            });
             for (name, value) in inject.iter() {
                 let value = match (value, &tokens) {
                     (Injected::Fixed(value), _) => value.clone(),
@@ -496,6 +565,11 @@ where
                     (Injected::Minted(_), None) => continue,
                 };
                 request.headers_mut().insert(name.clone(), value);
+            }
+            if let Some(authorization) = host_credential {
+                request
+                    .headers_mut()
+                    .insert(hyper::header::AUTHORIZATION, authorization);
             }
             let request = if let Some((hostname, secrets)) = secrets {
                 let (mut parts, body) = request.into_parts();
@@ -548,6 +622,7 @@ enum Injected {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::{engine::general_purpose::STANDARD as STANDARD_FOR_TEST, Engine as _};
     use rustls::client::danger::ServerCertVerifier;
 
     #[test]
@@ -727,6 +802,111 @@ mod tests {
         assert!(response.ends_with(b"OK"));
         receiver.await.unwrap();
         relay.await.unwrap().unwrap();
+    }
+
+    /// What an upstream received for each of `requests` sent in turn on one
+    /// connection, as the head of each request.
+    async fn heads_received(
+        credentials: Option<CredentialScope>,
+        requests: &[&str],
+    ) -> Vec<String> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let (mut client, guest) = tokio::io::duplex(16384);
+        let (upstream, mut server) = tokio::io::duplex(16384);
+        let relay = tokio::spawn(async move {
+            relay_http_policy(
+                guest,
+                upstream,
+                &Headers::new(),
+                None,
+                None,
+                credentials.map(|scope| ("git.example".to_string(), scope)),
+            )
+            .await
+        });
+        let count = requests.len();
+        let receiver = tokio::spawn(async move {
+            let mut heads = Vec::new();
+            let mut received = Vec::new();
+            let mut buffer = [0; 2048];
+            while heads.len() < count {
+                let n = server.read(&mut buffer).await.unwrap();
+                assert!(n > 0);
+                received.extend_from_slice(&buffer[..n]);
+                while let Some(end) = received.windows(4).position(|w| w == b"\r\n\r\n") {
+                    let head = String::from_utf8(received.drain(..end + 4).collect()).unwrap();
+                    heads.push(head);
+                    server
+                        .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK")
+                        .await
+                        .unwrap();
+                }
+            }
+            heads
+        });
+        for (i, request) in requests.iter().enumerate() {
+            client.write_all(request.as_bytes()).await.unwrap();
+            let mut seen = Vec::new();
+            let mut byte = [0; 1];
+            while !seen.ends_with(b"\r\n\r\nOK") {
+                let n =
+                    tokio::time::timeout(std::time::Duration::from_secs(5), client.read(&mut byte))
+                        .await
+                        .unwrap()
+                        .unwrap();
+                assert!(n > 0, "response {i}");
+                seen.push(byte[0]);
+            }
+        }
+        drop(client);
+        let heads = receiver.await.unwrap();
+        let _ = relay.await;
+        heads
+    }
+
+    #[tokio::test]
+    async fn a_host_credential_is_set_only_under_its_url_and_replaces_the_guests() {
+        let mut credentials = crate::host_credentials::HostCredentials::default();
+        credentials
+            .add("https://git.example/team/", "bot:s3cret")
+            .unwrap();
+        let scope = CredentialScope {
+            port: 443,
+            credentials: Arc::new(credentials),
+        };
+        let heads = heads_received(
+            Some(scope),
+            &[
+                "GET /team/r.git/info/refs HTTP/1.1\r\nHost: git.example\r\n\r\n",
+                "GET /team/r.git/info/refs HTTP/1.1\r\nHost: git.example\r\nAuthorization: Bearer guest\r\n\r\n",
+                "GET /teammate/r.git HTTP/1.1\r\nHost: git.example\r\nAuthorization: Bearer guest\r\n\r\n",
+                "GET /team/../x HTTP/1.1\r\nHost: git.example\r\n\r\n",
+            ],
+        )
+        .await;
+        let basic = format!(
+            "authorization: Basic {}",
+            STANDARD_FOR_TEST.encode("bot:s3cret")
+        );
+        let lower = |h: &str| h.to_ascii_lowercase();
+        assert!(lower(&heads[0]).contains(&lower(&basic)), "{}", heads[0]);
+        assert!(lower(&heads[1]).contains(&lower(&basic)), "{}", heads[1]);
+        assert!(
+            !lower(&heads[1]).contains("bearer"),
+            "the guest's was replaced"
+        );
+        assert_eq!(lower(&heads[1]).matches("authorization:").count(), 1);
+        // Outside the URL: as the guest wrote it, with nothing added.
+        assert!(lower(&heads[2]).contains("authorization: bearer guest"));
+        assert!(!lower(&heads[2]).contains("basic"));
+        assert!(!lower(&heads[3]).contains("authorization"), "{}", heads[3]);
+    }
+
+    #[tokio::test]
+    async fn without_host_credentials_a_request_goes_as_written() {
+        let heads =
+            heads_received(None, &["GET /team/x HTTP/1.1\r\nHost: git.example\r\n\r\n"]).await;
+        assert!(!heads[0].to_ascii_lowercase().contains("authorization"));
     }
 
     #[tokio::test]

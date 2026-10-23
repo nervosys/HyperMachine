@@ -321,6 +321,9 @@ struct Options {
     git_remotes: Vec<String>,
     /// What a private Git remote is cloned with, by `--git-credential`.
     git_credentials: Vec<git_repos::Credential>,
+    /// Whether a sandbox's own `git` may use them too, by
+    /// `--git-credential-in-sandbox`: the gateway sets them on its requests.
+    git_in_sandbox: bool,
     /// What the flags said about pushing metrics over OTLP; the environment
     /// is consulted when they are parsed. See hv2_cluster::otlp.
     otlp_flags: hv2_cluster::otlp::Flags,
@@ -415,6 +418,7 @@ fn parse_options() -> Result<Options, String> {
         lit_remotes: Vec::new(),
         git_remotes: Vec::new(),
         git_credentials: Vec::new(),
+        git_in_sandbox: false,
         otlp_flags: hv2_cluster::otlp::Flags::default(),
         otlp: None,
         allow_private_webhooks: false,
@@ -513,6 +517,7 @@ fn parse_options() -> Result<Options, String> {
                 opts.git_credentials
                     .push(git_repos::Credential::new(prefix, &userinfo)?);
             }
+            "--git-credential-in-sandbox" => opts.git_in_sandbox = true,
             "--otlp-endpoint" => opts.otlp_flags.endpoint = Some(value(&mut i)?),
             "--otlp-header" => opts.otlp_flags.headers.push(value(&mut i)?),
             "--otlp-interval" => {
@@ -852,6 +857,9 @@ struct AppState {
     /// One per server process; its certificate is installed in each guest.
     authority: Option<Arc<Authority>>,
     secret_scopes: Option<Arc<hv2_net::secret_substitution::ScopedStores>>,
+    /// The node's Git credentials, for the gateway to present to a sandbox's
+    /// own requests; only with `--git-credential-in-sandbox`.
+    host_git: Option<Arc<hv2_net::host_credentials::HostCredentials>>,
     upstream_roots: Vec<tokio_rustls::rustls::pki_types::CertificateDer<'static>>,
     sandboxes: Mutex<HashMap<String, LiveSandbox>>,
     next_cid: Mutex<u64>,
@@ -4623,6 +4631,11 @@ async fn start_network(
             .set_secret_store(scopes.get(sandbox_id))
             .map_err(|_| "configuring sandbox secret scope failed".to_string())?;
     }
+    if let Some(credentials) = &state.host_git {
+        handle
+            .set_host_credentials(Some(Arc::clone(credentials)))
+            .map_err(|e| format!("giving the gateway its Git credentials: {e}"))?;
+    }
     handle.set_egress_proxy(spec.proxy);
     // Workload tokens, minted here per request for the names this sandbox
     // registered: the guest's request carries a placeholder, and the token
@@ -6099,6 +6112,26 @@ async fn main() -> std::process::ExitCode {
             }
         }
     };
+    let host_git = if opts.git_in_sandbox {
+        if !opts.network {
+            eprintln!("hv2-sandboxd: --git-credential-in-sandbox requires --network");
+            return std::process::ExitCode::FAILURE;
+        }
+        let mut credentials = hv2_net::host_credentials::HostCredentials::default();
+        for credential in &opts.git_credentials {
+            if let Err(e) = credential.add_to(&mut credentials) {
+                eprintln!("hv2-sandboxd: --git-credential-in-sandbox: {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+        }
+        if credentials.is_empty() {
+            eprintln!("hv2-sandboxd: --git-credential-in-sandbox needs a --git-credential");
+            return std::process::ExitCode::FAILURE;
+        }
+        Some(Arc::new(credentials))
+    } else {
+        None
+    };
     let secret_scopes = match &opts.egress_secrets_file {
         None => None,
         Some(path) => {
@@ -6311,6 +6344,7 @@ async fn main() -> std::process::ExitCode {
         checkpoints: parking_lot::Mutex::new(HashMap::new()),
         authority,
         secret_scopes,
+        host_git,
         upstream_roots,
         opts,
         sandboxes: Mutex::new(HashMap::new()),

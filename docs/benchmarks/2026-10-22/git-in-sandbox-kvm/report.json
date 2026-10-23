@@ -1,0 +1,50 @@
+{
+  "success": true,
+  "cases": [
+    {
+      "name": "a clone from inside the sandbox uses the node's credential",
+      "success": true,
+      "seconds": 0.317,
+      "detail": {
+        "requests_to_team": 6
+      }
+    },
+    {
+      "name": "the token is nowhere in the guest",
+      "success": true,
+      "seconds": 0.064
+    },
+    {
+      "name": "an Authorization the guest wrote is replaced, not sent",
+      "success": true,
+      "seconds": 0.104
+    },
+    {
+      "name": "outside the prefix nothing is added",
+      "success": true,
+      "seconds": 0.316
+    },
+    {
+      "name": "a path that climbs out of the prefix is sent no credential",
+      "success": true,
+      "seconds": 0.128
+    },
+    {
+      "name": "without the flag the guest has no credential",
+      "success": true,
+      "seconds": 0.163,
+      "detail": {
+        "stderr": "warning: templates not found in /usr/share/git-core/templates\nfatal: could not read Username for 'https://git.example.test:44529': terminal prompts disabled"
+      }
+    }
+  ],
+  "host_cpus": 24,
+  "input_sha256": {
+    "daemon": "f67c6312241f42eecfdb0438e770c820352c6506d780807a5ddb5392de391375",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "706b0c27149e33c2eceda6c19731d28c0f55be903ef5447b73a4f72fe17d206e",
+    "combined_initrd": "d9c73dfc72e7655a9e1a1d8f1f3ee4e213b081e54fbf057770da9f3bb8a75401"
+  },
+  "git": "git version 2.47.3"
+}

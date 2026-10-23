@@ -245,6 +245,8 @@ struct Shared {
     /// Workload tokens for placeholders in injected headers.
     tokens: RwLock<Option<mitm::TokenSource>>,
     secrets: RwLock<Option<Arc<crate::secret_substitution::Store>>>,
+    /// Credentials the host sends for the guest to certain HTTPS remotes.
+    host_credentials: RwLock<Option<Arc<crate::host_credentials::HostCredentials>>>,
     resolved: Mutex<HashMap<IpAddr, BTreeSet<String>>>,
     log: Mutex<VecDeque<Decision>>,
     stats: Mutex<GatewayStats>,
@@ -374,6 +376,28 @@ impl GatewayHandle {
         Ok(())
     }
 
+    /// Credentials the host holds for HTTPS remotes, sent as `Authorization`
+    /// on this guest's requests to them (see [`crate::host_credentials`]).
+    /// TLS interception must already be enabled. They grant no network
+    /// access, and plaintext connections never carry them.
+    ///
+    /// # Errors
+    ///
+    /// Credentials are given and interception is not enabled.
+    pub fn set_host_credentials(
+        &self,
+        credentials: Option<Arc<crate::host_credentials::HostCredentials>>,
+    ) -> io::Result<()> {
+        let credentials = credentials.filter(|c| !c.is_empty());
+        if credentials.is_some() && self.0.intercept.is_none() {
+            return Err(io::Error::other(
+                "host credentials require TLS interception",
+            ));
+        }
+        *self.0.host_credentials.write() = credentials;
+        Ok(())
+    }
+
     /// The most recent decisions, oldest first.
     #[must_use]
     pub fn decisions(&self) -> Vec<Decision> {
@@ -473,6 +497,7 @@ impl GatewayBuilder {
             egress_proxy: RwLock::new(None),
             tokens: RwLock::new(None),
             secrets: RwLock::new(None),
+            host_credentials: RwLock::new(None),
             resolved: Mutex::new(HashMap::new()),
             log: Mutex::new(VecDeque::new()),
             stats: Mutex::new(GatewayStats::default()),
@@ -1655,7 +1680,8 @@ async fn connection(
             // Only look inside when the answer could change something.
             let look = via_names.is_some()
                 || shared.policy.read().has_transforms()
-                || shared.secrets.read().is_some();
+                || shared.secrets.read().is_some()
+                || shared.host_credentials.read().is_some();
             let (prefix, sniffed) = if look {
                 read_name(&mut guest, config.sniff_wait).await
             } else {
@@ -1726,7 +1752,16 @@ async fn connection(
             .read()
             .clone()
             .filter(|store| store.has_host(sni));
-        if headers.is_some() || secrets.is_some() {
+        let credentials = shared
+            .host_credentials
+            .read()
+            .clone()
+            .filter(|c| c.has_target(sni, destination.port()))
+            .map(|credentials| mitm::CredentialScope {
+                port: destination.port(),
+                credentials,
+            });
+        if headers.is_some() || secrets.is_some() || credentials.is_some() {
             let headers = headers.unwrap_or_default();
             let Some(intercept) = shared.intercept.clone() else {
                 refuse(
@@ -1747,30 +1782,18 @@ async fn connection(
                 inner: guest,
             };
             let tokens = shared.tokens.read().clone();
-            let result = if let Some(secrets) = secrets {
-                mitm::intercept_with_secrets(
-                    guest,
-                    upstream,
-                    sni,
-                    &headers,
-                    tokens,
-                    intercept.server,
-                    intercept.client,
-                    secrets,
-                )
-                .await
-            } else {
-                mitm::intercept(
-                    guest,
-                    upstream,
-                    sni,
-                    &headers,
-                    tokens,
-                    intercept.server,
-                    intercept.client,
-                )
-                .await
-            };
+            let result = mitm::intercept_with(
+                guest,
+                upstream,
+                sni,
+                &headers,
+                tokens,
+                intercept.server,
+                intercept.client,
+                secrets,
+                credentials,
+            )
+            .await;
             if let Err(e) = result {
                 tracing::debug!("gateway: intercepted connection to {sni} ended: {e}");
             }

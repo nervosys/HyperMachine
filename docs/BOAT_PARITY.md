@@ -123,8 +123,11 @@ In rough order of how much each matters to someone choosing between them:
    is cloned with a `user:token` the operator gave the node
    (`--git-credential`), sent only under its prefix and never stored or put
    in the guest ([checked on KVM](benchmarks/2026-10-17/git-private-kvm/README.md)).
-   One token per node and prefix, not per team or environment; a clone made
-   from inside a sandbox has no credential.
+   One token per node and prefix, not per team or environment. **A clone
+   made from inside a sandbox** can use it too, with `--git-credential-in-sandbox`:
+   [the gateway sets it](ENVIRONMENTS.md#from-inside-a-sandbox) on requests
+   under the prefix, and the guest never holds it ([checked on KVM](benchmarks/2026-10-22/git-in-sandbox-kvm/README.md)),
+   for every sandbox on that node, not per team.
 8. **Logs and traces, and usage as a total, in a team's telemetry.** A
    team [sets its own metrics destination](TELEMETRY.md#a-teams-own-telemetry),
    and [usage](USAGE.md) is kept for good in a cluster; what a team is sent

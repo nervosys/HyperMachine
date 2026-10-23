@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A sandbox's own `git` can use the node's `--git-credential` without the
+  guest holding it: with `--git-credential-in-sandbox`, the gateway sets
+  `Authorization: Basic` on a guest's HTTPS request whose scheme, host, port
+  and path prefix are the credential's URL, replacing any the guest wrote
+  (new `hv2_net::host_credentials`, `Gateway::set_host_credentials`,
+  `mitm::intercept_with`). A look-alike host, another port, a path outside
+  the prefix and one that climbs out with `..` or an encoded dot or slash
+  get none. It applies to every sandbox on the node, not per team. Checked
+  on real KVM with the host's git and curl in the guest, 6 cases
+  (`tools/check-git-in-sandbox-kvm.py`,
+  `docs/benchmarks/2026-10-22/git-in-sandbox-kvm/`), and 7 unit tests.
+  NOT VERIFIED: a real GitHub or GitLab (the server is a Python dumb-protocol
+  one), `git push`, the smart protocol, HTTP/2, a credential per team or per
+  sandbox, and a Debian-based template (the guest was busybox plus copied
+  binaries).
 - A sandbox of a size of its own can now be snapshotted into a template
   (`POST /sandboxes/{id}/snapshots`); it was refused. The snapshot keeps the
   size beside its base, in the store record too (`cpuCount`, `memoryMB`,

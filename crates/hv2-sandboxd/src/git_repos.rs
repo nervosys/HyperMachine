@@ -47,6 +47,16 @@ impl Credential {
         }
     }
 
+    /// Let a sandbox's gateway present it, for requests under its prefix.
+    pub(crate) fn add_to(
+        &self,
+        credentials: &mut hv2_net::host_credentials::HostCredentials,
+    ) -> Result<(), String> {
+        credentials
+            .add(&self.prefix, &self.userinfo)
+            .map_err(|e| format!("the credential for {}: {e}", self.prefix))
+    }
+
     /// The header that presents it.
     fn header(&self) -> String {
         format!(
