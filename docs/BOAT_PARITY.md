@@ -130,7 +130,10 @@ In rough order of how much each matters to someone choosing between them:
    made from inside a sandbox** can use it too, with `--git-credential-in-sandbox`:
    [the gateway sets it](ENVIRONMENTS.md#from-inside-a-sandbox) on requests
    under the prefix, and the guest never holds it ([checked on KVM](benchmarks/2026-10-22/git-in-sandbox-kvm/README.md)),
-   for every sandbox on that node, not per team.
+   for every sandbox on that node; with `--team-git-credential`, [a team's
+   sandboxes get the team's own](ENVIRONMENTS.md#from-inside-a-sandbox) first
+   ([checked on KVM](benchmarks/2026-10-22/team-git-kvm/README.md)). Not a
+   credential per environment or per sandbox.
 8. **Logs and traces, and usage as a total, in a team's telemetry.** A
    team [sets its own metrics destination](TELEMETRY.md#a-teams-own-telemetry),
    and [usage](USAGE.md) is kept for good in a cluster; what a team is sent

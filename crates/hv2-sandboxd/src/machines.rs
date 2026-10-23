@@ -508,7 +508,7 @@ async fn boot(state: &Arc<AppState>, machine: &Stored) -> Result<(), String> {
         (Some(spec), Some(device)) => {
             // The guest is configured at every boot, by a script that is safe
             // to run again on a disk that kept the last boot's changes.
-            match start_network(state, &machine.id, &vm, device, spec, false, false).await {
+            match start_network(state, &machine.id, &vm, device, spec, false, false, None).await {
                 Ok(network) => {
                     if let Err(e) =
                         configure_network(&vm, network.gateway.ca_pem().as_deref()).await
@@ -655,7 +655,7 @@ async fn boot_firmware(state: &Arc<AppState>, machine: &Stored, slot: Slot) -> R
     let network = match (spec, nic) {
         (Some(spec), Some(device)) => {
             device.lock().set_host_offloads(!state.opts.no_net_offload);
-            Some(start_network(state, &machine.id, &vm, device, spec, false, false).await?)
+            Some(start_network(state, &machine.id, &vm, device, spec, false, false, None).await?)
         }
         _ => None,
     };

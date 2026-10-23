@@ -324,6 +324,10 @@ struct Options {
     /// Whether a sandbox's own `git` may use them too, by
     /// `--git-credential-in-sandbox`: the gateway sets them on its requests.
     git_in_sandbox: bool,
+    /// A team's own credentials, by `--team-git-credential TEAM=PREFIX=VAR`:
+    /// used by that team's sandboxes' own `git`, first, whether or not the
+    /// node-wide ones are shared.
+    team_git_credentials: Vec<(hv2_cluster::ownership::TeamId, git_repos::Credential)>,
     /// What the flags said about pushing metrics over OTLP; the environment
     /// is consulted when they are parsed. See hv2_cluster::otlp.
     otlp_flags: hv2_cluster::otlp::Flags,
@@ -419,6 +423,7 @@ fn parse_options() -> Result<Options, String> {
         git_remotes: Vec::new(),
         git_credentials: Vec::new(),
         git_in_sandbox: false,
+        team_git_credentials: Vec::new(),
         otlp_flags: hv2_cluster::otlp::Flags::default(),
         otlp: None,
         allow_private_webhooks: false,
@@ -518,6 +523,20 @@ fn parse_options() -> Result<Options, String> {
                     .push(git_repos::Credential::new(prefix, &userinfo)?);
             }
             "--git-credential-in-sandbox" => opts.git_in_sandbox = true,
+            "--team-git-credential" => {
+                let given = value(&mut i)?;
+                let usage = "--team-git-credential takes TEAM=PREFIX=ENVIRONMENT_VARIABLE";
+                let (team, rest) = given.split_once('=').ok_or(usage)?;
+                let (prefix, variable) = rest.split_once('=').ok_or(usage)?;
+                let team = hv2_cluster::ownership::TeamId::parse(team)
+                    .map_err(|e| format!("--team-git-credential {team}: {e}"))?;
+                reqwest::Url::parse(prefix)
+                    .map_err(|e| format!("--team-git-credential {prefix}: {e}"))?;
+                let userinfo = std::env::var(variable)
+                    .map_err(|_| format!("--team-git-credential: {variable} is not set"))?;
+                opts.team_git_credentials
+                    .push((team, git_repos::Credential::new(prefix, &userinfo)?));
+            }
             "--otlp-endpoint" => opts.otlp_flags.endpoint = Some(value(&mut i)?),
             "--otlp-header" => opts.otlp_flags.headers.push(value(&mut i)?),
             "--otlp-interval" => {
@@ -857,9 +876,8 @@ struct AppState {
     /// One per server process; its certificate is installed in each guest.
     authority: Option<Arc<Authority>>,
     secret_scopes: Option<Arc<hv2_net::secret_substitution::ScopedStores>>,
-    /// The node's Git credentials, for the gateway to present to a sandbox's
-    /// own requests; only with `--git-credential-in-sandbox`.
-    host_git: Option<Arc<hv2_net::host_credentials::HostCredentials>>,
+    /// The Git credentials the gateway presents to a sandbox's own requests.
+    host_git: HostGit,
     upstream_roots: Vec<tokio_rustls::rustls::pki_types::CertificateDer<'static>>,
     sandboxes: Mutex<HashMap<String, LiveSandbox>>,
     next_cid: Mutex<u64>,
@@ -1990,6 +2008,7 @@ async fn bring_up(
                 spec,
                 snapshot.is_none(),
                 true,
+                team,
             )
             .await
             {
@@ -4595,6 +4614,68 @@ impl Drop for ActivityGuard {
     }
 }
 
+/// The credentials a sandbox's gateway presents for its own `git`: the
+/// node's, with `--git-credential-in-sandbox`, and a team's, with
+/// `--team-git-credential`, which a team's sandboxes try first.
+#[derive(Default)]
+struct HostGit {
+    node: Option<Arc<hv2_net::host_credentials::HostCredentials>>,
+    teams:
+        BTreeMap<hv2_cluster::ownership::TeamId, Arc<hv2_net::host_credentials::HostCredentials>>,
+}
+
+impl HostGit {
+    fn build(
+        share_node: bool,
+        node_credentials: &[git_repos::Credential],
+        team_credentials: &[(hv2_cluster::ownership::TeamId, git_repos::Credential)],
+    ) -> Result<Self, String> {
+        use hv2_net::host_credentials::HostCredentials;
+        let node = if share_node {
+            let mut all = HostCredentials::default();
+            for credential in node_credentials {
+                credential.add_to(&mut all)?;
+            }
+            if all.is_empty() {
+                return Err("--git-credential-in-sandbox needs a --git-credential".into());
+            }
+            Some(Arc::new(all))
+        } else {
+            None
+        };
+        let mut teams = BTreeMap::new();
+        for (team, _) in team_credentials {
+            if teams.contains_key(team) {
+                continue;
+            }
+            let mut all = HostCredentials::default();
+            for (owner, credential) in team_credentials {
+                if owner == team {
+                    credential.add_to(&mut all)?;
+                }
+            }
+            // Then the node's, for what the team has none of its own.
+            if share_node {
+                for credential in node_credentials {
+                    credential.add_to(&mut all)?;
+                }
+            }
+            teams.insert(team.clone(), Arc::new(all));
+        }
+        Ok(Self { node, teams })
+    }
+
+    /// What a sandbox of `team` is given, if anything.
+    fn for_team(
+        &self,
+        team: Option<&hv2_cluster::ownership::TeamId>,
+    ) -> Option<Arc<hv2_net::host_credentials::HostCredentials>> {
+        team.and_then(|t| self.teams.get(t))
+            .or(self.node.as_ref())
+            .cloned()
+    }
+}
+
 /// Put a gateway behind a sandbox's NIC, and point the guest at it.
 async fn start_network(
     state: &Arc<AppState>,
@@ -4606,6 +4687,8 @@ async fn start_network(
     // Whether it may join private sandbox networks. A machine is not a
     // sandbox the cluster knows, so it does not.
     private: bool,
+    // Whose sandbox it is, for the Git credentials its own `git` is given.
+    team: Option<&hv2_cluster::ownership::TeamId>,
 ) -> Result<LiveNetwork, String> {
     let mut builder = Gateway::builder(spec.policy).config(GatewayConfig::default());
     if private {
@@ -4631,9 +4714,9 @@ async fn start_network(
             .set_secret_store(scopes.get(sandbox_id))
             .map_err(|_| "configuring sandbox secret scope failed".to_string())?;
     }
-    if let Some(credentials) = &state.host_git {
+    if let Some(credentials) = state.host_git.for_team(team) {
         handle
-            .set_host_credentials(Some(Arc::clone(credentials)))
+            .set_host_credentials(Some(credentials))
             .map_err(|e| format!("giving the gateway its Git credentials: {e}"))?;
     }
     handle.set_egress_proxy(spec.proxy);
@@ -6112,25 +6195,24 @@ async fn main() -> std::process::ExitCode {
             }
         }
     };
-    let host_git = if opts.git_in_sandbox {
+    let host_git = if opts.git_in_sandbox || !opts.team_git_credentials.is_empty() {
         if !opts.network {
-            eprintln!("hv2-sandboxd: --git-credential-in-sandbox requires --network");
+            eprintln!("hv2-sandboxd: Git credentials for sandboxes require --network");
             return std::process::ExitCode::FAILURE;
         }
-        let mut credentials = hv2_net::host_credentials::HostCredentials::default();
-        for credential in &opts.git_credentials {
-            if let Err(e) = credential.add_to(&mut credentials) {
-                eprintln!("hv2-sandboxd: --git-credential-in-sandbox: {e}");
+        match HostGit::build(
+            opts.git_in_sandbox,
+            &opts.git_credentials,
+            &opts.team_git_credentials,
+        ) {
+            Ok(built) => built,
+            Err(e) => {
+                eprintln!("hv2-sandboxd: {e}");
                 return std::process::ExitCode::FAILURE;
             }
         }
-        if credentials.is_empty() {
-            eprintln!("hv2-sandboxd: --git-credential-in-sandbox needs a --git-credential");
-            return std::process::ExitCode::FAILURE;
-        }
-        Some(Arc::new(credentials))
     } else {
-        None
+        HostGit::default()
     };
     let secret_scopes = match &opts.egress_secrets_file {
         None => None,
@@ -6923,6 +7005,49 @@ async fn main() -> std::process::ExitCode {
 
 #[cfg(test)]
 mod tests {
+    /// A team's sandboxes try the team's Git credentials first, then the
+    /// node's if shared; others get the node's if shared; nothing otherwise.
+    #[test]
+    fn a_sandbox_is_given_its_teams_git_credentials_before_the_nodes() {
+        use hv2_cluster::ownership::TeamId;
+        let team = |n: &str| TeamId::parse(n).unwrap();
+        let node = [git_repos::Credential::new("https://git.example/", "node:one").unwrap()];
+        let red = (
+            team("red"),
+            git_repos::Credential::new("https://git.example/red/", "red:two").unwrap(),
+        );
+        let auth = |c: &Option<Arc<hv2_net::host_credentials::HostCredentials>>, path: &str| {
+            c.as_ref()
+                .and_then(|c| c.authorization_for("git.example", 443, path))
+                .map(|v| v.to_str().unwrap().to_string())
+        };
+        let basic = |s: &str| format!("Basic {}", hv2_guest_agent::b64::encode(s.as_bytes()));
+
+        let shared = HostGit::build(true, &node, std::slice::from_ref(&red)).unwrap();
+        let reds = shared.for_team(Some(&team("red")));
+        assert_eq!(auth(&reds, "/red/x"), Some(basic("red:two")));
+        assert_eq!(
+            auth(&reds, "/other/x"),
+            Some(basic("node:one")),
+            "the node's for the rest"
+        );
+        for other in [Some(team("blue")), None] {
+            let got = shared.for_team(other.as_ref());
+            assert_eq!(auth(&got, "/red/x"), Some(basic("node:one")), "not red's");
+        }
+
+        // Not shared: only the team's own, and nothing for anyone else.
+        let private = HostGit::build(false, &node, std::slice::from_ref(&red)).unwrap();
+        let reds = private.for_team(Some(&team("red")));
+        assert_eq!(auth(&reds, "/red/x"), Some(basic("red:two")));
+        assert_eq!(auth(&reds, "/other/x"), None, "the node's is not shared");
+        assert!(private.for_team(Some(&team("blue"))).is_none());
+        assert!(private.for_team(None).is_none());
+
+        // Sharing needs a credential to share.
+        assert!(HostGit::build(true, &[], &[]).is_err());
+    }
+
     use super::*;
 
     #[test]

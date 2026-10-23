@@ -123,6 +123,16 @@ hv2-sandboxd --network --git-credential https://git.example/team/=GIT_TOKEN \
   network access: the sandbox's own `allowOut` and `denyOut` still decide
   whether it can reach the host. Give a node that runs for several teams a
   token for something they may all read, or do not set the flag.
+- **A credential per team.** `--team-git-credential TEAM=PREFIX=VAR`
+  (repeatable) gives one team's sandboxes a credential of their own. A team's
+  sandboxes try the team's credentials first and then, with
+  `--git-credential-in-sandbox`, the node's; a sandbox of another team, or of
+  none, is never given them. The team is the one the control plane
+  attributes the sandbox to, so it needs a clustered node with a cluster
+  token. Two teams can hold different tokens for the same prefix. A team's
+  credential serves only that team's sandboxes' own `git`; it does not
+  apply to a server-side environment clone, which uses `--git-credential`.
+  [Checked on KVM](benchmarks/2026-10-22/team-git-kvm/README.md).
 - Only `https` prefixes (the gateway sets it inside TLS), and the node must
   have `--network`. The gateway verifies the server's certificate against the
   public roots and `--egress-upstream-ca`, as for any intercepted host. The

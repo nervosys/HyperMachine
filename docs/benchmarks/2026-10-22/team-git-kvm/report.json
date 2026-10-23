@@ -1,0 +1,46 @@
+{
+  "success": true,
+  "cases": [
+    {
+      "name": "each team's sandbox clones with its own team's credential",
+      "success": true,
+      "seconds": 0.696,
+      "detail": {
+        "alpha": 6,
+        "beta": 6
+      }
+    },
+    {
+      "name": "a sandbox with no team is given neither team's credential",
+      "success": true,
+      "seconds": 0.166,
+      "detail": {
+        "stderr": "/share/git-core/templates\nfatal: could not read Username for 'https://git.example.test:36725': terminal prompts disabled"
+      }
+    },
+    {
+      "name": "what only the node's credential covers is cloned by every sandbox",
+      "success": true,
+      "seconds": 0.818,
+      "detail": {
+        "alpha": 6,
+        "beta": 6,
+        "none": 6
+      }
+    },
+    {
+      "name": "no token is anywhere in any guest",
+      "success": true,
+      "seconds": 0.149
+    }
+  ],
+  "host_cpus": 24,
+  "input_sha256": {
+    "daemon": "c739890356906e4df7ba8e8fb6454de5b67e47f674c70811f076b5e3d85acbbe",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "a557cb5f50485dac9bc516e2cff17fcf1787e45bdcb93518c640a675abf324d9",
+    "combined_initrd": "b4694ec6d7f796b90012a9d2cf0e4281bcd7734ef70e0828173426cfbe2b34dd"
+  },
+  "git": "git version 2.47.3"
+}
