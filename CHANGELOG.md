@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `tools/check-team-telemetry-kvm.py --otelcol PATH` runs the team telemetry
+  check with the real OpenTelemetry Collector (contrib 0.163.2, bearer-token
+  auth) as red's destination: 7 cases pass on KVM, metrics read back from the
+  collector, logs and traces accepted
+  (`docs/benchmarks/2026-10-23/team-telemetry-otelcol-kvm/`). Usage in the
+  push stays a rolling 24 hours: a running total would read the whole,
+  never-trimmed ledger on every push.
 - Webhook deliveries carry `hv2-signature` (`v1=` HMAC-SHA256 over
   `<timestamp>.<body>`) and `hv2-signature-timestamp`, beside the unchanged
   `e2b-signature` that E2B's verifiers expect. Rotating `signatureSecret`

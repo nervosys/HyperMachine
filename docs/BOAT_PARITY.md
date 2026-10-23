@@ -140,7 +140,7 @@ In rough order of how much each matters to someone choosing between them:
    is metrics, with the last day's usage rather than a running total, and
    [its sandboxes' events as logs](TELEMETRY.md#a-teams-own-telemetry)
    and [a span for each sandbox that ended](TELEMETRY.md#a-teams-own-telemetry)
-   (both tested against a loopback collector, not a real one). No command
+   (tested against a loopback collector, and the metrics [against the real OpenTelemetry Collector](benchmarks/2026-10-23/team-telemetry-otelcol-kvm/README.md); logs and traces were accepted by it, their content not read back). No command
    output and nothing traced inside a sandbox.
 9. **Clients published to a registry.** [Python](../sdk/python/README.md)
    and [TypeScript](../sdk/typescript/README.md) clients are packaged and

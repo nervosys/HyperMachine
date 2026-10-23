@@ -19,6 +19,12 @@ loopback. The control plane is given both collectors with
    how the last push went; the other team sees only its own.
 5. Deleting a destination stops its pushes, and the other team's go on.
 
+With `--otelcol PATH` (the OpenTelemetry Collector's contrib binary), red's
+destination is that real collector instead of the Python one: its OTLP/HTTP
+receiver demands `Authorization: Bearer red-token` (bearertokenauth), so a
+push without the team's header is refused, and its file exporter writes what
+it accepted for the same assertions to read.
+
 Writes report.json and each service's log into --output.
 """
 import argparse, hashlib, http.client, http.server, json, socket, ssl, subprocess, tempfile, threading, time, uuid
@@ -76,6 +82,81 @@ class Collector:
         return self.pushes[-1] if self.pushes else None
 
 
+class RealCollector:
+    """The OpenTelemetry Collector (contrib), as a process: an OTLP/HTTP receiver that wants a
+    bearer token, and a file exporter whose lines are read back as pushes."""
+
+    def __init__(self, binary, directory, token):
+        self.port = port()
+        self.base = f"http://127.0.0.1:{self.port}"
+        self.output = Path(directory) / "collector-out.jsonl"
+        self.output.write_text("")
+        config = Path(directory) / "collector.yaml"
+        config.write_text(f"""extensions:
+  bearertokenauth:
+    token: {token}
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 127.0.0.1:{self.port}
+        auth:
+          authenticator: bearertokenauth
+exporters:
+  file:
+    path: {self.output}
+    flush_interval: 1s
+  file/logs:
+    path: {Path(directory) / "collector-logs.jsonl"}
+    flush_interval: 1s
+  file/traces:
+    path: {Path(directory) / "collector-traces.jsonl"}
+    flush_interval: 1s
+service:
+  extensions: [bearertokenauth]
+  telemetry:
+    metrics:
+      level: none
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      exporters: [file]
+    logs:
+      receivers: [otlp]
+      exporters: [file/logs]
+    traces:
+      receivers: [otlp]
+      exporters: [file/traces]
+""")
+        self.log = (Path(directory) / "collector.log").open("wb")
+        self.process = subprocess.Popen([str(binary), "--config", str(config)], stdin=subprocess.DEVNULL,
+                                        stdout=self.log, stderr=subprocess.STDOUT)
+        self.version = subprocess.run([str(binary), "--version"], capture_output=True, text=True).stdout.strip()
+        deadline = time.monotonic() + 30
+        while True:
+            try:
+                socket.create_connection(("127.0.0.1", self.port), timeout=0.2).close()
+                break
+            except OSError:
+                assert self.process.poll() is None, "the collector exited"
+                assert time.monotonic() < deadline, "the collector did not start"
+                time.sleep(0.2)
+
+    @property
+    def pushes(self):
+        rows = []
+        for line in self.output.read_text().splitlines():
+            try:
+                rows.append(({}, json.loads(line)))
+            except ValueError:
+                pass
+        return rows
+
+    def last(self):
+        rows = self.pushes
+        return rows[-1] if rows else None
+
+
 def gauge(body, name):
     for metric in body["resourceMetrics"][0]["scopeMetrics"][0]["metrics"]:
         if metric["name"] == name:
@@ -94,6 +175,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ["daemon", "control", "kernel", "initrd", "output"]:
         parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--otelcol", type=Path, help="the OpenTelemetry Collector contrib binary")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     inputs = {name: getattr(args, name) for name in ["daemon", "control", "kernel", "initrd"]}
@@ -106,7 +188,7 @@ def main():
     env = {"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "RUST_LOG": "warn"}
     processes, handles = [], []
     state = {}
-    collector_a, collector_b = Collector(), Collector()
+    collector_a, collector_b = None, Collector()
 
     def case(name, action):
         row = {"name": name, "success": False}
@@ -162,6 +244,8 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix="hm-team-telemetry-", dir="/var/tmp") as temporary:
         directory = Path(temporary)
+        collector_a = RealCollector(args.otelcol, directory, "red-token") if args.otelcol else Collector()
+        report["real_collector"] = collector_a.version if args.otelcol else None
 
         def start(name, argv, environment):
             handle = (args.output / (name + ".log")).open("wb")
@@ -284,7 +368,8 @@ def main():
                 headers_b, body_b = collector_b.last()
                 assert resource(body_a, "hypermachine.team") == "red", body_a
                 assert resource(body_b, "hypermachine.team") == "blue", body_b
-                assert headers_a.get("authorization", headers_a.get("Authorization")) == "Bearer red-token", headers_a
+                if not args.otelcol:  # the real collector refuses a push without the token
+                    assert headers_a.get("authorization", headers_a.get("Authorization")) == "Bearer red-token", headers_a
                 assert headers_b.get("X-Team-Key", headers_b.get("x-team-key")) == "blue-token", headers_b
                 counts = {}
                 for label, body, running, paused in [("red", body_a, 1, 1), ("blue", body_b, 1, 0)]:
@@ -349,7 +434,11 @@ def main():
 
             report["success"] = True
         finally:
-            collector_a.server.shutdown()
+            if args.otelcol:
+                stop(collector_a.process)
+                collector_a.log.close()
+            else:
+                collector_a.server.shutdown()
             collector_b.server.shutdown()
             for child in reversed(processes):
                 stop(child)
