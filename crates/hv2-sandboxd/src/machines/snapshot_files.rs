@@ -492,6 +492,9 @@ fn archive(
         let said: Vec<&str> = text
             .lines()
             .filter(|l| !l.starts_with("debugfs ") && !l.trim().is_empty())
+            // A node that is not root cannot give the files the image's
+            // owners; they are dumped all the same, as the node's own.
+            .filter(|l| !l.contains("while changing ownership"))
             .collect();
         if !said.is_empty() {
             return Err(internal(format!("reading the disk: {}", said.join("; "))));
@@ -647,9 +650,15 @@ mod tests {
         names
     }
 
+    /// Both tests watch or make scratch directories in the shared temp
+    /// directory, so they take turns.
+    #[cfg(target_os = "linux")]
+    static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     #[cfg(target_os = "linux")]
     fn a_directory_of_an_image_is_archived_with_its_links_and_nothing_above_it() {
+        let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         let Some(image) = image_with_tree(dir.path()) else {
             eprintln!("skipped: no mkfs.ext4 here");
@@ -672,6 +681,7 @@ mod tests {
     #[test]
     #[cfg(target_os = "linux")]
     fn what_is_too_big_or_not_a_directory_or_absent_is_refused_and_leaves_no_scratch() {
+        let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         let Some(image) = image_with_tree(dir.path()) else {
             eprintln!("skipped: no mkfs.ext4 here");
