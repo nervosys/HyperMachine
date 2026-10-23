@@ -379,6 +379,10 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
             get(to_machine_node),
         )
         .route(
+            "/machines/{name}/snapshots/{snapshotID}/archive",
+            get(to_machine_node),
+        )
+        .route(
             "/machines/{name}/ports/{hostPort}",
             axum::routing::delete(to_machine_node),
         )

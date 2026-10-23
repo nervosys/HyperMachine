@@ -455,7 +455,7 @@ pub(crate) async fn archive(
 
 /// A checkpoint's name as a file name: anything outside letters, digits,
 /// `-`, `_` and `.` becomes `_`, so it cannot close the header's quotes.
-fn archive_name(name: &str) -> String {
+pub(crate) fn archive_name(name: &str) -> String {
     name.chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {

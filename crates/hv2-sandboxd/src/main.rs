@@ -6703,6 +6703,10 @@ async fn main() -> std::process::ExitCode {
             get(machines::snapshot_files::file),
         )
         .route(
+            "/machines/{name}/snapshots/{snapshotID}/archive",
+            get(machines::snapshot_files::archive_of),
+        )
+        .route(
             "/machines/{name}/ports/{hostPort}",
             axum::routing::delete(machines::ports::unpublish),
         )

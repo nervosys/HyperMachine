@@ -84,6 +84,9 @@ pub(crate) mod snapshot_files {
     pub(crate) async fn file() -> Response {
         refused()
     }
+    pub(crate) async fn archive_of() -> Response {
+        refused()
+    }
 }
 
 /// A machine's snapshots: the same answer.

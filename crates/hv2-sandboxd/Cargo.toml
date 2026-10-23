@@ -44,9 +44,9 @@ libc = "0.2"
 form_urlencoded = "1"
 tokio-rustls = { workspace = true }
 subtle = { version = "2.6", default-features = false }
+tempfile = "3"
 
 [dev-dependencies]
-tempfile = "3"
 # A fresh RSA key per test run; see cloud_login.rs.
 ic-rsa = "0.2.2"
 ic-drbg = "0.2.2"

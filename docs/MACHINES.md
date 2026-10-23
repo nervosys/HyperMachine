@@ -349,6 +349,20 @@ hm sandbox vm machine snapshot download web-01 snap-61d5adc592c0469 web-01.img
   links are listed and not followed; XFS and Btrfs are not read.
   [Checked on KVM](benchmarks/2026-10-12/snapshot-files-kvm/README.md),
   Ubuntu's cloud image included.
+- **A directory comes down as an archive.**
+  `GET .../snapshots/{id}/archive?path=/srv/data&partition=N` (`/` for
+  everything) is the directory and all below it as a gzipped tar. `debugfs`
+  dumps the tree into a scratch directory of the node's own, `tar` and
+  `gzip` pack it, and the scratch is removed. Symbolic links are archived as
+  links; sockets, devices and pipes are left out. Owners are the image's
+  when the node runs as root, and the node's user otherwise. **At most 64
+  MiB** of archive, and 256 MiB or 500,000 entries read from the disk before
+  it is stopped (413); a read over 3 minutes is stopped (504). It needs the
+  same e2fsprogs, `tar` and `gzip` as the file reads, and the same ext
+  filesystem. A snapshot's archive is of the disk as it was left: a
+  machine stopped without unmounting may have a filesystem `debugfs` reads
+  as the kernel's journal had not yet replayed it.
+  [Checked on KVM](benchmarks/2026-10-22/machine-snapshot-archive-kvm/README.md).
 - **The cloud-init seed is not in one**, and is left as it is by a restore.
 - At most 32 a machine; deleting the machine deletes them.
 

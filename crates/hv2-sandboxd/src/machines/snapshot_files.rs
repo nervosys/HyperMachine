@@ -4,6 +4,8 @@
 //!   lists a directory.
 //! - `GET /machines/{name}/snapshots/{id}/file?path=/etc/hostname` is one
 //!   file's bytes.
+//! - `GET /machines/{name}/snapshots/{id}/archive?path=/home` is a directory
+//!   and all below it as a gzipped tar.
 //!
 //! Read with e2fsprogs' `debugfs`, which opens an ext2, ext3 or ext4
 //! filesystem in an image file and changes nothing in it. A template
@@ -34,6 +36,14 @@ use super::named;
 
 /// The most bytes of one file read out of a snapshot.
 pub(crate) const MAX_FILE: usize = 64 << 20;
+/// The most a tree may write while it is dumped from the image, before it is
+/// stopped: the archive is capped at [`MAX_FILE`] *after* compression, and
+/// this bounds what compression is given.
+const MAX_DUMP: u64 = 4 * MAX_FILE as u64;
+/// The most entries one dump may write.
+const MAX_DUMP_ENTRIES: u64 = 500_000;
+/// How long a dump or an archive may take.
+const ARCHIVE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(180);
 /// An ext superblock's magic, at this offset in its filesystem.
 const EXT_MAGIC_AT: u64 = 1080;
 const EXT_MAGIC: [u8; 2] = [0x53, 0xEF];
@@ -365,9 +375,341 @@ pub(crate) async fn file(
     }
 }
 
+/// What `dir` holds, in bytes and entries, counting no further than `stop`.
+fn tree_size(dir: &FsPath, stop: (u64, u64)) -> (u64, u64) {
+    let (mut bytes, mut entries) = (0u64, 0u64);
+    let mut pending = vec![dir.to_path_buf()];
+    while let Some(here) = pending.pop() {
+        let Ok(read) = std::fs::read_dir(&here) else {
+            continue;
+        };
+        for entry in read.flatten() {
+            entries += 1;
+            let Ok(meta) = entry.metadata() else { continue };
+            if meta.is_dir() {
+                pending.push(entry.path());
+            } else {
+                bytes += meta.len();
+            }
+            if bytes > stop.0 || entries > stop.1 {
+                return (bytes, entries);
+            }
+        }
+    }
+    (bytes, entries)
+}
+
+/// The directory `path` of the filesystem at `offset` in `image` and
+/// everything below it, as a gzipped tar.
+///
+/// `debugfs` dumps the tree into a scratch directory of this call's own (the
+/// request names no path on the host: the directory is the working
+/// directory, and the dump's destination is `.`), `tar` and `gzip` pack it,
+/// and the scratch is removed. Symbolic links are archived as links, and
+/// what is not a file, directory or link (a socket, a device) is not in it.
+/// Owners are the image's when this runs as root, and the node's otherwise.
+fn archive(
+    image: &FsPath,
+    offset: u64,
+    path: &str,
+    max_dump: (u64, u64),
+    max_archive: usize,
+) -> Result<Vec<u8>, (StatusCode, String)> {
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+    let internal = |why: String| (StatusCode::INTERNAL_SERVER_ERROR, why);
+    let entry = resolve(image, offset, path)?;
+    if entry.kind() != "directory" {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!(
+                "{path:?} is a {}, not a directory; read a file with /file",
+                entry.kind()
+            ),
+        ));
+    }
+    let scratch = tempfile::tempdir().map_err(|e| internal(format!("a scratch directory: {e}")))?;
+    let mut spec = image.as_os_str().to_owned();
+    if offset != 0 {
+        spec.push(format!("?offset={offset}"));
+    }
+    let complaints = tempfile::tempfile().map_err(|e| internal(e.to_string()))?;
+    let mut dump = Command::new("debugfs")
+        .current_dir(scratch.path())
+        .arg("-R")
+        .arg(format!("rdump <{}> .", entry.inode))
+        .arg(spec)
+        .stdout(Stdio::null())
+        .stderr(Stdio::from(
+            complaints
+                .try_clone()
+                .map_err(|e| internal(e.to_string()))?,
+        ))
+        .spawn()
+        .map_err(|e| internal(format!("running debugfs (is e2fsprogs installed?): {e}")))?;
+    let began = std::time::Instant::now();
+    loop {
+        let finished = match dump.try_wait() {
+            Ok(status) => status.is_some(),
+            Err(e) => return Err(internal(e.to_string())),
+        };
+        // Checked once more after it ends: a small tree is dumped before the
+        // first look.
+        let (bytes, entries) = tree_size(scratch.path(), max_dump);
+        if bytes > max_dump.0 || entries > max_dump.1 {
+            let _ = dump.kill();
+            let _ = dump.wait();
+            return Err((
+                StatusCode::PAYLOAD_TOO_LARGE,
+                format!(
+                    "{path:?} holds more than {} MiB or {} entries; read part of it, or download the disk",
+                    max_dump.0 >> 20,
+                    max_dump.1
+                ),
+            ));
+        }
+        if began.elapsed() > ARCHIVE_TIMEOUT {
+            let _ = dump.kill();
+            let _ = dump.wait();
+            return Err((
+                StatusCode::GATEWAY_TIMEOUT,
+                format!("{path:?} took over {ARCHIVE_TIMEOUT:?} to read"),
+            ));
+        }
+        if finished {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    {
+        use std::io::{Seek, SeekFrom};
+        let mut text = String::new();
+        let mut complaints = complaints;
+        complaints
+            .seek(SeekFrom::Start(0))
+            .map_err(|e| internal(e.to_string()))?;
+        let _ = complaints.read_to_string(&mut text);
+        let said: Vec<&str> = text
+            .lines()
+            .filter(|l| !l.starts_with("debugfs ") && !l.trim().is_empty())
+            .collect();
+        if !said.is_empty() {
+            return Err(internal(format!("reading the disk: {}", said.join("; "))));
+        }
+    }
+    // One directory, named for the inode.
+    let dumped = std::fs::read_dir(scratch.path())
+        .map_err(|e| internal(e.to_string()))?
+        .flatten()
+        .find(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+        .ok_or_else(|| internal("debugfs wrote nothing".to_string()))?
+        .path();
+    let mut tar = Command::new("tar")
+        .arg("-C")
+        .arg(&dumped)
+        .arg("-cf")
+        .arg("-")
+        .arg(".")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| internal(format!("running tar: {e}")))?;
+    let packed = tar
+        .stdout
+        .take()
+        .ok_or_else(|| internal("tar has no output".into()))?;
+    let mut gzip = Command::new("gzip")
+        .arg("-c")
+        .stdin(Stdio::from(packed))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| internal(format!("running gzip: {e}")))?;
+    let mut out = Vec::new();
+    let read = gzip
+        .stdout
+        .take()
+        .ok_or_else(|| internal("gzip has no output".into()))?
+        .take(max_archive as u64 + 1)
+        .read_to_end(&mut out);
+    if out.len() > max_archive {
+        let _ = gzip.kill();
+        let _ = tar.kill();
+        let _ = gzip.wait();
+        let _ = tar.wait();
+        return Err((
+            StatusCode::PAYLOAD_TOO_LARGE,
+            format!(
+                "the archive of {path:?} is over {} MiB; read part of it, or download the disk",
+                max_archive >> 20
+            ),
+        ));
+    }
+    read.map_err(|e| internal(format!("reading the archive: {e}")))?;
+    let tar_ok = tar.wait().is_ok_and(|s| s.success());
+    let gzip_ok = gzip.wait().is_ok_and(|s| s.success());
+    if !tar_ok || !gzip_ok || out.is_empty() {
+        return Err(internal(format!("packing {path:?} failed")));
+    }
+    Ok(out)
+}
+
+/// `GET /machines/{name}/snapshots/{id}/archive?path=`.
+pub(crate) async fn archive_of(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path((name, id)): Path<(String, String)>,
+    axum::extract::Query(at): axum::extract::Query<At>,
+) -> Response {
+    let (image, offset, _) = match disk_of(&state, &headers, &name, &id, at.partition) {
+        Ok(found) => found,
+        Err(response) => return response,
+    };
+    let path = at.path.unwrap_or_else(|| "/".into());
+    let shown = path.clone();
+    let made = tokio::task::spawn_blocking(move || {
+        archive(
+            &image,
+            offset,
+            &path,
+            (MAX_DUMP, MAX_DUMP_ENTRIES),
+            MAX_FILE,
+        )
+    })
+    .await;
+    match made {
+        Ok(Ok(bytes)) => (
+            [
+                (header::CONTENT_TYPE, "application/gzip".to_string()),
+                (
+                    header::CONTENT_DISPOSITION,
+                    format!(
+                        "attachment; filename=\"{}-{}.tar.gz\"",
+                        crate::checkpoint_files::archive_name(&id),
+                        crate::checkpoint_files::archive_name(shown.trim_matches('/'))
+                    ),
+                ),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Ok(Err((status, why))) => api_error(status, why),
+        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An ext4 image holding a small tree, made by `mkfs.ext4 -d`; none
+    /// when this host cannot (the tools are e2fsprogs').
+    fn image_with_tree(dir: &FsPath) -> Option<std::path::PathBuf> {
+        use std::process::Command;
+        let ok = |c: &mut Command| c.output().is_ok_and(|o| o.status.success());
+        let src = dir.join("src");
+        std::fs::create_dir_all(src.join("notes/sub")).ok()?;
+        std::fs::write(src.join("notes/a.txt"), "hi\n").ok()?;
+        std::fs::write(src.join("notes/a b"), "x").ok()?;
+        std::fs::write(src.join("notes/sub/b.txt"), "deep\n").ok()?;
+        std::fs::write(src.join("big.bin"), vec![7u8; 3 << 20]).ok()?;
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("a.txt", src.join("notes/link")).ok()?;
+        let image = dir.join("img");
+        let file = std::fs::File::create(&image).ok()?;
+        file.set_len(16 << 20).ok()?;
+        ok(Command::new("mkfs.ext4")
+            .arg("-q")
+            .arg("-d")
+            .arg(&src)
+            .arg(&image))
+        .then_some(image)
+    }
+
+    fn names(archive: &[u8]) -> Vec<String> {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+        let mut tar = Command::new("tar")
+            .arg("-tzf")
+            .arg("-")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        tar.stdin.take().unwrap().write_all(archive).unwrap();
+        let out = tar.wait_with_output().unwrap();
+        let mut names: Vec<String> = String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .map(|l| l.trim_start_matches("./").to_string())
+            .filter(|l| !l.is_empty())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn a_directory_of_an_image_is_archived_with_its_links_and_nothing_above_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(image) = image_with_tree(dir.path()) else {
+            eprintln!("skipped: no mkfs.ext4 here");
+            return;
+        };
+        let bytes = archive(&image, 0, "/notes", (MAX_DUMP, MAX_DUMP_ENTRIES), MAX_FILE).unwrap();
+        assert_eq!(
+            names(&bytes),
+            ["a b", "a.txt", "link", "sub/", "sub/b.txt"],
+            "the tree below /notes, and not big.bin or lost+found"
+        );
+        // The whole filesystem.
+        let all = archive(&image, 0, "/", (MAX_DUMP, MAX_DUMP_ENTRIES), MAX_FILE).unwrap();
+        let all = names(&all);
+        assert!(
+            all.contains(&"big.bin".to_string()) && all.contains(&"notes/sub/b.txt".to_string())
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn what_is_too_big_or_not_a_directory_or_absent_is_refused_and_leaves_no_scratch() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(image) = image_with_tree(dir.path()) else {
+            eprintln!("skipped: no mkfs.ext4 here");
+            return;
+        };
+        let scratch = |n: &mut Vec<std::path::PathBuf>| {
+            n.clear();
+            n.extend(
+                std::fs::read_dir(std::env::temp_dir())
+                    .unwrap()
+                    .flatten()
+                    .map(|e| e.path()),
+            );
+        };
+        let mut before = Vec::new();
+        scratch(&mut before);
+        // Over the dump bound (1 MiB; big.bin is 3).
+        let e = archive(&image, 0, "/", (1 << 20, 1000), MAX_FILE).unwrap_err();
+        assert_eq!(e.0, StatusCode::PAYLOAD_TOO_LARGE, "{e:?}");
+        // Over the archive bound, which a compressed zero page does not reach
+        // but a one-byte cap does.
+        let e = archive(&image, 0, "/notes", (MAX_DUMP, 1000), 1).unwrap_err();
+        assert_eq!(e.0, StatusCode::PAYLOAD_TOO_LARGE, "{e:?}");
+        let e = archive(&image, 0, "/notes/a.txt", (MAX_DUMP, 1000), MAX_FILE).unwrap_err();
+        assert_eq!(e.0, StatusCode::BAD_REQUEST, "{e:?}");
+        let e = archive(&image, 0, "/nope", (MAX_DUMP, 1000), MAX_FILE).unwrap_err();
+        assert_eq!(e.0, StatusCode::NOT_FOUND, "{e:?}");
+        let e = archive(&image, 0, "/notes/../etc", (MAX_DUMP, 1000), MAX_FILE).unwrap_err();
+        assert_eq!(e.0, StatusCode::BAD_REQUEST, "{e:?}");
+        let mut after = Vec::new();
+        scratch(&mut after);
+        assert!(
+            after
+                .iter()
+                .all(|p| before.contains(p) || !p.to_string_lossy().contains(".tmp")),
+            "a scratch directory was left: {after:?}"
+        );
+    }
 
     #[test]
     fn a_listing_is_read_with_names_that_hold_anything_but_a_slash() {

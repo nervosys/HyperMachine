@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `GET /machines/{name}/snapshots/{id}/archive?path=&partition=` downloads a
+  directory of a machine's disk snapshot (`/` for all) as a gzipped tar,
+  without booting it: `debugfs rdump` into a scratch directory of the
+  node's own, then `tar | gzip`, then the scratch is removed. Links are
+  kept; capped at 64 MiB of archive, 256 MiB or 500,000 entries read (413)
+  and 3 minutes (504). Routed through the control plane too. Checked on real
+  KVM (4 cases, `tools/check-machine-snapshot-archive-kvm.py`) and 2 unit
+  tests on a `mkfs.ext4 -d` image. NOT VERIFIED: a partitioned disk image or
+  Ubuntu's cloud image (the fixtures are gone), a filesystem that was not
+  cleanly unmounted, the archive over 64 MiB, a non-root node's ownership,
+  and the route through a running control plane.
 - A sandbox's own `git` can use the node's `--git-credential` without the
   guest holding it: with `--git-credential-in-sandbox`, the gateway sets
   `Authorization: Basic` on a guest's HTTPS request whose scheme, host, port

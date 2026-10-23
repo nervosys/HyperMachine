@@ -1,0 +1,53 @@
+{
+  "success": true,
+  "purpose": "functional verification of archiving a directory of a machine disk snapshot; no timing claim",
+  "input_sha256": {
+    "daemon": "872cdebcc72aeb46a6df62048891af010f87dcb7656c89bc58e3a340adbc9bc0",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "743acb61ea9dc30f92eb585ab0d08728433c0e1af7cc5b856bcffbb1412413eb"
+  },
+  "running_as_root": true,
+  "cases": [
+    {
+      "name": "a stopped template machine's tree is archived exactly",
+      "success": true,
+      "seconds": 0.769,
+      "detail": {
+        "archive_bytes": 660,
+        "seconds": 0.053,
+        "owner_of_note": [
+          1000,
+          1000
+        ]
+      }
+    },
+    {
+      "name": "the whole filesystem is archived and holds the tree",
+      "success": true,
+      "seconds": 0.371,
+      "detail": {
+        "archive_bytes": 1873474,
+        "entries": 293
+      }
+    },
+    {
+      "name": "what cannot be archived is refused, each with why",
+      "success": true,
+      "seconds": 0.079,
+      "detail": {
+        "refused": {
+          "a file": "\"/srv/data/note\" is a file, not a directory; read a file with /file",
+          "no such path": "\"/srv/nothing\": there is no \"nothing\"",
+          "dot-dot": "\"/srv/../etc\": a path has no `.` or `..` in it",
+          "no such snapshot": "machine tpl-01 has no snapshot snap-ffffffff"
+        }
+      }
+    },
+    {
+      "name": "the scratch is gone",
+      "success": true,
+      "seconds": 0.0
+    }
+  ]
+}
