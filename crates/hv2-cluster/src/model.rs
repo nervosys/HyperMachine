@@ -335,6 +335,13 @@ pub struct Webhook {
     /// for an administrator's, which receives every event.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub team_id: Option<crate::ownership::TeamId>,
+    /// The secret before the last rotation, which signs deliveries beside the
+    /// new one until `previous_until_ms`, so a receiver can switch without a
+    /// gap. Never returned by the API.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_secret: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_until_ms: Option<u64>,
 }
 
 /// One attempt to deliver an event to a webhook: E2B's `WebhookDelivery`.

@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Webhook deliveries carry `hv2-signature` (`v1=` HMAC-SHA256 over
+  `<timestamp>.<body>`) and `hv2-signature-timestamp`, beside the unchanged
+  `e2b-signature` that E2B's verifiers expect. Rotating `signatureSecret`
+  keeps the old secret signing too for `overlapSeconds` (a day by default, 0
+  for none, a week at most): the header then holds two `v1=` values. See
+  `docs/WEBHOOKS.md`. 3 unit tests, one a loopback delivery after rotations,
+  one against RFC 4231's vector. NOT VERIFIED: another vendor's verifier,
+  and a webhook stored by an older node is read as having no old secret.
 - `GET /machines/{name}/snapshots/{id}/archive?path=&partition=` downloads a
   directory of a machine's disk snapshot (`/` for all) as a gzipped tar,
   without booting it: `debugfs rdump` into a scratch directory of the

@@ -359,6 +359,8 @@ async fn create_webhook(
         secret: req.signature_secret,
         created_ms: now_ms(),
         team_id: team_of(team).0,
+        previous_secret: None,
+        previous_until_ms: None,
     };
     match store.put_webhook(&hook).await {
         Ok(()) => (StatusCode::CREATED, Json(detail(&hook))).into_response(),
@@ -414,6 +416,11 @@ struct WebhookConfiguration {
     events: Option<Vec<String>>,
     #[serde(rename = "signatureSecret")]
     signature_secret: Option<String>,
+    /// How long the secret being replaced keeps signing beside the new one
+    /// (`hv2-signature` carries both), in seconds. A day if absent; 0 for
+    /// none; a week at most.
+    #[serde(default, rename = "overlapSeconds")]
+    overlap_seconds: Option<u64>,
 }
 
 async fn update_webhook(
@@ -448,7 +455,23 @@ async fn update_webhook(
                 "signatureSecret: 16 characters at least",
             );
         }
-        hook.secret = secret;
+        let overlap = req.overlap_seconds.unwrap_or(DEFAULT_OVERLAP_SECONDS);
+        if overlap > MAX_OVERLAP_SECONDS {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                format!("overlapSeconds: {MAX_OVERLAP_SECONDS} at most"),
+            );
+        }
+        if secret != hook.secret {
+            let old = std::mem::replace(&mut hook.secret, secret);
+            if overlap == 0 {
+                hook.previous_secret = None;
+                hook.previous_until_ms = None;
+            } else {
+                hook.previous_secret = Some(old);
+                hook.previous_until_ms = Some(now_ms() + overlap * 1000);
+            }
+        }
     }
     if let Some(name) = req.name {
         hook.name = name;
@@ -711,6 +734,7 @@ impl Dispatcher {
         delivery_id: &str,
         body: &str,
     ) -> Result<(u16, String), (&'static str, String)> {
+        let timestamp = now_ms() / 1000;
         let url = reqwest::Url::parse(&hook.url).map_err(|e| ("request_error", e.to_string()))?;
         let host = url
             .host_str()
@@ -745,6 +769,11 @@ impl Dispatcher {
             .header("content-type", "application/json")
             .header("e2b-signature-version", "v1")
             .header("e2b-signature", sign(&hook.secret, body))
+            .header("hv2-signature-timestamp", timestamp.to_string())
+            .header(
+                "hv2-signature",
+                hmac_signatures(hook, timestamp, now_ms(), body),
+            )
             .header("e2b-webhook-id", &hook.id)
             .header("e2b-delivery-id", delivery_id)
             .body(body.to_string())
@@ -772,6 +801,40 @@ pub fn sign(secret: &str, body: &str) -> String {
     hash.update(secret.as_bytes());
     hash.update(body.as_bytes());
     base64_unpadded(&hash.finalize())
+}
+
+/// A day: how long a replaced secret keeps signing unless the rotation says.
+const DEFAULT_OVERLAP_SECONDS: u64 = 86_400;
+const MAX_OVERLAP_SECONDS: u64 = 7 * 86_400;
+
+/// HMAC-SHA256 of `message` under `secret`, in lowercase hex.
+fn hmac_hex(secret: &str, message: &[u8]) -> String {
+    use hmac::{Hmac, KeyInit, Mac};
+    let mut mac = Hmac::<sha2::Sha256>::new_from_slice(secret.as_bytes())
+        .expect("an HMAC takes a key of any length");
+    mac.update(message);
+    mac.finalize()
+        .into_bytes()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// The `hv2-signature` header: `v1=<hex>` where hex is HMAC-SHA256 over
+/// `<timestamp>.<body>`, the timestamp being `hv2-signature-timestamp`, so a
+/// receiver can refuse a replayed delivery. While a replaced secret is still
+/// in its overlap, a second `v1=` follows, space separated; a receiver that
+/// has either secret finds its own.
+#[must_use]
+pub fn hmac_signatures(hook: &Webhook, timestamp: u64, now_ms: u64, body: &str) -> String {
+    let message = format!("{timestamp}.{body}");
+    let mut header = format!("v1={}", hmac_hex(&hook.secret, message.as_bytes()));
+    if let (Some(previous), Some(until)) = (&hook.previous_secret, hook.previous_until_ms) {
+        if now_ms < until {
+            header.push_str(&format!(" v1={}", hmac_hex(previous, message.as_bytes())));
+        }
+    }
+    header
 }
 
 fn base64_unpadded(bytes: &[u8]) -> String {
@@ -869,6 +932,8 @@ mod tests {
                     secret: "0123456789abcdef".into(),
                     created_ms: 1,
                     team_id: team.map(|t| TeamId::parse(t).unwrap()),
+                    previous_secret: None,
+                    previous_until_ms: None,
                 })
                 .await
                 .unwrap();
@@ -898,6 +963,117 @@ mod tests {
         receiver.abort();
     }
 
+    /// A rotation keeps the old secret signing beside the new for the overlap,
+    /// through the update route and a real delivery to a loopback receiver.
+    #[tokio::test]
+    async fn a_delivery_after_a_rotation_verifies_under_either_secret_until_it_ends() {
+        use crate::store::MemoryStore;
+        let received = Arc::new(parking_lot::Mutex::new(
+            Vec::<(String, String, String)>::new(),
+        ));
+        let seen = Arc::clone(&received);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let receiver = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new().route(
+                    "/",
+                    axum::routing::post(move |headers: axum::http::HeaderMap, body: String| {
+                        let seen = Arc::clone(&seen);
+                        async move {
+                            let get = |n: &str| {
+                                headers
+                                    .get(n)
+                                    .and_then(|v| v.to_str().ok())
+                                    .unwrap_or("")
+                                    .to_owned()
+                            };
+                            seen.lock().push((
+                                get("hv2-signature"),
+                                get("hv2-signature-timestamp"),
+                                body,
+                            ));
+                            StatusCode::OK
+                        }
+                    }),
+                ),
+            )
+            .await
+            .unwrap();
+        });
+        let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+        let hook = Webhook {
+            id: "h".into(),
+            name: "h".into(),
+            url: format!("http://{address}/"),
+            events: vec![],
+            enabled: true,
+            secret: "first-secret-01234".into(),
+            created_ms: 1,
+            team_id: None,
+            previous_secret: None,
+            previous_until_ms: None,
+        };
+        store.put_webhook(&hook).await.unwrap();
+        let rotate = |secret: &str, overlap: Option<u64>| {
+            let store = Arc::clone(&store);
+            let config = WebhookConfiguration {
+                signature_secret: Some(secret.to_owned()),
+                overlap_seconds: overlap,
+                ..Default::default()
+            };
+            async move {
+                update_webhook(State(store), None, Path("h".into()), Json(config))
+                    .await
+                    .status()
+            }
+        };
+        let dispatcher = Dispatcher::new(Arc::clone(&store), true);
+        let deliver = |n: usize| {
+            let received = Arc::clone(&received);
+            let dispatcher = &dispatcher;
+            async move {
+                dispatcher.deliver(&ClusterEvent::new("sandbox-created", "n", Some("sbx")));
+                let deadline = Instant::now() + Duration::from_secs(5);
+                while received.lock().len() < n && Instant::now() < deadline {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+                received.lock().last().cloned().expect("a delivery arrived")
+            }
+        };
+        let verifies = |header: &str, secret: &str, stamp: &str, body: &str| {
+            header.split(' ').any(|v| {
+                v == format!(
+                    "v1={}",
+                    hmac_hex(secret, format!("{stamp}.{body}").as_bytes())
+                )
+            })
+        };
+        // Rotated with the default overlap: both verify.
+        assert_eq!(rotate("second-secret-0123", None).await, StatusCode::OK);
+        let (header, stamp, body) = deliver(1).await;
+        assert_eq!(header.split(' ').count(), 2, "{header}");
+        assert!(verifies(&header, "second-secret-0123", &stamp, &body));
+        assert!(verifies(&header, "first-secret-01234", &stamp, &body));
+        // Rotated again with no overlap: only the newest.
+        assert_eq!(rotate("third-secret-01234", Some(0)).await, StatusCode::OK);
+        let (header, stamp, body) = deliver(2).await;
+        assert_eq!(header.split(' ').count(), 1, "{header}");
+        assert!(verifies(&header, "third-secret-01234", &stamp, &body));
+        assert!(!verifies(&header, "second-secret-0123", &stamp, &body));
+        // An overlap over a week is refused, and changes nothing.
+        assert_eq!(
+            rotate("fourth-secret-0123", Some(MAX_OVERLAP_SECONDS + 1)).await,
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            store.webhooks().await.unwrap()[0].secret,
+            "third-secret-01234"
+        );
+        receiver.abort();
+    }
+
     #[test]
     fn signatures_are_e2bs() {
         // sha256("secret" + "{}") = 0bbd...; base64 without padding.
@@ -906,6 +1082,43 @@ mod tests {
         assert_eq!(sig.len(), 43);
         assert_eq!(base64_unpadded(b"foobar"), "Zm9vYmFy");
         assert_eq!(base64_unpadded(b"fo"), "Zm8");
+    }
+
+    /// RFC 4231, test case 2.
+    #[test]
+    fn the_hmac_is_rfc_4231s() {
+        assert_eq!(
+            hmac_hex("Jefe", b"what do ya want for nothing?"),
+            "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
+        );
+    }
+
+    #[test]
+    fn a_replaced_secret_signs_beside_the_new_one_until_its_overlap_ends() {
+        let mut hook = Webhook {
+            id: "h".into(),
+            name: "h".into(),
+            url: "https://example.com".into(),
+            events: vec![],
+            enabled: true,
+            secret: "new-secret-0123456".into(),
+            created_ms: 1,
+            team_id: None,
+            previous_secret: Some("old-secret-0123456".into()),
+            previous_until_ms: Some(10_000),
+        };
+        let new = format!("v1={}", hmac_hex("new-secret-0123456", b"5.{}"));
+        let old = format!("v1={}", hmac_hex("old-secret-0123456", b"5.{}"));
+        assert_ne!(new, old);
+        assert_eq!(
+            hmac_signatures(&hook, 5, 9_999, "{}"),
+            format!("{new} {old}")
+        );
+        assert_eq!(hmac_signatures(&hook, 5, 10_000, "{}"), new);
+        hook.previous_secret = None;
+        assert_eq!(hmac_signatures(&hook, 5, 0, "{}"), new);
+        // The timestamp is signed, so a replay with another one differs.
+        assert_ne!(hmac_signatures(&hook, 6, 0, "{}"), new);
     }
 
     #[test]
