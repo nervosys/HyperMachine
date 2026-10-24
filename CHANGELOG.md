@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `/dev/kvm` in a sandbox: `build-kernel.sh --kvm` (`tools/guest-image/kvm.fragment`).
+  Checked on real KVM on an AMD host, 2 cases, 3 runs in a row
+  (`tools/check-kvm-sandbox-kvm.py`, `docs/benchmarks/2026-10-23/kvm-sandbox-kvm/`):
+  a program in the guest creates a VM and runs a vCPU to an I/O exit and HLT.
+  NOT VERIFIED: Intel hosts, a real guest inside the sandbox, checkpoint or fork with a VM running.
 - Docker's engine in a sandbox: `build-tools-image.sh --docker docker-X.tgz` and
   `build-kernel.sh --docker` (`tools/guest-image/docker.fragment`: memory cgroups,
   overlayfs, veth, bridge, user namespaces, NAT, iptables raw). The guest uses

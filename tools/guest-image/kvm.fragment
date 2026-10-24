@@ -1,0 +1,6 @@
+# Added by build-kernel.sh --kvm: /dev/kvm inside the guest, where the host
+# passes nested virtualization through.
+CONFIG_VIRTUALIZATION=y
+CONFIG_KVM=y
+CONFIG_KVM_AMD=y
+CONFIG_KVM_INTEL=y

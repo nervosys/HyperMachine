@@ -127,6 +127,16 @@ containers talk over a bridge, and `hello-world` is pulled and run. Not checked:
 `docker build`, compose, published ports, checkpoint or fork with containers
 running.
 
+## /dev/kvm
+
+`build-kernel.sh --kvm` appends [`kvm.fragment`](../tools/guest-image/kvm.fragment)
+(KVM for AMD and Intel), and may be combined with `--docker`. Where the host passes
+nested virtualization through, the sandbox has `/dev/kvm`. Checked on KVM on an AMD
+host with [`tools/check-kvm-sandbox-kvm.py`](../tools/check-kvm-sandbox-kvm.py)
+([evidence](benchmarks/2026-10-23/kvm-sandbox-kvm/README.md)): a program in the
+guest creates a VM and runs a vCPU to an I/O exit and HLT. Not checked: Intel, a
+real guest of its own.
+
 ## Not checked
 
 - **The parity table's 1,000-run loop.** The checks' Node.js test is two
