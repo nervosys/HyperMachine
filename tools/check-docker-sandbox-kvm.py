@@ -193,6 +193,39 @@ def main():
             return {"from_the_guest": inside, "through_the_node_proxy": list(outside), "dnat_rules_for_8080": rule}
         case("a published port reaches the container, from the guest and through the node proxy", published)
 
+        def resumed():
+            sandbox = state["sandbox"]
+            # /tmp/resp is the HTTP response the previous case wrote.
+            sh(sandbox, "docker run -d --rm --name keep -p 8081:9000 -v /tmp/resp:/resp:ro hvbox /bin/busybox sh -c "
+                        "'while true; do /bin/busybox nc -l -p 9000 < /resp; done'")
+            sh(sandbox, "echo before > /root/mark")
+            time.sleep(1)
+
+            def serves(target):
+                return sh(target, "/bin/busybox nc 127.0.0.1 8081 </dev/null | /bin/busybox tail -n 1", 60, ok=False)
+            assert serves(sandbox) == "hi-publish"
+            status, made = request("POST", f"/sandboxes/{sandbox}/checkpoints", {"name": "with-container"})
+            assert status in (200, 201), (status, made)
+            sh(sandbox, "docker rm -f keep >/dev/null; echo after > /root/mark")
+            assert sh(sandbox, "docker ps -q | wc -l") == "0"
+            status, back = request("POST", f"/sandboxes/{sandbox}/checkpoints/with-container/restore")
+            assert status in (200, 201, 204), (status, back)
+            restored = {"running": sh(sandbox, "docker ps --format '{{.Names}}'"), "mark": sh(sandbox, "cat /root/mark"),
+                        "serves": serves(sandbox)}
+            assert restored == {"running": "keep", "mark": "before", "serves": "hi-publish"}, restored
+            status, made = request("POST", f"/sandboxes/{sandbox}/fork", {"timeout": 600})
+            assert status in (200, 201), (status, made)
+            child = made[0]["sandbox"]["sandboxID"]
+            try:
+                forked = {"running": sh(child, "docker ps --format '{{.Names}}'"), "serves": serves(child),
+                          "can_run_another": sh(child, "docker run --rm --network none hvbox /bin/busybox echo ok", 120)}
+            finally:
+                request("DELETE", f"/sandboxes/{child}")
+            assert forked == {"running": "keep", "serves": "hi-publish", "can_run_another": "ok"}, forked
+            sh(sandbox, "docker rm -f keep >/dev/null; true", 60, ok=False)
+            return {"restored": restored, "forked": forked}
+        case("a checkpoint and a fork carry dockerd and a running container", resumed)
+
         if args.network:
             def pulled():
                 sandbox = state["sandbox"]

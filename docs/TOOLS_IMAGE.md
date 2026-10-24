@@ -125,8 +125,8 @@ Checked on KVM with [`tools/check-docker-sandbox-kvm.py`](../tools/check-docker-
 runs, a container runs from an imported image, a memory limit applies, two
 containers talk over a bridge, a Dockerfile builds (from `scratch`, with a `RUN`
 step) and runs, a published port answers from the guest and through the node's
-port proxy, and `hello-world` is pulled and run. Not checked: compose, a build
-from a pulled base, checkpoint or fork with containers running.
+port proxy, a checkpoint and a fork carry the engine and a running container, and
+`hello-world` is pulled and run. Not checked: compose, a build from a pulled base.
 
 ## /dev/kvm
 

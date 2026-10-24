@@ -5,7 +5,7 @@
     "daemon": "311c26f69a609ec47aabe8a7b6c47633b522f8552e5e29eed6e0162207daf13f",
     "kernel": "6dcf46487bd263f4224f7127c3461fa48974432528c7d777f9e3b856335dffac",
     "initrd": "828b2d879786ec71cdfe546ab55b6052ff67d5a0dd45ed28e45872fbaaf208e4",
-    "driver": "e3ab3d2033162cb3742ea4cac882235ae0ac93e838464333dcc3307698ce616f"
+    "driver": "4c1eac5abf7f228807710569134e175e969f1e393a0027a67e5f8b9d64d2ec1f"
   },
   "initrd_bytes": 127629407,
   "memory_mb": 2048,
@@ -15,7 +15,7 @@
       "name": "dockerd is up under systemd",
       "success": true,
       "detail": {
-        "create_seconds": 0.068,
+        "create_seconds": 0.244,
         "docker_info": "overlayfs cgroup2 29.9.2 [name=seccomp,profile=builtin name=cgroupns]",
         "kernel": "6.6.52"
       }
@@ -58,6 +58,22 @@
           "hi-publish"
         ],
         "dnat_rules_for_8080": "1"
+      }
+    },
+    {
+      "name": "a checkpoint and a fork carry dockerd and a running container",
+      "success": true,
+      "detail": {
+        "restored": {
+          "running": "keep",
+          "mark": "before",
+          "serves": "hi-publish"
+        },
+        "forked": {
+          "running": "keep",
+          "serves": "hi-publish",
+          "can_run_another": "ok"
+        }
       }
     },
     {

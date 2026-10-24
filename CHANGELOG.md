@@ -17,10 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `build-kernel.sh --docker` (`tools/guest-image/docker.fragment`: memory cgroups,
   overlayfs, veth, bridge, user namespaces, NAT, iptables raw). The guest uses
   legacy iptables and a `runc-nopivot` runtime, since the root is an initramfs.
-  Checked on real KVM, 7 cases, 3 runs in a row (`tools/check-docker-sandbox-kvm.py`,
+  Checked on real KVM, 8 cases, 3 runs in a row (`tools/check-docker-sandbox-kvm.py`,
   `docs/benchmarks/2026-10-23/docker-sandbox-kvm/`), including `docker build` from
-  `scratch` and a published port reached through the node's port proxy. NOT VERIFIED:
-  compose, a build from a pulled base, checkpoint or fork with containers running.
+  `scratch`, a published port reached through the node's port proxy, and a checkpoint
+  and fork that carry a running container. NOT VERIFIED: compose, a build from a pulled base.
 - `build-tools-image.sh --systemd` builds a sandbox template whose first process is
   systemd (Ubuntu 24.04, `tools/guest-image/init-systemd`; `build.sh` takes `--init`).
   Checked on real KVM, 5 cases, 3 runs in a row (`tools/check-systemd-sandbox-kvm.py`,
