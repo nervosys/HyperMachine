@@ -1,0 +1,59 @@
+{
+  "success": true,
+  "purpose": "functional verification that a sandbox can run systemd as its first process on KVM; the times are the check's own stopwatch and not a benchmark",
+  "input_sha256": {
+    "daemon": "311c26f69a609ec47aabe8a7b6c47633b522f8552e5e29eed6e0162207daf13f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "93072958b1bbc34d6cc74ecdaa2d361ae998769d2c33e636e6b46c1749d2d050",
+    "driver": "d890c3825e5e6c4c9c6820055709242bdbfadf5c76a00c074c60257345fce499"
+  },
+  "initrd_bytes": 41113291,
+  "memory_mb": 1536,
+  "host_cpus": 24,
+  "cases": [
+    {
+      "name": "PID 1 is systemd, the system settles, and exec still works",
+      "success": true,
+      "detail": {
+        "create_seconds": 0.124,
+        "seconds_until_settled_after_create": 0.875,
+        "system_state": "running",
+        "failed_units": [],
+        "os": "VERSION_ID=\"24.04\"",
+        "systemd": "systemd 255 (255.4-1ubuntu8.18)"
+      }
+    },
+    {
+      "name": "a unit written into the guest starts, runs and logs to the journal",
+      "success": true,
+      "detail": {
+        "unit": "active"
+      }
+    },
+    {
+      "name": "a fork has systemd as PID 1 and the unit still active",
+      "success": true,
+      "detail": {
+        "fork_system_state": "running"
+      }
+    },
+    {
+      "name": "a checkpoint restores systemd and the unit, and drops what came after it",
+      "success": true,
+      "detail": {
+        "restored": "systemd, the unit active, the later file gone"
+      }
+    },
+    {
+      "name": "what it costs: create time, free memory, failed units",
+      "success": true,
+      "detail": {
+        "meminfo_kb": "MemTotal:        1509068 kB MemAvailable:    1341184 kB",
+        "first_create_seconds": 0.124,
+        "second_create_seconds": 0.256,
+        "initramfs_bytes": 41113291,
+        "failed_units": []
+      }
+    }
+  ]
+}

@@ -6,6 +6,7 @@
 #       [--busybox /bin/busybox] [--agent path/to/hv2-guest-agentd] \
 #       [--extra /path/to/curl[:NAME] ...] [--ca-bundle /etc/ssl/certs/ca-certificates.crt] \
 #       [--rootfs DIR]   # start from a root filesystem, e.g. from-oci.sh's
+#       [--init FILE]    # PID 1; init in this directory by default, or init-systemd
 #
 # Every binary must be static: the image has no libc of its own. The agent is
 # built static by default if --agent is not given:
@@ -25,6 +26,7 @@ busybox=$(command -v busybox || true)
 agent=""
 ca_bundle=""
 rootfs=""
+init=""
 extras=()
 
 while [ $# -gt 0 ]; do
@@ -35,11 +37,14 @@ while [ $# -gt 0 ]; do
         --extra) extras+=("$2"); shift 2 ;;
         --ca-bundle) ca_bundle=$2; shift 2 ;;
         --rootfs) rootfs=$2; shift 2 ;;
+        --init) init=$2; shift 2 ;;
         -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
         *) echo "build.sh: unknown argument $1" >&2; exit 2 ;;
     esac
 done
 [ -n "$out" ] || { echo "build.sh: -o OUTPUT is required" >&2; exit 2; }
+: "${init:=$here/init}"
+[ -f "$init" ] || { echo "build.sh: no init $init" >&2; exit 2; }
 out=$(realpath -m "$out")
 
 static() {
@@ -74,7 +79,7 @@ mkdir -p "$root"/{bin,sbin,dev,proc,sys,tmp,etc,root}
 install -m 0755 "$busybox" "$root/bin/busybox"
 [ -e "$root/bin/sh" ] || [ -L "$root/bin/sh" ] || ln -s busybox "$root/bin/sh"
 install -m 0755 "$agent" "$root/bin/hv2-guest-agentd"
-install -m 0755 "$here/init" "$root/init"
+install -m 0755 "$init" "$root/init"
 # The SDK runs everything through /bin/bash; an --extra named bash, or the
 # rootfs's own, replaces this.
 [ -e "$root/bin/bash" ] || install -m 0755 "$here/bash-shim" "$root/bin/bash"

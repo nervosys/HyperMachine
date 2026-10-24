@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `build-tools-image.sh --systemd` builds a sandbox template whose first process is
+  systemd (Ubuntu 24.04, `tools/guest-image/init-systemd`; `build.sh` takes `--init`).
+  Checked on real KVM, 5 cases, 3 runs in a row (`tools/check-systemd-sandbox-kvm.py`,
+  `docs/benchmarks/2026-10-23/systemd-sandbox-kvm/`). NOT VERIFIED: Docker,
+  `/dev/kvm` in the guest, OCI-built images, other distributions, several nodes.
 - A team can share a snapshot with another team: `PUT`/`DELETE
   /templates/{id}/shares/{team}` and `GET /templates/{id}/shares` on the control
   plane. The team shared with lists it and starts sandboxes from it; it cannot

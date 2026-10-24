@@ -4,7 +4,10 @@
 #
 #   sudo tools/guest-image/build-tools-image.sh -o tools.cpio.gz \
 #       --busybox /path/to/static/busybox --agent /path/to/static/hv2-guest-agentd \
-#       [--work DIR] [--packages "pkg pkg ..."]
+#       [--work DIR] [--packages "pkg pkg ..."] [--systemd]
+#
+# --systemd adds systemd and makes it the guest's first process (init-systemd):
+# see docs/TOOLS_IMAGE.md#systemd.
 #
 # Then run a node with `--template base=tools.cpio.gz` (or HV2_INITRD) and give
 # it at least 1536 MiB per sandbox: see docs/TOOLS_IMAGE.md for why.
@@ -17,7 +20,7 @@
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
-out="" busybox="" agent="" work=/var/tmp/hm-tools-image
+out="" busybox="" agent="" work=/var/tmp/hm-tools-image init="" systemd=""
 packages="ca-certificates curl git python3 nodejs npm make gcc libc6-dev jq less procps openssh-client"
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -26,10 +29,16 @@ while [ $# -gt 0 ]; do
         --agent) agent=$2; shift 2 ;;
         --work) work=$2; shift 2 ;;
         --packages) packages=$2; shift 2 ;;
-        -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+        --systemd) systemd=1; shift ;;
+        -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
         *) echo "build-tools-image.sh: unknown argument $1" >&2; exit 2 ;;
     esac
 done
+# Whatever order the options came in: --packages replaces the list, --systemd adds to it.
+if [ -n "$systemd" ]; then
+    packages="$packages systemd systemd-sysv dbus iproute2"
+    init=$here/init-systemd
+fi
 [ -n "$out" ] && [ -n "$busybox" ] && [ -n "$agent" ] ||
     { echo "build-tools-image.sh: -o, --busybox and --agent are required" >&2; exit 2; }
 [ "$(id -u)" = 0 ] || { echo "build-tools-image.sh: run as root (chroot and mount)" >&2; exit 1; }
@@ -78,5 +87,5 @@ rm -f "$root/etc/resolv.conf"
 # apt cannot write its cache without these.
 mkdir -p "$root/var/lib/apt/lists/partial" "$root/var/cache/apt/archives/partial"
 
-bash "$here/build.sh" -o "$out" --busybox "$busybox" --agent "$agent" --rootfs "$root"
+bash "$here/build.sh" -o "$out" --busybox "$busybox" --agent "$agent" --rootfs "$root" ${init:+--init "$init"}
 echo "build-tools-image.sh: rootfs $(du -sm "$root" | cut -f1) MiB; packages: $packages"

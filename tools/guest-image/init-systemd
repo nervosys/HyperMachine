@@ -1,0 +1,56 @@
+#!/bin/busybox sh
+# PID 1 of a sandbox guest whose root is a distribution with systemd in it
+# (build-tools-image.sh --systemd). Mounts what systemd needs, arranges for the
+# guest agent to start as a unit once the system is up, and becomes systemd.
+#
+# The agent being a unit is what makes the template fast: a template is ready,
+# and snapshotted, when the agent answers, so with the agent last the snapshot
+# holds a system that has already booted, and a sandbox from it resumes into
+# one. Start the agent from here instead and systemd boots after every create.
+/bin/busybox --install -s /bin 2>/dev/null
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts /etc /tmp /root /run
+mount -t devpts devpts /dev/pts
+mount -t tmpfs tmpfs /run
+mount -t tmpfs tmpfs /tmp
+# The kernel caps the in-memory root at about half of RAM; see init.
+mount -o remount,size=90% / 2>/dev/null
+
+[ -e /etc/resolv.conf ] || ln -s /proc/net/pnp /etc/resolv.conf
+ip link set lo up 2>/dev/null
+
+# Quiet: each console byte is an emulated UART exit.
+mkdir -p /etc/systemd/system.conf.d /etc/systemd/system/multi-user.target.wants
+printf '[Manager]\nShowStatus=no\nLogLevel=warning\n' >/etc/systemd/system.conf.d/hv2.conf
+
+# An image built from an OCI image carries that image's ENV here.
+env_file=/etc/hv2-env
+[ -f $env_file ] || env_file=/dev/null
+cat >/etc/systemd/system/hv2-agent.service <<UNIT
+[Unit]
+Description=HyperMachine guest agent
+After=basic.target
+[Service]
+Type=simple
+EnvironmentFile=-$env_file
+Environment=HOME=/root
+ExecStart=/bin/hv2-guest-agentd
+Restart=always
+[Install]
+WantedBy=multi-user.target
+UNIT
+ln -sf /etc/systemd/system/hv2-agent.service /etc/systemd/system/multi-user.target.wants/hv2-agent.service
+
+# No udev announces the serial console, so its getty would wait out systemd's
+# 90 seconds for a device that never appears; a sandbox has no login anyway.
+ln -sf /dev/null /etc/systemd/system/serial-getty@.service
+ln -sf /dev/null /etc/systemd/system/getty@.service
+
+if [ ! -x /lib/systemd/systemd ]; then
+    echo "init-systemd: this image has no /lib/systemd/systemd; build it with systemd installed" >/dev/console
+    /bin/hv2-guest-agentd &
+    exec setsid sh -c "exec sh </dev/console >/dev/console 2>&1"
+fi
+exec /lib/systemd/systemd --system --unit=multi-user.target

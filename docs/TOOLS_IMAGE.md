@@ -96,6 +96,21 @@ in [the evidence](benchmarks/2026-10-16/tools-image-kvm/README.md)):
 Three runs in a row passed. The network cases need the Internet, and
 `archive.ubuntu.com`, `github.com` and the npm registry, to be up.
 
+## systemd
+
+`build-tools-image.sh --systemd` adds `systemd`, `systemd-sysv`, `dbus` and
+`iproute2` and uses [`init-systemd`](../tools/guest-image/init-systemd) as the
+guest's `/init`: it mounts what systemd needs, writes the guest agent as a unit
+(`hv2-agent.service`), masks the getty units, and becomes systemd. The flag may
+come before or after `--packages`. The agent being a unit is what keeps creates
+fast: a template is snapshotted when the agent answers, so the snapshot holds a
+system that has already booted. Needs the 1536 MiB above.
+
+Checked on KVM with [`tools/check-systemd-sandbox-kvm.py`](../tools/check-systemd-sandbox-kvm.py)
+([evidence](benchmarks/2026-10-23/systemd-sandbox-kvm/README.md)): systemd is
+PID 1 and `running`, a unit starts and logs to the journal, and forks and
+checkpoint restores keep it. Not checked: Docker, `/dev/kvm`, other distributions.
+
 ## Not checked
 
 - **The parity table's 1,000-run loop.** The checks' Node.js test is two
