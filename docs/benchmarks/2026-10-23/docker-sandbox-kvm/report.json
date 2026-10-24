@@ -1,0 +1,52 @@
+{
+  "success": true,
+  "purpose": "functional verification that Docker runs inside a sandbox on KVM; the times are the check's own stopwatch and not a benchmark",
+  "input_sha256": {
+    "daemon": "311c26f69a609ec47aabe8a7b6c47633b522f8552e5e29eed6e0162207daf13f",
+    "kernel": "6dcf46487bd263f4224f7127c3461fa48974432528c7d777f9e3b856335dffac",
+    "initrd": "828b2d879786ec71cdfe546ab55b6052ff67d5a0dd45ed28e45872fbaaf208e4",
+    "driver": "93f04baf64e5d969dba3da4974de830814f56565ecc0ca6948ea3f1dae31372f"
+  },
+  "initrd_bytes": 127629407,
+  "memory_mb": 2048,
+  "host_cpus": 24,
+  "cases": [
+    {
+      "name": "dockerd is up under systemd",
+      "success": true,
+      "detail": {
+        "create_seconds": 0.839,
+        "docker_info": "overlayfs cgroup2 29.9.2 [name=seccomp,profile=builtin name=cgroupns]",
+        "kernel": "6.6.52"
+      }
+    },
+    {
+      "name": "a container runs from an imported image, with no network",
+      "success": true,
+      "detail": {
+        "output": "from-a-container"
+      }
+    },
+    {
+      "name": "a memory limit reaches the container's cgroup",
+      "success": true,
+      "detail": {
+        "memory.max": "67108864"
+      }
+    },
+    {
+      "name": "two containers on a bridge network reach each other",
+      "success": true,
+      "detail": {
+        "output": "hello-over-bridge"
+      }
+    },
+    {
+      "name": "an image is pulled from Docker Hub and runs",
+      "success": true,
+      "detail": {
+        "first_line": "Hello from Docker!"
+      }
+    }
+  ]
+}

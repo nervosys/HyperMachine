@@ -111,6 +111,22 @@ Checked on KVM with [`tools/check-systemd-sandbox-kvm.py`](../tools/check-system
 PID 1 and `running`, a unit starts and logs to the journal, and forks and
 checkpoint restores keep it. Not checked: Docker, `/dev/kvm`, other distributions.
 
+## Docker
+
+`build-tools-image.sh --docker docker-X.tgz` (Docker's static binaries from
+download.docker.com) adds the engine, `iptables` (legacy) and a `docker.service`,
+and implies `--systemd`. It needs a kernel from `build-kernel.sh --docker`, which
+appends [`docker.fragment`](../tools/guest-image/docker.fragment) to the sandbox
+defconfig (memory cgroups, overlayfs, veth, bridge, user namespaces, NAT); point
+the node at it with `HV2_KERNEL`. The default kernel is unchanged. Give it 2048 MiB.
+
+Checked on KVM with [`tools/check-docker-sandbox-kvm.py`](../tools/check-docker-sandbox-kvm.py)
+([evidence](benchmarks/2026-10-23/docker-sandbox-kvm/README.md)): `dockerd`
+runs, a container runs from an imported image, a memory limit applies, two
+containers talk over a bridge, and `hello-world` is pulled and run. Not checked:
+`docker build`, compose, published ports, checkpoint or fork with containers
+running.
+
 ## Not checked
 
 - **The parity table's 1,000-run loop.** The checks' Node.js test is two

@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Docker's engine in a sandbox: `build-tools-image.sh --docker docker-X.tgz` and
+  `build-kernel.sh --docker` (`tools/guest-image/docker.fragment`: memory cgroups,
+  overlayfs, veth, bridge, user namespaces, NAT, iptables raw). The guest uses
+  legacy iptables and a `runc-nopivot` runtime, since the root is an initramfs.
+  Checked on real KVM, 5 cases, 3 runs in a row (`tools/check-docker-sandbox-kvm.py`,
+  `docs/benchmarks/2026-10-23/docker-sandbox-kvm/`). NOT VERIFIED: `docker build`,
+  compose, published ports, checkpoint or fork with containers running, `/dev/kvm`.
 - `build-tools-image.sh --systemd` builds a sandbox template whose first process is
   systemd (Ubuntu 24.04, `tools/guest-image/init-systemd`; `build.sh` takes `--init`).
   Checked on real KVM, 5 cases, 3 runs in a row (`tools/check-systemd-sandbox-kvm.py`,

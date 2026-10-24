@@ -1,0 +1,24 @@
+#!/bin/sh
+# runc without pivot_root, for a guest whose root is an initramfs: the kernel
+# will not pivot away from the initial rootfs (EINVAL), so a container is
+# entered with MS_MOVE and chroot instead. Docker is told to use this as an
+# additional runtime (docker.service's daemon.json); everything else is runc's.
+real=/usr/local/bin/runc
+n=$#
+i=0
+ins=""
+while [ "$i" -lt "$n" ]; do
+    a=$1
+    shift
+    set -- "$@" "$a"
+    i=$((i + 1))
+    case "$a" in
+        create|run)
+            if [ -z "$ins" ]; then
+                set -- "$@" --no-pivot
+                ins=1
+            fi
+            ;;
+    esac
+done
+exec "$real" "$@"

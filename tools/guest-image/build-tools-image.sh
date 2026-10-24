@@ -9,6 +9,10 @@
 # --systemd adds systemd and makes it the guest's first process (init-systemd):
 # see docs/TOOLS_IMAGE.md#systemd.
 #
+# --docker docker-X.tgz (Docker's static binaries) adds them, iptables and a
+# docker.service, and implies --systemd. The guest needs a kernel built with
+# build-kernel.sh --docker: see docs/TOOLS_IMAGE.md#docker.
+#
 # Then run a node with `--template base=tools.cpio.gz` (or HV2_INITRD) and give
 # it at least 1536 MiB per sandbox: see docs/TOOLS_IMAGE.md for why.
 #
@@ -20,7 +24,7 @@
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
-out="" busybox="" agent="" work=/var/tmp/hm-tools-image init="" systemd=""
+out="" busybox="" agent="" work=/var/tmp/hm-tools-image init="" systemd="" docker=""
 packages="ca-certificates curl git python3 nodejs npm make gcc libc6-dev jq less procps openssh-client"
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -30,11 +34,13 @@ while [ $# -gt 0 ]; do
         --work) work=$2; shift 2 ;;
         --packages) packages=$2; shift 2 ;;
         --systemd) systemd=1; shift ;;
-        -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+        --docker) docker=$(realpath "$2"); shift 2 ;;
+        -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
         *) echo "build-tools-image.sh: unknown argument $1" >&2; exit 2 ;;
     esac
 done
 # Whatever order the options came in: --packages replaces the list, --systemd adds to it.
+[ -z "$docker" ] || { systemd=1; packages="$packages iptables kmod"; }
 if [ -n "$systemd" ]; then
     packages="$packages systemd systemd-sysv dbus iproute2"
     init=$here/init-systemd
@@ -86,6 +92,27 @@ rm -rf "$root"/var/cache/apt/archives/*.deb "$root"/var/lib/apt/lists/* \
 rm -f "$root/etc/resolv.conf"
 # apt cannot write its cache without these.
 mkdir -p "$root/var/lib/apt/lists/partial" "$root/var/cache/apt/archives/partial"
+
+if [ -n "$docker" ]; then
+    tar -xzf "$docker" -C "$root/usr/local/bin" --strip-components=1
+    mkdir -p "$root/etc/systemd/system/multi-user.target.wants" "$root/etc/docker"
+    install -m 0755 "$here/runc-nopivot" "$root/usr/local/bin/runc-nopivot"
+    echo '{"iptables": true, "default-runtime": "nopivot", "runtimes": {"nopivot": {"path": "/usr/local/bin/runc-nopivot"}}}'         >"$root/etc/docker/daemon.json"
+    # The guest kernel has the legacy iptables and not nf_tables.
+    chroot "$root" update-alternatives --set iptables /usr/sbin/iptables-legacy
+    chroot "$root" update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
+    cat >"$root/etc/systemd/system/docker.service" <<'UNIT'
+[Unit]
+Description=Docker engine
+After=network.target
+[Service]
+ExecStart=/usr/local/bin/dockerd
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target
+UNIT
+    ln -sf /etc/systemd/system/docker.service "$root/etc/systemd/system/multi-user.target.wants/docker.service"
+fi
 
 bash "$here/build.sh" -o "$out" --busybox "$busybox" --agent "$agent" --rootfs "$root" ${init:+--init "$init"}
 echo "build-tools-image.sh: rootfs $(du -sm "$root" | cut -f1) MiB; packages: $packages"
