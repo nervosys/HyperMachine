@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A machine sends webhooks: `machine.lifecycle.created`, `.started`,
+  `.stopped` and `.deleted`, signed as a sandbox's are, to a webhook that names
+  them in `events` (one with no list keeps getting sandbox events only) and
+  only to the machine's own team's. The payload has `machine_name` where a
+  sandbox's has `sandbox_id`; `GET /events/sandboxes` does not list them.
+  Checked on real KVM through a control plane with two teams and a loopback
+  receiver, 5 cases, 3 runs in a row (`tools/check-machine-webhooks-kvm.py`,
+  `docs/benchmarks/2026-10-23/machine-webhooks-kvm/`). NOT VERIFIED: a guest
+  that stops by itself or a node restart (no event), snapshots (no event), a
+  failing receiver for a machine event, several nodes.
 - Compose `ports:` checked on real KVM through a real control plane and
   `hv2-native-gateway` (`tools/check-compose-ports-cluster-kvm.py`,
   `docs/benchmarks/2026-10-23/compose-ports-cluster-kvm/`): `up` reserves the

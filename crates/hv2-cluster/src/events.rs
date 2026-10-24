@@ -52,6 +52,19 @@ pub fn e2b_type(kind: &str) -> Option<&'static str> {
     })
 }
 
+/// The webhook type of a machine's cluster event. E2B has no machines, so
+/// these are this project's own, under `machine.lifecycle.`.
+#[must_use]
+pub fn machine_type(kind: &str) -> Option<&'static str> {
+    Some(match kind {
+        "machine-created" => "machine.lifecycle.created",
+        "machine-started" => "machine.lifecycle.started",
+        "machine-stopped" => "machine.lifecycle.stopped",
+        "machine-deleted" => "machine.lifecycle.deleted",
+        _ => return None,
+    })
+}
+
 /// E2B's short label for an event type: `kill` for `sandbox.lifecycle.killed`.
 /// Only `kill` is in E2B's published example; the others follow it.
 fn label(kind: &str) -> &'static str {
@@ -61,6 +74,10 @@ fn label(kind: &str) -> &'static str {
         "sandbox.lifecycle.resumed" => "resume",
         "sandbox.lifecycle.updated" => "update",
         "sandbox.lifecycle.killed" => "kill",
+        "machine.lifecycle.created" => "create",
+        "machine.lifecycle.started" => "start",
+        "machine.lifecycle.stopped" => "stop",
+        "machine.lifecycle.deleted" => "delete",
         _ => "",
     }
 }
@@ -125,6 +142,20 @@ const EVENTS_TTL_DAYS: u32 = 30;
 /// camelCase, which a receiver written against E2B would not read.
 #[must_use]
 pub fn to_webhook(event: &ClusterEvent) -> Option<Value> {
+    if let Some(machine) = &event.machine {
+        let kind = machine_type(&event.kind)?;
+        return Some(json!({
+            "id": event.id,
+            "version": "v2",
+            "type": kind,
+            "timestamp": rfc3339(event.at_ms),
+            "event_category": "lifecycle",
+            "event_label": label(kind),
+            "event_data": event_data(event),
+            "machine_name": machine,
+            "events_ttl_days": EVENTS_TTL_DAYS,
+        }));
+    }
     let kind = e2b_type(&event.kind)?;
     let sandbox = event.sandbox_id.clone()?;
     let template = event.template_id.clone().unwrap_or_default();
@@ -312,8 +343,10 @@ fn valid_url(url: &str) -> bool {
 
 fn valid_events(events: &[String]) -> Result<(), String> {
     for event in events {
-        if !event.starts_with("sandbox.lifecycle.") {
-            return Err(format!("event type {event:?}: sandbox.lifecycle.* only"));
+        if !event.starts_with("sandbox.lifecycle.") && !event.starts_with("machine.lifecycle.") {
+            return Err(format!(
+                "event type {event:?}: sandbox.lifecycle.* or machine.lifecycle.* only"
+            ));
         }
     }
     Ok(())
@@ -655,7 +688,14 @@ impl Dispatcher {
             };
             let kind = payload["type"].as_str().unwrap_or_default().to_string();
             for hook in hooks {
-                if !hook.enabled || !(hook.events.is_empty() || hook.events.contains(&kind)) {
+                // A machine's event goes only to a webhook that names it: one
+                // with no list asked for sandboxes, and keeps getting just those.
+                let wanted = if kind.starts_with("machine.") {
+                    hook.events.contains(&kind)
+                } else {
+                    hook.events.is_empty() || hook.events.contains(&kind)
+                };
+                if !hook.enabled || !wanted {
                     continue;
                 }
                 // A team's webhook hears only its own team's sandboxes.
@@ -693,8 +733,10 @@ impl Dispatcher {
             id: uuid::Uuid::new_v4().to_string(),
             webhook_id: hook.id.clone(),
             event_id: payload["id"].as_str().unwrap_or_default().to_string(),
+            // A machine's event has its name where a sandbox's has its ID.
             sandbox_id: payload["sandbox_id"]
                 .as_str()
+                .or_else(|| payload["machine_name"].as_str())
                 .unwrap_or_default()
                 .to_string(),
             event_type: payload["type"].as_str().unwrap_or_default().to_string(),
@@ -1070,6 +1112,108 @@ mod tests {
         assert_eq!(
             store.webhooks().await.unwrap()[0].secret,
             "third-secret-01234"
+        );
+        receiver.abort();
+    }
+
+    #[test]
+    fn a_machine_event_is_a_webhook_payload_but_not_a_sandbox_event() {
+        let mut event = ClusterEvent::new("machine-started", "n", None);
+        event.machine = Some("dev".into());
+        let payload = to_webhook(&event).unwrap();
+        assert_eq!(payload["type"], "machine.lifecycle.started");
+        assert_eq!(payload["event_label"], "start");
+        assert_eq!(payload["machine_name"], "dev");
+        assert_eq!(payload["event_data"]["node_id"], "n");
+        assert!(payload.get("sandbox_id").is_none());
+        // GET /events/sandboxes never lists it.
+        assert!(to_e2b(&event).is_none());
+        // A machine kind without a machine, or a sandbox kind with one, sends nothing.
+        assert!(to_webhook(&ClusterEvent::new("machine-started", "n", None)).is_none());
+        let mut odd = ClusterEvent::new("sandbox-created", "n", Some("sbx"));
+        odd.machine = Some("dev".into());
+        assert!(to_webhook(&odd).is_none());
+        assert!(valid_events(&["machine.lifecycle.stopped".into()]).is_ok());
+        assert!(valid_events(&["machine.other".into()]).is_err());
+        assert!(valid_events(&["volume.lifecycle.created".into()]).is_err());
+    }
+
+    /// Only a webhook that names a machine type hears machine events, and a
+    /// team's hears only its own team's; the other kinds of hook are as before.
+    #[tokio::test]
+    async fn a_machine_event_goes_to_the_webhooks_that_name_it() {
+        use crate::ownership::TeamId;
+        use crate::store::MemoryStore;
+        let received = Arc::new(parking_lot::Mutex::new(Vec::<(String, String)>::new()));
+        let seen = Arc::clone(&received);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let receiver = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new().route(
+                    "/{hook}",
+                    axum::routing::post(move |Path(hook): Path<String>, body: String| {
+                        let seen = Arc::clone(&seen);
+                        async move {
+                            let payload: Value = serde_json::from_str(&body).unwrap();
+                            let what = payload["type"].as_str().unwrap_or("").to_owned();
+                            seen.lock().push((hook, what));
+                            StatusCode::OK
+                        }
+                    }),
+                ),
+            )
+            .await
+            .unwrap();
+        });
+        let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+        let machine_started = vec!["machine.lifecycle.started".to_owned()];
+        for (id, events, team) in [
+            ("everything", vec![], None),
+            ("named", machine_started.clone(), None),
+            ("red", machine_started.clone(), Some("red")),
+            ("blue", machine_started.clone(), Some("blue")),
+            (
+                "other-type",
+                vec!["machine.lifecycle.deleted".to_owned()],
+                None,
+            ),
+        ] {
+            store
+                .put_webhook(&Webhook {
+                    id: id.into(),
+                    name: id.into(),
+                    url: format!("http://{address}/{id}"),
+                    events,
+                    enabled: true,
+                    secret: "0123456789abcdef".into(),
+                    created_ms: 1,
+                    team_id: team.map(|t| TeamId::parse(t).unwrap()),
+                    previous_secret: None,
+                    previous_until_ms: None,
+                })
+                .await
+                .unwrap();
+        }
+        let dispatcher = Dispatcher::new(Arc::clone(&store), true);
+        let mut event = ClusterEvent::new("machine-started", "n", None);
+        event.machine = Some("dev".into());
+        event.team_id = Some(TeamId::parse("red").unwrap());
+        dispatcher.deliver(&event);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while received.lock().len() < 2 && Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let mut got = received.lock().clone();
+        got.sort();
+        assert_eq!(
+            got,
+            vec![
+                ("named".to_owned(), "machine.lifecycle.started".to_owned()),
+                ("red".to_owned(), "machine.lifecycle.started".to_owned()),
+            ]
         );
         receiver.abort();
     }

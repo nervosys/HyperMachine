@@ -713,8 +713,9 @@ without the VM exiting. Stop a machine through the API.
   cannot be changed after creation, and it does not join private sandbox
   networks.
 - **Formats.** QCOW2, and several disks per machine.
-- **Control plane.** It routes `/machines`, but there is no event or webhook
-  when a machine changes state, and each request asks every node where the
+- **Control plane.** It routes `/machines`, and a [webhook](WEBHOOKS.md#machine-events)
+  hears a machine created, started, stopped and deleted through the API (not one
+  that stops by itself, or a snapshot), but each request asks every node where the
   machine is, which will not suit a large fleet.
 - **Migration.** Moving a machine between nodes, live migration, and HA restart
   on another host.

@@ -1,0 +1,62 @@
+{
+  "success": true,
+  "purpose": "local KVM functional verification of machine webhooks; no timing claim",
+  "input_sha256": {
+    "daemon": "ae4fb7cbb0e3bf4347add77d666c9914a3db856cb82124664202d1c011142170",
+    "control": "e47b8054bd3b2a9865e6f1722a4e7f4e905375f9a66f297841fd4904157bd36d",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "16ac660bd5a98d5c716035353050e65f4639431645c19fe9a71cc68b6a7bdafa"
+  },
+  "cases": [
+    {
+      "name": "red's webhook hears its machine's lifecycle, in order, signed",
+      "success": true,
+      "detail": {
+        "types": [
+          "created",
+          "started",
+          "stopped",
+          "started",
+          "stopped",
+          "deleted"
+        ]
+      }
+    },
+    {
+      "name": "blue's webhook and red's catch-all heard none of it, and red's delivery records show success",
+      "success": true,
+      "detail": {
+        "events_delivered": 6
+      }
+    },
+    {
+      "name": "blue's machine of the same name reaches blue's webhook and not red's",
+      "success": true,
+      "detail": {
+        "blue_types": [
+          "created",
+          "started"
+        ]
+      }
+    },
+    {
+      "name": "a webhook with no list of types still gets sandbox events only, and the sandbox event list has none of a machine's",
+      "success": true,
+      "detail": {
+        "redall": [
+          "sandbox.lifecycle.created",
+          "sandbox.lifecycle.killed"
+        ],
+        "listed": 2
+      }
+    },
+    {
+      "name": "a type that is neither sandbox.lifecycle.* nor machine.lifecycle.* is refused",
+      "success": true,
+      "detail": {
+        "refused": 2
+      }
+    }
+  ]
+}

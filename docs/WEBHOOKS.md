@@ -27,4 +27,24 @@ Nothing returns a secret, old or new.
 
 Checked by unit tests against RFC 4231's HMAC-SHA256 vector and by a delivery
 to a loopback receiver after a rotation; **not** against another vendor's
-verifier. Machines send no webhooks.
+verifier.
+
+## Machine events
+
+A machine sends `machine.lifecycle.created`, `.started`, `.stopped` and
+`.deleted` when it is created, started, stopped (a restart is a stop and a start)
+and deleted through the API. These are this project's own; E2B has no machines.
+A webhook gets them only if it **names** them in `events`: one with no list asks
+for sandboxes, as it always did, and keeps getting only those. A team's webhook
+hears only its own team's machines.
+
+The payload is the sandbox event's, with `machine_name` where `sandbox_id` was:
+`{"id", "version", "type", "timestamp", "event_category":"lifecycle",
+"event_label", "event_data":{"node_id"}, "machine_name", "events_ttl_days"}`. It
+is signed as above. In the webhook's delivery records, a machine's name is in the
+`sandboxId` field. `GET /events/sandboxes` does not list them.
+
+A machine that stops or crashes by itself, or that a node starts again after its
+daemon restarted, sends no event; nor does a snapshot. [Checked on
+KVM](benchmarks/2026-10-23/machine-webhooks-kvm/README.md) through a control plane
+with two teams.

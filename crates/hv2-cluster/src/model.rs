@@ -260,6 +260,11 @@ pub struct ClusterEvent {
     /// webhooks receive it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub team_id: Option<crate::ownership::TeamId>,
+    /// The machine it concerns, by name, when it concerns one and not a
+    /// sandbox: `machine-created`, `machine-started`, `machine-stopped`,
+    /// `machine-deleted`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine: Option<String>,
 }
 
 impl ClusterEvent {
@@ -275,6 +280,7 @@ impl ClusterEvent {
             template_id: None,
             data: None,
             team_id: None,
+            machine: None,
         }
     }
 

@@ -34,6 +34,7 @@ use serde_json::{json, Value};
 
 use axum::http::HeaderMap;
 use hv2_agent::AgentVM;
+use hv2_cluster::model::ClusterEvent;
 use hv2_cluster::ownership::TeamId;
 
 use super::seed;
@@ -1233,6 +1234,7 @@ pub(crate) async fn create(
             format!("making the root disk: {e}"),
         );
     }
+    announce(&state, &machine, "machine-created").await;
     if req.start.unwrap_or(true) {
         if let Err(response) = set_running(&state, &machine.id, true).await {
             return response;
@@ -1240,6 +1242,16 @@ pub(crate) async fn create(
     }
     let machine = load(&state, &machine.id).unwrap_or(machine);
     (StatusCode::CREATED, Json(describe(&machine))).into_response()
+}
+
+/// Record a machine's lifecycle event and send it to the webhooks that name
+/// its type. The machine's own team hears it, and no one else's.
+async fn announce(state: &AppState, machine: &Stored, kind: &str) {
+    let mut event = ClusterEvent::new(kind, &state.node_id, None);
+    event.machine = Some(machine.name.clone());
+    event.team_id.clone_from(&machine.team);
+    let _ = state.events.store().publish(&event).await;
+    state.events.deliver(&event);
 }
 
 /// Start or stop `id` and record it as what should be. Holds [`OPS`].
@@ -1259,7 +1271,18 @@ async fn set_running(state: &Arc<AppState>, id: &str, running: bool) -> Result<(
         halt(state, id).await;
         machine.desired = Desired::Stopped;
     }
-    save(state, &machine).map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e))
+    save(state, &machine).map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    announce(
+        state,
+        &machine,
+        if running {
+            "machine-started"
+        } else {
+            "machine-stopped"
+        },
+    )
+    .await;
+    Ok(())
 }
 
 /// `GET /machines`.
@@ -1345,7 +1368,10 @@ pub(crate) async fn delete(
     conversations::forget(&machine.id);
     ports::forget(&machine.id);
     match std::fs::remove_dir_all(dir_of(&state, &machine.id)) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Ok(()) => {
+            announce(&state, &machine, "machine-deleted").await;
+            StatusCode::NO_CONTENT.into_response()
+        }
         Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
