@@ -285,6 +285,37 @@ def main():
                 return {"compose": version, "services": services.split(), "volume_after_down": kept}
             case("docker compose runs two services that reach each other, and a volume outlives them", composed)
 
+            def composed_resumed():
+                sandbox = state["sandbox"]
+                sh(sandbox, "cd /tmp/c && docker compose up -d 2>&1 | tail -3", 300)
+                time.sleep(3)
+
+                def reach(target):
+                    return sh(target, "cd /tmp/c && docker compose exec -T client /bin/busybox nc srv 9000 </dev/null", 60, ok=False)
+
+                def listed(target):
+                    return sh(target, "cd /tmp/c && docker compose ps --format '{{.Service}}' | sort | tr '\\n' ' '").split()
+                assert listed(sandbox) == ["client", "srv"] and reach(sandbox) == "hello-from-compose"
+                status, made = request("POST", f"/sandboxes/{sandbox}/checkpoints", {"name": "with-compose"})
+                assert status in (200, 201), (status, made)
+                sh(sandbox, "cd /tmp/c && docker compose down 2>&1 | tail -3", 120)
+                assert sh(sandbox, "docker ps -q | wc -l") == "0"
+                status, back = request("POST", f"/sandboxes/{sandbox}/checkpoints/with-compose/restore")
+                assert status in (200, 201, 204), (status, back)
+                restored = {"services": listed(sandbox), "reach": reach(sandbox)}
+                assert restored == {"services": ["client", "srv"], "reach": "hello-from-compose"}, restored
+                status, made = request("POST", f"/sandboxes/{sandbox}/fork", {"timeout": 600})
+                assert status in (200, 201), (status, made)
+                child = made[0]["sandbox"]["sandboxID"]
+                try:
+                    forked = {"services": listed(child), "reach": reach(child)}
+                finally:
+                    request("DELETE", f"/sandboxes/{child}")
+                assert forked == restored, forked
+                sh(sandbox, "cd /tmp/c && docker compose down -v 2>&1 | tail -3", 120)
+                return {"restored": restored, "forked": forked}
+            case("a checkpoint and a fork carry a running compose project", composed_resumed)
+
         request("DELETE", f"/sandboxes/{state['sandbox']}")
         report["success"] = True
     finally:

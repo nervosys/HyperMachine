@@ -4,7 +4,7 @@
 owned `hv2-sandboxd` whose `base` template is the initramfs from
 `build-tools-image.sh --docker docker-29.9.2.tgz` (Ubuntu 24.04, systemd, Docker's
 static binaries, 122 MiB) on a Linux 6.6.52 kernel from `build-kernel.sh --docker`
-(`resolved.config` is its full configuration), at 2048 MiB. 10 of 10 cases pass in
+(`resolved.config` is its full configuration), at 2048 MiB. 11 of 11 cases pass in
 each of 3 runs in a row (`runs/run1..3.json`; `report.json` is run 1). Docker is
 the engine inside the guest; nothing on the host used it.
 
@@ -29,6 +29,10 @@ the engine inside the guest; nothing on the host used it.
     by service name and writes into a named volume); after `down` the volume still
     holds what the client wrote. Compose is v2.40.3 from `--compose`, with its
     sha256 matching the release's `.sha256` file.
+11. A checkpoint and a fork carry a running compose project: with both services up
+    and `client` reaching `srv`, a checkpoint is taken and the project taken `down`;
+    the restore brings both services back and `client` reaches `srv` again, and a
+    fork has the same.
 
 What it took, each found by a failing run: the default kernel has no memory cgroup,
 overlayfs, veth, bridge, user namespaces or iptables `raw` table (`docker.fragment`
@@ -38,7 +42,7 @@ and runc cannot `pivot_root` out of an initramfs, so `runc-nopivot` adds
 
 ## NOT VERIFIED
 
-compose `build:` and `docker compose` in a checkpoint or fork, `RUN` steps that need
+compose `build:`, more than one compose project, `RUN` steps that need
 the network, volumes holding data across a checkpoint, a published port from outside the node, a checkpoint or fork of a sandbox
 with more than one container, with a volume holding data, or with a build in
 progress (one container with a published port was checkpointed and forked), user namespaces with `--userns-remap`, the default kernel

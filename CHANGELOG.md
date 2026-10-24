@@ -18,12 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   overlayfs, veth, bridge, user namespaces, NAT, iptables raw). The guest uses
   legacy iptables and a `runc-nopivot` runtime, since the root is an initramfs.
   `--compose BIN` adds `docker compose` (the release binary, as a CLI plugin).
-  Checked on real KVM, 10 cases, 3 runs in a row (`tools/check-docker-sandbox-kvm.py`,
+  Checked on real KVM, 11 cases, 3 runs in a row (`tools/check-docker-sandbox-kvm.py`,
   `docs/benchmarks/2026-10-23/docker-sandbox-kvm/`), including `docker build` from
   `scratch` and from a pulled `busybox`, a published port reached through the node's
   port proxy, a checkpoint and fork that carry a running container, and a two-service
-  `docker compose up` with a volume that outlives `down`. NOT VERIFIED: a checkpoint
-  during a compose project, compose `build:`, more than one project.
+  `docker compose up` with a volume that outlives `down`, and a checkpoint and fork
+  that carry the running project. NOT VERIFIED: compose `build:`, more than one project.
 - `build-tools-image.sh --systemd` builds a sandbox template whose first process is
   systemd (Ubuntu 24.04, `tools/guest-image/init-systemd`; `build.sh` takes `--init`).
   Checked on real KVM, 5 cases, 3 runs in a row (`tools/check-systemd-sandbox-kvm.py`,

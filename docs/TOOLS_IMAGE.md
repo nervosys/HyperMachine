@@ -128,7 +128,8 @@ step) and runs, a published port answers from the guest and through the node's
 port proxy, a checkpoint and a fork carry the engine and a running container, and
 `hello-world` is pulled and run, a Dockerfile builds `FROM busybox:1.36` pulled
 from Docker Hub, and `docker compose up` runs two services that reach each other
-by name with a named volume that outlives `down`. `--compose BIN` installs the
+by name with a named volume that outlives `down`, and a checkpoint and a fork
+carry that running project. `--compose BIN` installs the
 `docker-compose-linux-x86_64` release binary (Compose v2.40.3, sha256 checked
 against the release's checksum file) as a Docker CLI plugin.
 

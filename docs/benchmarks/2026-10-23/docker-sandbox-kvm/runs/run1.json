@@ -5,7 +5,7 @@
     "daemon": "311c26f69a609ec47aabe8a7b6c47633b522f8552e5e29eed6e0162207daf13f",
     "kernel": "6dcf46487bd263f4224f7127c3461fa48974432528c7d777f9e3b856335dffac",
     "initrd": "f132e2cce43e67ad35ceb320ea662be5d8bf569396f91e7d0199e5fcc1c2a319",
-    "driver": "0657df30d29d7bf243ca23c95800465bb4ff05bb53c529a86871baceef1cd1d1"
+    "driver": "ac5e79259f08965ab1c60a5e4bde8ccc79936819d590178437506303e1427e2d"
   },
   "initrd_bytes": 148846827,
   "memory_mb": 2048,
@@ -15,7 +15,7 @@
       "name": "dockerd is up under systemd",
       "success": true,
       "detail": {
-        "create_seconds": 0.146,
+        "create_seconds": 0.041,
         "docker_info": "overlayfs cgroup2 29.9.2 [name=seccomp,profile=builtin name=cgroupns]",
         "kernel": "6.6.52"
       }
@@ -100,6 +100,26 @@
           "srv"
         ],
         "volume_after_down": "hello-from-compose"
+      }
+    },
+    {
+      "name": "a checkpoint and a fork carry a running compose project",
+      "success": true,
+      "detail": {
+        "restored": {
+          "services": [
+            "client",
+            "srv"
+          ],
+          "reach": "hello-from-compose"
+        },
+        "forked": {
+          "services": [
+            "client",
+            "srv"
+          ],
+          "reach": "hello-from-compose"
+        }
       }
     }
   ]
