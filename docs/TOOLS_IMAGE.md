@@ -123,9 +123,10 @@ the node at it with `HV2_KERNEL`. The default kernel is unchanged. Give it 2048 
 Checked on KVM with [`tools/check-docker-sandbox-kvm.py`](../tools/check-docker-sandbox-kvm.py)
 ([evidence](benchmarks/2026-10-23/docker-sandbox-kvm/README.md)): `dockerd`
 runs, a container runs from an imported image, a memory limit applies, two
-containers talk over a bridge, and `hello-world` is pulled and run. Not checked:
-`docker build`, compose, published ports, checkpoint or fork with containers
-running.
+containers talk over a bridge, a Dockerfile builds (from `scratch`, with a `RUN`
+step) and runs, a published port answers from the guest and through the node's
+port proxy, and `hello-world` is pulled and run. Not checked: compose, a build
+from a pulled base, checkpoint or fork with containers running.
 
 ## /dev/kvm
 

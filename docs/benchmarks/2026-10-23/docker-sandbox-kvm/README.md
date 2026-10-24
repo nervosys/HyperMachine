@@ -4,7 +4,7 @@
 owned `hv2-sandboxd` whose `base` template is the initramfs from
 `build-tools-image.sh --docker docker-29.9.2.tgz` (Ubuntu 24.04, systemd, Docker's
 static binaries, 122 MiB) on a Linux 6.6.52 kernel from `build-kernel.sh --docker`
-(`resolved.config` is its full configuration), at 2048 MiB. 5 of 5 cases pass in
+(`resolved.config` is its full configuration), at 2048 MiB. 7 of 7 cases pass in
 each of 3 runs in a row (`runs/run1..3.json`; `report.json` is run 1). Docker is
 the engine inside the guest; nothing on the host used it.
 
@@ -14,7 +14,12 @@ the engine inside the guest; nothing on the host used it.
 3. `--memory 64m` reaches the container's cgroup (`memory.max` 67108864).
 4. Two containers on a user-defined bridge: one serves a line with `nc`, the other
    reads it by container name.
-5. `docker run hello-world` pulls from Docker Hub and prints "Hello from Docker!".
+5. `docker build` of a Dockerfile (`FROM scratch`, `COPY`, a `RUN` step, `CMD`): the
+   RUN step executes and the built image prints what it wrote.
+6. `-p 8080:9000`: the container's port answers HTTP from the guest (`127.0.0.1:8080`)
+   and from outside the sandbox through the node's port proxy
+   (`Host: 8080-<sandbox>.localhost`); a DNAT rule for 8080 exists.
+7. `docker run hello-world` pulls from Docker Hub and prints "Hello from Docker!".
 
 What it took, each found by a failing run: the default kernel has no memory cgroup,
 overlayfs, veth, bridge, user namespaces or iptables `raw` table (`docker.fragment`
@@ -24,8 +29,9 @@ and runc cannot `pivot_root` out of an initramfs, so `runc-nopivot` adds
 
 ## NOT VERIFIED
 
-Building images (`docker build`), `docker compose`, published ports from a
-container to outside the sandbox, volumes, a checkpoint or fork of a sandbox with
-containers running, user namespaces with `--userns-remap`, the default kernel
-(the Docker kernel is a separate build, opted into with `HV2_KERNEL`), and
-`/dev/kvm` in the guest.
+`docker compose`, a `docker build` from a pulled base (only `FROM scratch` was
+built), `RUN` steps that need the network, volumes beyond a read-only bind mount of
+one file, a published port from outside the node, a checkpoint or fork of a sandbox
+with containers running, user namespaces with `--userns-remap`, the default kernel
+(the Docker kernel is a separate build, opted into with `HV2_KERNEL`), and Docker
+together with `/dev/kvm`.

@@ -15,9 +15,16 @@ checks through its API:
 
 Writes report.json and the daemon's log into --output.
 """
-import argparse, hashlib, json, os, socket, subprocess, time
+import argparse, hashlib, http.client, json, os, socket, subprocess, time
 import urllib.error, urllib.request
 from pathlib import Path
+
+DOCKERFILE = """FROM scratch
+COPY busybox /busybox
+RUN ["/busybox", "sh", "-c", "echo built-by-docker > /msg"]
+CMD ["/busybox", "cat", "/msg"]
+"""
+
 
 def port():
     with socket.socket() as sock:
@@ -46,10 +53,11 @@ def main():
     report["input_sha256"]["driver"] = digest(__file__)
     env = dict(os.environ, HV2_KERNEL=str(args.kernel), HV2_INITRD=str(args.initrd), RUST_LOG="info")
     api = port()
+    proxy = port()
     base = f"http://127.0.0.1:{api}"
     log = (args.output / "daemon.log").open("wb")
     daemon = subprocess.Popen(
-        [str(args.daemon), "--port", str(api), "--proxy-port", str(port()),
+        [str(args.daemon), "--port", str(api), "--proxy-port", str(proxy),
          "--memory-mb", str(args.memory_mb), "--cpu-cores", "2", "--capacity", "4"] + (["--network", "--egress-default", "allow"] if args.network else []),
         env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
 
@@ -154,6 +162,36 @@ def main():
             assert out == "hello-over-bridge", out
             return {"output": out}
         case("two containers on a bridge network reach each other", bridged)
+
+        def built():
+            sandbox = state["sandbox"]
+            sh(sandbox, "rm -rf /tmp/b && mkdir /tmp/b && cp /bin/busybox /tmp/b/busybox && cat > /tmp/b/Dockerfile <<'EOF'" + chr(10) + DOCKERFILE + "EOF")
+            built_out = sh(sandbox, "docker build -q -t hvbuilt /tmp/b 2>&1 | tail -3", 300, ok=False)
+            out = sh(sandbox, "docker run --rm --network none hvbuilt", 120)
+            assert out == "built-by-docker", (out, built_out)
+            return {"output": out}
+        case("docker build runs a Dockerfile's RUN step and the image runs", built)
+
+        def published():
+            sandbox = state["sandbox"]
+            sh(sandbox, "printf 'HTTP/1.1 200 OK\r\nContent-Length: 10\r\nConnection: close\r\n\r\nhi-publish' > /tmp/resp")
+            sh(sandbox, "docker run -d --rm --name web -p 8080:9000 -v /tmp/resp:/resp:ro hvbox /bin/busybox sh -c "
+                        "'while true; do /bin/busybox nc -l -p 9000 < /resp; done'")
+            time.sleep(1)
+            inside = sh(sandbox, "/bin/busybox nc 127.0.0.1 8080 </dev/null | /bin/busybox tail -n 1", 60)
+            assert inside == "hi-publish", inside
+            conn = http.client.HTTPConnection("127.0.0.1", proxy, timeout=30)
+            try:
+                conn.request("GET", "/", headers={"Host": f"8080-{sandbox}.localhost"})
+                response = conn.getresponse()
+                outside = (response.status, response.read().decode(errors="replace").strip())
+            finally:
+                conn.close()
+            assert outside == (200, "hi-publish"), outside
+            rule = sh(sandbox, "iptables -t nat -S DOCKER | grep -c 'dport 8080'", ok=False)
+            sh(sandbox, "docker rm -f web >/dev/null; true", 60, ok=False)
+            return {"from_the_guest": inside, "through_the_node_proxy": list(outside), "dnat_rules_for_8080": rule}
+        case("a published port reaches the container, from the guest and through the node proxy", published)
 
         if args.network:
             def pulled():

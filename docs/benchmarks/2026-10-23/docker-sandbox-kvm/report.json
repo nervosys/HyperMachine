@@ -5,7 +5,7 @@
     "daemon": "311c26f69a609ec47aabe8a7b6c47633b522f8552e5e29eed6e0162207daf13f",
     "kernel": "6dcf46487bd263f4224f7127c3461fa48974432528c7d777f9e3b856335dffac",
     "initrd": "828b2d879786ec71cdfe546ab55b6052ff67d5a0dd45ed28e45872fbaaf208e4",
-    "driver": "93f04baf64e5d969dba3da4974de830814f56565ecc0ca6948ea3f1dae31372f"
+    "driver": "e3ab3d2033162cb3742ea4cac882235ae0ac93e838464333dcc3307698ce616f"
   },
   "initrd_bytes": 127629407,
   "memory_mb": 2048,
@@ -15,7 +15,7 @@
       "name": "dockerd is up under systemd",
       "success": true,
       "detail": {
-        "create_seconds": 0.839,
+        "create_seconds": 0.171,
         "docker_info": "overlayfs cgroup2 29.9.2 [name=seccomp,profile=builtin name=cgroupns]",
         "kernel": "6.6.52"
       }
@@ -39,6 +39,25 @@
       "success": true,
       "detail": {
         "output": "hello-over-bridge"
+      }
+    },
+    {
+      "name": "docker build runs a Dockerfile's RUN step and the image runs",
+      "success": true,
+      "detail": {
+        "output": "built-by-docker"
+      }
+    },
+    {
+      "name": "a published port reaches the container, from the guest and through the node proxy",
+      "success": true,
+      "detail": {
+        "from_the_guest": "hi-publish",
+        "through_the_node_proxy": [
+          200,
+          "hi-publish"
+        ],
+        "dnat_rules_for_8080": "1"
       }
     },
     {
