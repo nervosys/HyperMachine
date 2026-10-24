@@ -4,10 +4,10 @@
   "input_sha256": {
     "daemon": "311c26f69a609ec47aabe8a7b6c47633b522f8552e5e29eed6e0162207daf13f",
     "kernel": "6dcf46487bd263f4224f7127c3461fa48974432528c7d777f9e3b856335dffac",
-    "initrd": "828b2d879786ec71cdfe546ab55b6052ff67d5a0dd45ed28e45872fbaaf208e4",
-    "driver": "4c1eac5abf7f228807710569134e175e969f1e393a0027a67e5f8b9d64d2ec1f"
+    "initrd": "f132e2cce43e67ad35ceb320ea662be5d8bf569396f91e7d0199e5fcc1c2a319",
+    "driver": "0657df30d29d7bf243ca23c95800465bb4ff05bb53c529a86871baceef1cd1d1"
   },
-  "initrd_bytes": 127629407,
+  "initrd_bytes": 148846827,
   "memory_mb": 2048,
   "host_cpus": 24,
   "cases": [
@@ -15,7 +15,7 @@
       "name": "dockerd is up under systemd",
       "success": true,
       "detail": {
-        "create_seconds": 0.597,
+        "create_seconds": 0.146,
         "docker_info": "overlayfs cgroup2 29.9.2 [name=seccomp,profile=builtin name=cgroupns]",
         "kernel": "6.6.52"
       }
@@ -81,6 +81,25 @@
       "success": true,
       "detail": {
         "first_line": "Hello from Docker!"
+      }
+    },
+    {
+      "name": "docker build from a pulled base image runs its RUN step",
+      "success": true,
+      "detail": {
+        "output": "from-a-pulled-base"
+      }
+    },
+    {
+      "name": "docker compose runs two services that reach each other, and a volume outlives them",
+      "success": true,
+      "detail": {
+        "compose": "2.40.3",
+        "services": [
+          "client",
+          "srv"
+        ],
+        "volume_after_down": "hello-from-compose"
       }
     }
   ]

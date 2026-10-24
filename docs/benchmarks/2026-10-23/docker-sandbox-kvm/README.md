@@ -4,7 +4,7 @@
 owned `hv2-sandboxd` whose `base` template is the initramfs from
 `build-tools-image.sh --docker docker-29.9.2.tgz` (Ubuntu 24.04, systemd, Docker's
 static binaries, 122 MiB) on a Linux 6.6.52 kernel from `build-kernel.sh --docker`
-(`resolved.config` is its full configuration), at 2048 MiB. 8 of 8 cases pass in
+(`resolved.config` is its full configuration), at 2048 MiB. 10 of 10 cases pass in
 each of 3 runs in a row (`runs/run1..3.json`; `report.json` is run 1). Docker is
 the engine inside the guest; nothing on the host used it.
 
@@ -24,6 +24,11 @@ the engine inside the guest; nothing on the host used it.
    restore brings back the container (still serving), the file as it was, and the
    fork has the container serving and can run another.
 8. `docker run hello-world` pulls from Docker Hub and prints "Hello from Docker!".
+9. `docker build` of a Dockerfile `FROM busybox:1.36` (pulled), with a `RUN` step.
+10. `docker compose up -d` of two services (`srv`, and `client` that reads from `srv`
+    by service name and writes into a named volume); after `down` the volume still
+    holds what the client wrote. Compose is v2.40.3 from `--compose`, with its
+    sha256 matching the release's `.sha256` file.
 
 What it took, each found by a failing run: the default kernel has no memory cgroup,
 overlayfs, veth, bridge, user namespaces or iptables `raw` table (`docker.fragment`
@@ -33,9 +38,8 @@ and runc cannot `pivot_root` out of an initramfs, so `runc-nopivot` adds
 
 ## NOT VERIFIED
 
-`docker compose`, a `docker build` from a pulled base (only `FROM scratch` was
-built), `RUN` steps that need the network, volumes beyond a read-only bind mount of
-one file, a published port from outside the node, a checkpoint or fork of a sandbox
+compose `build:` and `docker compose` in a checkpoint or fork, `RUN` steps that need
+the network, volumes holding data across a checkpoint, a published port from outside the node, a checkpoint or fork of a sandbox
 with more than one container, with a volume holding data, or with a build in
 progress (one container with a published port was checkpointed and forked), user namespaces with `--userns-remap`, the default kernel
 (the Docker kernel is a separate build, opted into with `HV2_KERNEL`), and Docker

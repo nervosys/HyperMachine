@@ -26,6 +26,28 @@ CMD ["/busybox", "cat", "/msg"]
 """
 
 
+PULLED_DOCKERFILE = """FROM busybox:1.36
+RUN echo from-a-pulled-base > /msg
+CMD ["cat", "/msg"]
+"""
+
+COMPOSE = """name: c
+services:
+  srv:
+    image: hvbox
+    pull_policy: never
+    command: ["/bin/busybox", "sh", "-c", "while true; do echo hello-from-compose | /bin/busybox nc -l -p 9000; done"]
+  client:
+    image: hvbox
+    pull_policy: never
+    depends_on: [srv]
+    volumes: ["data:/d"]
+    command: ["/bin/busybox", "sh", "-c", "sleep 2; /bin/busybox nc srv 9000 > /d/got; sleep 3600"]
+volumes:
+  data: {}
+"""
+
+
 def port():
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -233,6 +255,35 @@ def main():
                 assert "Hello from Docker" in out, out
                 return {"first_line": out.splitlines()[0]}
             case("an image is pulled from Docker Hub and runs", pulled)
+
+            def based():
+                sandbox = state["sandbox"]
+                sh(sandbox, "rm -rf /tmp/p && mkdir /tmp/p && cat > /tmp/p/Dockerfile <<'EOF'" + chr(10) + PULLED_DOCKERFILE + "EOF")
+                built_out = sh(sandbox, "docker build -q -t hvpulled /tmp/p 2>&1 | tail -3", 300, ok=False)
+                out = sh(sandbox, "docker run --rm --network none hvpulled", 120)
+                assert out == "from-a-pulled-base", (out, built_out)
+                return {"output": out}
+            case("docker build from a pulled base image runs its RUN step", based)
+
+            def composed():
+                sandbox = state["sandbox"]
+                version = sh(sandbox, "docker compose version --short")
+                sh(sandbox, "rm -rf /tmp/c && mkdir /tmp/c && cat > /tmp/c/compose.yaml <<'EOF'" + chr(10) + COMPOSE + "EOF")
+                sh(sandbox, "cd /tmp/c && docker compose up -d 2>&1 | tail -5", 300)
+                time.sleep(2)
+                services = sh(sandbox, "cd /tmp/c && docker compose ps --format '{{.Service}}' | sort | tr '\\n' ' '")
+                assert services.split() == ["client", "srv"], services
+                # client reaches srv by service name on the project network, and wrote into the named volume.
+                deadline = time.monotonic() + 60
+                while sh(sandbox, "docker run --rm -v c_data:/d hvbox /bin/busybox cat /d/got 2>&1; true") != "hello-from-compose":
+                    assert time.monotonic() < deadline, sh(sandbox, "cd /tmp/c && docker compose logs 2>&1 | tail -20", 30, ok=False)
+                    time.sleep(1)
+                sh(sandbox, "cd /tmp/c && docker compose down 2>&1 | tail -3", 120)
+                kept = sh(sandbox, "docker run --rm -v c_data:/d hvbox /bin/busybox cat /d/got")
+                assert kept == "hello-from-compose", kept
+                sh(sandbox, "docker volume rm c_data >/dev/null; true", 60, ok=False)
+                return {"compose": version, "services": services.split(), "volume_after_down": kept}
+            case("docker compose runs two services that reach each other, and a volume outlives them", composed)
 
         request("DELETE", f"/sandboxes/{state['sandbox']}")
         report["success"] = True
