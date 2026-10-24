@@ -1,0 +1,55 @@
+{
+  "success": true,
+  "purpose": "local KVM functional verification of sharing a snapshot between teams; no timing claim",
+  "input_sha256": {
+    "daemon": "311c26f69a609ec47aabe8a7b6c47633b522f8552e5e29eed6e0162207daf13f",
+    "control": "e5cc411f15c4c1357be8a2cffb42de75b572a3d4ffd3b431f36b356ff42bd788",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "3597068a3d6151bb7de699eda026dd45794eb7b7422a693627cf29f51f449410"
+  },
+  "cases": [
+    {
+      "name": "before a share, only red can list or start from its snapshot",
+      "success": true,
+      "detail": {
+        "before_share": "hidden from blue and green"
+      }
+    },
+    {
+      "name": "a share without acknowledgeContents is refused and shares nothing",
+      "success": true,
+      "detail": {
+        "refused": 3
+      }
+    },
+    {
+      "name": "red shares it with blue: blue lists it, starts from it and finds red's file; green still cannot",
+      "success": true,
+      "detail": {
+        "blue_sandbox": "sbx-b9c838301b1148a7bf3f"
+      }
+    },
+    {
+      "name": "blue cannot read, extend, revoke or delete the share; bad shares are refused",
+      "success": true,
+      "detail": {
+        "refused": "404 x4, 409, 400, 404"
+      }
+    },
+    {
+      "name": "the share is still there after the node restarts",
+      "success": true,
+      "detail": {
+        "after_restart": "blue started from it"
+      }
+    },
+    {
+      "name": "revoking removes blue's access, and the sandbox blue started keeps running",
+      "success": true,
+      "detail": {
+        "blue_sandbox_still_runs": true
+      }
+    }
+  ]
+}

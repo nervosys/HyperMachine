@@ -305,6 +305,11 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/v2/sandboxes/{id}/logs", get(forward))
         .route("/snapshots", get(snapshots))
         .route("/templates/{id}", axum::routing::delete(delete_template))
+        .route("/templates/{id}/shares", get(template_shares))
+        .route(
+            "/templates/{id}/shares/{team}",
+            axum::routing::put(share_template).delete(share_template),
+        )
         .route("/v3/templates", post(to_builder))
         .route("/templates/{id}/files/{hash}", get(to_builder))
         .route("/v2/templates/{id}/builds/{build}", post(to_builder))
@@ -1185,6 +1190,8 @@ fn shared_across_teams(route: &str, method: &axum::http::Method) -> bool {
         "/templates" => *method != Method::GET && *method != Method::HEAD,
         // A team deletes its own snapshots; see `delete_template`.
         "/templates/{id}" => *method != Method::DELETE,
+        // A team shares its own snapshot with another; see `share_template`.
+        _ if route.starts_with("/templates/{id}/shares") => false,
         "/cluster/events" => true,
         _ => ["/templates/{id}/", "/v2/templates", "/v3/templates"]
             .iter()
@@ -2727,7 +2734,10 @@ async fn templates(
         };
         for name in names {
             let metadata = node.template_metadata.get(&name);
-            if !team.may_use_template(metadata.and_then(|m| m.team.as_ref())) {
+            if !team.may_use_shared_template(
+                metadata.and_then(|m| m.team.as_ref()),
+                metadata.map_or(&[][..], |m| m.shared_with.as_slice()),
+            ) {
                 continue;
             }
             offered.entry(name).or_default().push((node, metadata));
@@ -2879,7 +2889,16 @@ async fn snapshots(
             let owner = snapshot["teamID"]
                 .as_str()
                 .and_then(|t| crate::ownership::TeamId::parse(t).ok());
-            if !team.may_use_template(owner.as_ref()) {
+            let shared: Vec<crate::ownership::TeamId> = snapshot["sharedWith"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|t| {
+                    t.as_str()
+                        .and_then(|t| crate::ownership::TeamId::parse(t).ok())
+                })
+                .collect();
+            if !team.may_use_shared_template(owner.as_ref(), &shared) {
                 continue;
             }
             let Some(id) = snapshot["snapshotID"].as_str().map(str::to_string) else {
@@ -2895,6 +2914,105 @@ async fn snapshots(
         }
     }
     Json(merged.into_values().collect::<Vec<_>>()).into_response()
+}
+
+/// The snapshot `name`'s owner team and the teams it is shared with, as the
+/// nodes last reported them. `None` when no node offers a team's snapshot of
+/// that name.
+// The error is the reply, returned by the handler at once.
+#[allow(clippy::result_large_err)]
+async fn snapshot_owner(
+    control: &ControlPlane,
+    name: &str,
+) -> Result<Option<(crate::ownership::TeamId, Vec<crate::ownership::TeamId>)>, Response> {
+    let nodes = control
+        .store
+        .nodes()
+        .await
+        .map_err(|e| api_error(StatusCode::SERVICE_UNAVAILABLE, e))?;
+    Ok(nodes.iter().find_map(|node| {
+        let info = node.template_metadata.get(name)?;
+        Some((info.team.clone()?, info.shared_with.clone()))
+    }))
+}
+
+/// `GET /templates/{id}/shares`: whose snapshot it is and the teams it is
+/// shared with. Its owner team's to read, or an administrator's.
+async fn template_shares(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(team): Extension<crate::ownership::RequestTeam>,
+    Path(id): Path<String>,
+) -> Response {
+    let name = crate::model::untagged(&id);
+    match snapshot_owner(&control, name).await {
+        Err(response) => response,
+        Ok(Some((owner, shared))) if team.0.as_ref().is_none_or(|mine| *mine == owner) => {
+            Json(json!({ "snapshotID": id, "teamID": owner.as_str(), "sharedWith": shared }))
+                .into_response()
+        }
+        Ok(_) => api_error(StatusCode::NOT_FOUND, format!("no snapshot {id}")),
+    }
+}
+
+/// `PUT` or `DELETE /templates/{id}/shares/{team}`: let another team start
+/// sandboxes from a team's snapshot, or stop. The snapshot's own team's to
+/// do, or an administrator's; every node that has the snapshot is told.
+async fn share_template(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(team): Extension<crate::ownership::RequestTeam>,
+    method: Method,
+    Path((id, with)): Path<(String, String)>,
+    body: Bytes,
+) -> Response {
+    let name = crate::model::untagged(&id);
+    match snapshot_owner(&control, name).await {
+        Err(response) => return response,
+        Ok(Some((owner, _))) if team.0.as_ref().is_none_or(|mine| *mine == owner) => {}
+        Ok(Some(_)) => return api_error(StatusCode::NOT_FOUND, format!("no snapshot {id}")),
+        Ok(None) if team.0.is_some() => {
+            return api_error(StatusCode::NOT_FOUND, format!("no snapshot {id}"))
+        }
+        // An administrator is told by the node what is wrong with it.
+        Ok(None) => {}
+    }
+    let nodes = match control.store.nodes().await {
+        Ok(nodes) => nodes,
+        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+    };
+    let mut worst: Option<(u16, Value)> = None;
+    let mut done: Option<(u16, Value)> = None;
+    for node in &nodes {
+        let mut request = control
+            .http
+            .request(
+                method.clone(),
+                format!("{}/templates/{name}/shares/{with}", node.api),
+            )
+            .header("content-type", "application/json")
+            .body(body.clone());
+        if let Some(token) = &control.config.cluster_token {
+            request = request.header(CLUSTER_TOKEN_HEADER, token);
+        }
+        let Ok(response) = request.send().await else {
+            continue;
+        };
+        let status = response.status().as_u16();
+        let answer = response.json::<Value>().await.unwrap_or(Value::Null);
+        if (200..300).contains(&status) {
+            done.get_or_insert((status, answer));
+        } else if status != 404 {
+            worst.get_or_insert((status, answer));
+        }
+    }
+    match (done, worst) {
+        (Some((204, _)), _) => StatusCode::NO_CONTENT.into_response(),
+        (Some((status, answer)), _) | (None, Some((status, answer))) => (
+            StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY),
+            Json(answer),
+        )
+            .into_response(),
+        (None, None) => api_error(StatusCode::NOT_FOUND, format!("no snapshot {id}")),
+    }
 }
 
 /// `DELETE /templates/{id}`: delete a snapshot wherever it is offered.

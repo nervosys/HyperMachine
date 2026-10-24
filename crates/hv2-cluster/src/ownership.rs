@@ -91,6 +91,13 @@ impl RequestTeam {
     pub fn may_use_template(&self, owner: Option<&TeamId>) -> bool {
         owner.is_none() || self.sees(owner)
     }
+
+    /// As [`Self::may_use_template`], and also a team its owner shared it
+    /// with: `shared_with` lists them.
+    #[must_use]
+    pub fn may_use_shared_template(&self, owner: Option<&TeamId>, shared_with: &[TeamId]) -> bool {
+        self.may_use_template(owner) || self.0.as_ref().is_some_and(|me| shared_with.contains(me))
+    }
 }
 
 /// Atomic legacy adoption; never transfers an existing owner or reservations.
@@ -119,5 +126,21 @@ mod tests {
             id
         );
         assert!(OwnerId::parse(&"a".repeat(128)).is_ok());
+    }
+
+    #[test]
+    fn a_shared_template_may_be_used_by_the_teams_it_was_shared_with() {
+        let team = |t: &str| TeamId::parse(t).unwrap();
+        let red = team("red");
+        let shared = [team("blue")];
+        // An operator's template is every team's, shared or not.
+        assert!(RequestTeam(Some(team("green"))).may_use_shared_template(None, &[]));
+        // A team's is its own, and a team it was shared with, and no other.
+        assert!(RequestTeam(Some(red.clone())).may_use_shared_template(Some(&red), &shared));
+        assert!(RequestTeam(Some(team("blue"))).may_use_shared_template(Some(&red), &shared));
+        assert!(!RequestTeam(Some(team("green"))).may_use_shared_template(Some(&red), &shared));
+        assert!(!RequestTeam(Some(team("blue"))).may_use_shared_template(Some(&red), &[]));
+        // A request with no team is an administrator's, and sees everything.
+        assert!(RequestTeam(None).may_use_shared_template(Some(&red), &[]));
     }
 }

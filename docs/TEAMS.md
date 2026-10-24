@@ -56,6 +56,35 @@ another team holds answers 409. Operator templates (`base`, images built by an
 administrator) belong to no team: every team may start from them, and only
 administrators delete them.
 
+## Sharing a snapshot with another team
+
+A team can let another team start sandboxes from one of its snapshots:
+
+```
+PUT    /templates/{snapshot}/shares/{team}   {"acknowledgeContents": true}
+DELETE /templates/{snapshot}/shares/{team}
+GET    /templates/{snapshot}/shares          -> {"teamID", "sharedWith": [...]}
+```
+
+Only the snapshot's own team (or an administrator) may do these; the team it
+is shared with cannot read the list, share it on, revoke it or delete the
+snapshot (404 each). The team shared with lists it in `/snapshots` and
+`/templates` and starts sandboxes from it; those sandboxes are its own team's.
+Revoking stops new starts at once; sandboxes already started run on.
+
+**A shared snapshot is the source sandbox as it was: its memory, its files and
+its environment variables.** Nothing is removed first (a layered memory
+snapshot cannot be cleaned after the fact), which is why the request must say
+`acknowledgeContents: true`. Take the snapshot from a sandbox that never held
+what you do not want the other team to have. A Git credential held on the host
+(`--team-git-credential`, `--git-credential`) is not in the guest, so not in the
+snapshot; `--git-credential-in-sandbox`, which this was not checked with, is a
+different matter. Taking a new snapshot of the same name replaces
+it and drops its shares. An operator's template is every team's already, and a
+machine's snapshot cannot be shared. The share list is kept with the snapshot
+in the snapshot store, so it survives a node restart. [Checked on
+KVM](benchmarks/2026-10-23/snapshot-share-kvm/README.md).
+
 A volume belongs to the team that created it. Its ID is derived from the team
 and the name, so two teams can each have a volume called `data`, and a
 sandbox's `volumeMounts` finds a name among its own team's volumes only. The

@@ -29,6 +29,9 @@ pub(crate) struct Snapshot {
     /// The team of the sandbox it was taken from: the only team that may
     /// use it. `None` for an operator's, which every team may use.
     pub team: Option<TeamId>,
+    /// Other teams its owner let start sandboxes from it. Changed in place:
+    /// a share does not make a new snapshot.
+    pub shared_with: parking_lot::RwLock<Vec<TeamId>>,
     /// The size of the guest it was taken from, when that is not its base
     /// template's: a sandbox started from it is that size.
     pub sizes: Option<crate::Sizes>,
@@ -57,6 +60,8 @@ struct Record {
     created_ms: u64,
     #[serde(rename = "teamID", default, skip_serializing_if = "Option::is_none")]
     team: Option<TeamId>,
+    #[serde(rename = "sharedWith", default, skip_serializing_if = "Vec::is_empty")]
+    shared_with: Vec<TeamId>,
     /// Both or neither: the size, where it is not the base template's.
     #[serde(rename = "cpuCount", default, skip_serializing_if = "Option::is_none")]
     cpu_count: Option<u32>,
@@ -228,23 +233,12 @@ pub(crate) async fn keep(
         sandbox_id,
         created_ms: now_ms(),
         team,
+        shared_with: parking_lot::RwLock::new(Vec::new()),
         sizes,
         owned: state.store.is_none(),
     };
     if let (Some(_), Some(dir)) = (&state.store, snapshot.file.parent()) {
-        let record = Record {
-            base: snapshot.base.clone(),
-            file: snapshot
-                .file
-                .file_name()
-                .map(|f| f.to_string_lossy().into_owned())
-                .unwrap_or_default(),
-            sandbox_id: snapshot.sandbox_id.clone(),
-            created_ms: snapshot.created_ms,
-            team: snapshot.team.clone(),
-            cpu_count: snapshot.sizes.map(|s| s.cpus),
-            memory_mb: snapshot.sizes.map(|s| s.memory_mb),
-        };
+        let record = record_of(&snapshot);
         if let Err(e) = publish(dir, name, &record) {
             let _ = std::fs::remove_file(&snapshot.file);
             return Err(e);
@@ -259,6 +253,139 @@ pub(crate) async fn keep(
     }
     announce(state).await;
     Ok(())
+}
+
+/// What a store keeps about `snapshot`.
+fn record_of(snapshot: &Snapshot) -> Record {
+    Record {
+        base: snapshot.base.clone(),
+        file: snapshot
+            .file
+            .file_name()
+            .map(|f| f.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        sandbox_id: snapshot.sandbox_id.clone(),
+        created_ms: snapshot.created_ms,
+        team: snapshot.team.clone(),
+        shared_with: snapshot.shared_with.read().clone(),
+        cpu_count: snapshot.sizes.map(|s| s.cpus),
+        memory_mb: snapshot.sizes.map(|s| s.memory_mb),
+    }
+}
+
+/// Whether a sandbox of `team` may be started from `snapshot`: an operator's
+/// is every team's, a team's is that team's and those it was shared with, and
+/// a caller with no team gets none of a team's.
+pub(crate) fn usable_by(snapshot: &Snapshot, team: Option<&TeamId>) -> bool {
+    match &snapshot.team {
+        None => true,
+        Some(owner) => {
+            Some(owner) == team || team.is_some_and(|t| snapshot.shared_with.read().contains(t))
+        }
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct ShareRequest {
+    #[serde(rename = "acknowledgeContents", default)]
+    acknowledge_contents: bool,
+}
+
+/// The team's snapshot `name` and the team to share it with, or why not.
+// The error is the reply, returned by the handler at once.
+#[allow(clippy::result_large_err)]
+fn shareable(
+    state: &AppState,
+    name: &str,
+    with: &str,
+) -> Result<(Arc<Snapshot>, TeamId), Response> {
+    let name = untagged(name);
+    let Some(snapshot) = lookup(state, name) else {
+        return Err(api_error(
+            StatusCode::NOT_FOUND,
+            format!("no snapshot {name}"),
+        ));
+    };
+    let Some(owner) = &snapshot.team else {
+        return Err(api_error(
+            StatusCode::CONFLICT,
+            format!("{name} is an operator's template, which every team already uses"),
+        ));
+    };
+    let with = TeamId::parse(with).map_err(|e| api_error(StatusCode::BAD_REQUEST, e))?;
+    if &with == owner {
+        return Err(api_error(
+            StatusCode::CONFLICT,
+            format!("{name} is that team's own snapshot"),
+        ));
+    }
+    Ok((snapshot, with))
+}
+
+/// Write a changed share list to the store, where another node reads it, and
+/// tell the cluster.
+async fn shared_changed(state: &AppState, name: &str, snapshot: &Snapshot) -> Result<(), String> {
+    if let Some(store) = &state.store {
+        publish(&store.dir.join("snapshots"), name, &record_of(snapshot))?;
+    }
+    announce(state).await;
+    Ok(())
+}
+
+/// `PUT /templates/{id}/shares/{team}`: let `team` start sandboxes from this
+/// team's snapshot. What it starts from is the source sandbox as it was --
+/// its memory, its files and its environment variables -- so the request
+/// must say it knows.
+pub(crate) async fn share(
+    State(state): State<Arc<AppState>>,
+    Path((name, with)): Path<(String, String)>,
+    body: axum::body::Bytes,
+) -> Response {
+    let (snapshot, with) = match shareable(&state, &name, &with) {
+        Ok(found) => found,
+        Err(response) => return response,
+    };
+    // A missing or malformed body has not said it.
+    if !serde_json::from_slice::<ShareRequest>(&body).is_ok_and(|b| b.acknowledge_contents) {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "a shared snapshot gives the other team the sandbox's memory, files and environment \
+             variables as they were: send {\"acknowledgeContents\": true} to share it",
+        );
+    }
+    {
+        let mut shared = snapshot.shared_with.write();
+        if !shared.contains(&with) {
+            shared.push(with);
+        }
+    }
+    if let Err(e) = shared_changed(&state, untagged(&name), &snapshot).await {
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, e);
+    }
+    let shared = snapshot.shared_with.read().clone();
+    Json(json!({
+        "snapshotID": snapshot_id(untagged(&name)),
+        "teamID": snapshot.team,
+        "sharedWith": shared,
+    }))
+    .into_response()
+}
+
+/// `DELETE /templates/{id}/shares/{team}`: stop. Sandboxes the team already
+/// started from it run on.
+pub(crate) async fn unshare(
+    State(state): State<Arc<AppState>>,
+    Path((name, with)): Path<(String, String)>,
+) -> Response {
+    let (snapshot, with) = match shareable(&state, &name, &with) {
+        Ok(found) => found,
+        Err(response) => return response,
+    };
+    snapshot.shared_with.write().retain(|t| *t != with);
+    if let Err(e) = shared_changed(&state, untagged(&name), &snapshot).await {
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, e);
+    }
+    StatusCode::NO_CONTENT.into_response()
 }
 
 /// Written beside, then renamed over: another node never reads half of one.
@@ -308,6 +435,7 @@ pub(crate) async fn list(
             entry["templateID"] = json!(s.base);
             entry["createdAt"] = json!(s.created_ms);
             entry["teamID"] = json!(s.team);
+            entry["sharedWith"] = json!(s.shared_with.read().clone());
             entry
         })
         .collect();
@@ -370,6 +498,7 @@ pub(crate) fn lookup(state: &AppState, name: &str) -> Option<Arc<Snapshot>> {
         sandbox_id: record.sandbox_id,
         created_ms: record.created_ms,
         team: record.team,
+        shared_with: parking_lot::RwLock::new(record.shared_with),
         sizes,
         owned: false,
     });
@@ -418,7 +547,12 @@ pub(crate) async fn follow_store(state: Arc<AppState>) {
             changed |= snapshots.len() != before;
             for (name, record) in found {
                 let file = dir.join(&record.file);
-                if snapshots.get(&name).is_some_and(|s| s.file == file) {
+                if let Some(existing) = snapshots.get(&name).filter(|s| s.file == file) {
+                    // Shared or unshared by another node since.
+                    if *existing.shared_with.read() != record.shared_with {
+                        *existing.shared_with.write() = record.shared_with;
+                        changed = true;
+                    }
                     continue;
                 }
                 let sizes = record.sizes();
@@ -430,6 +564,7 @@ pub(crate) async fn follow_store(state: Arc<AppState>) {
                         sandbox_id: record.sandbox_id,
                         created_ms: record.created_ms,
                         team: record.team,
+                        shared_with: parking_lot::RwLock::new(record.shared_with),
                         sizes,
                         owned: false,
                     }),
@@ -466,6 +601,51 @@ mod tests {
         assert!(written.contains(r#""teamID":"red""#));
         let back: Record = serde_json::from_str(&written).unwrap();
         assert_eq!(back.team, red.team);
+    }
+
+    /// A share list is kept with the record, and an older record has none.
+    #[test]
+    fn a_snapshot_record_carries_who_it_is_shared_with() {
+        let old: Record = serde_json::from_str(
+            r#"{"base":"base","file":"a.snap","sandboxID":"sbx","createdAt":1,"teamID":"red"}"#,
+        )
+        .unwrap();
+        assert!(old.shared_with.is_empty());
+        assert!(!serde_json::to_string(&old).unwrap().contains("sharedWith"));
+        let shared = Record {
+            shared_with: vec![TeamId::parse("blue").unwrap()],
+            ..old
+        };
+        let written = serde_json::to_string(&shared).unwrap();
+        assert!(written.contains(r#""sharedWith":["blue"]"#), "{written}");
+        let back: Record = serde_json::from_str(&written).unwrap();
+        assert_eq!(back.shared_with, shared.shared_with);
+    }
+
+    /// An operator's snapshot is every team's; a team's is its own and those
+    /// it was shared with, and never a caller with no team's.
+    #[test]
+    fn a_shared_snapshot_is_usable_by_its_owner_and_the_teams_shared_with() {
+        let team = |t: &str| TeamId::parse(t).unwrap();
+        let snapshot = |owner: Option<&str>, shared: &[&str]| Snapshot {
+            base: "base".into(),
+            file: std::path::PathBuf::from("a.snap"),
+            sandbox_id: "sbx".into(),
+            created_ms: 1,
+            team: owner.map(team),
+            shared_with: parking_lot::RwLock::new(shared.iter().map(|t| team(t)).collect()),
+            sizes: None,
+            owned: false,
+        };
+        let operators = snapshot(None, &[]);
+        assert!(usable_by(&operators, None) && usable_by(&operators, Some(&team("blue"))));
+        let reds = snapshot(Some("red"), &["blue"]);
+        assert!(usable_by(&reds, Some(&team("red"))));
+        assert!(usable_by(&reds, Some(&team("blue"))));
+        assert!(!usable_by(&reds, Some(&team("green"))));
+        assert!(!usable_by(&reds, None));
+        reds.shared_with.write().clear();
+        assert!(!usable_by(&reds, Some(&team("blue"))));
     }
 
     /// A size is kept with a snapshot of a sandbox of its own, and a record

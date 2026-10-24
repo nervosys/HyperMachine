@@ -330,6 +330,7 @@ mod tests {
                     cpu_count: 2,
                     memory_mb: 256,
                     team: None,
+                    shared_with: Vec::new(),
                 },
             )]
             .into_iter()

@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A team can share a snapshot with another team: `PUT`/`DELETE
+  /templates/{id}/shares/{team}` and `GET /templates/{id}/shares` on the control
+  plane. The team shared with lists it and starts sandboxes from it; it cannot
+  read, extend, revoke or delete the share (404). Revoking stops new starts at
+  once. Nothing is scrubbed from a shared snapshot, so the request must carry
+  `acknowledgeContents: true`. The list is kept in the snapshot store and
+  survives a node restart. Checked on real KVM through a control plane with three
+  teams, 6 cases, 3 runs in a row (`tools/check-snapshot-share-kvm.py`,
+  `docs/benchmarks/2026-10-23/snapshot-share-kvm/`). NOT VERIFIED: several
+  nodes (the share is sent to each and the store is followed every 2 seconds), a
+  node that was down when a share was revoked, and any removal of secrets.
 - A machine sends webhooks: `machine.lifecycle.created`, `.started`,
   `.stopped` and `.deleted`, signed as a sandbox's are, to a webhook that names
   them in `events` (one with no list keeps getting sandbox events only) and

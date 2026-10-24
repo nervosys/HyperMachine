@@ -38,6 +38,9 @@ pub struct TemplateInfo {
     /// operator's template, which every team may use.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub team: Option<crate::ownership::TeamId>,
+    /// Other teams its owner let use it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shared_with: Vec<crate::ownership::TeamId>,
 }
 
 /// A node, as it last reported itself.
@@ -85,10 +88,13 @@ impl NodeInfo {
     #[must_use]
     pub fn offers_to(&self, template: &str, team: &crate::ownership::RequestTeam) -> bool {
         self.offers(template)
-            && team.may_use_template(
+            && team.may_use_shared_template(
                 self.template_metadata
                     .get(untagged(template))
                     .and_then(|info| info.team.as_ref()),
+                self.template_metadata
+                    .get(untagged(template))
+                    .map_or(&[][..], |info| info.shared_with.as_slice()),
             )
     }
 

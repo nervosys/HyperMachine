@@ -2771,11 +2771,12 @@ async fn create_sandbox(
     // pages copied in. Held until then: a delete meanwhile waits for it.
     let requested = snapshots::untagged(req.template_id.as_deref().unwrap_or("base")).to_string();
     let from_snapshot = snapshots::lookup(&state, &requested);
-    // A team's snapshot starts that team's sandboxes and no others -- not
-    // another team's, and not a teamless copy of its data.
+    // A team's snapshot starts that team's sandboxes and those of the teams
+    // it was shared with -- not another team's, and not a teamless copy of
+    // its data.
     if from_snapshot
         .as_ref()
-        .is_some_and(|s| s.team.is_some() && s.team != team_id)
+        .is_some_and(|s| !snapshots::usable_by(s, team_id.as_ref()))
     {
         return api_error(
             StatusCode::NOT_FOUND,
@@ -5267,6 +5268,7 @@ fn advertise_templates(state: &AppState) {
                     cpu_count: sizes.cpus,
                     memory_mb: sizes.memory_mb,
                     team: None,
+                    shared_with: Vec::new(),
                 };
                 (name, info)
             })
@@ -5280,11 +5282,12 @@ fn advertise_templates(state: &AppState) {
                     name.clone(),
                     snapshot.base.clone(),
                     snapshot.team.clone(),
+                    snapshot.shared_with.read().clone(),
                     snapshot.sizes,
                 )
             })
             .collect();
-        for (name, base, team, own) in snapshots {
+        for (name, base, team, shared_with, own) in snapshots {
             let sizes = own.unwrap_or_else(|| sizes_of(state, &base));
             metadata.insert(
                 name,
@@ -5293,6 +5296,7 @@ fn advertise_templates(state: &AppState) {
                     cpu_count: sizes.cpus,
                     memory_mb: sizes.memory_mb,
                     team,
+                    shared_with,
                 },
             );
         }
@@ -6385,6 +6389,7 @@ async fn main() -> std::process::ExitCode {
                                 cpu_count: opts.cpu_cores,
                                 memory_mb: opts.memory_mb,
                                 team: None,
+                                shared_with: Vec::new(),
                             },
                         )
                     })
@@ -6674,6 +6679,10 @@ async fn main() -> std::process::ExitCode {
         .route(
             "/templates/{templateID}",
             axum::routing::delete(snapshots::delete),
+        )
+        .route(
+            "/templates/{templateID}/shares/{team}",
+            axum::routing::put(snapshots::share).delete(snapshots::unshare),
         )
         .route("/v3/templates", post(builds::request))
         .route(

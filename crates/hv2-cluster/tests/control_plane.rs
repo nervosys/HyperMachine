@@ -1342,6 +1342,7 @@ async fn template_metadata_distinguishes_snapshot_cold_legacy_and_heterogeneous_
                 cpu_count,
                 memory_mb,
                 team: None,
+                shared_with: Vec::new(),
             },
         )]
         .into_iter()
@@ -2896,6 +2897,7 @@ async fn snapshots_and_templates_are_the_teams_own_or_the_operators() {
         cpu_count: 1,
         memory_mb: 512,
         team: team.map(|t| TeamId::parse(t).unwrap()),
+        shared_with: Vec::new(),
     };
     let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
     store
