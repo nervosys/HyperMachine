@@ -99,7 +99,9 @@ if [ -n "$docker" ]; then
     tar -xzf "$docker" -C "$root/usr/local/bin" --strip-components=1
     mkdir -p "$root/etc/systemd/system/multi-user.target.wants" "$root/etc/docker"
     [ -z "$compose" ] || { mkdir -p "$root/usr/local/lib/docker/cli-plugins"; install -m 0755 "$compose" "$root/usr/local/lib/docker/cli-plugins/docker-compose"; }
+    mv "$root/usr/local/bin/runc" "$root/usr/local/bin/runc-real"
     install -m 0755 "$here/runc-nopivot" "$root/usr/local/bin/runc-nopivot"
+    install -m 0755 "$here/runc-nopivot" "$root/usr/local/bin/runc"
     echo '{"iptables": true, "default-runtime": "nopivot", "runtimes": {"nopivot": {"path": "/usr/local/bin/runc-nopivot"}}}'         >"$root/etc/docker/daemon.json"
     # The guest kernel has the legacy iptables and not nf_tables.
     chroot "$root" update-alternatives --set iptables /usr/sbin/iptables-legacy

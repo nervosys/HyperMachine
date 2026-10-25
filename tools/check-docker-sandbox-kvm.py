@@ -48,6 +48,14 @@ volumes:
 """
 
 
+COMPOSE_BUILD = """name: cb
+services:
+  app:
+    build: .
+    network_mode: none
+"""
+
+
 def port():
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -316,6 +324,16 @@ def main():
                 sh(sandbox, "cd /tmp/c && docker compose down -v 2>&1 | tail -3", 120)
                 return {"restored": restored, "forked": forked}
             case("a checkpoint and a fork carry a running compose project", composed_resumed)
+
+            def composed_build():
+                sandbox = state["sandbox"]
+                sh(sandbox, "rm -rf /tmp/cb && mkdir /tmp/cb && cp /bin/busybox /tmp/cb/busybox && cat > /tmp/cb/Dockerfile <<'EOF'" + chr(10) + DOCKERFILE + "EOF")
+                sh(sandbox, "cat > /tmp/cb/compose.yaml <<'EOF'" + chr(10) + COMPOSE_BUILD + "EOF")
+                built_out = sh(sandbox, "cd /tmp/cb && docker compose build 2>&1 | tail -3", 300, ok=False)
+                out = sh(sandbox, "cd /tmp/cb && docker compose run --rm --no-deps app", 120)
+                assert out == "built-by-docker", (out, built_out)
+                return {"output": out}
+            case("docker compose build builds a service's image from its build context", composed_build)
 
         if args.nested:
             def nested():

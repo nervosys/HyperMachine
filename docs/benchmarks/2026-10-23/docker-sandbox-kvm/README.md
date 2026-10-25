@@ -2,9 +2,9 @@
 
 `tools/check-docker-sandbox-kvm.py --network` on WSL2's KVM, running as root: an
 owned `hv2-sandboxd` whose `base` template is the initramfs from
-`build-tools-image.sh --docker docker-29.9.2.tgz` (Ubuntu 24.04, systemd, Docker's
-static binaries, 122 MiB) on a Linux 6.6.52 kernel from `build-kernel.sh --docker`
-(`resolved.config` is its full configuration), at 2048 MiB. 11 of 11 cases pass in
+`build-tools-image.sh --docker docker-29.9.2.tgz --compose docker-compose-linux-x86_64` (Ubuntu 24.04, systemd, Docker's
+static binaries and the Compose plugin, 142 MiB) on a Linux 6.6.52 kernel from `build-kernel.sh --docker`
+(`resolved.config` is its full configuration), at 2048 MiB. 12 of 12 cases pass in
 each of 3 runs in a row (`runs/run1..3.json`; `report.json` is run 1). Docker is
 the engine inside the guest; nothing on the host used it.
 
@@ -33,18 +33,19 @@ the engine inside the guest; nothing on the host used it.
     and `client` reaching `srv`, a checkpoint is taken and the project taken `down`;
     the restore brings both services back and `client` reaches `srv` again, and a
     fork has the same.
+12. `docker compose build` builds a service's image from its `build:` context and `compose run` runs it.
 
 What it took, each found by a failing run: the default kernel has no memory cgroup,
 overlayfs, veth, bridge, user namespaces or iptables `raw` table (`docker.fragment`
 adds them); `iptables` must be the legacy flavour (the kernel has no nf_tables);
 and runc cannot `pivot_root` out of an initramfs, so `runc-nopivot` adds
-`--no-pivot` and is Docker's default runtime.
+`--no-pivot` and is Docker's default runtime and also stands in for `runc` itself (BuildKit, used by `docker compose build`, runs `runc` from PATH and ignores the default runtime; found by that case failing).
 
 ## NOT VERIFIED
 
-compose `build:`, more than one compose project, `RUN` steps that need
+more than one compose project, `RUN` steps that need
 the network, volumes holding data across a checkpoint, a published port from outside the node, a checkpoint or fork of a sandbox
 with more than one container, with a volume holding data, or with a build in
 progress (one container with a published port was checkpointed and forked), user namespaces with `--userns-remap`, the default kernel
-(the Docker kernel is a separate build, opted into with `HV2_KERNEL`), and Docker
-together with `/dev/kvm`.
+(the Docker kernel is a separate build, opted into with `HV2_KERNEL`).
+Docker together with `/dev/kvm` has [its own evidence](../../2026-10-24/docker-kvm-sandbox-kvm/README.md).

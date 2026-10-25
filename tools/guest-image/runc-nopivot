@@ -2,8 +2,10 @@
 # runc without pivot_root, for a guest whose root is an initramfs: the kernel
 # will not pivot away from the initial rootfs (EINVAL), so a container is
 # entered with MS_MOVE and chroot instead. Docker is told to use this as an
-# additional runtime (docker.service's daemon.json); everything else is runc's.
-real=/usr/local/bin/runc
+# default runtime (daemon.json), and it is also installed as `runc` itself since
+# BuildKit's executor (docker build, compose build) runs `runc` from PATH and
+# ignores the default runtime. Everything else is runc's.
+real=/usr/local/bin/runc-real
 n=$#
 i=0
 ins=""

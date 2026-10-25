@@ -4,10 +4,10 @@
   "input_sha256": {
     "daemon": "311c26f69a609ec47aabe8a7b6c47633b522f8552e5e29eed6e0162207daf13f",
     "kernel": "6dcf46487bd263f4224f7127c3461fa48974432528c7d777f9e3b856335dffac",
-    "initrd": "f132e2cce43e67ad35ceb320ea662be5d8bf569396f91e7d0199e5fcc1c2a319",
-    "driver": "ac5e79259f08965ab1c60a5e4bde8ccc79936819d590178437506303e1427e2d"
+    "initrd": "0c95127a0c31a3ac08aa292ee3bb41d7900514058d440f5d9426cecd9ec7e6ac",
+    "driver": "dfd0fab4e7bf23257830193e5559e2021f8f94f1affafd209f4a5442a23f94c8"
   },
-  "initrd_bytes": 148846827,
+  "initrd_bytes": 148846713,
   "memory_mb": 2048,
   "host_cpus": 24,
   "cases": [
@@ -15,7 +15,7 @@
       "name": "dockerd is up under systemd",
       "success": true,
       "detail": {
-        "create_seconds": 0.041,
+        "create_seconds": 0.228,
         "docker_info": "overlayfs cgroup2 29.9.2 [name=seccomp,profile=builtin name=cgroupns]",
         "kernel": "6.6.52"
       }
@@ -120,6 +120,13 @@
           ],
           "reach": "hello-from-compose"
         }
+      }
+    },
+    {
+      "name": "docker compose build builds a service's image from its build context",
+      "success": true,
+      "detail": {
+        "output": "built-by-docker"
       }
     }
   ]
