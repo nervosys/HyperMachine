@@ -22,3 +22,15 @@ So the one kernel carries Docker and KVM together, and a container can be given
 Intel hosts (this is an AMD host under WSL2), a real guest OS inside the nested VM (a
 toy real-mode program ran), a checkpoint or fork while a nested VM is running, and a
 container image that carries its own KVM user (QEMU, Firecracker).
+
+## Tried, and did not work (2026-10-25)
+
+A real Linux kernel (a 6.x bzImage with a busybox initramfs, through hv2-core's
+`linux_boot_probe`, built static) booted inside the sandbox did **not** reach
+userspace. The same probe, kernel and initramfs reach userspace on the WSL host in
+0.6 s. Inside the sandbox the kernel starts and then stops advancing in early boot:
+its console ended at guest time 17 to 34 s whether the probe was given 20, 60 or 270 s
+of wall time, with or without `tsc_early_khz=… tsc=reliable` (without it the guest
+also logs "Unable to calibrate against PIT"). The cause is not known: it may be the
+cost of exits through two levels of nesting on this host (Hyper-V under WSL2), or the
+probe. The attempt was not committed as a check.
