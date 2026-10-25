@@ -15,7 +15,7 @@ checks through its API:
 
 Writes report.json and the daemon's log into --output.
 """
-import argparse, hashlib, http.client, json, os, socket, subprocess, time
+import argparse, hashlib, http.client, importlib.util, json, os, socket, subprocess, time
 import urllib.error, urllib.request
 from pathlib import Path
 
@@ -64,6 +64,7 @@ def main():
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--memory-mb", type=int, default=2048)
     parser.add_argument("--network", action="store_true", help="also pull hello-world (needs the Internet)")
+    parser.add_argument("--nested", action="store_true", help="also run a nested VM (needs a kernel built with --kvm and python3 in the image)")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     report = {"success": False,
@@ -315,6 +316,22 @@ def main():
                 sh(sandbox, "cd /tmp/c && docker compose down -v 2>&1 | tail -3", 120)
                 return {"restored": restored, "forked": forked}
             case("a checkpoint and a fork carry a running compose project", composed_resumed)
+
+        if args.nested:
+            def nested():
+                sandbox = state["sandbox"]
+                spec = importlib.util.spec_from_file_location("kvmcheck", Path(__file__).with_name("check-kvm-sandbox-kvm.py"))
+                kvmcheck = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(kvmcheck)
+                sh(sandbox, "cat > /tmp/nested.py <<'EOF'" + chr(10) + kvmcheck.NESTED + "EOF")
+                guest = sh(sandbox, "python3 /tmp/nested.py 2>&1", 60)
+                # The same program in a container that was given /dev/kvm, running the guest's python from bind mounts.
+                boxed = sh(sandbox, "docker run --rm --network none --device /dev/kvm -v /tmp/nested.py:/nested.py:ro "
+                                    "-v /usr:/usr:ro -v /lib:/lib:ro -v /lib64:/lib64:ro hvbox /usr/bin/python3 /nested.py 2>&1", 120)
+                for out in (guest, boxed):
+                    assert "KVM_RUN exit_reason 2" in out and "second exit_reason 5" in out, out
+                return {"in_the_guest": guest.splitlines()[-2:], "in_a_container": boxed.splitlines()[-2:]}
+            case("a nested VM runs to an I/O exit and HLT, in the guest and in a container given /dev/kvm", nested)
 
         request("DELETE", f"/sandboxes/{state['sandbox']}")
         report["success"] = True

@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`tools/check-kvm-sandbox-kvm.py`, `docs/benchmarks/2026-10-23/kvm-sandbox-kvm/`):
   a program in the guest creates a VM and runs a vCPU to an I/O exit and HLT.
   NOT VERIFIED: Intel hosts, a real guest inside the sandbox, checkpoint or fork with a VM running.
+- Docker together with `/dev/kvm` in a sandbox: `check-docker-sandbox-kvm.py --nested`
+  runs a nested VM to an I/O exit and HLT from the guest and from a container given
+  `--device /dev/kvm`, on a `--docker --kvm` kernel. 12 cases, 3 runs in a row on KVM
+  (`docs/benchmarks/2026-10-24/docker-kvm-sandbox-kvm/`). NOT VERIFIED: Intel hosts,
+  a real guest OS in the nested VM, a checkpoint with a nested VM running.
 - Docker's engine in a sandbox: `build-tools-image.sh --docker docker-X.tgz` and
   `build-kernel.sh --docker` (`tools/guest-image/docker.fragment`: memory cgroups,
   overlayfs, veth, bridge, user namespaces, NAT, iptables raw). The guest uses

@@ -140,8 +140,11 @@ against the release's checksum file) as a Docker CLI plugin.
 nested virtualization through, the sandbox has `/dev/kvm`. Checked on KVM on an AMD
 host with [`tools/check-kvm-sandbox-kvm.py`](../tools/check-kvm-sandbox-kvm.py)
 ([evidence](benchmarks/2026-10-23/kvm-sandbox-kvm/README.md)): a program in the
-guest creates a VM and runs a vCPU to an I/O exit and HLT. Not checked: Intel, a
-real guest of its own.
+guest creates a VM and runs a vCPU to an I/O exit and HLT. With both flags the
+same program also runs in a container given `--device /dev/kvm`
+([evidence](benchmarks/2026-10-24/docker-kvm-sandbox-kvm/README.md), run with
+`check-docker-sandbox-kvm.py --nested`). Not checked: Intel, a real guest of its
+own, a checkpoint or fork with a nested VM running.
 
 ## Not checked
 
