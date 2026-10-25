@@ -5,11 +5,11 @@ owned `hv2-sandboxd` whose `base` template is the initramfs from
 `build-tools-image.sh --docker docker-29.9.2.tgz --compose docker-compose-linux-x86_64
 --packages "ca-certificates procps python3"` (155 MiB) on a Linux 6.6.52 kernel from
 `build-kernel.sh --docker --kvm` (`resolved.config` is its full configuration), at
-2048 MiB. 13 of 13 cases pass in each of 3 runs in a row (`runs/run1..3.json`;
-`report.json` is run 1). Cases 1 to 12 are those of
-[the Docker check](../2026-10-23/docker-sandbox-kvm/README.md); the thirteenth is new:
+2048 MiB. 14 of 14 cases pass in each of 3 runs in a row (`runs/run1..3.json`;
+`report.json` is run 1). Cases 1 to 13 are those of
+[the Docker check](../2026-10-23/docker-sandbox-kvm/README.md); the fourteenth is new:
 
-13. A nested VM runs to a `KVM_EXIT_IO` (port 0x10, byte 0x42) and then `KVM_EXIT_HLT`,
+14. A nested VM runs to a `KVM_EXIT_IO` (port 0x10, byte 0x42) and then `KVM_EXIT_HLT`,
     both from the guest's own shell and from a container started with
     `--device /dev/kvm`, with the guest's `/usr`, `/lib` and `/lib64` bind-mounted
     read-only so the container can run the guest's python3.

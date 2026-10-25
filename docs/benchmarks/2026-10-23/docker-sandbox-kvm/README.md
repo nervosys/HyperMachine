@@ -4,7 +4,7 @@
 owned `hv2-sandboxd` whose `base` template is the initramfs from
 `build-tools-image.sh --docker docker-29.9.2.tgz --compose docker-compose-linux-x86_64` (Ubuntu 24.04, systemd, Docker's
 static binaries and the Compose plugin, 142 MiB) on a Linux 6.6.52 kernel from `build-kernel.sh --docker`
-(`resolved.config` is its full configuration), at 2048 MiB. 12 of 12 cases pass in
+(`resolved.config` is its full configuration), at 2048 MiB. 13 of 13 cases pass in
 each of 3 runs in a row (`runs/run1..3.json`; `report.json` is run 1). Docker is
 the engine inside the guest; nothing on the host used it.
 
@@ -34,6 +34,7 @@ the engine inside the guest; nothing on the host used it.
     the restore brings both services back and `client` reaches `srv` again, and a
     fork has the same.
 12. `docker compose build` builds a service's image from its `build:` context and `compose run` runs it.
+13. Two compose projects (the same file under `-p one` and `-p two`) run side by side with separate networks and containers; `down` on one leaves the other running.
 
 What it took, each found by a failing run: the default kernel has no memory cgroup,
 overlayfs, veth, bridge, user namespaces or iptables `raw` table (`docker.fragment`
@@ -43,7 +44,7 @@ and runc cannot `pivot_root` out of an initramfs, so `runc-nopivot` adds
 
 ## NOT VERIFIED
 
-more than one compose project, `RUN` steps that need
+`RUN` steps that need
 the network, volumes holding data across a checkpoint, a published port from outside the node, a checkpoint or fork of a sandbox
 with more than one container, with a volume holding data, or with a build in
 progress (one container with a published port was checkpointed and forked), user namespaces with `--userns-remap`, the default kernel

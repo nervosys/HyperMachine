@@ -335,6 +335,23 @@ def main():
                 return {"output": out}
             case("docker compose build builds a service's image from its build context", composed_build)
 
+            def two_projects():
+                sandbox = state["sandbox"]
+                # The same file under two project names: separate networks, containers and volumes.
+                sh(sandbox, "cd /tmp/c && docker compose -p one up -d 2>&1 | tail -2 && docker compose -p two up -d 2>&1 | tail -2", 300)
+                time.sleep(3)
+
+                listed = sh(sandbox, "docker ps --format '{{.Names}}' | sort | tr '\\n' ' '").split()
+                assert listed == ["one-client-1", "one-srv-1", "two-client-1", "two-srv-1"], listed
+                nets = sh(sandbox, "docker network ls --format '{{.Name}}' | grep -E '^(one|two)_' | sort | tr '\\n' ' '").split()
+                assert nets == ["one_default", "two_default"], nets
+                sh(sandbox, "cd /tmp/c && docker compose -p one down -v 2>&1 | tail -2", 120)
+                left = sh(sandbox, "docker ps --format '{{.Names}}' | sort | tr '\\n' ' '").split()
+                assert left == ["two-client-1", "two-srv-1"], left
+                sh(sandbox, "cd /tmp/c && docker compose -p two down -v 2>&1 | tail -2", 120)
+                return {"running_together": listed, "networks": nets, "left_after_one_down": left}
+            case("two compose projects run side by side, and one comes down without the other", two_projects)
+
         if args.nested:
             def nested():
                 sandbox = state["sandbox"]

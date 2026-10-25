@@ -5,7 +5,7 @@
     "daemon": "311c26f69a609ec47aabe8a7b6c47633b522f8552e5e29eed6e0162207daf13f",
     "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
     "initrd": "7c1a5329c7e370d866f231864941c7fdbbfd0f69fad737b7d681c246b8ba200f",
-    "driver": "dfd0fab4e7bf23257830193e5559e2021f8f94f1affafd209f4a5442a23f94c8"
+    "driver": "8fa6296f678c228cf2dc35ab6fd18033d0cc5838f5d6b2fe2677a5ba935c952f"
   },
   "initrd_bytes": 160963505,
   "memory_mb": 2048,
@@ -15,7 +15,7 @@
       "name": "dockerd is up under systemd",
       "success": true,
       "detail": {
-        "create_seconds": 0.275,
+        "create_seconds": 0.517,
         "docker_info": "overlayfs cgroup2 29.9.2 [name=seccomp,profile=builtin name=cgroupns]",
         "kernel": "6.6.52"
       }
@@ -127,6 +127,26 @@
       "success": true,
       "detail": {
         "output": "built-by-docker"
+      }
+    },
+    {
+      "name": "two compose projects run side by side, and one comes down without the other",
+      "success": true,
+      "detail": {
+        "running_together": [
+          "one-client-1",
+          "one-srv-1",
+          "two-client-1",
+          "two-srv-1"
+        ],
+        "networks": [
+          "one_default",
+          "two_default"
+        ],
+        "left_after_one_down": [
+          "two-client-1",
+          "two-srv-1"
+        ]
       }
     },
     {
