@@ -438,6 +438,34 @@ def main():
                 return {"image_output": out, "services_after_restore": services}
             case("a checkpoint in the middle of a docker build, with a compose project running, resumes both", build_in_progress)
 
+            def build_forked():
+                sandbox = state["sandbox"]
+
+                def built(target):
+                    deadline = time.monotonic() + 180
+                    while sh(target, "docker image ls -q hvslow | wc -l") == "0":
+                        assert time.monotonic() < deadline, sh(target, "tail -5 /tmp/slow.log", ok=False)
+                        time.sleep(2)
+                    return sh(target, "docker run --rm --network none hvslow", 120)
+                sh(sandbox, "docker rmi -f hvslow >/dev/null 2>&1; cd /tmp/s && (docker build -t hvslow . > /tmp/slow.log 2>&1 &) ; true")
+                deadline = time.monotonic() + 120
+                while "sleep 30" not in sh(sandbox, "cat /tmp/slow.log", ok=False):
+                    assert time.monotonic() < deadline, sh(sandbox, "cat /tmp/slow.log", ok=False)
+                    time.sleep(1)
+                assert sh(sandbox, "docker image ls -q hvslow | wc -l") == "0", "the build had already finished"
+                status, made = request("POST", f"/sandboxes/{sandbox}/fork", {"timeout": 900})
+                assert status in (200, 201), (status, made)
+                child = made[0]["sandbox"]["sandboxID"]
+                try:
+                    in_child = built(child)
+                    in_parent = built(sandbox)
+                finally:
+                    request("DELETE", f"/sandboxes/{child}")
+                sh(sandbox, "docker rmi -f hvslow >/dev/null; true", 60, ok=False)
+                assert in_child == in_parent == "built-after-resume", (in_child, in_parent)
+                return {"in_fork": in_child, "in_parent": in_parent}
+            case("a fork in the middle of a docker build finishes the build in the fork and the parent", build_forked)
+
         def remapped():
             sandbox = state["sandbox"]
             up = "for i in $(seq 60); do docker info >/dev/null 2>&1 && break; sleep 1; done; docker info >/dev/null 2>&1"
