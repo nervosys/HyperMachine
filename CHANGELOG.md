@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Disk checkpoints on a filesystem with reflinks: `tools/check-disk-checkpoint-kvm.py --work-dir`
+  now records whether the checkpoint copy shares extents with the disk. On a
+  loop-mounted XFS (`reflink=1`) it did and 10 of 10 cases passed; on ext4 it
+  did not and 10 of 10 passed (`docs/benchmarks/2026-10-25/disk-checkpoint-reflink-kvm/`).
+  One run each. NOT VERIFIED: Btrfs, a real block device, `--disk-slot` nodes.
 - `/dev/kvm` in a sandbox: `build-kernel.sh --kvm` (`tools/guest-image/kvm.fragment`).
   Checked on real KVM on an AMD host, 2 cases, 3 runs in a row
   (`tools/check-kvm-sandbox-kvm.py`, `docs/benchmarks/2026-10-23/kvm-sandbox-kvm/`):
@@ -77,7 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sandbox checkpointed again and a 1 GiB disk with 400 MiB of data restored
   byte for byte. NOT VERIFIED: a filesystem with reflinks (WSL's ext4 has
   none, so the copies were full), `--disk-slot` nodes, and disks much beyond
-  1 GiB.
+  1 GiB. A filesystem with reflinks is now checked: see the entry above.
 - Checked on real KVM with Ubuntu 24.04's cloud image (a GPT disk with four
   partitions): a machine's snapshot is listed and archived from its root
   partition without one being named, the archive equal file for file to the

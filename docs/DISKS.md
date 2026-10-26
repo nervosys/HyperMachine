@@ -85,7 +85,7 @@ What it costs and changes:
   template from one that did not, so the node makes its own on first start with
   the flag. A named snapshot taken before the flag was set has no slot, and a
   create from it with a disk fails at the mount.
-- **The fork's disk copy is unchanged.** It is still a block-by-block copy where
+- **A copy is a reflink where the filesystem has them.** Checked on XFS (see the 2026-10-25 reflink evidence under benchmarks); the fork's copy is a block-by-block copy where
   the filesystem has no reflinks.
 
 Evidence: [real KVM: the disk slot, with timings against the same build without it](benchmarks/2026-10-08/disk-slot-kvm/README.md).

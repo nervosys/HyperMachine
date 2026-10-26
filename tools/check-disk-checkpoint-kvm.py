@@ -49,6 +49,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ["daemon", "kernel", "initrd", "output"]:
         parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--work-dir", type=Path, default=Path("/var/tmp"),
+                        help="where the node keeps its disks; put it on XFS or Btrfs to check reflinks")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     report = {"success": False,
@@ -56,7 +58,7 @@ def main():
               "input_sha256": {k: digest(getattr(args, k)) for k in ["daemon", "kernel", "initrd"]},
               "cases": []}
     report["input_sha256"]["driver"] = digest(__file__)
-    work = Path(tempfile.mkdtemp(prefix="hm-disk-checkpoint-check-", dir="/var/tmp"))
+    work = Path(tempfile.mkdtemp(prefix="hm-disk-checkpoint-check-", dir=args.work_dir))
     (work / "tmp").mkdir()
     env = dict(os.environ, HV2_KERNEL=str(args.kernel), HV2_INITRD=str(args.initrd), RUST_LOG="info",
                TMPDIR=str(work / "tmp"))
@@ -103,6 +105,14 @@ def main():
 
     def copies_on_disk():
         return sorted(str(p.relative_to(work)) for p in work.rglob("*.disk.img"))
+
+    def shared_extents():
+        """True when a copy of the disk shares extents with another file (a reflink); None without filefrag."""
+        if shutil.which("filefrag") is None:
+            return None
+        copies = [p for p in work.rglob("*.disk.img")]
+        return any("shared" in subprocess.run(["filefrag", "-v", str(p)], capture_output=True, text=True).stdout
+                   for p in copies)
 
     sha = "sha256sum {} | cut -d' ' -f1"
     state = {}
@@ -254,6 +264,8 @@ def main():
             started = time.monotonic()
             status, value = request("POST", f"/sandboxes/{other}/checkpoints", {"name": "big1"})
             took = round(time.monotonic() - started, 3)
+            os.sync()
+            shared = shared_extents()
             assert status == 201, (status, value)
             execute(other, "dd if=/dev/zero of=/big/blob bs=1M count=50 conv=notrunc 2>/dev/null && sync")
             assert execute(other, sha.format("/big/blob")) != digest_before
@@ -263,7 +275,7 @@ def main():
             assert status == 200, (status, value)
             assert execute(other, sha.format("/big/blob")) == digest_before
             request("DELETE", f"/sandboxes/{other}")
-            return {"disk_mib": 1024, "written_mib": 400, "checkpoint_request_seconds": took,
+            return {"disk_mib": 1024, "written_mib": 400, "checkpoint_request_seconds": took, "disk_copy_shares_extents": shared,
                     "restore_request_seconds": restore_took}
         case("a 1 GiB disk holding 400 MiB of random data is checkpointed and restored byte for byte", larger_disk)
 
