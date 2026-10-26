@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - A fork in the middle of `docker build`: the build finishes in the fork and the parent. 18 cases,
-  3 clean runs; one earlier run of 7 failed in the existing published-port case, cause unknown
+  3 clean runs (9 of 10 runs clean); one run failed in the existing published-port case, cause unknown
   (`docs/benchmarks/2026-10-26/docker-build-fork-kvm/`).
 - A checkpoint in the middle of `docker build` with a two-container compose project running: after
   the restore the build finishes by itself and the project is back. 17 cases, 3 runs in a row
