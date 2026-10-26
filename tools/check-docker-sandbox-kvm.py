@@ -325,6 +325,33 @@ def main():
                 return {"restored": restored, "forked": forked}
             case("a checkpoint and a fork carry a running compose project", composed_resumed)
 
+            def volume_checkpointed():
+                sandbox = state["sandbox"]
+
+                def volume(target):
+                    return sh(target, "docker run --rm -v vdata:/d hvbox /bin/busybox cat /d/file 2>&1; true")
+                sh(sandbox, "docker volume create vdata >/dev/null && docker run --rm -v vdata:/d hvbox /bin/busybox sh -c 'echo before > /d/file' && sync")
+                assert volume(sandbox) == "before"
+                status, made = request("POST", f"/sandboxes/{sandbox}/checkpoints", {"name": "with-volume"})
+                assert status in (200, 201), (status, made)
+                sh(sandbox, "docker run --rm -v vdata:/d hvbox /bin/busybox sh -c 'echo after > /d/file' && sync")
+                assert volume(sandbox) == "after"
+                status, back = request("POST", f"/sandboxes/{sandbox}/checkpoints/with-volume/restore")
+                assert status in (200, 201, 204), (status, back)
+                restored = volume(sandbox)
+                assert restored == "before", restored
+                status, made = request("POST", f"/sandboxes/{sandbox}/fork", {"timeout": 600})
+                assert status in (200, 201), (status, made)
+                child = made[0]["sandbox"]["sandboxID"]
+                try:
+                    forked = volume(child)
+                finally:
+                    request("DELETE", f"/sandboxes/{child}")
+                assert forked == "before", forked
+                sh(sandbox, "docker volume rm vdata >/dev/null; true", 60, ok=False)
+                return {"after_restore": restored, "in_fork": forked}
+            case("a named volume's data is as it was at a checkpoint, and a fork has it", volume_checkpointed)
+
             def composed_build():
                 sandbox = state["sandbox"]
                 sh(sandbox, "rm -rf /tmp/cb && mkdir /tmp/cb && cp /bin/busybox /tmp/cb/busybox && cat > /tmp/cb/Dockerfile <<'EOF'" + chr(10) + DOCKERFILE + "EOF")

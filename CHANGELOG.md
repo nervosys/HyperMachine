@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A Docker named volume across a checkpoint and a fork, on real KVM: the data is as it
+  was at the checkpoint after a restore, and a fork has it. 14 cases, 3 runs in a row
+  (`docs/benchmarks/2026-10-25/docker-volume-checkpoint-kvm/`).
 - Disk checkpoints on a `--disk-slot` node: `tools/check-disk-checkpoint-kvm.py --daemon-arg=--disk-slot`,
   10 of 10 cases, one run (`docs/benchmarks/2026-10-25/disk-checkpoint-slot-kvm/`).
 - Disk checkpoints on a filesystem with reflinks: `tools/check-disk-checkpoint-kvm.py --work-dir`
