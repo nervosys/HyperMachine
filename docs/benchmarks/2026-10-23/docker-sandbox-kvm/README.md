@@ -50,3 +50,11 @@ with more than one container, with a volume holding data, or with a build in
 progress (one container with a published port was checkpointed and forked), user namespaces with `--userns-remap`, the default kernel
 (the Docker kernel is a separate build, opted into with `HV2_KERNEL`).
 Docker together with `/dev/kvm` has [its own evidence](../../2026-10-24/docker-kvm-sandbox-kvm/README.md).
+
+Since then (2026-10-25, each with its own 3 runs in a row): a
+[volume's data across a checkpoint and a fork](../../2026-10-25/docker-volume-checkpoint-kvm/README.md),
+a [`RUN` step that fetches from a server on the bridge](../../2026-10-25/docker-build-network-kvm/README.md)
+(not the internet), and
+[`--userns-remap`](../../2026-10-25/docker-userns-remap-kvm/README.md) are checked.
+Still not: a published port reached from outside the node, the default kernel,
+a sandbox with more than one container at a checkpoint with a build in progress.
