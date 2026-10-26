@@ -51,6 +51,7 @@ def main():
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--work-dir", type=Path, default=Path("/var/tmp"),
                         help="where the node keeps its disks; put it on XFS or Btrfs to check reflinks")
+    parser.add_argument("--daemon-arg", action="append", default=[], help="an extra argument for the daemon, e.g. --daemon-arg=--disk-slot")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     report = {"success": False,
@@ -67,7 +68,7 @@ def main():
     log = (args.output / "daemon.log").open("wb")
     daemon = subprocess.Popen(
         [str(args.daemon), "--port", str(api), "--proxy-port", str(port()), "--disk-dir", str(work / "disks"),
-         "--snapshot-store", str(work / "store"), "--memory-mb", "512", "--cpu-cores", "1", "--capacity", "8"],
+         "--snapshot-store", str(work / "store"), "--memory-mb", "512", "--cpu-cores", "1", "--capacity", "8", *args.daemon_arg],
         env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
 
     def case(name, action):

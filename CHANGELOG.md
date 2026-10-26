@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Disk checkpoints on a `--disk-slot` node: `tools/check-disk-checkpoint-kvm.py --daemon-arg=--disk-slot`,
+  10 of 10 cases, one run (`docs/benchmarks/2026-10-25/disk-checkpoint-slot-kvm/`).
 - Disk checkpoints on a filesystem with reflinks: `tools/check-disk-checkpoint-kvm.py --work-dir`
   now records whether the checkpoint copy shares extents with the disk. On a
   loop-mounted XFS (`reflink=1`) it did and 10 of 10 cases passed; on ext4 it
