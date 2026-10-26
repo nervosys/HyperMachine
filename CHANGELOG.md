@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A `RUN` step that needs the network during `docker build` in a sandbox: it fetched from a
+  server on the guest's bridge. 15 cases, 3 runs in a row
+  (`docs/benchmarks/2026-10-25/docker-build-network-kvm/`).
 - A Docker named volume across a checkpoint and a fork, on real KVM: the data is as it
   was at the checkpoint after a restore, and a fork has it. 14 cases, 3 runs in a row
   (`docs/benchmarks/2026-10-25/docker-volume-checkpoint-kvm/`).

@@ -31,6 +31,12 @@ RUN echo from-a-pulled-base > /msg
 CMD ["cat", "/msg"]
 """
 
+NETWORK_DOCKERFILE = """FROM busybox:1.36
+ARG SRV
+RUN wget -q -O /msg http://$SRV:8080/msg
+CMD ["cat", "/msg"]
+"""
+
 COMPOSE = """name: c
 services:
   srv:
@@ -273,6 +279,21 @@ def main():
                 assert out == "from-a-pulled-base", (out, built_out)
                 return {"output": out}
             case("docker build from a pulled base image runs its RUN step", based)
+
+            def build_network():
+                sandbox = state["sandbox"]
+                # A server on the guest's own bridge, so the build's RUN step needs the network and not the internet.
+                sh(sandbox, "docker rm -f websrv >/dev/null 2>&1; docker run -d --name websrv busybox:1.36 /bin/sh -c "
+                            "'mkdir /w && echo fetched-during-build > /w/msg && exec httpd -f -p 8080 -h /w'", 120)
+                address = sh(sandbox, "docker inspect -f '{{.NetworkSettings.Networks.bridge.IPAddress}}' websrv")
+                assert address.count(".") == 3, address
+                sh(sandbox, "rm -rf /tmp/n && mkdir /tmp/n && cat > /tmp/n/Dockerfile <<'EOF'" + chr(10) + NETWORK_DOCKERFILE + "EOF")
+                built_out = sh(sandbox, f"docker build -q --build-arg SRV={address} -t hvnet /tmp/n 2>&1 | tail -3", 300, ok=False)
+                out = sh(sandbox, "docker run --rm --network none hvnet", 120)
+                sh(sandbox, "docker rm -f websrv >/dev/null; true", 60, ok=False)
+                assert out == "fetched-during-build", (out, built_out)
+                return {"output": out, "server": address}
+            case("a RUN step that fetches from a server on the bridge during docker build", build_network)
 
             def composed():
                 sandbox = state["sandbox"]
