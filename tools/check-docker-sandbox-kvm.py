@@ -400,6 +400,29 @@ def main():
                 return {"running_together": listed, "networks": nets, "left_after_one_down": left}
             case("two compose projects run side by side, and one comes down without the other", two_projects)
 
+        def remapped():
+            sandbox = state["sandbox"]
+            up = "for i in $(seq 60); do docker info >/dev/null 2>&1 && break; sleep 1; done; docker info >/dev/null 2>&1"
+            sh(sandbox, "id dockremap >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin dockremap; "
+                        "echo dockremap:100000:65536 > /etc/subuid; echo dockremap:100000:65536 > /etc/subgid; "
+                        "cp /etc/docker/daemon.json /tmp/daemon.json.orig")
+            try:
+                sh(sandbox, "sed 's/^{/{\"userns-remap\": \"dockremap\", /' /tmp/daemon.json.orig > /etc/docker/daemon.json "
+                            "&& systemctl restart docker && " + up, 180)
+                # The remapped daemon keeps its own image store.
+                sh(sandbox, "rm -rf /tmp/r && mkdir -p /tmp/r/bin && cp /bin/busybox /tmp/r/bin/busybox "
+                            "&& tar -C /tmp/r -c . | docker import - hvbox", 120)
+                maps = sh(sandbox, "docker run --rm --network none hvbox /bin/busybox cat /proc/self/uid_map", 120).split()
+                assert maps[:3] == ["0", "100000", "65536"], maps
+                sh(sandbox, "rm -rf /tmp/own && mkdir /tmp/own && chmod 777 /tmp/own")
+                sh(sandbox, "docker run --rm --network none -v /tmp/own:/o hvbox /bin/busybox touch /o/f", 120)
+                owner = sh(sandbox, "stat -c %u /tmp/own/f")
+                assert owner == "100000", owner
+                return {"uid_map": maps, "file_owner_on_host": owner}
+            finally:
+                sh(sandbox, "cp /tmp/daemon.json.orig /etc/docker/daemon.json && systemctl restart docker && " + up, 180, ok=False)
+        case("--userns-remap maps a container's root to an unprivileged id", remapped)
+
         if args.nested:
             def nested():
                 sandbox = state["sandbox"]

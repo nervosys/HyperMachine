@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `--userns-remap` in a sandbox: a container's root maps to uid 100000, and a file it writes is owned
+  by that uid on the guest. 16 cases, 3 runs in a row
+  (`docs/benchmarks/2026-10-25/docker-userns-remap-kvm/`).
 - A `RUN` step that needs the network during `docker build` in a sandbox: it fetched from a
   server on the guest's bridge. 15 cases, 3 runs in a row
   (`docs/benchmarks/2026-10-25/docker-build-network-kvm/`).
