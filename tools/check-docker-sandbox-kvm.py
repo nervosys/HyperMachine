@@ -37,6 +37,11 @@ RUN wget -q -O /msg http://$SRV:8080/msg
 CMD ["cat", "/msg"]
 """
 
+SLOW_DOCKERFILE = """FROM busybox:1.36
+RUN sleep 30 && echo built-after-resume > /msg
+CMD ["cat", "/msg"]
+"""
+
 COMPOSE = """name: c
 services:
   srv:
@@ -399,6 +404,39 @@ def main():
                 sh(sandbox, "cd /tmp/c && docker compose -p two down -v 2>&1 | tail -2", 120)
                 return {"running_together": listed, "networks": nets, "left_after_one_down": left}
             case("two compose projects run side by side, and one comes down without the other", two_projects)
+
+            def build_in_progress():
+                sandbox = state["sandbox"]
+                sh(sandbox, "rm -rf /tmp/s && mkdir /tmp/s && cat > /tmp/s/Dockerfile <<'EOF'" + chr(10) + SLOW_DOCKERFILE + "EOF")
+                sh(sandbox, "cd /tmp/c && docker compose up -d 2>&1 | tail -2", 300)
+                sh(sandbox, "cd /tmp/s && (docker build -t hvslow . > /tmp/slow.log 2>&1 &) ; true")
+                deadline = time.monotonic() + 120
+                while "sleep 30" not in sh(sandbox, "cat /tmp/slow.log", ok=False):
+                    assert time.monotonic() < deadline, sh(sandbox, "cat /tmp/slow.log", ok=False)
+                    time.sleep(1)
+                assert sh(sandbox, "docker image ls -q hvslow | wc -l") == "0", "the build had already finished"
+                status, made = request("POST", f"/sandboxes/{sandbox}/checkpoints", {"name": "mid-build"})
+                assert status in (200, 201), (status, made)
+                # Let the build finish and then take its result away, so only a restore can bring the unfinished build back.
+                deadline = time.monotonic() + 180
+                while sh(sandbox, "docker image ls -q hvslow | wc -l") == "0":
+                    assert time.monotonic() < deadline, sh(sandbox, "tail -5 /tmp/slow.log", ok=False)
+                    time.sleep(2)
+                sh(sandbox, "docker rmi -f hvslow >/dev/null; cd /tmp/c && docker compose down 2>&1 | tail -1", 120)
+                status, back = request("POST", f"/sandboxes/{sandbox}/checkpoints/mid-build/restore")
+                assert status in (200, 201, 204), (status, back)
+                assert sh(sandbox, "docker image ls -q hvslow | wc -l") == "0", "the finished build's image is back too early"
+                deadline = time.monotonic() + 180
+                while sh(sandbox, "docker image ls -q hvslow | wc -l") == "0":
+                    assert time.monotonic() < deadline, sh(sandbox, "tail -5 /tmp/slow.log", ok=False)
+                    time.sleep(2)
+                out = sh(sandbox, "docker run --rm --network none hvslow", 120)
+                services = sh(sandbox, "cd /tmp/c && docker compose ps --format '{{.Service}}' | sort | tr '\\n' ' '").split()
+                sh(sandbox, "cd /tmp/c && docker compose down -v 2>&1 | tail -1; docker rmi -f hvslow >/dev/null; true", 120, ok=False)
+                assert out == "built-after-resume", out
+                assert services == ["client", "srv"], services
+                return {"image_output": out, "services_after_restore": services}
+            case("a checkpoint in the middle of a docker build, with a compose project running, resumes both", build_in_progress)
 
         def remapped():
             sandbox = state["sandbox"]

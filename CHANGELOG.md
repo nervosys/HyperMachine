@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A checkpoint in the middle of `docker build` with a two-container compose project running: after
+  the restore the build finishes by itself and the project is back. 17 cases, 3 runs in a row
+  (`docs/benchmarks/2026-10-26/docker-build-checkpoint-kvm/`).
 - `--userns-remap` in a sandbox: a container's root maps to uid 100000, and a file it writes is owned
   by that uid on the guest. 16 cases, 3 runs in a row
   (`docs/benchmarks/2026-10-25/docker-userns-remap-kvm/`).

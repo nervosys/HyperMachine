@@ -56,5 +56,5 @@ Since then (2026-10-25, each with its own 3 runs in a row): a
 a [`RUN` step that fetches from a server on the bridge](../../2026-10-25/docker-build-network-kvm/README.md)
 (not the internet), and
 [`--userns-remap`](../../2026-10-25/docker-userns-remap-kvm/README.md) are checked.
-Still not: a published port reached from outside the node, the default kernel,
-a sandbox with more than one container at a checkpoint with a build in progress.
+Also checked since (2026-10-26): a [checkpoint mid-build with a compose project running](../../2026-10-26/docker-build-checkpoint-kvm/README.md).
+Still not: a published port reached from outside the node, the default kernel.
