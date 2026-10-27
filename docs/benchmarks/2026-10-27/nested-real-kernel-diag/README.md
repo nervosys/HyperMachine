@@ -117,3 +117,18 @@ below, so the guest is slow because its host is slow. A cheap test would be a
 busy loop's wall time inside the sandbox against the same loop on the WSL2 host.
 
 NOT VERIFIED: the cause, and any fix.
+
+## The sandbox's own vCPU is not slow (`nested_diag6.py`)
+
+The guess above was tested: a CPU-bound loop
+(`sum(i*i for i in range(6000000))` in `python3`) took **0.57, 0.50 and 0.48 s inside
+the sandbox** and **0.64, 0.36 and 0.66 s on the WSL2 host directly** (same
+machine, different Python builds, three runs each, no controls for host load).
+So the sandbox's vCPU runs ordinary code at about the host's speed, and "the
+sandbox is slow" is not the explanation. **The cause of the nested guest's slow
+progress is still unknown.** What is ruled out so far: PIT creation failing,
+exit handling cost, the guest halting, first-touch memory faults, and a slow
+sandbox vCPU. What is not: how the guest's timer interrupts are delivered
+(about 360 a second were injected against about 830 external-interrupt exits a
+second), the early-boot `tsc` calibration failure, and the probe's legacy
+device set.
