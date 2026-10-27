@@ -132,3 +132,32 @@ sandbox vCPU. What is not: how the guest's timer interrupts are delivered
 (about 360 a second were injected against about 830 external-interrupt exits a
 second), the early-boot `tsc` calibration failure, and the probe's legacy
 device set.
+
+## What the nested guest's own console says about time (from the saved logs)
+
+The same kernel, probe and initramfs, side by side (`host-direct/base256.out` and
+`long/long256.out`):
+
+| | On the WSL2 host directly | In the sandbox (nested) |
+|---|---|---|
+| Paravirtual clock | `clocksource: kvm-clock` at 0.003 s | **no `kvm-clock` line** |
+| TSC frequency | `tsc: Detected 4391.660 MHz processor` | `tsc: Fast TSC calibration failed`, `Unable to calibrate against PIT`, `No reference (HPET/PMTIMER) available`, **`Marking TSC unstable due to could not calculate TSC khz`** |
+| Delay loop | `Calibrating delay loop (skipped) preset value` (lpj=4391660) | `Calibrating delay loop... 3024.89 BogoMIPS (lpj=1512448)`, measured against ticks |
+| Clocksource used | `kvm-clock`, then `tsc` | `refined-jiffies`, then `jiffies` |
+| Local APIC timer | `TSC deadline timer available` | **`APIC timer disabled due to verification failure`**, at 26.8 s of guest time, after a 12 s gap (14.5 s to 26.8 s) |
+
+Read plainly, not interpreted past what the lines say: the sandbox's kernel is not
+giving the nested guest a paravirtual clock or a TSC frequency, so the nested guest
+measures time in timer ticks, and its local APIC timer fails the kernel's own
+check. The guest's time is then a count of ticks, which would explain why its
+clock runs at about 0.15 of wall time **if** its ticks arrive at about 15% of the
+nominal rate. That last step is a guess: nothing here measured the tick rate. A
+`tsc_early_khz` experiment on 2026-10-25 removed the `Unable to calibrate against
+PIT` line and the stall remained (see the 2026-10-24 README), so a missing TSC
+frequency is not by itself the whole story.
+
+Where to look next (not done): why the sandbox kernel's KVM gives the nested
+guest no kvm-clock (`KVM_GET_SUPPORTED_CPUID`'s leaves `0x40000000` to
+`0x40000001` as the probe sees them in the sandbox; the sandbox's own clocksource
+when the nested VM is created), and the nested guest's tick rate measured from
+the sandbox (`irq_injections` per second against `HZ`).
