@@ -61,3 +61,30 @@ NOT VERIFIED: still the cause. Next things that would tell more: the same
 three variants on the WSL2 host directly (one level of nesting, for the
 exit-cost baseline), `perf kvm` or `trace-cmd` in the sandbox, a longer wait
 than 270 s, a run with host load measured.
+
+## A baseline on the host, and a 240 s run that tested a prediction
+
+**On the WSL2 host directly** (no nesting; `host-direct/*.out`, run by a shell
+loop that is not kept): all three variants reached the busybox userspace in
+about 1.4 s of guest time, after about **37,000** userspace exits, in under
+10 s of wall time (`lpj` and the 96 MiB guest made no difference there either).
+
+**The prediction.** If the nested guest were slow only because each exit costs
+about 4 ms (60 s for about 15,000 exits), it would need those same 37,000 exits
+and so reach userspace at about 150 s. `nested_diag3.py` ran the baseline with a
+240 s window (`long/long256.out`). Result: **243 s of wall time, 16,962 exits,
+35.9 s of guest time, no userspace** (the console ended at 35.9 s, at the
+`perf` PMU lines). The prediction **failed**: the exit count barely moved
+between 60 s (about 15,000) and 243 s (16,962), so the guest is not limited by
+how fast exits are handled.
+
+What this does and does not show: the nested guest is **not exit-bound**; it
+makes few userspace exits and little progress, and its clock advances at
+roughly 0.15 guest-seconds per wall-second. **Guess, not tested:** it spends
+most of the time halted, waiting for timer interrupts that arrive slowly, since
+a halt that the in-kernel irqchip handles is not counted as a userspace exit.
+That would fit the failed PIT calibration too, but no run here measured it.
+
+NOT VERIFIED: why the guest is slow; any fix. A test of the guess: count halts in
+the L1 kernel (`kvm` tracepoints or `/sys/kernel/debug/kvm/` statistics) during
+a nested boot, or give the L2 guest a lapic timer by another route.
