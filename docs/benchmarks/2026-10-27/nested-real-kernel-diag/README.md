@@ -36,3 +36,28 @@ NOT VERIFIED: why it is slow; whether it would ever reach userspace given
 enough time (the longest wait was 270 s); a smaller memory size, a prefaulted
 guest memory, or `lpj=` on the kernel command line as ways to tell the two guesses
 apart; an Intel host.
+
+## Three variants, one sandbox (same day)
+
+`nested_diag2.py` ran the probe three times in one sandbox, 60 s each,
+`variants/*.out`:
+
+| Variant | Guest time the console reached | Userspace exits | Reached userspace |
+|---|---|---|---|
+| 256 MiB, baseline again | 4.9 s | 15,042 | no |
+| 96 MiB | 7.0 s | 15,296 | no |
+| 256 MiB, `lpj=4000000 tsc=reliable` | 6.2 s | 15,976 | no |
+
+- None of the three was clearly faster, and none reached userspace. The
+  guest-time-per-wall-second ratio was about 0.08 to 0.12 in all three.
+- The baseline itself differs a lot between runs: 14.2 s of guest time above,
+  4.9 s here. One run each, so the spread is as large as the differences
+  between variants, and **no conclusion about either guess follows**. A smaller
+  guest and a fixed `lpj` did not visibly help, which is weak evidence
+  against both guesses and not a refutation of either.
+- Userspace exits stayed near 15,000 a minute in each variant.
+
+NOT VERIFIED: still the cause. Next things that would tell more: the same
+three variants on the WSL2 host directly (one level of nesting, for the
+exit-cost baseline), `perf kvm` or `trace-cmd` in the sandbox, a longer wait
+than 270 s, a run with host load measured.
