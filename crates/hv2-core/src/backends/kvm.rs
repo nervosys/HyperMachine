@@ -123,6 +123,24 @@ fn patch_topology(entries: &mut [kvm_cpuid_entry2], vcpu_id: u32, vcpu_count: u3
     }
 }
 
+/// Say that the guest runs under a hypervisor: leaf 1 ECX bit 31.
+///
+/// KVM's supported set already carries the KVM signature and feature leaves
+/// (0x40000000 and 0x40000001), but a guest Linux looks for them only when
+/// this bit is set, and not every KVM sets it in `KVM_GET_SUPPORTED_CPUID`
+/// (a 6.6 host's does not; a 6.18 host's does). Without the bit the guest
+/// reports "bare hardware" and gets no `kvm-clock` and no TSC frequency, so it
+/// keeps time in timer ticks and boots an order of magnitude slower. The
+/// userspace VMMs that configure CPUID themselves set it.
+#[cfg(target_os = "linux")]
+fn advertise_hypervisor(entries: &mut [kvm_cpuid_entry2]) {
+    for entry in entries {
+        if entry.function == 1 {
+            entry.ecx |= 1 << 31;
+        }
+    }
+}
+
 fn interrupt_state(events: kvm_vcpu_events) -> VCpuInterruptState {
     // asm/kvm.h: fields marked optional must not be interpreted without flags.
     const VALID_NMI_PENDING: u32 = 1;
@@ -3059,6 +3077,7 @@ impl KvmVcpu {
             let first = buf.as_mut_ptr().add(header_size) as *mut kvm_cpuid_entry2;
             let table = std::slice::from_raw_parts_mut(first, entries as usize);
             patch_topology(table, self.vcpu_id, vcpu_count);
+            advertise_hypervisor(table);
             let header = &mut *(buf.as_mut_ptr() as *mut kvm_cpuid2);
             kvm_set_cpuid2(self.vcpu_fd, header).map_err(|e| {
                 Error::Hypervisor(format!(
@@ -3703,6 +3722,37 @@ mod tests {
             ),
             (0, 1, 0x401, 0)
         );
+    }
+
+    #[test]
+    fn hypervisor_bit_is_set_in_leaf_1_only() {
+        let mut entries = vec![
+            kvm_cpuid_entry2 {
+                function: 1,
+                ecx: 0x76f8_3203, // what a 6.6 host's supported set holds
+                ..Default::default()
+            },
+            kvm_cpuid_entry2 {
+                function: 7,
+                ecx: 0,
+                ..Default::default()
+            },
+            kvm_cpuid_entry2 {
+                function: 0x4000_0001,
+                eax: 0x0100_7efb,
+                ..Default::default()
+            },
+        ];
+        advertise_hypervisor(&mut entries);
+        assert_eq!(entries[0].ecx, 0xf6f8_3203, "bit 31 set, the rest kept");
+        assert_eq!(entries[1].ecx, 0, "other leaves untouched");
+        assert_eq!(
+            entries[2].eax, 0x0100_7efb,
+            "the KVM feature leaf is untouched"
+        );
+        // Setting it again changes nothing, as on a host that already sets it.
+        advertise_hypervisor(&mut entries);
+        assert_eq!(entries[0].ecx, 0xf6f8_3203);
     }
     use super::*;
     use crate::hypervisor::HypervisorBackend;
