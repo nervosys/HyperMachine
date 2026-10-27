@@ -139,7 +139,7 @@ Evidence: [real KVM: a sandbox forked with its disk, unflushed writes included](
 holds a disk. While its guest is paused, just after its memory is written,
 the node copies the disk's image beside the checkpoint (a reflink where the
 filesystem has them, which costs nothing until the two diverge; elsewhere
-every allocated block, with the guest waiting). Memory and disk are of the
+every allocated block, with the guest waiting; the copy shared extents with the disk on a loop-mounted XFS and Btrfs and not on ext4, [one run each](benchmarks/2026-10-25/disk-checkpoint-reflink-kvm/README.md)). Memory and disk are of the
 same moment.
 
 Restoring (`POST .../checkpoints/{name}/restore`) **never writes to the disk

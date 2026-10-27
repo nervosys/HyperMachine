@@ -215,7 +215,7 @@ independently of boat:
 - The header of `hv2-sandboxd`'s disk module said a sandbox with a disk
   cannot be paused, forked or restored from a template. It can pause and fork
   (a fork copies the disk), and restores from a template with `--disk-slot`;
-  the header now says what the code does. Checkpoints and starting from a
-  snapshot are still refused.
+  the header now says what the code does. At that time checkpoints and starting from a
+  snapshot were still refused; a checkpoint by name has worked since 2026-10-23 ([DISKS.md](DISKS.md#checkpoints-of-a-sandbox-with-a-disk)), and starting from a snapshot is still refused.
 - [The boxd matrix](PLATFORM_PARITY.md) says API keys are for a "single
   team" one row below saying that keys belong to teams.
