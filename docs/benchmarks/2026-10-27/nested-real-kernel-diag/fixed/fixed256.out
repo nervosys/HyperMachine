@@ -1,0 +1,131 @@
+platform      : Kvm
+kernel        : /opt/nested/bzImage (12952576 bytes)
+cmdline       : console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 panic=1
+initrd        : /opt/nested/inner.cpio.gz
+VM::new       : ok
+devices       : legacy PC set attached (COM1, RTC, i8042)
+provision     : OK
+memory check  : bytes at 0x100000 via GuestMemory = [fc, fa, 8d, a6, e8, 01, 00, 00, e8, 00, 00, 00, 00, 5d, 83, ed]
+memory check  : kernel image visible — shared
+launch        : OK — the loop is running in the background
+exits         : 15643
+console       :
+No EFI environment detected.
+early console in extract_kernel
+input_data: 0x0000000002b672c4
+input_len: 0x0000000000c4417b
+output: 0x0000000001000000
+output_len: 0x0000000002762c30
+kernel_total_size: 0x0000000002630000
+needed_size: 0x0000000002800000
+trampoline_32bit: 0x0000000000000000
+Physical KASLR using RDRAND RDTSC...
+Virtual KASLR using RDRAND RDTSC...
+
+Decompressing Linux... Parsing ELF... Performing relocations... done.
+Booting the kernel (entry_offset: 0x0000000000000000).
+[    0.000000] Linux version 6.6.52 (hv2@hv2) (gcc (Debian 14.2.0-19) 14.2.0, GNU ld (GNU Binutils for Debian) 2.44) #1 SMP PREEMPT_DYNAMIC 1970-01-01
+[    0.000000] Command line: console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 panic=1
+[    0.000000] [Firmware Bug]: TSC doesn't count with P0 frequency!
+[    0.000000] BIOS-provided physical RAM map:
+[    0.000000] BIOS-e820: [mem 0x0000000000000000-0x000000000009fbff] usable
+[    0.000000] BIOS-e820: [mem 0x0000000000100000-0x000000000fffffff] usable
+[    0.000000] printk: bootconsole [earlyser0] enabled
+[    0.000000] NX (Execute Disable) protection: active
+[    0.000000] APIC: Static calls initialized
+[    0.000000] DMI not present or invalid.
+[    0.000000] Hypervisor detected: KVM
+[    0.000000] kvm-clock: Using msrs 4b564d01 and 4b564d00
+[    0.000014] kvm-clock: using sched offset of 12866286597 cycles
+[    0.051827] clocksource: kvm-clock: mask: 0xffffffffffffffff max_cycles: 0x1cd42e4dffb, max_idle_ns: 881590591483 ns
+[    0.283059] tsc: Detected 4391.660 MHz processor
+[    0.355337] last_pfn = 0x10000 max_arch_pfn = 0x400000000
+[    0.422733] MTRRs disabled by BIOS
+[    0.460389] x86/PAT: Configuration [0-7]: WB  WC  UC- UC  WB  WP  UC- WT  
+Memory KASLR using RDRAND RDTSC...
+[    0.573026] found SMP MP-table at [mem 0x0009fc00-0x0009fc0f]
+[    0.634748] Using GB pages for direct mapping
+[    0.679738] RAMDISK: [mem 0x0fefc000-0x0fffffff]
+[    0.747296] ACPI: Early table checksum verification disabled
+[    0.840226] ACPI BIOS Error (bug): A valid RSDP was not found (20230628/tbxfroot-222)
+[    0.939165] No NUMA configuration found
+[    0.979876] Faking a node at [mem 0x0000000000000000-0x000000000fffffff]
+[    1.086327] NODE_DATA(0) allocated [mem 0x0fef8000-0x0fefbfff]
+[    1.147891] Zone ranges:
+[    1.175418]   DMA      [mem 0x0000000000001000-0x0000000000ffffff]
+[    1.235806]   DMA32    [mem 0x0000000001000000-0x000000000fffffff]
+[    1.298313]   Normal   empty
+[    1.347879] Movable zone start for each node
+[    1.390746] Early memory node ranges
+[    1.421864]   node   0: [mem 0x0000000000001000-0x000000000009efff]
+[    1.496128]   node   0: [mem 0x0000000000100000-0x000000000fffffff]
+[    1.571047] Initmem setup node 0 [mem 0x0000000000001000-0x000000000fffffff]
+[    1.639290] On node 0, zone DMA: 1 pages in unavailable ranges
+[    1.666405] On node 0, zone DMA: 97 pages in unavailable ranges
+[    2.377355] Intel MultiProcessor Specification v1.4
+[    2.517221] MPTABLE: OEM ID: HV2     
+[    2.552905] MPTABLE: Product ID: HYPERMACHINE
+[    2.592926] MPTABLE: APIC at: 0xFEE00000
+[    2.641142] Processor #0 (Bootup-CPU)
+[    2.684974] IOAPIC[0]: apic_id 1, version 17, address 0xfec00000, GSI 0-23
+[    2.749258] Processors: 1
+[    2.775804] smpboot: Allowing 1 CPUs, 0 hotplug CPUs
+[    2.822724] kvm-guest: APIC: eoi() replaced with kvm_guest_apic_eoi_write()
+[    2.877793] PM: hibernation: Registered nosave memory: [mem 0x00000000-0x00000fff]
+[    2.960171] PM: hibernation: Registered nosave memory: [mem 0x0009f000-0x000fffff]
+[    3.034189] [mem 0x10000000-0xffffffff] available for PCI devices
+[    3.092233] Booting paravirtualized kernel on KVM
+[    3.135116] clocksource: refined-jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 1910969940391419 ns
+[    3.270782] setup_percpu: NR_CPUS:64 nr_cpumask_bits:1 nr_cpu_ids:1 nr_node_ids:1
+[    3.539145] percpu: Embedded 54 pages/cpu s183016 r8192 d29976 u2097152
+[    3.607093] Kernel command line: console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 panic=1
+[    3.703326] random: crng init done
+[    3.952862] Dentry cache hash table entries: 32768 (order: 6, 262144 bytes, linear)
+[    4.184184] Inode-cache hash table entries: 16384 (order: 5, 131072 bytes, linear)
+[    4.343986] Fallback order for Node 0: 0 
+[    4.344039] Built 1 zonelists, mobility grouping on.  Total pages: 64256
+[    4.573171] Policy zone: DMA32
+[    4.617122] mem auto-init: stack:all(zero), heap alloc:off, heap free:off
+[    4.875123] Memory: 216084K/261752K available (18432K kernel code, 2745K rwdata, 6556K rodata, 2664K init, 1380K bss, 45408K reserved, 0K cma-reserved)
+[    5.155411] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+Poking KASLR using RDRAND RDTSC...
+[    5.415394] Dynamic Preempt: voluntary
+[    5.497251] rcu: Preemptible hierarchical RCU implementation.
+[    5.640047] rcu: 	RCU event tracing is enabled.
+[    5.767851] rcu: 	RCU restricting CPUs from NR_CPUS=64 to nr_cpu_ids=1.
+[    5.856097] 	Trampoline variant of Tasks RCU enabled.
+[    5.955261] rcu: RCU calculated value of scheduler-enlistment delay is 100 jiffies.
+[    6.191088] rcu: Adjusting geometry for rcu_fanout_leaf=16, nr_cpu_ids=1
+[    6.672813] NR_IRQS: 4352, nr_irqs: 256, preallocated irqs: 16
+[    6.813227] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+[    6.924770] Console: colour dummy device 80x25
+[    6.990032] printk: console [ttyS0] enabled
+[    6.990032] printk: console [ttyS0] enabled
+[    7.096042] printk: bootconsole [earlyser0] disabled
+[    7.096042] printk: bootconsole [earlyser0] disabled
+[    7.257685] APIC: Switch to symmetric I/O mode setup
+[    7.857882] ..TIMER: vector=0x30 apic1=0 pin1=0 apic2=-1 pin2=-1
+[    7.967761] clocksource: tsc-early: mask: 0xffffffffffffffff max_cycles: 0x3f4d9fa184b, max_idle_ns: 440795424041 ns
+[    8.185840] Calibrating delay loop (skipped) preset value.. 8783.32 BogoMIPS (lpj=4391660)
+[    9.721559] x86/cpu: User Mode Instruction Prevention (UMIP) activated
+[   12.354995] Last level iTLB entries: 4KB 64, 2MB 64, 4MB 32
+[   12.378878] Last level dTLB entries: 4KB 128, 2MB 128, 4MB 64, 1GB 0
+[   12.621922] Spectre V1 : Mitigation: usercopy/swapgs barriers and __user pointer sanitization
+[   13.640943] Spectre V2 : Mitigation: Retpolines
+[   13.657875] Spectre V2 : Spectre v2 / SpectreRSB mitigation: Filling RSB on context switch
+[   14.630875] Spectre V2 : Spectre v2 / SpectreRSB : Filling RSB on VMEXIT
+[   15.153898] Spectre V2 : Enabling Restricted Speculation for firmware calls
+[   15.347540] Spectre V2 : mitigation: Enabling conditional Indirect Branch Prediction Barrier
+[   15.547868] Speculative Store Bypass: Mitigation: Speculative Store Bypass disabled via prctl
+[   16.491865] x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
+[   16.599923] x86/fpu: Supporting XSAVE feature 0x002: 'SSE registers'
+[   16.818911] x86/fpu: Supporting XSAVE feature 0x004: 'AVX registers'
+[   16.894869] x86/fpu: Supporting XSAVE feature 0x020: 'AVX-512 opmask'
+[   17.126920] x86/fpu: Supporting XSAVE feature 0x040: 'AVX-512 Hi256'
+[   17.425962] x86/fpu: Supporting XSAVE feature 0x080: 'AVX-512 ZMM_Hi256'
+[   17.587903] x86/fpu: xstate_offset[2]:  576, xstate_sizes[2]:  256
+[   17.595958] x86/fpu: xstate_offset[5]:  832, xstate_sizes[5]:   64
+[   17.599900] x86/fpu: xstate_offset[6]:  896, xstate_sizes[6]:  512
+[   17.667901] x86/fpu: xstate_offset[7]: 1408, xstate_sizes[7]: 1024
+[   17.735897] x86/fpu: Enabled xstate features 0xe7, context size is 2432 bytes, using 'compacted' format.
+

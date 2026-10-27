@@ -161,3 +161,40 @@ guest no kvm-clock (`KVM_GET_SUPPORTED_CPUID`'s leaves `0x40000000` to
 `0x40000001` as the probe sees them in the sandbox; the sandbox's own clocksource
 when the nested VM is created), and the nested guest's tick rate measured from
 the sandbox (`irq_injections` per second against `HZ`).
+
+## The cause of the missing `kvm-clock`, a fix, and what it did and did not change
+
+`kvm_cpuid.py` reads `KVM_GET_SUPPORTED_CPUID` (run on the WSL2 host and, through
+`nested_diag7.py`, in the sandbox):
+
+| | WSL2 host (6.18.33) | Sandbox (6.6.52) |
+|---|---|---|
+| Leaf `0x40000000` / `0x40000001` | present, `KVMKVMKVM`, `CLOCKSOURCE2`, `STABLE_TSC` | the same |
+| Leaf 1 ECX | `0xf7f83203`, **HYPERVISOR (bit 31) set** | `0x76f83203`, **bit 31 clear** |
+
+`hv2-core`'s KVM backend passes the supported set to the guest, changing only the
+topology leaves, so on a 6.6 host the nested guest saw no hypervisor bit.
+A Linux guest looks for KVM's leaves only when that bit is set: it printed
+`Booting paravirtualized kernel on bare hardware`, had no `kvm-clock` and no TSC
+frequency, and kept time in timer ticks.
+
+**The fix** (`advertise_hypervisor` in `kvm.rs`, with a unit test): set leaf 1 ECX
+bit 31 after applying the supported set. On hosts that already set it, nothing
+changes. With the rebuilt probe uploaded into the sandbox (`nested_diag8.py`,
+`fixed/fixed256.out`, sha256 `725da0945...` checked after upload), the nested guest now prints
+`Hypervisor detected: KVM`, `kvm-clock: Using msrs 4b564d01 and 4b564d00`,
+`tsc: Detected 4391.660 MHz processor` and `Booting paravirtualized kernel on KVM`,
+the same as on the host.
+
+**What it did not fix: the boot is still slow.** In 60 s of wall time the console
+reached 17.7 s of guest time (the xstate lines), 15,643 userspace exits, and no
+userspace. With `kvm-clock` the guest's clock is a real clock, so this is a
+real slowdown: the nested guest runs roughly an order of magnitude slower than
+the same guest on the host, which reached userspace in 1.4 s. **This corrects the
+section above:** "the guest keeps time in ticks, so it only looks slow" is wrong,
+the guest is slow in real time too. One run.
+
+NOT VERIFIED: the cause of the remaining slowness; whether this fix helps any
+other guest (the template guests in sandboxes already ran on a host whose KVM sets
+the bit, and nothing here re-ran them); a run on a host older than 6.6 or newer
+than 6.18.
