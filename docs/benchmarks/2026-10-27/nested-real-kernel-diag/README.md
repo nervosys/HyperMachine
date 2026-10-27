@@ -88,3 +88,32 @@ That would fit the failed PIT calibration too, but no run here measured it.
 NOT VERIFIED: why the guest is slow; any fix. A test of the guess: count halts in
 the L1 kernel (`kvm` tracepoints or `/sys/kernel/debug/kvm/` statistics) during
 a nested boot, or give the L2 guest a lapic timer by another route.
+
+## The sandbox kernel's own KVM counters during a nested boot
+
+`nested_diag5.py`, one 60 s run (`kvm-stats/`): at 20 s and 50 s into the nested boot
+the sandbox kernel's per-VM debugfs counters for the probe's VM
+(`/sys/kernel/debug/kvm/<pid>-<fd>/`; they exist only while the VM is alive, so a first
+attempt that read them after the probe had stopped got zeros and is not counted):
+
+| Counter | 20 s | 50 s |
+|---|---|---|
+| exits (all, in the sandbox kernel) | 31,152 | 86,444 |
+| `halt_exits`, `halt_wakeup` | 0, 0 | 0, 0 |
+| `irq_exits` (external interrupts hitting the guest) | 5,320 | 30,394 |
+| `io_exits` (port I/O, sent to userspace) | 7,695 | 16,539 |
+| `irq_injections` (interrupts delivered into the guest) | 0 | 10,763 |
+| `pf_fixed` (nested page faults fixed) | 18,096 | 18,442 |
+
+What this refutes, for this one run: **the guest is not halted** (zero halt exits, so
+the "waiting for slow timer ticks" guess in the section above is wrong); **it is not
+bound by first-touch memory faults** (`pf_fixed` is flat after the first 20 s, so
+the guest's memory was touched early and cheaply). What it shows: the guest is
+running; the sandbox kernel took about 830 external-interrupt exits a second from the
+layer below it, delivered about 360 interrupts a second into the guest, and handled
+about 290 port-I/O exits a second. **Nothing here says where the time goes.** A guess,
+not tested: the sandbox's own vCPU is getting a small share of a core from the layer
+below, so the guest is slow because its host is slow. A cheap test would be a
+busy loop's wall time inside the sandbox against the same loop on the WSL2 host.
+
+NOT VERIFIED: the cause, and any fix.
