@@ -15,5 +15,15 @@ on WSL's ext4 (no reflinks) in `ext4/` as the control. One run each.
   1.187 s / 1.31 s. One run each on a loop device inside a file, so it is a
   direction and not a benchmark.
 
-NOT VERIFIED: Btrfs; XFS on a real block device; a repeat run (one run each);
+NOT VERIFIED: XFS on a real block device; a repeat run (one run each); (Btrfs is below.)
 `--disk-slot` nodes; disks much beyond 1 GiB.
+
+## Btrfs (2026-10-26)
+
+The same check on a loop-mounted Btrfs (`mkfs.btrfs`, 8 GiB image file in WSL's
+ext4, `findmnt` printed `btrfs`; `btrfs/report.json`): 10 of 10 cases pass and
+`disk_copy_shares_extents` is **true**, as on XFS. One run. The timings in the
+report are one run on a loop device and not a benchmark.
+
+NOT VERIFIED (still): XFS or Btrfs on a real block device; a repeat run on
+either; `--disk-slot` on a reflink filesystem.
