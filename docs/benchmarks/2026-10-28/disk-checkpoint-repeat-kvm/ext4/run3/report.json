@@ -1,0 +1,93 @@
+{
+  "success": true,
+  "purpose": "functional verification of checkpointing a sandbox with its disk on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "311c26f69a609ec47aabe8a7b6c47633b522f8552e5e29eed6e0162207daf13f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "ae6e55b1eacb2d06b61a37c57bce5dd3eb3bb099f9d0dc8f5e4b08018ab85a10"
+  },
+  "cases": [
+    {
+      "name": "a sandbox holding a disk is checkpointed, and the node keeps a copy of the disk",
+      "success": true,
+      "detail": {
+        "checkpoint_request_seconds": 0.406,
+        "copy_on_node": "store/paused/checkpoints/sbx-ad8a742d04e24c5cb835/cp1.disk.img"
+      }
+    },
+    {
+      "name": "the sandbox ran on and changed its disk",
+      "success": true,
+      "detail": {
+        "counter": [
+          11,
+          32
+        ]
+      }
+    },
+    {
+      "name": "restoring gives the sandbox, and its disk, back as they were at the checkpoint",
+      "success": true,
+      "detail": {
+        "restore_request_seconds": 0.248,
+        "counter_after_restore": 12,
+        "disk_now": "data-restored-75703955"
+      }
+    },
+    {
+      "name": "the disk it held before is let go as it was, with the later writes",
+      "success": true,
+      "detail": {
+        "read_by": "sbx-de26efd34e794bc6b272"
+      }
+    },
+    {
+      "name": "restoring again returns the checkpointed disk, not the second life's",
+      "success": true,
+      "detail": {
+        "second_disk": "data-restored-76639925"
+      }
+    },
+    {
+      "name": "a restore that fails leaves the sandbox on the disk it had",
+      "success": true,
+      "detail": {
+        "status": 500,
+        "message": "restoring sbx-ad8a742d04e24c5cb835 to cp1: launching: VM error: Configuration error: opening /var/tmp/hm-disk-checkpoint-check-axdy36z4/store/paused/checkpoints/sbx-ad8a742d04e24c5cb835/cp1.snap: No such file or directory (os error 2)"
+      }
+    },
+    {
+      "name": "a sandbox that was restored can be checkpointed, and restored from either",
+      "success": true,
+      "detail": {
+        "restored_twice_from_a_restored_sandbox": true
+      }
+    },
+    {
+      "name": "a 1 GiB disk holding 400 MiB of random data is checkpointed and restored byte for byte",
+      "success": true,
+      "detail": {
+        "disk_mib": 1024,
+        "written_mib": 400,
+        "checkpoint_request_seconds": 2.904,
+        "disk_copy_shares_extents": false,
+        "restore_request_seconds": 2.106
+      }
+    },
+    {
+      "name": "a template from a sandbox with a disk is still refused",
+      "success": true,
+      "detail": {
+        "snapshot": 409
+      }
+    },
+    {
+      "name": "deleting a checkpoint, and a sandbox ending, remove the copies of the disk",
+      "success": true,
+      "detail": {
+        "copies_left": 0
+      }
+    }
+  ]
+}

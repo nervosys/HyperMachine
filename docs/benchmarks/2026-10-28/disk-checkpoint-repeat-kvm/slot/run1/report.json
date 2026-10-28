@@ -1,0 +1,34 @@
+{
+  "success": false,
+  "purpose": "functional verification of checkpointing a sandbox with its disk on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "311c26f69a609ec47aabe8a7b6c47633b522f8552e5e29eed6e0162207daf13f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "ae6e55b1eacb2d06b61a37c57bce5dd3eb3bb099f9d0dc8f5e4b08018ab85a10"
+  },
+  "cases": [
+    {
+      "name": "a sandbox holding a disk is checkpointed, and the node keeps a copy of the disk",
+      "success": true,
+      "detail": {
+        "checkpoint_request_seconds": 0.033,
+        "copy_on_node": "store/paused/checkpoints/sbx-4ddeea02d4624a2c9d13/cp1.disk.img"
+      }
+    },
+    {
+      "name": "the sandbox ran on and changed its disk",
+      "success": true,
+      "detail": {
+        "counter": [
+          10,
+          31
+        ]
+      }
+    },
+    {
+      "name": "restoring gives the sandbox, and its disk, back as they were at the checkpoint",
+      "success": false
+    }
+  ]
+}
