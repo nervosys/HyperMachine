@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A compose project under `--userns-remap` survives a checkpoint, a restore and a fork (both containers
+  running, the volume's data intact): 3 of 3 runs; the first version of the check failed 4 times on a
+  mistake in the check itself (`docs/benchmarks/2026-10-28/docker-userns-remap-compose-kvm/`).
 - A 128 MiB Docker volume and a 64 MiB bind-mounted file are byte for byte as they were at a checkpoint,
   and a fork has them: a new case in `check-docker-sandbox-kvm.py`, 3 of 3 runs
   (`docs/benchmarks/2026-10-28/docker-big-data-checkpoint-kvm/`).

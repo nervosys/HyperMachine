@@ -73,8 +73,9 @@ The nested guest is still about ten times slower in real time.
       and 64 MiB bind-mounted file, checkpoint, restore and fork, 3 of 3 runs
       (`2026-10-28/docker-big-data-checkpoint-kvm`). Data written during a checkpoint
       is NOT VERIFIED.
-- [ ] Remapped daemon (`--userns-remap`) together with compose and build, across a
-      checkpoint.
+- [x] Remapped daemon (`--userns-remap`) together with compose, across a checkpoint,
+      restore and fork: 3 of 3 runs (`2026-10-28/docker-userns-remap-compose-kvm`).
+      A `build` under the remap is NOT VERIFIED.
 
 ## 4. Evidence quality (repeat what was run once)
 

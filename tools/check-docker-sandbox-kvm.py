@@ -514,10 +514,42 @@ def main():
                 sh(sandbox, "docker run --rm --network none -v /tmp/own:/o hvbox /bin/busybox touch /o/f", 120)
                 owner = sh(sandbox, "stat -c %u /tmp/own/f")
                 assert owner == "100000", owner
-                return {"uid_map": maps, "file_owner_on_host": owner}
+                # A compose project under the remapped daemon, across a checkpoint, a restore and a fork.
+                sh(sandbox, "rm -rf /tmp/rc && mkdir /tmp/rc && cat > /tmp/rc/compose.yaml <<'EOF'" + chr(10) + COMPOSE + "EOF")
+                sh(sandbox, "cd /tmp/rc && docker compose up -d 2>&1 | tail -3", 300)
+                deadline = time.monotonic() + 60
+                while sh(sandbox, "cd /tmp/rc && docker compose exec -T client /bin/busybox cat /d/got 2>&1; true", 30) != "hello-from-compose":
+                    assert time.monotonic() < deadline, sh(
+                        sandbox, "cd /tmp/rc && docker compose ps -a 2>&1; docker compose logs 2>&1 | tail -10; "
+                                 "docker compose exec -T client /bin/busybox cat /d/got 2>&1; ls -la /var/lib/docker/ 2>&1; true", 30)
+                    time.sleep(1)
+                status, made = request("POST", f"/sandboxes/{sandbox}/checkpoints", {"name": "remapped-compose"})
+                assert status in (200, 201), (status, made)
+                sh(sandbox, "cd /tmp/rc && docker compose down 2>&1 | tail -2", 120)
+                assert sh(sandbox, "docker ps -q | wc -l") == "0"
+                status, back = request("POST", f"/sandboxes/{sandbox}/checkpoints/remapped-compose/restore")
+                assert status in (200, 201, 204), (status, back)
+
+                def project(target):
+                    running = sh(target, "cd /tmp/rc && docker compose ps -q | wc -l", 60)
+                    got = sh(target, "cd /tmp/rc && docker compose exec -T client /bin/busybox cat /d/got 2>&1; true", 30)
+                    return running, got
+                restored = project(sandbox)
+                assert restored == ("2", "hello-from-compose"), restored
+                status, made = request("POST", f"/sandboxes/{sandbox}/fork", {"timeout": 600})
+                assert status in (200, 201), (status, made)
+                child = made[0]["sandbox"]["sandboxID"]
+                try:
+                    forked = project(child)
+                finally:
+                    request("DELETE", f"/sandboxes/{child}")
+                assert forked == ("2", "hello-from-compose"), forked
+                sh(sandbox, "cd /tmp/rc && docker compose down -v 2>&1 | tail -2", 120, ok=False)
+                return {"uid_map": maps, "file_owner_on_host": owner, "compose_after_restore": list(restored),
+                        "compose_in_fork": list(forked)}
             finally:
                 sh(sandbox, "cp /tmp/daemon.json.orig /etc/docker/daemon.json && systemctl restart docker && " + up, 180, ok=False)
-        case("--userns-remap maps a container's root to an unprivileged id", remapped)
+        case("--userns-remap maps a container's root to an unprivileged id, and a compose project under it survives a checkpoint, a restore and a fork", remapped)
 
         if args.netns:
             def outside_namespace():
