@@ -58,8 +58,10 @@ The nested guest is still about ten times slower in real time.
       (`2026-10-28/docker-flake-chase`): the published-port case did not recur, but
       a different case failed once (a fork restored mid-build never answered on
       vsock, 1 in 20; 1 in 30 with the earlier fork runs). Cause not known.
-- [ ] **Fork restore that never resumes** (run 11 above): reproduce with a plain fork
-      of a busy sandbox, without Docker, and read why the restored vCPUs barely run.
+- [ ] **Fork restore that never resumes** (run 11 above): a plain fork of a busy or idle
+      sandbox did not reproduce it (0 in 560 forks, `2026-10-28/fork-busy-kvm`), but one
+      cold boot of 14 stalled with both vCPUs halted and a timer armed. Cause unknown;
+      next, catch one with the per-VM KVM counters sampled during the stall.
 - [x] Published port reached from outside the node: a client in another network
       namespace over a veth pair, 3 of 3 runs (`2026-10-28/docker-netns-proxy-kvm`).
       A second machine is NOT VERIFIED.

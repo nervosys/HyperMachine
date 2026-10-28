@@ -1,0 +1,296 @@
+{
+  "success": true,
+  "busy": false,
+  "count": 40,
+  "within_seconds": 30,
+  "input_sha256": {
+    "daemon": "311c26f69a609ec47aabe8a7b6c47633b522f8552e5e29eed6e0162207daf13f",
+    "kernel": "6dcf46487bd263f4224f7127c3461fa48974432528c7d777f9e3b856335dffac",
+    "initrd": "0c95127a0c31a3ac08aa292ee3bb41d7900514058d440f5d9426cecd9ec7e6ac",
+    "driver": "b0b04bd42e8f495f0476385636a488ec4cd6b681e2d7d6aad3bdb54ecd65139a"
+  },
+  "host_cpus": 24,
+  "forks": [
+    {
+      "n": 1,
+      "fork_seconds": 0.101,
+      "child": "sbx-c89e4a30659446409d69",
+      "ok": true,
+      "answer_seconds": 0.093
+    },
+    {
+      "n": 2,
+      "fork_seconds": 0.128,
+      "child": "sbx-199b40089ce84af69e6b",
+      "ok": true,
+      "answer_seconds": 0.105
+    },
+    {
+      "n": 3,
+      "fork_seconds": 0.209,
+      "child": "sbx-6d685f7d5eb44981aa82",
+      "ok": true,
+      "answer_seconds": 0.044
+    },
+    {
+      "n": 4,
+      "fork_seconds": 0.187,
+      "child": "sbx-7198d52c641f433fa5aa",
+      "ok": true,
+      "answer_seconds": 0.053
+    },
+    {
+      "n": 5,
+      "fork_seconds": 0.269,
+      "child": "sbx-6366cabfb45c4471b76d",
+      "ok": true,
+      "answer_seconds": 0.059
+    },
+    {
+      "n": 6,
+      "fork_seconds": 0.181,
+      "child": "sbx-f093533d25bb4c638679",
+      "ok": true,
+      "answer_seconds": 0.055
+    },
+    {
+      "n": 7,
+      "fork_seconds": 0.141,
+      "child": "sbx-ef595bb7e4944efa8265",
+      "ok": true,
+      "answer_seconds": 0.041
+    },
+    {
+      "n": 8,
+      "fork_seconds": 0.128,
+      "child": "sbx-5655243bce0e4bdeafb1",
+      "ok": true,
+      "answer_seconds": 0.028
+    },
+    {
+      "n": 9,
+      "fork_seconds": 0.272,
+      "child": "sbx-0301a5f9dd4c4e36a592",
+      "ok": true,
+      "answer_seconds": 0.033
+    },
+    {
+      "n": 10,
+      "fork_seconds": 0.245,
+      "child": "sbx-5dd76ff1b5064b459b73",
+      "ok": true,
+      "answer_seconds": 0.027
+    },
+    {
+      "n": 11,
+      "fork_seconds": 0.147,
+      "child": "sbx-f1564fc025cc44b4ae59",
+      "ok": true,
+      "answer_seconds": 0.021
+    },
+    {
+      "n": 12,
+      "fork_seconds": 0.188,
+      "child": "sbx-f2b7e621c2a64184a9cc",
+      "ok": true,
+      "answer_seconds": 0.028
+    },
+    {
+      "n": 13,
+      "fork_seconds": 0.146,
+      "child": "sbx-6b4f756cc51f406e930a",
+      "ok": true,
+      "answer_seconds": 0.022
+    },
+    {
+      "n": 14,
+      "fork_seconds": 0.17,
+      "child": "sbx-de45c52eb97643918dec",
+      "ok": true,
+      "answer_seconds": 0.022
+    },
+    {
+      "n": 15,
+      "fork_seconds": 0.164,
+      "child": "sbx-dae914c4f5ac4eb0a4cb",
+      "ok": true,
+      "answer_seconds": 0.038
+    },
+    {
+      "n": 16,
+      "fork_seconds": 0.206,
+      "child": "sbx-b4137ce134eb47c18efb",
+      "ok": true,
+      "answer_seconds": 0.024
+    },
+    {
+      "n": 17,
+      "fork_seconds": 0.231,
+      "child": "sbx-2ae401ce51e44823825e",
+      "ok": true,
+      "answer_seconds": 0.011
+    },
+    {
+      "n": 18,
+      "fork_seconds": 0.21,
+      "child": "sbx-7cf7b4a383e547979c32",
+      "ok": true,
+      "answer_seconds": 0.022
+    },
+    {
+      "n": 19,
+      "fork_seconds": 0.196,
+      "child": "sbx-b99efe60d92249e9bdaa",
+      "ok": true,
+      "answer_seconds": 0.017
+    },
+    {
+      "n": 20,
+      "fork_seconds": 0.208,
+      "child": "sbx-75c8742a72004d6f89cd",
+      "ok": true,
+      "answer_seconds": 0.016
+    },
+    {
+      "n": 21,
+      "fork_seconds": 0.22,
+      "child": "sbx-eb39786fb48b4e1db7fb",
+      "ok": true,
+      "answer_seconds": 0.011
+    },
+    {
+      "n": 22,
+      "fork_seconds": 0.152,
+      "child": "sbx-e7ad2fb1526241be8592",
+      "ok": true,
+      "answer_seconds": 0.012
+    },
+    {
+      "n": 23,
+      "fork_seconds": 0.145,
+      "child": "sbx-8c3a72cbc83e46ea81d0",
+      "ok": true,
+      "answer_seconds": 0.012
+    },
+    {
+      "n": 24,
+      "fork_seconds": 0.196,
+      "child": "sbx-fa27de5320a543209136",
+      "ok": true,
+      "answer_seconds": 0.04
+    },
+    {
+      "n": 25,
+      "fork_seconds": 0.122,
+      "child": "sbx-297c390193e34877bc9e",
+      "ok": true,
+      "answer_seconds": 0.027
+    },
+    {
+      "n": 26,
+      "fork_seconds": 0.165,
+      "child": "sbx-4ea2510ecb1643c19596",
+      "ok": true,
+      "answer_seconds": 0.014
+    },
+    {
+      "n": 27,
+      "fork_seconds": 0.109,
+      "child": "sbx-62fd490fd9ee4ac9b6b4",
+      "ok": true,
+      "answer_seconds": 0.011
+    },
+    {
+      "n": 28,
+      "fork_seconds": 0.103,
+      "child": "sbx-e6eb77e93f5c499abe0e",
+      "ok": true,
+      "answer_seconds": 0.023
+    },
+    {
+      "n": 29,
+      "fork_seconds": 0.133,
+      "child": "sbx-13ec254c31c94f6d9a76",
+      "ok": true,
+      "answer_seconds": 0.021
+    },
+    {
+      "n": 30,
+      "fork_seconds": 0.167,
+      "child": "sbx-17325e77b5644cd7a105",
+      "ok": true,
+      "answer_seconds": 0.016
+    },
+    {
+      "n": 31,
+      "fork_seconds": 0.136,
+      "child": "sbx-ef4ea3c1dd9140af893a",
+      "ok": true,
+      "answer_seconds": 0.015
+    },
+    {
+      "n": 32,
+      "fork_seconds": 0.245,
+      "child": "sbx-e8da5653fd6f4a56aa67",
+      "ok": true,
+      "answer_seconds": 0.012
+    },
+    {
+      "n": 33,
+      "fork_seconds": 0.121,
+      "child": "sbx-fcbd3b85272849d1a25c",
+      "ok": true,
+      "answer_seconds": 0.017
+    },
+    {
+      "n": 34,
+      "fork_seconds": 0.149,
+      "child": "sbx-5bb935f3d6314e99a6f0",
+      "ok": true,
+      "answer_seconds": 0.02
+    },
+    {
+      "n": 35,
+      "fork_seconds": 0.141,
+      "child": "sbx-3786c760251a4361b224",
+      "ok": true,
+      "answer_seconds": 0.026
+    },
+    {
+      "n": 36,
+      "fork_seconds": 0.113,
+      "child": "sbx-cc75e85b9485416c8248",
+      "ok": true,
+      "answer_seconds": 0.013
+    },
+    {
+      "n": 37,
+      "fork_seconds": 0.189,
+      "child": "sbx-16c140e58fec45d8a184",
+      "ok": true,
+      "answer_seconds": 0.02
+    },
+    {
+      "n": 38,
+      "fork_seconds": 0.171,
+      "child": "sbx-f4717046ae8c4c739f05",
+      "ok": true,
+      "answer_seconds": 0.015
+    },
+    {
+      "n": 39,
+      "fork_seconds": 0.145,
+      "child": "sbx-7a8be5da3ae74976a694",
+      "ok": true,
+      "answer_seconds": 0.024
+    },
+    {
+      "n": 40,
+      "fork_seconds": 0.165,
+      "child": "sbx-f81aa4786727417b9a6c",
+      "ok": true,
+      "answer_seconds": 0.02
+    }
+  ],
+  "failed_forks": []
+}

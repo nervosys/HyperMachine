@@ -1,0 +1,7 @@
+run 1 busy: exit 0 idle: exit 0 idle-ok=40 busy-ok=40
+run 2 busy: exit 0 idle: exit 0 idle-ok=40 busy-ok=40
+run 3 busy: exit 0 idle: exit 0 idle-ok=40 busy-ok=40
+run 4 busy: exit 0 idle: exit 0 idle-ok=40 busy-ok=40
+run 5 busy: exit 0 idle: exit 0 idle-ok=40 busy-ok=40
+run 6 busy: exit 0 idle: exit 0 idle-ok=40 busy-ok=40
+FINISHED

@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `tools/check-fork-busy-kvm.py`: 560 of 560 forks of a busy or idle sandbox answered; the mid-build fork
+  failure did not reproduce without Docker. One cold boot in 14 stalled (both vCPUs halted, timer armed),
+  cause unknown (`docs/benchmarks/2026-10-28/fork-busy-kvm/`).
 - A published port reached through the node proxy from a second network namespace (veth pair), with
   the namespace's own loopback as a control: `check-docker-sandbox-kvm.py --netns`, 3 of 3 runs
   (`docs/benchmarks/2026-10-28/docker-netns-proxy-kvm/`). One kernel, not a second machine.
