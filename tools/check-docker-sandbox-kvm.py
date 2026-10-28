@@ -379,6 +379,35 @@ def main():
                 return {"after_restore": restored, "in_fork": forked}
             case("a named volume's data is as it was at a checkpoint, and a fork has it", volume_checkpointed)
 
+            def big_data_checkpointed():
+                sandbox = state["sandbox"]
+                digests = "sha256sum /var/lib/docker/volumes/bigvol/_data/big /srv/bind/big | cut -d' ' -f1 | tr '\\n' ' '"
+                sh(sandbox, "docker volume create bigvol >/dev/null && mkdir -p /srv/bind && "
+                            "docker run --rm -v bigvol:/d -v /srv/bind:/b hvbox /bin/busybox sh -c "
+                            "'dd if=/dev/urandom of=/d/big bs=1M count=128 2>/dev/null && dd if=/dev/urandom of=/b/big bs=1M count=64 2>/dev/null' && sync", 300)
+                before = sh(sandbox, digests, 120)
+                assert len(before.split()) == 2, before
+                status, made = request("POST", f"/sandboxes/{sandbox}/checkpoints", {"name": "with-big-data"})
+                assert status in (200, 201), (status, made)
+                sh(sandbox, "docker run --rm -v bigvol:/d -v /srv/bind:/b hvbox /bin/busybox sh -c "
+                            "'dd if=/dev/urandom of=/d/big bs=1M count=128 2>/dev/null && dd if=/dev/urandom of=/b/big bs=1M count=64 2>/dev/null' && sync", 300)
+                assert sh(sandbox, digests, 120) != before, "the data did not change"
+                status, back = request("POST", f"/sandboxes/{sandbox}/checkpoints/with-big-data/restore")
+                assert status in (200, 201, 204), (status, back)
+                restored = sh(sandbox, digests, 120)
+                assert restored == before, (restored, before)
+                status, made = request("POST", f"/sandboxes/{sandbox}/fork", {"timeout": 600})
+                assert status in (200, 201), (status, made)
+                child = made[0]["sandbox"]["sandboxID"]
+                try:
+                    forked = sh(child, digests, 120)
+                finally:
+                    request("DELETE", f"/sandboxes/{child}")
+                assert forked == before, (forked, before)
+                sh(sandbox, "docker volume rm bigvol >/dev/null; rm -rf /srv/bind; true", 60, ok=False)
+                return {"sha256_volume_128MiB_and_bind_64MiB": before.split(), "restored_equal": True, "fork_equal": True}
+            case("a 128 MiB volume and a 64 MiB bind-mounted file are as they were at a checkpoint, and a fork has them", big_data_checkpointed)
+
             def composed_build():
                 sandbox = state["sandbox"]
                 sh(sandbox, "rm -rf /tmp/cb && mkdir /tmp/cb && cp /bin/busybox /tmp/cb/busybox && cat > /tmp/cb/Dockerfile <<'EOF'" + chr(10) + DOCKERFILE + "EOF")

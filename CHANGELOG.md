@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A 128 MiB Docker volume and a 64 MiB bind-mounted file are byte for byte as they were at a checkpoint,
+  and a fork has them: a new case in `check-docker-sandbox-kvm.py`, 3 of 3 runs
+  (`docs/benchmarks/2026-10-28/docker-big-data-checkpoint-kvm/`).
 - Disk checkpoints, three runs in a row each: XFS, Btrfs and ext4 10 of 10 every time (extents shared on XFS
   and Btrfs); a `--disk-slot` node 2 of 3, the failed run an empty read of the guest's counter after a restore,
   likely a race in the check (`docs/benchmarks/2026-10-28/disk-checkpoint-repeat-kvm/`).

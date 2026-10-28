@@ -69,7 +69,10 @@ The nested guest is still about ten times slower in real time.
       option or stays an opt-in build (`HV2_KERNEL`); document the choice.
 - [ ] `docker compose build` (BuildKit) checkpointed mid-step, and a build that is
       pulling layers when checkpointed or forked.
-- [ ] A volume bigger than a few bytes, and a volume on a bind mount.
+- [x] A volume bigger than a few bytes, and a volume on a bind mount: 128 MiB volume
+      and 64 MiB bind-mounted file, checkpoint, restore and fork, 3 of 3 runs
+      (`2026-10-28/docker-big-data-checkpoint-kvm`). Data written during a checkpoint
+      is NOT VERIFIED.
 - [ ] Remapped daemon (`--userns-remap`) together with compose and build, across a
       checkpoint.
 

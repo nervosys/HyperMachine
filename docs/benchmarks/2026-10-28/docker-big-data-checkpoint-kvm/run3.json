@@ -1,0 +1,212 @@
+{
+  "success": true,
+  "purpose": "functional verification that Docker runs inside a sandbox on KVM; the times are the check's own stopwatch and not a benchmark",
+  "input_sha256": {
+    "daemon": "311c26f69a609ec47aabe8a7b6c47633b522f8552e5e29eed6e0162207daf13f",
+    "kernel": "6dcf46487bd263f4224f7127c3461fa48974432528c7d777f9e3b856335dffac",
+    "initrd": "0c95127a0c31a3ac08aa292ee3bb41d7900514058d440f5d9426cecd9ec7e6ac",
+    "driver": "28c7c4998356d5a66ccebac05865e281b30ada0da201a8018656b7068166942c"
+  },
+  "initrd_bytes": 148846713,
+  "memory_mb": 2048,
+  "host_cpus": 24,
+  "cases": [
+    {
+      "name": "dockerd is up under systemd",
+      "success": true,
+      "detail": {
+        "create_seconds": 0.196,
+        "docker_info": "overlayfs cgroup2 29.9.2 [name=seccomp,profile=builtin name=cgroupns]",
+        "kernel": "6.6.52"
+      }
+    },
+    {
+      "name": "a container runs from an imported image, with no network",
+      "success": true,
+      "detail": {
+        "output": "from-a-container"
+      }
+    },
+    {
+      "name": "a memory limit reaches the container's cgroup",
+      "success": true,
+      "detail": {
+        "memory.max": "67108864"
+      }
+    },
+    {
+      "name": "two containers on a bridge network reach each other",
+      "success": true,
+      "detail": {
+        "output": "hello-over-bridge"
+      }
+    },
+    {
+      "name": "docker build runs a Dockerfile's RUN step and the image runs",
+      "success": true,
+      "detail": {
+        "output": "built-by-docker"
+      }
+    },
+    {
+      "name": "a published port reaches the container, from the guest and through the node proxy",
+      "success": true,
+      "detail": {
+        "from_the_guest": "hi-publish",
+        "through_the_node_proxy": [
+          200,
+          "hi-publish"
+        ],
+        "dnat_rules_for_8080": "1"
+      }
+    },
+    {
+      "name": "a checkpoint and a fork carry dockerd and a running container",
+      "success": true,
+      "detail": {
+        "restored": {
+          "running": "keep",
+          "mark": "before",
+          "serves": "hi-publish"
+        },
+        "forked": {
+          "running": "keep",
+          "serves": "hi-publish",
+          "can_run_another": "ok"
+        }
+      }
+    },
+    {
+      "name": "an image is pulled from Docker Hub and runs",
+      "success": true,
+      "detail": {
+        "first_line": "Hello from Docker!"
+      }
+    },
+    {
+      "name": "docker build from a pulled base image runs its RUN step",
+      "success": true,
+      "detail": {
+        "output": "from-a-pulled-base"
+      }
+    },
+    {
+      "name": "a RUN step that fetches from a server on the bridge during docker build",
+      "success": true,
+      "detail": {
+        "output": "fetched-during-build",
+        "server": "172.17.0.2"
+      }
+    },
+    {
+      "name": "docker compose runs two services that reach each other, and a volume outlives them",
+      "success": true,
+      "detail": {
+        "compose": "2.40.3",
+        "services": [
+          "client",
+          "srv"
+        ],
+        "volume_after_down": "hello-from-compose"
+      }
+    },
+    {
+      "name": "a checkpoint and a fork carry a running compose project",
+      "success": true,
+      "detail": {
+        "restored": {
+          "services": [
+            "client",
+            "srv"
+          ],
+          "reach": "hello-from-compose"
+        },
+        "forked": {
+          "services": [
+            "client",
+            "srv"
+          ],
+          "reach": "hello-from-compose"
+        }
+      }
+    },
+    {
+      "name": "a named volume's data is as it was at a checkpoint, and a fork has it",
+      "success": true,
+      "detail": {
+        "after_restore": "before",
+        "in_fork": "before"
+      }
+    },
+    {
+      "name": "a 128 MiB volume and a 64 MiB bind-mounted file are as they were at a checkpoint, and a fork has them",
+      "success": true,
+      "detail": {
+        "sha256_volume_128MiB_and_bind_64MiB": [
+          "97d409ad23af2caee36bddb441ce81fc909f159c9984780e192dec6c93ef9c5f",
+          "67c843452548928caf966e02ce62b29fcdcb1aa65c2fc16bc2d59ade5a31cc29"
+        ],
+        "restored_equal": true,
+        "fork_equal": true
+      }
+    },
+    {
+      "name": "docker compose build builds a service's image from its build context",
+      "success": true,
+      "detail": {
+        "output": "built-by-docker"
+      }
+    },
+    {
+      "name": "two compose projects run side by side, and one comes down without the other",
+      "success": true,
+      "detail": {
+        "running_together": [
+          "one-client-1",
+          "one-srv-1",
+          "two-client-1",
+          "two-srv-1"
+        ],
+        "networks": [
+          "one_default",
+          "two_default"
+        ],
+        "left_after_one_down": [
+          "two-client-1",
+          "two-srv-1"
+        ]
+      }
+    },
+    {
+      "name": "a checkpoint in the middle of a docker build, with a compose project running, resumes both",
+      "success": true,
+      "detail": {
+        "image_output": "built-after-resume",
+        "services_after_restore": [
+          "client",
+          "srv"
+        ]
+      }
+    },
+    {
+      "name": "a fork in the middle of a docker build finishes the build in the fork and the parent",
+      "success": true,
+      "detail": {
+        "in_fork": "built-after-resume",
+        "in_parent": "built-after-resume"
+      }
+    },
+    {
+      "name": "--userns-remap maps a container's root to an unprivileged id",
+      "success": true,
+      "detail": {
+        "uid_map": [
+          "0",
+          "100000",
+          "65536"
+        ],
+        "file_owner_on_host": "100000"
+      }
+    }
+  ]
+}
