@@ -104,8 +104,16 @@ Several results are one run. Each needs three runs in a row, kept.
       enabled; log retry count and elapsed time at the failure site; test with and
       without framebuffer and net device, and at different memory sizes.
 - [ ] **WHPX guest CPUID** reports the hypervisor-present bit clear (Botnix
-      measurement). Decide whether to set it and add the `0x40000000` signature
-      leaf; check what each backend does.
+      measurement). What each backend does (read from the code, 2026-10-28): KVM sets
+      leaf 1 ECX bit 31 (`kvm.rs`, `advertise_hypervisor`) and takes 0x40000000 from
+      KVM's supported set; WHPX configures no CPUID at all (`whpx.rs` sets only the
+      processor count, no CpuidResultList, no CPUID exit handler), so it gets WHP's
+      defaults; HVF has no CPUID emulation. `tsc_early_khz` and `tsc=reliable` are
+      injected on WHPX and HVF only (`vm.rs:1081`). Setting the bit under WHPX needs
+      new code (a CPUID result list or exit handling) and changes how the working
+      1-vCPU guest probes time, so it is NOT done: it needs a WHPX run on this host
+      (both before and after) and a decision. Botnix asked for the signal; the cost
+      of not having it is that a guest sees bare hardware.
 - [ ] **HVF (macOS), IRQ 12.** Needs a Mac. **OWNER** hardware.
 - [ ] **Intel nested KVM (VMX).** Needs an Intel host. **OWNER** hardware.
 - [ ] **vCPU reservation** (priority and affinity for vCPU threads, requested by
