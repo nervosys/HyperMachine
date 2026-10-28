@@ -57,7 +57,7 @@ tower-http = { version = "0.7", features = ["cors"] }
 # Shell completions
 clap_complete = "4.5"
 tempfile = "3.10"
-base64 = "0.22"
+base64 = "0.23"
 # `hm sandbox vm build` packs the context a Dockerfile's COPY reads.
 tar = { version = "0.4", default-features = false }
 sha2 = "0.11"
