@@ -1,0 +1,4 @@
+slot run 1: 10 ok, exit 0
+slot run 2: 10 ok, exit 0
+slot run 3: 10 ok, exit 0
+FINISHED

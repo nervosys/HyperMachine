@@ -32,3 +32,12 @@ Counting all four slot runs: 3 of 4 passed.
 - That the empty read is the check's race and not a restore fault (no run was
   repeated enough to see it again; a read that retries would settle it).
 - A real block device (all are loop devices) and a disk larger than 1 GiB.
+
+## `--disk-slot` again, with the read retried (`slot-retry/`)
+
+After the failed run, the check's second read of the counter retries up to 10 times
+(0.3 s apart) when it gets an empty answer. Three more `--disk-slot` runs: **3 of 3
+passed 10 of 10**. So `--disk-slot` is 5 of 7 runs overall across the two sets and 3
+of 3 with the retry. That the empty read was a race in the check is consistent with
+this and still not proven: a race that happens about 1 run in 4 could also simply not
+have fired. The first counter read (just before) does not retry.

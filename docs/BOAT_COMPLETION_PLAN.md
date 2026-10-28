@@ -79,10 +79,10 @@ Several results are one run. Each needs three runs in a row, kept.
 
 - [x] Reflink checks: XFS, Btrfs, ext4 control, 3 of 3 runs each, extents shared on
       XFS and Btrfs every time (`2026-10-28/disk-checkpoint-repeat-kvm`).
-- [ ] Disk checkpoint on a `--disk-slot` node: 2 of 3 runs passed; run 1 got an empty
-      `cat /tmp/count` after a restore (likely a race in the check, not proven).
-      Make the read retry and run it three more times. `--disk-slot` on a reflink
-      filesystem is still NOT VERIFIED.
+- [x] Disk checkpoint on a `--disk-slot` node: 2 of 3 runs passed (run 1 got an empty
+      `cat /tmp/count` after a restore); with the read retried, 3 of 3
+      (`2026-10-28/disk-checkpoint-repeat-kvm/slot-retry`). Race in the check is likely,
+      not proven. `--disk-slot` on a reflink filesystem is still NOT VERIFIED.
 - [ ] XFS or Btrfs on a real block device, not a loop device; a disk much larger
       than 1 GiB.
 - [x] `docs/BOAT_PARITY.md`: re-read against the 2026-10-21 to 2026-10-28 evidence

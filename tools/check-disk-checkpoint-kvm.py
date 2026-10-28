@@ -182,7 +182,16 @@ def main():
             counter = int(execute(box, "cat /tmp/count"))
             assert counter < state["count_after"], (counter, state["count_after"])
             time.sleep(0.6)
-            assert int(execute(box, "cat /tmp/count")) > counter, "the counter does not run"
+            # The guest's counter truncates the file before it writes, so a read can be empty: retry.
+            later = None
+            for _ in range(10):
+                said = execute(box, "cat /tmp/count")
+                if said:
+                    later = int(said)
+                    if later > counter:
+                        break
+                time.sleep(0.3)
+            assert later is not None and later > counter, ("the counter does not run", counter, later)
             held = disks()
             assert held["data"] is None, held
             mine = [n for n, holder in held.items() if holder == box]
