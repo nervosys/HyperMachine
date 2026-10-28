@@ -51,7 +51,26 @@ The nested guest is still about ten times slower in real time.
 - [ ] If it boots: a checkpoint and a fork while a nested VM is running, and the
       nested guest across a restore.
 
-## 3. Docker leftovers
+## 3a. Direction (owner, 2026-10-28)
+
+HyperMachine is not meant to run Docker; the goal is to **port Docker's workflow to
+HyperMachine itself** (build and run images, compose, with HyperMachine's own
+sandboxes). Docker's engine inside a guest was checked (section 3 below) and stays as
+evidence, but no more of it is to be built. The work is on the native path
+(`hm sandbox vm build|run|compose`), whose gaps are in
+[RUN_IMAGES.md](RUN_IMAGES.md):
+
+- [x] Multi-stage builds and `COPY --from` a stage
+      (`2026-10-28/hm-multistage-kvm`, 5 cases and the 6-case build check, 3 of 3 runs each).
+- [ ] Compose: networks between services (`depends_on` is start order only today).
+- [ ] Compose: bind mounts, `:ro` and options on volumes.
+- [ ] Compose: health checks and restarts (refused as unknown keys today).
+- [ ] Build: `ADD` of a URL or archive, `SHELL`, `ONBUILD`, `FROM` an earlier stage,
+      `RUN --mount`, heredocs.
+- [ ] `hm sandbox vm run`: `-p`, `-v`, `--network`, stdin and `-it`.
+- [ ] A moved tag (re-pull when the registry's tag moves).
+
+## 3. Docker leftovers (Docker's engine in a guest: done; no more to be built)
 
 - [x] **The one unexplained failure.** The published-port case failed once in 10
       runs with no error captured. Ran the full check 20 times with logs kept

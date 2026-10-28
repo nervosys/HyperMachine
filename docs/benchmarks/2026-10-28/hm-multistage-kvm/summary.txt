@@ -1,0 +1,7 @@
+multistage run 1: 5 ok
+multistage run 2: 5 ok
+multistage run 3: 5 ok
+hm build run 2: 6 ok
+hm build run 3: 6 ok
+hm build run 1 (earlier, same kit): 6 ok
+FINISHED

@@ -14,7 +14,8 @@ build context, and drives the real `hm` binary:
    rest.
 5. Building the same thing again is quicker (the node's step cache).
 6. A failing RUN fails the build at its step with a non-zero exit and no
-   template; a multi-stage Dockerfile is refused before anything is sent.
+   template; COPY --from an image (not a stage) is refused before anything is sent.
+   Multi-stage builds are in check-hm-multistage-kvm.py.
 
 Writes report.json and the daemon log into --output. Times are the check's own.
 """
@@ -171,12 +172,12 @@ def main():
             assert "will-fail" not in [t["templateID"] for t in get("/templates") if t.get("buildStatus") == "ready"]
             multi = args.output / "multi"
             multi.mkdir()
-            (multi / "Dockerfile").write_text("FROM alpine:3.20 AS build\nRUN true\nFROM alpine:3.20\nCOPY --from=build /x /x\n")
+            (multi / "Dockerfile").write_text("FROM alpine:3.20\nCOPY --from=nginx:latest /x /x\n")
             refused, _ = hm("build", "-t", "never", str(multi))
-            assert refused.returncode != 0 and "multi-stage" in refused.stderr, refused
+            assert refused.returncode != 0 and "not an earlier stage" in refused.stderr, refused
             return {"failed_step": [l for l in failed.stderr.splitlines() if "build failed" in l],
                     "refused": refused.stderr.strip()[:160]}
-        case("a failing RUN fails the build at its step, and a multi-stage Dockerfile is refused", failures)
+        case("a failing RUN fails the build at its step, and COPY --from an image is refused", failures)
 
         report["success"] = True
     finally:

@@ -135,6 +135,31 @@ failing step ends the build at that step with a non-zero exit and no template.
 
 Checked on KVM, 6 cases on 3 runs
 ([evidence](benchmarks/2026-10-19/hm-build-kvm/README.md)). Not done:
-multi-stage builds and `COPY --from` (refused up front), `ADD` of a URL or
-archive, `SHELL`, `ONBUILD`; `LABEL`, `EXPOSE`, `HEALTHCHECK` and `VOLUME` are
-accepted with a warning and ignored. See the evidence's "Not verified" list.
+`ADD` of a URL or archive, `SHELL`, `ONBUILD`; `LABEL`, `EXPOSE`,
+`HEALTHCHECK` and `VOLUME` are accepted with a warning and ignored. See the
+evidence's "Not verified" list.
+
+### Multi-stage builds
+
+```
+FROM golang:1.22 AS build
+RUN go build -o /out/app ./...
+FROM alpine:3.20
+COPY --from=build /out/app /usr/local/bin/app
+```
+
+Every `FROM` starts a stage, named with `AS name`. `COPY --from=NAME` (or the
+stage's number) takes files out of an earlier stage: a file, a directory or a
+glob, as `COPY` takes them from the context. `hm` builds each earlier stage the
+last one reads as a template of its own, starts a sandbox of it, tars the paths
+with the guest's busybox, reads them back and uploads them as it uploads a
+context; the stage templates are deleted when the build is done. The same files
+make the same bytes, so the node's step cache is hit on a repeat build. The
+stages the last one does not read are not built.
+
+Refused, by name: `FROM` an earlier stage (building on a stage's result),
+`COPY --from=IMAGE` (copying out of an image that is not a stage), and a path the
+stage does not have (the build fails, naming the path). A copy is limited to 64
+MiB, and is read through the guest's exec in pieces, so it is slow for
+large trees. [Checked on KVM](benchmarks/2026-10-28/hm-multistage-kvm/README.md):
+5 cases on 3 runs.

@@ -24,6 +24,9 @@ pub struct Step {
     pub args: Vec<String>,
     /// A `COPY`: its source is in the build context's archive.
     pub from_context: bool,
+    /// A `COPY --from=NAME`: its source is in an earlier stage, named as the
+    /// Dockerfile wrote it (a stage's name or its number).
+    pub from_stage: Option<String>,
 }
 
 impl Step {
@@ -40,6 +43,8 @@ impl Step {
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Plan {
     pub image: String,
+    /// `FROM image AS name`.
+    pub name: Option<String>,
     pub steps: Vec<Step>,
     pub warnings: Vec<String>,
 }
@@ -48,6 +53,62 @@ impl Plan {
     pub fn copies_from_context(&self) -> bool {
         self.steps.iter().any(|s| s.from_context)
     }
+}
+
+/// A Dockerfile of several stages: every stage's plan, in order. The last
+/// stage is the image; the others are only read by `COPY --from`.
+pub fn parse_stages(text: &str, build_args: &BTreeMap<String, String>) -> Result<Vec<Plan>> {
+    // The instructions before the first FROM (global ARGs) are put in front
+    // of every stage, where `parse` already knows what to do with them.
+    let mut preamble = String::new();
+    let mut stages: Vec<String> = Vec::new();
+    let mut continued = false;
+    for raw in text.lines() {
+        let trimmed = raw.trim_start();
+        let starts = !continued
+            && trimmed
+                .split_whitespace()
+                .next()
+                .is_some_and(|w| w.eq_ignore_ascii_case("FROM"));
+        if starts {
+            stages.push(String::new());
+        }
+        let target = match stages.last_mut() {
+            Some(stage) => stage,
+            None => &mut preamble,
+        };
+        target.push_str(raw);
+        target.push('\n');
+        let body = raw.trim_end_matches('\r').trim_end();
+        let is_comment = trimmed.starts_with('#') || trimmed.is_empty();
+        if !is_comment {
+            continued = body.ends_with('\\');
+        }
+    }
+    if stages.is_empty() {
+        bail!("Dockerfile has no FROM");
+    }
+    let mut plans: Vec<Plan> = Vec::new();
+    let mut start = preamble.lines().count();
+    for (index, stage) in stages.iter().enumerate() {
+        // Blank lines keep each stage's line numbers those of the whole file.
+        let blanks = "\n".repeat(start - preamble.lines().count());
+        let padded = format!("{preamble}{blanks}{stage}");
+        start += stage.lines().count();
+        let plan = parse(&padded, build_args)?;
+        if plans.iter().any(|p| {
+            p.name
+                .as_deref()
+                .is_some_and(|n| n.eq_ignore_ascii_case(&plan.image))
+        }) {
+            bail!(
+                "stage {index}: FROM {} names an earlier stage; building from a stage is not supported",
+                plan.image
+            );
+        }
+        plans.push(plan);
+    }
+    Ok(plans)
 }
 
 /// Parse `text`, with `build_args` overriding `ARG` defaults.
@@ -94,7 +155,7 @@ pub fn parse(text: &str, build_args: &BTreeMap<String, String>) -> Result<Plan> 
             "FROM" => {
                 if seen_from {
                     return Err(at(
-                        "multi-stage builds are not supported (a second FROM)".into()
+                        "a second FROM in one stage (use parse_stages for several stages)".into(),
                     ));
                 }
                 let mut parts = words(rest, &lookup(&args, &env)).map_err(|e| at(e.to_string()))?;
@@ -104,6 +165,9 @@ pub fn parse(text: &str, build_args: &BTreeMap<String, String>) -> Result<Plan> 
                     .ok_or_else(|| at("FROM without an image".into()))?;
                 if image.eq_ignore_ascii_case("scratch") {
                     return Err(at("FROM scratch is not supported".into()));
+                }
+                if parts.len() >= 3 && parts[1].eq_ignore_ascii_case("as") {
+                    plan.name = Some(parts[2].clone());
                 }
                 plan.image = image.clone();
                 seen_from = true;
@@ -169,12 +233,16 @@ pub fn parse(text: &str, build_args: &BTreeMap<String, String>) -> Result<Plan> 
                 let (flags, operands) = split_flags(rest);
                 let mut owner = String::new();
                 let mut mode = String::new();
+                let mut from_stage: Option<String> = None;
                 for flag in flags {
                     match flag.split_once('=') {
                         Some(("--chown", v)) => owner = v.to_string(),
                         Some(("--chmod", v)) => mode = v.to_string(),
+                        Some(("--from", v)) if keyword == "COPY" && !v.is_empty() => {
+                            from_stage = Some(v.to_string());
+                        }
                         Some(("--from", _)) => {
-                            return Err(at("COPY --from (multi-stage) is not supported".into()))
+                            return Err(at(format!("{keyword} --from needs a COPY and a stage")))
                         }
                         _ if flag.starts_with("--link") => {}
                         _ => return Err(at(format!("{keyword} flag {flag} is not supported"))),
@@ -205,7 +273,8 @@ pub fn parse(text: &str, build_args: &BTreeMap<String, String>) -> Result<Plan> 
                         "COPY",
                         vec![source, dest.clone(), owner.clone(), mode.clone()],
                     );
-                    copy.from_context = true;
+                    copy.from_context = from_stage.is_none();
+                    copy.from_stage = from_stage.clone();
                     plan.steps.push(copy);
                 }
             }
@@ -242,6 +311,7 @@ fn step(kind: &'static str, args: Vec<String>) -> Step {
         kind,
         args,
         from_context: false,
+        from_stage: None,
     }
 }
 
@@ -570,10 +640,38 @@ mod tests {
     }
 
     #[test]
+    fn stages_are_parsed_one_each_and_copy_from_names_its_stage() {
+        let plans = parse_stages(
+            "ARG V=1\nFROM a AS build\nRUN make\nFROM b\nCOPY --from=build /out/app /app\n",
+            &BTreeMap::new(),
+        )
+        .unwrap();
+        assert_eq!(plans.len(), 2);
+        assert_eq!(plans[0].name.as_deref(), Some("build"));
+        assert_eq!(plans[1].image, "b");
+        let copy = &plans[1].steps[0];
+        assert_eq!(copy.from_stage.as_deref(), Some("build"));
+        assert!(!copy.from_context);
+        assert!(!plans[1].copies_from_context());
+    }
+
+    #[test]
+    fn a_stage_used_as_a_base_is_refused_and_errors_keep_the_files_line() {
+        let message = parse_stages("FROM a AS x\nRUN ok\nFROM x\n", &BTreeMap::new())
+            .unwrap_err()
+            .to_string();
+        assert!(message.contains("earlier stage"), "{message}");
+        let message = parse_stages("FROM a\nRUN ok\nFROM b\nFROBNICATE x\n", &BTreeMap::new())
+            .unwrap_err()
+            .to_string();
+        assert!(message.starts_with("Dockerfile line 4:"), "{message}");
+    }
+
+    #[test]
     fn what_cannot_be_done_is_refused_by_name() {
         for (text, expected) in [
-            ("FROM a\nFROM b\n", "multi-stage"),
-            ("FROM a\nCOPY --from=build /x /y\n", "multi-stage"),
+            ("FROM a\nFROM b\n", "second FROM"),
+            ("FROM a\nCOPY --from= /x /y\n", "needs a COPY and a stage"),
             ("FROM scratch\n", "scratch"),
             (
                 "FROM a\nRUN --mount=type=cache,target=/c make\n",

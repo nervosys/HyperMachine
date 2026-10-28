@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `hm sandbox vm build` builds multi-stage Dockerfiles: `FROM x AS name`, `COPY --from=name|N` of a
+  file, a directory or a glob, chains of stages. Each earlier stage is built as a hidden template and
+  its files are read out of a sandbox of it and uploaded as a context; no daemon change. Refused by
+  name: `FROM` an earlier stage and `COPY --from=IMAGE`. 5 cases, 3 of 3 runs, and the 6-case build
+  check 3 of 3 (`docs/benchmarks/2026-10-28/hm-multistage-kvm/`). Failure cleanup of the hidden
+  templates is not verified.
 - A compose project under `--userns-remap` survives a checkpoint, a restore and a fork (both containers
   running, the volume's data intact): 3 of 3 runs; the first version of the check failed 4 times on a
   mistake in the check itself (`docs/benchmarks/2026-10-28/docker-userns-remap-compose-kvm/`).

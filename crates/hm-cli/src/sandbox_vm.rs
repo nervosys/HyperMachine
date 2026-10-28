@@ -3632,19 +3632,237 @@ async fn build_template(api: &Api, build: BuildImage) -> Result<Option<String>> 
         args.insert(name.to_string(), value.to_string());
     }
     let login = build.registry.login(|v| std::env::var(v).ok())?;
-    let plan = crate::dockerfile::parse(&text, &args)?;
-    for warning in &plan.warnings {
-        eprintln!("warning: {warning}");
+    let plans = crate::dockerfile::parse_stages(&text, &args)?;
+    for plan in &plans {
+        for warning in &plan.warnings {
+            eprintln!("warning: {warning}");
+        }
     }
-
-    let packed = if plan.copies_from_context() {
+    let packed = if plans.iter().any(|p| p.copies_from_context()) {
         Some(crate::build_context::pack(&build.context)?)
     } else {
         None
     };
-    let hash = packed.as_ref().map(|(_, hash)| hash.clone());
 
-    let mut body = json!({"name": build.tag});
+    // Which earlier stage each `COPY --from` reads; only the stages the last
+    // one needs (directly or through another) are built.
+    let last = plans.len() - 1;
+    let mut reads: Vec<Vec<Option<usize>>> = Vec::new();
+    for (index, plan) in plans.iter().enumerate() {
+        let mut row = Vec::new();
+        for step in &plan.steps {
+            row.push(match &step.from_stage {
+                Some(name) => Some(stage_named(&plans, index, name)?),
+                None => None,
+            });
+        }
+        reads.push(row);
+    }
+    let mut needed = vec![false; plans.len()];
+    needed[last] = true;
+    for index in (0..plans.len()).rev() {
+        if needed[index] {
+            for source in reads[index].iter().flatten() {
+                needed[*source] = true;
+            }
+        }
+    }
+
+    let mut built: Vec<Option<String>> = vec![None; plans.len()];
+    let mut hidden: Vec<String> = Vec::new();
+    let result: Result<Option<String>> = async {
+        for (index, plan) in plans.iter().enumerate() {
+            if !needed[index] {
+                continue;
+            }
+            let tag = if index == last {
+                build.tag.clone()
+            } else {
+                format!("{}-stage{index}", build.tag)
+            };
+            let mut from_stages: Vec<Option<(Vec<u8>, String)>> = Vec::new();
+            for (step, source) in plan.steps.iter().zip(&reads[index]) {
+                from_stages.push(match source {
+                    Some(stage) => {
+                        let template = built[*stage].as_deref().context("a stage was not built")?;
+                        let path = step.args.first().map(String::as_str).unwrap_or("");
+                        eprintln!("copying {path} out of stage {stage} ...");
+                        Some(files_from_stage(api, template, path).await?)
+                    }
+                    None => None,
+                });
+            }
+            let made = build_plan(
+                api,
+                &build,
+                &tag,
+                plan,
+                login.as_ref(),
+                packed.as_ref(),
+                &from_stages,
+            )
+            .await?;
+            match made {
+                Some(template) => {
+                    if index != last {
+                        hidden.push(template.clone());
+                    }
+                    built[index] = Some(template);
+                }
+                None => return Ok(None),
+            }
+        }
+        Ok(built[last].clone())
+    }
+    .await;
+    // The stages only fed `COPY --from`; the image does not need them.
+    for template in hidden {
+        let _ = api
+            .request(Method::DELETE, &["templates", &template], None)
+            .await;
+    }
+    result
+}
+
+/// The earlier stage `name` means in stage `index`: its `AS` name or its number.
+fn stage_named(plans: &[crate::dockerfile::Plan], index: usize, name: &str) -> Result<usize> {
+    let found = plans[..index]
+        .iter()
+        .position(|p| {
+            p.name
+                .as_deref()
+                .is_some_and(|n| n.eq_ignore_ascii_case(name))
+        })
+        .or_else(|| name.parse::<usize>().ok().filter(|n| *n < index));
+    found.with_context(|| {
+        format!("COPY --from={name}: not an earlier stage (copying from an image is not supported)")
+    })
+}
+
+/// The files `path` names in a built stage, as a plain tar with its entries
+/// at paths below `/`, and the tar's SHA-256 as hex. They are read out of a
+/// sandbox of the stage's template with the guest's busybox, a piece of the
+/// base64 of the tar at a time (the guest holds only so much output).
+async fn files_from_stage(api: &Api, template: &str, path: &str) -> Result<(Vec<u8>, String)> {
+    use base64::Engine;
+    use sha2::{Digest, Sha256};
+    const MOST_BYTES: usize = 64 << 20;
+    let made = api
+        .request(
+            Method::POST,
+            &["v2", "sandboxes"],
+            Some(json!({"templateID": template, "timeout": 600})),
+        )
+        .await?;
+    let id = made["sandboxID"]
+        .as_str()
+        .filter(|id| !id.is_empty())
+        .context("the node's answer had no sandboxID")?
+        .to_string();
+    let result: Result<Vec<u8>> = async {
+        let word = path.trim_start_matches('/').trim_start_matches("./");
+        let quoted = if word.contains(['*', '?', '[']) {
+            word.to_string()
+        } else {
+            format!("'{}'", word.replace('\'', "'\\''"))
+        };
+        let script = format!(
+            "cd / && /bin/busybox tar -cf /tmp/.hm-from.tar {quoted} && /bin/busybox base64 /tmp/.hm-from.tar > /tmp/.hm-from.b64"
+        );
+        let done = guest_exec(api, &id, &script, 300, Some("root")).await?;
+        if done["exit_code"].as_i64() != Some(0) {
+            bail!(
+                "COPY --from: nothing at {path} in the stage: {}",
+                done["stderr"].as_str().unwrap_or("").trim()
+            );
+        }
+        let mut text = String::new();
+        let mut chunk = 0usize;
+        loop {
+            let read = guest_exec(
+                api,
+                &id,
+                &format!(
+                    "/bin/busybox dd if=/tmp/.hm-from.b64 bs=65536 skip={} count=4 2>/dev/null",
+                    chunk * 4
+                ),
+                60,
+                Some("root"),
+            )
+            .await?;
+            let piece = read["stdout"].as_str().unwrap_or("");
+            if piece.is_empty() {
+                break;
+            }
+            text.extend(piece.chars().filter(|c| !c.is_whitespace()));
+            chunk += 1;
+            if text.len() > MOST_BYTES * 4 / 3 {
+                bail!("COPY --from {path}: over {} MiB", MOST_BYTES >> 20);
+            }
+        }
+        base64::engine::general_purpose::STANDARD
+            .decode(text.as_bytes())
+            .context("the files out of the stage did not decode")
+    }
+    .await;
+    let _ = api.request(Method::DELETE, &["sandboxes", &id], None).await;
+    let bytes = reproducible(&result?)?;
+    let hash: String = Sha256::digest(&bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    Ok((bytes, hash))
+}
+
+/// `tar` again with its entries in path order and no times or owners, so the
+/// same files make the same bytes, and the same hash, whenever they are read.
+fn reproducible(tar_bytes: &[u8]) -> Result<Vec<u8>> {
+    let mut entries: Vec<(String, tar::Header, Vec<u8>)> = Vec::new();
+    let mut archive = tar::Archive::new(tar_bytes);
+    for entry in archive.entries()? {
+        let mut entry = entry?;
+        let path = entry
+            .path()?
+            .to_string_lossy()
+            .trim_end_matches('/')
+            .to_string();
+        let mut data = Vec::new();
+        std::io::Read::read_to_end(&mut entry, &mut data)?;
+        let mut header = entry.header().clone();
+        header.set_mtime(0);
+        header.set_uid(0);
+        header.set_gid(0);
+        entries.push((path, header, data));
+    }
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut out = tar::Builder::new(Vec::new());
+    for (path, mut header, data) in entries {
+        let is_dir = header.entry_type().is_dir();
+        let name = if is_dir { format!("{path}/") } else { path };
+        out.append_data(&mut header, name, &data[..])?;
+    }
+    Ok(out.into_inner()?)
+}
+
+/// One stage's build on the node: the template `tag`, once it is ready, or
+/// `None` after the failure has been reported on stderr. `context` is the
+/// packed build context for the `COPY`s that read it, and `from_stages` has
+/// one entry per step: the files a `COPY --from` reads.
+async fn build_plan(
+    api: &Api,
+    build: &BuildImage,
+    tag: &str,
+    plan: &crate::dockerfile::Plan,
+    login: Option<&(String, String)>,
+    context: Option<&(Vec<u8>, String)>,
+    from_stages: &[Option<(Vec<u8>, String)>],
+) -> Result<Option<String>> {
+    let hash = context.map(|(_, hash)| hash.clone());
+    let packed = context
+        .filter(|_| plan.copies_from_context())
+        .map(|(bytes, hash)| (bytes.clone(), hash.clone()));
+
+    let mut body = json!({"name": tag});
     if let Some(cpus) = build.cpus {
         body["cpuCount"] = json!(cpus);
     }
@@ -3663,7 +3881,14 @@ async fn build_template(api: &Api, build: BuildImage) -> Result<Option<String>> 
         .context("the node's answer had no buildID")?
         .to_string();
 
-    if let (Some((bytes, hash)), true) = (packed, plan.copies_from_context()) {
+    let mut uploads: Vec<(&str, Vec<u8>, String)> = Vec::new();
+    if let Some((bytes, hash)) = packed {
+        uploads.push(("the build context", bytes, hash));
+    }
+    for (bytes, hash) in from_stages.iter().flatten() {
+        uploads.push(("files from a stage", bytes.clone(), hash.clone()));
+    }
+    for (what, bytes, hash) in uploads {
         let link = api
             .request(Method::GET, &["templates", &template, "files", &hash], None)
             .await?;
@@ -3674,13 +3899,10 @@ async fn build_template(api: &Api, build: BuildImage) -> Result<Option<String>> 
             let mut target = api.base.clone();
             target.set_path(given.path());
             target.set_query(given.query());
-            eprintln!(
-                "uploading the build context ({} KiB) ...",
-                bytes.len() >> 10
-            );
+            eprintln!("uploading {what} ({} KiB) ...", bytes.len() >> 10);
             let sent = api.client.put(target).body(bytes).send().await?;
             if !sent.status().is_success() {
-                bail!("uploading the context: {}", sent.status());
+                bail!("uploading {what}: {}", sent.status());
             }
         }
     }
@@ -3688,10 +3910,21 @@ async fn build_template(api: &Api, build: BuildImage) -> Result<Option<String>> 
     let steps: Vec<Value> = plan
         .steps
         .iter()
-        .map(|s| s.to_json(hash.as_deref()))
+        .zip(from_stages)
+        .map(|(s, staged)| {
+            let mut step = s.to_json(hash.as_deref());
+            if let Some((_, staged_hash)) = staged {
+                step["filesHash"] = json!(staged_hash);
+                // The tar's entries are the stage's paths below `/`.
+                if let Some(source) = s.args.first() {
+                    step["args"][0] = json!(source.trim_start_matches('/'));
+                }
+            }
+            step
+        })
         .collect();
     let mut start = json!({"fromImage": plan.image, "steps": steps, "force": build.no_cache});
-    if let Some((username, password)) = &login {
+    if let Some((username, password)) = login {
         start["fromImageRegistry"] =
             json!({"type": "registry", "username": username, "password": password});
     }
@@ -4476,6 +4709,48 @@ async fn benchmark(
 
 #[cfg(test)]
 mod tests {
+    /// A tar of `(path, mtime, data)`, in the order given.
+    fn tar_of(files: &[(&str, u64, &[u8])]) -> Vec<u8> {
+        let mut out = tar::Builder::new(Vec::new());
+        for (path, mtime, data) in files {
+            let mut header = tar::Header::new_gnu();
+            header.set_mtime(*mtime);
+            header.set_uid(1000);
+            header.set_mode(0o755);
+            header.set_size(data.len() as u64);
+            out.append_data(&mut header, path, &data[..]).unwrap();
+        }
+        out.into_inner().unwrap()
+    }
+
+    #[test]
+    fn the_same_files_make_the_same_tar_whatever_their_times_and_order() {
+        let a = reproducible(&tar_of(&[("app/b", 5, b"two"), ("app/a", 9, b"one")])).unwrap();
+        let b = reproducible(&tar_of(&[("app/a", 1, b"one"), ("app/b", 2, b"two")])).unwrap();
+        assert_eq!(a, b);
+        let paths: Vec<String> = tar::Archive::new(&a[..])
+            .entries()
+            .unwrap()
+            .map(|e| e.unwrap().path().unwrap().to_string_lossy().to_string())
+            .collect();
+        assert_eq!(paths, ["app/a", "app/b"]);
+        let changed = reproducible(&tar_of(&[("app/a", 1, b"ONE"), ("app/b", 2, b"two")])).unwrap();
+        assert_ne!(a, changed);
+    }
+
+    #[test]
+    fn copy_from_names_an_earlier_stage_by_name_or_number_only() {
+        let plans = crate::dockerfile::parse_stages(
+            "FROM a AS Build\nRUN x\nFROM b\nRUN y\nFROM c\n",
+            &Default::default(),
+        )
+        .unwrap();
+        assert_eq!(stage_named(&plans, 2, "build").unwrap(), 0);
+        assert_eq!(stage_named(&plans, 2, "1").unwrap(), 1);
+        assert!(stage_named(&plans, 2, "2").is_err());
+        assert!(stage_named(&plans, 1, "nginx:latest").is_err());
+    }
+
     #[test]
     fn a_detached_line_backgrounds_and_quotes_the_command() {
         let line = detached_line(&["sh".into(), "-c".into(), "echo 'hi'".into()]).unwrap();

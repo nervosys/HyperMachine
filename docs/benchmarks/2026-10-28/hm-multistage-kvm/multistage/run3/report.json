@@ -1,0 +1,51 @@
+{
+  "success": true,
+  "purpose": "hm sandbox vm build of a multi-stage Dockerfile on KVM; functional, times are the check's stopwatch",
+  "input_sha256": {
+    "daemon": "311c26f69a609ec47aabe8a7b6c47633b522f8552e5e29eed6e0162207daf13f",
+    "hm": "0eb5e3a20c7ffe11574a58e22a42c75af132f8468cca131bce6f6740d00d362f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "4ea00fed534da2fda343faba4d53ba000647329f1eb3dc0b26834a94b9bf89f4"
+  },
+  "cases": [
+    {
+      "name": "a two-stage Dockerfile builds: COPY --from by name (a directory and a glob) and by number, mode kept, stage's workdir absent",
+      "success": true,
+      "detail": {
+        "build_seconds": 14.38,
+        "stdout": "tool says built-in-stage conf=cfg zero=only-in-build glob=artifact.txt, final=final stage=clean\n"
+      }
+    },
+    {
+      "name": "building it again is quicker, so the files read out of a stage are the same bytes",
+      "success": true,
+      "detail": {
+        "first_seconds": 14.38,
+        "second_seconds": 1.7
+      }
+    },
+    {
+      "name": "the stage that was only read from is not left behind as a template",
+      "success": true,
+      "detail": {
+        "run_of_the_stage_template": "Error: sandbox API returned 404 Not Found: {\"code\":404,\"message\":\"template \\\"ms-app-stage0\\\" not found; this node has base, image-d3dfed77bb64d7d2\"}"
+      }
+    },
+    {
+      "name": "three stages, each copying from the one before",
+      "success": true,
+      "detail": {
+        "stdout": "from-a\nand-b\n"
+      }
+    },
+    {
+      "name": "COPY --from a path the stage lacks fails the build, and FROM an earlier stage is refused",
+      "success": true,
+      "detail": {
+        "missing": "dy: snapshot of 1 MiB in 2.55555ms\ncopying /nope out of stage 0 ...\nError: COPY --from: nothing at /nope in the stage: tar: nope: No such file or directory\ntar: error exit delayed from previous errors",
+        "as_base": "Error: stage 1: FROM build names an earlier stage; building from a stage is not supported"
+      }
+    }
+  ]
+}
