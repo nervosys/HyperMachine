@@ -43,7 +43,44 @@ fn parse_name(name: &str) -> io::Result<(String, NetworkTag)> {
     let network = NetworkTag::parse(network).map_err(|_| refused())?;
     Ok((destination.into(), network))
 }
+/// What `hm sandbox vm compose up` puts in a service's sandbox metadata.
+pub const COMPOSE_PROJECT: &str = "hm.compose.project";
+pub const COMPOSE_SERVICE: &str = "hm.compose.service";
+
+/// The sandbox a compose service name means in `network`: the one sandbox of
+/// the source's own owner whose metadata names that service of the project
+/// called like the tag. No match, or more than one, is `None`: an ambiguous
+/// name is refused, not guessed. This only names a candidate; the route
+/// snapshot still checks both memberships and both owners before any address
+/// is given out.
+fn alias_target(
+    records: &[SandboxRecord],
+    source: &SandboxRecord,
+    network: &NetworkTag,
+    label: &str,
+) -> Option<String> {
+    let owner = source.owner_id.as_ref()?;
+    let mut matches = records.iter().filter(|r| {
+        r.owner_id.as_ref() == Some(owner)
+            && r.metadata.get(COMPOSE_SERVICE).map(String::as_str) == Some(label)
+            && r.metadata.get(COMPOSE_PROJECT).map(String::as_str) == Some(network.as_str())
+    });
+    let found = matches.next()?;
+    if matches.next().is_some() {
+        return None;
+    }
+    Some(found.sandbox_id.clone())
+}
 impl PrivateSourceRouter {
+    /// `label` as a compose service of the network's project, unless it is
+    /// already a sandbox's ID.
+    async fn alias(&self, label: &str, network: &NetworkTag) -> io::Result<Option<String>> {
+        let records = self.store.sandboxes().await.map_err(|_| unavailable())?;
+        if records.iter().any(|r| r.sandbox_id == label) {
+            return Ok(None);
+        }
+        Ok(alias_target(&records, &self.source, network, label))
+    }
     pub fn new(
         connector: Arc<PrivateNodeConnector>,
         leases: Arc<dyn PrivateSourceLeaseFactory>,
@@ -125,6 +162,10 @@ impl PrivateSourceRouter {
         let attempt = async {
             let lease = self.acquire_lease().await?;
             crate::private_node::validate_source(lease.as_ref(), &self.source).await?;
+            let destination = match self.alias(&destination, &network).await? {
+                Some(id) => id,
+                None => destination.clone(),
+            };
             for _ in 0..4 {
                 let view = self.view(&destination).await?;
                 let (expected, book) = self.ledger().await?;
@@ -270,6 +311,39 @@ mod tests {
             assert!(parse_name(name).is_err());
         }
     }
+    #[test]
+    fn a_service_name_picks_one_sandbox_of_the_sources_owner_and_project() {
+        let owner = OwnerId::parse("owner-a").unwrap();
+        let record = |id: &str, owner: &str, project: &str, service: &str| {
+            let mut r = crate::store::tests::sandbox(id, "node");
+            r.owner_id = Some(OwnerId::parse(owner).unwrap());
+            r.metadata.insert(COMPOSE_PROJECT.into(), project.into());
+            r.metadata.insert(COMPOSE_SERVICE.into(), service.into());
+            r
+        };
+        let mut source = crate::store::tests::sandbox("src", "node");
+        source.owner_id = Some(owner);
+        let team = NetworkTag::parse("team").unwrap();
+        let records = vec![
+            record("a", "owner-a", "team", "web"),
+            record("b", "owner-a", "team", "db"),
+            record("c", "owner-b", "team", "db"),
+            record("d", "owner-a", "other", "db"),
+        ];
+        let pick = |label: &str| alias_target(&records, &source, &team, label);
+        assert_eq!(pick("web").as_deref(), Some("a"));
+        // Another owner's, and another project's, sandbox with the same service name are not it.
+        assert_eq!(pick("db").as_deref(), Some("b"));
+        assert_eq!(pick("nothing"), None);
+        // Two of one's own with one name: refused, not guessed.
+        let mut twice = records.clone();
+        twice.push(record("e", "owner-a", "team", "web"));
+        assert_eq!(alias_target(&twice, &source, &team, "web"), None);
+        // A source with no owner names nothing.
+        let mut ownerless = source.clone();
+        ownerless.owner_id = None;
+        assert_eq!(alias_target(&records, &ownerless, &team, "web"), None);
+    }
     async fn contract(store: Arc<dyn ClusterStore>) {
         let identity = crate::native_node::tests::identity(crate::mtls::DEFAULT_NODE_NAME);
         let mut source = crate::store::tests::sandbox("router-source", "router-node");
@@ -278,6 +352,13 @@ mod tests {
         destination.owner_id = source.owner_id.clone();
         let mut other = crate::store::tests::sandbox("router-other", "router-node");
         other.owner_id = Some(OwnerId::parse("other-owner").unwrap());
+        // Both are "the web service of the team project"; only the source's own owner's counts.
+        for record in [&mut destination, &mut other] {
+            record.metadata.insert(COMPOSE_SERVICE.into(), "web".into());
+            record
+                .metadata
+                .insert(COMPOSE_PROJECT.into(), "team".into());
+        }
         let tags = || {
             vec![
                 NetworkTag::parse("team").unwrap(),
@@ -384,12 +465,25 @@ mod tests {
             .unwrap()[0];
         assert_ne!(team, new_ip);
         assert_ne!(dev, new_ip);
+        // A compose service name means the same sandbox, and so the same binding.
+        assert_eq!(
+            router.resolve("web.team.hv2.internal").await.unwrap()[0],
+            new_ip
+        );
+        for name in [
+            // The project is not the tag, or the service is not a service of it.
+            "web.dev.hv2.internal",
+            "db.team.hv2.internal",
+        ] {
+            assert!(router.resolve(name).await.is_err(), "{name}");
+        }
         store.remove_node("router-node").await.unwrap();
         assert!(router
             .resolve("router-destination.team.hv2.internal")
             .await
             .is_err());
-        assert_eq!(factory.dropped.load(Ordering::SeqCst), 11);
+        assert!(router.resolve("web.team.hv2.internal").await.is_err());
+        assert_eq!(factory.dropped.load(Ordering::SeqCst), 15);
         eprintln!(
             "private_source_router_contract completed dns_commit_before_return=true concurrent_rebase=true cross_owner=refused stale_address=refused node_missing=refused"
         );
