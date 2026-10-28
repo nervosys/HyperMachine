@@ -77,9 +77,12 @@ The nested guest is still about ten times slower in real time.
 
 Several results are one run. Each needs three runs in a row, kept.
 
-- [ ] Reflink checks: XFS, Btrfs, ext4 control (one run each today).
-- [ ] Disk checkpoint on a `--disk-slot` node, and `--disk-slot` on a reflink
-      filesystem.
+- [x] Reflink checks: XFS, Btrfs, ext4 control, 3 of 3 runs each, extents shared on
+      XFS and Btrfs every time (`2026-10-28/disk-checkpoint-repeat-kvm`).
+- [ ] Disk checkpoint on a `--disk-slot` node: 2 of 3 runs passed; run 1 got an empty
+      `cat /tmp/count` after a restore (likely a race in the check, not proven).
+      Make the read retry and run it three more times. `--disk-slot` on a reflink
+      filesystem is still NOT VERIFIED.
 - [ ] XFS or Btrfs on a real block device, not a loop device; a disk much larger
       than 1 GiB.
 - [x] `docs/BOAT_PARITY.md`: re-read against the 2026-10-21 to 2026-10-28 evidence

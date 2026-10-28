@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Disk checkpoints, three runs in a row each: XFS, Btrfs and ext4 10 of 10 every time (extents shared on XFS
+  and Btrfs); a `--disk-slot` node 2 of 3, the failed run an empty read of the guest's counter after a restore,
+  likely a race in the check (`docs/benchmarks/2026-10-28/disk-checkpoint-repeat-kvm/`).
 - `tools/check-fork-busy-kvm.py`: 560 of 560 forks of a busy or idle sandbox answered; the mid-build fork
   failure did not reproduce without Docker. One cold boot in 14 stalled (both vCPUs halted, timer armed),
   cause unknown (`docs/benchmarks/2026-10-28/fork-busy-kvm/`).
