@@ -82,9 +82,10 @@ Several results are one run. Each needs three runs in a row, kept.
       filesystem.
 - [ ] XFS or Btrfs on a real block device, not a loop device; a disk much larger
       than 1 GiB.
-- [ ] `docs/BOAT_PARITY.md`: re-read every row against the evidence and correct
-      any statement that has gone stale (one was found on 2026-10-28; look for
-      more).
+- [x] `docs/BOAT_PARITY.md`: re-read against the 2026-10-21 to 2026-10-28 evidence
+      (2026-10-28). Four stale statements fixed: "no Docker" in the tools image
+      (twice) and "cannot be checkpointed at such a size". Rows outside that date
+      range were not re-read: NOT VERIFIED.
 
 ## 5. Platform backends
 
