@@ -53,13 +53,16 @@ The nested guest is still about ten times slower in real time.
 
 ## 3. Docker leftovers
 
-- [ ] **The one unexplained failure.** The published-port case failed once in 10
-      runs with no error captured. Run the full check at least 20 times with each
-      run's log and the daemon log kept; if it recurs, read the log; if it does
-      not, say "1 in 30" and stop.
-- [ ] Published port reached from outside the node: decide what "outside" means
-      (a client on another network namespace or machine hitting the node's proxy
-      port), then check exactly that.
+- [x] **The one unexplained failure.** The published-port case failed once in 10
+      runs with no error captured. Ran the full check 20 times with logs kept
+      (`2026-10-28/docker-flake-chase`): the published-port case did not recur, but
+      a different case failed once (a fork restored mid-build never answered on
+      vsock, 1 in 20; 1 in 30 with the earlier fork runs). Cause not known.
+- [ ] **Fork restore that never resumes** (run 11 above): reproduce with a plain fork
+      of a busy sandbox, without Docker, and read why the restored vCPUs barely run.
+- [x] Published port reached from outside the node: a client in another network
+      namespace over a veth pair, 3 of 3 runs (`2026-10-28/docker-netns-proxy-kvm`).
+      A second machine is NOT VERIFIED.
 - [ ] The default kernel: decide whether the Docker kernel becomes a shipped
       option or stays an opt-in build (`HV2_KERNEL`); document the choice.
 - [ ] `docker compose build` (BuildKit) checkpointed mid-step, and a build that is

@@ -83,7 +83,8 @@ def main():
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--memory-mb", type=int, default=2048)
     parser.add_argument("--network", action="store_true", help="also pull hello-world (needs the Internet)")
-    parser.add_argument("--nested", action="store_true", help="also run a nested VM (needs a kernel built with --kvm and python3 in the image)")
+    parser.add_argument("--netns", action="store_true", help="also reach a published port from a second network namespace (needs root, ip, python3)")
+    parser.add_argument("--nested",action="store_true", help="also run a nested VM (needs a kernel built with --kvm and python3 in the image)")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     report = {"success": False,
@@ -488,6 +489,54 @@ def main():
             finally:
                 sh(sandbox, "cp /tmp/daemon.json.orig /etc/docker/daemon.json && systemctl restart docker && " + up, 180, ok=False)
         case("--userns-remap maps a container's root to an unprivileged id", remapped)
+
+        if args.netns:
+            def outside_namespace():
+                sandbox = state["sandbox"]
+                sh(sandbox, "printf 'HTTP/1.1 200 OK\r\nContent-Length: 10\r\nConnection: close\r\n\r\nhi-publish' > /tmp/resp")
+                sh(sandbox, "docker rm -f webns >/dev/null 2>&1; docker run -d --rm --name webns -p 8082:9000 -v /tmp/resp:/resp:ro hvbox "
+                            "/bin/busybox sh -c 'while true; do /bin/busybox nc -l -p 9000 < /resp; done'")
+                deadline = time.monotonic() + 30
+                while sh(sandbox, "/bin/busybox nc 127.0.0.1 8082 </dev/null | /bin/busybox tail -n 1", 20, ok=False) != "hi-publish":
+                    assert time.monotonic() < deadline, "the container never answered inside the guest"
+                    time.sleep(0.5)
+                client = ("import http.client, sys\n"
+                          "host, port, vhost = sys.argv[1], int(sys.argv[2]), sys.argv[3]\n"
+                          "c = http.client.HTTPConnection(host, port, timeout=10)\n"
+                          "try:\n"
+                          "    c.request('GET', '/', headers={'Host': vhost})\n"
+                          "    r = c.getresponse()\n"
+                          "    print(r.status, r.read().decode(errors='replace').strip())\n"
+                          "except OSError as e:\n"
+                          "    print('error', type(e).__name__)\n")
+
+                def from_namespace(host):
+                    done = subprocess.run(["ip", "netns", "exec", "hmout", "python3", "-c", client, host, str(proxy),
+                                           f"8082-{sandbox}.localhost"], capture_output=True, text=True, timeout=60)
+                    return done.stdout.strip()
+                ip = ["ip"]
+                loopback = reached = None
+                try:
+                    for cmd in (["netns", "add", "hmout"],
+                                ["link", "add", "hmv0", "type", "veth", "peer", "name", "hmv1"],
+                                ["link", "set", "hmv1", "netns", "hmout"],
+                                ["addr", "add", "10.99.0.1/24", "dev", "hmv0"],
+                                ["link", "set", "hmv0", "up"],
+                                ["netns", "exec", "hmout", "ip", "addr", "add", "10.99.0.2/24", "dev", "hmv1"],
+                                ["netns", "exec", "hmout", "ip", "link", "set", "hmv1", "up"],
+                                ["netns", "exec", "hmout", "ip", "link", "set", "lo", "up"]):
+                        subprocess.run(ip + cmd, check=True, capture_output=True)
+                    # The control: the node's loopback is not visible from the other namespace.
+                    loopback = from_namespace("127.0.0.1")
+                    assert loopback.startswith("error"), loopback
+                    reached = from_namespace("10.99.0.1")
+                    assert reached == "200 hi-publish", reached
+                finally:
+                    subprocess.run(ip + ["netns", "del", "hmout"], capture_output=True)
+                    subprocess.run(ip + ["link", "del", "hmv0"], capture_output=True)
+                    sh(sandbox, "docker rm -f webns >/dev/null; true", 60, ok=False)
+                return {"namespace_loopback": loopback, "through_the_node_address": reached}
+            case("a published port is reached through the node proxy from another network namespace", outside_namespace)
 
         if args.nested:
             def nested():

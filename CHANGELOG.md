@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A published port reached through the node proxy from a second network namespace (veth pair), with
+  the namespace's own loopback as a control: `check-docker-sandbox-kvm.py --netns`, 3 of 3 runs
+  (`docs/benchmarks/2026-10-28/docker-netns-proxy-kvm/`). One kernel, not a second machine.
+- 20 runs of the 18-case Docker check with logs kept: 19 passed; run 11 failed in the mid-build
+  fork case (the restored fork never answered on vsock), cause unknown
+  (`docs/benchmarks/2026-10-28/docker-flake-chase/`).
 - Disk checkpoints on Btrfs (loop-mounted): 10 of 10 cases, and the disk copy shares extents, as on XFS.
   One run (`docs/benchmarks/2026-10-25/disk-checkpoint-reflink-kvm/btrfs/`).
 - A fork in the middle of `docker build`: the build finishes in the fork and the parent. 18 cases,
