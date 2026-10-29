@@ -4376,6 +4376,10 @@ async fn compose_start(
         .as_str()
         .context("the node's answer had no sandboxID")?
         .to_string();
+    if let Err(e) = join_project_network(api, &id, project).await {
+        let _ = api.request(Method::DELETE, &["sandboxes", &id], None).await;
+        return Err(e);
+    }
     if let Err(e) = start_detached(api, &id, &svc.command).await {
         let _ = api.request(Method::DELETE, &["sandboxes", &id], None).await;
         return Err(e);
@@ -4385,6 +4389,64 @@ async fn compose_start(
         return Err(e);
     }
     Ok((id, template))
+}
+
+/// Whether `project` can be a private-network tag: 1 to 63 lower-case DNS-label
+/// characters, no leading or trailing hyphen (a project may carry `_`).
+fn project_is_network_tag(project: &str) -> bool {
+    !project.is_empty()
+        && project.len() <= 63
+        && !project.starts_with('-')
+        && !project.ends_with('-')
+        && project
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+/// The guest's resolv.conf: the kernel's own lines, then the search domain.
+fn search_domain_line(project: &str) -> String {
+    format!(
+        "{{ cat /proc/net/pnp; echo 'search {project}.hv2.internal'; }} >/etc/resolv.conf.hm \
+         && mv -f /etc/resolv.conf.hm /etc/resolv.conf"
+    )
+}
+
+/// Put the service's sandbox in the private network named after its project,
+/// so a sibling's service name resolves (`web` for `web.<project>.hv2.internal`).
+/// A node that is not part of a cluster has no such route (404); the project
+/// then runs without a network and says so. Any other failure fails the `up`.
+async fn join_project_network(api: &Api, id: &str, project: &str) -> Result<()> {
+    if !project_is_network_tag(project) {
+        eprintln!(
+            "project {project:?} is not a valid network tag; its services get no private network"
+        );
+        return Ok(());
+    }
+    let revision = uuid::Uuid::new_v4().to_string();
+    let joined = api
+        .request(
+            Method::PUT,
+            &["sandboxes", id, "private-networks"],
+            Some(json!({"expectedRevision": null, "revision": revision, "tags": [project]})),
+        )
+        .await;
+    if let Err(e) = joined {
+        if format!("{e:#}").contains("404") {
+            eprintln!("this node has no private networks; the services of {project} get none");
+            return Ok(());
+        }
+        return Err(e.context(format!("joining {id} to the private network {project}")));
+    }
+    let set = guest_exec(api, id, &search_domain_line(project), 10, None).await?;
+    let timed_out = set["timed_out"].as_bool().unwrap_or(false);
+    let code = exec_exit_code(&set, timed_out)?;
+    if code != 0 {
+        bail!(
+            "setting the search domain in {id} exited {code}: {}",
+            set["stderr"].as_str().unwrap_or("")
+        );
+    }
+    Ok(())
 }
 
 /// Create the project's declared volumes that do not exist yet. A volume
@@ -4736,6 +4798,17 @@ mod tests {
         assert_eq!(paths, ["app/a", "app/b"]);
         let changed = reproducible(&tar_of(&[("app/a", 1, b"ONE"), ("app/b", 2, b"two")])).unwrap();
         assert_ne!(a, changed);
+    }
+
+    #[test]
+    fn a_project_joins_a_network_only_when_its_name_is_a_tag() {
+        assert!(project_is_network_tag("team-1"));
+        assert!(!project_is_network_tag("my_app"));
+        assert!(!project_is_network_tag("-x"));
+        assert!(!project_is_network_tag(&"a".repeat(64)));
+        let line = search_domain_line("team");
+        assert!(line.contains("search team.hv2.internal"));
+        assert!(line.contains("/proc/net/pnp"));
     }
 
     #[test]
