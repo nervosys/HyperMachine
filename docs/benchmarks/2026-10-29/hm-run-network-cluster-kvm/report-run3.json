@@ -1,0 +1,84 @@
+{
+  "success": true,
+  "cases": [
+    {
+      "name": "up joins both services to the private network named after the project",
+      "success": true,
+      "seconds": 6.444,
+      "detail": {
+        "tags": {
+          "server": [
+            "web"
+          ],
+          "client": [
+            "web"
+          ]
+        }
+      }
+    },
+    {
+      "name": "the full service name resolves to a private-network address",
+      "success": true,
+      "seconds": 0.039,
+      "detail": {
+        "answer": [
+          "",
+          "Non-authoritative answer:",
+          "",
+          "rc=0"
+        ]
+      }
+    },
+    {
+      "name": "a TCP connection to the bare name `server` (the search line expands it) is echoed back",
+      "success": true,
+      "seconds": 0.052,
+      "detail": {
+        "bytes": 17
+      }
+    },
+    {
+      "name": "`run --network web` reaches the project's `server` by its bare name, then leaves nothing",
+      "success": true,
+      "seconds": 0.414,
+      "detail": {
+        "stdout": "hello-from-run"
+      }
+    },
+    {
+      "name": "a different principal's project cannot resolve the first project's service",
+      "success": true,
+      "seconds": 0.697,
+      "detail": {
+        "answer": [
+          "** server can't find server.web.hv2.internal: REFUSED",
+          "",
+          "rc=1"
+        ]
+      }
+    },
+    {
+      "name": "down removes both sandboxes",
+      "success": true,
+      "seconds": 0.168
+    },
+    {
+      "name": "no API key or cluster token is in anything hm printed",
+      "success": true,
+      "seconds": 0.0,
+      "detail": {
+        "hm_output_bytes": 1270
+      }
+    }
+  ],
+  "purpose": "functional verification of compose ports: through the control plane and native gateway; no timing claim",
+  "input_sha256": {
+    "daemon": "2bb8c58cdf228bf685e88c556e4ac12051645f67d3ad529122cd7110be1deb5b",
+    "control": "e5cc411f15c4c1357be8a2cffb42de75b572a3d4ffd3b431f36b356ff42bd788",
+    "gateway": "ea35abad3254aa49725547ac81ee10927af57236dca231da3cd94f77ca96eb42",
+    "hm": "cd226ef7d0fefcfeea86ca4d17fd3060f18ffbac76930ef2c28192183220a1e8",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "fdd27ed2e35ea1ceeee4f572e818220ccca9250c37faec558adb3d0d45ec4b51"
+  }
+}

@@ -289,6 +289,11 @@ pub enum VmCommand {
         /// directory is not a name, so it is refused
         #[arg(short = 'v', long = "volume", value_name = "NAME:/PATH", value_parser = disk_mount)]
         volume: Vec<(String, String)>,
+        /// Join the private network of a compose project (its name), so the
+        /// project's services resolve by their bare names. Needs a node in a
+        /// cluster and a key with a principal; otherwise the run fails
+        #[arg(long, value_name = "PROJECT")]
+        network: Option<String>,
         /// Publish a container port, like `docker run -d -p`: `80`, `8080:80`,
         /// `53/udp`. The command then starts detached and the sandbox is kept
         /// (see --lifetime); the public port is printed. Needs a control plane
@@ -2767,6 +2772,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             keep,
             stdin,
             volume,
+            network,
             publish,
             lifetime,
             timeout,
@@ -2776,6 +2782,11 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             registry,
             command,
         } => {
+            if let Some(tag) = &network {
+                if !project_is_network_tag(tag) {
+                    bail!("--network {tag:?} is not a valid network name");
+                }
+            }
             if timeout >= args.request_timeout {
                 bail!("--request-timeout must exceed the guest command's --timeout");
             }
@@ -2797,6 +2808,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                     keep,
                     stdin,
                     volumes: volume,
+                    network,
                     publish,
                     lifetime,
                     timeout,
@@ -4047,6 +4059,8 @@ struct RunImage {
     stdin: Option<Vec<u8>>,
     /// Named volumes to mount (`-v`): name and guest path.
     volumes: Vec<(String, String)>,
+    /// A compose project's private network to join (`--network`).
+    network: Option<String>,
     /// How long a detached sandbox lives.
     lifetime: u64,
     timeout: u64,
@@ -4195,6 +4209,19 @@ async fn run_image(api: &Api, run: RunImage) -> Result<i32> {
         .as_str()
         .context("the node's answer had no sandboxID")?
         .to_string();
+    if let Some(tag) = &run.network {
+        let joined = async {
+            put_private_network(api, &id, tag)
+                .await
+                .with_context(|| format!("joining {id} to the private network {tag}"))?;
+            set_search_domain(api, &id, tag).await
+        }
+        .await;
+        if let Err(e) = joined {
+            let _ = api.request(Method::DELETE, &["sandboxes", &id], None).await;
+            return Err(e);
+        }
+    }
     if detached {
         // A published port is only reachable while the command runs, so it
         // starts detached and the sandbox is kept (its lifetime is the limit).
@@ -4467,6 +4494,7 @@ async fn compose_start(
                 publish: std::collections::BTreeMap::new(),
                 stdin: None,
                 volumes: Vec::new(),
+                network: None,
                 lifetime: 0,
                 timeout: 1,
                 build_wait,
@@ -4582,14 +4610,7 @@ async fn join_project_network(api: &Api, id: &str, project: &str) -> Result<()> 
         );
         return Ok(());
     }
-    let revision = uuid::Uuid::new_v4().to_string();
-    let joined = api
-        .request(
-            Method::PUT,
-            &["sandboxes", id, "private-networks"],
-            Some(json!({"expectedRevision": null, "revision": revision, "tags": [project]})),
-        )
-        .await;
+    let joined = put_private_network(api, id, project).await;
     if let Err(e) = joined {
         let text = format!("{e:#}");
         if text.contains("404") {
@@ -4605,7 +4626,23 @@ async fn join_project_network(api: &Api, id: &str, project: &str) -> Result<()> 
         }
         return Err(e.context(format!("joining {id} to the private network {project}")));
     }
-    let set = guest_exec(api, id, &search_domain_line(project), 10, None).await?;
+    set_search_domain(api, id, project).await
+}
+
+/// Tag the sandbox into the private network `tag`.
+async fn put_private_network(api: &Api, id: &str, tag: &str) -> Result<Value> {
+    let revision = uuid::Uuid::new_v4().to_string();
+    api.request(
+        Method::PUT,
+        &["sandboxes", id, "private-networks"],
+        Some(json!({"expectedRevision": null, "revision": revision, "tags": [tag]})),
+    )
+    .await
+}
+
+/// Make the network's names resolve bare inside the guest.
+async fn set_search_domain(api: &Api, id: &str, tag: &str) -> Result<()> {
+    let set = guest_exec(api, id, &search_domain_line(tag), 10, None).await?;
     let timed_out = set["timed_out"].as_bool().unwrap_or(false);
     let code = exec_exit_code(&set, timed_out)?;
     if code != 0 {

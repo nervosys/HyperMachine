@@ -146,8 +146,11 @@ range and a key with a principal. [Checked on KVM](benchmarks/2026-10-28/hm-run-
 - **A moved tag**: a template is kept by the reference, so `python:3.12` is
   not pulled again when the registry's tag moves. Delete the template to
   refresh it.
-- **`-it`, volumes (`-v`), `--network` options**: not in `run` (`-i` is: see below). Sandboxes have ports, volumes and networks of
-  their own through their own commands.
+- **`-it`**: not in `run` (`-i`, `-v` and `--network PROJECT` are: see below). A `run --network PROJECT`
+  joins a compose project's private network so its services resolve by bare name; it needs a
+  cluster node with private networks and a key with a principal, else it fails
+  ([checked on KVM](benchmarks/2026-10-29/hm-run-network-cluster-kvm/README.md), 3 of 3 runs; the
+  `run` sandbox itself is not resolvable by others).
 - **`HEALTHCHECK`, `EXPOSE`, `LABEL`, `STOPSIGNAL`**: ignored. **A numeric
   or `uid:gid` USER** was not tried. Only `linux/amd64` images.
 - **An image without a shell** was not tried: the command is run through

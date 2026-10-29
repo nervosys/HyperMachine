@@ -278,6 +278,19 @@ def main():
         case("a TCP connection to the bare name `server` (the search line expands it) is echoed back",
              short_name_connects)
 
+        def run_joins_network():
+            done = hm("red", "run", "--network", "web", "alpine:3.20", "sh", "-c",
+                      "echo hello-from-run | nc -w 3 server 8080")
+            require(done.returncode == 0 and "hello-from-run" in done.stdout,
+                    (done.returncode, done.stdout[-300:], done.stderr[-600:]))
+            _, rows = api("GET", "/sandboxes", key="admin")
+            require(sorted(r["sandboxID"] for r in rows) == sorted(found.values()), "run left a sandbox")
+            bad = hm("red", "run", "--network", "Not A Name", "alpine:3.20", "true")
+            require(bad.returncode != 0 and "network name" in bad.stderr, (bad.returncode, bad.stderr[-300:]))
+            return {"stdout": done.stdout.strip()}
+        case("`run --network web` reaches the project's `server` by its bare name, then leaves nothing",
+             run_joins_network)
+
         def other_project():
             done = hm("blue", "compose", "-f", str(compose), "-p", "other", "up")
             require(done.returncode == 0, (done.returncode, done.stderr[-800:]))
