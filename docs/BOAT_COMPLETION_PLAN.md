@@ -69,8 +69,11 @@ evidence, but no more of it is to be built. The work is on the native path
 - [x] Compose: health checks and `depends_on: condition: service_healthy`
       (`2026-10-28/compose-health-cluster-kvm`, 6 cases, 3 of 3 runs). Checked only during
       `up`.
-- [ ] Compose: `restart:` (refused today; needs the node's supervisor to cover these sandboxes,
-      not yet checked).
+- [ ] Compose: `restart:` (refused today; the node's restart supervisor
+      (`machines.rs` `supervise`, `RestartPolicy` always/never) covers machines only; `POST /sandboxes`
+      has no restart field and the v2 sandbox code has no restart logic. Needs an owner decision:
+      a node change for sandboxes, or compose creating machines. `on-failure` also needs exit
+      status recorded by the node. Checked by reading code, not run).
 - [x] Build: `SHELL` (`2026-10-28/hm-build-shell-kvm`, 7-case build check, 3 of 3 runs).
 - [x] Build: `RUN` here-documents (`2026-10-28/hm-build-heredoc-kvm`, 8-case build check,
       3 of 3 runs). `COPY <<EOF` is still refused.
