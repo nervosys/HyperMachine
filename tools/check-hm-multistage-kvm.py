@@ -175,6 +175,16 @@ def main():
             return {"stdout": ran.stdout}
         case("FROM an earlier stage builds on that stage's result, through a chain, and leaves no stage template", from_a_stage)
 
+        def inherits_config():
+            text = ("FROM alpine:3.20 AS base\nENV X=one\nWORKDIR /w\nCMD [\"sh\", \"-c\", \"echo $X; pwd\"]\n"
+                    "FROM base\nRUN true\n")
+            built, _ = hm("build", "-t", "ms-inherit", str(dockerfile_dir("inherit", text)))
+            assert built.returncode == 0, built.stderr[-1000:]
+            ran, _ = hm("run", "--template", "ms-inherit")
+            assert ran.returncode == 0 and ran.stdout == "one\n/w\n", (ran.stdout, ran.stderr[-500:])
+            return {"stdout": ran.stdout}
+        case("a stage built FROM an earlier one inherits its ENV, WORKDIR and CMD", inherits_config)
+
         report["success"] = True
     finally:
         if daemon.poll() is None:

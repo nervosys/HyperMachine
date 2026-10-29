@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `hm sandbox vm build`: `FROM <earlier stage>` builds on that stage's result. Checked on KVM (a
-  chain of three, 3 of 3 runs). Inheriting the stage's `ENV`/`WORKDIR`/`USER` is not verified.
+  chain of three, 3 of 3 runs); the stage's `ENV`, `WORKDIR` and `CMD` carry over (`USER` and
+  `ENTRYPOINT` not verified).
 - `hm sandbox vm build`: `ADD` of a local tar archive unpacks it into the destination, as Docker
   does; a zip is copied whole. Checked on KVM for tar and tar.gz (build check now 9 cases, 3 of 3
   runs). `ADD` of a URL is still refused.

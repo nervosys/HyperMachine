@@ -6,14 +6,14 @@
     "hm": "402d61775fc84d7b27cb09693a6a426840d98ee4dde064090d190ac39ae3adba",
     "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
     "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
-    "driver": "a1eca76e0b14b159ce8c7ed7abcfa063683453b1d930e8447d91cb15f55b237c"
+    "driver": "d701962a070d38979a16d9f4c0edc4b2fa7c8aa25a3036b814d39892a46e1933"
   },
   "cases": [
     {
       "name": "a two-stage Dockerfile builds: COPY --from by name (a directory and a glob) and by number, mode kept, stage's workdir absent",
       "success": true,
       "detail": {
-        "build_seconds": 18.57,
+        "build_seconds": 20.37,
         "stdout": "tool says built-in-stage conf=cfg zero=only-in-build glob=artifact.txt, final=final stage=clean\n"
       }
     },
@@ -21,8 +21,8 @@
       "name": "building it again is quicker, so the files read out of a stage are the same bytes",
       "success": true,
       "detail": {
-        "first_seconds": 18.57,
-        "second_seconds": 2.01
+        "first_seconds": 20.37,
+        "second_seconds": 5.47
       }
     },
     {
@@ -43,7 +43,7 @@
       "name": "COPY --from a path the stage lacks fails the build, naming the path",
       "success": true,
       "detail": {
-        "missing": "y: snapshot of 1 MiB in 3.629731ms\ncopying /nope out of stage 0 ...\nError: COPY --from: nothing at /nope in the stage: tar: nope: No such file or directory\ntar: error exit delayed from previous errors"
+        "missing": "y: snapshot of 1 MiB in 14.19588ms\ncopying /nope out of stage 0 ...\nError: COPY --from: nothing at /nope in the stage: tar: nope: No such file or directory\ntar: error exit delayed from previous errors"
       }
     },
     {
@@ -51,6 +51,13 @@
       "success": true,
       "detail": {
         "stdout": "from-base\nfrom-mid\n"
+      }
+    },
+    {
+      "name": "a stage built FROM an earlier one inherits its ENV, WORKDIR and CMD",
+      "success": true,
+      "detail": {
+        "stdout": "one\n/w\n"
       }
     }
   ]
