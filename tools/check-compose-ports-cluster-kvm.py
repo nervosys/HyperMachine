@@ -19,7 +19,10 @@ against the control plane:
    accepting connections.
 5. `up` with a key that has no principal (so it may not reserve) fails, says
    which port it was publishing, and leaves no sandbox behind.
-6. No API key or cluster token is in anything `hm` printed.
+6. `hm sandbox vm run -p 9001:8080 alpine:3.20 ...` starts the image detached, keeps the sandbox,
+   prints the public port, and a TCP client of it is echoed; deleting that sandbox leaves nothing.
+7. `run -p` with a key that has no principal fails naming the port and leaves no sandbox.
+8. No API key or cluster token is in anything `hm` printed.
 
 UDP and `protocol: both` through compose are not exercised.
 
@@ -296,6 +299,42 @@ def main():
             require(rows == [], rows)
             return {"stderr": done.stderr.strip().splitlines()[-1][:200]}
         case("up with a key that has no principal fails naming the port and leaves no sandbox", no_principal_refused)
+
+        def run_publishes():
+            done = hm("red", "run", "-p", "9001:8080", "alpine:3.20", "sh", "-c", "nc -ll -p 8080 -e /bin/cat")
+            require(done.returncode == 0, (done.returncode, done.stdout[-400:], done.stderr[-800:]))
+            sandbox = json.loads(done.stdout)["sandboxID"]
+            said = re.search(r"container port 8080/tcp is public port (\d+)", done.stderr)
+            require(said, done.stderr[-600:])
+            public = int(said.group(1))
+            require(first <= public <= first + 3, (public, first))
+            found["run_id"] = sandbox
+
+            def echo():
+                with socket.create_connection(("127.0.0.1", public), timeout=3) as client:
+                    client.settimeout(5)
+                    client.sendall(b"hello from run -p\n")
+                    got = client.recv(64)
+                    require(got == b"hello from run -p\n", got)
+            eventually(echo, 60)
+            return {"public_port": public}
+        case("`run -p` starts the image detached, keeps the sandbox, and the public port reaches it", run_publishes)
+
+        def run_cleanup():
+            gone = hm("red", "delete", found["run_id"])
+            require(gone.returncode == 0, (gone.returncode, gone.stderr[-400:]))
+            _, rows = api("GET", "/sandboxes", key="admin")
+            require(rows == [], rows)
+        case("deleting the `run -p` sandbox leaves nothing behind", run_cleanup)
+
+        def run_no_principal():
+            done = hm("admin", "run", "-p", "8080", "alpine:3.20", "sh", "-c", "sleep 60")
+            require(done.returncode != 0, "run -p succeeded without a principal")
+            require("publishing port 8080" in done.stderr, done.stderr[-600:])
+            _, rows = api("GET", "/sandboxes", key="admin")
+            require(rows == [], rows)
+        case("`run -p` with a key that has no principal fails naming the port and leaves no sandbox",
+             run_no_principal)
 
         def no_secrets():
             text = "\n".join(printed)

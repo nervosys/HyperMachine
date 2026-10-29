@@ -259,6 +259,13 @@ fn parse_ports(service: &str, value: &Option<Value>) -> Result<BTreeMap<u16, &'s
     Ok(out)
 }
 
+/// The container ports of `hm sandbox vm run -p`, in the same forms as a
+/// compose `ports:` entry (`80`, `8080:80`, `53/udp`).
+pub fn parse_publish(specs: &[String]) -> Result<BTreeMap<u16, &'static str>> {
+    let items = specs.iter().cloned().map(Value::String).collect();
+    parse_ports("-p", &Some(Value::Sequence(items)))
+}
+
 /// A compose file that has been parsed and checked.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Compose {
@@ -713,6 +720,18 @@ services:
     fn ports_of(list: &str) -> BTreeMap<u16, &'static str> {
         let text = format!("services:\n  a:\n    image: x\n    ports: {list}\n");
         parse(&text).unwrap().services["a"].ports.clone()
+    }
+
+    #[test]
+    fn run_publish_takes_the_compose_port_forms_and_refuses_ranges() {
+        let given =
+            |v: &[&str]| parse_publish(&v.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        let got = given(&["8080:80", "53/udp", "53"]).unwrap();
+        assert_eq!(got.get(&80), Some(&"tcp"));
+        assert_eq!(got.get(&53), Some(&"both"));
+        assert!(given(&[]).unwrap().is_empty());
+        assert!(given(&["8000-8010:80"]).is_err());
+        assert!(given(&["0"]).is_err());
     }
 
     #[test]

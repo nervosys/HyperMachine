@@ -280,6 +280,15 @@ pub enum VmCommand {
         /// Keep the sandbox afterwards and print its ID on stderr
         #[arg(long)]
         keep: bool,
+        /// Publish a container port, like `docker run -d -p`: `80`, `8080:80`,
+        /// `53/udp`. The command then starts detached and the sandbox is kept
+        /// (see --lifetime); the public port is printed. Needs a control plane
+        /// with a native port range and a key with a principal.
+        #[arg(short = 'p', long = "publish", value_name = "PORT")]
+        publish: Vec<String>,
+        /// With -p: seconds the detached sandbox lives
+        #[arg(long, default_value_t = 3600, value_parser = clap::value_parser!(u64).range(1..))]
+        lifetime: u64,
         /// Seconds the command may run
         #[arg(long, default_value_t = 60, value_parser = clap::value_parser!(u64).range(1..))]
         timeout: u64,
@@ -2747,6 +2756,8 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             template: named,
             env,
             keep,
+            publish,
+            lifetime,
             timeout,
             build_wait,
             cpus,
@@ -2757,6 +2768,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             if timeout >= args.request_timeout {
                 bail!("--request-timeout must exceed the guest command's --timeout");
             }
+            let publish = crate::compose::parse_publish(&publish)?;
             return run_image(
                 &api,
                 RunImage {
@@ -2764,6 +2776,8 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                     named,
                     env,
                     keep,
+                    publish,
+                    lifetime,
                     timeout,
                     build_wait,
                     cpus,
@@ -3981,6 +3995,10 @@ struct RunImage {
     named: bool,
     env: Vec<String>,
     keep: bool,
+    /// Container ports to publish (`-p`); not empty means detached and kept.
+    publish: std::collections::BTreeMap<u16, &'static str>,
+    /// How long a detached sandbox lives.
+    lifetime: u64,
     timeout: u64,
     build_wait: u64,
     cpus: Option<u32>,
@@ -4098,7 +4116,13 @@ async fn run_image(api: &Api, run: RunImage) -> Result<i32> {
             .with_context(|| format!("-e {pair}: expected NAME=VALUE"))?;
         envs.insert(name.to_string(), json!(value));
     }
-    let mut body = json!({"templateID": template, "timeout": run.timeout + 120, "envVars": envs});
+    let detached = !run.publish.is_empty();
+    let lifetime = if detached {
+        run.lifetime
+    } else {
+        run.timeout + 120
+    };
+    let mut body = json!({"templateID": template, "timeout": lifetime, "envVars": envs});
     if let Some(cpus) = run.cpus {
         body["cpuCount"] = json!(cpus);
     }
@@ -4112,6 +4136,21 @@ async fn run_image(api: &Api, run: RunImage) -> Result<i32> {
         .as_str()
         .context("the node's answer had no sandboxID")?
         .to_string();
+    if detached {
+        // A published port is only reachable while the command runs, so it
+        // starts detached and the sandbox is kept (its lifetime is the limit).
+        let started = async {
+            start_detached(api, &id, &run.command).await?;
+            expose_ports(api, &id, &run.image, &run.publish).await
+        }
+        .await;
+        if let Err(e) = started {
+            let _ = api.request(Method::DELETE, &["sandboxes", &id], None).await;
+            return Err(e);
+        }
+        println!("{}", json!({"sandboxID": id, "lifetimeSeconds": lifetime}));
+        return Ok(0);
+    }
     let outcome = run_in(api, &id, &run).await;
     if run.keep {
         eprintln!("kept sandbox {id}");
@@ -4308,6 +4347,8 @@ async fn compose_start(
                 named: false,
                 env: Vec::new(),
                 keep: true,
+                publish: std::collections::BTreeMap::new(),
+                lifetime: 0,
                 timeout: 1,
                 build_wait,
                 cpus,
@@ -4431,8 +4472,16 @@ async fn join_project_network(api: &Api, id: &str, project: &str) -> Result<()> 
         )
         .await;
     if let Err(e) = joined {
-        if format!("{e:#}").contains("404") {
+        let text = format!("{e:#}");
+        if text.contains("404") {
             eprintln!("this node has no private networks; the services of {project} get none");
+            return Ok(());
+        }
+        // A key with no principal owns nothing a network could be scoped to.
+        if text.contains("403") && text.contains("creator identity required") {
+            eprintln!(
+                "this key has no principal; the services of {project} get no private network"
+            );
             return Ok(());
         }
         return Err(e.context(format!("joining {id} to the private network {project}")));
@@ -4483,7 +4532,18 @@ async fn ensure_volumes(api: &Api, project: &str, parsed: &crate::compose::Compo
 /// Reserve a public port for each of the service's `ports:`. The gateway
 /// picks the public number, so it is reported rather than chosen.
 async fn expose_service_ports(api: &Api, id: &str, svc: &crate::compose::Service) -> Result<()> {
-    for (&port, &protocol) in &svc.ports {
+    expose_ports(api, id, &svc.name, &svc.ports).await
+}
+
+/// Reserve a public port for each container port; `label` names the service
+/// or image in the messages.
+async fn expose_ports(
+    api: &Api,
+    id: &str,
+    label: &str,
+    ports: &std::collections::BTreeMap<u16, &'static str>,
+) -> Result<()> {
+    for (&port, &protocol) in ports {
         let protocol = match protocol {
             "udp" => PublicPortProtocol::Udp,
             "both" => PublicPortProtocol::Both,
@@ -4500,14 +4560,12 @@ async fn expose_service_ports(api: &Api, id: &str, svc: &crate::compose::Service
         .await
         .with_context(|| {
             format!(
-                "publishing port {port} of service {:?} (public ports need the control plane's \
-                 --native-port-range and an API key with a principal_id)",
-                svc.name
+                "publishing port {port} of service {label:?} (public ports need the control \
+                 plane's --native-port-range and an API key with a principal_id)"
             )
         })?;
         eprintln!(
-            "{}: container port {port}/{} is public port {}",
-            svc.name,
+            "{label}: container port {port}/{} is public port {}",
             protocol.as_str(),
             reserved["publicPort"]
         );

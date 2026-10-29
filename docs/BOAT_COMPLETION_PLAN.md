@@ -69,7 +69,8 @@ evidence, but no more of it is to be built. The work is on the native path
 - [ ] Compose: health checks and restarts (refused as unknown keys today).
 - [ ] Build: `ADD` of a URL or archive, `SHELL`, `ONBUILD`, `FROM` an earlier stage,
       `RUN --mount`, heredocs.
-- [ ] `hm sandbox vm run`: `-p`, `-v`, `--network`, stdin and `-it`.
+- [ ] `hm sandbox vm run`: `-p` done (`2026-10-28/hm-run-publish-cluster-kvm`, 3 of 3);
+      `-v`, `--network`, stdin and `-it` not done.
 - [ ] A moved tag (re-pull when the registry's tag moves).
 
 ## 3. Docker leftovers (Docker's engine in a guest: done; no more to be built)

@@ -1,0 +1,88 @@
+{
+  "success": true,
+  "cases": [
+    {
+      "name": "up reserves the container port, and the API and the CLI show the same reservation",
+      "success": true,
+      "seconds": 9.336,
+      "detail": {
+        "public_port": 41000,
+        "reservation": [
+          {
+            "machinePort": 8080,
+            "protocol": "tcp",
+            "publicPort": 41000
+          }
+        ]
+      }
+    },
+    {
+      "name": "a TCP client of the public port reaches the service's listener and gets its bytes back",
+      "success": true,
+      "seconds": 0.015,
+      "detail": {
+        "bytes": 19
+      }
+    },
+    {
+      "name": "another principal's key cannot see the reservation",
+      "success": true,
+      "seconds": 0.003,
+      "detail": {
+        "blue_status": 403
+      }
+    },
+    {
+      "name": "down removes the sandbox and its reservation, and the public port closes",
+      "success": true,
+      "seconds": 0.307,
+      "detail": {
+        "after_down_status": 404
+      }
+    },
+    {
+      "name": "up with a key that has no principal fails naming the port and leaves no sandbox",
+      "success": true,
+      "seconds": 0.177,
+      "detail": {
+        "stderr": "    1: sandbox API returned 403 Forbidden"
+      }
+    },
+    {
+      "name": "`run -p` starts the image detached, keeps the sandbox, and the public port reaches it",
+      "success": true,
+      "seconds": 0.534,
+      "detail": {
+        "public_port": 41000
+      }
+    },
+    {
+      "name": "deleting the `run -p` sandbox leaves nothing behind",
+      "success": true,
+      "seconds": 0.123
+    },
+    {
+      "name": "`run -p` with a key that has no principal fails naming the port and leaves no sandbox",
+      "success": true,
+      "seconds": 0.146
+    },
+    {
+      "name": "no API key or cluster token is in anything hm printed",
+      "success": true,
+      "seconds": 0.0,
+      "detail": {
+        "hm_output_bytes": 1152
+      }
+    }
+  ],
+  "purpose": "functional verification of compose ports: through the control plane and native gateway; no timing claim",
+  "input_sha256": {
+    "daemon": "2bb8c58cdf228bf685e88c556e4ac12051645f67d3ad529122cd7110be1deb5b",
+    "control": "e5cc411f15c4c1357be8a2cffb42de75b572a3d4ffd3b431f36b356ff42bd788",
+    "gateway": "ea35abad3254aa49725547ac81ee10927af57236dca231da3cd94f77ca96eb42",
+    "hm": "1ddc65dbd099e79a091a6bbdddb3dd8430ce8cf481145c47e87b489d9d154def",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "47dfd30a5c08f982a6a08d5d442ffd59aed68ab7cb876f8c9ee5bd79740c55de"
+  }
+}

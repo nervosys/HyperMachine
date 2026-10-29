@@ -105,13 +105,21 @@ see [PRIVATE_VM_NETWORKS.md](PRIVATE_VM_NETWORKS.md) and the
 node). On a node without that, the services run with no network between them and `up` says
 so. A project name with `_` gets no network. Two nodes: NOT VERIFIED.
 
+## Publishing a port from `run`
+
+`hm sandbox vm run -p 8080:80 IMAGE [CMD]` (like `docker run -d -p`) starts the image
+detached, keeps the sandbox for `--lifetime` seconds (default 3600) and prints the
+public port; the command's output and exit code are not returned. The host side is
+ignored, the gateway picks the public port. It needs a control plane with a native port
+range and a key with a principal. [Checked on KVM](benchmarks/2026-10-28/hm-run-publish-cluster-kvm/README.md)
+(3 cases added to the compose ports check, 9 in all, 3 runs); UDP is NOT VERIFIED.
+
 ## Not done
 
 - **A moved tag**: a template is kept by the reference, so `python:3.12` is
   not pulled again when the registry's tag moves. Delete the template to
   refresh it.
-- **stdin, `-it`, port publishing (`-p`), volumes (`-v`), `--network`
-  options**: not in `run`. Sandboxes have ports, volumes and networks of
+- **stdin, `-it`, volumes (`-v`), `--network` options**: not in `run`. Sandboxes have ports, volumes and networks of
   their own through their own commands.
 - **`HEALTHCHECK`, `EXPOSE`, `LABEL`, `STOPSIGNAL`**: ignored. **A numeric
   or `uid:gid` USER** was not tried. Only `linux/amd64` images.

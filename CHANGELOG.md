@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `hm sandbox vm run -p PORT`: publish a container port like `docker run -d -p`; the image starts
+  detached, the sandbox is kept (`--lifetime`), the public port is printed. 3 cases added to the compose
+  ports check on KVM (9 cases, 3 of 3 runs). Fixed on the way: `compose up` with a key that has no
+  principal failed at the new network join before reaching the port step; it now skips the network.
 - Private VM networks: a sandbox can reach another by its compose service name
   (`web.<project>.hv2.internal`) when both have the same owner, the service label and the project
   tag match, and exactly one sandbox matches. `hm sandbox vm compose up` now joins each service to
