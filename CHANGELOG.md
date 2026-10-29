@@ -10,8 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Private VM networks: a sandbox can reach another by its compose service name
   (`web.<project>.hv2.internal`) when both have the same owner, the service label and the project
-  tag match, and exactly one sandbox matches. Router unit and contract tests only; NOT VERIFIED
-  with KVM guests, and `compose up` does not join services to a network yet.
+  tag match, and exactly one sandbox matches. `hm sandbox vm compose up` now joins each service to
+  the private network named after the project and sets a `search <project>.hv2.internal` line in the
+  guest, so a service reaches a sibling by name (`nc server 8080`). On a node without private
+  networks it says so and carries on. Checked on KVM on one cluster node (6 cases, 3 of 3 runs);
+  two nodes and UDP are NOT VERIFIED.
 - `hm sandbox vm build` builds multi-stage Dockerfiles: `FROM x AS name`, `COPY --from=name|N` of a
   file, a directory or a glob, chains of stages. Each earlier stage is built as a hidden template and
   its files are read out of a sandbox of it and uploaded as a context; no daemon change. Refused by

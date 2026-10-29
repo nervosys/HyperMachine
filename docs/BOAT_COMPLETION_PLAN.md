@@ -62,7 +62,9 @@ evidence, but no more of it is to be built. The work is on the native path
 
 - [x] Multi-stage builds and `COPY --from` a stage
       (`2026-10-28/hm-multistage-kvm`, 5 cases and the 6-case build check, 3 of 3 runs each).
-- [ ] Compose: networks between services (`depends_on` is start order only today).
+- [x] Compose: networks between services, by service name, on a cluster node
+      (`2026-10-28/compose-network-cluster-kvm`, 6 cases, 3 of 3 runs). Two nodes, UDP and
+      a standalone (non-cluster) node are NOT VERIFIED; a standalone node gets no network.
 - [ ] Compose: bind mounts, `:ro` and options on volumes.
 - [ ] Compose: health checks and restarts (refused as unknown keys today).
 - [ ] Build: `ADD` of a URL or archive, `SHELL`, `ONBUILD`, `FROM` an earlier stage,

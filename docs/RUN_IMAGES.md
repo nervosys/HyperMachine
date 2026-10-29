@@ -93,10 +93,17 @@ service starts with, so a team needs an operator to have built the template. A t
 `volumes:` declares named volumes (created as `PROJECT-NAME`, 9P mounts, they
 survive `down`; delete one with `hm sandbox vm volume delete`); a service mounts
 one with `data:/path`. Bind mounts, `:ro` and options are refused, volumes need a
-Linux host, and unknown keys are refused rather than ignored, and the
-services cannot reach one another over a network: `depends_on` is start order
+Linux host, and unknown keys are refused rather than ignored, and `depends_on` is start order
 only. [Checked on KVM](benchmarks/2026-10-19/hm-compose-kvm/README.md) (8 cases,
 3 runs).
+
+On a node that is part of a cluster with private networks (`--network`, mTLS), `up` also
+joins every service to a private network named after the project and gives the guest a
+search domain, so a service reaches a sibling by its service name (`nc server 8080`);
+see [PRIVATE_VM_NETWORKS.md](PRIVATE_VM_NETWORKS.md) and the
+[KVM check](benchmarks/2026-10-28/compose-network-cluster-kvm/README.md) (6 cases, 3 runs, one
+node). On a node without that, the services run with no network between them and `up` says
+so. A project name with `_` gets no network. Two nodes: NOT VERIFIED.
 
 ## Not done
 
