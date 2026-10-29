@@ -1,0 +1,80 @@
+{
+  "success": true,
+  "purpose": "hm sandbox vm build on KVM; functional, times are the check's stopwatch",
+  "input_sha256": {
+    "daemon": "2bb8c58cdf228bf685e88c556e4ac12051645f67d3ad529122cd7110be1deb5b",
+    "hm": "802377929a144cb361dcbae58cd7395944cb5d451442ebb19f71af5f8061987c",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "f296461908a96b6a55612ad731c1c020ccf39780bea61616e9f68f1fa32b6543"
+  },
+  "cases": [
+    {
+      "name": "a Dockerfile builds, and the template runs its ENTRYPOINT with CMD, ENV, WORKDIR, USER and COPY",
+      "success": true,
+      "detail": {
+        "build_seconds": 4.95,
+        "stdout": "args=default-arg env=prod user=runner cwd=/srv/app greeting=hello data=one.txt,\n"
+      }
+    },
+    {
+      "name": "a command replaces CMD and the ENTRYPOINT stays",
+      "success": true,
+      "detail": {
+        "stdout": "args=other args env=prod user=runner cwd=/srv/app greeting=hello data=one.txt,\n"
+      }
+    },
+    {
+      "name": "--build-arg changes what the build wrote",
+      "success": true,
+      "detail": {
+        "stdout": "args=default-arg env=prod user=runner cwd=/srv/app greeting=howdy data=one.txt,\n"
+      }
+    },
+    {
+      "name": ".dockerignore keeps ignored files out and COPY . copies the rest",
+      "success": true,
+      "detail": {
+        "files": [
+          "./.dockerignore",
+          "./Dockerfile",
+          "./keep.txt"
+        ]
+      }
+    },
+    {
+      "name": "building the same thing again is quicker",
+      "success": true,
+      "detail": {
+        "first_seconds": 4.24,
+        "second_seconds": 0.71
+      }
+    },
+    {
+      "name": "a failing RUN fails the build at its step, and COPY --from an image is refused",
+      "success": true,
+      "detail": {
+        "failed_step": [
+          "build failed at step 2: \"echo boom >&2; exit 3\" exited 3"
+        ],
+        "refused": "Error: COPY --from=nginx:latest: not an earlier stage (copying from an image is not supported)"
+      }
+    },
+    {
+      "name": "SHELL changes how a shell-form RUN runs (errexit stops a build the default shell finishes)",
+      "success": true,
+      "detail": {
+        "stopped": [
+          "build failed at step 1: \"'/bin/sh' '-ec' 'false; touch /marker'\" exited 1"
+        ]
+      }
+    },
+    {
+      "name": "RUN here-documents: `RUN cat <<EOF > file` keeps its body and `RUN <<EOT` runs as a script",
+      "success": true,
+      "detail": {
+        "stdout": "hello world\n  indented\nfrom-script\nafter=yes\n"
+      }
+    }
+  ]
+}

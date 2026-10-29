@@ -14,7 +14,8 @@ build context, and drives the real `hm` binary:
    rest.
 5. Building the same thing again is quicker (the node's step cache).
 6. `SHELL` changes how a shell-form RUN runs (errexit stops a build the default shell finishes).
-7. A failing RUN fails the build at its step with a non-zero exit and no
+7. `RUN` here-documents (`cat <<EOF > file`, and a bare `RUN <<EOT` script) run.
+8. A failing RUN fails the build at its step with a non-zero exit and no
    template; COPY --from an image (not a stage) is refused before anything is sent.
    Multi-stage builds are in check-hm-multistage-kvm.py.
 
@@ -195,6 +196,23 @@ def main():
             assert stopped.returncode != 0 and "build failed at step" in stopped.stderr, stopped
             return {"stopped": [l for l in stopped.stderr.splitlines() if "build failed" in l]}
         case("SHELL changes how a shell-form RUN runs (errexit stops a build the default shell finishes)", shell_instruction)
+
+        def heredocs():
+            doc = args.output / "heredoc"
+            doc.mkdir()
+            (doc / "Dockerfile").write_text(
+                "FROM alpine:3.20\n"
+                "ARG WHO=world\n"
+                "RUN cat <<EOF > /note.txt\nhello $WHO\n  indented\nEOF\n"
+                "RUN <<EOT\nset -e\necho from-script > /script.txt\nEOT\n"
+                "ENV AFTER=yes\n")
+            built, _ = hm("build", "-t", "heredoc", str(doc))
+            assert built.returncode == 0, built.stderr[-800:]
+            ran, _ = hm("run", "--template", "heredoc", "sh", "-c", "cat /note.txt /script.txt; echo after=$AFTER")
+            want = "hello world\n  indented\nfrom-script\nafter=yes\n"
+            assert ran.stdout == want, (ran.stdout, ran.stderr[-300:])
+            return {"stdout": ran.stdout}
+        case("RUN here-documents: `RUN cat <<EOF > file` keeps its body and `RUN <<EOT` runs as a script", heredocs)
 
         report["success"] = True
     finally:

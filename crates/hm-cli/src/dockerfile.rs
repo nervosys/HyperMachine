@@ -130,12 +130,14 @@ pub fn parse(text: &str, build_args: &BTreeMap<String, String>) -> Result<Plan> 
             None => (logical.as_str(), ""),
         };
         let keyword = word.to_ascii_uppercase();
-        if rest.contains("<<") && matches!(keyword.as_str(), "RUN" | "COPY" | "ADD") {
+        if rest.contains("<<") && matches!(keyword.as_str(), "COPY" | "ADD") {
             let heredoc = rest
                 .split_whitespace()
                 .any(|w| w.starts_with("<<") && w.len() > 2);
             if heredoc {
-                return Err(at("here-documents are not supported".into()));
+                return Err(at(format!(
+                    "{keyword} with a here-document is not supported"
+                )));
             }
         }
         match keyword.as_str() {
@@ -188,6 +190,8 @@ pub fn parse(text: &str, build_args: &BTreeMap<String, String>) -> Result<Plan> 
                 }
                 let mut command = match exec_form(rest) {
                     Some(argv) => shell_join(&argv),
+                    // `RUN <<EOF` runs the body as a script.
+                    None if rest.starts_with("<<") => format!("/bin/sh {rest}"),
                     None => match &shell {
                         Some(shell) => {
                             shell_join(&[shell.clone(), vec![rest.to_string()]].concat())
@@ -347,7 +351,8 @@ fn is_archive(source: &str) -> bool {
 fn logical_lines(text: &str) -> Result<Vec<(usize, String)>> {
     let mut lines = Vec::new();
     let mut current: Option<(usize, String)> = None;
-    for (index, raw) in text.lines().enumerate() {
+    let mut source = text.lines().enumerate();
+    while let Some((index, raw)) = source.next() {
         let raw = raw.trim_end_matches('\r');
         let trimmed = raw.trim();
         // A comment line, or a blank one, inside a continuation is skipped.
@@ -361,13 +366,61 @@ fn logical_lines(text: &str) -> Result<Vec<(usize, String)>> {
             current = Some((number, text));
         } else {
             text.push_str(body);
-            lines.push((number, text.trim().to_string()));
+            let mut text = text.trim().to_string();
+            // `RUN <<EOF`: the body and its terminator belong to this
+            // instruction, verbatim (the shell reads the here-document).
+            if text
+                .split_whitespace()
+                .next()
+                .is_some_and(|w| w.eq_ignore_ascii_case("RUN"))
+            {
+                for (marker, strip_tabs) in heredoc_markers(&text) {
+                    let mut closed = false;
+                    for (_, line) in source.by_ref() {
+                        let line = line.trim_end_matches('\r');
+                        text.push('\n');
+                        text.push_str(line);
+                        let compare = if strip_tabs {
+                            line.trim_start_matches('\t')
+                        } else {
+                            line
+                        };
+                        if compare == marker {
+                            closed = true;
+                            break;
+                        }
+                    }
+                    if !closed {
+                        bail!("Dockerfile line {number}: here-document {marker} is never closed");
+                    }
+                }
+            }
+            lines.push((number, text));
         }
     }
     if let Some((number, text)) = current {
         lines.push((number, text.trim().to_string()));
     }
     Ok(lines)
+}
+
+/// The here-document markers on an instruction line, in order, and whether
+/// each was `<<-` (leading tabs stripped from the terminator).
+fn heredoc_markers(line: &str) -> Vec<(String, bool)> {
+    line.split_whitespace()
+        .filter_map(|word| {
+            let rest = word.strip_prefix("<<")?;
+            if rest.starts_with('<') {
+                return None;
+            }
+            let (rest, strip_tabs) = match rest.strip_prefix('-') {
+                Some(r) => (r, true),
+                None => (rest, false),
+            };
+            let name = rest.trim_matches(|c| c == '\'' || c == '"');
+            (!name.is_empty()).then(|| (name.to_string(), strip_tabs))
+        })
+        .collect()
 }
 
 /// `["a", "b"]` as its elements; `None` if `text` is not a JSON string array.
@@ -700,7 +753,8 @@ mod tests {
             ),
             ("FROM a\nADD https://x.example/f /f\n", "ADD of"),
             ("FROM a\nADD app.tar.gz /srv/\n", "ADD of"),
-            ("FROM a\nRUN cat <<EOF\nx\nEOF\n", "here-documents"),
+            ("FROM a\nCOPY <<EOF /x\nhi\nEOF\n", "here-document"),
+            ("FROM a\nRUN cat <<EOF\nx\n", "never closed"),
             ("FROM a\nSHELL /bin/bash -c\n", "SHELL needs a JSON array"),
             ("FROM a\nONBUILD RUN x\n", "ONBUILD"),
             ("RUN echo hi\n", "before FROM"),
@@ -710,6 +764,29 @@ mod tests {
             let message = error(text);
             assert!(message.contains(expected), "{text:?}: {message}");
         }
+    }
+
+    #[test]
+    fn a_run_here_document_keeps_its_body_and_a_bare_one_runs_as_a_script() {
+        let plan = parse(
+            "FROM a\nRUN cat <<EOF >/f\nline one\n  two\nEOF\nRUN <<-X\n\tset -e\n\tX\nENV A=b\n",
+            &BTreeMap::new(),
+        )
+        .unwrap();
+        let runs: Vec<&str> = plan
+            .steps
+            .iter()
+            .filter(|s| s.kind == "RUN")
+            .map(|s| s.args[0].as_str())
+            .collect();
+        assert_eq!(
+            runs,
+            [
+                "cat <<EOF >/f\nline one\n  two\nEOF",
+                "/bin/sh <<-X\n\tset -e\n\tX"
+            ]
+        );
+        assert!(plan.steps.iter().any(|s| s.kind == "ENV"));
     }
 
     #[test]

@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `hm sandbox vm build`: `RUN` here-documents (`RUN cat <<EOF > f`, and `RUN <<EOT` as a script).
+  Checked on KVM (build check now 8 cases, 3 of 3 runs). `COPY <<EOF` is still refused.
 - `hm sandbox vm build`: the `SHELL` instruction (JSON form) for shell-form `RUN`, `CMD` and
   `ENTRYPOINT`. Checked on KVM (build check now 7 cases, 3 of 3 runs).
 - `hm sandbox vm compose`: `healthcheck:` (`test`, `interval`, `retries`, `disable`) and

@@ -72,8 +72,9 @@ evidence, but no more of it is to be built. The work is on the native path
 - [ ] Compose: `restart:` (refused today; needs the node's supervisor to cover these sandboxes,
       not yet checked).
 - [x] Build: `SHELL` (`2026-10-28/hm-build-shell-kvm`, 7-case build check, 3 of 3 runs).
-- [ ] Build: `ADD` of a URL or archive, `ONBUILD`, `FROM` an earlier stage,
-      `RUN --mount`, heredocs.
+- [x] Build: `RUN` here-documents (`2026-10-28/hm-build-heredoc-kvm`, 8-case build check,
+      3 of 3 runs). `COPY <<EOF` is still refused.
+- [ ] Build: `ADD` of a URL or archive, `ONBUILD`, `FROM` an earlier stage, `RUN --mount`.
 - [ ] `hm sandbox vm run`: `-p` done (`2026-10-28/hm-run-publish-cluster-kvm`, 3 of 3);
       `-v`, `--network`, stdin and `-it` not done.
 - [ ] A moved tag (re-pull when the registry's tag moves).
