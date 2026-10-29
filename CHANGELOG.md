@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `RUN --mount=type=bind|tmpfs|cache` in `hm sandbox vm build`: the mount lasts for one RUN (a bind
+  source is copied in, targets are removed afterwards; a cache is not kept between builds). `secret`,
+  `ssh` and `--network` are refused. Checked on KVM (3 of 3 runs).
 - `COPY <<EOF /dest` in `hm sandbox vm build`: each here-document is written as a file by a build
   step (no upload); `--chmod`/`--chown` apply. Checked on KVM (3 of 3 runs).
 - `hm sandbox vm run -i`: send standard input (to its end, up to 256 KiB) to the command. Checked on

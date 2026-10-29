@@ -178,11 +178,25 @@ pub fn parse(text: &str, build_args: &BTreeMap<String, String>) -> Result<Plan> 
                 return Err(at(format!("{word} before FROM")));
             }
             "RUN" => {
-                if rest.starts_with("--") {
-                    return Err(at(format!(
-                        "RUN flags ({}) are not supported",
-                        rest.split_whitespace().next().unwrap_or("")
-                    )));
+                let (flags, rest) = split_flags(rest);
+                let rest = rest.as_str();
+                let mut mounts: Vec<Mount> = Vec::new();
+                for flag in &flags {
+                    match flag.strip_prefix("--mount=") {
+                        Some(spec) => {
+                            let mount = parse_mount(spec).map_err(|e| at(e.to_string()))?;
+                            if mount.kind == "cache" {
+                                plan.warnings.push(format!(
+                                    "line {line_number}: RUN --mount=type=cache: the cache is not \
+                                     kept between builds (an empty directory for this RUN)"
+                                ));
+                            }
+                            mounts.push(mount);
+                        }
+                        None => {
+                            return Err(at(format!("RUN flag {flag} is not supported")));
+                        }
+                    }
                 }
                 let mut command = match exec_form(rest) {
                     Some(argv) => shell_join(&argv),
@@ -201,6 +215,40 @@ pub fn parse(text: &str, build_args: &BTreeMap<String, String>) -> Result<Plan> 
                     .filter_map(|n| args.get(n).map(|v| format!("export {n}={}; ", quote(v))))
                     .collect();
                 command.insert_str(0, &exports);
+                // Mounts last only for this RUN: a bind mount is copied in
+                // first, and every target is removed when the command ends.
+                for mount in &mounts {
+                    if mount.kind == "bind" {
+                        let mut copy = step(
+                            "COPY",
+                            vec![
+                                mount.source.clone(),
+                                mount.target.clone(),
+                                String::new(),
+                                String::new(),
+                            ],
+                        );
+                        copy.from_context = mount.from.is_none();
+                        copy.from_stage = mount.from.clone();
+                        plan.steps.push(copy);
+                    }
+                }
+                if !mounts.is_empty() {
+                    let mut before = String::new();
+                    let mut after = String::new();
+                    for (n, mount) in mounts.iter().enumerate() {
+                        let target = quote(&mount.target);
+                        if mount.kind == "bind" {
+                            after.push_str(&format!("rm -rf {target}; "));
+                        } else {
+                            before.push_str(&format!(
+                                "made{n}=; [ -d {target} ] || {{ mkdir -p {target} && made{n}=1; }}; "
+                            ));
+                            after.push_str(&format!("[ -z \"$made{n}\" ] || rm -rf {target}; "));
+                        }
+                    }
+                    command = format!("{before}{{\n{command}\n}}; status=$?; {after}exit $status");
+                }
                 plan.steps.push(step("RUN", vec![command]));
             }
             "ENV" => {
@@ -419,6 +467,50 @@ fn logical_lines(text: &str) -> Result<Vec<(usize, String)>> {
         lines.push((number, text.trim().to_string()));
     }
     Ok(lines)
+}
+
+/// One `RUN --mount=...` after parsing.
+struct Mount {
+    kind: String,
+    source: String,
+    target: String,
+    from: Option<String>,
+}
+
+/// `type=bind,source=src,target=/t[,from=stage][,rw]`; bind, tmpfs and cache
+/// are honoured, secret and ssh are refused (they would land in a layer).
+fn parse_mount(spec: &str) -> Result<Mount> {
+    let mut mount = Mount {
+        kind: "bind".into(),
+        source: ".".into(),
+        target: String::new(),
+        from: None,
+    };
+    for option in spec.split(',').filter(|o| !o.is_empty()) {
+        let (key, value) = option.split_once('=').unwrap_or((option, ""));
+        match key {
+            "type" => mount.kind = value.to_string(),
+            "source" | "src" => {
+                mount.source = value.trim_start_matches('/').to_string();
+                if mount.source.is_empty() {
+                    mount.source = ".".into();
+                }
+            }
+            "target" | "dst" | "destination" => mount.target = value.to_string(),
+            "from" => mount.from = Some(value.to_string()),
+            _ => {}
+        }
+    }
+    if !matches!(mount.kind.as_str(), "bind" | "tmpfs" | "cache") {
+        bail!(
+            "RUN --mount=type={} is not supported (bind, tmpfs and cache are)",
+            mount.kind
+        );
+    }
+    if !mount.target.starts_with('/') || mount.target == "/" {
+        bail!("RUN --mount needs target= an absolute path other than /");
+    }
+    Ok(mount)
 }
 
 /// `COPY [--chown= --chmod=] <<EOF [<<EOF2 ...] DEST` with its bodies: each
@@ -842,10 +934,9 @@ mod tests {
             ("FROM a\nFROM b\n", "second FROM"),
             ("FROM a\nCOPY --from= /x /y\n", "needs a COPY and a stage"),
             ("FROM scratch\n", "scratch"),
-            (
-                "FROM a\nRUN --mount=type=cache,target=/c make\n",
-                "RUN flags",
-            ),
+            ("FROM a\nRUN --network=none make\n", "RUN flag"),
+            ("FROM a\nRUN --mount=type=secret,id=x make\n", "type=secret"),
+            ("FROM a\nRUN --mount=type=tmpfs make\n", "absolute path"),
             ("FROM a\nADD https://x.example/f /f\n", "ADD of"),
             ("FROM a\nADD <<EOF /x\nhi\nEOF\n", "here-document"),
             ("FROM a\nCOPY <<EOF\nhi\nEOF\n", "destination"),
@@ -883,6 +974,30 @@ mod tests {
             ]
         );
         assert!(plan.steps.iter().any(|s| s.kind == "ENV"));
+    }
+
+    #[test]
+    fn run_mounts_last_for_one_run() {
+        let plan = parse(
+            "FROM a\nRUN --mount=type=bind,source=src,target=/b --mount=type=tmpfs,target=/t \
+             make\nRUN --mount=type=cache,target=/c true\n",
+            &BTreeMap::new(),
+        )
+        .unwrap();
+        let kinds: Vec<&str> = plan.steps.iter().map(|s| s.kind).collect();
+        assert_eq!(kinds, ["COPY", "RUN", "RUN"]);
+        let copy = &plan.steps[0];
+        assert!(copy.from_context);
+        assert_eq!(copy.args[..2], ["src", "/b"]);
+        let run = &plan.steps[1].args[0];
+        assert!(run.contains("{\nmake\n}; status=$?;"), "{run}");
+        assert!(
+            run.contains("rm -rf '/b';") && run.contains("rm -rf '/t'"),
+            "{run}"
+        );
+        assert!(run.ends_with("exit $status"));
+        assert_eq!(plan.warnings.len(), 1);
+        assert!(plan.warnings[0].contains("cache"));
     }
 
     #[test]

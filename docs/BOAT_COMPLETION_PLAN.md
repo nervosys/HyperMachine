@@ -83,7 +83,10 @@ evidence, but no more of it is to be built. The work is on the native path
       check, 3 of 3 runs). bz2, xz and a tar-less image are NOT verified.
 - [x] Build: `FROM` an earlier stage (`2026-10-29/hm-from-stage-kvm`, multistage check 7 cases,
       3 of 3 runs). `ENV`/`WORKDIR`/`CMD` are inherited; `USER`/`ENTRYPOINT` are NOT verified.
-- [ ] Build: `ADD` of a URL, `ONBUILD`, `RUN --mount`.
+- [x] Build: `RUN --mount` bind, tmpfs, cache (`2026-10-29/hm-build-run-mount-kvm`, 11-case build
+      check, 3 of 3 runs). Copy-in design: no real mount, a cache does not persist, an existing bind
+      target is removed afterwards; secret, ssh and `--network` are refused.
+- [ ] Build: `ADD` of a URL, `ONBUILD`.
 - [ ] `hm sandbox vm run`: `-p` done (`2026-10-28/hm-run-publish-cluster-kvm`, 3 of 3);
       `-i` (stdin to EOF, `2026-10-29/hm-run-stdin-kvm`, 3 of 4 runs); `-v`, `--network` and
       `-it` not done.

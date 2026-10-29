@@ -259,6 +259,33 @@ def main():
             return {"stdout": ran.stdout}
         case("COPY <<EOF writes each here-document as a file (expanded or raw, --chmod, several into a directory)", copy_heredoc)
 
+        def run_mounts():
+            ctx = args.output / "mounts"
+            (ctx / "src").mkdir(parents=True)
+            (ctx / "src" / "input.txt").write_text("from the context\n")
+            (ctx / "Dockerfile").write_text(
+                "FROM alpine:3.20\n"
+                "RUN --mount=type=bind,source=src,target=/mnt/in cat /mnt/in/input.txt > /seen.txt\n"
+                "RUN --mount=type=tmpfs,target=/scratch echo temp > /scratch/f && cp /scratch/f /seen-tmp.txt\n"
+                "RUN --mount=type=cache,target=/cache echo c > /cache/x && cp /cache/x /seen-cache.txt\n")
+            built, _ = hm("build", "-t", "mounts", str(ctx))
+            assert built.returncode == 0, built.stderr[-800:]
+            assert "type=cache" in built.stderr, built.stderr[-400:]
+            ran, _ = hm("run", "--template", "mounts", "sh", "-c",
+                        "cat /seen.txt /seen-tmp.txt /seen-cache.txt; ls -d /mnt/in /scratch /cache 2>&1")
+            assert ran.stdout.startswith("from the context\ntemp\nc\n"), (ran.stdout, ran.stderr[-300:])
+            assert ran.stdout.count("No such file") == 3, ran.stdout
+            (ctx / "Dockerfile").write_text(
+                "FROM alpine:3.20\nRUN --mount=type=tmpfs,target=/scratch sh -c 'exit 5'\n")
+            failed, _ = hm("build", "-t", "mounts-fail", str(ctx))
+            assert failed.returncode != 0 and "build failed at step" in failed.stderr, failed
+            (ctx / "Dockerfile").write_text(
+                "FROM alpine:3.20\nRUN --mount=type=secret,id=k true\n")
+            refused, _ = hm("build", "-t", "mounts-secret", str(ctx))
+            assert refused.returncode != 0 and "type=secret" in refused.stderr, refused
+            return {"stdout": ran.stdout}
+        case("RUN --mount: bind from the context, tmpfs and cache last for one RUN; a failing RUN still fails; secret is refused", run_mounts)
+
         report["success"] = True
     finally:
         if daemon.poll() is None:

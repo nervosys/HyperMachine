@@ -185,7 +185,11 @@ for tar and tar.gz (3 of 3 runs); bz2 and xz are NOT verified.
 [checked on KVM](benchmarks/2026-10-28/hm-build-heredoc-kvm/README.md), 3 of 3 runs. `COPY <<EOF /dest` writes each
 here-document as a file (named by its marker under a `/` destination; `--chmod`/`--chown` apply;
 [checked on KVM](benchmarks/2026-10-29/hm-build-copy-heredoc-kvm/README.md), 3 of 3 runs); `ADD <<EOF`
-is refused. The shell must exist in the image: a
+is refused. `RUN --mount=type=bind|tmpfs|cache,target=/t` lasts for that one `RUN`: a bind source
+(`source=`, or `from=` a stage) is copied to the target first, and every target is removed
+afterwards, so an existing directory at a bind target is deleted and a cache is not kept between
+builds ([checked on KVM](benchmarks/2026-10-29/hm-build-run-mount-kvm/README.md), 3 of 3 runs);
+`secret`, `ssh` and `--network` are refused. The shell must exist in the image: a
 `SHELL` naming `/bin/bash` in an image without it fails at the first `RUN`.
 
 ### Multi-stage builds

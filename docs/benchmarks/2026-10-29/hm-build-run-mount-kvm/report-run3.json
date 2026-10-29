@@ -1,0 +1,101 @@
+{
+  "success": true,
+  "purpose": "hm sandbox vm build on KVM; functional, times are the check's stopwatch",
+  "input_sha256": {
+    "daemon": "2bb8c58cdf228bf685e88c556e4ac12051645f67d3ad529122cd7110be1deb5b",
+    "hm": "139d1ceb5ab11ff5c5f56e61cef9631033b030d28d33280082cfad3ad781736c",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "9e4a4befbd2c246bad111d1d3d190eefd9fe63330a89d08b81fe571b7aecad51"
+  },
+  "cases": [
+    {
+      "name": "a Dockerfile builds, and the template runs its ENTRYPOINT with CMD, ENV, WORKDIR, USER and COPY",
+      "success": true,
+      "detail": {
+        "build_seconds": 7.05,
+        "stdout": "args=default-arg env=prod user=runner cwd=/srv/app greeting=hello data=one.txt,\n"
+      }
+    },
+    {
+      "name": "a command replaces CMD and the ENTRYPOINT stays",
+      "success": true,
+      "detail": {
+        "stdout": "args=other args env=prod user=runner cwd=/srv/app greeting=hello data=one.txt,\n"
+      }
+    },
+    {
+      "name": "--build-arg changes what the build wrote",
+      "success": true,
+      "detail": {
+        "stdout": "args=default-arg env=prod user=runner cwd=/srv/app greeting=howdy data=one.txt,\n"
+      }
+    },
+    {
+      "name": ".dockerignore keeps ignored files out and COPY . copies the rest",
+      "success": true,
+      "detail": {
+        "files": [
+          "./.dockerignore",
+          "./Dockerfile",
+          "./keep.txt"
+        ]
+      }
+    },
+    {
+      "name": "building the same thing again is quicker",
+      "success": true,
+      "detail": {
+        "first_seconds": 4.23,
+        "second_seconds": 0.75
+      }
+    },
+    {
+      "name": "a failing RUN fails the build at its step, and COPY --from an image is refused",
+      "success": true,
+      "detail": {
+        "failed_step": [
+          "build failed at step 2: \"echo boom >&2; exit 3\" exited 3"
+        ],
+        "refused": "Error: COPY --from=nginx:latest: not an earlier stage (copying from an image is not supported)"
+      }
+    },
+    {
+      "name": "SHELL changes how a shell-form RUN runs (errexit stops a build the default shell finishes)",
+      "success": true,
+      "detail": {
+        "stopped": [
+          "build failed at step 1: \"'/bin/sh' '-ec' 'false; touch /marker'\" exited 1"
+        ]
+      }
+    },
+    {
+      "name": "RUN here-documents: `RUN cat <<EOF > file` keeps its body and `RUN <<EOT` runs as a script",
+      "success": true,
+      "detail": {
+        "stdout": "hello world\n  indented\nfrom-script\nafter=yes\n"
+      }
+    },
+    {
+      "name": "ADD unpacks a local tar and tar.gz into the destination, copies a zip whole, and leaves no temp file",
+      "success": true,
+      "detail": {
+        "stdout": "alpha\nbeta\nalpha\nnot really a zip\nls: /tmp/.hm-add-*: No such file or directory\n"
+      }
+    },
+    {
+      "name": "COPY <<EOF writes each here-document as a file (expanded or raw, --chmod, several into a directory)",
+      "success": true,
+      "detail": {
+        "stdout": "hello world\n755\nraw $WHO 'q'\nindented\nafter=yes\n"
+      }
+    },
+    {
+      "name": "RUN --mount: bind from the context, tmpfs and cache last for one RUN; a failing RUN still fails; secret is refused",
+      "success": true,
+      "detail": {
+        "stdout": "from the context\ntemp\nc\nls: /mnt/in: No such file or directory\nls: /scratch: No such file or directory\nls: /cache: No such file or directory\n"
+      }
+    }
+  ]
+}
