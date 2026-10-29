@@ -13,7 +13,8 @@ build context, and drives the real `hm` binary:
 4. `.dockerignore` keeps ignored files out of the guest, and COPY . copies the
    rest.
 5. Building the same thing again is quicker (the node's step cache).
-6. A failing RUN fails the build at its step with a non-zero exit and no
+6. `SHELL` changes how a shell-form RUN runs (errexit stops a build the default shell finishes).
+7. A failing RUN fails the build at its step with a non-zero exit and no
    template; COPY --from an image (not a stage) is refused before anything is sent.
    Multi-stage builds are in check-hm-multistage-kvm.py.
 
@@ -178,6 +179,22 @@ def main():
             return {"failed_step": [l for l in failed.stderr.splitlines() if "build failed" in l],
                     "refused": refused.stderr.strip()[:160]}
         case("a failing RUN fails the build at its step, and COPY --from an image is refused", failures)
+
+        def shell_instruction():
+            # `false; touch /marker` carries on under the default `sh -c` and
+            # stops at `false` under `SHELL ["/bin/sh", "-ec"]`.
+            line = "RUN false; touch /marker\n"
+            for name, head in [("shell-default", ""), ("shell-errexit", 'SHELL ["/bin/sh", "-ec"]\n')]:
+                (args.output / name).mkdir()
+                (args.output / name / "Dockerfile").write_text("FROM alpine:3.20\n" + head + line)
+            built, _ = hm("build", "-t", "shell-default", str(args.output / "shell-default"))
+            assert built.returncode == 0, built.stderr[-600:]
+            ran, _ = hm("run", "--template", "shell-default", "sh", "-c", "test -f /marker && echo marker")
+            assert ran.stdout.strip() == "marker", ran
+            stopped, _ = hm("build", "-t", "shell-errexit", str(args.output / "shell-errexit"))
+            assert stopped.returncode != 0 and "build failed at step" in stopped.stderr, stopped
+            return {"stopped": [l for l in stopped.stderr.splitlines() if "build failed" in l]}
+        case("SHELL changes how a shell-form RUN runs (errexit stops a build the default shell finishes)", shell_instruction)
 
         report["success"] = True
     finally:

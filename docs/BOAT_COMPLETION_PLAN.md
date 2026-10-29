@@ -71,7 +71,8 @@ evidence, but no more of it is to be built. The work is on the native path
       `up`.
 - [ ] Compose: `restart:` (refused today; needs the node's supervisor to cover these sandboxes,
       not yet checked).
-- [ ] Build: `ADD` of a URL or archive, `SHELL`, `ONBUILD`, `FROM` an earlier stage,
+- [x] Build: `SHELL` (`2026-10-28/hm-build-shell-kvm`, 7-case build check, 3 of 3 runs).
+- [ ] Build: `ADD` of a URL or archive, `ONBUILD`, `FROM` an earlier stage,
       `RUN --mount`, heredocs.
 - [ ] `hm sandbox vm run`: `-p` done (`2026-10-28/hm-run-publish-cluster-kvm`, 3 of 3);
       `-v`, `--network`, stdin and `-it` not done.

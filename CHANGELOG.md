@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `hm sandbox vm build`: the `SHELL` instruction (JSON form) for shell-form `RUN`, `CMD` and
+  `ENTRYPOINT`. Checked on KVM (build check now 7 cases, 3 of 3 runs).
 - `hm sandbox vm compose`: `healthcheck:` (`test`, `interval`, `retries`, `disable`) and
   `depends_on: condition: service_healthy`; `up` waits for the dependency's test to exit 0 and
   fails, taking back what it started, after `retries` failures. Checked on KVM (6 cases, 3 of 3

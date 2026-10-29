@@ -159,9 +159,14 @@ failing step ends the build at that step with a non-zero exit and no template.
 
 Checked on KVM, 6 cases on 3 runs
 ([evidence](benchmarks/2026-10-19/hm-build-kvm/README.md)). Not done:
-`ADD` of a URL or archive, `SHELL`, `ONBUILD`; `LABEL`, `EXPOSE`,
+`ADD` of a URL or archive, `ONBUILD`; `LABEL`, `EXPOSE`,
 `HEALTHCHECK` and `VOLUME` are accepted with a warning and ignored. See the
 evidence's "Not verified" list.
+
+`SHELL ["/bin/sh", "-ec"]` (JSON form only) sets how later shell-form `RUN` and
+`CMD`/`ENTRYPOINT` lines are run; exec forms are unaffected. [Checked on KVM](benchmarks/2026-10-28/hm-build-shell-kvm/README.md)
+(one case added to the build check, 3 of 3 runs). The shell must exist in the image: a
+`SHELL` naming `/bin/bash` in an image without it fails at the first `RUN`.
 
 ### Multi-stage builds
 

@@ -120,6 +120,8 @@ pub fn parse(text: &str, build_args: &BTreeMap<String, String>) -> Result<Plan> 
     let mut env: BTreeMap<String, String> = BTreeMap::new();
     let mut declared: Vec<String> = Vec::new();
     let mut seen_from = false;
+    // The SHELL instruction's argv; the default is `/bin/sh -c`.
+    let mut shell: Option<Vec<String>> = None;
 
     for (line_number, logical) in logical_lines(text)? {
         let at = |message: String| anyhow!("Dockerfile line {line_number}: {message}");
@@ -186,7 +188,12 @@ pub fn parse(text: &str, build_args: &BTreeMap<String, String>) -> Result<Plan> 
                 }
                 let mut command = match exec_form(rest) {
                     Some(argv) => shell_join(&argv),
-                    None => rest.to_string(),
+                    None => match &shell {
+                        Some(shell) => {
+                            shell_join(&[shell.clone(), vec![rest.to_string()]].concat())
+                        }
+                        None => rest.to_string(),
+                    },
                 };
                 // Docker passes the ARGs seen so far to a RUN as environment.
                 let exports: String = declared
@@ -281,7 +288,13 @@ pub fn parse(text: &str, build_args: &BTreeMap<String, String>) -> Result<Plan> 
             "CMD" | "ENTRYPOINT" => {
                 let argv = match exec_form(rest) {
                     Some(argv) => argv,
-                    None => vec!["/bin/sh".into(), "-c".into(), rest.to_string()],
+                    None => [
+                        shell
+                            .clone()
+                            .unwrap_or_else(|| vec!["/bin/sh".into(), "-c".into()]),
+                        vec![rest.to_string()],
+                    ]
+                    .concat(),
                 };
                 plan.steps.push(step(
                     if keyword == "CMD" {
@@ -296,7 +309,15 @@ pub fn parse(text: &str, build_args: &BTreeMap<String, String>) -> Result<Plan> 
                 plan.warnings
                     .push(format!("line {line_number}: {keyword} is ignored"));
             }
-            "SHELL" | "ONBUILD" => return Err(at(format!("{keyword} is not supported"))),
+            "SHELL" => match exec_form(rest) {
+                Some(argv) if !argv.is_empty() => shell = Some(argv),
+                _ => {
+                    return Err(at(
+                        "SHELL needs a JSON array, like [\"/bin/sh\", \"-ec\"]".into()
+                    ))
+                }
+            },
+            "ONBUILD" => return Err(at(format!("{keyword} is not supported"))),
             _ => return Err(at(format!("unknown instruction {word}"))),
         }
     }
@@ -680,7 +701,7 @@ mod tests {
             ("FROM a\nADD https://x.example/f /f\n", "ADD of"),
             ("FROM a\nADD app.tar.gz /srv/\n", "ADD of"),
             ("FROM a\nRUN cat <<EOF\nx\nEOF\n", "here-documents"),
-            ("FROM a\nSHELL [\"/bin/bash\", \"-c\"]\n", "SHELL"),
+            ("FROM a\nSHELL /bin/bash -c\n", "SHELL needs a JSON array"),
             ("FROM a\nONBUILD RUN x\n", "ONBUILD"),
             ("RUN echo hi\n", "before FROM"),
             ("FROM a\nFROBNICATE x\n", "unknown instruction"),
@@ -689,6 +710,24 @@ mod tests {
             let message = error(text);
             assert!(message.contains(expected), "{text:?}: {message}");
         }
+    }
+
+    #[test]
+    fn shell_changes_how_a_shell_form_run_and_cmd_are_run() {
+        let plan = parse(
+            "FROM a\nRUN one\nSHELL [\"/bin/sh\", \"-ec\"]\nRUN two words\nRUN [\"x\", \"y\"]\nCMD serve\n",
+            &BTreeMap::new(),
+        )
+        .unwrap();
+        let runs: Vec<&str> = plan
+            .steps
+            .iter()
+            .filter(|s| s.kind == "RUN")
+            .map(|s| s.args[0].as_str())
+            .collect();
+        assert_eq!(runs, ["one", "'/bin/sh' '-ec' 'two words'", "'x' 'y'"]);
+        let cmd = plan.steps.iter().find(|s| s.kind == "CMD").unwrap();
+        assert_eq!(cmd.args, ["/bin/sh", "-ec", "serve"]);
     }
 
     #[test]
