@@ -77,7 +77,12 @@ evidence, but no more of it is to be built. The work is on the native path
 - [ ] Build: `ADD` of a URL or archive, `ONBUILD`, `FROM` an earlier stage, `RUN --mount`.
 - [ ] `hm sandbox vm run`: `-p` done (`2026-10-28/hm-run-publish-cluster-kvm`, 3 of 3);
       `-v`, `--network`, stdin and `-it` not done.
-- [ ] A moved tag (re-pull when the registry's tag moves).
+- [ ] A moved tag (re-pull when the registry's tag moves). Tried 2026-10-29: a client-only
+      `run --pull` (delete the template, pull again) failed 3 of 3 runs on KVM, because the node
+      refuses to delete a template built from an image (409 "only snapshots are deleted"), and
+      a repeat `POST /templates` for the same name is a 409 "exists". Not shipped; it needs a
+      node change (replace an image-built template, in a cluster too). A digest check also needs
+      a manifest HEAD in `oci.rs` and the stored digest exposed by `GET /templates`.
 
 ## 3. Docker leftovers (Docker's engine in a guest: done; no more to be built)
 
