@@ -114,6 +114,16 @@ until it exits 0, and fails (taking back what it started) after `retries` failur
 [KVM check](benchmarks/2026-10-28/compose-health-cluster-kvm/README.md) (6 cases, 3 of 3 runs).
 `restart:` is still refused; `condition: service_completed_successfully` is refused.
 
+## Standard input: `run -i`
+
+`hm sandbox vm run -i IMAGE CMD` reads its own standard input to the end (at most 256 KiB, more is
+refused) and feeds it to the command, like `docker run -i` with a pipe: `echo hi | hm sandbox vm run -i
+alpine:3.20 cat`. The exec API has no stdin, so the bytes travel base64-encoded in the command line
+and the guest decodes them with its busybox. It is not interactive: nothing is sent before EOF, and
+there is no `-t`. It cannot be combined with `-p`. [Checked on KVM](benchmarks/2026-10-29/hm-run-stdin-kvm/README.md):
+3 of 4 runs passed (the fourth stalled in an unrelated case); input larger than the limit and a
+binary stream are NOT verified.
+
 ## Publishing a port from `run`
 
 `hm sandbox vm run -p 8080:80 IMAGE [CMD]` (like `docker run -d -p`) starts the image
@@ -128,7 +138,7 @@ range and a key with a principal. [Checked on KVM](benchmarks/2026-10-28/hm-run-
 - **A moved tag**: a template is kept by the reference, so `python:3.12` is
   not pulled again when the registry's tag moves. Delete the template to
   refresh it.
-- **stdin, `-it`, volumes (`-v`), `--network` options**: not in `run`. Sandboxes have ports, volumes and networks of
+- **`-it`, volumes (`-v`), `--network` options**: not in `run` (`-i` is: see below). Sandboxes have ports, volumes and networks of
   their own through their own commands.
 - **`HEALTHCHECK`, `EXPOSE`, `LABEL`, `STOPSIGNAL`**: ignored. **A numeric
   or `uid:gid` USER** was not tried. Only `linux/amd64` images.

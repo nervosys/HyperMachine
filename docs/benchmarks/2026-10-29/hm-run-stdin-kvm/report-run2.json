@@ -1,0 +1,47 @@
+{
+  "success": false,
+  "purpose": "hm sandbox vm run on KVM; functional, times are the check's stopwatch",
+  "input_sha256": {
+    "daemon": "2bb8c58cdf228bf685e88c556e4ac12051645f67d3ad529122cd7110be1deb5b",
+    "hm": "b826e0de3f27108d0495015f50fded39b57eee1b765b5cc8840a334509b6ed0a",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "d09e9fdf4d59265abc2b9bfcc03a596a6b3d35c41f2d01865331c8ebb90cdacb"
+  },
+  "cases": [
+    {
+      "name": "pulls an image, runs a command, prints, exits 0, leaves nothing; a second run reuses the template",
+      "success": true,
+      "detail": {
+        "first_run_seconds": 6.51,
+        "second_run_seconds": 0.22,
+        "template": "oci-alpine-3.20-f5f95933"
+      }
+    },
+    {
+      "name": "the command's exit code and streams are the process's own",
+      "success": true,
+      "detail": {
+        "exit": 7
+      }
+    },
+    {
+      "name": "-e variables reach the command",
+      "success": true,
+      "detail": {
+        "stdout": "hi there 2\n"
+      }
+    },
+    {
+      "name": "-i sends standard input to the command (quotes, $ and non-ASCII intact); an over-long input is refused",
+      "success": true,
+      "detail": {
+        "echoed_bytes": 47
+      }
+    },
+    {
+      "name": "an image's ENTRYPOINT stays under a command, its CMD runs alone, and its USER applies",
+      "success": false
+    }
+  ]
+}

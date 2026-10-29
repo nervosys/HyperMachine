@@ -280,6 +280,10 @@ pub enum VmCommand {
         /// Keep the sandbox afterwards and print its ID on stderr
         #[arg(long)]
         keep: bool,
+        /// Send this command's standard input to the command, like `docker run -i`
+        /// (read to its end first; at most 256 KiB)
+        #[arg(short = 'i', long = "stdin")]
+        stdin: bool,
         /// Publish a container port, like `docker run -d -p`: `80`, `8080:80`,
         /// `53/udp`. The command then starts detached and the sandbox is kept
         /// (see --lifetime); the public port is printed. Needs a control plane
@@ -2756,6 +2760,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             template: named,
             env,
             keep,
+            stdin,
             publish,
             lifetime,
             timeout,
@@ -2769,6 +2774,14 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 bail!("--request-timeout must exceed the guest command's --timeout");
             }
             let publish = crate::compose::parse_publish(&publish)?;
+            let stdin = if stdin {
+                if !publish.is_empty() {
+                    bail!("--stdin cannot be combined with -p: a detached command has no stdin");
+                }
+                Some(read_stdin_bounded(std::io::stdin().lock())?)
+            } else {
+                None
+            };
             return run_image(
                 &api,
                 RunImage {
@@ -2776,6 +2789,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                     named,
                     env,
                     keep,
+                    stdin,
                     publish,
                     lifetime,
                     timeout,
@@ -4022,6 +4036,8 @@ struct RunImage {
     keep: bool,
     /// Container ports to publish (`-p`); not empty means detached and kept.
     publish: std::collections::BTreeMap<u16, &'static str>,
+    /// Bytes to feed the command's standard input.
+    stdin: Option<Vec<u8>>,
     /// How long a detached sandbox lives.
     lifetime: u64,
     timeout: u64,
@@ -4431,6 +4447,7 @@ async fn compose_start(
                 env: Vec::new(),
                 keep: true,
                 publish: std::collections::BTreeMap::new(),
+                stdin: None,
                 lifetime: 0,
                 timeout: 1,
                 build_wait,
@@ -4716,20 +4733,45 @@ async fn run_in(api: &Api, id: &str, run: &RunImage) -> Result<i32> {
     let launch: Value = serde_json::from_str(launch["stdout"].as_str().unwrap_or("{}"))
         .context("the image's launch settings did not parse")?;
     let command = launch_command(&launch, &run.command)?;
-    let value = guest_exec(
-        api,
-        id,
-        &shell_exec(&command)?,
-        run.timeout,
-        launch["user"].as_str(),
-    )
-    .await?;
+    let line = with_stdin(&shell_exec(&command)?, run.stdin.as_deref());
+    let value = guest_exec(api, id, &line, run.timeout, launch["user"].as_str()).await?;
     let timed_out = value["timed_out"].as_bool().unwrap_or(false);
     let code = exec_exit_code(&value, timed_out)?;
     use std::io::Write;
     std::io::stdout().write_all(value["stdout"].as_str().unwrap_or("").as_bytes())?;
     std::io::stderr().write_all(value["stderr"].as_str().unwrap_or("").as_bytes())?;
     Ok(code)
+}
+
+/// The most standard input `run --stdin` sends: it travels in the exec
+/// request's command line.
+const MAX_STDIN: usize = 256 * 1024;
+
+/// All of `input`, or an error if it is longer than [`MAX_STDIN`].
+fn read_stdin_bounded(input: impl std::io::Read) -> Result<Vec<u8>> {
+    use std::io::Read;
+    let mut data = Vec::new();
+    input
+        .take(MAX_STDIN as u64 + 1)
+        .read_to_end(&mut data)
+        .context("reading standard input")?;
+    if data.len() > MAX_STDIN {
+        bail!("standard input is longer than {MAX_STDIN} bytes, which is the most `run --stdin` sends");
+    }
+    Ok(data)
+}
+
+/// `line` with `input` piped into it: the guest decodes it with its busybox
+/// (the exec API has no stdin of its own).
+fn with_stdin(line: &str, input: Option<&[u8]>) -> String {
+    use base64::Engine;
+    match input {
+        None => line.to_string(),
+        Some(bytes) => format!(
+            "echo '{}' | /bin/busybox base64 -d | {line}",
+            base64::engine::general_purpose::STANDARD.encode(bytes)
+        ),
+    }
 }
 
 pub(crate) fn shell_exec(command: &[String]) -> Result<String> {
@@ -4939,6 +4981,17 @@ mod tests {
         assert_eq!(paths, ["app/a", "app/b"]);
         let changed = reproducible(&tar_of(&[("app/a", 1, b"ONE"), ("app/b", 2, b"two")])).unwrap();
         assert_ne!(a, changed);
+    }
+
+    #[test]
+    fn stdin_is_bounded_and_piped_through_base64() {
+        assert_eq!(with_stdin("exec 'cat'", None), "exec 'cat'");
+        assert_eq!(
+            with_stdin("exec 'cat'", Some(b"hi\n")),
+            "echo 'aGkK' | /bin/busybox base64 -d | exec 'cat'"
+        );
+        assert!(read_stdin_bounded(std::io::Cursor::new(vec![0u8; MAX_STDIN])).is_ok());
+        assert!(read_stdin_bounded(std::io::Cursor::new(vec![0u8; MAX_STDIN + 1])).is_err());
     }
 
     #[test]

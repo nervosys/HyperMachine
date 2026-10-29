@@ -18,6 +18,7 @@ binary against it:
 6. An image that does not exist fails with the registry's error, and no
    sandbox or template is left claiming to be ready.
 7. `--keep` leaves the sandbox running and says its ID.
+8. `-i` sends standard input to the command intact; more than 256 KiB is refused.
 
 Writes report.json and the daemon log into --output. Times are the check's own.
 """
@@ -59,10 +60,11 @@ def main():
         with urllib.request.urlopen(url + path, timeout=30) as r:
             return json.loads(r.read())
 
-    def hm(*argv, timeout=900):
+    def hm(*argv, timeout=900, stdin=None):
         began = time.monotonic()
         done = subprocess.run([str(args.hm), "sandbox", "vm", "--endpoint", url, "--request-timeout", "300", "run", *argv],
-                              capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL,
+                              capture_output=True, text=True, timeout=timeout,
+                              stdin=subprocess.DEVNULL if stdin is None else None, input=stdin,
                               env={k: v for k, v in os.environ.items() if k != "HV2_API_KEY"} | {"HOME": str(args.output)})
         return done, round(time.monotonic() - began, 2)
 
@@ -108,6 +110,18 @@ def main():
             assert done.stdout == "hi there 2\n", done
             return {"stdout": done.stdout}
         case("-e variables reach the command", env)
+
+        def stdin_reaches_the_command():
+            text = "line one\nline two with 'quotes' and $dollars\né\n"
+            echoed, _ = hm("-i", "alpine:3.20", "cat", stdin=text)
+            assert echoed.returncode == 0 and echoed.stdout == text, (echoed.stdout, echoed.stderr[-300:])
+            empty, _ = hm("-i", "alpine:3.20", "cat", stdin="")
+            assert empty.returncode == 0 and empty.stdout == "", empty
+            big = "x" * 300_000
+            refused, _ = hm("-i", "alpine:3.20", "cat", stdin=big)
+            assert refused.returncode != 0 and "longer than" in refused.stderr, refused
+            return {"echoed_bytes": len(echoed.stdout)}
+        case("-i sends standard input to the command (quotes, $ and non-ASCII intact); an over-long input is refused", stdin_reaches_the_command)
 
         def entrypoint_and_user():
             who, _ = hm("curlimages/curl", "id", "-u")
