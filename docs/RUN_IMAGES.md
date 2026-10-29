@@ -105,6 +105,15 @@ see [PRIVATE_VM_NETWORKS.md](PRIVATE_VM_NETWORKS.md) and the
 node). On a node without that, the services run with no network between them and `up` says
 so. A project name with `_` gets no network. Two nodes: NOT VERIFIED.
 
+A service may have a `healthcheck:` (`test` as `[CMD, ...]`, `[CMD-SHELL, "..."]` or a string, `interval` like
+`5s` or `1m30s` (default 30s), `retries` (default 3), `disable`), and another may wait for it with
+`depends_on: {db: {condition: service_healthy}}`. `up` runs the test in the guest, `interval` apart,
+until it exits 0, and fails (taking back what it started) after `retries` failures in a row; a
+`service_healthy` wait on a service with no health check is refused. Unlike Docker there is no
+`start_period` or `timeout`, and health is checked only during `up`: nothing watches it afterwards.
+[KVM check](benchmarks/2026-10-28/compose-health-cluster-kvm/README.md) (6 cases, 3 of 3 runs).
+`restart:` is still refused; `condition: service_completed_successfully` is refused.
+
 ## Publishing a port from `run`
 
 `hm sandbox vm run -p 8080:80 IMAGE [CMD]` (like `docker run -d -p`) starts the image
@@ -125,8 +134,8 @@ range and a key with a principal. [Checked on KVM](benchmarks/2026-10-28/hm-run-
   or `uid:gid` USER** was not tried. Only `linux/amd64` images.
 - **An image without a shell** was not tried: the command is run through
   `/bin/sh`, and the guest kit adds a static busybox when the image has none.
-- **`compose` beyond a first slice**: no bind mounts, health checks or
-  restarts, and no network between services; see
+- **`compose` beyond a first slice**: no bind mounts or `restart:`, and
+  health is checked only during `up`; see
   [Compose](#compose).
 - **Old guest agents**: a template built before this change has an agent that
   ignores the exec `user` field, so the command would run as root. Rebuild

@@ -4292,15 +4292,36 @@ async fn compose(
                 .unwrap_or_else(|| std::path::Path::new("."));
             let mut started: Vec<Value> = Vec::new();
             let mut ids: Vec<String> = Vec::new();
+            let mut id_of: std::collections::BTreeMap<String, String> = Default::default();
             for service in order {
                 let svc = &parsed.services[&service];
-                let step = compose_start(
-                    api, base, &project, svc, lifetime, build_wait, cpus, memory_mb, &registry,
-                )
-                .await;
+                let mut gate: Result<()> = Ok(());
+                for dep in &svc.wait_healthy {
+                    // Checked at parse time: a dependency waited for has a
+                    // health check and was started before this service.
+                    if let (Some(dep_id), Some(health)) =
+                        (id_of.get(dep), parsed.services[dep].health.as_ref())
+                    {
+                        gate = wait_healthy(api, dep_id, dep, health).await;
+                        if gate.is_err() {
+                            break;
+                        }
+                    }
+                }
+                let step = match gate {
+                    Ok(()) => {
+                        compose_start(
+                            api, base, &project, svc, lifetime, build_wait, cpus, memory_mb,
+                            &registry,
+                        )
+                        .await
+                    }
+                    Err(e) => Err(e),
+                };
                 match step {
                     Ok((id, template)) => {
                         ids.push(id.clone());
+                        id_of.insert(service.clone(), id.clone());
                         started.push(json!({"service": service, "sandboxID": id,
                                             "name": crate::compose::vm_name(&project, &service),
                                             "template": template}));
@@ -4322,6 +4343,43 @@ async fn compose(
             Ok(json!({"project": project, "services": started}))
         }
     }
+}
+
+/// Run a service's health check in its sandbox until it exits 0. Each
+/// failed run (a non-zero exit, a timeout, or an exec error) counts; after
+/// `retries` of them in a row the service is unhealthy and this fails. The
+/// runs are `interval_secs` apart.
+async fn wait_healthy(
+    api: &Api,
+    id: &str,
+    service: &str,
+    health: &crate::compose::Health,
+) -> Result<()> {
+    let line = shell_exec(&health.test)?;
+    let mut last = String::new();
+    for attempt in 0..health.retries {
+        if attempt > 0 {
+            tokio::time::sleep(std::time::Duration::from_secs(health.interval_secs)).await;
+        }
+        match guest_exec(api, id, &line, health.interval_secs.max(10), None).await {
+            Ok(value) => {
+                let timed_out = value["timed_out"].as_bool().unwrap_or(false);
+                let code = exec_exit_code(&value, timed_out)?;
+                if code == 0 {
+                    return Ok(());
+                }
+                last = format!(
+                    "exit {code}: {}",
+                    value["stderr"].as_str().unwrap_or("").trim()
+                );
+            }
+            Err(e) => last = format!("{e:#}"),
+        }
+    }
+    bail!(
+        "service {service:?} is unhealthy after {} failed health checks ({last})",
+        health.retries
+    )
 }
 
 /// Make the service's template, create its sandbox and start its command

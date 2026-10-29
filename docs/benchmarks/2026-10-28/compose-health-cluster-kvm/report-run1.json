@@ -1,0 +1,57 @@
+{
+  "success": true,
+  "cases": [
+    {
+      "name": "up waits until the dependency's health check passes before starting the dependent",
+      "success": true,
+      "seconds": 26.351,
+      "detail": {
+        "up_seconds": 26.3
+      }
+    },
+    {
+      "name": "down removes both sandboxes",
+      "success": true,
+      "seconds": 0.176
+    },
+    {
+      "name": "the same files with a plain depends_on do not wait (control)",
+      "success": true,
+      "seconds": 0.47,
+      "detail": {
+        "up_seconds": 0.3
+      }
+    },
+    {
+      "name": "a dependency that never turns healthy fails `up` and leaves no sandbox",
+      "success": true,
+      "seconds": 2.18,
+      "detail": {
+        "stderr": "Error: starting service \"app\"; the 1 already started were deleted\n\nCaused by:\n    service \"db\" is unhealthy after 2 failed health checks (exit 1: )\n"
+      }
+    },
+    {
+      "name": "service_healthy on a service with no healthcheck is refused before anything is created",
+      "success": true,
+      "seconds": 0.02
+    },
+    {
+      "name": "no API key or cluster token is in anything hm printed",
+      "success": true,
+      "seconds": 0.0,
+      "detail": {
+        "hm_output_bytes": 1383
+      }
+    }
+  ],
+  "purpose": "functional verification of compose health checks; the timings are bounds, not measurements",
+  "input_sha256": {
+    "daemon": "2bb8c58cdf228bf685e88c556e4ac12051645f67d3ad529122cd7110be1deb5b",
+    "control": "e5cc411f15c4c1357be8a2cffb42de75b572a3d4ffd3b431f36b356ff42bd788",
+    "gateway": "ea35abad3254aa49725547ac81ee10927af57236dca231da3cd94f77ca96eb42",
+    "hm": "e349108cfceb7a82a3b1d7e117b339be3c72cf005c04d623420b083059dffa2c",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "0ecc6a39a8573e886f3ab83878f508cbd2c80aafb0cd326ec966f3bcd219c555",
+    "driver": "e63c5390ea2b8d854cb3664ba950f28bf9a99a6df4b8115b9ea7805e05e724fd"
+  }
+}

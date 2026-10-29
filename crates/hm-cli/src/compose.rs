@@ -6,8 +6,8 @@
 //! gateway picks the public number, so a requested host port is not honoured).
 //! `volumes` (named volumes only; a bind mount is refused). Anything else is
 //! refused with an error rather than ignored, and
-//! services cannot reach one another over a network yet: `depends_on` only
-//! orders start-up.
+//! `depends_on` orders start-up; `condition: service_healthy` also waits for
+//! the dependency's `healthcheck`.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -42,6 +42,24 @@ struct RawService {
     depends_on: Option<RawDepends>,
     ports: Option<Value>,
     volumes: Option<Value>,
+    healthcheck: Option<RawHealth>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawHealth {
+    test: Option<RawCommand>,
+    interval: Option<String>,
+    retries: Option<u32>,
+    #[serde(default)]
+    disable: bool,
+}
+
+/// A `depends_on` entry's body: only `condition` is understood.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawDepend {
+    condition: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -73,7 +91,7 @@ enum RawEnv {
 #[serde(untagged)]
 enum RawDepends {
     List(Vec<String>),
-    Map(BTreeMap<String, Value>),
+    Map(BTreeMap<String, Option<RawDepend>>),
 }
 
 /// Where a service's template comes from.
@@ -101,6 +119,78 @@ pub struct Service {
     pub ports: BTreeMap<u16, &'static str>,
     /// Named volumes to mount: `(volume, guest path)`, by path.
     pub mounts: Vec<(String, String)>,
+    pub health: Option<Health>,
+    /// The dependencies whose health this service waits for
+    /// (`condition: service_healthy`); a subset of `depends_on`.
+    pub wait_healthy: BTreeSet<String>,
+}
+
+/// A health check: `test` is an argv run in the guest every `interval_secs`;
+/// exit 0 is healthy. Unhealthy after `retries` failures in a row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Health {
+    pub test: Vec<String>,
+    pub interval_secs: u64,
+    pub retries: u32,
+}
+
+/// `5s`, `1m30s`, `2h`; compose's duration form, whole seconds only.
+fn parse_duration(service: &str, text: &str) -> Result<u64> {
+    let mut total = 0u64;
+    let mut digits = String::new();
+    for c in text.chars() {
+        if c.is_ascii_digit() {
+            digits.push(c);
+            continue;
+        }
+        let unit = match c {
+            's' => 1,
+            'm' => 60,
+            'h' => 3600,
+            _ => bail!("service {service:?}: healthcheck duration {text:?} must use s, m or h"),
+        };
+        let n: u64 = digits.parse().with_context(|| {
+            format!("service {service:?}: healthcheck duration {text:?} is not valid")
+        })?;
+        digits.clear();
+        total += n * unit;
+    }
+    if !digits.is_empty() || total == 0 {
+        bail!("service {service:?}: healthcheck duration {text:?} must be like 5s or 1m30s");
+    }
+    Ok(total)
+}
+
+fn parse_health(service: &str, raw: Option<RawHealth>) -> Result<Option<Health>> {
+    let Some(raw) = raw else { return Ok(None) };
+    if raw.disable {
+        return Ok(None);
+    }
+    let test = match raw.test {
+        None => bail!("service {service:?}: healthcheck needs `test`"),
+        Some(RawCommand::Line(l)) => vec!["sh".into(), "-c".into(), l],
+        Some(RawCommand::Words(w)) => match w.first().map(String::as_str) {
+            Some("NONE") => return Ok(None),
+            Some("CMD") if w.len() > 1 => w[1..].to_vec(),
+            Some("CMD-SHELL") if w.len() == 2 => vec!["sh".into(), "-c".into(), w[1].clone()],
+            _ => bail!(
+                "service {service:?}: healthcheck `test` list must start with CMD, CMD-SHELL or NONE"
+            ),
+        },
+    };
+    let interval_secs = match &raw.interval {
+        Some(t) => parse_duration(service, t)?,
+        None => 30,
+    };
+    let retries = raw.retries.unwrap_or(3);
+    if retries == 0 {
+        bail!("service {service:?}: healthcheck `retries` must be at least 1");
+    }
+    Ok(Some(Health {
+        test,
+        interval_secs,
+        retries,
+    }))
 }
 
 /// A name a volume can carry: what the node accepts, 1-64 of `[A-Za-z0-9_-]`.
@@ -452,10 +542,25 @@ pub fn parse(text: &str) -> Result<Compose> {
         if let Some(bad) = env.keys().find(|k| k.is_empty()) {
             bail!("service {name:?}: environment name {bad:?} is empty");
         }
+        let health = parse_health(&name, svc.healthcheck)?;
+        let mut wait_healthy = BTreeSet::new();
         let depends_on = match svc.depends_on {
             None => Vec::new(),
             Some(RawDepends::List(l)) => l,
-            Some(RawDepends::Map(m)) => m.into_keys().collect(),
+            Some(RawDepends::Map(m)) => {
+                for (dep, body) in &m {
+                    match body.as_ref().and_then(|b| b.condition.as_deref()) {
+                        None | Some("service_started") => {}
+                        Some("service_healthy") => {
+                            wait_healthy.insert(dep.clone());
+                        }
+                        Some(other) => bail!(
+                            "service {name:?}: depends_on {dep:?} condition {other:?} is not supported \n                             (service_started, service_healthy)"
+                        ),
+                    }
+                }
+                m.into_keys().collect()
+            }
         };
         services.insert(
             name.clone(),
@@ -467,6 +572,8 @@ pub fn parse(text: &str) -> Result<Compose> {
                 depends_on,
                 ports,
                 mounts,
+                health,
+                wait_healthy,
             },
         );
     }
@@ -480,6 +587,16 @@ impl Compose {
     /// on, ties broken by name so the order is the same every time. Fails on
     /// a dependency that is not a service and on a cycle.
     pub fn start_order(&self) -> Result<Vec<String>> {
+        for svc in self.services.values() {
+            for dep in &svc.wait_healthy {
+                if self.services.get(dep).is_some_and(|d| d.health.is_none()) {
+                    bail!(
+                        "service {:?} waits for {dep:?} to be healthy, which has no healthcheck",
+                        svc.name
+                    );
+                }
+            }
+        }
         for svc in self.services.values() {
             for dep in &svc.depends_on {
                 if !self.services.contains_key(dep) {
@@ -765,6 +882,59 @@ services:
         }
         let e = err("services:\n  a:\n    image: x\n    ports: [{target: 80}]\n");
         assert!(e.contains("short `ports:` syntax"), "{e}");
+    }
+
+    #[test]
+    fn healthchecks_and_service_healthy_conditions() {
+        let c = parse(
+            "services:
+  db:
+    image: x
+    healthcheck:
+      test: [CMD-SHELL, \"true\"]
+      interval: 1m30s
+      retries: 5
+  app:
+    image: x
+    depends_on:
+      db:
+        condition: service_healthy
+",
+        )
+        .unwrap();
+        let h = c.services["db"].health.clone().unwrap();
+        assert_eq!(h.test, vec!["sh", "-c", "true"]);
+        assert_eq!((h.interval_secs, h.retries), (90, 5));
+        assert!(c.services["app"].wait_healthy.contains("db"));
+        let c = parse(
+            "services:
+  a: {image: x, healthcheck: {test: [CMD, ls, /]}}
+",
+        )
+        .unwrap();
+        assert_eq!(
+            c.services["a"].health.as_ref().unwrap().test,
+            vec!["ls", "/"]
+        );
+        assert_eq!(c.services["a"].health.as_ref().unwrap().interval_secs, 30);
+        assert!(err("services:
+  a: {image: x}
+  b: {image: x, depends_on: {a: {condition: service_healthy}}}
+")
+        .contains("no healthcheck"));
+        assert!(err("services:
+  a: {image: x, depends_on: {b: {condition: service_completed_successfully}}}
+  b: {image: x}
+")
+        .contains("not supported"));
+        assert!(err("services:
+  a: {image: x, healthcheck: {test: [FOO]}}
+")
+        .contains("CMD"));
+        assert!(err("services:
+  a: {image: x, healthcheck: {test: 'true', interval: 5}}
+")
+        .contains("duration"));
     }
 
     #[test]

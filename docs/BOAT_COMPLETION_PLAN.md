@@ -66,7 +66,11 @@ evidence, but no more of it is to be built. The work is on the native path
       (`2026-10-28/compose-network-cluster-kvm`, 6 cases, 3 of 3 runs). Two nodes, UDP and
       a standalone (non-cluster) node are NOT VERIFIED; a standalone node gets no network.
 - [ ] Compose: bind mounts, `:ro` and options on volumes.
-- [ ] Compose: health checks and restarts (refused as unknown keys today).
+- [x] Compose: health checks and `depends_on: condition: service_healthy`
+      (`2026-10-28/compose-health-cluster-kvm`, 6 cases, 3 of 3 runs). Checked only during
+      `up`.
+- [ ] Compose: `restart:` (refused today; needs the node's supervisor to cover these sandboxes,
+      not yet checked).
 - [ ] Build: `ADD` of a URL or archive, `SHELL`, `ONBUILD`, `FROM` an earlier stage,
       `RUN --mount`, heredocs.
 - [ ] `hm sandbox vm run`: `-p` done (`2026-10-28/hm-run-publish-cluster-kvm`, 3 of 3);

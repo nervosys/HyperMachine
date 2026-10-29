@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `hm sandbox vm compose`: `healthcheck:` (`test`, `interval`, `retries`, `disable`) and
+  `depends_on: condition: service_healthy`; `up` waits for the dependency's test to exit 0 and
+  fails, taking back what it started, after `retries` failures. Checked on KVM (6 cases, 3 of 3
+  runs). `restart:` is still refused.
 - `hm sandbox vm run -p PORT`: publish a container port like `docker run -d -p`; the image starts
   detached, the sandbox is kept (`--lifetime`), the public port is printed. 3 cases added to the compose
   ports check on KVM (9 cases, 3 of 3 runs). Fixed on the way: `compose up` with a key that has no
