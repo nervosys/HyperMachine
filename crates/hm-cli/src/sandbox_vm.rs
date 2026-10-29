@@ -3672,12 +3672,27 @@ async fn build_template(api: &Api, build: BuildImage) -> Result<Option<String>> 
         }
         reads.push(row);
     }
+    // The earlier stage a stage's `FROM` names, which it is built on.
+    let bases: Vec<Option<usize>> = plans
+        .iter()
+        .enumerate()
+        .map(|(index, plan)| {
+            plans[..index].iter().rposition(|p| {
+                p.name
+                    .as_deref()
+                    .is_some_and(|n| n.eq_ignore_ascii_case(&plan.image))
+            })
+        })
+        .collect();
     let mut needed = vec![false; plans.len()];
     needed[last] = true;
     for index in (0..plans.len()).rev() {
         if needed[index] {
             for source in reads[index].iter().flatten() {
                 needed[*source] = true;
+            }
+            if let Some(base) = bases[index] {
+                needed[base] = true;
             }
         }
     }
@@ -3706,11 +3721,16 @@ async fn build_template(api: &Api, build: BuildImage) -> Result<Option<String>> 
                     None => None,
                 });
             }
+            let base_template = match bases[index] {
+                Some(base) => Some(built[base].as_deref().context("a stage was not built")?),
+                None => None,
+            };
             let made = build_plan(
                 api,
                 &build,
                 &tag,
                 plan,
+                base_template,
                 login.as_ref(),
                 packed.as_ref(),
                 &from_stages,
@@ -3867,6 +3887,7 @@ async fn build_plan(
     build: &BuildImage,
     tag: &str,
     plan: &crate::dockerfile::Plan,
+    base_template: Option<&str>,
     login: Option<&(String, String)>,
     context: Option<&(Vec<u8>, String)>,
     from_stages: &[Option<(Vec<u8>, String)>],
@@ -3937,8 +3958,12 @@ async fn build_plan(
             step
         })
         .collect();
-    let mut start = json!({"fromImage": plan.image, "steps": steps, "force": build.no_cache});
-    if let Some((username, password)) = login {
+    let mut start = match base_template {
+        // `FROM <earlier stage>`: build on that stage's template.
+        Some(base) => json!({"fromTemplate": base, "steps": steps, "force": build.no_cache}),
+        None => json!({"fromImage": plan.image, "steps": steps, "force": build.no_cache}),
+    };
+    if let Some((username, password)) = login.filter(|_| base_template.is_none()) {
         start["fromImageRegistry"] =
             json!({"type": "registry", "username": username, "password": password});
     }

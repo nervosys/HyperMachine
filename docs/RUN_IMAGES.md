@@ -194,8 +194,12 @@ context; the stage templates are deleted when the build is done. The same files
 make the same bytes, so the node's step cache is hit on a repeat build. The
 stages the last one does not read are not built.
 
-Refused, by name: `FROM` an earlier stage (building on a stage's result),
-`COPY --from=IMAGE` (copying out of an image that is not a stage), and a path the
+A stage may also be `FROM` an earlier stage's name: it is built on that stage's template, so
+the files carry over ([checked on KVM](benchmarks/2026-10-29/hm-from-stage-kvm/README.md), a
+chain of three, 3 of 3 runs). Whether the later stage inherits the earlier one's `ENV`,
+`WORKDIR` and `USER` is NOT verified.
+
+Refused, by name: `COPY --from=IMAGE` (copying out of an image that is not a stage), and a path the
 stage does not have (the build fails, naming the path). A copy is limited to 64
 MiB, and is read through the guest's exec in pieces, so it is slow for
 large trees. [Checked on KVM](benchmarks/2026-10-28/hm-multistage-kvm/README.md):

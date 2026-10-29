@@ -76,7 +76,9 @@ evidence, but no more of it is to be built. The work is on the native path
       3 of 3 runs). `COPY <<EOF` is still refused.
 - [x] Build: `ADD` of a local tar / tar.gz (`2026-10-29/hm-build-add-archive-kvm`, 9-case build
       check, 3 of 3 runs). bz2, xz and a tar-less image are NOT verified.
-- [ ] Build: `ADD` of a URL, `ONBUILD`, `FROM` an earlier stage, `RUN --mount`.
+- [x] Build: `FROM` an earlier stage (`2026-10-29/hm-from-stage-kvm`, multistage check 6 cases,
+      3 of 3 runs). Inheriting its `ENV`/`WORKDIR`/`USER` is NOT verified.
+- [ ] Build: `ADD` of a URL, `ONBUILD`, `RUN --mount`.
 - [ ] `hm sandbox vm run`: `-p` done (`2026-10-28/hm-run-publish-cluster-kvm`, 3 of 3);
       `-v`, `--network`, stdin and `-it` not done.
 - [ ] A moved tag (re-pull when the registry's tag moves). Tried 2026-10-29: a client-only

@@ -90,22 +90,12 @@ pub fn parse_stages(text: &str, build_args: &BTreeMap<String, String>) -> Result
     }
     let mut plans: Vec<Plan> = Vec::new();
     let mut start = preamble.lines().count();
-    for (index, stage) in stages.iter().enumerate() {
+    for stage in &stages {
         // Blank lines keep each stage's line numbers those of the whole file.
         let blanks = "\n".repeat(start - preamble.lines().count());
         let padded = format!("{preamble}{blanks}{stage}");
         start += stage.lines().count();
         let plan = parse(&padded, build_args)?;
-        if plans.iter().any(|p| {
-            p.name
-                .as_deref()
-                .is_some_and(|n| n.eq_ignore_ascii_case(&plan.image))
-        }) {
-            bail!(
-                "stage {index}: FROM {} names an earlier stage; building from a stage is not supported",
-                plan.image
-            );
-        }
         plans.push(plan);
     }
     Ok(plans)
@@ -751,11 +741,12 @@ mod tests {
     }
 
     #[test]
-    fn a_stage_used_as_a_base_is_refused_and_errors_keep_the_files_line() {
-        let message = parse_stages("FROM a AS x\nRUN ok\nFROM x\n", &BTreeMap::new())
-            .unwrap_err()
-            .to_string();
-        assert!(message.contains("earlier stage"), "{message}");
+    fn a_stage_may_name_an_earlier_one_as_its_base_and_errors_keep_the_files_line() {
+        let plans = parse_stages("FROM a AS x\nRUN ok\nFROM x\n", &BTreeMap::new()).unwrap();
+        assert_eq!(
+            (plans[0].name.as_deref(), plans[1].image.as_str()),
+            (Some("x"), "x")
+        );
         let message = parse_stages("FROM a\nRUN ok\nFROM b\nFROBNICATE x\n", &BTreeMap::new())
             .unwrap_err()
             .to_string();

@@ -13,7 +13,9 @@ context, and drives the real `hm` binary:
 3. A stage that was only read from is not left behind as a template.
 4. A chain of three stages, each copying from the one before.
 5. COPY --from a path the stage does not have fails the build, naming the path,
-   and builds no template; FROM an earlier stage is refused.
+   and builds no template.
+6. `FROM <earlier stage>` builds on that stage's result, through a chain of three, and
+   leaves no stage template.
 
 Writes report.json and the daemon log into --output. Times are the check's own.
 """
@@ -157,11 +159,21 @@ def main():
             missing = dockerfile_dir("missing", "FROM alpine:3.20 AS build\nRUN true\nFROM alpine:3.20\nCOPY --from=build /nope /nope\n")
             failed, _ = hm("build", "-t", "ms-missing", str(missing))
             assert failed.returncode != 0 and "nothing at /nope" in failed.stderr, failed
-            as_base = dockerfile_dir("asbase", "FROM alpine:3.20 AS build\nRUN true\nFROM build\nRUN true\n")
-            refused, _ = hm("build", "-t", "ms-asbase", str(as_base))
-            assert refused.returncode != 0 and "earlier stage" in refused.stderr, refused
-            return {"missing": failed.stderr.strip()[-200:], "as_base": refused.stderr.strip()[:200]}
-        case("COPY --from a path the stage lacks fails the build, and FROM an earlier stage is refused", failures)
+            return {"missing": failed.stderr.strip()[-200:]}
+        case("COPY --from a path the stage lacks fails the build, naming the path", failures)
+
+        def from_a_stage():
+            text = ("FROM alpine:3.20 AS base\nRUN echo from-base > /base.txt && mkdir /opt/x\n"
+                    "FROM base AS mid\nRUN echo from-mid > /mid.txt\n"
+                    "FROM mid\nRUN cat /base.txt /mid.txt > /top.txt\n")
+            built, _ = hm("build", "-t", "ms-from", str(dockerfile_dir("fromstage", text)))
+            assert built.returncode == 0, built.stderr[-1000:]
+            ran, _ = hm("run", "--template", "ms-from", "cat", "/top.txt")
+            assert ran.returncode == 0 and ran.stdout == "from-base\nfrom-mid\n", (ran.stdout, ran.stderr[-500:])
+            gone, _ = hm("run", "--template", "ms-from-stage0")
+            assert gone.returncode != 0, "a stage template was left behind"
+            return {"stdout": ran.stdout}
+        case("FROM an earlier stage builds on that stage's result, through a chain, and leaves no stage template", from_a_stage)
 
         report["success"] = True
     finally:
