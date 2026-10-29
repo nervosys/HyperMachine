@@ -86,7 +86,10 @@ evidence, but no more of it is to be built. The work is on the native path
 - [x] Build: `RUN --mount` bind, tmpfs, cache (`2026-10-29/hm-build-run-mount-kvm`, 11-case build
       check, 3 of 3 runs). Copy-in design: no real mount, a cache does not persist, an existing bind
       target is removed afterwards; secret, ssh and `--network` are refused.
-- [ ] Build: `ADD` of a URL, `ONBUILD`.
+- [ ] Build: `ADD` of a URL (left refused, `RUN curl` does the same: build `RUN` steps have a network
+      only when the node runs with `--network` (`builds.rs:583`), no hm check has fetched a URL from
+      a build, and a guest cannot reach a host server at 10.0.2.2, so it could not be verified on
+      KVM), `ONBUILD` (a base image's triggers would need the node to expose the image config).
 - [ ] `hm sandbox vm run`: `-p` done (`2026-10-28/hm-run-publish-cluster-kvm`, 3 of 3);
       `-i` (stdin to EOF, `2026-10-29/hm-run-stdin-kvm`, 3 of 4 runs); `-v`, `--network` and
       `-it` not done.
