@@ -91,8 +91,8 @@ evidence, but no more of it is to be built. The work is on the native path
       a build, and a guest cannot reach a host server at 10.0.2.2, so it could not be verified on
       KVM), `ONBUILD` (a base image's triggers would need the node to expose the image config).
 - [ ] `hm sandbox vm run`: `-p` done (`2026-10-28/hm-run-publish-cluster-kvm`, 3 of 3);
-      `-i` (stdin to EOF, `2026-10-29/hm-run-stdin-kvm`, 3 of 4 runs); `-v`, `--network` and
-      `-it` not done.
+      `-i` (stdin to EOF, `2026-10-29/hm-run-stdin-kvm`, 3 of 4 runs); `-v` named volumes
+      (`2026-10-29/hm-run-volume-kvm`, 3 of 3); `--network` and `-it` not done.
 - [ ] A moved tag (re-pull when the registry's tag moves). Tried 2026-10-29: a client-only
       `run --pull` (delete the template, pull again) failed 3 of 3 runs on KVM, because the node
       refuses to delete a template built from an image (409 "only snapshots are deleted"), and

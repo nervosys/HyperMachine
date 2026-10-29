@@ -123,6 +123,19 @@ def main():
             return {"echoed_bytes": len(echoed.stdout)}
         case("-i sends standard input to the command (quotes, $ and non-ASCII intact); an over-long input is refused", stdin_reaches_the_command)
 
+        def named_volume():
+            wrote, _ = hm("-v", "runvol:/data", "alpine:3.20", "sh", "-c", "echo persisted > /data/f")
+            assert wrote.returncode == 0, wrote.stderr[-400:]
+            assert "runvol" in [v["name"] for v in get("/volumes")], get("/volumes")
+            read, _ = hm("-v", "runvol:/mnt/elsewhere", "alpine:3.20", "cat", "/mnt/elsewhere/f")
+            assert read.returncode == 0 and read.stdout == "persisted\n", (read.stdout, read.stderr[-300:])
+            without, _ = hm("alpine:3.20", "cat", "/data/f")
+            assert without.returncode != 0 and without.stdout == "", without
+            host, _ = hm("-v", "/srv/data:/data", "alpine:3.20", "true")
+            assert host.returncode != 0 and "volume names" in host.stderr, host
+            return {"read": read.stdout.strip()}
+        case("-v NAME:/path mounts a named volume that outlives the run; a host path is refused", named_volume)
+
         def entrypoint_and_user():
             who, _ = hm("curlimages/curl", "id", "-u")
             assert who.returncode == 0 and who.stdout.strip() not in ("", "0"), who

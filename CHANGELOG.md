@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `hm sandbox vm run -v NAME:/path`: mount a named volume (created if missing, kept afterwards); host
+  directories are refused. Checked on KVM (3 of 3 runs).
 - `RUN --mount=type=bind|tmpfs|cache` in `hm sandbox vm build`: the mount lasts for one RUN (a bind
   source is copied in, targets are removed afterwards; a cache is not kept between builds). `secret`,
   `ssh` and `--network` are refused. Checked on KVM (3 of 3 runs).

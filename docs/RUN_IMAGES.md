@@ -124,6 +124,14 @@ there is no `-t`. It cannot be combined with `-p`. [Checked on KVM](benchmarks/2
 3 of 4 runs passed (the fourth stalled in an unrelated case); input larger than the limit and a
 binary stream are NOT verified.
 
+## Volumes: `run -v`
+
+`hm sandbox vm run -v NAME:/guest/path IMAGE CMD` mounts a named volume, creating it when the node
+has none; the volume is kept afterwards and the next run can mount it anywhere. Only names are
+accepted: a host directory (`-v ./data:/data`) is refused, as is a `:ro` suffix.
+[Checked on KVM](benchmarks/2026-10-29/hm-run-volume-kvm/README.md), 3 of 3 runs; several volumes and
+a non-root image `USER` are NOT verified.
+
 ## Publishing a port from `run`
 
 `hm sandbox vm run -p 8080:80 IMAGE [CMD]` (like `docker run -d -p`) starts the image

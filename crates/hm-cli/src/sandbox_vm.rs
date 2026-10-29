@@ -284,6 +284,11 @@ pub enum VmCommand {
         /// (read to its end first; at most 256 KiB)
         #[arg(short = 'i', long = "stdin")]
         stdin: bool,
+        /// Mount a named volume, like `docker run -v`: `NAME:/guest/path`. The
+        /// volume is created if it does not exist and kept afterwards. A host
+        /// directory is not a name, so it is refused
+        #[arg(short = 'v', long = "volume", value_name = "NAME:/PATH", value_parser = disk_mount)]
+        volume: Vec<(String, String)>,
         /// Publish a container port, like `docker run -d -p`: `80`, `8080:80`,
         /// `53/udp`. The command then starts detached and the sandbox is kept
         /// (see --lifetime); the public port is printed. Needs a control plane
@@ -2761,6 +2766,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             env,
             keep,
             stdin,
+            volume,
             publish,
             lifetime,
             timeout,
@@ -2790,6 +2796,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                     env,
                     keep,
                     stdin,
+                    volumes: volume,
                     publish,
                     lifetime,
                     timeout,
@@ -4038,6 +4045,8 @@ struct RunImage {
     publish: std::collections::BTreeMap<u16, &'static str>,
     /// Bytes to feed the command's standard input.
     stdin: Option<Vec<u8>>,
+    /// Named volumes to mount (`-v`): name and guest path.
+    volumes: Vec<(String, String)>,
     /// How long a detached sandbox lives.
     lifetime: u64,
     timeout: u64,
@@ -4169,6 +4178,15 @@ async fn run_image(api: &Api, run: RunImage) -> Result<i32> {
     }
     if let Some(memory_mb) = run.memory_mb {
         body["memoryMB"] = json!(memory_mb);
+    }
+    if !run.volumes.is_empty() {
+        let names: Vec<String> = run.volumes.iter().map(|(n, _)| n.clone()).collect();
+        ensure_volume_names(api, &names).await?;
+        body["volumeMounts"] = run
+            .volumes
+            .iter()
+            .map(|(name, path)| json!({"name": name, "path": path}))
+            .collect();
     }
     let created = api
         .request(Method::POST, &["v2", "sandboxes"], Some(body))
@@ -4448,6 +4466,7 @@ async fn compose_start(
                 keep: true,
                 publish: std::collections::BTreeMap::new(),
                 stdin: None,
+                volumes: Vec::new(),
                 lifetime: 0,
                 timeout: 1,
                 build_wait,
@@ -4601,19 +4620,32 @@ async fn join_project_network(api: &Api, id: &str, project: &str) -> Result<()> 
 /// Create the project's declared volumes that do not exist yet. A volume
 /// outlives `down` (it holds data), and is reused by the next `up`.
 async fn ensure_volumes(api: &Api, project: &str, parsed: &crate::compose::Compose) -> Result<()> {
-    if parsed.volumes.is_empty() {
+    let names: Vec<String> = parsed
+        .volumes
+        .iter()
+        .map(|v| crate::compose::volume_name(project, v))
+        .collect();
+    ensure_volume_names(api, &names).await
+}
+
+/// Create the volumes among `names` that the node does not have yet.
+async fn ensure_volume_names(api: &Api, names: &[String]) -> Result<()> {
+    if names.is_empty() {
         return Ok(());
     }
     let listed = api
         .request_bounded(Method::GET, &["volumes"], None, 1024 * 1024)
         .await?;
-    let have: std::collections::BTreeSet<&str> = listed
+    let mut have: std::collections::BTreeSet<String> = listed
         .as_array()
-        .map(|a| a.iter().filter_map(|v| v["name"].as_str()).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v["name"].as_str().map(str::to_string))
+                .collect()
+        })
         .unwrap_or_default();
-    for volume in &parsed.volumes {
-        let name = crate::compose::volume_name(project, volume);
-        if have.contains(name.as_str()) {
+    for name in names {
+        if !have.insert(name.clone()) {
             continue;
         }
         api.request_bounded(
@@ -4981,6 +5013,23 @@ mod tests {
         assert_eq!(paths, ["app/a", "app/b"]);
         let changed = reproducible(&tar_of(&[("app/a", 1, b"ONE"), ("app/b", 2, b"two")])).unwrap();
         assert_ne!(a, changed);
+    }
+
+    #[test]
+    fn run_volume_takes_a_name_and_refuses_a_host_path() {
+        assert_eq!(
+            disk_mount("data:/var/lib/app").unwrap(),
+            ("data".to_string(), "/var/lib/app".to_string())
+        );
+        for bad in [
+            "/srv/data:/data",
+            "./data:/data",
+            "C:\\data:/data",
+            "data",
+            "data:relative",
+        ] {
+            assert!(disk_mount(bad).is_err(), "{bad}");
+        }
     }
 
     #[test]
