@@ -15,7 +15,8 @@ build context, and drives the real `hm` binary:
 5. Building the same thing again is quicker (the node's step cache).
 6. `SHELL` changes how a shell-form RUN runs (errexit stops a build the default shell finishes).
 7. `RUN` here-documents (`cat <<EOF > file`, and a bare `RUN <<EOT` script) run.
-8. A failing RUN fails the build at its step with a non-zero exit and no
+8. `ADD` of a local tar or tar.gz unpacks it into the destination; a zip is copied whole.
+9. A failing RUN fails the build at its step with a non-zero exit and no
    template; COPY --from an image (not a stage) is refused before anything is sent.
    Multi-stage builds are in check-hm-multistage-kvm.py.
 
@@ -213,6 +214,32 @@ def main():
             assert ran.stdout == want, (ran.stdout, ran.stderr[-300:])
             return {"stdout": ran.stdout}
         case("RUN here-documents: `RUN cat <<EOF > file` keeps its body and `RUN <<EOT` runs as a script", heredocs)
+
+        def add_archive():
+            import io, tarfile
+            ctx = args.output / "addtar"
+            ctx.mkdir()
+            for name, mode in [("data.tar.gz", "w:gz"), ("plain.tar", "w")]:
+                with tarfile.open(ctx / name, mode) as tar:
+                    for member, body in [("inner/a.txt", b"alpha\n"), ("b.txt", b"beta\n")]:
+                        info = tarfile.TarInfo(member)
+                        info.size = len(body)
+                        tar.addfile(info, io.BytesIO(body))
+            (ctx / "site.zip").write_bytes(b"not really a zip\n")
+            (ctx / "Dockerfile").write_text(
+                "FROM alpine:3.20\n"
+                "ADD data.tar.gz /srv/data\n"
+                "ADD plain.tar /srv/plain/\n"
+                "ADD site.zip /srv/site.zip\n")
+            built, _ = hm("build", "-t", "addtar", str(ctx))
+            assert built.returncode == 0, built.stderr[-800:]
+            ran, _ = hm("run", "--template", "addtar", "sh", "-c",
+                        "cat /srv/data/inner/a.txt /srv/data/b.txt /srv/plain/inner/a.txt; "
+                        "cat /srv/site.zip; ls /tmp/.hm-add-* 2>&1 | head -1")
+            want = "alpha\nbeta\nalpha\nnot really a zip\n"
+            assert ran.stdout.startswith(want) and "No such file" in ran.stdout + ran.stderr, (ran.stdout, ran.stderr[-300:])
+            return {"stdout": ran.stdout}
+        case("ADD unpacks a local tar and tar.gz into the destination, copies a zip whole, and leaves no temp file", add_archive)
 
         report["success"] = True
     finally:

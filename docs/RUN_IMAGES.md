@@ -159,9 +159,14 @@ failing step ends the build at that step with a non-zero exit and no template.
 
 Checked on KVM, 6 cases on 3 runs
 ([evidence](benchmarks/2026-10-19/hm-build-kvm/README.md)). Not done:
-`ADD` of a URL or archive, `ONBUILD`; `LABEL`, `EXPOSE`,
+`ADD` of a URL, `ONBUILD`; `LABEL`, `EXPOSE`,
 `HEALTHCHECK` and `VOLUME` are accepted with a warning and ignored. See the
 evidence's "Not verified" list.
+
+`ADD` of a local `.tar`, `.tar.gz`, `.tgz`, `.tar.bz2` or `.tar.xz` unpacks it into the
+destination directory (copied aside, unpacked with the image's `tar` or busybox, removed);
+other files, a zip included, are copied whole. [Checked on KVM](benchmarks/2026-10-29/hm-build-add-archive-kvm/README.md)
+for tar and tar.gz (3 of 3 runs); bz2 and xz are NOT verified.
 
 `SHELL ["/bin/sh", "-ec"]` (JSON form only) sets how later shell-form `RUN` and
 `CMD`/`ENTRYPOINT` lines are run; exec forms are unaffected. [Checked on KVM](benchmarks/2026-10-28/hm-build-shell-kvm/README.md)

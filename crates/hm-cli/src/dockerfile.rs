@@ -275,10 +275,31 @@ pub fn parse(text: &str, build_args: &BTreeMap<String, String>) -> Result<Plan> 
                     )));
                 }
                 for source in paths {
-                    if keyword == "ADD" && (source.contains("://") || is_archive(&source)) {
+                    if keyword == "ADD" && source.contains("://") {
                         return Err(at(format!(
-                            "ADD of {source}: only plain local files are supported; use COPY, or RUN curl / tar"
+                            "ADD of {source}: only local files are supported; use COPY, or RUN curl"
                         )));
+                    }
+                    if keyword == "ADD" && is_archive(&source) {
+                        // Docker unpacks a local archive into the destination
+                        // directory: copy it aside, unpack, remove it.
+                        let aside = format!("/tmp/.hm-add-{}.tar", plan.steps.len());
+                        let mut copy = step(
+                            "COPY",
+                            vec![source, aside.clone(), owner.clone(), mode.clone()],
+                        );
+                        copy.from_context = true;
+                        plan.steps.push(copy);
+                        let into = quote(&dest);
+                        plan.steps.push(step(
+                            "RUN",
+                            vec![format!(
+                                "mkdir -p {into} && {{ tar -xf {aside} -C {into} 2>/dev/null \
+                                 || /bin/busybox tar -xf {aside} -C {into}; }}; \
+                                 status=$?; rm -f {aside}; exit $status"
+                            )],
+                        ));
+                        continue;
                     }
                     let mut copy = step(
                         "COPY",
@@ -341,7 +362,7 @@ fn step(kind: &'static str, args: Vec<String>) -> Step {
 }
 
 fn is_archive(source: &str) -> bool {
-    [".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tar.xz", ".zip"]
+    [".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tar.xz"]
         .iter()
         .any(|ext| source.ends_with(ext))
 }
@@ -752,7 +773,6 @@ mod tests {
                 "RUN flags",
             ),
             ("FROM a\nADD https://x.example/f /f\n", "ADD of"),
-            ("FROM a\nADD app.tar.gz /srv/\n", "ADD of"),
             ("FROM a\nCOPY <<EOF /x\nhi\nEOF\n", "here-document"),
             ("FROM a\nRUN cat <<EOF\nx\n", "never closed"),
             ("FROM a\nSHELL /bin/bash -c\n", "SHELL needs a JSON array"),
@@ -787,6 +807,24 @@ mod tests {
             ]
         );
         assert!(plan.steps.iter().any(|s| s.kind == "ENV"));
+    }
+
+    #[test]
+    fn add_of_a_local_archive_unpacks_it_and_a_zip_is_copied_whole() {
+        let plan = parse(
+            "FROM a\nADD app.tar.gz /srv/app\nADD site.zip /srv/\n",
+            &BTreeMap::new(),
+        )
+        .unwrap();
+        let kinds: Vec<&str> = plan.steps.iter().map(|s| s.kind).collect();
+        assert_eq!(kinds, ["COPY", "RUN", "COPY"]);
+        assert_eq!(plan.steps[0].args[1], "/tmp/.hm-add-0.tar");
+        let run = &plan.steps[1].args[0];
+        assert!(
+            run.contains("mkdir -p '/srv/app'") && run.contains("rm -f /tmp/.hm-add-0.tar"),
+            "{run}"
+        );
+        assert_eq!(plan.steps[2].args[0], "site.zip");
     }
 
     #[test]

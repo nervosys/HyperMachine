@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `hm sandbox vm build`: `ADD` of a local tar archive unpacks it into the destination, as Docker
+  does; a zip is copied whole. Checked on KVM for tar and tar.gz (build check now 9 cases, 3 of 3
+  runs). `ADD` of a URL is still refused.
 - `hm sandbox vm build`: `RUN` here-documents (`RUN cat <<EOF > f`, and `RUN <<EOT` as a script).
   Checked on KVM (build check now 8 cases, 3 of 3 runs). `COPY <<EOF` is still refused.
 - `hm sandbox vm build`: the `SHELL` instruction (JSON form) for shell-form `RUN`, `CMD` and
