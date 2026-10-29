@@ -121,13 +121,19 @@ pub fn parse(text: &str, build_args: &BTreeMap<String, String>) -> Result<Plan> 
         };
         let keyword = word.to_ascii_uppercase();
         if rest.contains("<<") && matches!(keyword.as_str(), "COPY" | "ADD") {
-            let heredoc = rest
+            let first_line = rest.lines().next().unwrap_or("");
+            let heredoc = first_line
                 .split_whitespace()
                 .any(|w| w.starts_with("<<") && w.len() > 2);
             if heredoc {
-                return Err(at(format!(
-                    "{keyword} with a here-document is not supported"
-                )));
+                if keyword == "ADD" || !seen_from {
+                    return Err(at(format!(
+                        "{keyword} with a here-document is not supported"
+                    )));
+                }
+                copy_heredoc(rest, &lookup(&args, &env), &mut plan)
+                    .map_err(|e| at(e.to_string()))?;
+                continue;
             }
         }
         match keyword.as_str() {
@@ -383,7 +389,7 @@ fn logical_lines(text: &str) -> Result<Vec<(usize, String)>> {
             if text
                 .split_whitespace()
                 .next()
-                .is_some_and(|w| w.eq_ignore_ascii_case("RUN"))
+                .is_some_and(|w| w.eq_ignore_ascii_case("RUN") || w.eq_ignore_ascii_case("COPY"))
             {
                 for (marker, strip_tabs) in heredoc_markers(&text) {
                     let mut closed = false;
@@ -413,6 +419,83 @@ fn logical_lines(text: &str) -> Result<Vec<(usize, String)>> {
         lines.push((number, text.trim().to_string()));
     }
     Ok(lines)
+}
+
+/// `COPY [--chown= --chmod=] <<EOF [<<EOF2 ...] DEST` with its bodies: each
+/// body becomes a file (named by its marker under a DEST ending in `/`, else
+/// DEST itself), written by a RUN so nothing is uploaded. An unquoted marker
+/// expands ARG/ENV variables, as in Docker; a quoted one keeps the body as is.
+fn copy_heredoc(rest: &str, vars: &Lookup<'_>, plan: &mut Plan) -> Result<()> {
+    use base64::Engine;
+    let (head, body) = rest.split_once('\n').unwrap_or((rest, ""));
+    let (flags, operands) = split_flags(head);
+    let (mut owner, mut mode) = (String::new(), String::new());
+    for flag in flags {
+        match flag.split_once('=') {
+            Some(("--chown", v)) => owner = v.to_string(),
+            Some(("--chmod", v)) => mode = v.to_string(),
+            _ if flag.starts_with("--link") => {}
+            _ => bail!("COPY flag {flag} is not supported with a here-document"),
+        }
+    }
+    let mut words: Vec<&str> = operands.split_whitespace().collect();
+    let dest = words.pop().filter(|d| !d.starts_with("<<"));
+    let Some(dest) = dest else {
+        bail!("COPY needs a destination after the here-document");
+    };
+    let dest = substitute(dest, vars)?;
+    let markers = heredoc_markers(&words.join(" "));
+    if markers.len() != words.len() {
+        bail!("COPY with a here-document takes only here-documents as sources");
+    }
+    if markers.len() > 1 && !dest.ends_with('/') {
+        bail!("COPY of several here-documents needs a destination ending in /");
+    }
+    let mut lines = body.lines();
+    for (word, (marker, strip_tabs)) in words.iter().zip(markers) {
+        let mut text = String::new();
+        loop {
+            let line = lines
+                .next()
+                .ok_or_else(|| anyhow!("here-document {marker} is never closed"))?;
+            let line = if strip_tabs {
+                line.trim_start_matches('\t')
+            } else {
+                line
+            };
+            if line == marker {
+                break;
+            }
+            text.push_str(line);
+            text.push('\n');
+        }
+        let quoted = word.contains('\'') || word.contains('"');
+        if !quoted {
+            text = substitute(&text, vars)?;
+        }
+        let target = if dest.ends_with('/') {
+            format!("{dest}{marker}")
+        } else {
+            dest.clone()
+        };
+        let dir = target
+            .rsplit_once('/')
+            .map_or(".", |(d, _)| if d.is_empty() { "/" } else { d });
+        let mut command = format!(
+            "mkdir -p {} && echo '{}' | /bin/busybox base64 -d > {}",
+            quote(dir),
+            base64::engine::general_purpose::STANDARD.encode(text.as_bytes()),
+            quote(&target)
+        );
+        if !mode.is_empty() {
+            command.push_str(&format!(" && chmod {} {}", quote(&mode), quote(&target)));
+        }
+        if !owner.is_empty() {
+            command.push_str(&format!(" && chown {} {}", quote(&owner), quote(&target)));
+        }
+        plan.steps.push(step("RUN", vec![command]));
+    }
+    Ok(())
 }
 
 /// The here-document markers on an instruction line, in order, and whether
@@ -764,7 +847,9 @@ mod tests {
                 "RUN flags",
             ),
             ("FROM a\nADD https://x.example/f /f\n", "ADD of"),
-            ("FROM a\nCOPY <<EOF /x\nhi\nEOF\n", "here-document"),
+            ("FROM a\nADD <<EOF /x\nhi\nEOF\n", "here-document"),
+            ("FROM a\nCOPY <<EOF\nhi\nEOF\n", "destination"),
+            ("FROM a\nCOPY <<A <<B /d\na\nA\nb\nB\n", "ending in /"),
             ("FROM a\nRUN cat <<EOF\nx\n", "never closed"),
             ("FROM a\nSHELL /bin/bash -c\n", "SHELL needs a JSON array"),
             ("FROM a\nONBUILD RUN x\n", "ONBUILD"),
@@ -797,6 +882,48 @@ mod tests {
                 "/bin/sh <<-X\n\tset -e\n\tX"
             ]
         );
+        assert!(plan.steps.iter().any(|s| s.kind == "ENV"));
+    }
+
+    #[test]
+    fn a_copy_here_document_is_written_by_a_run() {
+        use base64::Engine;
+        let decode = |s: &str| {
+            let b64 = s
+                .split("echo '")
+                .nth(1)
+                .unwrap()
+                .split('\'')
+                .next()
+                .unwrap();
+            String::from_utf8(
+                base64::engine::general_purpose::STANDARD
+                    .decode(b64)
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        let plan = parse(
+            "FROM a\nARG V=1\nCOPY --chmod=755 <<EOF /etc/a.conf\nv=$V\nEOF\n\
+             COPY <<'Q' <<-R /out/\nraw $V\nQ\n\tx\n\tR\nENV A=b\n",
+            &BTreeMap::new(),
+        )
+        .unwrap();
+        let runs: Vec<&str> = plan
+            .steps
+            .iter()
+            .filter(|s| s.kind == "RUN")
+            .map(|s| s.args[0].as_str())
+            .collect();
+        assert_eq!(runs.len(), 3);
+        assert!(plan.steps.iter().all(|s| s.kind != "COPY"));
+        assert!(runs[0].starts_with("mkdir -p '/etc' && echo '"));
+        assert!(runs[0].ends_with("> '/etc/a.conf' && chmod '755' '/etc/a.conf'"));
+        assert_eq!(decode(runs[0]), "v=1\n");
+        assert!(runs[1].ends_with("> '/out/Q'"));
+        assert_eq!(decode(runs[1]), "raw $V\n");
+        assert!(runs[2].ends_with("> '/out/R'"));
+        assert_eq!(decode(runs[2]), "x\n");
         assert!(plan.steps.iter().any(|s| s.kind == "ENV"));
     }
 

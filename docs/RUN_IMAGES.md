@@ -182,7 +182,9 @@ for tar and tar.gz (3 of 3 runs); bz2 and xz are NOT verified.
 `CMD`/`ENTRYPOINT` lines are run; exec forms are unaffected. [Checked on KVM](benchmarks/2026-10-28/hm-build-shell-kvm/README.md)
 (one case added to the build check, 3 of 3 runs). A `RUN` may use a here-document
 (`RUN cat <<EOF > /f`, or `RUN <<EOT` to run the body as a script with `/bin/sh`);
-[checked on KVM](benchmarks/2026-10-28/hm-build-heredoc-kvm/README.md), 3 of 3 runs; `COPY <<EOF`
+[checked on KVM](benchmarks/2026-10-28/hm-build-heredoc-kvm/README.md), 3 of 3 runs. `COPY <<EOF /dest` writes each
+here-document as a file (named by its marker under a `/` destination; `--chmod`/`--chown` apply;
+[checked on KVM](benchmarks/2026-10-29/hm-build-copy-heredoc-kvm/README.md), 3 of 3 runs); `ADD <<EOF`
 is refused. The shell must exist in the image: a
 `SHELL` naming `/bin/bash` in an image without it fails at the first `RUN`.
 

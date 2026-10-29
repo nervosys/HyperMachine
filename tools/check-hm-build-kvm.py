@@ -241,6 +241,24 @@ def main():
             return {"stdout": ran.stdout}
         case("ADD unpacks a local tar and tar.gz into the destination, copies a zip whole, and leaves no temp file", add_archive)
 
+        def copy_heredoc():
+            doc = args.output / "copyheredoc"
+            doc.mkdir()
+            (doc / "Dockerfile").write_text(
+                "FROM alpine:3.20\n"
+                "ARG WHO=world\n"
+                "COPY --chmod=755 <<EOF /usr/local/bin/greet\n#!/bin/sh\necho hello $WHO\nEOF\n"
+                "COPY <<'RAW' <<-TWO /etc/conf/\nraw $WHO 'q'\nRAW\n\tindented\n\tTWO\n"
+                "ENV AFTER=yes\n")
+            built, _ = hm("build", "-t", "copyheredoc", str(doc))
+            assert built.returncode == 0, built.stderr[-800:]
+            ran, _ = hm("run", "--template", "copyheredoc", "sh", "-c",
+                        "greet; stat -c %a /usr/local/bin/greet; cat /etc/conf/RAW /etc/conf/TWO; echo after=$AFTER")
+            want = "hello world\n755\nraw $WHO 'q'\nindented\nafter=yes\n"
+            assert ran.stdout == want, (ran.stdout, ran.stderr[-300:])
+            return {"stdout": ran.stdout}
+        case("COPY <<EOF writes each here-document as a file (expanded or raw, --chmod, several into a directory)", copy_heredoc)
+
         report["success"] = True
     finally:
         if daemon.poll() is None:

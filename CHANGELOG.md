@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `COPY <<EOF /dest` in `hm sandbox vm build`: each here-document is written as a file by a build
+  step (no upload); `--chmod`/`--chown` apply. Checked on KVM (3 of 3 runs).
 - `hm sandbox vm run -i`: send standard input (to its end, up to 256 KiB) to the command. Checked on
   KVM (3 of 4 runs; the fourth stalled in an unrelated cold-boot case). Not interactive.
 - `hm sandbox vm build`: `FROM <earlier stage>` builds on that stage's result. Checked on KVM (a

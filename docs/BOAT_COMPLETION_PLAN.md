@@ -76,7 +76,9 @@ evidence, but no more of it is to be built. The work is on the native path
       status recorded by the node. Checked by reading code, not run).
 - [x] Build: `SHELL` (`2026-10-28/hm-build-shell-kvm`, 7-case build check, 3 of 3 runs).
 - [x] Build: `RUN` here-documents (`2026-10-28/hm-build-heredoc-kvm`, 8-case build check,
-      3 of 3 runs). `COPY <<EOF` is still refused.
+      3 of 3 runs).
+- [x] Build: `COPY <<EOF` (`2026-10-29/hm-build-copy-heredoc-kvm`, 10-case build check, 3 of 3
+      runs). `ADD <<EOF` is still refused; an image without busybox is NOT verified.
 - [x] Build: `ADD` of a local tar / tar.gz (`2026-10-29/hm-build-add-archive-kvm`, 9-case build
       check, 3 of 3 runs). bz2, xz and a tar-less image are NOT verified.
 - [x] Build: `FROM` an earlier stage (`2026-10-29/hm-from-stage-kvm`, multistage check 7 cases,
