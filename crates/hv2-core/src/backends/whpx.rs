@@ -846,6 +846,9 @@ impl WhpxVm {
         }
 
         let vcpu = Arc::new(WhpxVcpu::new(self.partition, vcpu_id)?);
+        if let Some(ptr) = self.guest_memory {
+            let _ = vcpu.ram.set((ptr as usize, self.memory_size));
+        }
         self.vcpus.write().push(vcpu.clone());
         Ok(vcpu)
     }
@@ -1377,6 +1380,9 @@ pub struct WhpxVcpu {
     /// An MMIO load whose device has not answered yet: where the answer goes
     /// and where the guest resumes once it has.
     pending_mmio_load: parking_lot::Mutex<Option<PendingMmioLoad>>,
+    /// The VM's RAM as (host address, size), set by `create_vcpu`. Read only to
+    /// fetch an instruction WHP cut short at a page edge.
+    ram: std::sync::OnceLock<(usize, u64)>,
 }
 
 /// An MMIO load waiting for its data. See [`WhpxVcpu::set_mmio_result`].
@@ -1436,6 +1442,7 @@ impl WhpxVcpu {
                 vp_index,
                 stats: Arc::new(RwLock::new(InterruptStats::new())),
                 pending_mmio_load: parking_lot::Mutex::new(None),
+                ram: std::sync::OnceLock::new(),
             })
         }
     }
@@ -1495,6 +1502,55 @@ impl WhpxVcpu {
         }
     }
 
+    /// Read up to 15 bytes of the instruction at `rip` from guest memory,
+    /// translating each page it touches. Stops early at an untranslatable page,
+    /// so the result may be short.
+    #[cfg(target_os = "windows")]
+    fn fetch_instruction(&self, rip: u64) -> Vec<u8> {
+        let mut out = Vec::with_capacity(15);
+        while out.len() < 15 {
+            let gva = rip.wrapping_add(out.len() as u64);
+            let mut result = WHV_TRANSLATE_GVA_RESULT::default();
+            let mut gpa = 0u64;
+            // SAFETY: WHvTranslateGva FFI call; the partition and vp_index are valid
+            // and both out-pointers refer to live locals.
+            let hr = unsafe {
+                WHvTranslateGva(
+                    self.partition,
+                    self.vp_index,
+                    gva,
+                    WHV_TRANSLATE_GVA_VALIDATE_EXECUTE,
+                    &mut result,
+                    &mut gpa,
+                )
+            };
+            if hr != S_OK || result.ResultCode != 0 {
+                break;
+            }
+            let to_page_end = 4096 - (gva & 0xFFF) as usize;
+            let want = (15 - out.len()).min(to_page_end);
+            let Some(&(base, size)) = self.ram.get() else {
+                break;
+            };
+            let Some(offset) = crate::memory::host_offset(size, gpa) else {
+                break;
+            };
+            let in_one_range = crate::memory::host_offset(size, gpa + want as u64 - 1)
+                .is_some_and(|end| end == offset + want as u64 - 1);
+            if !in_one_range {
+                break;
+            }
+            // SAFETY: host_offset put gpa..gpa+want inside one RAM range, so the
+            // read stays within the buffer WhpxVm allocated, which outlives
+            // its vCPUs' runs.
+            let chunk = unsafe {
+                std::slice::from_raw_parts((base as *const u8).add(offset as usize), want)
+            };
+            out.extend_from_slice(chunk);
+        }
+        out
+    }
+
     /// Turn a memory-access exit into an MMIO exit by decoding the instruction.
     ///
     /// A store has everything it needs now: the value is in a register or an
@@ -1531,8 +1587,18 @@ impl WhpxVcpu {
                 bytes,
             ))
         };
-        let decoded = decode(bytes, length)
-            .ok_or_else(|| refuse("not a plain mov, movzx, movsx or movsxd"))?;
+        // WHP hands over only the bytes on the faulting instruction's first page,
+        // so one that crosses a page boundary arrives cut short (and with no
+        // length). Read it again through the guest's page tables.
+        let fetched;
+        let decoded = match decode(bytes, length) {
+            Some(decoded) => decoded,
+            None => {
+                fetched = self.fetch_instruction(ctx.VpContext.Rip);
+                decode(&fetched, length)
+                    .ok_or_else(|| refuse("not a plain mov, movzx, movsx or movsxd"))?
+            }
+        };
         let next_rip = ctx.VpContext.Rip + decoded.length as u64;
 
         match (decoded.access, is_write) {

@@ -456,6 +456,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   program starts, the bounding set included.
 
 ### Fixed
+- WHPX stopped a guest whose MMIO instruction straddled a page boundary:
+  WHP gave only the bytes on the first page (`[66]`, length 0), the decoder
+  refused them and the vCPU died. The instruction is now read again through
+  the guest's page tables (`WHvTranslateGva`) when the bytes WHP gave do not
+  decode. Checked on this host with a Botnix kernel that put a 16-bit store
+  on a page edge: the unfixed code reproduces the error, the fixed code boots
+  to the expected console line (1 run each; not a repeated check). Not
+  verified: an instruction that crosses into a page the guest has not mapped,
+  and HVF, which has its own exit path.
 - A keystroke on WHPX or HVF could be followed by an interrupt for an empty
   keyboard buffer (a stray `0x00` read from port 0x60, about one
   `key_delivery` run in fifteen). The i8042 raised IRQ 1 on the userspace PIC

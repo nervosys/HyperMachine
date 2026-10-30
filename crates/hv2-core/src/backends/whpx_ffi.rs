@@ -770,6 +770,17 @@ pub union WHV_RUN_VP_EXIT_DATA {
     pub AsUINT64: [UINT64; 22],
 }
 
+// WHV_TRANSLATE_GVA_RESULT - outcome of WHvTranslateGva (ResultCode 0 = success)
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct WHV_TRANSLATE_GVA_RESULT {
+    pub ResultCode: u32,
+    pub Reserved: u32,
+}
+
+/// WHvTranslateGvaFlagValidateExecute
+pub const WHV_TRANSLATE_GVA_VALIDATE_EXECUTE: u32 = 0x4;
+
 // WHV_MEMORY_ACCESS_CONTEXT - MMIO access context
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -1024,6 +1035,16 @@ extern "system" {
         Flags: UINT32,
     ) -> HRESULT;
 
+    /// Translate a guest virtual address through the vCPU's page tables
+    pub fn WHvTranslateGva(
+        Partition: WHV_PARTITION_HANDLE,
+        VpIndex: UINT32,
+        Gva: u64,
+        TranslateFlags: UINT32,
+        TranslationResult: *mut WHV_TRANSLATE_GVA_RESULT,
+        Gpa: *mut u64,
+    ) -> HRESULT;
+
     /// Get virtual processor registers
     pub fn WHvGetVirtualProcessorRegisters(
         Partition: WHV_PARTITION_HANDLE,
@@ -1131,6 +1152,18 @@ pub unsafe fn WHvCancelRunVirtualProcessor(
     _: WHV_PARTITION_HANDLE,
     _: UINT32,
     _: UINT32,
+) -> HRESULT {
+    E_FAIL
+}
+
+#[cfg(not(target_os = "windows"))]
+pub unsafe fn WHvTranslateGva(
+    _: WHV_PARTITION_HANDLE,
+    _: UINT32,
+    _: u64,
+    _: UINT32,
+    _: *mut WHV_TRANSLATE_GVA_RESULT,
+    _: *mut u64,
 ) -> HRESULT {
     E_FAIL
 }

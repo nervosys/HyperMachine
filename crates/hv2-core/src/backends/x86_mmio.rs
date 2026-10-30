@@ -345,6 +345,17 @@ mod tests {
     }
 
     #[test]
+    fn an_instruction_cut_at_a_page_edge_needs_its_second_page() {
+        // mov %ax,(%rdi), split after the operand-size prefix: WHP reported
+        // only [0x66] with length 0.
+        assert!(decode(&[0x66], 0).is_none());
+        assert!(decode(&[0x66, 0x89], 0).is_none());
+        let got = decode(&[0x66, 0x89, 0x07], 0).unwrap();
+        assert_eq!(got.length, 3);
+        assert!(matches!(got.access, Access::Store { size: 2, .. }));
+    }
+
+    #[test]
     fn the_length_is_computed_when_the_hypervisor_gives_none() {
         // The 16 bytes WHP reported for a real iowrite8: mov %dil,(%rsi) and
         // whatever followed it.
