@@ -1,0 +1,40 @@
+=== A-70: a pristine api.env must REFUSE to start ===
+  PASS  A-70 placeholder secrets refuse to start
+  PASS  A-70 the refusal names the variable
+  PASS  real secrets start the service and log in
+
+=== A-72: settings + accounts persist across a restart ===
+  PASS  A-72 security settings survived
+  PASS  A-72 accounts survived
+
+=== A-66/A-67/A-72: backup contents and permissions ===
+  PASS  A-72 backup captures settings.json
+  PASS  backup captures accounts.json
+  PASS  A-67 archive is 0600 (was 0644)
+  PASS  A-85 retention note present
+
+=== A-71: backup_dir warnings under the unit's confinement ===
+  PASS  A-71 private-/tmp warning fires
+  PASS  A-71 silent on a supported path
+
+=== A-73: five control-plane restarts, no NFLOG race ===
+  PASS  A-73 zero kernel NFLOG refusals across 5 restarts
+  PASS  A-73 API returned after every restart
+  PASS  A-73 observation re-established after restarts
+
+=== A-52 + A-72: backup/restore round trip actually restores SETTINGS ===
+  PASS  A-52 restore reports both stores restored
+  PASS  A-52 the restore ended the caller's session
+  PASS  A-72 settings restored live, before any restart (7, not the post-backup 99)
+  PASS  the pre-backup account is present live, before any restart
+  PASS  the post-backup account is gone live, before any restart
+  PASS  A-72 settings restored after a restart (7, not the post-backup 99)
+  PASS  the pre-backup account is present after a restart
+  PASS  the post-backup account is gone after a restart
+  PASS  A-67 accounts.json still 0600 after a restore
+  PASS  A-67 settings.json still 0600 after a restore
+
+=== enforcement still real ===
+  PASS  a real block reaches the kernel ruleset
+
+================ 25 passed, 0 failed ================
