@@ -1,0 +1,22 @@
+[INFO] Setting up 4 GiB identity mapping
+[INFO] Page tables setup
+[INFO] Booting with PVH Boot Protocol
+[INFO] Found PCI device vendor=8086 device=1237 in slot=0
+[INFO] Found PCI device vendor=1af4 device=1042 in slot=4
+[INFO] PCI Device: 0:4.0 1af4:1042
+[INFO] Bar: type=MemorySpace64 address=0xd0040000 size=0x4000
+[INFO] Bar: type=MemorySpace32 address=0x0 size=0x0
+[INFO] Bar: type=MemorySpace32 address=0x0 size=0x0
+[INFO] Bar: type=MemorySpace32 address=0x0 size=0x0
+[INFO] Bar: type=MemorySpace32 address=0x0 size=0x0
+[INFO] Bar: type=Unused address=0x0 size=0x0
+[INFO] Updated BARs: type=MemorySpace64 address=d0040000 size=4000
+[INFO] Updated BARs: type=MemorySpace32 address=0 size=0
+[INFO] Updated BARs: type=MemorySpace32 address=0 size=0
+[INFO] Updated BARs: type=MemorySpace32 address=0 size=0
+[INFO] Updated BARs: type=MemorySpace32 address=0 size=0
+[INFO] Updated BARs: type=Unused address=0 size=0
+[INFO] Virtio block device configured. Capacity: 11392 sectors
+[ERROR] Failed to find EFI partition: HeaderNotFound
+PANIC: panicked at src/main.rs:290:5:
+Unable to boot from any virtio-blk device
