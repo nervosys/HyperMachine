@@ -65,11 +65,14 @@ evidence, but no more of it is to be built. The work is on the native path
 - [x] Compose: networks between services, by service name, on a cluster node
       (`2026-10-28/compose-network-cluster-kvm`, 6 cases, 3 of 3 runs). Two nodes, UDP and
       a standalone (non-cluster) node are NOT VERIFIED; a standalone node gets no network.
-- [ ] Compose: bind mounts, `:ro` and options on volumes.
+- [x] Compose: bind mounts, `:ro` and options on volumes: DECLINED 2026-10-29 (owner delegated the
+      call). The sandbox API has named volumes only; a host path would be a copy-in with no live
+      link, and `:ro` needs a server change. Refused with a message; use a named volume.
 - [x] Compose: health checks and `depends_on: condition: service_healthy`
       (`2026-10-28/compose-health-cluster-kvm`, 6 cases, 3 of 3 runs). Checked only during
       `up`.
-- [ ] Compose: `restart:` (refused today; the node's restart supervisor
+- [x] Compose: `restart:` DECLINED beyond `"no"` 2026-10-29 (owner delegated the call): `"no"`/`false`
+      is accepted (unit-tested), `always`/`on-failure`/`unless-stopped` stay refused. Reason: the node's restart supervisor
       (`machines.rs` `supervise`, `RestartPolicy` always/never) covers machines only; `POST /sandboxes`
       has no restart field and the v2 sandbox code has no restart logic. Needs an owner decision:
       a node change for sandboxes, or compose creating machines. `on-failure` also needs exit
@@ -95,7 +98,8 @@ evidence, but no more of it is to be built. The work is on the native path
       (`2026-10-29/hm-run-volume-kvm`, 3 of 3); `--network PROJECT` (joins a compose
       project's network, `2026-10-29/hm-run-network-cluster-kvm`, 3 of 3); `-it` not done (the exec
       API has no tty).
-- [ ] A moved tag (re-pull when the registry's tag moves). Tried 2026-10-29: a client-only
+- [x] A moved tag: DECLINED 2026-10-29 (owner delegated the call). `docker run` does not re-pull a
+      moved tag either; the way to refresh is to build under a new name. Tried 2026-10-29: a client-only
       `run --pull` (delete the template, pull again) failed 3 of 3 runs on KVM, because the node
       refuses to delete a template built from an image (409 "only snapshots are deleted"), and
       a repeat `POST /templates` for the same name is a 409 "exists". Not shipped; it needs a

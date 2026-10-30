@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Compose accepts `restart: "no"` (and `false`); the other policies are refused with the reason
+  (unit-tested only).
 - `hm sandbox vm run --network PROJECT`: join a compose project's private network so its services
   resolve by bare name (cluster node with private networks). Checked on KVM (3 of 3 runs).
 - `hm sandbox vm run -v NAME:/path`: mount a named volume (created if missing, kept afterwards); host

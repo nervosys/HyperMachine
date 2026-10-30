@@ -112,7 +112,8 @@ until it exits 0, and fails (taking back what it started) after `retries` failur
 `service_healthy` wait on a service with no health check is refused. Unlike Docker there is no
 `start_period` or `timeout`, and health is checked only during `up`: nothing watches it afterwards.
 [KVM check](benchmarks/2026-10-28/compose-health-cluster-kvm/README.md) (6 cases, 3 of 3 runs).
-`restart:` is still refused; `condition: service_completed_successfully` is refused.
+`restart: "no"` is accepted (it is what happens anyway); `always`, `on-failure` and `unless-stopped`
+are refused because the node restarts machines, not sandboxes (unit-tested only); `condition: service_completed_successfully` is refused.
 
 ## Standard input: `run -i`
 

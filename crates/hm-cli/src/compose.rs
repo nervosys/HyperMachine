@@ -43,6 +43,7 @@ struct RawService {
     ports: Option<Value>,
     volumes: Option<Value>,
     healthcheck: Option<RawHealth>,
+    restart: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -542,6 +543,16 @@ pub fn parse(text: &str) -> Result<Compose> {
         if let Some(bad) = env.keys().find(|k| k.is_empty()) {
             bail!("service {name:?}: environment name {bad:?} is empty");
         }
+        // A service is never restarted after it exits, which is `restart: "no"`;
+        // the other policies need a node that restarts sandboxes.
+        match &svc.restart {
+            None | Some(Value::Bool(false)) => {}
+            Some(Value::String(s)) if s.is_empty() || s == "no" => {}
+            Some(other) => bail!(
+                "service {name:?}: restart: {other:?} is not supported (the node restarts \
+                 machines, not sandboxes); only \"no\" is"
+            ),
+        }
         let health = parse_health(&name, svc.healthcheck)?;
         let mut wait_healthy = BTreeSet::new();
         let depends_on = match svc.depends_on {
@@ -940,6 +951,11 @@ services:
     #[test]
     fn unknown_keys_and_bad_environment_are_errors() {
         assert!(err("services:\n  a: {image: x, restart: always}\n").contains("restart"));
+        assert!(err("services:\n  a: {image: x, restart: on-failure}\n").contains("not supported"));
+        for ok in ["\"no\"", "no", "false", "\"\""] {
+            parse(&format!("services:\n  a: {{image: x, restart: {ok}}}\n"))
+                .unwrap_or_else(|e| panic!("restart: {ok}: {e}"));
+        }
         assert!(err("services:\n  a: {image: x, environment: [NOEQUALS]}\n").contains("NAME=VALUE"));
         assert!(
             err("services:\n  a: {image: x, environment: {K: null}}\n").contains("needs a value")
