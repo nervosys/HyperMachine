@@ -468,6 +468,36 @@ def main():
                 return {"image_output": out, "services_after_restore": services}
             case("a checkpoint in the middle of a docker build, with a compose project running, resumes both", build_in_progress)
 
+            def buildkit_in_progress():
+                sandbox = state["sandbox"]
+                sh(sandbox, "rm -rf /tmp/bk && mkdir /tmp/bk && cat > /tmp/bk/Dockerfile <<'EOF'" + chr(10) + SLOW_DOCKERFILE + "EOF")
+                sh(sandbox, "printf 'name: bk\\nservices:\\n  app:\\n    build: .\\n    image: hvslowbk\\n' > /tmp/bk/compose.yaml")
+                sh(sandbox, "docker rmi -f hvslowbk >/dev/null 2>&1; cd /tmp/bk && (docker compose --progress plain build > /tmp/bk.log 2>&1 &) ; true")
+                deadline = time.monotonic() + 120
+                while "sleep 30" not in sh(sandbox, "cat /tmp/bk.log", ok=False):
+                    assert time.monotonic() < deadline, sh(sandbox, "cat /tmp/bk.log", ok=False)
+                    time.sleep(1)
+                assert sh(sandbox, "docker image ls -q hvslowbk | wc -l") == "0", "the build had already finished"
+                status, made = request("POST", f"/sandboxes/{sandbox}/checkpoints", {"name": "mid-buildkit"})
+                assert status in (200, 201), (status, made)
+                deadline = time.monotonic() + 180
+                while sh(sandbox, "docker image ls -q hvslowbk | wc -l") == "0":
+                    assert time.monotonic() < deadline, sh(sandbox, "tail -8 /tmp/bk.log", ok=False)
+                    time.sleep(2)
+                sh(sandbox, "docker rmi -f hvslowbk >/dev/null", 120)
+                status, back = request("POST", f"/sandboxes/{sandbox}/checkpoints/mid-buildkit/restore")
+                assert status in (200, 201, 204), (status, back)
+                assert sh(sandbox, "docker image ls -q hvslowbk | wc -l") == "0", "the finished build's image is back too early"
+                deadline = time.monotonic() + 180
+                while sh(sandbox, "docker image ls -q hvslowbk | wc -l") == "0":
+                    assert time.monotonic() < deadline, sh(sandbox, "tail -8 /tmp/bk.log", ok=False)
+                    time.sleep(2)
+                out = sh(sandbox, "docker run --rm --network none hvslowbk", 120)
+                sh(sandbox, "docker rmi -f hvslowbk >/dev/null; true", 120, ok=False)
+                assert out == "built-after-resume", out
+                return {"image_output": out}
+            case("a checkpoint in the middle of a BuildKit build (docker compose build) resumes it", buildkit_in_progress)
+
             def build_forked():
                 sandbox = state["sandbox"]
 
