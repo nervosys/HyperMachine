@@ -1,0 +1,73 @@
+{
+  "success": true,
+  "purpose": "a destructive script run in a throwaway Ubuntu machine on KVM; the script's verdict is its own",
+  "input_sha256": {
+    "daemon": "2bb8c58cdf228bf685e88c556e4ac12051645f67d3ad529122cd7110be1deb5b",
+    "firmware": "4a0a1e977368f6b15d2198a216bdedf9a350bf5e5ae07e29e695373ec16ad958",
+    "image": "766dc9fdcde1039f502ffcb59471e0082c2d39e6e538a1d4f8fbd7a1f1c36cdb",
+    "guest-agent": "3cb70efe681a691201c94de32dcc0808b1cbf3c54a19e3e9615102a07b90d340",
+    "driver": "1e415f8123b8ebc6692bcaab1cae292939384104359567033bb6ebf8ebd85e5a"
+  },
+  "cases": [
+    {
+      "name": "a machine from the image boots; exec answers as root with systemd as the first process",
+      "success": true,
+      "detail": {
+        "seconds_until_exec_answered": 24.0,
+        "refused_before_that": 8,
+        "whoami": "root",
+        "pid_1": "systemd",
+        "kernel": "6.8.0-147-generic",
+        "os": "Ubuntu 24.04.5 LTS"
+      }
+    },
+    {
+      "name": "the bundle and the binaries are written into the guest and unpacked",
+      "success": true,
+      "detail": {
+        "bundle_tar_bytes": 3322074,
+        "bins_tar_bytes": 3861032,
+        "bins": [
+          "sentry",
+          "sentry-dp",
+          "sentryd"
+        ]
+      }
+    },
+    {
+      "name": "the packages are installed from the distribution's archive",
+      "success": true,
+      "detail": {
+        "installed": [
+          "curl 8.5.0-2ubuntu10.16",
+          "nftables 1.0.9-1ubuntu0.1"
+        ],
+        "reached": "the distribution's apt archive"
+      }
+    },
+    {
+      "name": "the script ran to an exit; what it printed is in script-stdout.txt",
+      "success": true,
+      "detail": {
+        "exit_code": 0,
+        "seconds": 31.9,
+        "pass_lines": 24,
+        "fail_lines": 1,
+        "last_line": "================ 24 passed, 1 failed ================"
+      }
+    },
+    {
+      "name": "the machine is stopped and deleted",
+      "success": true,
+      "detail": {
+        "deleted": true
+      }
+    }
+  ],
+  "apt_packages": "nftables curl",
+  "bins_sha256": {
+    "sentry": "05f710abdf50dbb949219137459b643b71233825e593c68305a7c9a692091945",
+    "sentry-dp": "13e35acdd388e473f6f157274393dcf7d9a8239f7c779a1a5345a08fc4923ded",
+    "sentryd": "b5098d7a1b9002b894ce50ad787f38f37366b14d1596effc4a71f668f7e5b5c6"
+  }
+}
