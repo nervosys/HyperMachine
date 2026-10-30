@@ -86,7 +86,8 @@ evidence, but no more of it is to be built. The work is on the native path
       check, 3 of 3 runs). bz2 and xz: `2026-10-29/hm-build-add-bz2-xz-kvm`, 12-case check, 3 of 3 runs. A tar-less
       image is NOT verified.
 - [x] Build: `FROM` an earlier stage (`2026-10-29/hm-from-stage-kvm`, multistage check 7 cases,
-      3 of 3 runs). `ENV`/`WORKDIR`/`CMD` are inherited; `USER`/`ENTRYPOINT` are NOT verified.
+      3 of 3 runs). `ENV`/`WORKDIR`/`CMD` are inherited, and `USER`/`ENTRYPOINT` too
+      (`2026-10-29/hm-from-stage-user-kvm`, 8 cases, 3 of 3 runs).
 - [x] Build: `RUN --mount` bind, tmpfs, cache (`2026-10-29/hm-build-run-mount-kvm`, 11-case build
       check, 3 of 3 runs). Copy-in design: no real mount, a cache does not persist, an existing bind
       target is removed afterwards; secret, ssh and `--network` are refused.

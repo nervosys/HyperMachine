@@ -226,7 +226,9 @@ stages the last one does not read are not built.
 A stage may also be `FROM` an earlier stage's name: it is built on that stage's template, so
 the files carry over ([checked on KVM](benchmarks/2026-10-29/hm-from-stage-kvm/README.md), a
 chain of three, 7 cases, 3 of 3 runs). The later stage inherits the earlier one's `ENV`,
-`WORKDIR` and `CMD`; `USER` and `ENTRYPOINT` are NOT verified.
+`WORKDIR` and `CMD`, and its `USER` and `ENTRYPOINT`
+([checked](benchmarks/2026-10-29/hm-from-stage-user-kvm/README.md), 3 of 3 runs; overriding them in
+the later stage is NOT verified).
 
 Refused, by name: `COPY --from=IMAGE` (copying out of an image that is not a stage), and a path the
 stage does not have (the build fails, naming the path). A copy is limited to 64

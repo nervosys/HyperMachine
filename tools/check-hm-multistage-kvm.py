@@ -185,6 +185,20 @@ def main():
             return {"stdout": ran.stdout}
         case("a stage built FROM an earlier one inherits its ENV, WORKDIR and CMD", inherits_config)
 
+        def inherits_user_and_entrypoint():
+            text = ("FROM alpine:3.20 AS base\nRUN adduser -D -u 1234 app\nUSER app\n"
+                    "ENTRYPOINT [\"sh\", \"-c\", \"echo ep:$(id -u) $*\", \"--\"]\nCMD [\"default\"]\n"
+                    "FROM base\nRUN true\n")
+            built, _ = hm("build", "-t", "ms-user", str(dockerfile_dir("user", text)))
+            assert built.returncode == 0, built.stderr[-1000:]
+            ran, _ = hm("run", "--template", "ms-user")
+            assert ran.returncode == 0 and ran.stdout == "ep:1234 default\n", (ran.stdout, ran.stderr[-500:])
+            given, _ = hm("run", "--template", "ms-user", "given")
+            assert given.stdout == "ep:1234 given\n", (given.stdout, given.stderr[-500:])
+            return {"stdout": ran.stdout + given.stdout}
+        case("a stage built FROM an earlier one inherits its USER and ENTRYPOINT (a given command replaces CMD only)",
+             inherits_user_and_entrypoint)
+
         report["success"] = True
     finally:
         if daemon.poll() is None:
