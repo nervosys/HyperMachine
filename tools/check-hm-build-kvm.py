@@ -241,6 +241,25 @@ def main():
             return {"stdout": ran.stdout}
         case("ADD unpacks a local tar and tar.gz into the destination, copies a zip whole, and leaves no temp file", add_archive)
 
+        def add_bz2_xz():
+            import io, tarfile
+            ctx = args.output / "addcomp"
+            ctx.mkdir()
+            for name, mode in [("b.tar.bz2", "w:bz2"), ("x.tar.xz", "w:xz")]:
+                with tarfile.open(ctx / name, mode) as tar:
+                    body = (name + " body\n").encode()
+                    info = tarfile.TarInfo("f.txt")
+                    info.size = len(body)
+                    tar.addfile(info, io.BytesIO(body))
+            (ctx / "Dockerfile").write_text(
+                "FROM alpine:3.20\nADD b.tar.bz2 /srv/b\nADD x.tar.xz /srv/x\n")
+            built, _ = hm("build", "-t", "addcomp", str(ctx))
+            assert built.returncode == 0, built.stderr[-800:]
+            ran, _ = hm("run", "--template", "addcomp", "sh", "-c", "cat /srv/b/f.txt /srv/x/f.txt")
+            assert ran.stdout == "b.tar.bz2 body\nx.tar.xz body\n", (ran.stdout, ran.stderr[-300:])
+            return {"stdout": ran.stdout}
+        case("ADD unpacks a tar.bz2 and a tar.xz", add_bz2_xz)
+
         def copy_heredoc():
             doc = args.output / "copyheredoc"
             doc.mkdir()

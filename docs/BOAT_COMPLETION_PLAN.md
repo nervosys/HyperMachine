@@ -83,7 +83,8 @@ evidence, but no more of it is to be built. The work is on the native path
 - [x] Build: `COPY <<EOF` (`2026-10-29/hm-build-copy-heredoc-kvm`, 10-case build check, 3 of 3
       runs). `ADD <<EOF` is still refused; an image without busybox is NOT verified.
 - [x] Build: `ADD` of a local tar / tar.gz (`2026-10-29/hm-build-add-archive-kvm`, 9-case build
-      check, 3 of 3 runs). bz2, xz and a tar-less image are NOT verified.
+      check, 3 of 3 runs). bz2 and xz: `2026-10-29/hm-build-add-bz2-xz-kvm`, 12-case check, 3 of 3 runs. A tar-less
+      image is NOT verified.
 - [x] Build: `FROM` an earlier stage (`2026-10-29/hm-from-stage-kvm`, multistage check 7 cases,
       3 of 3 runs). `ENV`/`WORKDIR`/`CMD` are inherited; `USER`/`ENTRYPOINT` are NOT verified.
 - [x] Build: `RUN --mount` bind, tmpfs, cache (`2026-10-29/hm-build-run-mount-kvm`, 11-case build
