@@ -1,0 +1,340 @@
+[INFO] Setting up 4 GiB identity mapping
+[INFO] Page tables setup
+[INFO] Booting with PVH Boot Protocol
+[INFO] Found PCI device vendor=8086 device=1237 in slot=0
+[INFO] Found PCI device vendor=1af4 device=1042 in slot=4
+[INFO] Found PCI device vendor=1af4 device=1041 in slot=5
+[INFO] PCI Device: 0:4.0 1af4:1042
+[INFO] Bar: type=MemorySpace64 address=0xd0040000 size=0x4000
+[INFO] Bar: type=MemorySpace32 address=0x0 size=0x0
+[INFO] Bar: type=MemorySpace32 address=0x0 size=0x0
+[INFO] Bar: type=MemorySpace32 address=0x0 size=0x0
+[INFO] Bar: type=MemorySpace32 address=0x0 size=0x0
+[INFO] Bar: type=Unused address=0x0 size=0x0
+[INFO] Updated BARs: type=MemorySpace64 address=d0040000 size=4000
+[INFO] Updated BARs: type=MemorySpace32 address=0 size=0
+[INFO] Updated BARs: type=MemorySpace32 address=0 size=0
+[INFO] Updated BARs: type=MemorySpace32 address=0 size=0
+[INFO] Updated BARs: type=MemorySpace32 address=0 size=0
+[INFO] Updated BARs: type=Unused address=0 size=0
+[INFO] Virtio block device configured. Capacity: 8388608 sectors
+[INFO] Found EFI partition
+[INFO] Filesystem ready
+[WARN] Error loading default entry: File(NotFound)
+[INFO] Using EFI boot.
+[INFO] Found bootloader: \EFI\BOOT\BOOTX64.EFI
+[INFO] Executable loaded
+probing: pc0 mem[640K 1022M]
+disk: hd0 hd1* hd2*
+>> OpenBSD/amd64 BOOTX64 3.71
+|witching console to com0
+>> OpenBSD/amd64 BOOTX64 3.71
+boot> 
+-\|/-cannot open hd0a:/etc/random.seed: No such file or directory
+booting hd0a:/bsd: \|/-\4387730|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-+1852417\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/+3896264-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\+0|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\+716800|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\ [118|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\+503808|/-\|/-\|/-\|/-\|/-+355282\|/-\|/-\|/]=0xb2e010
+-\|/-entry point at 0x1001000
+Copyright (c) 1982, 1986, 1989, 1991, 1993
+	The Regents of the University of California.  All rights reserved.
+Copyright (c) 1995-2026 OpenBSD. All rights reserved.  https://www.OpenBSD.org
+OpenBSD 8.0 (RAMDISK_CD) #79: Tue Oct  6 23:24:34 MDT 2026
+    deraadt@amd64.openbsd.org:/usr/src/sys/arch/amd64/compile/RAMDISK_CD
+real mem = 1056964608 (1008MB)
+avail mem = 1025077248 (977MB)
+random: good seed from bootblocks
+mainbus0 at root
+bios0 at mainbus0
+efi0 at bios0: UEFI 2.8
+efi0: RHF rev 0x0
+acpi0 at bios0: ACPI 6.5
+acpi0: tables DSDT FACP APIC
+acpimadt0 at acpi0 addr 0xfee00000: PC-AT compat
+cpu0 at mainbus0: apid 0 (boot processor)
+cpu0: Opteron or Athlon 64, 5273.26 MHz, 1a-44-00
+cpu0: cpuid 1 edx=78bfbff<FPU,VME,DE,PSE,TSC,MSR,PAE,MCE,CX8,APIC,SEP,MTRR,PGE,MCA,CMOV,PAT,PSE36,CFLUSH,MMX,FXSR,SSE,SSE2> ecx=f7f83203<SSE3,PCLMUL,SSSE3,FMA3,CX16,SSE4.1,SSE4.2,x2APIC,MOVBE,POPCNT,DEADLINE,AES,XSAVE,AVX,F16C,RDRAND,HV>
+cpu0: cpuid 6 eax=4<ARAT>
+cpu0: cpuid 7.0 ebx=f1bf07ab<FSGSBASE,TSC_ADJUST,BMI1,AVX2,SMEP,BMI2,ERMS,INVPCID,AVX512F,AVX512DQ,RDSEED,ADX,SMAP,AVX512IFMA,CLFLUSHOPT,CLWB,AVX512CD,SHA,AVX512BW,AVX512VL> ecx=405fc6<AVX512VBMI,UMIP> edx=ac000110<IBRS,IBPB,STIBP,SSBD>
+cpu0: cpuid d.1 eax=f<XSAVEOPT,XSAVEC,XGETBV1,XSAVES>
+cpu0: cpuid 80000001 edx=2fd3fbff<NXE,MMXX,FFXSR,PAGE1GB,RDTSCP,LONG> ecx=c003f7<LAHF,CMPLEG,SVM,AMCR8,ABM,SSE4A,MASSE,3DNOWP,OSVW,TOPEXT,CPCTR>
+cpu0: cpuid 80000007 edx=100<ITSC>
+cpu0: cpuid 80000008 ebx=5302d005<IBPB,IBRS,STIBP,STIBP_ALL,SSBD,VIRTSSBD>
+cpu0: 48KB 64b/line 12-way D-cache, 32KB 64b/line 8-way I-cache, 1MB 64b/line 16-way L2 cache, 32MB 64b/line 16-way L3 cache
+cpu0: apic clock running at 1001MHz
+ioapic0 at mainbus0: apid 1 pa 0xfec00000, version 11, 24 pins, remapped
+acpiprt0 at acpi0: bus 0 (PCI0)
+com0 at acpi0 COM1 addr 0x3f8/0x8 irq 4: ns16550a, 16 byte fifo
+com0: console
+acpipci0 at acpi0 PCI0
+pvbus0 at mainbus0: KVM
+pci0 at mainbus0 bus 0
+pchb0 at pci0 dev 0 function 0 "Intel 82441FX" rev 0x02
+virtio0 at pci0 dev 4 function 0 "Qumranet Virtio 1.x Storage" rev 0x01
+vioblk0 at virtio0
+virtio0: apic 1 int 10
+scsibus0 at vioblk0: 1 targets
+sd0 at scsibus0 targ 0 lun 0: <VirtIO, Block Device, >
+sd0: 4096MB, 512 bytes/sector, 8388608 sectors
+virtio1 at pci0 dev 5 function 0 "Qumranet Virtio 1.x Network" rev 0x01
+vio0 at virtio1: 1 queue, address 52:54:00:00:00:02
+virtio1: apic 1 int 11
+isa0 at mainbus0
+pckbc0 at isa0 port 0x60/5 irq 1 irq 12
+pckbd0 at pckbc0 (kbd slot)
+wskbd0 at pckbd0 mux 1
+efifb at mainbus0 not configured
+enable mbufs in high memory
+softraid0 at root
+scsibus1 at softraid0: 256 targets
+root on rd0a swap on rd0b dump on rd0b
+WARNING: CHECK AND RESET THE DATE!
+erase ^?, werase ^W, kill ^U, intr ^C, status ^T
+Welcome to the OpenBSD/amd64 8.0 installation program.
+(I)nstall, (U)pgrade, (A)utoinstall or (S)hell? I
+At any prompt except password prompts you can escape to a shell by
+typing '!'. Default answers are shown in []'s and are selected by
+pressing RETURN.  You can exit this program at any time by pressing
+Control-C, but this can leave your system in an inconsistent state.
+Terminal type? [vt220] vt220
+System hostname? (short form, e.g. 'foo') obsd-pf
+Available network interfaces are: vio0 vlan0.
+Network interface to configure? (name, lladdr, '?', or 'done') [vio0] 
+IPv4 address for vio0? (or 'autoconf' or 'none') [autoconf] 
+IPv6 address for vio0? (or 'autoconf' or 'none') [autoconf] none
+Available network interfaces are: vio0 vlan0.
+Network interface to configure? (name, lladdr, '?', or 'done') [done] 
+Using DNS domainname my.domain
+Using DNS nameservers at 10.0.2.3
+Password for root account? (will not echo) 
+Password for root account? (again) 
+Start sshd(8) by default? [yes] no
+Change the default console to com0? [yes] 
+Available speeds are: 9600 19200 38400 57600 115200.
+Which speed should com0 use? (or 'done') [115200] 
+Setup a user? (enter a lower-case loginname, or 'no') [no] 
+What timezone are you in? ('?' for list) [UTC] UTC
+Available disks are: sd0.
+Which disk is the root disk? ('?' for details) [sd0] 
+Encrypt the root disk with a (p)assphrase or (k)eydisk? [no] 
+Disk: sd0	Usable LBA: 34 to 16350 [8388608 Sectors]
+   #: type                                 [       start:         size ]
+------------------------------------------------------------------------
+    : Free                                 [          34:           30 ]
+   0: EFI Sys                              [          64:          960 ]
+   3: OpenBSD                              [        1024:        10368 ]
+    : Free                                 [       11392:         4959 ]
+Use (W)hole disk MBR, whole disk (G)PT, (O)penBSD area or (E)dit? [OpenBSD] G
+Setting OpenBSD GPT partition to whole sd0...done.
+The auto-allocated layout for sd0 is:
+#                size           offset  fstype [fsize bsize   cpg]
+  a:           870.0M           532544  4.2BSD   2048 16384     1 # /
+  b:           220.0M          2314272    swap                    
+  c:          4096.0M                0  unused                    
+  d:          2392.0M          2764832  4.2BSD   2048 16384     1 # /usr
+  e:           354.0M          7663552  4.2BSD   2048 16384     1 # /home
+  i:           260.0M               64   MSDOS                    
+Use (A)uto layout, (E)dit auto layout, or create (C)ustom layout? [a] 
+/dev/rsd0a: 870.0MB in 1781728 sectors of 512 bytes
+5 cylinder groups of 202.50MB, 12960 blocks, 25920 inodes each
+/dev/rsd0e: 354.0MB in 724992 sectors of 512 bytes
+4 cylinder groups of 88.50MB, 5664 blocks, 11328 inodes each
+/dev/rsd0d: 2392.0MB in 4898720 sectors of 512 bytes
+12 cylinder groups of 202.50MB, 12960 blocks, 25920 inodes each
+/dev/sd0a (e8992fc648089959.a) on /mnt type ffs (rw, asynchronous, local)
+/dev/sd0e (e8992fc648089959.e) on /mnt/home type ffs (rw, asynchronous, local, nodev, nosuid)
+/dev/sd0d (e8992fc648089959.d) on /mnt/usr type ffs (rw, asynchronous, local, nodev)
+Let's install the sets!
+Location of sets? (disk http nfs or 'done') [http] 
+HTTP proxy URL? (e.g. 'http://proxy:8080', or 'none') [none] 
+HTTP Server? (hostname, list#, 'done' or '?') [mirror.leaseweb.com] mirror.leaseweb.com
+Server directory? [pub/OpenBSD/8.0/amd64] 
+Select sets by entering a set name, a file name pattern or 'all'. De-select
+sets by prepending a '-', e.g.: '-game*'. Selected sets are labelled '[X]'.
+    [X] bsd           [X] comp80.tgz    [X] xbase80.tgz   [X] xserv80.tgz
+    [X] bsd.rd        [X] man80.tgz     [X] xshare80.tgz
+    [X] base80.tgz    [X] game80.tgz    [X] xfont80.tgz
+Set name(s)? (or 'abort' or 'done') [done] -comp* -man* -game* -x*
+    [X] bsd           [ ] comp80.tgz    [ ] xbase80.tgz   [ ] xserv80.tgz
+    [X] bsd.rd        [ ] man80.tgz     [ ] xshare80.tgz
+    [X] base80.tgz    [ ] game80.tgz    [ ] xfont80.tgz
+Set name(s)? (or 'abort' or 'done') [done] 
+Get/Verify SHA256.sig     0% |                          |     0       --:-- ETA
+Get/Verify SHA256.sig   100% |**************************|  2144       00:00    
+Signature Verified
+Get/Verify bsd            0% |                          |     0       --:-- ETA
+Get/Verify bsd            9% |**                        |  2944 KB    00:10 ETA
+Get/Verify bsd           24% |******                    |  7936 KB    00:06 ETA
+Get/Verify bsd           41% |**********                | 13440 KB    00:04 ETA
+Get/Verify bsd           52% |*************             | 17152 KB    00:03 ETA
+Get/Verify bsd           65% |****************          | 21376 KB    00:02 ETA
+Get/Verify bsd           79% |********************      | 25856 KB    00:01 ETA
+Get/Verify bsd          100% |**************************| 32494 KB    00:06    
+Get/Verify bsd.rd         0% |                          |     0       --:-- ETA
+Get/Verify bsd.rd        48% |************              |  2304 KB    00:01 ETA
+Get/Verify bsd.rd       100% |**************************|  4782 KB    00:01    
+Get/Verify base80.tgz     0% |                          |     0       --:-- ETA
+Get/Verify base80.tgz     0% |                          |  4480 KB    02:01 ETA
+Get/Verify base80.tgz     2% |                          | 13696 KB    01:18 ETA
+Get/Verify base80.tgz     3% |                          | 19328 KB    01:21 ETA
+Get/Verify base80.tgz     5% |*                         | 27520 KB    01:15 ETA
+Get/Verify base80.tgz     7% |*                         | 39040 KB    01:04 ETA
+Get/Verify base80.tgz     8% |**                        | 45440 KB    01:05 ETA
+Get/Verify base80.tgz     9% |**                        | 50560 KB    01:08 ETA
+Get/Verify base80.tgz    10% |**                        | 56960 KB    01:08 ETA
+Get/Verify base80.tgz    11% |**                        | 62592 KB    01:09 ETA
+Get/Verify base80.tgz    12% |***                       | 69504 KB    01:08 ETA
+Get/Verify base80.tgz    14% |***                       | 79232 KB    01:04 ETA
+Get/Verify base80.tgz    15% |***                       | 84480 KB    01:05 ETA
+Get/Verify base80.tgz    16% |****                      | 88960 KB    01:06 ETA
+Get/Verify base80.tgz    17% |****                      | 93952 KB    01:06 ETA
+Get/Verify base80.tgz    18% |****                      | 98944 KB    01:07 ETA
+Get/Verify base80.tgz    19% |****                      |   101 MB    01:07 ETA
+Get/Verify base80.tgz    20% |*****                     |   106 MB    01:07 ETA
+Get/Verify base80.tgz    21% |*****                     |   112 MB    01:07 ETA
+Get/Verify base80.tgz    22% |*****                     |   117 MB    01:06 ETA
+Get/Verify base80.tgz    23% |*****                     |   122 MB    01:06 ETA
+Get/Verify base80.tgz    24% |******                    |   127 MB    01:06 ETA
+Get/Verify base80.tgz    25% |******                    |   133 MB    01:05 ETA
+Get/Verify base80.tgz    26% |******                    |   138 MB    01:05 ETA
+Get/Verify base80.tgz    27% |*******                   |   143 MB    01:04 ETA
+Get/Verify base80.tgz    28% |*******                   |   149 MB    01:04 ETA
+Get/Verify base80.tgz    29% |*******                   |   154 MB    01:03 ETA
+Get/Verify base80.tgz    30% |*******                   |   159 MB    01:02 ETA
+Get/Verify base80.tgz    31% |********                  |   166 MB    01:01 ETA
+Get/Verify base80.tgz    32% |********                  |   172 MB    01:00 ETA
+Get/Verify base80.tgz    33% |********                  |   178 MB    00:59 ETA
+Get/Verify base80.tgz    34% |********                  |   183 MB    00:58 ETA
+Get/Verify base80.tgz    35% |*********                 |   187 MB    00:58 ETA
+Get/Verify base80.tgz    36% |*********                 |   191 MB    00:58 ETA
+Get/Verify base80.tgz    36% |*********                 |   196 MB    00:57 ETA
+Get/Verify base80.tgz    37% |*********                 |   200 MB    00:57 ETA
+Get/Verify base80.tgz    38% |*********                 |   205 MB    00:57 ETA
+Get/Verify base80.tgz    39% |**********                |   209 MB    00:56 ETA
+Get/Verify base80.tgz    40% |**********                |   214 MB    00:55 ETA
+Get/Verify base80.tgz    41% |**********                |   219 MB    00:55 ETA
+Get/Verify base80.tgz    42% |**********                |   223 MB    00:54 ETA
+Get/Verify base80.tgz    42% |**********                |   228 MB    00:54 ETA
+Get/Verify base80.tgz    43% |***********               |   232 MB    00:53 ETA
+Get/Verify base80.tgz    44% |***********               |   236 MB    00:53 ETA
+Get/Verify base80.tgz    45% |***********               |   240 MB    00:53 ETA
+Get/Verify base80.tgz    45% |***********               |   243 MB    00:52 ETA
+Get/Verify base80.tgz    46% |***********               |   248 MB    00:52 ETA
+Get/Verify base80.tgz    47% |************              |   252 MB    00:51 ETA
+Get/Verify base80.tgz    48% |************              |   258 MB    00:50 ETA
+Get/Verify base80.tgz    49% |************              |   263 MB    00:49 ETA
+Get/Verify base80.tgz    50% |*************             |   268 MB    00:48 ETA
+Get/Verify base80.tgz    51% |*************             |   273 MB    00:47 ETA
+Get/Verify base80.tgz    52% |*************             |   278 MB    00:47 ETA
+Get/Verify base80.tgz    53% |*************             |   283 MB    00:46 ETA
+Get/Verify base80.tgz    54% |**************            |   288 MB    00:45 ETA
+Get/Verify base80.tgz    55% |**************            |   293 MB    00:44 ETA
+Get/Verify base80.tgz    56% |**************            |   299 MB    00:43 ETA
+Get/Verify base80.tgz    57% |**************            |   304 MB    00:42 ETA
+Get/Verify base80.tgz    58% |***************           |   310 MB    00:41 ETA
+Get/Verify base80.tgz    59% |***************           |   315 MB    00:40 ETA
+Get/Verify base80.tgz    60% |***************           |   319 MB    00:39 ETA
+Get/Verify base80.tgz    60% |***************           |   322 MB    00:39 ETA
+Get/Verify base80.tgz    61% |***************           |   324 MB    00:39 ETA
+Get/Verify base80.tgz    61% |***************           |   327 MB    00:38 ETA
+Get/Verify base80.tgz    62% |****************          |   330 MB    00:38 ETA
+Get/Verify base80.tgz    62% |****************          |   333 MB    00:38 ETA
+Get/Verify base80.tgz    63% |****************          |   337 MB    00:37 ETA
+Get/Verify base80.tgz    64% |****************          |   342 MB    00:36 ETA
+Get/Verify base80.tgz    65% |****************          |   347 MB    00:35 ETA
+Get/Verify base80.tgz    67% |*****************         |   355 MB    00:33 ETA
+Get/Verify base80.tgz    68% |*****************         |   365 MB    00:31 ETA
+Get/Verify base80.tgz    70% |******************        |   376 MB    00:29 ETA
+Get/Verify base80.tgz    73% |******************        |   389 MB    00:26 ETA
+Get/Verify base80.tgz    75% |*******************       |   399 MB    00:24 ETA
+Get/Verify base80.tgz    77% |********************      |   408 MB    00:22 ETA
+Get/Verify base80.tgz    78% |********************      |   414 MB    00:20 ETA
+Get/Verify base80.tgz    79% |********************      |   419 MB    00:20 ETA
+Get/Verify base80.tgz    79% |********************      |   422 MB    00:19 ETA
+Get/Verify base80.tgz    80% |********************      |   426 MB    00:19 ETA
+Get/Verify base80.tgz    81% |*********************     |   430 MB    00:18 ETA
+Get/Verify base80.tgz    81% |*********************     |   434 MB    00:17 ETA
+Get/Verify base80.tgz    82% |*********************     |   438 MB    00:16 ETA
+Get/Verify base80.tgz    83% |*********************     |   443 MB    00:16 ETA
+Get/Verify base80.tgz    84% |*********************     |   447 MB    00:15 ETA
+Get/Verify base80.tgz    85% |**********************    |   452 MB    00:14 ETA
+Get/Verify base80.tgz    86% |**********************    |   457 MB    00:13 ETA
+Get/Verify base80.tgz    87% |**********************    |   462 MB    00:12 ETA
+Get/Verify base80.tgz    88% |**********************    |   467 MB    00:11 ETA
+Get/Verify base80.tgz    89% |***********************   |   473 MB    00:10 ETA
+Get/Verify base80.tgz    90% |***********************   |   480 MB    00:09 ETA
+Get/Verify base80.tgz    91% |***********************   |   486 MB    00:08 ETA
+Get/Verify base80.tgz    93% |************************  |   493 MB    00:06 ETA
+Get/Verify base80.tgz    94% |************************  |   500 MB    00:05 ETA
+Get/Verify base80.tgz    95% |************************  |   505 MB    00:04 ETA
+Get/Verify base80.tgz    96% |************************  |   510 MB    00:03 ETA
+Get/Verify base80.tgz    97% |************************* |   514 MB    00:02 ETA
+Get/Verify base80.tgz    98% |************************* |   520 MB    00:01 ETA
+Get/Verify base80.tgz    99% |************************* |   525 MB    00:00 ETA
+Get/Verify base80.tgz   100% |**************************|   530 MB    01:37    
+Get/Verify BUILDINFO      0% |                          |     0       --:-- ETA
+Get/Verify BUILDINFO    100% |**************************|    54       00:00    
+Installing bsd            0% |                          |     0       --:-- ETA
+Installing bsd           89% |***********************   | 29184 KB    00:00 ETA
+Installing bsd          100% |**************************| 32494 KB    00:01    
+Installing bsd.rd         0% |                          |     0       --:-- ETA
+Installing bsd.rd       100% |**************************|  4782 KB    00:00    
+Installing base80.tgz     0% |                          |     0       --:-- ETA
+Installing base80.tgz     0% |                          |  4608 KB    01:57 ETA
+Installing base80.tgz     1% |                          |  9472 KB    01:52 ETA
+Installing base80.tgz     3% |                          | 16512 KB    01:35 ETA
+Installing base80.tgz     4% |*                         | 22400 KB    01:33 ETA
+Installing base80.tgz     5% |*                         | 27264 KB    01:34 ETA
+Installing base80.tgz     5% |*                         | 31744 KB    01:36 ETA
+Installing base80.tgz     6% |*                         | 33408 KB    01:46 ETA
+Installing base80.tgz     6% |*                         | 36608 KB    01:50 ETA
+Installing base80.tgz     7% |*                         | 39808 KB    01:53 ETA
+Installing base80.tgz     8% |**                        | 43520 KB    01:54 ETA
+Installing base80.tgz     9% |**                        | 53632 KB    01:40 ETA
+Installing base80.tgz    11% |**                        | 61824 KB    01:33 ETA
+Installing base80.tgz    12% |***                       | 67968 KB    01:30 ETA
+Installing base80.tgz    14% |***                       | 78848 KB    01:22 ETA
+Installing base80.tgz    16% |****                      | 91648 KB    01:13 ETA
+Installing base80.tgz    18% |****                      |    99 MB    01:08 ETA
+Installing base80.tgz    19% |****                      |   103 MB    01:10 ETA
+Installing base80.tgz    21% |*****                     |   115 MB    01:05 ETA
+Installing base80.tgz    24% |******                    |   128 MB    00:59 ETA
+Installing base80.tgz    25% |******                    |   136 MB    00:57 ETA
+Installing base80.tgz    26% |******                    |   142 MB    00:57 ETA
+Installing base80.tgz    28% |*******                   |   151 MB    00:55 ETA
+Installing base80.tgz    30% |*******                   |   163 MB    00:51 ETA
+Installing base80.tgz    33% |********                  |   179 MB    00:46 ETA
+Installing base80.tgz    38% |*********                 |   206 MB    00:39 ETA
+Installing base80.tgz    41% |**********                |   221 MB    00:36 ETA
+Installing base80.tgz    45% |***********               |   238 MB    00:32 ETA
+Installing base80.tgz    49% |************              |   261 MB    00:28 ETA
+Installing base80.tgz    53% |*************             |   285 MB    00:24 ETA
+Installing base80.tgz    58% |***************           |   307 MB    00:21 ETA
+Installing base80.tgz    61% |***************           |   328 MB    00:19 ETA
+Installing base80.tgz    66% |*****************         |   352 MB    00:16 ETA
+Installing base80.tgz    70% |******************        |   376 MB    00:13 ETA
+Installing base80.tgz    74% |*******************       |   393 MB    00:11 ETA
+Installing base80.tgz    77% |********************      |   409 MB    00:10 ETA
+Installing base80.tgz    81% |*********************     |   433 MB    00:08 ETA
+Installing base80.tgz    86% |**********************    |   457 MB    00:05 ETA
+Installing base80.tgz    89% |***********************   |   473 MB    00:04 ETA
+Installing base80.tgz    91% |***********************   |   487 MB    00:03 ETA
+Installing base80.tgz    94% |************************  |   503 MB    00:02 ETA
+Installing base80.tgz    97% |************************* |   517 MB    00:01 ETA
+Installing base80.tgz    99% |************************* |   526 MB    00:00 ETA
+Installing base80.tgz    99% |************************* |   529 MB    00:00 ETA
+Installing base80.tgz   100% |**************************|   530 MB    00:43    
+Extracting etc.tgz        0% |                          |     0       --:-- ETA
+Extracting etc.tgz      100% |**************************|   243 KB    00:00    
+Installing BUILDINFO      0% |                          |     0       --:-- ETA
+Installing BUILDINFO    100% |**************************|    54       00:00    
+Location of sets? (disk http nfs or 'done') [done] 
+Saving configuration files... done.
+Making all device nodes... done.
+fw_update: add none; update none
+Relinking to create unique kernel... done.
+CONGRATULATIONS! Your OpenBSD install has been successfully completed!
+When you login to your new system the first time, please read your mail
+using the 'mail' command.
+Exit to (S)hell, (H)alt or (R)eboot? [reboot] H
+halt: halted by root
+syncing disks... done
+The operating system has halted.
+Please press any key to reboot.

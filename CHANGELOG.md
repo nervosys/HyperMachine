@@ -455,6 +455,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so then could the program. Every capability is now dropped before the
   program starts, the bounding set included.
 
+### Added
+- OpenBSD 8.0 as a machine on KVM: installed to a virtio disk over the serial console (sets over HTTP
+  through the machine's NIC) and booted from its own EFI system partition, with `pf` enabled
+  (`docs/benchmarks/2026-10-30/openbsd-install-pf-kvm/`, 1 install and 1 boot). Not verified:
+  SentryWall's own `pf` code on it, repeatability, restarting the machine.
+
 ### Fixed
 - A virtio driver that never writes `queue_size` got a queue that was never ready: virtio 1.x defines
   the register as the device's maximum until written, but readiness and the ring arithmetic required a

@@ -1,0 +1,181 @@
+[INFO] Setting up 4 GiB identity mapping
+[INFO] Page tables setup
+[INFO] Booting with PVH Boot Protocol
+[INFO] Found PCI device vendor=8086 device=1237 in slot=0
+[INFO] Found PCI device vendor=1af4 device=1042 in slot=4
+[INFO] Found PCI device vendor=1af4 device=1041 in slot=5
+[INFO] PCI Device: 0:4.0 1af4:1042
+[INFO] Bar: type=MemorySpace64 address=0xd0040000 size=0x4000
+[INFO] Bar: type=MemorySpace32 address=0x0 size=0x0
+[INFO] Bar: type=MemorySpace32 address=0x0 size=0x0
+[INFO] Bar: type=MemorySpace32 address=0x0 size=0x0
+[INFO] Bar: type=MemorySpace32 address=0x0 size=0x0
+[INFO] Bar: type=Unused address=0x0 size=0x0
+[INFO] Updated BARs: type=MemorySpace64 address=d0040000 size=4000
+[INFO] Updated BARs: type=MemorySpace32 address=0 size=0
+[INFO] Updated BARs: type=MemorySpace32 address=0 size=0
+[INFO] Updated BARs: type=MemorySpace32 address=0 size=0
+[INFO] Updated BARs: type=MemorySpace32 address=0 size=0
+[INFO] Updated BARs: type=Unused address=0 size=0
+[INFO] Virtio block device configured. Capacity: 8388608 sectors
+[INFO] Found EFI partition
+[INFO] Filesystem ready
+[WARN] Error loading default entry: File(NotFound)
+[INFO] Using EFI boot.
+[INFO] Found bootloader: \EFI\BOOT\BOOTX64.EFI
+[INFO] Executable loaded
+probing: pc0 mem[640K 1022M]
+disk: hd0 hd1* hd2*
+>> OpenBSD/amd64 BOOTX64 3.71
+|witching console to com0
+>> OpenBSD/amd64 BOOTX64 3.71
+boot> 
+|/-\|/-\|/booting hd0a:/bsd: -\|/-\23082933|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|+4822040/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\+449840|/-\|/-\|/-\|/-\|/-\|/-\|/-+0+1376256\ [2116492|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/+137+1568064-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|+1264195/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-]=0x21147e8
+\|/-\|/-entry point at 0x1001000
+[ using 4949992 bytes of bsd ELF symbol table ]
+Copyright (c) 1982, 1986, 1989, 1991, 1993
+	The Regents of the University of California.  All rights reserved.
+Copyright (c) 1995-2026 OpenBSD. All rights reserved.  https://www.OpenBSD.org
+OpenBSD 8.0 (GENERIC) #82: Tue Oct  6 22:58:03 MDT 2026
+    deraadt@amd64.openbsd.org:/usr/src/sys/arch/amd64/compile/GENERIC
+real mem = 1056964608 (1008MB)
+avail mem = 1003630592 (957MB)
+random: good seed from bootblocks
+mpath0 at root
+scsibus0 at mpath0: 256 targets
+mainbus0 at root
+bios0 at mainbus0
+efi0 at bios0: UEFI 2.8
+efi0: RHF rev 0x0
+acpi0 at bios0: ACPI 6.5
+acpi0: sleep states S5
+acpi0: tables DSDT FACP APIC
+acpi0: wakeup devices
+acpimadt0 at acpi0 addr 0xfee00000: PC-AT compat
+cpu0 at mainbus0: apid 0 (boot processor)
+cpu0: Opteron or Athlon 64, 4393.21 MHz, 1a-44-00
+cpu0: cpuid 1 edx=78bfbff<FPU,VME,DE,PSE,TSC,MSR,PAE,MCE,CX8,APIC,SEP,MTRR,PGE,MCA,CMOV,PAT,PSE36,CFLUSH,MMX,FXSR,SSE,SSE2> ecx=f7f83203<SSE3,PCLMUL,SSSE3,FMA3,CX16,SSE4.1,SSE4.2,x2APIC,MOVBE,POPCNT,DEADLINE,AES,XSAVE,AVX,F16C,RDRAND,HV>
+cpu0: cpuid 6 eax=4<ARAT>
+cpu0: cpuid 7.0 ebx=f1bf07ab<FSGSBASE,TSC_ADJUST,BMI1,AVX2,SMEP,BMI2,ERMS,INVPCID,AVX512F,AVX512DQ,RDSEED,ADX,SMAP,AVX512IFMA,CLFLUSHOPT,CLWB,AVX512CD,SHA,AVX512BW,AVX512VL> ecx=405fc6<AVX512VBMI,UMIP> edx=ac000110<IBRS,IBPB,STIBP,SSBD>
+cpu0: cpuid d.1 eax=f<XSAVEOPT,XSAVEC,XGETBV1,XSAVES>
+cpu0: cpuid 80000001 edx=2fd3fbff<NXE,MMXX,FFXSR,PAGE1GB,RDTSCP,LONG> ecx=c003f7<LAHF,CMPLEG,SVM,AMCR8,ABM,SSE4A,MASSE,3DNOWP,OSVW,TOPEXT,CPCTR>
+cpu0: cpuid 80000007 edx=100<ITSC>
+cpu0: cpuid 80000008 ebx=5302d005<IBPB,IBRS,STIBP,STIBP_ALL,SSBD,VIRTSSBD>
+cpu0: 48KB 64b/line 12-way D-cache, 32KB 64b/line 8-way I-cache, 1MB 64b/line 16-way L2 cache, 32MB 64b/line 16-way L3 cache
+cpu0: smt 0, core 0, package 0, type P
+mtrr: CPU supports MTRRs but not enabled by BIOS
+cpu0: apic clock running at 1000MHz
+ioapic0 at mainbus0: apid 1 pa 0xfec00000, version 11, 24 pins, remapped
+acpiprt0 at acpi0: bus 0 (PCI0)
+com0 at acpi0 COM1 addr 0x3f8/0x8 irq 4: ns16550a, 16 byte fifo
+com0: console
+acpipci0 at acpi0 PCI0
+pvbus0 at mainbus0: KVM
+pvclock0 at pvbus0
+pci0 at mainbus0 bus 0
+pchb0 at pci0 dev 0 function 0 "Intel 82441FX" rev 0x02
+virtio0 at pci0 dev 4 function 0 "Qumranet Virtio 1.x Storage" rev 0x01
+vioblk0 at virtio0
+virtio0: apic 1 int 10
+scsibus1 at vioblk0: 1 targets
+sd0 at scsibus1 targ 0 lun 0: <VirtIO, Block Device, >
+sd0: 4096MB, 512 bytes/sector, 8388608 sectors
+virtio1 at pci0 dev 5 function 0 "Qumranet Virtio 1.x Network" rev 0x01
+vio0 at virtio1: 1 queue, address 52:54:00:00:00:02
+virtio1: apic 1 int 11
+isa0 at mainbus0
+isadma0 at isa0
+pckbc0 at isa0 port 0x60/5 irq 1 irq 12
+pckbd0 at pckbc0 (kbd slot)
+wskbd0 at pckbd0 mux 1
+pcppi0 at isa0 port 0x61
+spkr0 at pcppi0
+vmm0 at mainbus0: SVM/RVI
+efifb at mainbus0 not configured
+enable mbufs in high memory
+vscsi0 at root
+scsibus2 at vscsi0: 256 targets
+softraid0 at root
+scsibus3 at softraid0: 256 targets
+root on sd0a (e8992fc648089959.a) swap on sd0b dump on sd0b
+Automatic boot in progress: starting file system checks.
+/dev/sd0a (e8992fc648089959.a): file system is clean; not checking
+/dev/sd0e (e8992fc648089959.e): file system is clean; not checking
+/dev/sd0d (e8992fc648089959.d): file system is clean; not checking
+pf enabled
+clearing /tmp
+starting network
+reordering: ld.so libc libcrypto ssh-agent smtpd-ca smtpd-control smtpd-dispatcher smtpd-lka smtpd-queue smtpd-scheduler sshd-auth sshd-session httpd smtpd sshd.
+openssl: generating isakmpd RSA keys... done.
+openssl: generating iked ECDSA keys... done.
+ssh-keygen: generating new host keys: RSA ECDSA ED25519 MLDSA44-ED25519 
+sshd: (ED25519) SHA256:Rxw8Iw036SF1uPZ6B0ZN+Qcs/vCYrEIWxqYBazf+n+U
+starting early daemons: syslogd pflogd ntpd.
+starting RPC daemons:.
+savecore: no core dump
+checking quotas: done.
+kern.securelevel: 0 -> 1
+creating runtime link editor directory cache.
+preserving editor files.
+starting network daemons: smtpd sndiod.
+running rc.firsttime
+fw_update: add vmm; update none
+Checking for available binary patches...
+Run syspatch(8) to install:
+001_ppp		002_nsd		003_aesgmac	004_video	005_dbupdate
+starting local daemons: cron.
+Sat Oct 31 04:55:28 UTC 2026
+OpenBSD/amd64 (obsd-pf.my.domain) (tty00)
+login: root
+Password:
+OpenBSD 8.0 (GENERIC) #82: Tue Oct  6 22:58:03 MDT 2026
+Welcome to OpenBSD: The proactively secure Unix-like operating system.
+Please use the sendbug(1) utility to report bugs in the system.
+Before reporting a bug, please try to reproduce it with the latest
+version of the code.  With bug reports, please try to ensure that
+enough information to reproduce the problem is enclosed, and if a
+known fix for it exists, include that as well.
+You have new mail.
+obsd-pf# uname -a; sysctl kern.version | head -1; pfctl -s info; pfctl -sr; if
+d -1; pfctl -s info; pfctl -sr; if                                            <config vio0; echo DONE-MARK-$((6*7))
+OpenBSD obsd-pf.my.domain 8.0 GENERIC#82 amd64
+kern.version=OpenBSD 8.0 (GENERIC) #82: Tue Oct  6 22:58:03 MDT 2026
+Status: Enabled for 0 days 00:00:48              Debug: err
+State Table                          Total             Rate
+  current entries                       41               
+  half-open tcp                          0               
+  searches                            4057           84.5/s
+  inserts                               48            1.0/s
+  removals                               7            0.1/s
+Counters
+  match                                 48            1.0/s
+  bad-offset                             0            0.0/s
+  fragment                               0            0.0/s
+  short                                  0            0.0/s
+  normalize                              0            0.0/s
+  memory                                 0            0.0/s
+  bad-timestamp                          0            0.0/s
+  congestion                             0            0.0/s
+  ip-option                              0            0.0/s
+  proto-cksum                            0            0.0/s
+  state-mismatch                         0            0.0/s
+  state-insert                           0            0.0/s
+  state-limit                            0            0.0/s
+  src-limit                              0            0.0/s
+  synproxy                               0            0.0/s
+  translate                              0            0.0/s
+  no-route                               0            0.0/s
+block return all
+pass all flags S/SA
+block return in on ! lo0 proto tcp from any to any port 6000:6010
+block return out log proto tcp all user = 55
+block return out log proto udp all user = 55
+vio0: flags=4808b43<UP,BROADCAST,RUNNING,PROMISC,ALLMULTI,SIMPLEX,MULTICAST,AUTOCONF4> mtu 1500
+	lladdr 52:54:00:00:00:02
+	index 1 priority 0 llprio 3
+	groups: egress
+	media: Ethernet autoselect
+	status: active
+	inet 10.0.2.15 netmask 0xffffff00 broadcast 10.0.2.255
+DONE-MARK-42
+obsd-pf# 
