@@ -29,3 +29,18 @@ modification time is from the install). The copy was deleted afterwards. WSL2, n
   and the `pfctl` arguments were used.
 - Whether traffic is blocked or passed: no packets were sent through the loaded rules.
 - `sshd` is off in this guest, so the `port 22` rule has no listener.
+
+## Second check (embedded anchors), 1 run
+
+SentryWall's session withdrew `embedded.conf` and `inject_shape` as errors in its own script and sent
+[`sentrywall-pf-check2.ksh`](sentrywall-pf-check2.ksh) (two files from `render_embedded_anchor`), run the same way
+on a fresh copy; output in [`result2.txt`](result2.txt), console in [`console2.txt`](console2.txt).
+
+- `/etc/pf.conf` of the installed system has no `anchor` line (`grep -n anchor` printed nothing, rc=1). None
+  was added, so the anchor was loaded with `pfctl -a sentrywall -f` but never evaluated from the main ruleset.
+- `embedded_stateful.conf` and `embedded_lockdown.conf`: `pfctl -nf` rc=0 and load into the anchor rc=0. The
+  second `-nf` printed `warning: table <sentrywall_blocked> already defined in anchor "sentrywall"` (the first
+  file was still loaded). `pfctl -a sentrywall -sr` printed the rules (`port = 22 flags S/SA label "ssh allow"`,
+  `block return in quick inet from 198.51.100.7`, `inet proto tcp ... port = 23`). Showing the empty table: rc=0.
+  `pfctl -a sentrywall -F all`: `2 tables deleted.`, `rules cleared`, rc=0.
+- Not verified: no traffic was sent; the rules were never in the evaluated path.
