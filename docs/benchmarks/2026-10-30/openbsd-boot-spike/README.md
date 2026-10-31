@@ -43,7 +43,10 @@ interrupt was ever lost, the request was simply never seen.
 - `pf` on OpenBSD: the ramdisk has no `pfctl`; it needs a full install to disk (base sets, the GENERIC
   kernel), which needs a network install over the machine's NIC (`vio` driver) or the 839 MB image.
 - That the `vio` (virtio-net) and `vioblk` drivers work for real I/O beyond the installer's first reads.
-- That Ubuntu and the other virtio devices (net, vsock) are unchanged by the fix beyond the unit tests;
-  no KVM re-run of the Ubuntu checks was done after it.
+- That Ubuntu and the other virtio devices are unchanged by the fix beyond the unit tests and **one**
+  KVM re-run: `tools/check-machine-script-kvm.py` with the fixed daemon booted Ubuntu 24.04.5, answered
+  `exec` as root (vsock), took a file bundle, got DHCP and DNS on the virtio NIC, installed `nftables`
+  with `apt`, and printed its script's marker; all 5 cases passed. Not run: the full Ubuntu distro,
+  Docker and snapshot checks.
 - The `hv2-sandboxd` used for attempts 10 and 11 was built in WSL from the working tree with this fix.
 - Repeatability: the installer shell was reached twice; no more.
