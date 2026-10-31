@@ -1,0 +1,70 @@
+== syntax stateful
+rc=0
+== syntax deny
+rc=0
+== syntax lockdown_mgmt
+rc=0
+== syntax embedded
+embedded.conf:6: port only applies to tcp/udp
+embedded.conf:6: skipping rule due to errors
+embedded.conf:6: rule expands to no valid combination
+rc=1
+== syntax t31
+rc=0
+== syntax t32
+t32.conf:1: table name too long, max 31 chars
+rc=1
+== syntax inject_shape
+rc=0
+== main pf.conf
+rc=0
+== load stateful
+rc=0
+block drop in quick from <sentrywall_blocked> to any
+pass quick on lo0 all flags S/SA
+pass out quick all flags S/SA
+block drop in all
+sentrywall_blocked@sentrywall
+== block add
+1/1 addresses added.
+rc=0
+== block show
+   203.0.113.5
+rc=0
+== reload keeps table
+rc=0
+   203.0.113.5
+== block delete
+1/1 addresses deleted.
+rc=0
+== delete missing
+0/1 addresses deleted.
+rc=0
+== load lockdown_mgmt
+rc=0
+block drop in quick from <sentrywall_blocked> to any
+pass in quick inet from <sentrywall_mgmt> to 127.0.0.1 flags S/SA
+pass in quick inet from <sentrywall_mgmt> to 10.0.2.15 flags S/SA
+pass out quick inet from 127.0.0.1 to <sentrywall_mgmt> flags S/SA
+pass out quick inet from 10.0.2.15 to <sentrywall_mgmt> flags S/SA
+pass in quick inet6 from <sentrywall_mgmt> to ::1 flags S/SA
+pass out quick inet6 from ::1 to <sentrywall_mgmt> flags S/SA
+pass quick on lo0 all flags S/SA
+block drop log all
+== load deny
+rc=0
+block drop in quick from <sentrywall_blocked> to any
+pass quick on lo0 all flags S/SA
+block drop log all
+== flush
+1 tables deleted.
+rules cleared
+rc=0
+restored rc=0
+pflog0: flags=141<UP,RUNNING,PROMISC> mtu 33136
+	index 4 priority 0 llprio 3
+117:daemon_execdir=${daemon_execdir}
+190:		${daemon_execdir:+cd ${daemon_execdir} && } \
+383:[ -n "${_rcexecdir}" ] && daemon_execdir=${_rcexecdir}
+SW-DONE-42
+o
