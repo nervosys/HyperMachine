@@ -4,7 +4,7 @@ rm -rf "/var/tmp/$1"
 export KEYS='[]'
 export SETTLE=10
 export EXPECT='[["(S)hell?","S\n"],["# ","sysctl kern.version hw.ncpu hw.physmem hw.model\n"],["hw.model","dmesg | grep -i vio\n"],["vioblk0 at virtio0","pfctl -s info\n"],["Status:","pfctl -sr\n"],["# ","ls /sbin /usr/sbin | tr \"\\n\" \" \"\n"],["pfctl","echo DONE-MARK-$((6*7))\n"],["DONE-MARK-42",""]]'
-python3 /mnt/c/Users/adamm/tmp/blk/obsd_probe.py "$2" "/var/tmp/$1" "$3" 2>&1 | grep -v "^create\|^final\|^console bytes" | head -12
+python3 probe.py "$2" "/var/tmp/$1" "$3" 2>&1 | grep -v "^create\|^final\|^console bytes" | head -12
 python3 - "$1" <<'EOF'
 import sys, re
 t = open(f"/var/tmp/{sys.argv[1]}/console.txt", errors="replace").read().replace("\x00", "")
