@@ -1,42 +1,49 @@
-# OpenBSD 8.0 as a machine on KVM: a spike (kernel boots, stalls at the first disk read)
+# OpenBSD 8.0 as a machine on KVM: boots to the installer shell (pf not yet tested)
 
-Approved by the owner as a trial. An owned `hv2-sandboxd` (WSL2, nested KVM, the same Rust Hypervisor
-Firmware the Ubuntu machines use), `miniroot80.img` from cdn.openbsd.org (5,832,704 bytes, sha256
-`fe268f37…99a` matching the mirror's `SHA256` file; the `.sig` was **not** verified, no `signify`).
-`install80.img` (839 MB) was not used: the download was cut off at 278 MB by the mirror (hash
-mismatch, so it was never booted).
+Approved by the owner as a trial, for SentryWall's `pf` path. An owned `hv2-sandboxd` (WSL2, nested KVM,
+the Rust Hypervisor Firmware the Ubuntu machines use), `miniroot80.img` from cdn.openbsd.org
+(5,832,704 bytes, sha256 `fe268f37…99a`, matching the mirror's `SHA256` file; the `.sig` was **not**
+verified, there is no `signify`). `install80.img` (839 MB) was not used: the download was cut off at
+278 MB by the mirror, so its hash did not match and it was never booted.
 
-| attempt | image | result |
+## Result
+
+**With the queue-size fix below, OpenBSD 8.0 (RAMDISK_CD #79) boots on this stack to its installer
+prompt, and `S` gives a root shell.** One run (attempt 10, repeated as attempt 11). Seen on the
+serial console: ACPI 6.5, `com0` as console, `pvbus0: KVM`, `virtio0 … "Qumranet Virtio 1.x Storage"`,
+`vioblk0`, `sd0: 8MB`, `softraid0`, `root on rd0a`, the installer's `(I)nstall, (U)pgrade,
+(A)utoinstall or (S)hell?`. `sysctl` and `dmesg` run in the shell. **`pfctl` is not in the ramdisk
+(`sh: pfctl: not found`)**, so whether `pf` works is still unknown.
+
+| attempt | what | result |
 |---|---|---|
-| 1 | miniroot as published | firmware: `Failed to find EFI partition: HeaderNotFound`, `Unable to boot from any virtio-blk device`. The image has an MBR with an `ef` partition and no GPT. |
-| 2 | miniroot wrapped in a GPT (`sgdisk -g`, ESP type set; `make-gpt.sh`) | OpenBSD's EFI loader ran, loaded the kernel (`bsd.rd`, ends `]=0xb2e010`) and printed `entry point at 0x1001000`. |
-| 3 | same, keystrokes sent to the console during the boot delay (`set tty com0`, `boot`) | the same. |
+| 1 | miniroot as published | firmware: `Failed to find EFI partition: HeaderNotFound`. The image has an MBR with an `ef` partition and no GPT. |
+| 2, 3 | miniroot wrapped in a GPT (`sgdisk -g`; `make-gpt.sh`) | OpenBSD's EFI loader loads the kernel (`bsd.rd`), prints `entry point at 0x1001000`; the console then shows only a byte ramp (the kernel's console is the EFI framebuffer, which this machine lacks). |
+| 4 | root filesystem rebuilt with `makefs` (`make-com0-root.sh`): `bsd.rd` (sha256 `40cddcb7…e45ce`, matches) plus `/etc/boot.conf` = `stty com0 115200`, `set tty com0`; boot sector and disklabel kept | kernel boots on `com0`, finds `vioblk0`/`sd0`, prints `softraid0 … scsibus1` and **stops**. |
+| 5, 6 | same, 240 s and 600 s | the same line; exits fell from ~1900/s to ~740/s: stuck, not slow. |
+| 7, 8, 9 | a daemon with temporary trace lines (not committed) | The loader's ~37,500 polled reads all completed (kernel read OK). The kernel driver's first request was kicked once and the device answered "nothing available"; no interrupt, no ISR read. The configuration writes showed **OpenBSD never writes `queue_size`** (offset 0x18), where the firmware writes `0x10`. |
+| 10, 11 | with the fix | installer prompt, shell. |
 
-| 4 | miniroot with its root filesystem rebuilt (`make-com0-root.sh`): `bsd.rd` from the mirror (sha256 `40cddcb7…e45ce`, matches) plus `/etc/boot.conf` = `stty com0 115200` / `set tty com0`; the boot sector and disklabel kept | **The OpenBSD 8.0 kernel boots on the serial console** (RAMDISK_CD #79): ACPI 6.5, the IOAPIC, `com0` as console, `pvbus0: KVM`, `virtio0 … "Qumranet Virtio 1.x Storage"`, `vioblk0`, `sd0: 8MB`. It then prints `softraid0 at root` / `scsibus1 at softraid0: 256 targets` and **nothing more**. |
-| 5, 6 | the same, with keys sent when the installer prompt should appear; attempt 6 waited 600 s | no installer prompt, no `root on rd0a` line. Exits fell from ~1900/s (240 s run, 460,510 exits) to ~740/s (600 s run, 445,010): the guest is stuck, not slow. |
+## The defect, and the fix (`crates/hv2-core/src/devices/virtio_queue.rs`)
 
-Attempt 1-3 (no serial console) printed only a byte ramp: that was the kernel running with its console on
-the EFI framebuffer, which this machine has none of.
+virtio 1.x defines `queue_size` as the device's maximum until the driver writes a smaller one, and a
+driver may use it as it is. OpenBSD's does. Our `GuestQueue::is_ready()` required a size the driver had
+written, so its queue never became ready and its first request was never served. Linux and the firmware
+write the size, which is why they worked. The register read already returned the maximum; readiness and
+the ring arithmetic did not. Now `ring_size()` (the driver's size, else the maximum) is used for both.
+`size()` still reports the driver's own value (0 until written). Test:
+`a_driver_that_never_writes_the_queue_size_gets_the_maximum`; the 179 `virtio` tests in `hv2-core`
+pass on Windows, clippy clean.
 
-## Where it stops, and a hypothesis (not tested)
-
-The stall is right after the first thing OpenBSD does with the disk (softraid probes `sd0`). Read from
-`crates/hv2-core` by a subagent and not yet checked by an experiment: the virtio-blk device holds its
-interrupt as a **level** (`signal_used` asserts GSI 10 and only the ISR read releases it), has no MSI-X,
-and the MADT declares GSI 10 **level, active-high** (flags 0x000D); real PCI INTx is active-low. Ubuntu
-works with this; OpenBSD may program the pin differently, so the first completion interrupt could be
-lost. That is a guess: no interrupt was traced.
-
-## Next steps, if continued
-
-- Trace the interrupt: count `KVM_IRQ_LINE` assertions and ISR reads against the guest's reads of `sd0`.
-- Try the MADT flag for the disk's GSI as level/active-low for this one machine (not for Ubuntu) and re-boot.
-- If it reaches the installer prompt: `S` for a shell, `pfctl -s info`; then a full install needs the 839 MB
-  `install80.img`, whose download from the mirror failed at 278 MB.
+My first hypothesis (a level/edge interrupt polarity mismatch) was wrong: the traces showed no
+interrupt was ever lost, the request was simply never seen.
 
 ## Not verified
-- That OpenBSD boots to the installer prompt, a shell or `login:` on this stack (it does not, so far).
-- That its virtio-blk and virtio-net drivers (`vioblk`, `vio`) work against these devices.
-- That `pf` runs; the point of the trial for SentryWall.
-- Everything about `install80.img` (including sets) beyond its partition table.
-- Whether another firmware (OVMF, a BIOS boot) would get further; not tried.
+
+- `pf` on OpenBSD: the ramdisk has no `pfctl`; it needs a full install to disk (base sets, the GENERIC
+  kernel), which needs a network install over the machine's NIC (`vio` driver) or the 839 MB image.
+- That the `vio` (virtio-net) and `vioblk` drivers work for real I/O beyond the installer's first reads.
+- That Ubuntu and the other virtio devices (net, vsock) are unchanged by the fix beyond the unit tests;
+  no KVM re-run of the Ubuntu checks was done after it.
+- The `hv2-sandboxd` used for attempts 10 and 11 was built in WSL from the working tree with this fix.
+- Repeatability: the installer shell was reached twice; no more.

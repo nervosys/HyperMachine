@@ -456,6 +456,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   program starts, the bounding set included.
 
 ### Fixed
+- A virtio driver that never writes `queue_size` got a queue that was never ready: virtio 1.x defines
+  the register as the device's maximum until written, but readiness and the ring arithmetic required a
+  size the driver had written. OpenBSD's driver reads the size and uses it as is, so its first disk
+  request was never served and the kernel waited at `softraid0`. Fixed in `GuestQueue` (the maximum is
+  used when no size was written). OpenBSD 8.0's miniroot now boots on KVM to the installer shell
+  (`docs/benchmarks/2026-10-30/openbsd-boot-spike/`, 2 runs). Not verified: `pf` (the ramdisk has no
+  `pfctl`), real disk I/O past the installer's first reads, and Ubuntu's checks re-run after the change.
 - WHPX stopped a guest whose MMIO instruction straddled a page boundary:
   WHP gave only the bytes on the first page (`[66]`, length 0), the decoder
   refused them and the vCPU died. The instruction is now read again through

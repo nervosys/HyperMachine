@@ -202,6 +202,20 @@ impl GuestQueue {
     /// Zero, values above the maximum, and non powers of two are refused: the
     /// ring index arithmetic below is only correct for a power-of-two size,
     /// and the spec requires one.
+    /// The size the rings are walked with: what the driver wrote, or, for a
+    /// driver that never writes it, the maximum the device reported.
+    ///
+    /// Virtio 1.x defines `queue_size` as the device's maximum until the driver
+    /// writes a smaller one, and a driver may leave it alone (OpenBSD's does).
+    /// [`Self::size`] stays the driver's own value, 0 until it is written.
+    fn ring_size(&self) -> u16 {
+        if self.size == 0 {
+            self.max_size
+        } else {
+            self.size
+        }
+    }
+
     pub fn set_size(&mut self, size: u16) {
         if size > 0 && size <= self.max_size && size.is_power_of_two() {
             self.size = size;
@@ -239,7 +253,7 @@ impl GuestQueue {
     /// the device declines to touch, rather than one that reads address zero.
     pub fn is_ready(&self) -> bool {
         self.ready
-            && self.size > 0
+            && self.ring_size() > 0
             && self.desc_addr != 0
             && self.avail_addr != 0
             && self.used_addr != 0
@@ -305,7 +319,7 @@ impl GuestQueue {
         }
 
         // avail: flags u16, idx u16, then the ring.
-        let slot = self.last_avail_idx % self.size;
+        let slot = self.last_avail_idx % self.ring_size();
         let ring_entry = self.avail_addr + 4 + u64::from(slot) * 2;
         let mut buf = [0u8; 2];
         mem.read_bytes_into(ring_entry, &mut buf)?;
@@ -320,10 +334,10 @@ impl GuestQueue {
 
     /// Read one descriptor, refusing an index outside the negotiated table.
     fn read_desc(&self, mem: &GuestMemory, idx: u16) -> Result<Descriptor> {
-        if idx >= self.size {
+        if idx >= self.ring_size() {
             return Err(Error::Device(format!(
                 "virtqueue descriptor index {idx} is outside a table of {}",
-                self.size
+                self.ring_size()
             )));
         }
         let mut buf = [0u8; DESC_SIZE as usize];
@@ -347,7 +361,7 @@ impl GuestQueue {
             // A well-formed chain visits each descriptor at most once, so the
             // table size is the bound. Exceeding it means a cycle.
             visited += 1;
-            if visited > self.size as usize {
+            if visited > self.ring_size() as usize {
                 return Err(Error::Device(
                     "virtqueue descriptor chain does not terminate".to_string(),
                 ));
@@ -441,14 +455,14 @@ impl GuestQueue {
     /// Publish a consumed chain in the used ring, `len` being the number of
     /// bytes the device wrote into it.
     pub fn add_used(&mut self, mem: &GuestMemory, head: u16, len: u32) -> Result<()> {
-        if self.size == 0 {
+        if self.ring_size() == 0 {
             return Err(Error::Device(
                 "cannot publish a used descriptor on a queue with no size".to_string(),
             ));
         }
 
         // used: flags u16, idx u16, then ring[size] of {id u32, len u32}.
-        let slot = self.next_used_idx % self.size;
+        let slot = self.next_used_idx % self.ring_size();
         let entry = self.used_addr + 4 + u64::from(slot) * 8;
         let mut bytes = [0u8; 8];
         bytes[0..4].copy_from_slice(&u32::from(head).to_le_bytes());
@@ -537,6 +551,41 @@ mod tests {
             .expect("ring entry");
         mem.write_bytes(AVAIL_BASE + 2, &(slot + 1).to_le_bytes())
             .expect("avail idx");
+    }
+
+    #[test]
+    fn a_driver_that_never_writes_the_queue_size_gets_the_maximum() {
+        // OpenBSD's virtio driver reads queue_size and uses it as it is, so the
+        // register is never written. The queue must still become ready and work.
+        let mem = memory();
+        let mut q = GuestQueue::new(QUEUE_SIZE);
+        q.set_desc_addr(DESC_BASE);
+        q.set_avail_addr(AVAIL_BASE);
+        q.set_used_addr(USED_BASE);
+        q.set_ready(true);
+        assert_eq!(q.size(), 0, "the driver's own value is still unset");
+        assert!(q.is_ready());
+        write_desc(
+            &mem,
+            0,
+            Descriptor {
+                addr: DATA_BASE,
+                len: 16,
+                flags: 0,
+                next: 0,
+            },
+        );
+        make_available(&mem, 0, 0);
+        let chain = q.pop(&mem).expect("pop").expect("a chain");
+        assert_eq!(chain.head, 0);
+        q.add_used(&mem, chain.head, 0).expect("used");
+        // a queue with no maximum at all is still never ready
+        let mut none = GuestQueue::new(0);
+        none.set_desc_addr(DESC_BASE);
+        none.set_avail_addr(AVAIL_BASE);
+        none.set_used_addr(USED_BASE);
+        none.set_ready(true);
+        assert!(!none.is_ready());
     }
 
     #[test]
