@@ -58,11 +58,22 @@ try:
     for delay, text in json.loads(os.environ.get("KEYS", "[]")):
         time.sleep(delay)
         print("send", repr(text), req("POST", "/machines/obsd-01/console", raw=text.encode())[0], flush=True)
+    expect = json.loads(os.environ.get("EXPECT", "[]"))
+    done_at = None
     while time.monotonic() - t0 < secs:
-        st, text = req("GET", "/machines/obsd-01/console?tail=20000")
+        st, text = req("GET", "/machines/obsd-01/console?tail=400000")
         text = re.sub(r"\x1b\[[0-9;?]*[a-zA-Z]", "", text if isinstance(text, str) else json.dumps(text))
         if text != last:
             last = text
+            clean = re.sub(r"(\x08 \x08.)+", "", text.replace("\x00", ""))
+            if expect and expect[0][0] in clean:
+                want, send = expect.pop(0)
+                time.sleep(1)
+                print("saw", repr(want), "-> send", repr(send), req("POST", "/machines/obsd-01/console", raw=send.encode())[0], flush=True)
+            if not expect and done_at is None and os.environ.get("EXPECT"):
+                done_at = time.monotonic() + float(os.environ.get("SETTLE", "20"))
+            if done_at is not None and time.monotonic() > done_at:
+                break
             (out / "console.txt").write_text(text)
         st2, m = req("GET", "/machines/obsd-01")
         if st2 == 200 and m.get("state") != "running":
