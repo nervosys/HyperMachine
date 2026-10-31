@@ -1,0 +1,11 @@
+ok: a machine from a distribution's image boots by firmware to its login prompt
+ok: the guest counts its processors, runs systemd as its first process, and took the ACPI tables
+ok: cloud-init read the machine's seed: its name, its ID, and the user data that let this log in
+ok: systemd finished starting, and what failed is named
+ok: with a NIC the guest configured itself by DHCP and resolves a name
+ok: apt-get installs Docker from the distribution's archive, and its service starts
+ok: Docker pulls an image and runs a container
+ok: `systemctl poweroff` stops the machine, and it is left stopped
+ok: started again, it has what was written to its disk and the same processors
+report: /var/tmp/distro-docker-out/report.json
+exit 0
