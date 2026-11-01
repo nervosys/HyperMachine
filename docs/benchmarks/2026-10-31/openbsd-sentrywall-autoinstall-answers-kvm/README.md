@@ -24,9 +24,18 @@ went unused; `/etc/myname` is `sentrywall.my.domain`. No `SHA256.sig` prompt (HT
 - `boot -s` at the boot prompt gave a root shell with no password prompt (the console is `secure`)
   ([`boot2-single-user-attempt.txt`](boot2-single-user-attempt.txt)).
 
+## Single-user read of the installed disk (second attempt, after the host stopped the first)
+
+`boot -s` on a fresh copy, `mount -uw /; mount -a`, then the checks ([`boot3-single-user-checks.txt`](boot3-single-user-checks.txt)):
+
+- root's field in `/etc/master.passwd` is `*************` (13 asterisks).
+- `/etc/ttys`: `console ... off secure` and `tty00 "/usr/libexec/getty std.115200" vt220 on secure`; `/etc/boot.conf`
+  is `stty com0 115200` / `set tty com0`.
+- `/etc/ssh/sshd_config` has only the commented defaults `#PermitRootLogin prohibit-password` and
+  `#PasswordAuthentication yes`; `rcctl ls on` lists `sshd`.
+- `sshd -T`: `sshd: no hostkeys available -- exiting.` (single-user, before first boot); `authorized_keys` is empty.
+
 ## Not verified
 
-- The root password field in `master.passwd` (the installer shell has no `awk`; the single-user read was
-  stopped by the host for low memory and not rerun).
-- `sshd -T` on a booted system (no host keys existed in the installer shell); any ssh login (the guest has no
-  inbound path).
+- The effective `sshd -T` values and any ssh login: no host keys existed in single-user mode, and the guest has
+  no inbound network path.
