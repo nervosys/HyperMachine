@@ -44,3 +44,6 @@ on a fresh copy; output in [`result2.txt`](result2.txt), console in [`console2.t
   `block return in quick inet from 198.51.100.7`, `inet proto tcp ... port = 23`). Showing the empty table: rc=0.
   `pfctl -a sentrywall -F all`: `2 tables deleted.`, `rules cleared`, rc=0.
 - Not verified: no traffic was sent; the rules were never in the evaluated path.
+
+The console files had their carriage returns turned into line ends, so that git's checkout (used by the benchmarks
+workflow) does not see them as modified; the text is otherwise as the console printed it.
