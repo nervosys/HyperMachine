@@ -1,0 +1,50 @@
+AI-BEGIN
+sentrywall# mount | head -3
+
+sh: head: not found
+sentrywall# echo "--1 root password field"; awk -F: '$1=="root"{print $2}' /mn
+wk -F: '$1=="root"{print $2}' /mn                                             <t/etc/master.passwd
+
+--1 root password field
+sh: awk: not found
+sentrywall# echo "--4 console"; grep -n -E 'com0|console' /mnt/etc/ttys /mnt/e
+om0|console' /mnt/etc/ttys /mnt/e                                             <tc/boot.conf
+
+--4 console
+/mnt/etc/ttys:6:console	"/usr/libexec/getty std.9600"	vt220	off secure
+/mnt/etc/boot.conf:1:stty com0 115200
+/mnt/etc/boot.conf:2:set tty com0
+sentrywall# echo "--boot.conf"; cat /mnt/etc/boot.conf
+
+--boot.conf
+stty com0 115200
+set tty com0
+sentrywall# echo "--sshd_config"; grep -n -i -E '^ *(permitrootlogin|passworda
+-E '^ *(permitrootlogin|passworda                                             <uthentication)' /mnt/etc/ssh/sshd_config
+
+--sshd_config
+sentrywall# echo "--3 sshd -T"; chroot /mnt /usr/sbin/sshd -T 2>&1 | grep -i -
+usr/sbin/sshd -T 2>&1 | grep -i -                                             <E 'permitrootlogin|passwordauthentication|hos
+mitrootlogin|passwordauthentication|hos                                       <tkeys|error'
+
+--3 sshd -T
+sshd: no hostkeys available -- exiting.
+
+sentrywall# echo "--authorized_keys"; cut -c1-50 /mnt/root/.ssh/authorized_key
+-50 /mnt/root/.ssh/authorized_key                                             <s; ls -la /mnt/root/.ssh
+
+--authorized_keys
+sh: cut: not found
+total 8
+drwx------  2 root  wheel  512 Nov  1 00:03 .
+drwx------  3 root  wheel  512 Nov  1 00:03 ..
+-rw-------  1 root  wheel    0 Oct  7 04:39 authorized_keys
+sentrywall# echo "--rc.conf.local"; cat /mnt/etc/rc.conf.local; cat /mnt/etc/m
+etc/rc.conf.local; cat /mnt/etc/m                                             <yname
+
+--rc.conf.local
+cat: /mnt/etc/rc.conf.local: No such file or directory
+sentrywall.my.domain
+sentrywall# echo AI-END-$((6*7))
+
+AI-END-42
