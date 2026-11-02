@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- WHPX can read a vCPU's state and write it back (`save_vcpu`/`restore_vcpu`, `backends/whpx_state.rs`): general
+  registers, segments, descriptor tables, CR0-4/8, EFER, APIC base, XCR0, x87/SSE registers and ten MSRs
+  including the TSC. Checked on WHPX with a Linux 6.x guest and the sandbox initramfs: pause, read, write the
+  same state back, read again (equal apart from the TSC, which keeps counting), resume, and the guest ran a
+  command (1 vCPU, runs once in each of 3 invocations). The SDK's XMM control-status struct in `whpx_ffi.rs` was
+  8 bytes where it is 16; nothing used it before. NOT DONE: a whole-VM snapshot still fails on WHPX, because
+  `save_machine` now refuses (the emulated PIC and PIT have no saved form yet; before, the default would have
+  silently left them out). NOT CAPTURED: the XSAVE area (AVX), pending-interruption and interrupt-shadow
+  registers, debug registers, halted vs runnable. NOT VERIFIED: restoring into a different VM (only a
+  write-back into the same one), more than one vCPU, guest memory, devices.
 - Compose accepts `restart: "no"` (and `false`); the other policies are refused with the reason
   (unit-tested only).
 - `hm sandbox vm run --network PROJECT`: join a compose project's private network so its services

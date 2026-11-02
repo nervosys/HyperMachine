@@ -40,6 +40,9 @@ pub mod whpx_ffi;
 pub mod whpx;
 
 #[cfg(target_os = "windows")]
+pub mod whpx_state;
+
+#[cfg(target_os = "windows")]
 pub use whpx::WhpxBackend;
 
 // macOS HVF backend.

@@ -270,6 +270,33 @@ pub enum WHV_REGISTER_NAME {
 
     // Extended control registers
     WHvX64RegisterXCr0 = 0x00000027,
+    WHvX64RegisterXmm0 = 0x00001000,
+    WHvX64RegisterXmm1 = 0x00001001,
+    WHvX64RegisterXmm2 = 0x00001002,
+    WHvX64RegisterXmm3 = 0x00001003,
+    WHvX64RegisterXmm4 = 0x00001004,
+    WHvX64RegisterXmm5 = 0x00001005,
+    WHvX64RegisterXmm6 = 0x00001006,
+    WHvX64RegisterXmm7 = 0x00001007,
+    WHvX64RegisterXmm8 = 0x00001008,
+    WHvX64RegisterXmm9 = 0x00001009,
+    WHvX64RegisterXmm10 = 0x0000100A,
+    WHvX64RegisterXmm11 = 0x0000100B,
+    WHvX64RegisterXmm12 = 0x0000100C,
+    WHvX64RegisterXmm13 = 0x0000100D,
+    WHvX64RegisterXmm14 = 0x0000100E,
+    WHvX64RegisterXmm15 = 0x0000100F,
+    WHvX64RegisterFpMmx0 = 0x00001010,
+    WHvX64RegisterFpMmx1 = 0x00001011,
+    WHvX64RegisterFpMmx2 = 0x00001012,
+    WHvX64RegisterFpMmx3 = 0x00001013,
+    WHvX64RegisterFpMmx4 = 0x00001014,
+    WHvX64RegisterFpMmx5 = 0x00001015,
+    WHvX64RegisterFpMmx6 = 0x00001016,
+    WHvX64RegisterFpMmx7 = 0x00001017,
+    WHvX64RegisterFpControlStatus = 0x00001018,
+    WHvX64RegisterXmmControlStatus = 0x00001019,
+    WHvX64RegisterTsc = 0x00002000,
 
     // MSRs
     WHvX64RegisterEfer = 0x00002001,
@@ -582,6 +609,9 @@ pub struct WHV_X64_FP_CONTROL_STATUS_REGISTER {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct WHV_X64_XMM_CONTROL_STATUS_REGISTER {
+    /// Last x87 data pointer (long mode). The SDK's struct is 16 bytes with
+    /// this first; without it the struct was 8 bytes and read the wrong half.
+    pub LastFpRdp: UINT64,
     pub XmmStatusControl: UINT32,
     pub XmmStatusControlMask: UINT32,
 }

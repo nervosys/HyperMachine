@@ -386,3 +386,100 @@ async fn a_root_filesystem_mounts_from_a_virtio_blk_disk_on_pci() {
         "the root filesystem never mounted within {BOOT_DEADLINE:?}.\nconsole:\n{console}"
     );
 }
+
+/// A paused WHPX guest's vCPU state read, written back unchanged and read
+/// again, then resumed: the registers must match, and the guest must still run.
+///
+/// Needs the same `HV2_TEST_KERNEL`, `HV2_TEST_INITRD`, `HV2_TEST_INITRD_MARKER`
+/// and `HV2_TEST_INITRD_SHELL` as the first test (a shell on the console).
+///
+/// The TSC is left out of the comparison: it counts on between the write and
+/// the next read. So are `RIP`-independent things that cannot differ.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_paused_vcpus_state_survives_a_write_back() {
+    if let Some(why) = unavailable() {
+        eprintln!("skipping: {why}");
+        return;
+    }
+    let (Ok(initrd), Ok(marker), Ok(_)) = (
+        std::env::var("HV2_TEST_INITRD"),
+        std::env::var("HV2_TEST_INITRD_MARKER"),
+        std::env::var("HV2_TEST_INITRD_SHELL"),
+    ) else {
+        eprintln!("skipping: needs HV2_TEST_INITRD, _MARKER and _SHELL");
+        return;
+    };
+    let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
+    let config = VMConfig {
+        name: "linux-whpx-state-test".to_string(),
+        vcpu_count: 1,
+        memory_size: memory_mib() * 1024 * 1024,
+        boot: Some(
+            BootSource::linux(&kernel)
+                .with_cmdline(cmdline_base())
+                .with_initrd(initrd),
+        ),
+        ..Default::default()
+    };
+    let Ok(vm) = VM::new(config) else {
+        eprintln!("skipping: a VM could not be created here");
+        return;
+    };
+    if !vm.executes_guest_code() {
+        eprintln!("skipping: no backend on this host executes guest code");
+        return;
+    }
+    let vm = Arc::new(vm);
+    if let Err(e) = vm.provision().await {
+        eprintln!("skipping: provision failed ({e})");
+        return;
+    }
+    vm.launch().await.expect("the vCPU loop starts");
+    let started = Instant::now();
+    let mut console = String::new();
+    while started.elapsed() < BOOT_DEADLINE && !console.contains(marker.as_str()) {
+        tokio::time::sleep(POLL).await;
+        console = vm.console_output().await;
+    }
+    assert!(
+        console.contains(marker.as_str()),
+        "userspace never came up:\n{console}"
+    );
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    vm.pause().await.expect("the VM pauses");
+    let before = vm.save_vcpu_states().await.expect("the vCPU state is read");
+    vm.restore_vcpu_states(&before)
+        .await
+        .expect("the same state is written back");
+    let after = vm.save_vcpu_states().await.expect("it is read again");
+
+    let strip = |mut s: hv2_core::snapshot::vcpu::VCpuSnapshot| {
+        s.msrs.retain(|m| m.index != 0x10);
+        s
+    };
+    for (b, a) in before.iter().cloned().zip(after.iter().cloned()) {
+        assert_eq!(strip(b), strip(a), "a write-back changed the vCPU's state");
+    }
+    println!(
+        "whpx vcpu state: {} vCPU(s) round-tripped; rip {:#x}, cr3 {:#x}, {} MSRs",
+        before.len(),
+        before[0].general.rip,
+        before[0].system.cr3,
+        before[0].msrs.len()
+    );
+
+    vm.resume().await.expect("the VM resumes");
+    vm.send_serial(b"echo hv2-after-restore-$((6*7))\n")
+        .await
+        .expect("the serial input is accepted");
+    while started.elapsed() < BOOT_DEADLINE && !console.contains("hv2-after-restore-42") {
+        tokio::time::sleep(POLL).await;
+        console = vm.console_output().await;
+    }
+    let _ = vm.stop().await;
+    assert!(
+        console.contains("hv2-after-restore-42"),
+        "the guest did not run after the write-back.\nconsole:\n{console}"
+    );
+}

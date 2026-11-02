@@ -406,6 +406,44 @@ impl HypervisorBackend for WhpxBackend {
         whpx_vcpu.kick()
     }
 
+    /// Read a vCPU's registers for a snapshot. See [`super::whpx_state`] for
+    /// what is and is not captured.
+    async fn save_vcpu(&self, vcpu: &VCpu) -> Result<crate::snapshot::vcpu::VCpuSnapshot> {
+        let vcpu_id = vcpu.id();
+        let whpx_vcpu = {
+            let map = self.vcpu_map.read();
+            map.get(&vcpu_id)
+                .cloned()
+                .ok_or_else(|| Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id)))?
+        };
+        whpx_vcpu.capture_snapshot(vcpu_id)
+    }
+
+    async fn restore_vcpu(
+        &self,
+        vcpu: &VCpu,
+        state: &crate::snapshot::vcpu::VCpuSnapshot,
+    ) -> Result<()> {
+        let vcpu_id = vcpu.id();
+        let whpx_vcpu = {
+            let map = self.vcpu_map.read();
+            map.get(&vcpu_id)
+                .cloned()
+                .ok_or_else(|| Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id)))?
+        };
+        whpx_vcpu.apply_snapshot(state)
+    }
+
+    /// The 8259 and the timer are emulated in userspace here and have no
+    /// saved form yet. The default would answer "nothing to save", and the
+    /// snapshot would restore a guest whose interrupt controller is at its
+    /// reset state; refuse instead.
+    async fn save_machine(&self) -> Result<Option<crate::snapshot::machine::MachineState>> {
+        Err(Error::NotSupported(
+            "whpx backend cannot yet save the emulated PIC and PIT".into(),
+        ))
+    }
+
     fn guest_memory_host_addr(&self) -> Option<u64> {
         // The pages the partition runs the guest in. Without this the device
         // model keeps a buffer of its own and a virtio device reads rings that
