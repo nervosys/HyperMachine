@@ -370,6 +370,77 @@ impl TimerDevice {
         self.base_address
     }
 
+    /// The three channels' programmed state as bytes, for a snapshot: a
+    /// version byte, then per channel the reload value and count (little
+    /// endian), mode, BCD flag, read/write mode, read latch (present flag and
+    /// value), write latch (present flag and value), gate, output and active.
+    ///
+    /// The time each channel last counted from is not saved: it is a host
+    /// `Instant`, meaningless in another process, and a restore starts the
+    /// count from the moment it is loaded.
+    #[must_use]
+    pub fn export_state(&self) -> Vec<u8> {
+        let mut out = vec![Self::STATE_VERSION];
+        for ch in self.channels.lock().iter() {
+            out.extend_from_slice(&ch.reload_value.to_le_bytes());
+            out.extend_from_slice(&ch.count.to_le_bytes());
+            out.push(ch.mode as u8);
+            out.push(u8::from(ch.bcd_mode));
+            out.push(ch.rw_mode);
+            out.push(u8::from(ch.latch.is_some()));
+            out.extend_from_slice(&ch.latch.unwrap_or(0).to_le_bytes());
+            out.push(u8::from(ch.write_latch.is_some()));
+            out.push(ch.write_latch.unwrap_or(0));
+            out.push(u8::from(ch.gate));
+            out.push(u8::from(ch.output));
+            out.push(u8::from(ch.active));
+        }
+        out
+    }
+
+    /// Put state from [`Self::export_state`] back.
+    ///
+    /// # Errors
+    ///
+    /// [`crate::Error::Device`] for the wrong length or an unknown version.
+    /// Nothing is changed then.
+    pub fn import_state(&self, bytes: &[u8]) -> Result<()> {
+        if bytes.len() != 1 + 3 * Self::CHANNEL_STATE_LEN || bytes[0] != Self::STATE_VERSION {
+            return Err(crate::Error::Device(format!(
+                "PIT state is {} bytes, version {:?}; this reads {} bytes, version {}",
+                bytes.len(),
+                bytes.first(),
+                1 + 3 * Self::CHANNEL_STATE_LEN,
+                Self::STATE_VERSION
+            )));
+        }
+        let now = Instant::now();
+        let mut channels = self.channels.lock();
+        for (ch, raw) in channels
+            .iter_mut()
+            .zip(bytes[1..].chunks(Self::CHANNEL_STATE_LEN))
+        {
+            ch.reload_value = u16::from_le_bytes([raw[0], raw[1]]);
+            ch.count = u16::from_le_bytes([raw[2], raw[3]]);
+            ch.mode = PitMode::from_u8(raw[4]);
+            ch.bcd_mode = raw[5] != 0;
+            ch.rw_mode = raw[6];
+            ch.latch = (raw[7] != 0).then(|| u16::from_le_bytes([raw[8], raw[9]]));
+            ch.write_latch = (raw[10] != 0).then_some(raw[11]);
+            ch.gate = raw[12] != 0;
+            ch.output = raw[13] != 0;
+            ch.active = raw[14] != 0;
+            ch.last_update = now;
+        }
+        drop(channels);
+        // the timer task paces itself by the channel 0 period it last read
+        self.reprogrammed.notify_one();
+        Ok(())
+    }
+
+    const STATE_VERSION: u8 = 1;
+    const CHANNEL_STATE_LEN: usize = 15;
+
     /// Get total ticks
     pub fn total_ticks(&self) -> u64 {
         self.total_ticks.load(Ordering::Relaxed)
@@ -708,6 +779,37 @@ impl Device for TimerDevice {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_pit_exports_and_imports_its_channels_unchanged() {
+        let src = TimerDevice::new("PIT".into(), 0x40);
+        {
+            let mut chans = src.channels.lock();
+            chans[0].reload_value = 11932;
+            chans[0].count = 4000;
+            chans[0].mode = PitMode::SquareWaveGenerator;
+            chans[0].latch = Some(0x1234);
+            chans[1].write_latch = Some(0xAB);
+            chans[1].bcd_mode = true;
+            chans[2].gate = false;
+            chans[2].active = false;
+        }
+        let bytes = src.export_state();
+        assert_eq!(bytes.len(), 46);
+        let dst = TimerDevice::new("PIT".into(), 0x40);
+        dst.import_state(&bytes).unwrap();
+        assert_eq!(dst.export_state(), bytes);
+        assert_eq!(dst.channels.lock()[0].latch, Some(0x1234));
+        assert!(dst.import_state(&bytes[..45]).is_err());
+        let mut bad = bytes.clone();
+        bad[0] = 7;
+        assert!(dst.import_state(&bad).is_err());
+        assert_eq!(
+            dst.export_state(),
+            bytes,
+            "a refused import changes nothing"
+        );
+    }
 
     #[tokio::test]
     async fn timer_two_output_rises_when_its_count_runs_out() {

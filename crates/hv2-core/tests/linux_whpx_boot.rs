@@ -483,3 +483,125 @@ async fn a_paused_vcpus_state_survives_a_write_back() {
         "the guest did not run after the write-back.\nconsole:\n{console}"
     );
 }
+
+/// A whole-VM snapshot of a running WHPX guest, taken, diverged from and
+/// restored into the same VM: the guest must be back where the snapshot was
+/// (a shell variable it set, in its memory) and its timer must still tick
+/// (`sleep 1` returns), which needs the PIC and PIT put back too.
+///
+/// Same environment as the write-back test.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_whpx_guest_returns_to_its_snapshot() {
+    if let Some(why) = unavailable() {
+        eprintln!("skipping: {why}");
+        return;
+    }
+    let (Ok(initrd), Ok(marker), Ok(_)) = (
+        std::env::var("HV2_TEST_INITRD"),
+        std::env::var("HV2_TEST_INITRD_MARKER"),
+        std::env::var("HV2_TEST_INITRD_SHELL"),
+    ) else {
+        eprintln!("skipping: needs HV2_TEST_INITRD, _MARKER and _SHELL");
+        return;
+    };
+    let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
+    let config = VMConfig {
+        name: "linux-whpx-snapshot-test".to_string(),
+        vcpu_count: 1,
+        memory_size: memory_mib() * 1024 * 1024,
+        boot: Some(
+            BootSource::linux(&kernel)
+                .with_cmdline(cmdline_base())
+                .with_initrd(initrd),
+        ),
+        ..Default::default()
+    };
+    let Ok(vm) = VM::new(config) else {
+        eprintln!("skipping: a VM could not be created here");
+        return;
+    };
+    if !vm.executes_guest_code() {
+        eprintln!("skipping: no backend on this host executes guest code");
+        return;
+    }
+    let vm = Arc::new(vm);
+    if let Err(e) = vm.provision().await {
+        eprintln!("skipping: provision failed ({e})");
+        return;
+    }
+    vm.launch().await.expect("the vCPU loop starts");
+    let started = Instant::now();
+
+    async fn wait_for(vm: &VM, started: Instant, what: &str) -> String {
+        let mut console = vm.console_output().await;
+        while started.elapsed() < BOOT_DEADLINE && !console.contains(what) {
+            tokio::time::sleep(POLL).await;
+            console = vm.console_output().await;
+        }
+        console
+    }
+    let console = wait_for(&vm, started, marker.as_str()).await;
+    assert!(
+        console.contains(marker.as_str()),
+        "userspace never came up:\n{console}"
+    );
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    vm.send_serial(b"X=hv2-state-$((6*7)); echo set-$X\n")
+        .await
+        .unwrap();
+    let console = wait_for(&vm, started, "set-hv2-state-42").await;
+    assert!(
+        console.contains("set-hv2-state-42"),
+        "the variable never got set:\n{console}"
+    );
+
+    let path = std::env::temp_dir().join("hv2-whpx-snapshot-test.snap");
+    vm.pause().await.expect("the VM pauses");
+    vm.snapshot(&path).await.expect("the VM snapshots");
+    vm.resume().await.expect("the VM resumes");
+
+    vm.send_serial(b"X=changed; echo now-$X\n").await.unwrap();
+    let console = wait_for(&vm, started, "now-changed").await;
+    assert!(
+        console.contains("now-changed"),
+        "the guest did not run on:\n{console}"
+    );
+
+    vm.pause().await.expect("the VM pauses again");
+    vm.restore(&path).await.expect("the VM restores");
+    vm.resume().await.expect("the VM resumes after the restore");
+
+    let sent = Instant::now();
+    vm.send_serial(b"sleep 1; echo restored-$X-$((6*7))\n")
+        .await
+        .unwrap();
+    // The typed line echoes "restored-$X-$((6*7))" literally, so wait for the
+    // answer: whatever X was, the arithmetic ends it in "-42".
+    let mut console = vm.console_output().await;
+    while started.elapsed() < BOOT_DEADLINE
+        && !console
+            .lines()
+            .any(|l| l.starts_with("restored-") && l.trim_end().ends_with("-42"))
+    {
+        tokio::time::sleep(POLL).await;
+        console = vm.console_output().await;
+    }
+    let after = console
+        .lines()
+        .find(|l| l.starts_with("restored-") && l.trim_end().ends_with("-42"))
+        .unwrap_or("(no answer)")
+        .trim_end()
+        .to_string();
+    let console_full = console.clone();
+    let _ = vm.stop().await;
+    let _ = std::fs::remove_file(&path);
+    println!(
+        "whpx snapshot: restored guest answered after {:?}",
+        sent.elapsed()
+    );
+    assert!(
+        after == "restored-hv2-state-42-42",
+        "after the restore the variable was not back (got {after:?}).\nconsole:\n{console_full}"
+    );
+}

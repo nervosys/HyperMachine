@@ -159,6 +159,84 @@ impl Pic8259 {
         }
     }
 
+    /// Both chips' registers and initialisation state as bytes, for a
+    /// snapshot: a version byte, then per chip (master, slave) IRR, ISR, IMR,
+    /// base vector, auto-EOI, init state and read-ISR select.
+    ///
+    /// Only the registers are saved. Whether a vCPU has been told of a
+    /// pending line is the run loop's, and is looked up again from these on
+    /// the first entry after a restore.
+    #[must_use]
+    pub fn export_state(&self) -> Vec<u8> {
+        let mut out = vec![Self::STATE_VERSION];
+        for chip in [&self.master, &self.slave] {
+            let c = chip.lock();
+            out.extend_from_slice(&[
+                c.irr,
+                c.isr,
+                c.imr,
+                c.base_vector,
+                u8::from(c.auto_eoi),
+                match c.init_state {
+                    InitState::Ready => 0,
+                    InitState::ExpectingIcw2 => 1,
+                    InitState::ExpectingIcw3 => 2,
+                    InitState::ExpectingIcw4 => 3,
+                },
+                u8::from(c.read_isr),
+            ]);
+        }
+        out
+    }
+
+    /// Put state from [`Self::export_state`] back.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Device`] for the wrong length, a version this does not know,
+    /// or an init state it does not recognise. Nothing is changed then.
+    pub fn import_state(&self, bytes: &[u8]) -> Result<()> {
+        if bytes.len() != 1 + 2 * Self::CHIP_STATE_LEN || bytes[0] != Self::STATE_VERSION {
+            return Err(Error::Device(format!(
+                "PIC state is {} bytes, version {:?}; this reads {} bytes, version {}",
+                bytes.len(),
+                bytes.first(),
+                1 + 2 * Self::CHIP_STATE_LEN,
+                Self::STATE_VERSION
+            )));
+        }
+        let mut chips = Vec::with_capacity(2);
+        for raw in bytes[1..].chunks(Self::CHIP_STATE_LEN) {
+            let init_state = match raw[5] {
+                0 => InitState::Ready,
+                1 => InitState::ExpectingIcw2,
+                2 => InitState::ExpectingIcw3,
+                3 => InitState::ExpectingIcw4,
+                other => {
+                    return Err(Error::Device(format!("PIC init state {other} is unknown")));
+                }
+            };
+            chips.push(PicChip {
+                irr: raw[0],
+                isr: raw[1],
+                imr: raw[2],
+                base_vector: raw[3],
+                auto_eoi: raw[4] != 0,
+                init_state,
+                read_isr: raw[6] != 0,
+            });
+        }
+        let slave = chips.pop().expect("two chips were read");
+        let master = chips.pop().expect("two chips were read");
+        *self.master.lock() = master;
+        *self.slave.lock() = slave;
+        self.raised.notify_one();
+        Ok(())
+    }
+
+    const STATE_VERSION: u8 = 1;
+    const CHIP_STATE_LEN: usize = 7;
+
     /// The signal that fires whenever an interrupt request is raised.
     pub fn raised(&self) -> Arc<tokio::sync::Notify> {
         Arc::clone(&self.raised)
@@ -620,6 +698,50 @@ impl Device for Pic8259 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn a_pic_with_requests_in_flight_exports_and_imports_unchanged() {
+        let src = Pic8259::new();
+        // the standard init sequence a Linux guest sends, then unmask IRQ 0, 4 and 12
+        for (port, v) in [
+            (0x20, 0x11),
+            (0x21, 0x20),
+            (0x21, 0x04),
+            (0x21, 0x01),
+            (0xA0, 0x11),
+            (0xA1, 0x28),
+            (0xA1, 0x02),
+            (0xA1, 0x01),
+            (0x21, 0xEC),
+            (0xA1, 0xEF),
+        ] {
+            src.write_port_sync(port, v);
+        }
+        src.raise_irq(4).unwrap();
+        src.raise_irq(12).unwrap();
+        let bytes = src.export_state();
+        assert_eq!(bytes.len(), 15);
+
+        let dst = Pic8259::new();
+        dst.import_state(&bytes).unwrap();
+        assert_eq!(dst.export_state(), bytes);
+        assert_eq!(dst.get_pending_interrupt(), src.get_pending_interrupt());
+        assert!(
+            dst.import_state(&bytes[..14]).is_err(),
+            "a short blob is refused"
+        );
+        let mut bad = bytes.clone();
+        bad[0] = 9;
+        assert!(
+            dst.import_state(&bad).is_err(),
+            "an unknown version is refused"
+        );
+        assert_eq!(
+            dst.export_state(),
+            bytes,
+            "a refused import changes nothing"
+        );
+    }
 
     #[tokio::test]
     async fn test_pic_creation() {

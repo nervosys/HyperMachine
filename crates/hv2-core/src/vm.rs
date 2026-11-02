@@ -7,6 +7,9 @@ use crate::hypervisor::VCpuDiagnostic;
 use crate::snapshot::device as snapshot_device;
 use crate::snapshot::file as snapshot_file;
 use crate::snapshot::vcpu::VCpuSnapshot;
+
+/// `MachineState.backend` for the PIC and PIT this crate emulates itself.
+const USERSPACE_MACHINE: &str = "userspace-pic-pit";
 use crate::{
     DeviceManager, Error, EventBus, GuestMemory, HypervisorBackend, IoDirection, Pic8259, Result,
     VCpu, VmEvent, VmExit,
@@ -672,6 +675,9 @@ pub struct VM {
     interrupt_queue:
         parking_lot::Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<(u8, IrqLevel)>>>,
     pic: Arc<Pic8259>,
+    /// The emulated 8254 PIT, where the hypervisor has none of its own (set by
+    /// `provision`). Kept so a snapshot can read it back.
+    pit: parking_lot::Mutex<Option<Arc<tokio::sync::RwLock<crate::devices::TimerDevice>>>>,
     backend: Arc<dyn HypervisorBackend>,
     exit_notify: Arc<Notify>,
     event_bus: EventBus,
@@ -926,6 +932,7 @@ impl VM {
             pci_root: Arc::new(parking_lot::RwLock::new(crate::pci::PciRootComplex::new())),
             interrupt_queue: parking_lot::Mutex::new(Some(interrupt_rx)),
             pic,
+            pit: parking_lot::Mutex::new(None),
             backend,
             exit_notify: Arc::new(Notify::new()),
             event_bus,
@@ -1164,10 +1171,12 @@ impl VM {
                 // device is handed it below rather than a second device
                 // registering on a port the first already claims.
                 system_control = Some(pit.system_control());
+                let pit = Arc::new(tokio::sync::RwLock::new(pit));
+                *self.pit.lock() = Some(Arc::clone(&pit));
                 machine = machine.with_device(
                     crate::machine::MachineDevice::new(
                         "PIT",
-                        Arc::new(tokio::sync::RwLock::new(pit)),
+                        pit,
                         0x40,
                         0x43,
                         "no PIT means a kernel's timer programming hits an absent port and its                          tick never comes",
@@ -1773,7 +1782,11 @@ impl VM {
                 })?;
             Some(handle.read_register(0, 4).await?)
         };
-        let machine = self.backend.save_machine().await?;
+        let machine = if self.pit.lock().is_some() {
+            Some(self.save_userspace_machine().await)
+        } else {
+            self.backend.save_machine().await?
+        };
         let header = snapshot_file::Header {
             vm_name: self.config.name.clone(),
             memory_size: memory.total_size(),
@@ -2038,7 +2051,11 @@ impl VM {
         // Interrupt controllers and the timer before the vCPUs: the LAPIC a
         // vCPU restore writes is wired to them.
         if let Some(machine) = &snapshot.header.machine {
-            self.backend.restore_machine(machine, keep_clock).await?;
+            if machine.backend == USERSPACE_MACHINE {
+                self.restore_userspace_machine(machine).await?;
+            } else {
+                self.backend.restore_machine(machine, keep_clock).await?;
+            }
         }
 
         let vcpus: Vec<VCpuSnapshot> = if keep_clock {
@@ -2378,6 +2395,43 @@ impl VM {
                 );
             }
         }
+        Ok(())
+    }
+
+    /// The emulated PIC and PIT as machine state, for a backend with no
+    /// interrupt controller of its own (WHPX, HVF). The PIC's bytes are in
+    /// `pic_master` whole; `pic_slave` and `ioapic` are empty and there is no
+    /// paravirtual clock.
+    async fn save_userspace_machine(&self) -> crate::snapshot::machine::MachineState {
+        let pit = self.pit.lock().clone();
+        let pit_bytes = match pit {
+            Some(pit) => pit.read().await.export_state(),
+            None => Vec::new(),
+        };
+        crate::snapshot::machine::MachineState {
+            backend: USERSPACE_MACHINE.to_string(),
+            pic_master: self.pic.export_state(),
+            pic_slave: Vec::new(),
+            ioapic: Vec::new(),
+            pit: pit_bytes,
+            clock_ns: None,
+        }
+    }
+
+    /// The inverse of [`Self::save_userspace_machine`].
+    ///
+    /// # Errors
+    ///
+    /// The PIC or PIT bytes are malformed, or this VM has no PIT to load.
+    async fn restore_userspace_machine(
+        &self,
+        machine: &crate::snapshot::machine::MachineState,
+    ) -> Result<()> {
+        let pit = self.pit.lock().clone().ok_or_else(|| {
+            Error::InvalidState("the snapshot has PIT state and this VM has no PIT".into())
+        })?;
+        self.pic.import_state(&machine.pic_master)?;
+        pit.read().await.import_state(&machine.pit)?;
         Ok(())
     }
 
