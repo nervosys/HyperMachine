@@ -2205,17 +2205,42 @@ impl VM {
         states
     }
 
+    /// Every virtio-PCI transport attached, in a fixed order: vsock, the
+    /// three disks, then the network device.
+    fn pci_transports(
+        &self,
+    ) -> Vec<Arc<tokio::sync::RwLock<crate::devices::virtio_pci::VirtioPciTransport>>> {
+        let mut found = Vec::new();
+        if let Some(VsockTransport::Pci(t)) =
+            self.vsock.read().as_ref().map(|a| a.transport.clone())
+        {
+            found.push(t);
+        }
+        for disk in [&self.block_pci, &self.seed_pci, &self.data_pci] {
+            if let Some(a) = disk.read().as_ref() {
+                found.push(a._transport.clone());
+            }
+        }
+        if let Some(a) = self.net_pci.read().as_ref() {
+            found.push(a.transport.clone());
+        }
+        found
+    }
+
     async fn pci_device_states(
         &self,
     ) -> (
         Vec<snapshot_device::PciDeviceState>,
         Vec<(u8, u8, u8, crate::pci::ConfigSnapshot)>,
     ) {
-        let transport = match self.vsock.read().as_ref().map(|a| a.transport.clone()) {
-            Some(VsockTransport::Pci(transport)) => transport,
-            _ => return (Vec::new(), Vec::new()),
-        };
-        let state = transport.read().await.save_state();
+        let transports = self.pci_transports();
+        if transports.is_empty() {
+            return (Vec::new(), Vec::new());
+        }
+        let mut states = Vec::new();
+        for transport in &transports {
+            states.push(transport.read().await.save_state());
+        }
         let root = self.pci_root.read();
         let configs = root
             .bus(0)
@@ -2232,29 +2257,28 @@ impl VM {
                 })
             })
             .collect();
-        (vec![state], configs)
+        (states, configs)
     }
 
     async fn validate_pci_device_states(&self, header: &snapshot_file::Header) -> Result<()> {
-        let transport = match self.vsock.read().as_ref().map(|a| a.transport.clone()) {
-            Some(VsockTransport::Pci(transport)) => Some(transport),
-            _ => None,
-        };
-        let Some(transport) = transport else {
+        let transports = self.pci_transports();
+        if transports.is_empty() {
             if !header.pci_devices.is_empty()
                 || !header.pci_configs.is_empty()
                 || header.pci_config_address.is_some()
             {
                 return Err(Error::InvalidState(
-                    "snapshot requires a PCI vsock device".into(),
+                    "snapshot requires a PCI device this VM does not have".into(),
                 ));
             }
             return Ok(());
-        };
-        if header.pci_devices.len() != 1 {
-            return Err(Error::InvalidState(
-                "snapshot does not contain exactly one PCI vsock state".into(),
-            ));
+        }
+        if header.pci_devices.len() != transports.len() {
+            return Err(Error::InvalidState(format!(
+                "snapshot holds {} PCI device state(s) but this VM has {}",
+                header.pci_devices.len(),
+                transports.len()
+            )));
         }
         if header.pci_config_address.is_none() || self.devices.find_io_device(0xcf8).await.is_none()
         {
@@ -2262,10 +2286,24 @@ impl VM {
                 "PCI configuration address state missing".into(),
             ));
         }
-        transport
-            .read()
-            .await
-            .validate_state(&header.pci_devices[0])?;
+        let mut vsock_bar = None;
+        for transport in &transports {
+            let guard = transport.read().await;
+            let saved = header
+                .pci_devices
+                .iter()
+                .find(|d| d.name == guard.name())
+                .ok_or_else(|| {
+                    Error::InvalidState(format!(
+                        "snapshot has no state for PCI device '{}'",
+                        guard.name()
+                    ))
+                })?;
+            guard.validate_state(saved)?;
+            if saved.name == "virtio-vsock-pci" {
+                vsock_bar = Some(saved.bar_base);
+            }
+        }
         let root = self.pci_root.read();
         let current_count = root
             .bus(0)
@@ -2291,10 +2329,10 @@ impl VM {
                 .and_then(|d| d.config())
                 .ok_or_else(|| Error::InvalidState("PCI snapshot function missing".into()))?;
             config.validate_state(saved)?;
-            if *slot == Self::VSOCK_PCI_SLOT {
+            if let (true, Some(expected)) = (*slot == Self::VSOCK_PCI_SLOT, vsock_bar) {
                 let bar =
                     u64::from(saved.bars[0].value & !0x0f) | (u64::from(saved.bars[1].value) << 32);
-                if bar != header.pci_devices[0].bar_base {
+                if bar != expected {
                     return Err(Error::InvalidState(
                         "PCI snapshot BAR was relocated outside the mapped transport".into(),
                     ));
@@ -2306,11 +2344,8 @@ impl VM {
 
     async fn restore_pci_device_states(&self, header: &snapshot_file::Header) -> Result<()> {
         self.validate_pci_device_states(header).await?;
-        let transport = match self.vsock.read().as_ref().map(|a| a.transport.clone()) {
-            Some(VsockTransport::Pci(transport)) => Some(transport),
-            _ => None,
-        };
-        if let Some(transport) = transport {
+        let transports = self.pci_transports();
+        if !transports.is_empty() {
             {
                 let mut root = self.pci_root.write();
                 for (bus, slot, function, saved) in &header.pci_configs {
@@ -2321,10 +2356,20 @@ impl VM {
                         .restore_state(saved)?;
                 }
             }
-            transport
-                .read()
-                .await
-                .restore_state(&header.pci_devices[0])?;
+            for transport in &transports {
+                let guard = transport.read().await;
+                let saved = header
+                    .pci_devices
+                    .iter()
+                    .find(|d| d.name == guard.name())
+                    .ok_or_else(|| {
+                        Error::InvalidState(format!(
+                            "snapshot has no state for PCI device '{}'",
+                            guard.name()
+                        ))
+                    })?;
+                guard.restore_state(saved)?;
+            }
             let handle =
                 self.devices.find_io_device(0xcf8).await.ok_or_else(|| {
                     Error::InvalidState("PCI config port missing at restore".into())

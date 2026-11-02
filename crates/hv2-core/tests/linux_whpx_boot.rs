@@ -717,3 +717,124 @@ async fn a_second_whpx_vm_continues_from_a_snapshot() {
         "the copy did not continue from the snapshot.\nconsole:\n{console}"
     );
 }
+
+/// A guest with a virtio-blk disk on PCI is snapshotted and restored into a
+/// second VM: the restored device must serve the disk the guest wrote.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_restored_whpx_guest_reads_its_pci_data_disk() {
+    if let Some(why) = unavailable() {
+        eprintln!("skipping: {why}");
+        return;
+    }
+    let (Ok(initrd), Ok(marker), Ok(_)) = (
+        std::env::var("HV2_TEST_INITRD"),
+        std::env::var("HV2_TEST_INITRD_MARKER"),
+        std::env::var("HV2_TEST_INITRD_SHELL"),
+    ) else {
+        eprintln!("skipping: needs HV2_TEST_INITRD, _MARKER and _SHELL");
+        return;
+    };
+    let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
+    let make = |name: &str| VMConfig {
+        name: name.to_string(),
+        vcpu_count: 1,
+        memory_size: memory_mib() * 1024 * 1024,
+        boot: Some(
+            BootSource::linux(&kernel)
+                .with_cmdline(cmdline_base())
+                .with_initrd(initrd.clone()),
+        ),
+        ..Default::default()
+    };
+    let dir = std::env::temp_dir();
+    let image = dir.join("hv2-whpx-data-disk.img");
+    let path = dir.join("hv2-whpx-data-disk.snap");
+    std::fs::write(&image, vec![0u8; 1024 * 1024]).expect("the image is written");
+    let started = Instant::now();
+    let wait_for = |needle: &'static str| needle;
+
+    {
+        let Ok(vm) = VM::new(make("linux-whpx-disk-source")) else {
+            eprintln!("skipping: a VM could not be created here");
+            return;
+        };
+        if !vm.executes_guest_code() {
+            eprintln!("skipping: no backend on this host executes guest code");
+            return;
+        }
+        let vm = Arc::new(vm);
+        vm.attach_data_pci(&image, "data0")
+            .await
+            .expect("the data disk attaches");
+        if let Err(e) = vm.provision().await {
+            eprintln!("skipping: provision failed ({e})");
+            return;
+        }
+        vm.launch().await.expect("the vCPU loop starts");
+        let mut console = String::new();
+        while started.elapsed() < BOOT_DEADLINE && !console.contains(marker.as_str()) {
+            tokio::time::sleep(POLL).await;
+            console = vm.console_output().await;
+        }
+        assert!(
+            console.contains(marker.as_str()),
+            "no userspace:\n{console}"
+        );
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        vm.send_serial(
+            b"echo -n DISKMARK-$((6*7)) | dd of=/dev/vda bs=512 count=1 conv=sync 2>/dev/null; sync; echo wrote-$?\n",
+        )
+        .await
+        .unwrap();
+        let done = wait_for("wrote-0");
+        while started.elapsed() < BOOT_DEADLINE && !console.contains(done) {
+            tokio::time::sleep(POLL).await;
+            console = vm.console_output().await;
+        }
+        assert!(
+            console.lines().any(|l| l.trim_end() == "wrote-0"),
+            "the guest could not write /dev/vda:\n{console}"
+        );
+        vm.pause().await.expect("the source pauses");
+        vm.snapshot(&path).await.expect("the source snapshots");
+        let _ = vm.stop().await;
+    }
+
+    let vm = Arc::new(VM::new(make("linux-whpx-disk-copy")).expect("the copy is created"));
+    vm.attach_data_pci(&image, "data0")
+        .await
+        .expect("the copy attaches the same disk");
+    vm.launch_from_snapshot(&path, hv2_core::snapshot::machine::ClockOnRestore::Continue)
+        .await
+        .expect("the copy launches from the snapshot");
+    // Drop the page cache so the read goes through the restored device.
+    vm.send_serial(
+        b"echo 3 > /proc/sys/vm/drop_caches; echo -n NEW-$((6*7)) | dd of=/dev/vda bs=512 seek=1 count=1 conv=sync 2>/dev/null; sync; echo read-$(dd if=/dev/vda bs=512 count=1 2>/dev/null | head -c 11)-$(dd if=/dev/vda bs=512 skip=1 count=1 2>/dev/null | head -c 6)-end\n",
+    )
+    .await
+    .unwrap();
+    let mut console = vm.console_output().await;
+    let answer = |c: &str| {
+        c.lines()
+            .find(|l| l.starts_with("read-") && l.trim_end().ends_with("-end"))
+            .map(|l| l.trim_end().to_string())
+    };
+    while started.elapsed() < BOOT_DEADLINE && answer(&console).is_none() {
+        tokio::time::sleep(POLL).await;
+        console = vm.console_output().await;
+    }
+    let got = answer(&console);
+    let _ = vm.stop().await;
+    let on_host = std::fs::read(&image).unwrap_or_default();
+    let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_file(&image);
+    assert_eq!(
+        got.as_deref(),
+        Some("read-DISKMARK-42-NEW-42-end"),
+        "the restored disk did not serve what the guest wrote.\nconsole:\n{console}"
+    );
+    assert!(
+        on_host.get(512..518) == Some(b"NEW-42".as_slice()),
+        "the write after restore never reached the image file"
+    );
+}

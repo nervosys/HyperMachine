@@ -26,8 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   before. `WhpxBackend::save_machine` still refuses on its own (the VM layer holds the PIC, PIT and UART).
   NOT CAPTURED: the XSAVE area (AVX, AVX-512 and other wide vector state), the remaining CET registers (shadow-
   stack pointers other than PL3, ISST), pending-interruption and interrupt-shadow registers, debug registers,
-  halted vs runnable, the i8042. NOT VERIFIED: more than one vCPU, virtio devices, a guest with a disk or network,
-  fork of many copies, and the sandbox daemon on Windows (it still serves no machines).
+  halted vs runnable, the i8042. Snapshots now also carry every virtio-PCI transport (the three disks and the
+  network device, matched by name), not only the PCI vsock. Verified once on this host: a guest wrote a marker to a
+  PCI data disk, was snapshotted, and a second VM restored from it read the marker back after the page cache was
+  dropped, then wrote a second one that reached the image file. NOT VERIFIED: more than one vCPU, a PCI network
+  device or a root disk through a restore, a disk written during the snapshot, fork of many copies, and the sandbox
+  daemon on Windows (it still serves no machines).
 - Compose accepts `restart: "no"` (and `false`); the other policies are refused with the reason
   (unit-tested only).
 - `hm sandbox vm run --network PROJECT`: join a compose project's private network so its services

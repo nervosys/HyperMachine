@@ -224,6 +224,11 @@ impl VirtioPciTransport {
         self.device.clone()
     }
 
+    /// The name this transport was registered under.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
     /// Bits the driver has set in the device status register.
     pub fn status(&self) -> u8 {
         self.regs.lock().device_status
