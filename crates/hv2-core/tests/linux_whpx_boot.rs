@@ -605,3 +605,109 @@ async fn a_whpx_guest_returns_to_its_snapshot() {
         "after the restore the variable was not back (got {after:?}).\nconsole:\n{console_full}"
     );
 }
+
+/// A snapshot taken from one WHPX VM, restored into a second, fresh one with
+/// `launch_from_snapshot`: the fork path. The first VM is stopped and dropped
+/// before the second is created, because WHP here cannot map two guests'
+/// memory at once (`0xC0370008`).
+///
+/// Same environment as the write-back test.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_second_whpx_vm_continues_from_a_snapshot() {
+    if let Some(why) = unavailable() {
+        eprintln!("skipping: {why}");
+        return;
+    }
+    let (Ok(initrd), Ok(marker), Ok(_)) = (
+        std::env::var("HV2_TEST_INITRD"),
+        std::env::var("HV2_TEST_INITRD_MARKER"),
+        std::env::var("HV2_TEST_INITRD_SHELL"),
+    ) else {
+        eprintln!("skipping: needs HV2_TEST_INITRD, _MARKER and _SHELL");
+        return;
+    };
+    let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
+    let make = |name: &str| VMConfig {
+        name: name.to_string(),
+        vcpu_count: 1,
+        memory_size: memory_mib() * 1024 * 1024,
+        boot: Some(
+            BootSource::linux(&kernel)
+                .with_cmdline(cmdline_base())
+                .with_initrd(initrd.clone()),
+        ),
+        ..Default::default()
+    };
+    let path = std::env::temp_dir().join("hv2-whpx-fork-test.snap");
+    let started = Instant::now();
+
+    {
+        let Ok(vm) = VM::new(make("linux-whpx-fork-source")) else {
+            eprintln!("skipping: a VM could not be created here");
+            return;
+        };
+        if !vm.executes_guest_code() {
+            eprintln!("skipping: no backend on this host executes guest code");
+            return;
+        }
+        let vm = Arc::new(vm);
+        if let Err(e) = vm.provision().await {
+            eprintln!("skipping: provision failed ({e})");
+            return;
+        }
+        vm.launch().await.expect("the vCPU loop starts");
+        let mut console = String::new();
+        while started.elapsed() < BOOT_DEADLINE && !console.contains(marker.as_str()) {
+            tokio::time::sleep(POLL).await;
+            console = vm.console_output().await;
+        }
+        assert!(
+            console.contains(marker.as_str()),
+            "userspace never came up:\n{console}"
+        );
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        vm.send_serial(b"X=hv2-fork-$((6*7)); echo set-$X\n")
+            .await
+            .unwrap();
+        while started.elapsed() < BOOT_DEADLINE && !console.contains("set-hv2-fork-42") {
+            tokio::time::sleep(POLL).await;
+            console = vm.console_output().await;
+        }
+        assert!(
+            console.contains("set-hv2-fork-42"),
+            "the variable never got set:\n{console}"
+        );
+        vm.pause().await.expect("the source pauses");
+        vm.snapshot(&path).await.expect("the source snapshots");
+        let _ = vm.stop().await;
+    }
+    // the source is out of scope: its partition is released
+
+    let vm = Arc::new(VM::new(make("linux-whpx-fork-copy")).expect("the copy is created"));
+    vm.launch_from_snapshot(&path, hv2_core::snapshot::machine::ClockOnRestore::Fresh)
+        .await
+        .expect("the copy launches from the snapshot");
+    let sent = Instant::now();
+    vm.send_serial(b"sleep 1; echo forked-$X-$((6*7))\n")
+        .await
+        .unwrap();
+    let mut console = vm.console_output().await;
+    let answer = |c: &str| {
+        c.lines()
+            .find(|l| l.starts_with("forked-") && l.trim_end().ends_with("-42"))
+            .map(|l| l.trim_end().to_string())
+    };
+    while started.elapsed() < BOOT_DEADLINE && answer(&console).is_none() {
+        tokio::time::sleep(POLL).await;
+        console = vm.console_output().await;
+    }
+    let got = answer(&console);
+    let _ = vm.stop().await;
+    let _ = std::fs::remove_file(&path);
+    println!("whpx fork: the copy answered after {:?}", sent.elapsed());
+    assert_eq!(
+        got.as_deref(),
+        Some("forked-hv2-fork-42-42"),
+        "the copy did not continue from the snapshot.\nconsole:\n{console}"
+    );
+}

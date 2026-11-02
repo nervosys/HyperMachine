@@ -297,6 +297,10 @@ pub enum WHV_REGISTER_NAME {
     WHvX64RegisterFpControlStatus = 0x00001018,
     WHvX64RegisterXmmControlStatus = 0x00001019,
     WHvX64RegisterTsc = 0x00002000,
+    WHvX64RegisterXss = 0x0000208B,
+    WHvX64RegisterUCet = 0x0000208C,
+    WHvX64RegisterSCet = 0x0000208D,
+    WHvX64RegisterPl3Ssp = 0x00002092,
 
     // MSRs
     WHvX64RegisterEfer = 0x00002001,

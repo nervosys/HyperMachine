@@ -809,6 +809,7 @@ impl HypervisorBackend for KvmBackend {
             ioapic: chip(KVM_IRQCHIP_IOAPIC)?,
             pit: pit.bytes.to_vec(),
             clock_ns,
+            devices: Vec::new(),
         }))
     }
 

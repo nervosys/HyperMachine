@@ -8,19 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- WHPX guests can be snapshotted and restored (`backends/whpx_state.rs`, `interrupt.rs`, `devices/timer.rs`, `vm.rs`):
-  a vCPU's general registers, segments, descriptor tables, CR0-4/8, EFER, APIC base, XCR0, x87/SSE registers and
-  ten MSRs including the TSC; the emulated 8259 PIC and 8254 PIT (new `export_state`/`import_state`, saved under
-  the machine-state tag `userspace-pic-pit`); guest memory through the existing snapshot file. Checked on WHPX
-  with a Linux 6.x guest and the sandbox initramfs, 1 vCPU, 1 run of each: (1) pause, read the vCPU state,
-  write it back, read again: equal apart from the TSC, and the guest runs on; (2) set a shell variable,
-  snapshot to a file, change the variable, restore into the same VM: the variable is back, and `sleep 1`
-  returns in 1.2-1.3 s. The SDK's XMM control-status struct in `whpx_ffi.rs` was 8 bytes where it is 16;
-  nothing used it before. `WhpxBackend::save_machine` still refuses on its own (the VM layer holds the PIC and
-  PIT and saves them itself). NOT CAPTURED: the XSAVE area (AVX), pending-interruption and interrupt-shadow
-  registers, debug registers, halted vs runnable, the COM1 UART's registers, the i8042. NOT VERIFIED: restoring
-  into a different VM (`launch_from_snapshot`), more than one vCPU, virtio devices, a guest with a disk or
-  network, fork, and the sandbox daemon on Windows (it still serves no machines there).
+- WHPX guests can be snapshotted and restored, into the same VM or a fresh one (`backends/whpx_state.rs`,
+  `interrupt.rs`, `devices/timer.rs`, `devices/serial.rs`, `vm.rs`): a vCPU's general registers, segments, descriptor
+  tables, CR0-4/8, EFER, APIC base, XCR0, x87/SSE registers and 14 MSRs (the TSC, IA32_XSS and the CET user and
+  supervisor state among them); the emulated 8259 PIC, 8254 PIT and COM1 UART (new `export_state`/`import_state`,
+  saved under the machine-state tag `userspace-pic-pit`; `Device` gained default `export_state`/`import_state`
+  and `MachineState` a `devices` list); guest memory through the existing snapshot file. Checked on WHPX with a
+  Linux 6.6 guest and the sandbox initramfs, 1 vCPU, 1 run each: (1) pause, read the vCPU state, write it back,
+  read again: equal apart from the TSC; (2) set a shell variable, snapshot, change it, restore into the same VM:
+  the variable is back and `sleep 1` returns in 1.3 s; (3) snapshot, stop that VM, `launch_from_snapshot` into a
+  second VM: the variable is there and the guest answers (its `sleep 1` took 4.9 s of host time, unexplained;
+  the fresh restore leaves the new vCPU's TSC as it is). Two first attempts at (3) failed and are why the state
+  list is what it is: without the UART's registers the copy printed nothing for 111 s (its interrupt enables
+  were clear), and without IA32_XSS the guest's XRSTORS of a buffer holding CET state faulted ("Bad FPU state",
+  then a panic). The SDK's XMM control-status struct in `whpx_ffi.rs` was 8 bytes where it is 16; nothing used it
+  before. `WhpxBackend::save_machine` still refuses on its own (the VM layer holds the PIC, PIT and UART).
+  NOT CAPTURED: the XSAVE area (AVX, AVX-512 and other wide vector state), the remaining CET registers (shadow-
+  stack pointers other than PL3, ISST), pending-interruption and interrupt-shadow registers, debug registers,
+  halted vs runnable, the i8042. NOT VERIFIED: more than one vCPU, virtio devices, a guest with a disk or network,
+  `ClockOnRestore::Continue`, fork of many copies, and the sandbox daemon on Windows (it still serves no machines).
 - Compose accepts `restart: "no"` (and `false`); the other policies are refused with the reason
   (unit-tested only).
 - `hm sandbox vm run --network PROJECT`: join a compose project's private network so its services

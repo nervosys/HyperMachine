@@ -411,6 +411,61 @@ impl Device for SerialDevice {
         DeviceType::Serial
     }
 
+    /// A version byte; IER, LCR, MCR, SCR, FCR, DLL, DLM and the THR-empty
+    /// flag; then the receive and transmit buffers, each as a little-endian
+    /// `u32` length and its bytes. A restored guest's driver believes the
+    /// interrupt enables it wrote are still set, so a fresh UART with them
+    /// clear takes no input and sends no transmit interrupt.
+    fn export_state(&self) -> Option<Vec<u8>> {
+        let mut out = vec![1];
+        out.extend_from_slice(&[
+            *self.ier.lock(),
+            *self.lcr.lock(),
+            *self.mcr.lock(),
+            *self.scr.lock(),
+            *self.fcr.lock(),
+            *self.dll.lock(),
+            *self.dlm.lock(),
+            u8::from(*self.thr_empty.lock()),
+        ]);
+        for buffer in [&self.rx_buffer, &self.tx_buffer] {
+            let b = buffer.lock();
+            out.extend_from_slice(&(b.len() as u32).to_le_bytes());
+            out.extend(b.iter());
+        }
+        Some(out)
+    }
+
+    fn import_state(&self, bytes: &[u8]) -> Result<()> {
+        let bad = || crate::Error::Device("serial state is malformed".into());
+        if bytes.len() < 9 || bytes[0] != 1 {
+            return Err(bad());
+        }
+        let mut at = 9;
+        let mut buffers = Vec::with_capacity(2);
+        for _ in 0..2 {
+            let len_bytes: [u8; 4] = bytes.get(at..at + 4).ok_or_else(bad)?.try_into().unwrap();
+            let len = u32::from_le_bytes(len_bytes) as usize;
+            at += 4;
+            buffers.push(bytes.get(at..at + len).ok_or_else(bad)?.to_vec());
+            at += len;
+        }
+        if at != bytes.len() {
+            return Err(bad());
+        }
+        *self.ier.lock() = bytes[1];
+        *self.lcr.lock() = bytes[2];
+        *self.mcr.lock() = bytes[3];
+        *self.scr.lock() = bytes[4];
+        *self.fcr.lock() = bytes[5];
+        *self.dll.lock() = bytes[6];
+        *self.dlm.lock() = bytes[7];
+        *self.thr_empty.lock() = bytes[8] != 0;
+        *self.tx_buffer.lock() = buffers.pop().expect("two buffers").into();
+        *self.rx_buffer.lock() = buffers.pop().expect("two buffers").into();
+        Ok(())
+    }
+
     fn name(&self) -> &str {
         &self.name
     }

@@ -30,6 +30,10 @@ pub struct MachineState {
     pub pit: Vec<u8>,
     /// The paravirtual clock's value, in nanoseconds, when captured.
     pub clock_ns: Option<u64>,
+    /// Devices that save their own state, by name (`Device::export_state`):
+    /// the serial port on a backend that emulates its interrupt controller.
+    #[serde(default)]
+    pub devices: Vec<(String, Vec<u8>)>,
 }
 
 /// What a restored guest's clock should read.

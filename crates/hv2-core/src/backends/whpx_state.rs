@@ -22,7 +22,7 @@ use crate::snapshot::vcpu::{
 };
 
 /// `(architectural MSR number, WHP register)` for the MSRs this captures.
-const MSR_MAP: [(u32, WHV_REGISTER_NAME); 10] = [
+const MSR_MAP: [(u32, WHV_REGISTER_NAME); 14] = [
     (0x10, WHV_REGISTER_NAME::WHvX64RegisterTsc),
     (0x174, WHV_REGISTER_NAME::WHvX64RegisterSysenterCs),
     (0x175, WHV_REGISTER_NAME::WHvX64RegisterSysenterEsp),
@@ -33,7 +33,18 @@ const MSR_MAP: [(u32, WHV_REGISTER_NAME); 10] = [
     (0xC000_0083, WHV_REGISTER_NAME::WHvX64RegisterCstar),
     (0xC000_0084, WHV_REGISTER_NAME::WHvX64RegisterSfmask),
     (0xC000_0102, WHV_REGISTER_NAME::WHvX64RegisterKernelGsBase),
+    // Supervisor-state components XSAVES/XRSTORS manage and the control-flow
+    // enforcement state in them. A guest that enabled CET user state (the
+    // kernel logs "Supporting XSAVE feature 0x800") restores its FPU buffers
+    // with XRSTORS, which faults on a vCPU whose XSS lacks bit 11.
+    (0x0DA0, WHV_REGISTER_NAME::WHvX64RegisterXss),
+    (0x06A0, WHV_REGISTER_NAME::WHvX64RegisterUCet),
+    (0x06A2, WHV_REGISTER_NAME::WHvX64RegisterSCet),
+    (0x06A4, WHV_REGISTER_NAME::WHvX64RegisterPl3Ssp),
 ];
+
+/// Where `XCR0` sits in [`capture_names`]' order.
+const XCR0_INDEX: usize = 35;
 
 /// The first sixteen XMM registers, in order.
 fn xmm_name(i: usize) -> WHV_REGISTER_NAME {
@@ -380,7 +391,24 @@ impl WhpxVcpu {
                 None => values.push(current[i]),
             }
         }
-        self.set_registers(&names, &values)
+        // XCR0 is accepted only once CR4.OSXSAVE is set, and a new vCPU starts
+        // with it clear: written in the same call as CR4 it did not take, and
+        // the guest's first XRSTOR of an AVX-wide save area faulted ("Bad FPU
+        // state"). So everything else first, then XCR0 alone, then read it back.
+        let mut names = names;
+        let xcr0_name = names.remove(XCR0_INDEX);
+        let xcr0_value = values.remove(XCR0_INDEX);
+        self.set_registers(&names, &values)?;
+        self.set_registers(&[xcr0_name], &[xcr0_value])?;
+        let back = self.get_registers(&[xcr0_name])?;
+        // SAFETY: XCR0 is read through its 64-bit member.
+        let got = unsafe { back[0].Reg64 };
+        if got != xcr0 {
+            return Err(crate::error::Error::VM(format!(
+                "XCR0 was written as {xcr0:#x} and reads back as {got:#x}"
+            )));
+        }
+        Ok(())
     }
 }
 
@@ -429,5 +457,9 @@ mod tests {
         // `capture_snapshot` indexes with.
         assert_eq!(capture_names().len(), 38 + 16 + 8 + MSR_MAP.len());
         assert_eq!(capture_names()[62], WHV_REGISTER_NAME::WHvX64RegisterTsc);
+        assert_eq!(
+            capture_names()[XCR0_INDEX],
+            WHV_REGISTER_NAME::WHvX64RegisterXCr0
+        );
     }
 }

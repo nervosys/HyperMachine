@@ -2408,6 +2408,12 @@ impl VM {
             Some(pit) => pit.read().await.export_state(),
             None => Vec::new(),
         };
+        let mut com1 = Vec::new();
+        if let Some(device) = self.devices.get_device("COM1").await {
+            if let Some(bytes) = device.read().await.export_state() {
+                com1.push(("COM1".to_string(), bytes));
+            }
+        }
         crate::snapshot::machine::MachineState {
             backend: USERSPACE_MACHINE.to_string(),
             pic_master: self.pic.export_state(),
@@ -2415,6 +2421,7 @@ impl VM {
             ioapic: Vec::new(),
             pit: pit_bytes,
             clock_ns: None,
+            devices: com1,
         }
     }
 
@@ -2432,6 +2439,11 @@ impl VM {
         })?;
         self.pic.import_state(&machine.pic_master)?;
         pit.read().await.import_state(&machine.pit)?;
+        for (name, bytes) in &machine.devices {
+            if let Some(device) = self.devices.get_device(name).await {
+                device.read().await.import_state(bytes)?;
+            }
+        }
         Ok(())
     }
 

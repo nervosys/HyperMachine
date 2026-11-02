@@ -47,6 +47,23 @@ pub trait Device: Send + Sync {
     /// Shutdown the device
     async fn shutdown(&mut self) -> Result<()>;
 
+    /// The device's guest-visible state as bytes, for a snapshot, or `None`
+    /// for a device that saves nothing (the default).
+    fn export_state(&self) -> Option<Vec<u8>> {
+        None
+    }
+
+    /// Put state from [`Self::export_state`] back. The default accepts
+    /// anything and does nothing, matching its `export_state`.
+    ///
+    /// # Errors
+    ///
+    /// Bytes this device does not recognise.
+    fn import_state(&self, bytes: &[u8]) -> Result<()> {
+        let _ = bytes;
+        Ok(())
+    }
+
     /// Accept somewhere to report an interrupt raised outside a guest access.
     ///
     /// Called once, when the device is registered. The default ignores it,
