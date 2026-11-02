@@ -17,8 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Linux 6.6 guest and the sandbox initramfs, 1 vCPU, 1 run each: (1) pause, read the vCPU state, write it back,
   read again: equal apart from the TSC; (2) set a shell variable, snapshot, change it, restore into the same VM:
   the variable is back and `sleep 1` returns in 1.3 s; (3) snapshot, stop that VM, `launch_from_snapshot` into a
-  second VM: the variable is there and the guest answers (its `sleep 1` took 4.9 s of host time, unexplained;
-  the fresh restore leaves the new vCPU's TSC as it is). Two first attempts at (3) failed and are why the state
+  second VM: the variable is there and the guest answers (`sleep 1` took 4.7-4.9 s of host time with
+  `ClockOnRestore::Fresh`, which leaves the new vCPU's TSC as it is, and 1.2 s with `Continue`, which restores it;
+  1 run each). Two first attempts at (3) failed and are why the state
   list is what it is: without the UART's registers the copy printed nothing for 111 s (its interrupt enables
   were clear), and without IA32_XSS the guest's XRSTORS of a buffer holding CET state faulted ("Bad FPU state",
   then a panic). The SDK's XMM control-status struct in `whpx_ffi.rs` was 8 bytes where it is 16; nothing used it
@@ -26,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   NOT CAPTURED: the XSAVE area (AVX, AVX-512 and other wide vector state), the remaining CET registers (shadow-
   stack pointers other than PL3, ISST), pending-interruption and interrupt-shadow registers, debug registers,
   halted vs runnable, the i8042. NOT VERIFIED: more than one vCPU, virtio devices, a guest with a disk or network,
-  `ClockOnRestore::Continue`, fork of many copies, and the sandbox daemon on Windows (it still serves no machines).
+  fork of many copies, and the sandbox daemon on Windows (it still serves no machines).
 - Compose accepts `restart: "no"` (and `false`); the other policies are refused with the reason
   (unit-tested only).
 - `hm sandbox vm run --network PROJECT`: join a compose project's private network so its services

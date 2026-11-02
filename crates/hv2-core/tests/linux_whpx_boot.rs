@@ -684,7 +684,13 @@ async fn a_second_whpx_vm_continues_from_a_snapshot() {
     // the source is out of scope: its partition is released
 
     let vm = Arc::new(VM::new(make("linux-whpx-fork-copy")).expect("the copy is created"));
-    vm.launch_from_snapshot(&path, hv2_core::snapshot::machine::ClockOnRestore::Fresh)
+    // HV2_TEST_CLOCK=continue restores the TSC with the rest, as a sandbox does.
+    let clock = if std::env::var("HV2_TEST_CLOCK").as_deref() == Ok("continue") {
+        hv2_core::snapshot::machine::ClockOnRestore::Continue
+    } else {
+        hv2_core::snapshot::machine::ClockOnRestore::Fresh
+    };
+    vm.launch_from_snapshot(&path, clock)
         .await
         .expect("the copy launches from the snapshot");
     let sent = Instant::now();
