@@ -182,6 +182,17 @@ pub enum WHV_PARTITION_PROPERTY_CODE {
     WHvPartitionPropertyCodeLocalApicEmulationMode = 0x00001005,
 }
 
+// WHV_INTERRUPT_CONTROL - an interrupt for the hypervisor's emulated local APIC.
+// `TypeAndModes` packs Type:8, DestinationMode:4, TriggerMode:4 (all zero is a
+// fixed-delivery, physical-destination, edge-triggered interrupt).
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct WHV_INTERRUPT_CONTROL {
+    pub TypeAndModes: UINT64,
+    pub Destination: UINT32,
+    pub Vector: UINT32,
+}
+
 // WHV_PARTITION_PROPERTY - Partition property value
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -1063,6 +1074,13 @@ extern "system" {
         VpIndex: UINT32,
         ExitContext: *mut VOID,
         ExitContextSizeInBytes: UINT32,
+    ) -> HRESULT;
+
+    /// Deliver an interrupt to the emulated local APIC of one or more processors
+    pub fn WHvRequestInterrupt(
+        Partition: WHV_PARTITION_HANDLE,
+        Interrupt: *const WHV_INTERRUPT_CONTROL,
+        InterruptControlSize: UINT32,
     ) -> HRESULT;
 
     /// Cancel virtual processor run

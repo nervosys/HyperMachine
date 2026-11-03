@@ -1203,6 +1203,47 @@ impl VM {
                     }
                 }
             }
+
+            // With several vCPUs the hypervisor emulates the local APICs, and
+            // the I/O APIC the firmware tables advertise has to exist: a
+            // device's legacy line is forwarded to it, and what it routes
+            // goes to the local APIC the guest chose. ISA IRQ 0 is GSI 2, as
+            // the MADT's interrupt override says.
+            if self.config.vcpu_count > 1
+                && self.backend.executes_guest_code()
+                && self.backend.platform() != crate::hypervisor::HypervisorPlatform::Kvm
+            {
+                use crate::devices::{IoApic, IoApicDevice, IOAPIC_BASE, IOAPIC_SIZE};
+                let ioapic = Arc::new(IoApic::new(0));
+                let backend = self.backend.clone();
+                let runtime = tokio::runtime::Handle::current();
+                ioapic.set_interrupt_callback(move |destination, vector| {
+                    let backend = backend.clone();
+                    runtime.spawn(async move {
+                        if let Err(e) = backend
+                            .request_lapic_interrupt(u32::from(destination), vector)
+                            .await
+                        {
+                            tracing::warn!("I/O APIC interrupt not delivered: {e}");
+                        }
+                    });
+                });
+                self.devices
+                    .register_device(
+                        "IOAPIC",
+                        Arc::new(tokio::sync::RwLock::new(IoApicDevice::new(Arc::clone(
+                            &ioapic,
+                        )))),
+                    )
+                    .await?;
+                self.devices
+                    .register_mmio_region("IOAPIC".to_string(), IOAPIC_BASE, IOAPIC_SIZE)
+                    .await?;
+                let line = Arc::clone(&ioapic);
+                self.pic.set_line_observer(move |irq| {
+                    line.raise_irq(if irq == 0 { 2 } else { irq });
+                });
+            }
         }
 
         // A boot source on a backend that cannot execute is the one case where

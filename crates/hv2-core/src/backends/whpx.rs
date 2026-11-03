@@ -406,6 +406,16 @@ impl HypervisorBackend for WhpxBackend {
         whpx_vcpu.kick()
     }
 
+    async fn request_lapic_interrupt(&self, destination: u32, vector: u8) -> Result<()> {
+        let vm = self
+            .vm
+            .read()
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| Error::VM("WHPX partition not created".into()))?;
+        vm.request_interrupt(destination, vector)
+    }
+
     /// Read a vCPU's registers for a snapshot. See [`super::whpx_state`] for
     /// what is and is not captured.
     async fn save_vcpu(&self, vcpu: &VCpu) -> Result<crate::snapshot::vcpu::VCpuSnapshot> {
@@ -975,6 +985,39 @@ impl WhpxVm {
             )));
         }
         Ok(offset)
+    }
+
+    /// Raise `vector` on the emulated local APIC with ID `destination`.
+    #[cfg(target_os = "windows")]
+    pub fn request_interrupt(&self, destination: u32, vector: u8) -> Result<()> {
+        let control = WHV_INTERRUPT_CONTROL {
+            TypeAndModes: 0,
+            Destination: destination,
+            Vector: u32::from(vector),
+        };
+        // SAFETY: the partition handle is live for the life of `self` and
+        // `control` outlives the call.
+        let hr = unsafe {
+            WHvRequestInterrupt(
+                self.partition,
+                &control,
+                std::mem::size_of::<WHV_INTERRUPT_CONTROL>() as UINT32,
+            )
+        };
+        if hr != S_OK {
+            return Err(Error::VM(format!(
+                "WHvRequestInterrupt failed: HRESULT 0x{:08X}",
+                hr
+            )));
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn request_interrupt(&self, _destination: u32, _vector: u8) -> Result<()> {
+        Err(Error::VM(
+            "WHPX backend is only available on Windows".into(),
+        ))
     }
 
     #[cfg(target_os = "windows")]

@@ -51,7 +51,6 @@ use crate::{Error, Result};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use parking_lot::RwLock;
-#[cfg(test)]
 use std::sync::Arc;
 
 /// IOAPIC base address (standard location)
@@ -671,6 +670,57 @@ pub mod irq_mapping {
     pub const PCI_C: u8 = 18;
     /// PCI slot D
     pub const PCI_D: u8 = 19;
+}
+
+/// The I/O APIC as a memory-mapped device: IOREGSEL at offset 0 and IOWIN at
+/// 0x10 of its window, as a guest reaches them.
+pub struct IoApicDevice {
+    ioapic: Arc<IoApic>,
+}
+
+impl IoApicDevice {
+    /// Wrap `ioapic` so it can be registered with a device manager.
+    pub fn new(ioapic: Arc<IoApic>) -> Self {
+        Self { ioapic }
+    }
+}
+
+#[async_trait::async_trait]
+impl crate::device::Device for IoApicDevice {
+    fn device_type(&self) -> crate::device::DeviceType {
+        crate::device::DeviceType::InterruptController
+    }
+
+    fn name(&self) -> &str {
+        "IOAPIC"
+    }
+
+    async fn init(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    async fn read(&self, offset: u64, data: &mut [u8]) -> Result<()> {
+        let value = self.ioapic.read(offset, data.len() as u8)?.to_le_bytes();
+        let n = data.len().min(4);
+        data[..n].copy_from_slice(&value[..n]);
+        Ok(())
+    }
+
+    async fn write(&mut self, offset: u64, data: &[u8]) -> Result<()> {
+        let mut bytes = [0u8; 4];
+        let n = data.len().min(4);
+        bytes[..n].copy_from_slice(&data[..n]);
+        self.ioapic
+            .write(offset, u32::from_le_bytes(bytes), data.len() as u8)
+    }
+
+    async fn reset(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    async fn shutdown(&mut self) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]

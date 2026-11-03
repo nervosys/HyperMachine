@@ -49,8 +49,8 @@ pub use ide::{
     SECTOR_SIZE,
 };
 pub use ioapic::{
-    DeliveryMode, DestinationMode, IoApic, Polarity, RedirectionEntry, TriggerMode, IOAPIC_BASE,
-    IOAPIC_NUM_PINS, IOAPIC_SIZE,
+    DeliveryMode, DestinationMode, IoApic, IoApicDevice, Polarity, RedirectionEntry, TriggerMode,
+    IOAPIC_BASE, IOAPIC_NUM_PINS, IOAPIC_SIZE,
 };
 pub use keyboard::KeyboardDevice;
 pub use lapic::{

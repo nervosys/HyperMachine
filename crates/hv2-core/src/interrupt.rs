@@ -147,6 +147,19 @@ pub struct Pic8259 {
     /// spinning never exits; whoever owns the vCPU waits on this to cancel
     /// the run and look.
     raised: Arc<tokio::sync::Notify>,
+    /// Told of every line a device raises, before the PIC's own masking. A VM
+    /// with an I/O APIC forwards the line there.
+    observer: Arc<LineObserver>,
+}
+
+/// A callback for raised lines, which has no `Debug` of its own.
+#[derive(Default)]
+struct LineObserver(Mutex<Option<Arc<dyn Fn(u8) + Send + Sync>>>);
+
+impl std::fmt::Debug for LineObserver {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("LineObserver")
+    }
 }
 
 impl Pic8259 {
@@ -156,7 +169,13 @@ impl Pic8259 {
             master: Arc::new(Mutex::new(PicChip::new(0x20))),
             slave: Arc::new(Mutex::new(PicChip::new(0x28))),
             raised: Arc::new(tokio::sync::Notify::new()),
+            observer: Arc::new(LineObserver::default()),
         }
+    }
+
+    /// Call `observer` with the number of every line raised from now on.
+    pub fn set_line_observer(&self, observer: impl Fn(u8) + Send + Sync + 'static) {
+        *self.observer.0.lock() = Some(Arc::new(observer));
     }
 
     /// Both chips' registers and initialisation state as bytes, for a
@@ -246,6 +265,10 @@ impl Pic8259 {
     pub fn raise_irq(&self, irq: u8) -> Result<()> {
         self.raise_irq_line(irq)?;
         self.raised.notify_one();
+        let observer = self.observer.0.lock().clone();
+        if let Some(observer) = observer {
+            observer(irq);
+        }
         Ok(())
     }
 
