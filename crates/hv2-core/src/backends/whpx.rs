@@ -987,6 +987,28 @@ impl WhpxVm {
         Ok(offset)
     }
 
+    /// With several vCPUs a guest has no other way to learn how many there
+    /// are or where the interrupt controllers sit: describe them in ACPI,
+    /// findable by scanning the BIOS area for the RSDP as on real hardware.
+    /// One vCPU keeps its guest without tables, as before.
+    #[cfg(target_os = "windows")]
+    pub fn write_smp_acpi_tables(&self) -> Result<()> {
+        if self.vcpu_count > 1 {
+            let tables = crate::acpi::AcpiTableBuilder::new()
+                .with_cpus(self.vcpu_count)
+                .build();
+            for (addr, data) in tables.iter() {
+                self.write_guest_memory(*addr, data)?;
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn write_smp_acpi_tables(&self) -> Result<()> {
+        Ok(())
+    }
+
     /// Raise `vector` on the emulated local APIC with ID `destination`.
     #[cfg(target_os = "windows")]
     pub fn request_interrupt(&self, destination: u32, vector: u8) -> Result<()> {
@@ -5193,6 +5215,7 @@ impl WhpxVcpu {
         let boot_params_data =
             LinuxBootProtocol::create_boot_params(params, initrd_addr, initrd_size);
         vm.write_guest_memory(boot_params_addr, &boot_params_data)?;
+        vm.write_smp_acpi_tables()?;
         tracing::debug!(
             "✓ boot_params written: {} bytes at 0x{:016X}",
             boot_params_data.len(),
@@ -5285,6 +5308,7 @@ impl WhpxVcpu {
         for (addr, len) in boot.zero_ranges()? {
             vm.write_guest_memory(addr, &vec![0u8; len as usize])?;
         }
+        vm.write_smp_acpi_tables()?;
 
         self.enable_protected_mode()?;
         self.configure_boot_segments(cs_selector, ds_selector, false)?;
@@ -5461,17 +5485,7 @@ impl WhpxVcpu {
             tracing::debug!("✓ wrote {} bytes at 0x{:016X}", data.len(), addr);
         }
 
-        // With several vCPUs a guest has no other way to learn how many there
-        // are or where the interrupt controllers sit: describe them in ACPI,
-        // findable by scanning the BIOS area for the RSDP as on real hardware.
-        if vm.vcpu_count > 1 {
-            let tables = crate::acpi::AcpiTableBuilder::new()
-                .with_cpus(vm.vcpu_count)
-                .build();
-            for (addr, data) in tables.iter() {
-                vm.write_guest_memory(*addr, data)?;
-            }
-        }
+        vm.write_smp_acpi_tables()?;
 
         // Step 7: Enable protected mode (32-bit, no paging)
         self.enable_protected_mode()?;

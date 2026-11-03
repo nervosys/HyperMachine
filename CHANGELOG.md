@@ -21,7 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   periodic on vector 0x40, halts, and takes five interrupts through its own IDT (one run, BSP only).
   The I/O APIC is emulated at 0xFEC00000 (`IoApicDevice`, a PIC line observer forwards each raised ISA line to it,
   and `WHvRequestInterrupt` delivers what it routes to the emulated LAPIC): a guest wrote redirection entry 4
-  through IOREGSEL/IOWIN, enabled the UART's transmit-empty interrupt, halted, and took vector 0x41 (one run). NOT VERIFIED: a Linux guest with more than one vCPU (the emulated APIC stalled a Linux guest
+  through IOREGSEL/IOWIN, enabled the UART's transmit-empty interrupt, halted, and took vector 0x41 (one run).
+  A Linux 6.6 guest with 2 vCPUs (the same ACPI tables are now written on the Linux boot path) finds the MADT and
+  I/O APIC and brings CPU 1 up through INIT/SIPI (`smp: Brought up 1 node, 2 CPUs`, one run), but it does NOT reach
+  userspace: the kernel reports `APIC timer disabled due to verification failure` and idles at the i8042 probe, so a
+  Linux guest with more than one vCPU still does not work. NOT VERIFIED: a Linux guest with more than one vCPU (the emulated APIC stalled a Linux guest
   in idle on 2026-10-21, and the userspace PIC is still wired to vCPU 0 only), more than 4 vCPUs, the I/O APIC beyond one
   edge-triggered pin, level-triggered lines and EOI, the LAPIC timer on an AP or in one-shot or TSC-deadline mode, and snapshots of a multi-vCPU guest.
 - WHPX guests can be snapshotted and restored, into the same VM or a fresh one (`backends/whpx_state.rs`,
