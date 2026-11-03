@@ -22,13 +22,22 @@ const COUNT: u32 = 0x9100;
 const COM1: u32 = 0x3F8;
 const BOUND: Duration = Duration::from_secs(20);
 
+/// A busy loop of `iterations` decrements; nothing when zero.
+fn spin_loop(code: &mut Vec<u8>, iterations: u32) {
+    if iterations != 0 {
+        code.push(0xB9); // mov ecx, iterations
+        code.extend_from_slice(&le(iterations));
+        code.extend_from_slice(&[0x49, 0x75, 0xFD]); // dec ecx; jnz -3
+    }
+}
+
 fn le(v: u32) -> [u8; 4] {
     v.to_le_bytes()
 }
 
 /// Real-mode entry at the SIPI vector, then 32-bit code that reads the local
 /// APIC ID, records it, counts itself and halts.
-fn trampoline() -> Vec<u8> {
+fn trampoline(spin: u32) -> Vec<u8> {
     // Offsets inside the page; the GDT pseudo-descriptor and table follow the code.
     let mut code: Vec<u8> = Vec::new();
     code.extend_from_slice(&[0xFA, 0x31, 0xC0, 0x8E, 0xD8]); // cli; xor ax,ax; mov ds,ax
@@ -45,6 +54,7 @@ fn trampoline() -> Vec<u8> {
     code.extend_from_slice(&[0xC1, 0xE8, 0x18, 0x89, 0xC3, 0x88, 0xD9, 0x80, 0xC1, b'0']);
     code.extend_from_slice(&[0x88, 0x8B]); // mov [ebx+IDS],cl
     code.extend_from_slice(&le(IDS));
+    spin_loop(&mut code, spin);
     code.extend_from_slice(&[0xF0, 0xFF, 0x05]); // lock inc dword [COUNT]
     code.extend_from_slice(&le(COUNT));
     code.extend_from_slice(&[0xF4, 0xEB, 0xFD]); // halt: hlt; jmp halt
@@ -66,8 +76,8 @@ fn trampoline() -> Vec<u8> {
 
 /// The BSP: copy the trampoline, send INIT then two SIPIs, wait for every AP,
 /// print the IDs.
-fn bsp(cpus: u32, base: u32) -> Vec<u8> {
-    let tramp = trampoline();
+fn bsp(cpus: u32, base: u32, spin: u32) -> Vec<u8> {
+    let tramp = trampoline(spin);
     let mut code: Vec<u8> = Vec::new();
     // The trampoline lives after this code; its address is patched in below.
     code.push(0xBE);
@@ -88,6 +98,7 @@ fn bsp(cpus: u32, base: u32) -> Vec<u8> {
         code.extend_from_slice(&[0xC6, 0x05]);
         code.extend_from_slice(&le(IDS));
         code.push(b'0');
+        spin_loop(&mut code, spin);
     } else {
         code.extend_from_slice(&[0xC7, 0x05, 0xF0, 0x00, 0xE0, 0xFE, 0xFF, 0x01, 0, 0]); // SVR
         code.extend_from_slice(&[0xA1, 0x20, 0x00, 0xE0, 0xFE]);
@@ -106,6 +117,7 @@ fn bsp(cpus: u32, base: u32) -> Vec<u8> {
             code.extend_from_slice(&[0xC7, 0x05, 0x00, 0x03, 0xE0, 0xFE, 0x08, 0x46, 0x0C, 0x00]); // SIPI
             delay(&mut code);
         }
+        spin_loop(&mut code, spin);
         // wait: mov eax,[COUNT]; cmp eax,cpus-1; jb wait
         code.push(0xA1);
         code.extend_from_slice(&le(COUNT));
@@ -133,8 +145,8 @@ fn bsp(cpus: u32, base: u32) -> Vec<u8> {
     code
 }
 
-fn image(cpus: u32) -> Vec<u8> {
-    flat(bsp(cpus, 0x0010_0010))
+fn image(cpus: u32, spin: u32) -> Vec<u8> {
+    flat(bsp(cpus, 0x0010_0010, spin))
 }
 
 fn flat(code: Vec<u8>) -> Vec<u8> {
@@ -150,7 +162,7 @@ fn flat(code: Vec<u8>) -> Vec<u8> {
 }
 
 async fn run(cpus: u32) -> Option<String> {
-    run_image(cpus, image(cpus)).await
+    run_image(cpus, image(cpus, 0)).await
 }
 
 async fn run_image(cpus: u32, image: Vec<u8>) -> Option<String> {
@@ -225,5 +237,41 @@ async fn the_madt_lists_one_local_apic_per_vcpu() {
         "4
 ",
         "a guest should find four LAPICs in the MADT"
+    );
+}
+
+/// Run the same fixed spin on every processor and time the whole guest.
+async fn timed(cpus: u32, spin: u32) -> Option<(String, Duration)> {
+    let started = Instant::now();
+    let console = run_image(cpus, image(cpus, spin)).await?;
+    Some((console, started.elapsed()))
+}
+
+/// Every vCPU does the same work. If they run in parallel the 4-vCPU guest
+/// takes about as long as the 1-vCPU one; time-sliced on one host thread it
+/// would take about four times as long. Needs a quiet host.
+#[tokio::test(flavor = "multi_thread")]
+async fn four_vcpus_spin_in_parallel_not_in_turn() {
+    const SPIN: u32 = 0x8000_0000;
+    let Some((one, t1)) = timed(1, SPIN).await else {
+        return;
+    };
+    let Some((four, t4)) = timed(4, SPIN).await else {
+        return;
+    };
+    println!("spin of {SPIN:#x} per vCPU: 1 vCPU {t1:?}, 4 vCPUs {t4:?}");
+    assert_eq!(
+        one,
+        "0
+"
+    );
+    assert_eq!(
+        four,
+        "0123
+"
+    );
+    assert!(
+        t4 < t1 * 2,
+        "4 vCPUs took {t4:?} against {t1:?} for one: they ran in turn, not in parallel"
     );
 }
