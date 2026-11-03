@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `a_linux_guest_with_two_vcpus_brings_both_online`). Five causes, found one after another by tracing the vCPU loop
   and the kernel's `apic=verbose` log:
   (1) the 8259 lost half the PIT's ticks: IRQ0 raised while a request was waiting was absorbed, so a guest counting
-  jiffies ran slow against its local APIC timer (100 ticks took 198 ms, now 101 ms; a bare-metal-style guest, `the_8259_delivers_the_pits_ticks_not_half_of_them`).
+  jiffies ran slow against its local APIC timer (100 ticks took 198 ms, now 101 ms; measured once on the dev host with a busy-waiting Multiboot guest. A timing test of this was added and removed: on the CI runner the same 100 ticks took 241 ms, which depends on the runner's nested-virtualization speed, so master CI went red on `f97ceea3`; the logic is covered by deterministic unit tests instead).
   Coalesced ticks (at most 50, none while IRQ0 is masked) are now handed back one per delivery, as KVM's PIT does; this also changes
   single-vCPU guests. (2) No ACPI PM timer existed at the address the tables name (0x408), so Linux calibrated the
   APIC timer against an assumed TSC and then rejected it (`APIC timer disabled due to verification failure`); a
