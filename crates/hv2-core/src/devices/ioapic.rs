@@ -344,7 +344,9 @@ impl Default for RedirectionEntry {
 }
 
 /// IOAPIC interrupt callback
-pub type IoApicCallback = Box<dyn Fn(u8, u8) + Send + Sync>;
+/// Called with the destination, the vector and whether the destination is a
+/// logical mask (as opposed to a physical APIC ID).
+pub type IoApicCallback = Box<dyn Fn(u8, u8, bool) + Send + Sync>;
 
 /// IOAPIC state
 pub struct IoApic {
@@ -356,6 +358,10 @@ pub struct IoApic {
     redirection_table: RwLock<[RedirectionEntry; IOAPIC_NUM_PINS]>,
     /// IRQ input states (for level-triggered)
     irq_state: [AtomicU32; 1], // Bitmap for 24 IRQs
+    /// Edges that arrived while their pin was masked, delivered when it is
+    /// unmasked. A device that signals once (a UART with a character to send)
+    /// would otherwise be lost to a guest that unmasks a moment later.
+    masked_edges: AtomicU32,
     /// Callback for interrupt delivery
     interrupt_callback: RwLock<Option<IoApicCallback>>,
 }
@@ -368,6 +374,7 @@ impl IoApic {
             regsel: AtomicU32::new(0),
             redirection_table: RwLock::new([RedirectionEntry::new(); IOAPIC_NUM_PINS]),
             irq_state: [AtomicU32::new(0)],
+            masked_edges: AtomicU32::new(0),
             interrupt_callback: RwLock::new(None),
         }
     }
@@ -375,7 +382,7 @@ impl IoApic {
     /// Set the interrupt delivery callback
     pub fn set_interrupt_callback<F>(&self, callback: F)
     where
-        F: Fn(u8, u8) + Send + Sync + 'static,
+        F: Fn(u8, u8, bool) + Send + Sync + 'static,
     {
         *self.interrupt_callback.write() = Some(Box::new(callback));
     }
@@ -488,6 +495,17 @@ impl IoApic {
                             entry.set_low(clean_value);
                             // Preserve remote IRR
                             entry.raw |= old_remote_irr;
+                            // An edge that came while the pin was masked is
+                            // delivered now that it is not.
+                            let bit = 1u32 << entry_idx;
+                            if !entry.is_masked()
+                                && self.masked_edges.fetch_and(!bit, Ordering::Relaxed) & bit != 0
+                            {
+                                let latched = *entry;
+                                drop(table);
+                                self.deliver_interrupt(&latched);
+                                return Ok(());
+                            }
                         }
                     }
                 }
@@ -510,6 +528,9 @@ impl IoApic {
 
         // Check if masked
         if entry.is_masked() {
+            if entry.trigger_mode() == TriggerMode::Edge {
+                self.masked_edges.fetch_or(1 << irq, Ordering::Relaxed);
+            }
             return;
         }
 
@@ -567,7 +588,11 @@ impl IoApic {
     fn deliver_interrupt(&self, entry: &RedirectionEntry) {
         let callback = self.interrupt_callback.read();
         if let Some(ref cb) = *callback {
-            cb(entry.destination(), entry.vector());
+            cb(
+                entry.destination(),
+                entry.vector(),
+                entry.destination_mode() == DestinationMode::Logical,
+            );
         }
     }
 
@@ -859,7 +884,7 @@ mod tests {
         let delivered = Arc::new(AtomicBool::new(false));
         let delivered_clone = delivered.clone();
 
-        ioapic.set_interrupt_callback(move |_dest, _vec| {
+        ioapic.set_interrupt_callback(move |_dest, _vec, _logical| {
             delivered_clone.store(true, Ordering::Relaxed);
         });
 
@@ -879,7 +904,7 @@ mod tests {
         let delivered_clone = delivered.clone();
         let vector_clone = vector_received.clone();
 
-        ioapic.set_interrupt_callback(move |_dest, vec| {
+        ioapic.set_interrupt_callback(move |_dest, vec, _logical| {
             delivered_clone.store(true, Ordering::Relaxed);
             vector_clone.store(vec as u32, Ordering::Relaxed);
         });
@@ -908,7 +933,7 @@ mod tests {
         let delivered = Arc::new(AtomicU32::new(0));
         let delivered_clone = delivered.clone();
 
-        ioapic.set_interrupt_callback(move |_dest, _vec| {
+        ioapic.set_interrupt_callback(move |_dest, _vec, _logical| {
             delivered_clone.fetch_add(1, Ordering::Relaxed);
         });
 
@@ -963,5 +988,48 @@ mod tests {
 
         assert_eq!(entry2.vector(), 0x42);
         assert_eq!(entry2.destination(), 5);
+    }
+
+    #[test]
+    fn an_edge_raised_while_masked_is_delivered_on_unmask() {
+        let ioapic = IoApic::new(0);
+        let received = Arc::new(AtomicU32::new(0));
+        let seen = received.clone();
+        ioapic.set_interrupt_callback(move |_dest, vec, _logical| {
+            seen.store(u32::from(vec), Ordering::Relaxed);
+        });
+        ioapic
+            .configure_irq(4, 0x41, 0, TriggerMode::Edge, Polarity::ActiveHigh, true)
+            .unwrap();
+        ioapic.raise_irq(4);
+        assert_eq!(received.load(Ordering::Relaxed), 0, "masked: not delivered");
+        // The guest writes the low dword of pin 4's entry without the mask bit.
+        ioapic
+            .regsel
+            .store(indirect::IOREDTBL_BASE + 8, Ordering::Relaxed);
+        ioapic.write_indirect(0x41).unwrap();
+        assert_eq!(
+            received.load(Ordering::Relaxed),
+            0x41,
+            "delivered on unmask"
+        );
+    }
+
+    #[test]
+    fn the_destination_mode_reaches_the_callback() {
+        let ioapic = IoApic::new(0);
+        let logical = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let seen = logical.clone();
+        ioapic.set_interrupt_callback(move |_dest, _vec, is_logical| {
+            seen.store(is_logical, Ordering::Relaxed);
+        });
+        ioapic
+            .configure_irq(4, 0x41, 2, TriggerMode::Edge, Polarity::ActiveHigh, false)
+            .unwrap();
+        let mut entry = ioapic.get_entry(4).unwrap();
+        entry.set_destination_mode(DestinationMode::Logical);
+        ioapic.set_entry(4, entry).unwrap();
+        ioapic.raise_irq(4);
+        assert!(logical.load(Ordering::Relaxed));
     }
 }

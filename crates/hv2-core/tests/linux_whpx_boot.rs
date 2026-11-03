@@ -838,3 +838,81 @@ async fn a_restored_whpx_guest_reads_its_pci_data_disk() {
         "the write after restore never reached the image file"
     );
 }
+
+/// A Linux guest on two vCPUs brings the second one online and reaches
+/// userspace: the ACPI tables name both, the local APIC timer is calibrated
+/// against the PM timer and accepted, and the UART's interrupt (routed by the
+/// I/O APIC to a logical destination) reaches whichever CPU Linux chose.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_linux_guest_with_two_vcpus_brings_both_online() {
+    if let Some(why) = unavailable() {
+        eprintln!("skipping: {why}");
+        return;
+    }
+    if std::env::var("HV2_TEST_INITRD_SHELL").is_err() {
+        eprintln!("skipping: needs HV2_TEST_INITRD_SHELL (a shell on the console)");
+        return;
+    }
+    let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
+    // With several vCPUs the guest has a local APIC and an I/O APIC, so the
+    // single-vCPU `nolapic noapic` is left off.
+    let mut source = BootSource::linux(&kernel)
+        .with_cmdline("console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 panic=1 apic=verbose");
+    if let Ok(initrd) = std::env::var("HV2_TEST_INITRD") {
+        source = source.with_initrd(initrd);
+    }
+    let config = VMConfig {
+        name: "linux-whpx-two-vcpus".to_string(),
+        vcpu_count: 2,
+        memory_size: memory_mib() * 1024 * 1024,
+        boot: Some(source),
+        ..Default::default()
+    };
+    let Ok(vm) = VM::new(config) else {
+        eprintln!("skipping: a VM could not be created here");
+        return;
+    };
+    if !vm.executes_guest_code() {
+        eprintln!("skipping: no backend on this host executes guest code");
+        return;
+    }
+    let vm = Arc::new(vm);
+    if let Err(e) = vm.provision().await {
+        eprintln!("skipping: provision failed ({e})");
+        return;
+    }
+    vm.launch().await.expect("the vCPU loop starts");
+
+    let started = Instant::now();
+    let marker = std::env::var("HV2_TEST_INITRD_MARKER").unwrap_or_else(|_| "HV2 READY".into());
+    let mut console = String::new();
+    while started.elapsed() < BOOT_DEADLINE && !console.contains(marker.as_str()) {
+        tokio::time::sleep(POLL).await;
+        console = vm.console_output().await;
+    }
+    assert!(
+        console.contains(marker.as_str()),
+        "userspace never wrote its marker with two vCPUs"
+    );
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    vm.send_serial(
+        b"echo hv2-cpus-$(grep -c ^processor /proc/cpuinfo)-end
+",
+    )
+    .await
+    .expect("the serial input is accepted");
+    while started.elapsed() < BOOT_DEADLINE && !console.contains("hv2-cpus-2-end") {
+        tokio::time::sleep(POLL).await;
+        console = vm.console_output().await;
+    }
+    let _ = vm.stop().await;
+    assert!(
+        console.contains("hv2-cpus-2-end"),
+        "the guest should report two processors; console tail: {}",
+        &console[console.len().saturating_sub(400)..]
+    );
+    assert!(
+        !console.contains("APIC timer disabled"),
+        "the local APIC timer was rejected"
+    );
+}

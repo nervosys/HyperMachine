@@ -8,6 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- WHPX: a Linux guest with 2 vCPUs now boots to userspace (`tests/linux_whpx_boot.rs`
+  `a_linux_guest_with_two_vcpus_brings_both_online`). Five causes, found one after another by tracing the vCPU loop
+  and the kernel's `apic=verbose` log:
+  (1) the 8259 lost half the PIT's ticks: IRQ0 raised while a request was waiting was absorbed, so a guest counting
+  jiffies ran slow against its local APIC timer (100 ticks took 198 ms, now 101 ms; a bare-metal-style guest, `the_8259_delivers_the_pits_ticks_not_half_of_them`).
+  Coalesced ticks (at most 50, none while IRQ0 is masked) are now handed back one per delivery, as KVM's PIT does; this also changes
+  single-vCPU guests. (2) No ACPI PM timer existed at the address the tables name (0x408), so Linux calibrated the
+  APIC timer against an assumed TSC and then rejected it (`APIC timer disabled due to verification failure`); a
+  3.579545 MHz `AcpiPmTimer` makes it report `PM-Timer result ok`. (3) The I/O APIC ignored the redirection entry's
+  destination mode: Linux sent the UART (IRQ 4) to logical destination 0x02 (a mask meaning CPU 1) and it was used as
+  APIC ID 2, so the interrupt vanished and userspace never printed; the mode now reaches `WHvRequestInterrupt`.
+  (4) An edge raised while its I/O APIC pin was masked was dropped; it is now latched and delivered on unmask.
+  (5) Nothing answered the PM1 event/control block at 0x400, so ACPI saw every fixed event pending
+  (`No installed handler for fixed event - PM_Timer`). Also `interrupts_deliverable` no longer answers "yes"
+  unconditionally under APIC emulation (it checks IF, interrupt shadow and the queued slot again); whether that change
+  was necessary was not isolated. Verified, Windows host with WHPX, Linux 6.6 bzImage and a busybox initrd: the guest
+  prints `hv2-cpus-2-end` from `grep -c ^processor /proc/cpuinfo` (3.7 s to a shell); the 1-vCPU Linux tests
+  (boot, snapshot, fork, PCI data disk) and the 14 SMP tests pass; 2438 lib tests; clippy on Windows and Linux.
+  NOT VERIFIED: more than 2 vCPUs under Linux, that CPU 1 runs user work in parallel (only that it is online),
+  several runs for flakiness (each Linux result is one or two runs), level-triggered I/O APIC lines and PCI
+  interrupts in I/O APIC mode, a PCI root disk with 2 vCPUs, other kernels or distributions, snapshots of a
+  2-vCPU guest, KVM and HVF.
 - WHPX, several vCPUs: a vCPU halted in HLT now wakes for 8259 (PIC) interrupts. With the local APIC emulated the
   hypervisor parks a halted vCPU inside its run call, and a vector written to the pending-interruption register did
   not end that, so the PIT tick never arrived (reported by Botnix: 0 HLT exits with 4 vCPUs against 2,432 with one).
@@ -16,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   wakes the vCPU but leaves it in service in the APIC, so a guest that acknowledges only the 8259 gets one tick; an
   ExtInt pending event did not wake it either and stalled Linux earlier. Verified: a Multiboot guest on 2 vCPUs
   remaps the PIC, programs the PIT, `sti; hlt`, and takes five ticks (it took 1 inject then stopped before; one run).
-  A Linux guest with 2 vCPUs is NOT fixed by this: it still fails the LAPIC timer verification.
+  A Linux guest with 2 vCPUs was NOT fixed by this alone; see the first entry above (2026-11-03).
 - A WHPX VM with the I/O APIC (several vCPUs) no longer keeps its partition alive after `stop`: the I/O APIC's
   interrupt callback held the backend strongly, the PIC's line observer held the I/O APIC, and the PIT task kept the
   PIC, so a second VM in the same process failed to map guest memory (`0xC0370008`) until the process ended. The
@@ -55,7 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`lapic delta = 1249960`) and its verification then waits 75 jiffies for a timer interrupt that never comes. Bare
   guests show the emulated timer is not the cause: it also fires one-shot, its current-count register falls, and a
   busy-waiting vCPU takes it with Linux's vector (0xEC) and divide (16). Suspect, untested: the vCPU loop's userspace
-  PIC injection interfering with the hypervisor's own interrupt delivery. NOT VERIFIED: a Linux guest with more than one vCPU (the emulated APIC stalled a Linux guest
+  PIC injection interfering with the hypervisor's own interrupt delivery (superseded 2026-11-03: the causes were elsewhere, see Fixed). NOT VERIFIED at the time: a Linux guest with more than one vCPU (the emulated APIC stalled a Linux guest
   in idle on 2026-10-21, and the userspace PIC is still wired to vCPU 0 only), more than 4 vCPUs, the I/O APIC beyond one
   edge-triggered pin, level-triggered lines and EOI, the LAPIC timer on an AP or in one-shot or TSC-deadline mode, and snapshots of a multi-vCPU guest.
 - WHPX guests can be snapshotted and restored, into the same VM or a fresh one (`backends/whpx_state.rs`,

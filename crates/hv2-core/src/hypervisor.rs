@@ -392,15 +392,20 @@ pub trait HypervisorBackend: Send + Sync {
     }
 
     /// Deliver a fixed, edge-triggered interrupt `vector` to the local APIC
-    /// whose ID is `destination`, for a backend whose hypervisor emulates the
+    /// whose ID (or, when `logical`, whose logical mask) is `destination`, for a backend whose hypervisor emulates the
     /// local APIC and so takes interrupts from the host side. A backend that
     /// does not answers that it cannot.
     ///
     /// # Errors
     ///
     /// The default, and a backend whose request fails.
-    async fn request_lapic_interrupt(&self, destination: u32, vector: u8) -> Result<()> {
-        let _ = (destination, vector);
+    async fn request_lapic_interrupt(
+        &self,
+        destination: u32,
+        vector: u8,
+        logical: bool,
+    ) -> Result<()> {
+        let _ = (destination, vector, logical);
         Err(Error::NotSupported(
             "this backend does not emulate a local APIC".into(),
         ))

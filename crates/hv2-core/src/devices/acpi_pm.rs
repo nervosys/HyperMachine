@@ -107,6 +107,80 @@ impl Device for AcpiPm {
     }
 }
 
+/// The port the SMP tables (`acpi.rs`) name as `PM_TMR_BLK`.
+pub const ACPI_PM_TIMER_PORT: u16 = 0x408;
+/// The timer's frequency, fixed by the ACPI specification.
+const PM_TIMER_HZ: u128 = 3_579_545;
+
+/// The ACPI power-management timer: a free-running 24-bit counter at
+/// 3.579545 MHz.
+///
+/// A Linux guest that finds it calibrates its local APIC timer against it
+/// and trusts the result, instead of timing the APIC against a TSC rate it
+/// had to be told and checking that against jiffies. It counts host
+/// monotonic time from when the device is made.
+#[derive(Debug)]
+pub struct AcpiPmTimer {
+    started: std::time::Instant,
+}
+
+impl AcpiPmTimer {
+    /// A timer at zero now.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            started: std::time::Instant::now(),
+        }
+    }
+
+    fn count(&self) -> u32 {
+        let ticks = self.started.elapsed().as_nanos() * PM_TIMER_HZ / 1_000_000_000;
+        (ticks & 0x00FF_FFFF) as u32
+    }
+}
+
+impl Default for AcpiPmTimer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl Device for AcpiPmTimer {
+    fn device_type(&self) -> DeviceType {
+        DeviceType::Timer
+    }
+
+    fn name(&self) -> &str {
+        "ACPI PM timer"
+    }
+
+    async fn init(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    async fn read(&self, offset: u64, data: &mut [u8]) -> Result<()> {
+        let count = self.count().to_le_bytes();
+        for (i, byte) in data.iter_mut().enumerate() {
+            *byte = count.get(offset as usize + i).copied().unwrap_or(0xFF);
+        }
+        Ok(())
+    }
+
+    async fn write(&mut self, _offset: u64, _data: &[u8]) -> Result<()> {
+        // Read-only.
+        Ok(())
+    }
+
+    async fn reset(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    async fn shutdown(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,5 +217,20 @@ mod tests {
         assert_eq!(beyond, [0xFF]);
         device.reset().await.unwrap();
         assert_eq!(read16(&device, 2).await, 0);
+    }
+
+    #[tokio::test]
+    async fn the_pm_timer_counts_at_3_58_mhz_and_stays_24_bit() {
+        let timer = AcpiPmTimer::new();
+        let mut a = [0u8; 4];
+        timer.read(0, &mut a).await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let mut b = [0u8; 4];
+        timer.read(0, &mut b).await.unwrap();
+        let (a, b) = (u32::from_le_bytes(a), u32::from_le_bytes(b));
+        assert!(a <= 0x00FF_FFFF && b <= 0x00FF_FFFF, "24 bits");
+        let delta = b.wrapping_sub(a) & 0x00FF_FFFF;
+        // 50 ms is about 178,977 counts; allow a slow host.
+        assert!((170_000..400_000).contains(&delta), "delta {delta}");
     }
 }

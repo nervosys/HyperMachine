@@ -412,7 +412,12 @@ impl HypervisorBackend for WhpxBackend {
         whpx_vcpu.kick()
     }
 
-    async fn request_lapic_interrupt(&self, destination: u32, vector: u8) -> Result<()> {
+    async fn request_lapic_interrupt(
+        &self,
+        destination: u32,
+        vector: u8,
+        logical: bool,
+    ) -> Result<()> {
         // (Also used for the PIC's vectors when the APIC is emulated.)
         let vm = self
             .vm
@@ -420,7 +425,7 @@ impl HypervisorBackend for WhpxBackend {
             .as_ref()
             .cloned()
             .ok_or_else(|| Error::VM("WHPX partition not created".into()))?;
-        vm.request_interrupt(destination, vector)
+        vm.request_interrupt(destination, vector, logical)
     }
 
     /// Read a vCPU's registers for a snapshot. See [`super::whpx_state`] for
@@ -490,11 +495,6 @@ impl HypervisorBackend for WhpxBackend {
     }
 
     async fn interrupts_deliverable(&self, vcpu: &VCpu) -> Result<bool> {
-        // The emulated local APIC queues what it is given until the guest can
-        // take it, so there is nothing to wait for.
-        if self.local_apic_emulated() {
-            return Ok(true);
-        }
         let vcpu_id = vcpu.id();
         let whpx_vcpu = {
             let map = self.vcpu_map.read();
@@ -1029,9 +1029,10 @@ impl WhpxVm {
 
     /// Raise `vector` on the emulated local APIC with ID `destination`.
     #[cfg(target_os = "windows")]
-    pub fn request_interrupt(&self, destination: u32, vector: u8) -> Result<()> {
+    pub fn request_interrupt(&self, destination: u32, vector: u8, logical: bool) -> Result<()> {
         let control = WHV_INTERRUPT_CONTROL {
-            TypeAndModes: 0,
+            // Type 0 (fixed), then DestinationMode in bits 8-11: 1 is logical.
+            TypeAndModes: if logical { 1 << 8 } else { 0 },
             Destination: destination,
             Vector: u32::from(vector),
         };
@@ -1054,7 +1055,7 @@ impl WhpxVm {
     }
 
     #[cfg(not(target_os = "windows"))]
-    pub fn request_interrupt(&self, _destination: u32, _vector: u8) -> Result<()> {
+    pub fn request_interrupt(&self, _destination: u32, _vector: u8, _logical: bool) -> Result<()> {
         Err(Error::VM(
             "WHPX backend is only available on Windows".into(),
         ))

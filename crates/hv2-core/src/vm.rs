@@ -1165,6 +1165,31 @@ impl VM {
             // without this the guest's programming of the PIT hit an unhandled
             // port, nothing ever raised IRQ 0, and a kernel that did STI and
             // HLT to wait for its tick waited forever.
+            // The ACPI PM timer, where the SMP tables name one (several
+            // vCPUs on an emulated local APIC): the guest calibrates that
+            // APIC's timer against it.
+            if self.config.vcpu_count > 1
+                && self.backend.executes_guest_code()
+                && self.backend.platform() != crate::hypervisor::HypervisorPlatform::Kvm
+            {
+                use crate::devices::acpi_pm::{AcpiPm, AcpiPmTimer, ACPI_PM_TIMER_PORT};
+                // The PM1 event and control registers the same tables name at
+                // 0x400: absent, they read as every event pending.
+                machine = machine.with_device(crate::machine::MachineDevice::new(
+                    "ACPI PM1",
+                    Arc::new(tokio::sync::RwLock::new(AcpiPm::new())),
+                    0x400,
+                    0x405,
+                    "a guest reads an absent PM1 block as every status bit set",
+                ));
+                machine = machine.with_device(crate::machine::MachineDevice::new(
+                    "ACPI PM timer",
+                    Arc::new(tokio::sync::RwLock::new(AcpiPmTimer::new())),
+                    ACPI_PM_TIMER_PORT,
+                    ACPI_PM_TIMER_PORT + 3,
+                    "a guest told by its tables that a PM timer exists reads an absent one as all ones",
+                ));
+            }
             // An Apple SMC, only when the operator supplied an OSK. The key
             // is never embedded in this repository.
             if let Some(osk) = *self.apple_smc_osk.read() {
@@ -1236,13 +1261,13 @@ impl VM {
                 // hypervisor partition alive with it after the VM has stopped.
                 let backend = Arc::downgrade(&self.backend);
                 let runtime = tokio::runtime::Handle::current();
-                ioapic.set_interrupt_callback(move |destination, vector| {
+                ioapic.set_interrupt_callback(move |destination, vector, logical| {
                     let Some(backend) = backend.upgrade() else {
                         return;
                     };
                     runtime.spawn(async move {
                         if let Err(e) = backend
-                            .request_lapic_interrupt(u32::from(destination), vector)
+                            .request_lapic_interrupt(u32::from(destination), vector, logical)
                             .await
                         {
                             tracing::warn!("I/O APIC interrupt not delivered: {e}");

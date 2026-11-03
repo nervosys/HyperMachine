@@ -46,7 +46,15 @@ struct PicChip {
     init_state: InitState,
     /// Read register select (false=IRR, true=ISR)
     read_isr: bool,
+    /// Interval-timer ticks that arrived while one was already waiting, and
+    /// which a delivery gives back one at a time. Only line 0 of the master
+    /// counts them. See [`PicChip::raise_timer_irq`].
+    lost_ticks: u8,
 }
+
+/// The most coalesced ticks kept: after a long pause the guest catches up on
+/// this many, not on every tick it missed.
+const MAX_LOST_TICKS: u8 = 50;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum InitState {
@@ -66,6 +74,24 @@ impl PicChip {
             auto_eoi: false,
             init_state: InitState::Ready,
             read_isr: false,
+            lost_ticks: 0,
+        }
+    }
+
+    /// Raise the interval timer's line. A request already waiting absorbs
+    /// the edge, as on hardware, but the tick is remembered and handed back
+    /// after a delivery: a guest that counts ticks to keep time (jiffies)
+    /// otherwise runs slow whenever it is a moment late, and a kernel that
+    /// checks its local APIC timer against jiffies refuses the timer. KVM's
+    /// in-kernel PIT re-injects missed ticks for the same reason.
+    fn raise_timer_irq(&mut self) {
+        if self.irr & 1 != 0 {
+            if self.imr & 1 != 0 {
+                return;
+            }
+            self.lost_ticks = (self.lost_ticks + 1).min(MAX_LOST_TICKS);
+        } else {
+            self.irr |= 1;
         }
     }
 
@@ -99,6 +125,10 @@ impl PicChip {
             self.irr &= !(1 << irq);
             if !self.auto_eoi {
                 self.isr |= 1 << irq;
+            }
+            if irq == 0 && self.lost_ticks > 0 {
+                self.lost_ticks -= 1;
+                self.irr |= 1;
             }
         }
     }
@@ -243,6 +273,7 @@ impl Pic8259 {
                 auto_eoi: raw[4] != 0,
                 init_state,
                 read_isr: raw[6] != 0,
+                lost_ticks: 0,
             });
         }
         let slave = chips.pop().expect("two chips were read");
@@ -275,7 +306,11 @@ impl Pic8259 {
     fn raise_irq_line(&self, irq: u8) -> Result<()> {
         if irq < 8 {
             // Master PIC
-            self.master.lock().raise_irq(irq);
+            if irq == 0 {
+                self.master.lock().raise_timer_irq();
+            } else {
+                self.master.lock().raise_irq(irq);
+            }
         } else if irq < 16 {
             // Slave PIC
             self.slave.lock().raise_irq(irq - 8);
@@ -871,5 +906,51 @@ mod tests {
 
         // Test shutdown
         pic.shutdown().await.unwrap();
+    }
+
+    #[test]
+    fn timer_ticks_that_arrive_while_one_waits_are_handed_back() {
+        let pic = Pic8259::new();
+        pic.set_master_mask(0);
+        // Three ticks before the guest takes the first.
+        for _ in 0..3 {
+            pic.raise_irq(0).unwrap();
+        }
+        let mut delivered = 0;
+        while let Some(vector) = pic.get_pending_interrupt() {
+            pic.acknowledge_interrupt(vector).unwrap();
+            delivered += 1;
+            // While it is in service nothing more is pending.
+            assert_eq!(pic.get_pending_interrupt(), None);
+            pic.write_master_command(0x20);
+            assert!(delivered <= 3, "more ticks came back than were lost");
+        }
+        assert_eq!(delivered, 3, "each of the three ticks is delivered");
+    }
+
+    #[test]
+    fn timer_ticks_are_not_banked_while_irq0_is_masked() {
+        let pic = Pic8259::new();
+        // Masked (the reset state): ticks come and go.
+        for _ in 0..10 {
+            pic.raise_irq(0).unwrap();
+        }
+        pic.set_master_mask(0);
+        let vector = pic.get_pending_interrupt().expect("one request waits");
+        pic.acknowledge_interrupt(vector).unwrap();
+        pic.write_master_command(0x20);
+        assert_eq!(pic.get_pending_interrupt(), None, "no burst on unmask");
+    }
+
+    #[test]
+    fn other_lines_are_still_edge_triggered_and_coalesce() {
+        let pic = Pic8259::new();
+        pic.set_master_mask(0);
+        pic.raise_irq(4).unwrap();
+        pic.raise_irq(4).unwrap();
+        let vector = pic.get_pending_interrupt().expect("pending");
+        pic.acknowledge_interrupt(vector).unwrap();
+        pic.write_master_command(0x20);
+        assert_eq!(pic.get_pending_interrupt(), None, "only IRQ 0 is replayed");
     }
 }
