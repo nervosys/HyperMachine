@@ -178,6 +178,8 @@ pub enum WHV_PARTITION_PROPERTY_CODE {
     WHvPartitionPropertyCodeProcessorCount = 0x00001fff,
     WHvPartitionPropertyCodeProcessorFeatures = 0x00001001,
     WHvPartitionPropertyCodeProcessorClFlushSize = 0x00001002,
+    /// 0 = none (userspace APIC), 1 = xAPIC, 2 = x2APIC, emulated by the hypervisor.
+    WHvPartitionPropertyCodeLocalApicEmulationMode = 0x00001005,
 }
 
 // WHV_PARTITION_PROPERTY - Partition property value
@@ -189,6 +191,7 @@ pub union WHV_PARTITION_PROPERTY {
     pub CpuReserve: UINT32,
     pub CpuCap: UINT32,
     pub CpuWeight: UINT32,
+    pub LocalApicEmulationMode: UINT32,
 }
 
 // WHV_EXTENDED_VM_EXITS - Extended VM exit configuration

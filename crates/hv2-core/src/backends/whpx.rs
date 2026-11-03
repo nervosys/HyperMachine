@@ -685,6 +685,27 @@ impl WhpxVm {
                 )));
             }
 
+            // With more than one vCPU the hypervisor must emulate the local
+            // APIC: INIT/SIPI to an application processor is delivered by it.
+            // A single vCPU keeps the userspace PIC and no APIC.
+            if vcpu_count > 1 {
+                let mut prop = std::mem::zeroed::<WHV_PARTITION_PROPERTY>();
+                prop.LocalApicEmulationMode = 1; // xAPIC
+                let hr = WHvSetPartitionProperty(
+                    partition,
+                    WHV_PARTITION_PROPERTY_CODE::WHvPartitionPropertyCodeLocalApicEmulationMode,
+                    &prop as *const _ as *const VOID,
+                    std::mem::size_of::<WHV_PARTITION_PROPERTY>() as UINT32,
+                );
+                if hr != S_OK {
+                    WHvDeletePartition(partition);
+                    return Err(Error::VM(format!(
+                        "Failed to enable APIC emulation: HRESULT 0x{:08X}",
+                        hr
+                    )));
+                }
+            }
+
             // Setup partition (finalize configuration)
             let hr = WHvSetupPartition(partition);
             if hr != S_OK {
@@ -5395,6 +5416,18 @@ impl WhpxVcpu {
         for (addr, data) in MultibootProtocol::prepare_guest_memory(info, &layout)? {
             vm.write_guest_memory(addr, &data)?;
             tracing::debug!("✓ wrote {} bytes at 0x{:016X}", data.len(), addr);
+        }
+
+        // With several vCPUs a guest has no other way to learn how many there
+        // are or where the interrupt controllers sit: describe them in ACPI,
+        // findable by scanning the BIOS area for the RSDP as on real hardware.
+        if vm.vcpu_count > 1 {
+            let tables = crate::acpi::AcpiTableBuilder::new()
+                .with_cpus(vm.vcpu_count)
+                .build();
+            for (addr, data) in tables.iter() {
+                vm.write_guest_memory(*addr, data)?;
+            }
         }
 
         // Step 7: Enable protected mode (32-bit, no paging)
