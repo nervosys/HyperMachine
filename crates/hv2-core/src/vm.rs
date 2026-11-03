@@ -730,6 +730,9 @@ pub struct VM {
     seed_pci: RwLock<Option<AttachedBlockPci>>,
     /// A third, writable disk on the PCI bus. See [`VM::attach_data_pci`].
     data_pci: RwLock<Option<AttachedBlockPci>>,
+    /// The operator-supplied OSK for an Apple SMC, if one is to be
+    /// presented. See [`VM::set_apple_smc_osk`]. Never defaulted.
+    apple_smc_osk: RwLock<Option<[u8; crate::devices::applesmc::OSK_LEN]>>,
     /// A network device over PCI, for a guest that finds its hardware by
     /// enumerating the bus. Kept apart from `net`: it is not snapshotted.
     net_pci: RwLock<Option<AttachedNetPci>>,
@@ -949,6 +952,7 @@ impl VM {
             block_pci: RwLock::new(None),
             seed_pci: RwLock::new(None),
             data_pci: RwLock::new(None),
+            apple_smc_osk: RwLock::new(None),
             net_pci: RwLock::new(None),
             standby: AtomicBool::new(false),
             standby_wakes: AtomicU64::new(0),
@@ -1161,6 +1165,18 @@ impl VM {
             // without this the guest's programming of the PIT hit an unhandled
             // port, nothing ever raised IRQ 0, and a kernel that did STI and
             // HLT to wait for its tick waited forever.
+            // An Apple SMC, only when the operator supplied an OSK. The key
+            // is never embedded in this repository.
+            if let Some(osk) = *self.apple_smc_osk.read() {
+                use crate::devices::applesmc::{AppleSmc, APPLE_SMC_BASE, APPLE_SMC_LAST};
+                machine = machine.with_device(crate::machine::MachineDevice::new(
+                    "Apple SMC",
+                    Arc::new(tokio::sync::RwLock::new(AppleSmc::with_osk(&osk))),
+                    APPLE_SMC_BASE,
+                    APPLE_SMC_LAST,
+                    "a guest that looks for an Apple SMC reads absent ports as all ones",
+                ));
+            }
             let mut system_control = None;
             if self.backend.executes_guest_code()
                 && self.backend.platform() != crate::hypervisor::HypervisorPlatform::Kvm
@@ -3274,6 +3290,14 @@ impl VM {
     /// added anywhere else is invisible however complete it is.
     pub fn pci_root(&self) -> Arc<parking_lot::RwLock<crate::pci::PciRootComplex>> {
         Arc::clone(&self.pci_root)
+    }
+
+    /// Present an Apple SMC to the guest, with this 64-byte OSK as keys
+    /// `OSK0`/`OSK1`. Call before provisioning. The key is the operator's to
+    /// supply; nothing in this repository carries one, and without this call
+    /// no SMC is present. Unreleased and unverified against any macOS guest.
+    pub fn set_apple_smc_osk(&self, osk: [u8; crate::devices::applesmc::OSK_LEN]) {
+        *self.apple_smc_osk.write() = Some(osk);
     }
 
     /// Attach a vsock device the guest can find by enumerating PCI.

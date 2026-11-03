@@ -1,6 +1,7 @@
 //! Device emulation
 
 pub mod acpi_pm;
+pub mod applesmc;
 pub mod disk_image;
 pub mod display_backend;
 pub mod e1000;

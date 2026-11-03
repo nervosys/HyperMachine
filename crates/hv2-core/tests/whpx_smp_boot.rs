@@ -171,6 +171,10 @@ static ONE_VM: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 static IMAGES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
 async fn run_image(cpus: u32, image: Vec<u8>) -> Option<String> {
+    run_image_with(cpus, image, None).await
+}
+
+async fn run_image_with(cpus: u32, image: Vec<u8>, osk: Option<[u8; 64]>) -> Option<String> {
     let _only = ONE_VM.lock().await;
     let dir = std::env::temp_dir().join("hv2-whpx-smp-test");
     std::fs::create_dir_all(&dir).expect("temp dir");
@@ -196,6 +200,9 @@ async fn run_image(cpus: u32, image: Vec<u8>) -> Option<String> {
         if !vm.executes_guest_code() {
             eprintln!("skipping: no backend on this host executes guest code");
             return None;
+        }
+        if let Some(osk) = osk {
+            vm.set_apple_smc_osk(osk);
         }
         let vm = Arc::new(vm);
         match vm.provision().await {
@@ -494,5 +501,53 @@ async fn a_halted_vcpu_wakes_for_the_8259_with_several_vcpus() {
         "P
 ",
         "the halted BSP never woke for the PIT tick via the PIC"
+    );
+}
+
+/// Read the first byte of `OSK0` and of `OSK1` through the SMC's ports
+/// (command 0x10 to 0x304, key and length to 0x300, data from 0x300) and print
+/// them on COM1.
+fn smc_probe() -> Vec<u8> {
+    let mut code = Vec::new();
+    for key in [b"OSK0", b"OSK1"] {
+        code.extend_from_slice(&[0xBA, 0x04, 0x03, 0x00, 0x00, 0xB0, 0x10, 0xEE]);
+        code.extend_from_slice(&[0xBA, 0x00, 0x03, 0x00, 0x00]);
+        for c in key {
+            code.extend_from_slice(&[0xB0, *c, 0xEE]);
+        }
+        code.extend_from_slice(&[0xB0, 0x01, 0xEE, 0xEC]);
+        code.extend_from_slice(&[0xBA, 0xF8, 0x03, 0x00, 0x00, 0xEE]);
+    }
+    code.extend_from_slice(&[0xB0, 0x0A, 0xEE, 0xF4]);
+    code
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_guest_reads_an_operator_supplied_osk_through_the_smc_ports() {
+    let mut osk = [0u8; 64];
+    for (i, b) in osk.iter_mut().enumerate() {
+        *b = b'A' + (i % 26) as u8;
+    }
+    let Some(console) = run_image_with(1, flat(smc_probe()), Some(osk)).await else {
+        return;
+    };
+    // OSK0[0] = 'A'; OSK1[0] = osk[32] = 'A' + 32 % 26 = 'G'.
+    assert_eq!(
+        console,
+        "AG
+"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn without_an_osk_no_smc_answers() {
+    let Some(console) = run_image_with(1, flat(smc_probe()), None).await else {
+        return;
+    };
+    // An absent port reads as all ones.
+    assert_ne!(
+        console,
+        "AG
+"
     );
 }
