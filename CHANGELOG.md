@@ -25,7 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   A Linux 6.6 guest with 2 vCPUs (the same ACPI tables are now written on the Linux boot path) finds the MADT and
   I/O APIC and brings CPU 1 up through INIT/SIPI (`smp: Brought up 1 node, 2 CPUs`, one run), but it does NOT reach
   userspace: the kernel reports `APIC timer disabled due to verification failure` and idles at the i8042 probe, so a
-  Linux guest with more than one vCPU still does not work. NOT VERIFIED: a Linux guest with more than one vCPU (the emulated APIC stalled a Linux guest
+  Linux guest with more than one vCPU still does not work. With `apic=verbose` Linux's own calibration succeeds
+  (`lapic delta = 1249960`) and its verification then waits 75 jiffies for a timer interrupt that never comes. Bare
+  guests show the emulated timer is not the cause: it also fires one-shot, its current-count register falls, and a
+  busy-waiting vCPU takes it with Linux's vector (0xEC) and divide (16). Suspect, untested: the vCPU loop's userspace
+  PIC injection interfering with the hypervisor's own interrupt delivery. NOT VERIFIED: a Linux guest with more than one vCPU (the emulated APIC stalled a Linux guest
   in idle on 2026-10-21, and the userspace PIC is still wired to vCPU 0 only), more than 4 vCPUs, the I/O APIC beyond one
   edge-triggered pin, level-triggered lines and EOI, the LAPIC timer on an AP or in one-shot or TSC-deadline mode, and snapshots of a multi-vCPU guest.
 - WHPX guests can be snapshotted and restored, into the same VM or a fresh one (`backends/whpx_state.rs`,
