@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- WHPX, several vCPUs: a vCPU halted in HLT now wakes for 8259 (PIC) interrupts. With the local APIC emulated the
+  hypervisor parks a halted vCPU inside its run call, and a vector written to the pending-interruption register did
+  not end that, so the PIT tick never arrived (reported by Botnix: 0 HLT exits with 4 vCPUs against 2,432 with one).
+  `WhpxVcpu::inject_ext_int` injects the vector and also clears the vCPU's internal halt state; only vCPU 0 takes PIC
+  vectors, as on a PC. Tried and rejected: delivering the vector as a fixed interrupt through `WHvRequestInterrupt`
+  wakes the vCPU but leaves it in service in the APIC, so a guest that acknowledges only the 8259 gets one tick; an
+  ExtInt pending event did not wake it either and stalled Linux earlier. Verified: a Multiboot guest on 2 vCPUs
+  remaps the PIC, programs the PIT, `sti; hlt`, and takes five ticks (it took 1 inject then stopped before; one run).
+  A Linux guest with 2 vCPUs is NOT fixed by this: it still fails the LAPIC timer verification.
+
 ### Added
 - WHPX guests can have more than one vCPU (`backends/whpx.rs`, `whpx_ffi.rs`, `tests/whpx_smp_boot.rs`): a
   partition with `vcpu_count > 1` asks Windows to emulate the local APIC in xAPIC mode, so the BSP can start each

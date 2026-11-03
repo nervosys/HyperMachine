@@ -330,6 +330,8 @@ pub enum WHV_REGISTER_NAME {
     WHvX64RegisterSfmask = 0x0000200B,
 
     // Internal registers (for interrupt/state management)
+    /// WHV_INTERNAL_ACTIVITY_REGISTER: StartupSuspend, HaltSuspend, IdleSuspend bits.
+    WHvRegisterInternalActivityState = 0x80000005,
     WHvX64RegisterPendingInterruption = 0x80000000,
     WHvX64RegisterInterruptState = 0x80000001,
     WHvX64RegisterPendingEvent = 0x80000002,

@@ -4606,8 +4606,12 @@ impl VM {
         // seen when the vCPU next exits, and a guest spinning on a tick (a
         // kernel calibrating its delay loop) never does. Cancel its run
         // whenever a request is raised, so the loop looks.
-        let kicker = self
-            .userspace_irq()
+        //
+        // The 8259 is wired to the bootstrap processor alone, as on a PC, so
+        // only vCPU 0 is kicked for it and only vCPU 0 injects from it: with
+        // several vCPUs an application processor that took the pending vector
+        // would acknowledge it and the BSP would never see it.
+        let kicker = (self.userspace_irq() && vcpu.id() == 0)
             .then(|| (self.pic.raised(), self.backend.clone(), vcpu.clone()));
         tokio::spawn(async move {
             let dispatched_at = std::time::Instant::now();
@@ -4722,7 +4726,8 @@ impl VM {
         let mut paused = false;
         let mut first_run = true;
         let userspace_irq = backend.executes_guest_code()
-            && backend.platform() != crate::hypervisor::HypervisorPlatform::Kvm;
+            && backend.platform() != crate::hypervisor::HypervisorPlatform::Kvm
+            && vcpu.id() == 0;
 
         loop {
             // Check for control messages (non-blocking)
@@ -5326,7 +5331,9 @@ impl VM {
         // A guest that halted with interrupts masked is not woken by one; the
         // vector stays pending until it enables them.
         let deliverable = backend.interrupts_deliverable(vcpu).await?;
-        let pending = pic.get_pending_interrupt().filter(|_| deliverable);
+        let pending = pic
+            .get_pending_interrupt()
+            .filter(|_| deliverable && vcpu.id() == 0);
         if let Some(vector) = pending {
             tracing::debug!("Injecting pending interrupt: vector {:#x}", vector);
             backend.inject_interrupt(vcpu, vector).await?;
@@ -5364,7 +5371,9 @@ impl VM {
         tracing::debug!("Interrupt window opened for vCPU {}", vcpu.id());
 
         let deliverable = backend.interrupts_deliverable(vcpu).await?;
-        let pending = pic.get_pending_interrupt().filter(|_| deliverable);
+        let pending = pic
+            .get_pending_interrupt()
+            .filter(|_| deliverable && vcpu.id() == 0);
         if let Some(vector) = pending {
             tracing::debug!("Injecting interrupt: vector {:#x}", vector);
             backend.inject_interrupt(vcpu, vector).await?;

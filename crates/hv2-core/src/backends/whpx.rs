@@ -178,6 +178,12 @@ impl Drop for WhpxBackend {
 }
 
 impl WhpxBackend {
+    /// Whether the partition was created with the hypervisor emulating the
+    /// local APIC: any partition with more than one vCPU.
+    fn local_apic_emulated(&self) -> bool {
+        self.vm.read().as_ref().is_some_and(|vm| vm.vcpu_count > 1)
+    }
+
     /// Create a new WHPX backend
     ///
     /// # Errors
@@ -407,6 +413,7 @@ impl HypervisorBackend for WhpxBackend {
     }
 
     async fn request_lapic_interrupt(&self, destination: u32, vector: u8) -> Result<()> {
+        // (Also used for the PIC's vectors when the APIC is emulated.)
         let vm = self
             .vm
             .read()
@@ -483,6 +490,11 @@ impl HypervisorBackend for WhpxBackend {
     }
 
     async fn interrupts_deliverable(&self, vcpu: &VCpu) -> Result<bool> {
+        // The emulated local APIC queues what it is given until the guest can
+        // take it, so there is nothing to wait for.
+        if self.local_apic_emulated() {
+            return Ok(true);
+        }
         let vcpu_id = vcpu.id();
         let whpx_vcpu = {
             let map = self.vcpu_map.read();
@@ -505,6 +517,9 @@ impl HypervisorBackend for WhpxBackend {
     }
 
     async fn inject_interrupt(&self, vcpu: &VCpu, vector: u8) -> Result<()> {
+        // With the local APIC emulated, a vector written into the vCPU's
+        // pending-interruption register does not wake a vCPU the hypervisor
+        // has halted. Delivering it through the emulated APIC does.
         let vcpu_id = vcpu.id();
         let whpx_vcpu = {
             let map = self.vcpu_map.read();
@@ -512,6 +527,9 @@ impl HypervisorBackend for WhpxBackend {
                 .cloned()
                 .ok_or_else(|| Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id)))?
         };
+        if self.local_apic_emulated() {
+            return whpx_vcpu.inject_ext_int(vector);
+        }
         whpx_vcpu.inject_interrupt(vector)
     }
 
@@ -2902,6 +2920,47 @@ impl WhpxVcpu {
     ///
     /// This sets up the pending interruption register to deliver the specified
     /// interrupt vector to the guest on the next vCPU entry.
+    /// Inject `vector` as an external (8259) interrupt and make sure the vCPU
+    /// is runnable to take it. With the local APIC emulated, the hypervisor
+    /// parks a vCPU that executed HLT inside its run call, and a vector
+    /// written to the pending-interruption register does not end that: the
+    /// halt has to be cleared as well. Delivering the vector through the
+    /// emulated APIC instead wakes the vCPU but leaves the vector in service
+    /// there, which a guest that acknowledges only the 8259 never clears.
+    #[cfg(target_os = "windows")]
+    pub fn inject_ext_int(&self, vector: u8) -> Result<()> {
+        use super::whpx_ffi::*;
+        self.inject_interrupt(vector)?;
+        // SAFETY: a zeroed register value set to 0 (no startup, halt or idle
+        // suspension), handed to WHvSetVirtualProcessorRegisters with a live
+        // partition handle.
+        let hr = unsafe {
+            let mut active = std::mem::zeroed::<WHV_REGISTER_VALUE>();
+            active.Reg64 = 0;
+            let names = [WHV_REGISTER_NAME::WHvRegisterInternalActivityState];
+            WHvSetVirtualProcessorRegisters(
+                self.partition,
+                self.vp_index,
+                names.as_ptr(),
+                1,
+                &active,
+            )
+        };
+        if hr != S_OK {
+            return Err(Error::VM(format!(
+                "Failed to clear halt for ExtInt {vector}: HRESULT 0x{hr:08X}"
+            )));
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn inject_ext_int(&self, _vector: u8) -> Result<()> {
+        Err(Error::VM(
+            "WHPX backend is only available on Windows".into(),
+        ))
+    }
+
     #[cfg(target_os = "windows")]
     pub fn inject_interrupt(&self, vector: u8) -> Result<()> {
         use super::whpx_ffi::*;
