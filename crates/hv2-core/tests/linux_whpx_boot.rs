@@ -845,6 +845,16 @@ async fn a_restored_whpx_guest_reads_its_pci_data_disk() {
 /// I/O APIC to a logical destination) reaches whichever CPU Linux chose.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_linux_guest_with_two_vcpus_brings_both_online() {
+    every_vcpu_comes_online(2).await;
+}
+
+/// The same with four.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_linux_guest_with_four_vcpus_brings_all_four_online() {
+    every_vcpu_comes_online(4).await;
+}
+
+async fn every_vcpu_comes_online(cpus: u32) {
     if let Some(why) = unavailable() {
         eprintln!("skipping: {why}");
         return;
@@ -862,8 +872,8 @@ async fn a_linux_guest_with_two_vcpus_brings_both_online() {
         source = source.with_initrd(initrd);
     }
     let config = VMConfig {
-        name: "linux-whpx-two-vcpus".to_string(),
-        vcpu_count: 2,
+        name: format!("linux-whpx-{cpus}-vcpus"),
+        vcpu_count: cpus,
         memory_size: memory_mib() * 1024 * 1024,
         boot: Some(source),
         ..Default::default()
@@ -892,7 +902,7 @@ async fn a_linux_guest_with_two_vcpus_brings_both_online() {
     }
     assert!(
         console.contains(marker.as_str()),
-        "userspace never wrote its marker with two vCPUs"
+        "userspace never wrote its marker with {cpus} vCPUs"
     );
     tokio::time::sleep(Duration::from_secs(2)).await;
     vm.send_serial(
@@ -901,14 +911,14 @@ async fn a_linux_guest_with_two_vcpus_brings_both_online() {
     )
     .await
     .expect("the serial input is accepted");
-    while started.elapsed() < BOOT_DEADLINE && !console.contains("hv2-cpus-2-end") {
+    while started.elapsed() < BOOT_DEADLINE && !console.contains(&format!("hv2-cpus-{cpus}-end")) {
         tokio::time::sleep(POLL).await;
         console = vm.console_output().await;
     }
     let _ = vm.stop().await;
     assert!(
-        console.contains("hv2-cpus-2-end"),
-        "the guest should report two processors; console tail: {}",
+        console.contains(&format!("hv2-cpus-{cpus}-end")),
+        "the guest should report {cpus} processors; console tail: {}",
         &console[console.len().saturating_sub(400)..]
     );
     assert!(

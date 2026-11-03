@@ -28,8 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (boot, snapshot, fork, PCI data disk) and the 14 SMP tests pass; 2438 lib tests; clippy on Windows and Linux.
   CPU 1 also does work: two shell busy loops (200,000 iterations) in the guest took 361 ms against 253 ms for one on 2 vCPUs
   (ratio 1.43), and 469 ms against 258 ms (ratio 1.82) on 1 vCPU as the control (`a_linux_guest_runs_two_busy_loops_in_parallel_on_two_vcpus`,
-  fastest of three, one run of the test; the speed-up is real but not perfect). NOT VERIFIED: more than 2 vCPUs under Linux,
-  true scaling beyond that one comparison,
+  fastest of three, one run of the test; the speed-up is real but not perfect). A repeat run measured 215 ms and 216 ms (ratio 1.0), so the ratio varies with host load. A Linux guest with 4 vCPUs also
+  boots and reports four processors (`a_linux_guest_with_four_vcpus_brings_all_four_online`, 7 s, two runs). NOT VERIFIED:
+  more than 4 vCPUs under Linux, true scaling beyond those comparisons,
   several runs for flakiness (each Linux result is one or two runs), level-triggered I/O APIC lines and PCI
   interrupts in I/O APIC mode, a PCI root disk with 2 vCPUs, other kernels or distributions, snapshots of a
   2-vCPU guest, KVM and HVF.
