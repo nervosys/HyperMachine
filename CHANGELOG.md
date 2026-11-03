@@ -26,7 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   was necessary was not isolated. Verified, Windows host with WHPX, Linux 6.6 bzImage and a busybox initrd: the guest
   prints `hv2-cpus-2-end` from `grep -c ^processor /proc/cpuinfo` (3.7 s to a shell); the 1-vCPU Linux tests
   (boot, snapshot, fork, PCI data disk) and the 14 SMP tests pass; 2438 lib tests; clippy on Windows and Linux.
-  NOT VERIFIED: more than 2 vCPUs under Linux, that CPU 1 runs user work in parallel (only that it is online),
+  CPU 1 also does work: two shell busy loops (200,000 iterations) in the guest took 361 ms against 253 ms for one on 2 vCPUs
+  (ratio 1.43), and 469 ms against 258 ms (ratio 1.82) on 1 vCPU as the control (`a_linux_guest_runs_two_busy_loops_in_parallel_on_two_vcpus`,
+  fastest of three, one run of the test; the speed-up is real but not perfect). NOT VERIFIED: more than 2 vCPUs under Linux,
+  true scaling beyond that one comparison,
   several runs for flakiness (each Linux result is one or two runs), level-triggered I/O APIC lines and PCI
   interrupts in I/O APIC mode, a PCI root disk with 2 vCPUs, other kernels or distributions, snapshots of a
   2-vCPU guest, KVM and HVF.

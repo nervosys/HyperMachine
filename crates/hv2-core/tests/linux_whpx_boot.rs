@@ -916,3 +916,90 @@ async fn a_linux_guest_with_two_vcpus_brings_both_online() {
         "the local APIC timer was rejected"
     );
 }
+
+/// Two busy loops in a 2-vCPU Linux guest finish in about the time of one:
+/// the second CPU is running work, not just online. The comparison is the
+/// guest's own marker times as the host sees them, fastest of three per side.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_linux_guest_runs_two_busy_loops_in_parallel_on_two_vcpus() {
+    if let Some(why) = unavailable() {
+        eprintln!("skipping: {why}");
+        return;
+    }
+    if std::env::var("HV2_TEST_INITRD_SHELL").is_err() {
+        eprintln!("skipping: needs HV2_TEST_INITRD_SHELL (a shell on the console)");
+        return;
+    }
+    let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
+    let mut source = BootSource::linux(&kernel)
+        .with_cmdline("console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 panic=1 apic=verbose");
+    if let Ok(initrd) = std::env::var("HV2_TEST_INITRD") {
+        source = source.with_initrd(initrd);
+    }
+    let config = VMConfig {
+        name: "linux-whpx-parallel".to_string(),
+        vcpu_count: 2,
+        memory_size: memory_mib() * 1024 * 1024,
+        boot: Some(source),
+        ..Default::default()
+    };
+    let Ok(vm) = VM::new(config) else {
+        eprintln!("skipping: a VM could not be created here");
+        return;
+    };
+    if !vm.executes_guest_code() {
+        eprintln!("skipping: no backend on this host executes guest code");
+        return;
+    }
+    let vm = Arc::new(vm);
+    if let Err(e) = vm.provision().await {
+        eprintln!("skipping: provision failed ({e})");
+        return;
+    }
+    vm.launch().await.expect("the vCPU loop starts");
+
+    let started = Instant::now();
+    let marker = std::env::var("HV2_TEST_INITRD_MARKER").unwrap_or_else(|_| "HV2 READY".into());
+    let mut console = String::new();
+    while started.elapsed() < BOOT_DEADLINE && !console.contains(marker.as_str()) {
+        tokio::time::sleep(POLL).await;
+        console = vm.console_output().await;
+    }
+    assert!(console.contains(marker.as_str()), "no userspace marker");
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    // The loop is a shell counting to 200,000; the reply is computed so the
+    // echoed command line cannot satisfy the wait.
+    let spin = "i=0; while [ $i -lt 200000 ]; do i=$((i+1)); done";
+    let mut fastest = [Duration::MAX; 2];
+    for round in 0..3 {
+        for (side, cmd) in [
+            format!("{spin}; echo one-{round}-$((6*7))\n"),
+            format!("( {spin} ) & ( {spin} ) & wait; echo two-{round}-$((6*7))\n"),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let want = format!("{}-{round}-42", if side == 0 { "one" } else { "two" });
+            let sent = Instant::now();
+            vm.send_serial(cmd.as_bytes()).await.expect("serial input");
+            while started.elapsed() < BOOT_DEADLINE && !console.contains(&want) {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+                console = vm.console_output().await;
+            }
+            assert!(console.contains(&want), "the guest never finished {want}");
+            fastest[side] = fastest[side].min(sent.elapsed());
+        }
+    }
+    let _ = vm.stop().await;
+    println!(
+        "linux whpx parallel: one loop {:?}, two loops {:?}",
+        fastest[0], fastest[1]
+    );
+    assert!(
+        fastest[1] < fastest[0].mul_f64(1.7),
+        "two loops took {:?} against {:?} for one: the second CPU is not doing work",
+        fastest[1],
+        fastest[0]
+    );
+}
