@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ExtInt pending event did not wake it either and stalled Linux earlier. Verified: a Multiboot guest on 2 vCPUs
   remaps the PIC, programs the PIT, `sti; hlt`, and takes five ticks (it took 1 inject then stopped before; one run).
   A Linux guest with 2 vCPUs is NOT fixed by this: it still fails the LAPIC timer verification.
+- A WHPX VM with the I/O APIC (several vCPUs) no longer keeps its partition alive after `stop`: the I/O APIC's
+  interrupt callback held the backend strongly, the PIC's line observer held the I/O APIC, and the PIT task kept the
+  PIC, so a second VM in the same process failed to map guest memory (`0xC0370008`) until the process ended. The
+  callback is now weak. `VM::stop` also keeps kicking vCPUs while it waits for them (a kick only lands while a vCPU
+  is inside its run call; whether that was needed in practice is untested). The new SMP tests had been passing
+  vacuously in places for this reason, and in CI (parallel test threads) two of them shared one image file; each
+  run now has its own file and the tests run one VM at a time.
 
 ### Added
 - WHPX guests can have more than one vCPU (`backends/whpx.rs`, `whpx_ffi.rs`, `tests/whpx_smp_boot.rs`): a
@@ -28,7 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the BIOS area, walks RSDP -> RSDT -> MADT and counts 4 LAPICs; a 1-vCPU guest still runs; the Linux WHPX tests
   still pass. Parallelism measured: every vCPU spins the same fixed loop (2^31 decrements); the whole guest took
   0.61-0.90 s with 1 vCPU and 0.74-0.91 s with 4 over three runs on a 24-thread host, where running in turn would
-  take about four times as long (the test asserts under twice). The emulated LAPIC timer fires: a guest arms it
+  take about four times as long (the test takes the fastest of three runs per side and asserts under three times, and only on hosts with at least 8
+  threads: single runs on this busy host varied from 1.0x to 2.5x; the fastest-of-three form gave 0.74-0.96 s for
+  1 vCPU against 0.80-1.13 s for 4 in three runs). The emulated LAPIC timer fires: a guest arms it
   periodic on vector 0x40, halts, and takes five interrupts through its own IDT (one run, BSP only).
   The I/O APIC is emulated at 0xFEC00000 (`IoApicDevice`, a PIC line observer forwards each raised ISA line to it,
   and `WHvRequestInterrupt` delivers what it routes to the emulated LAPIC): a guest wrote redirection entry 4

@@ -1215,10 +1215,15 @@ impl VM {
             {
                 use crate::devices::{IoApic, IoApicDevice, IOAPIC_BASE, IOAPIC_SIZE};
                 let ioapic = Arc::new(IoApic::new(0));
-                let backend = self.backend.clone();
+                // Weak: this callback is reachable from the PIC, which the PIT
+                // task keeps alive, and a strong reference would keep the
+                // hypervisor partition alive with it after the VM has stopped.
+                let backend = Arc::downgrade(&self.backend);
                 let runtime = tokio::runtime::Handle::current();
                 ioapic.set_interrupt_callback(move |destination, vector| {
-                    let backend = backend.clone();
+                    let Some(backend) = backend.upgrade() else {
+                        return;
+                    };
                     runtime.spawn(async move {
                         if let Err(e) = backend
                             .request_lapic_interrupt(u32::from(destination), vector)
@@ -2845,11 +2850,29 @@ impl VM {
         // Wait for all vCPU tasks to complete (no lock held). Bounded: a
         // kicked vCPU returns immediately, so the timeout is a report that the
         // kick did not land rather than an expected outcome.
-        for handle in handles {
-            match tokio::time::timeout(VCPU_REAP_TIMEOUT, handle).await {
-                Ok(Ok(_)) => {}
-                Ok(Err(e)) => tracing::warn!("vCPU task join error: {:?}", e),
-                Err(_) => tracing::error!(
+        //
+        // A kick only lands if the vCPU is inside its run call at that moment.
+        // One the hypervisor holds in HLT (an application processor with the
+        // local APIC emulated) can miss it and then never leave, so keep
+        // kicking while waiting rather than relying on the first.
+        for mut handle in handles {
+            let deadline = tokio::time::Instant::now() + VCPU_REAP_TIMEOUT;
+            let joined = loop {
+                let slice = Duration::from_millis(25);
+                match tokio::time::timeout(slice, &mut handle).await {
+                    Ok(joined) => break Some(joined),
+                    Err(_) if tokio::time::Instant::now() >= deadline => break None,
+                    Err(_) => {
+                        for vcpu in &self.vcpus {
+                            let _ = self.backend.kick_vcpu(vcpu).await;
+                        }
+                    }
+                }
+            };
+            match joined {
+                Some(Ok(_)) => {}
+                Some(Err(e)) => tracing::warn!("vCPU task join error: {:?}", e),
+                None => tracing::error!(
                     "VM '{}': a vCPU thread did not leave the guest within {:?} of being kicked; abandoning it. The thread is leaked and the process will not exit cleanly.",
                     self.config.name,
                     VCPU_REAP_TIMEOUT
