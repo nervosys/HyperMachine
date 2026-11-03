@@ -17,9 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the BIOS area, walks RSDP -> RSDT -> MADT and counts 4 LAPICs; a 1-vCPU guest still runs; the Linux WHPX tests
   still pass. Parallelism measured: every vCPU spins the same fixed loop (2^31 decrements); the whole guest took
   0.61-0.90 s with 1 vCPU and 0.74-0.91 s with 4 over three runs on a 24-thread host, where running in turn would
-  take about four times as long (the test asserts under twice). NOT VERIFIED: a Linux guest with more than one vCPU (the emulated APIC stalled a Linux guest
+  take about four times as long (the test asserts under twice). The emulated LAPIC timer fires: a guest arms it
+  periodic on vector 0x40, halts, and takes five interrupts through its own IDT (one run, BSP only). NOT VERIFIED: a Linux guest with more than one vCPU (the emulated APIC stalled a Linux guest
   in idle on 2026-10-21, and the userspace PIC is still wired to vCPU 0 only), more than 4 vCPUs, the I/O APIC
-  (the MADT lists it; nothing emulates it), the LAPIC timer, and snapshots of a multi-vCPU guest.
+  (the MADT lists it; nothing emulates it), the LAPIC timer on an AP or in one-shot or TSC-deadline mode, and snapshots of a multi-vCPU guest.
 - WHPX guests can be snapshotted and restored, into the same VM or a fresh one (`backends/whpx_state.rs`,
   `interrupt.rs`, `devices/timer.rs`, `devices/serial.rs`, `vm.rs`): a vCPU's general registers, segments, descriptor
   tables, CR0-4/8, EFER, APIC base, XCR0, x87/SSE registers and 14 MSRs (the TSC, IA32_XSS and the CET user and
