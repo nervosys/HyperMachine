@@ -31,7 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (ratio 1.43), and 469 ms against 258 ms (ratio 1.82) on 1 vCPU as the control (`a_linux_guest_runs_two_busy_loops_in_parallel_on_two_vcpus`,
   fastest of three, one run of the test; the speed-up is real but not perfect). A repeat run measured 215 ms and 216 ms (ratio 1.0), so the ratio varies with host load. A Linux guest with 4 vCPUs also
   boots and reports four processors (`a_linux_guest_with_four_vcpus_brings_all_four_online`, 7 s, two runs). NOT VERIFIED:
-  more than 4 vCPUs under Linux, true scaling beyond those comparisons,
+  more than 8 vCPUs under Linux (8 vCPUs now boot to userspace and report 8 processors: test
+  `a_linux_guest_with_eight_vcpus_brings_all_eight_online`, 3 of 3 runs on the Windows host, 3.5-3.7 s; not run in CI, which has no kernel fixture), true scaling beyond those comparisons,
   several runs for flakiness (each Linux result is one or two runs), level-triggered I/O APIC lines and PCI
   interrupts in I/O APIC mode, a PCI root disk with 2 vCPUs, other kernels or distributions, snapshots of a
   2-vCPU guest, KVM and HVF.

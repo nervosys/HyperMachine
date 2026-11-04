@@ -854,6 +854,12 @@ async fn a_linux_guest_with_four_vcpus_brings_all_four_online() {
     every_vcpu_comes_online(4).await;
 }
 
+/// And eight, past the four the first tests covered.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_linux_guest_with_eight_vcpus_brings_all_eight_online() {
+    every_vcpu_comes_online(8).await;
+}
+
 async fn every_vcpu_comes_online(cpus: u32) {
     if let Some(why) = unavailable() {
         eprintln!("skipping: {why}");
