@@ -492,6 +492,27 @@ async fn a_paused_vcpus_state_survives_a_write_back() {
 /// Same environment as the write-back test.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_whpx_guest_returns_to_its_snapshot() {
+    snapshot_round_trip(1).await;
+}
+
+/// The same with two vCPUs on the emulated local APIC: the snapshot has to
+/// carry each vCPU's APIC page, the I/O APIC and the PM timer, or the
+/// restored guest has no tick and no interrupts.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_two_vcpu_whpx_guest_returns_to_its_snapshot() {
+    snapshot_round_trip(2).await;
+}
+
+/// One vCPU keeps the default (`nolapic noapic`); several need their APICs.
+fn snapshot_cmdline(cpus: u32) -> String {
+    if cpus > 1 {
+        "console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 panic=1 apic=verbose".to_string()
+    } else {
+        cmdline_base()
+    }
+}
+
+async fn snapshot_round_trip(cpus: u32) {
     if let Some(why) = unavailable() {
         eprintln!("skipping: {why}");
         return;
@@ -506,12 +527,12 @@ async fn a_whpx_guest_returns_to_its_snapshot() {
     };
     let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
     let config = VMConfig {
-        name: "linux-whpx-snapshot-test".to_string(),
-        vcpu_count: 1,
+        name: format!("linux-whpx-snapshot-test-{cpus}"),
+        vcpu_count: cpus,
         memory_size: memory_mib() * 1024 * 1024,
         boot: Some(
             BootSource::linux(&kernel)
-                .with_cmdline(cmdline_base())
+                .with_cmdline(snapshot_cmdline(cpus))
                 .with_initrd(initrd),
         ),
         ..Default::default()
@@ -556,7 +577,7 @@ async fn a_whpx_guest_returns_to_its_snapshot() {
         "the variable never got set:\n{console}"
     );
 
-    let path = std::env::temp_dir().join("hv2-whpx-snapshot-test.snap");
+    let path = std::env::temp_dir().join(format!("hv2-whpx-snapshot-test-{cpus}.snap"));
     vm.pause().await.expect("the VM pauses");
     vm.snapshot(&path).await.expect("the VM snapshots");
     vm.resume().await.expect("the VM resumes");
@@ -614,6 +635,17 @@ async fn a_whpx_guest_returns_to_its_snapshot() {
 /// Same environment as the write-back test.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_second_whpx_vm_continues_from_a_snapshot() {
+    fork_from_snapshot(1).await;
+}
+
+/// The same with two vCPUs: a fresh VM's local APIC, I/O APIC and PM timer
+/// start at reset, so only a snapshot that carries them continues the guest.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_second_whpx_vm_with_two_vcpus_continues_from_a_snapshot() {
+    fork_from_snapshot(2).await;
+}
+
+async fn fork_from_snapshot(cpus: u32) {
     if let Some(why) = unavailable() {
         eprintln!("skipping: {why}");
         return;
@@ -629,16 +661,16 @@ async fn a_second_whpx_vm_continues_from_a_snapshot() {
     let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
     let make = |name: &str| VMConfig {
         name: name.to_string(),
-        vcpu_count: 1,
+        vcpu_count: cpus,
         memory_size: memory_mib() * 1024 * 1024,
         boot: Some(
             BootSource::linux(&kernel)
-                .with_cmdline(cmdline_base())
+                .with_cmdline(snapshot_cmdline(cpus))
                 .with_initrd(initrd.clone()),
         ),
         ..Default::default()
     };
-    let path = std::env::temp_dir().join("hv2-whpx-fork-test.snap");
+    let path = std::env::temp_dir().join(format!("hv2-whpx-fork-test-{cpus}.snap"));
     let started = Instant::now();
 
     {

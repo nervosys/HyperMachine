@@ -379,6 +379,46 @@ impl IoApic {
         }
     }
 
+    /// The guest-programmed state, for a snapshot: the register select, the
+    /// level and masked-edge bitmaps, and every redirection entry as it
+    /// stands (remote-IRR and delivery-status bits included). One version
+    /// byte first. The delivery callback is wiring, not state, and is left
+    /// alone.
+    pub fn export_state(&self) -> Vec<u8> {
+        let mut out = vec![1];
+        out.extend_from_slice(&self.regsel.load(Ordering::SeqCst).to_le_bytes());
+        out.extend_from_slice(&self.irq_state[0].load(Ordering::SeqCst).to_le_bytes());
+        out.extend_from_slice(&self.masked_edges.load(Ordering::SeqCst).to_le_bytes());
+        for entry in self.redirection_table.read().iter() {
+            out.extend_from_slice(&entry.raw.to_le_bytes());
+        }
+        out
+    }
+
+    /// Put state from [`Self::export_state`] back.
+    ///
+    /// # Errors
+    ///
+    /// Bytes of the wrong version or length.
+    pub fn import_state(&self, bytes: &[u8]) -> Result<()> {
+        let want = 1 + 3 * 4 + IOAPIC_NUM_PINS * 8;
+        if bytes.len() != want || bytes[0] != 1 {
+            return Err(Error::Device("I/O APIC state is malformed".into()));
+        }
+        let word = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+        self.regsel.store(word(1), Ordering::SeqCst);
+        self.irq_state[0].store(word(5), Ordering::SeqCst);
+        self.masked_edges.store(word(9), Ordering::SeqCst);
+        let mut table = self.redirection_table.write();
+        for (i, entry) in table.iter_mut().enumerate() {
+            let at = 13 + i * 8;
+            *entry = RedirectionEntry::from_raw(u64::from_le_bytes(
+                bytes[at..at + 8].try_into().unwrap(),
+            ));
+        }
+        Ok(())
+    }
+
     /// Set the interrupt delivery callback
     pub fn set_interrupt_callback<F>(&self, callback: F)
     where
@@ -720,6 +760,14 @@ impl crate::device::Device for IoApicDevice {
         "IOAPIC"
     }
 
+    fn export_state(&self) -> Option<Vec<u8>> {
+        Some(self.ioapic.export_state())
+    }
+
+    fn import_state(&self, bytes: &[u8]) -> Result<()> {
+        self.ioapic.import_state(bytes)
+    }
+
     async fn init(&mut self) -> Result<()> {
         Ok(())
     }
@@ -1031,5 +1079,27 @@ mod tests {
         ioapic.set_entry(4, entry).unwrap();
         ioapic.raise_irq(4);
         assert!(logical.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn the_programmed_state_survives_an_export_and_import() {
+        let a = IoApic::new(0);
+        // Pin 4: vector 0x31, fixed, logical destination 0x02, level, unmasked.
+        a.regsel.store(0x10 + 2 * 4, Ordering::SeqCst);
+        a.write_indirect(0x31 | (1 << 11) | (1 << 15)).unwrap();
+        a.regsel.store(0x11 + 2 * 4, Ordering::SeqCst);
+        a.write_indirect(0x02 << 24).unwrap();
+        a.regsel.store(0x10, Ordering::SeqCst);
+        let bytes = a.export_state();
+
+        let b = IoApic::new(0);
+        b.import_state(&bytes).unwrap();
+        assert_eq!(b.export_state(), bytes);
+        assert_eq!(
+            b.redirection_table.read()[4].raw,
+            a.redirection_table.read()[4].raw
+        );
+        assert_eq!(b.regsel.load(Ordering::SeqCst), 0x10);
+        assert!(b.import_state(&bytes[1..]).is_err());
     }
 }

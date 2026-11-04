@@ -1119,7 +1119,31 @@ extern "system" {
         RegisterCount: UINT32,
         RegisterValues: *const WHV_REGISTER_VALUE,
     ) -> HRESULT;
+
+    /// Get a block of virtual processor state (the emulated local APIC's
+    /// register page, for `WHV_VP_STATE_INTERRUPT_CONTROLLER_STATE2`).
+    pub fn WHvGetVirtualProcessorState(
+        Partition: WHV_PARTITION_HANDLE,
+        VpIndex: UINT32,
+        StateType: UINT32,
+        Buffer: *mut c_void,
+        BufferSizeInBytes: UINT32,
+        BytesWritten: *mut UINT32,
+    ) -> HRESULT;
+
+    /// Set a block of virtual processor state.
+    pub fn WHvSetVirtualProcessorState(
+        Partition: WHV_PARTITION_HANDLE,
+        VpIndex: UINT32,
+        StateType: UINT32,
+        Buffer: *const c_void,
+        BufferSizeInBytes: UINT32,
+    ) -> HRESULT;
 }
+
+/// `WHvVirtualProcessorStateTypeInterruptControllerState2` in
+/// WinHvPlatformDefs.h: the emulated local APIC's registers.
+pub const WHV_VP_STATE_INTERRUPT_CONTROLLER_STATE2: UINT32 = 0x0000_1000;
 
 // Stub implementations for non-Windows platforms
 #[cfg(not(target_os = "windows"))]
@@ -1243,6 +1267,29 @@ pub unsafe fn WHvSetVirtualProcessorRegisters(
     _: *const WHV_REGISTER_NAME,
     _: UINT32,
     _: *const WHV_REGISTER_VALUE,
+) -> HRESULT {
+    E_FAIL
+}
+
+#[cfg(not(target_os = "windows"))]
+pub unsafe fn WHvGetVirtualProcessorState(
+    _: WHV_PARTITION_HANDLE,
+    _: UINT32,
+    _: UINT32,
+    _: *mut c_void,
+    _: UINT32,
+    _: *mut UINT32,
+) -> HRESULT {
+    E_FAIL
+}
+
+#[cfg(not(target_os = "windows"))]
+pub unsafe fn WHvSetVirtualProcessorState(
+    _: WHV_PARTITION_HANDLE,
+    _: UINT32,
+    _: UINT32,
+    _: *const c_void,
+    _: UINT32,
 ) -> HRESULT {
     E_FAIL
 }

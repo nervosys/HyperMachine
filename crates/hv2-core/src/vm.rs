@@ -1791,14 +1791,18 @@ impl VM {
             }
         }
 
-        // Several vCPUs on an emulated local APIC (WHPX, HVF): the snapshot
-        // keeps no LAPIC, I/O APIC or ACPI PM timer state, so a restore would
-        // resume a guest whose interrupt controllers are at reset. Refuse
-        // rather than write a snapshot that restores wrongly. KVM keeps the
-        // APIC in the kernel and is not covered by this refusal.
+        // Several vCPUs on an emulated local APIC: WHPX saves each vCPU's APIC
+        // page, the I/O APIC and the PM timer, and KVM keeps the APIC in the
+        // kernel. Any other backend (HVF) saves none of that, so a restore
+        // would resume a guest whose interrupt controllers are at reset;
+        // refuse rather than write a snapshot that restores wrongly.
         if self.config.vcpu_count > 1
             && self.backend.executes_guest_code()
-            && self.backend.platform() != crate::hypervisor::HypervisorPlatform::Kvm
+            && !matches!(
+                self.backend.platform(),
+                crate::hypervisor::HypervisorPlatform::Kvm
+                    | crate::hypervisor::HypervisorPlatform::Whpx
+            )
         {
             return Err(Error::NotSupported(
                 "snapshots of a guest with several vCPUs are not supported on this backend \
@@ -2556,10 +2560,14 @@ impl VM {
             Some(pit) => pit.read().await.export_state(),
             None => Vec::new(),
         };
-        let mut com1 = Vec::new();
-        if let Some(device) = self.devices.get_device("COM1").await {
-            if let Some(bytes) = device.read().await.export_state() {
-                com1.push(("COM1".to_string(), bytes));
+        // The serial port, and on several vCPUs the I/O APIC and the PM timer
+        // the guest calibrates its local APIC timer against.
+        let mut saved = Vec::new();
+        for name in ["COM1", "IOAPIC", "ACPI PM timer"] {
+            if let Some(device) = self.devices.get_device(name).await {
+                if let Some(bytes) = device.read().await.export_state() {
+                    saved.push((name.to_string(), bytes));
+                }
             }
         }
         crate::snapshot::machine::MachineState {
@@ -2569,7 +2577,7 @@ impl VM {
             ioapic: Vec::new(),
             pit: pit_bytes,
             clock_ns: None,
-            devices: com1,
+            devices: saved,
         }
     }
 

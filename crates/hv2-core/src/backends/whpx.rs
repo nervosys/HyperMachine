@@ -2621,6 +2621,54 @@ impl WhpxVcpu {
         self.set_registers(&names, &values)
     }
 
+    /// The emulated local APIC's register page, or nothing when this
+    /// partition does not emulate the APIC (WHP then refuses the request).
+    /// The vCPU must not be running.
+    pub fn capture_lapic(&self) -> Vec<u8> {
+        let mut buffer = vec![0u8; 8192];
+        let mut written: UINT32 = 0;
+        // SAFETY: WHvGetVirtualProcessorState is a WHP FFI call. The handle
+        // and vp_index are valid, and the buffer is writable for its length.
+        let hr = unsafe {
+            WHvGetVirtualProcessorState(
+                self.partition,
+                self.vp_index,
+                WHV_VP_STATE_INTERRUPT_CONTROLLER_STATE2,
+                buffer.as_mut_ptr().cast(),
+                buffer.len() as UINT32,
+                &mut written,
+            )
+        };
+        if hr != S_OK {
+            return Vec::new();
+        }
+        buffer.truncate(written as usize);
+        buffer
+    }
+
+    /// Write the emulated local APIC's register page back. The vCPU must not
+    /// be running.
+    pub fn apply_lapic(&self, state: &[u8]) -> Result<()> {
+        // SAFETY: WHvSetVirtualProcessorState is a WHP FFI call. The handle
+        // and vp_index are valid, and the buffer is readable for its length.
+        let hr = unsafe {
+            WHvSetVirtualProcessorState(
+                self.partition,
+                self.vp_index,
+                WHV_VP_STATE_INTERRUPT_CONTROLLER_STATE2,
+                state.as_ptr().cast(),
+                state.len() as UINT32,
+            )
+        };
+        if hr != S_OK {
+            return Err(Error::VM(format!(
+                "Failed to set the local APIC state: HRESULT 0x{:08X}",
+                hr
+            )));
+        }
+        Ok(())
+    }
+
     /// Get all general-purpose registers as RegisterSet
     #[cfg(target_os = "windows")]
     pub fn get_register_set(&self) -> Result<crate::vcpu::RegisterSet> {

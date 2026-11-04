@@ -286,15 +286,34 @@ impl WhpxVcpu {
                 system,
                 fpu,
                 msrs,
-                lapic: Vec::new(),
+                lapic: self.capture_lapic(),
                 xsave: Vec::new(),
                 xcrs: vec![Msr {
                     index: 0,
                     value: xcr0,
                 }],
                 kvm_events: Vec::new(),
-                run_state: RunState::Runnable,
+                run_state: self.capture_run_state(),
             })
+        }
+    }
+
+    /// The vCPU's activity: runnable, halted by `HLT` or idle (the emulated
+    /// local APIC absorbs those), or still waiting for its first INIT/SIPI,
+    /// which is kept as the raw suspension bit so a restore can put it back.
+    fn capture_run_state(&self) -> RunState {
+        let Ok(v) = self.get_registers(&[WHV_REGISTER_NAME::WHvRegisterInternalActivityState])
+        else {
+            return RunState::Runnable;
+        };
+        // SAFETY: the activity state is read through its 64-bit member.
+        let activity = unsafe { v[0].Reg64 };
+        if activity & 1 != 0 {
+            RunState::Other(1)
+        } else if activity & 0b110 != 0 {
+            RunState::Halted
+        } else {
+            RunState::Runnable
         }
     }
 
@@ -407,6 +426,24 @@ impl WhpxVcpu {
             return Err(crate::error::Error::VM(format!(
                 "XCR0 was written as {xcr0:#x} and reads back as {got:#x}"
             )));
+        }
+        // The emulated local APIC (several vCPUs): its timer, its pending and
+        // in-service vectors. After the registers, since the APIC base is one.
+        if !s.lapic.is_empty() {
+            self.apply_lapic(&s.lapic)?;
+            // A vCPU of a fresh partition waits for its INIT/SIPI, and writing
+            // its registers does not end that: the activity state has to be
+            // written too. A halted vCPU is released (its HLT has retired and
+            // it executes the idle loop's next one); one that never started
+            // keeps waiting.
+            let activity = match s.run_state {
+                RunState::Other(n) => u64::from(n),
+                RunState::Runnable | RunState::Halted => 0,
+            };
+            self.set_registers_64(&[(
+                WHV_REGISTER_NAME::WHvRegisterInternalActivityState,
+                activity,
+            )])?;
         }
         Ok(())
     }

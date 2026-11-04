@@ -121,7 +121,7 @@ const PM_TIMER_HZ: u128 = 3_579_545;
 /// monotonic time from when the device is made.
 #[derive(Debug)]
 pub struct AcpiPmTimer {
-    started: std::time::Instant,
+    started: parking_lot::Mutex<std::time::Instant>,
 }
 
 impl AcpiPmTimer {
@@ -129,12 +129,12 @@ impl AcpiPmTimer {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            started: std::time::Instant::now(),
+            started: parking_lot::Mutex::new(std::time::Instant::now()),
         }
     }
 
     fn count(&self) -> u32 {
-        let ticks = self.started.elapsed().as_nanos() * PM_TIMER_HZ / 1_000_000_000;
+        let ticks = self.started.lock().elapsed().as_nanos() * PM_TIMER_HZ / 1_000_000_000;
         (ticks & 0x00FF_FFFF) as u32
     }
 }
@@ -153,6 +153,23 @@ impl Device for AcpiPmTimer {
 
     fn name(&self) -> &str {
         "ACPI PM timer"
+    }
+
+    /// The 24-bit count now. A restored timer carries on from it, so the
+    /// guest's calibration against this clock does not see it jump back.
+    fn export_state(&self) -> Option<Vec<u8>> {
+        Some(self.count().to_le_bytes().to_vec())
+    }
+
+    fn import_state(&self, bytes: &[u8]) -> Result<()> {
+        let bytes: [u8; 4] = bytes
+            .try_into()
+            .map_err(|_| crate::Error::Device("ACPI PM timer state is malformed".into()))?;
+        let count = u128::from(u32::from_le_bytes(bytes) & 0x00FF_FFFF);
+        let elapsed = std::time::Duration::from_nanos((count * 1_000_000_000 / PM_TIMER_HZ) as u64);
+        let now = std::time::Instant::now();
+        *self.started.lock() = now.checked_sub(elapsed).unwrap_or(now);
+        Ok(())
     }
 
     async fn init(&mut self) -> Result<()> {
@@ -232,5 +249,21 @@ mod tests {
         let delta = b.wrapping_sub(a) & 0x00FF_FFFF;
         // 50 ms is about 178,977 counts; allow a slow host.
         assert!((170_000..400_000).contains(&delta), "delta {delta}");
+    }
+
+    #[tokio::test]
+    async fn a_restored_pm_timer_carries_on_from_the_saved_count() {
+        let timer = AcpiPmTimer::new();
+        timer.import_state(&0x0012_3456u32.to_le_bytes()).unwrap();
+        let mut now = [0u8; 4];
+        timer.read(0, &mut now).await.unwrap();
+        let now = u32::from_le_bytes(now);
+        // A moment after the saved count, not back at zero.
+        let ahead = now.wrapping_sub(0x0012_3456) & 0x00FF_FFFF;
+        assert!(
+            ahead < 3_579_545 / 10,
+            "carried on {ahead} counts from the saved one"
+        );
+        assert!(timer.import_state(&[1, 2, 3]).is_err());
     }
 }
