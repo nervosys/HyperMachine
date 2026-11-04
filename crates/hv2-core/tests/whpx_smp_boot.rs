@@ -573,3 +573,52 @@ async fn a_busy_vcpu_takes_the_8259_tick_with_several_vcpus() {
     };
     assert_eq!(console, "P\n", "a spinning vCPU never took the 8259 tick");
 }
+
+/// A snapshot of several vCPUs on the emulated local APIC would drop the
+/// LAPIC, I/O APIC and ACPI PM timer state; it must be refused, not written.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_snapshot_of_several_vcpus_is_refused_not_written_wrong() {
+    let _only = ONE_VM.lock().await;
+    let dir = std::env::temp_dir().join("hv2-whpx-smp-test");
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let n = IMAGES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let path = dir.join(format!("snap-{}-{n}.mb", std::process::id()));
+    std::fs::write(&path, image(2, u32::MAX)).expect("write image");
+    let config = VMConfig {
+        name: "whpx-smp-snapshot".into(),
+        vcpu_count: 2,
+        memory_size: 64 * 1024 * 1024,
+        boot: Some(BootSource::multiboot(&path)),
+        ..Default::default()
+    };
+    let Ok(vm) = VM::new(config) else { return };
+    if !vm.executes_guest_code() {
+        eprintln!("skipping: no backend on this host executes guest code");
+        return;
+    }
+    let vm = Arc::new(vm);
+    let mut attempt = 0;
+    loop {
+        match vm.provision().await {
+            Ok(()) => break,
+            Err(_) if attempt < 40 => {
+                attempt += 1;
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            Err(e) => {
+                eprintln!("skipping: provision failed ({e})");
+                return;
+            }
+        }
+    }
+    vm.launch().await.expect("launch");
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    vm.pause().await.expect("pause");
+    let snap = dir.join(format!("snap-{}-{n}.hvsnap", std::process::id()));
+    let result = vm.snapshot(&snap).await;
+    let _ = vm.stop().await;
+    let refused =
+        matches!(&result, Err(hv2_core::Error::NotSupported(m)) if m.contains("several vCPUs"));
+    assert!(refused, "expected a refusal, got {result:?}");
+    assert!(!snap.exists(), "no snapshot file may be left behind");
+}

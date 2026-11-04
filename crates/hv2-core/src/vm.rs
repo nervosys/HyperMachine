@@ -1791,6 +1791,22 @@ impl VM {
             }
         }
 
+        // Several vCPUs on an emulated local APIC (WHPX, HVF): the snapshot
+        // keeps no LAPIC, I/O APIC or ACPI PM timer state, so a restore would
+        // resume a guest whose interrupt controllers are at reset. Refuse
+        // rather than write a snapshot that restores wrongly. KVM keeps the
+        // APIC in the kernel and is not covered by this refusal.
+        if self.config.vcpu_count > 1
+            && self.backend.executes_guest_code()
+            && self.backend.platform() != crate::hypervisor::HypervisorPlatform::Kvm
+        {
+            return Err(Error::NotSupported(
+                "snapshots of a guest with several vCPUs are not supported on this backend \
+                 yet: the local APIC, I/O APIC and ACPI PM timer state is not captured"
+                    .into(),
+            ));
+        }
+
         let vcpus = self.save_vcpu_states().await?;
         let memory = self.memory();
         let regions: Vec<_> = memory

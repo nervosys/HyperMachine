@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **A snapshot of a guest with several vCPUs on an emulated local APIC is now refused, not written wrong.** The WHPX snapshot keeps no local APIC, I/O APIC or ACPI PM timer state (the vCPU record's `lapic` is empty), so a 2-vCPU snapshot used to succeed and restore a guest whose interrupt controllers were at reset. `VM::snapshot` now returns `NotSupported` for `vcpu_count > 1` on a non-KVM backend that executes guest code; test `a_snapshot_of_several_vcpus_is_refused_not_written_wrong` (passes on the Windows host; the 1-vCPU snapshot tests still pass). NOT VERIFIED: actually saving and restoring multi-vCPU state (not built), KVM multi-vCPU snapshots, HVF.
 - WHPX: a Linux guest with 2 vCPUs now boots to userspace (`tests/linux_whpx_boot.rs`
   `a_linux_guest_with_two_vcpus_brings_both_online`). Five causes, found one after another by tracing the vCPU loop
   and the kernel's `apic=verbose` log:
