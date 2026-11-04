@@ -1019,3 +1019,106 @@ async fn a_linux_guest_runs_two_busy_loops_in_parallel_on_two_vcpus() {
         fastest[0]
     );
 }
+
+/// A guest with two vCPUs, a local APIC and an I/O APIC writes to a virtio-blk
+/// data disk on PCI and reads the data back: the device's interrupt has to
+/// reach a vCPU through the I/O APIC, not the 8259 the single-vCPU guests use.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_linux_guest_with_two_vcpus_reads_and_writes_a_pci_data_disk() {
+    if let Some(why) = unavailable() {
+        eprintln!("skipping: {why}");
+        return;
+    }
+    if std::env::var("HV2_TEST_INITRD_SHELL").is_err() {
+        eprintln!("skipping: needs HV2_TEST_INITRD_SHELL (a shell on the console)");
+        return;
+    }
+    let (Ok(initrd), Ok(marker)) = (
+        std::env::var("HV2_TEST_INITRD"),
+        std::env::var("HV2_TEST_INITRD_MARKER"),
+    ) else {
+        eprintln!("skipping: needs HV2_TEST_INITRD and _MARKER");
+        return;
+    };
+    let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
+    let image = std::env::temp_dir().join(format!("hv2-whpx-smp-data-{}.img", std::process::id()));
+    std::fs::write(&image, vec![0u8; 1024 * 1024]).expect("the image is written");
+    let config = VMConfig {
+        name: "linux-whpx-2-vcpus-disk".to_string(),
+        vcpu_count: 2,
+        memory_size: memory_mib() * 1024 * 1024,
+        boot: Some(
+            BootSource::linux(&kernel)
+                .with_cmdline(
+                    "console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 panic=1 apic=verbose",
+                )
+                .with_initrd(initrd),
+        ),
+        ..Default::default()
+    };
+    let Ok(vm) = VM::new(config) else {
+        eprintln!("skipping: a VM could not be created here");
+        return;
+    };
+    if !vm.executes_guest_code() {
+        eprintln!("skipping: no backend on this host executes guest code");
+        return;
+    }
+    let vm = Arc::new(vm);
+    vm.attach_data_pci(&image, "data0")
+        .await
+        .expect("the data disk attaches");
+    if let Err(e) = vm.provision().await {
+        eprintln!("skipping: provision failed ({e})");
+        return;
+    }
+    vm.launch().await.expect("the vCPU loop starts");
+
+    let started = Instant::now();
+    let mut console = String::new();
+    while started.elapsed() < BOOT_DEADLINE && !console.contains(marker.as_str()) {
+        tokio::time::sleep(POLL).await;
+        console = vm.console_output().await;
+    }
+    assert!(
+        console.contains(marker.as_str()),
+        "no userspace:\n{console}"
+    );
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    // The shell expands the arithmetic, so the console shows `DISKMARK-42`
+    // only from the guest's own read of the disk, not from the echoed command.
+    vm.send_serial(
+        b"echo -n DISKMARK-$((6*7)) | dd of=/dev/vda bs=512 count=1 conv=sync 2>/dev/null; sync; echo readback-$(dd if=/dev/vda bs=1 count=11 2>/dev/null)-end; echo virtioirqs-$(grep -c virtio /proc/interrupts)-end; grep virtio /proc/interrupts\n",
+    )
+    .await
+    .expect("the serial input is accepted");
+    while started.elapsed() < BOOT_DEADLINE
+        && !console.contains("virtioirqs-")
+        && !console.contains("readback-DISKMARK-42-end")
+    {
+        tokio::time::sleep(POLL).await;
+        console = vm.console_output().await;
+    }
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    console = vm.console_output().await;
+    let _ = vm.stop().await;
+    let on_host = std::fs::read(&image).unwrap_or_default();
+    let _ = std::fs::remove_file(&image);
+    for line in console
+        .lines()
+        .filter(|l| l.contains("readback-") || l.contains("virtioirqs-") || l.contains("virtio"))
+    {
+        println!("linux whpx 2 vcpus disk: guest: {line}");
+    }
+    assert!(
+        console
+            .lines()
+            .any(|l| l.trim_end() == "readback-DISKMARK-42-end"),
+        "the guest did not read back what it wrote.\nconsole tail: {}",
+        &console[console.len().saturating_sub(600)..]
+    );
+    assert!(
+        on_host.starts_with(b"DISKMARK-42"),
+        "the data did not reach the host's image file"
+    );
+}
