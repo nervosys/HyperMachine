@@ -37,7 +37,7 @@ const SCI_EN: u8 = 1;
 /// PM1a event and control registers.
 #[derive(Debug)]
 pub struct AcpiPm {
-    registers: [u8; REGISTERS],
+    registers: parking_lot::Mutex<[u8; REGISTERS]>,
 }
 
 impl AcpiPm {
@@ -47,7 +47,9 @@ impl AcpiPm {
     pub fn new() -> Self {
         let mut registers = [0; REGISTERS];
         registers[CONTROL_OFFSET] = SCI_EN;
-        Self { registers }
+        Self {
+            registers: parking_lot::Mutex::new(registers),
+        }
     }
 }
 
@@ -67,6 +69,21 @@ impl Device for AcpiPm {
         "ACPI PM"
     }
 
+    /// The enable and control registers the guest wrote.
+    fn export_state(&self) -> Option<Vec<u8>> {
+        Some(self.registers.lock().to_vec())
+    }
+
+    fn import_state(&self, bytes: &[u8]) -> Result<()> {
+        let bytes: [u8; REGISTERS] = bytes
+            .try_into()
+            .map_err(|_| crate::Error::Device("ACPI PM state is malformed".into()))?;
+        let mut registers = self.registers.lock();
+        *registers = bytes;
+        registers[CONTROL_OFFSET] |= SCI_EN;
+        Ok(())
+    }
+
     async fn init(&mut self) -> Result<()> {
         Ok(())
     }
@@ -78,7 +95,7 @@ impl Device for AcpiPm {
             // writing a one there clears a bit, and none is ever set.
             *byte = match at {
                 0..ENABLE_OFFSET => 0,
-                at if at < REGISTERS => self.registers[at],
+                at if at < REGISTERS => self.registers.lock()[at],
                 _ => 0xFF,
             };
         }
@@ -86,14 +103,15 @@ impl Device for AcpiPm {
     }
 
     async fn write(&mut self, offset: u64, data: &[u8]) -> Result<()> {
+        let mut registers = self.registers.lock();
         for (i, byte) in data.iter().enumerate() {
             let at = offset as usize + i;
             if (ENABLE_OFFSET..REGISTERS).contains(&at) {
-                self.registers[at] = *byte;
+                registers[at] = *byte;
             }
         }
         // Whatever a guest writes, it stays in ACPI mode.
-        self.registers[CONTROL_OFFSET] |= SCI_EN;
+        registers[CONTROL_OFFSET] |= SCI_EN;
         Ok(())
     }
 
@@ -249,6 +267,20 @@ mod tests {
         let delta = b.wrapping_sub(a) & 0x00FF_FFFF;
         // 50 ms is about 178,977 counts; allow a slow host.
         assert!((170_000..400_000).contains(&delta), "delta {delta}");
+    }
+
+    #[tokio::test]
+    async fn the_pm1_registers_a_guest_wrote_survive_an_export_and_import() {
+        let mut a = AcpiPm::new();
+        a.write(ENABLE_OFFSET as u64, &[0x21, 0x05]).await.unwrap();
+        let bytes = a.export_state().unwrap();
+        let b = AcpiPm::new();
+        b.import_state(&bytes).unwrap();
+        let mut got = [0u8; 2];
+        b.read(ENABLE_OFFSET as u64, &mut got).await.unwrap();
+        assert_eq!(got, [0x21, 0x05]);
+        assert_eq!(b.export_state().unwrap(), bytes);
+        assert!(b.import_state(&bytes[1..]).is_err());
     }
 
     #[tokio::test]

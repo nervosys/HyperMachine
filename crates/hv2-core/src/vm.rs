@@ -2560,10 +2560,10 @@ impl VM {
             Some(pit) => pit.read().await.export_state(),
             None => Vec::new(),
         };
-        // The serial port, and on several vCPUs the I/O APIC and the PM timer
-        // the guest calibrates its local APIC timer against.
+        // The serial port, and on several vCPUs the I/O APIC, the PM1 block and
+        // the PM timer the guest calibrates its local APIC timer against.
         let mut saved = Vec::new();
-        for name in ["COM1", "IOAPIC", "ACPI PM timer"] {
+        for name in ["COM1", "IOAPIC", "ACPI PM", "ACPI PM timer"] {
             if let Some(device) = self.devices.get_device(name).await {
                 if let Some(bytes) = device.read().await.export_state() {
                     saved.push((name.to_string(), bytes));
