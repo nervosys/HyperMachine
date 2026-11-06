@@ -651,6 +651,12 @@ async fn a_second_whpx_vm_with_four_vcpus_continues_from_a_snapshot() {
     fork_from_snapshot(4).await;
 }
 
+/// And eight, past the four covered so far.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_second_whpx_vm_with_eight_vcpus_continues_from_a_snapshot() {
+    fork_from_snapshot(8).await;
+}
+
 async fn fork_from_snapshot(cpus: u32) {
     if let Some(why) = unavailable() {
         eprintln!("skipping: {why}");
