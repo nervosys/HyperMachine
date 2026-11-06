@@ -59,12 +59,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   run now has its own file and the tests run one VM at a time.
 
 ### Added
-- Apple SMC register protocol, **unreleased** (`devices/applesmc.rs`, `VM::set_apple_smc_osk`): `AppleSmc` answers the
+- Apple SMC register protocol (`devices/applesmc.rs`, `VM::set_apple_smc_osk`): `AppleSmc` answers the
   System Management Controller's ports 0x300-0x31F (read, write, key-by-index and key-type commands; `#KEY`, `REV`, `$Num` and a
   few plain keys), the same protocol QEMU's `applesmc` speaks. The 64-byte OSK is not in this repository: the operator passes it
   before provisioning, and without it no SMC is present. Verified: 7 unit tests; on WHPX a hand-assembled guest reads the first
   byte of a supplied `OSK0` and `OSK1` through the ports, and a VM with no key gets nothing. NOT VERIFIED: any macOS guest booting
-  with it, which keys any macOS version needs, SMC state in snapshots, KVM/HVF. Not tagged.
+  with it, which keys any macOS version needs, SMC state in snapshots, KVM/HVF.
 - WHPX guests can have more than one vCPU (`backends/whpx.rs`, `whpx_ffi.rs`, `tests/whpx_smp_boot.rs`): a
   partition with `vcpu_count > 1` asks Windows to emulate the local APIC in xAPIC mode, so the BSP can start each
   application processor with INIT and SIPI as on hardware, and a Multiboot guest finds an ACPI RSDP (0xF0000)
