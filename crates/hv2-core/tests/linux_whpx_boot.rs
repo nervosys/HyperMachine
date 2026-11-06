@@ -309,33 +309,43 @@ console:
 /// registers being readable and writable through the instruction behind each
 /// MMIO exit, and the device seeing the rings the guest wrote (it reads the
 /// pages the partition runs the guest in). Needs `HV2_TEST_DISK`, a raw image
-/// whose first partition is the root, and an `HV2_TEST_INITRD` that loads
-/// `virtio_blk` (a distribution initramfs does); the disk is attached
+/// whose first partition is the root, and either a kernel with `virtio_blk` and
+/// ext4 built in or an `HV2_TEST_INITRD` that loads them; the disk is attached
 /// read-only.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_root_filesystem_mounts_from_a_virtio_blk_disk_on_pci() {
+    root_from_pci_disk(1).await;
+}
+
+/// The same with two vCPUs, so the interrupt for each queue crosses the I/O APIC
+/// with a second CPU online.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_root_filesystem_mounts_from_a_virtio_blk_disk_on_pci_with_two_vcpus() {
+    root_from_pci_disk(2).await;
+}
+
+/// With `HV2_TEST_INITRD` unset the kernel mounts the root itself (it needs
+/// `virtio_blk` and ext4 built in, as the fixture kernel has them).
+async fn root_from_pci_disk(cpus: u32) {
     if let Some(why) = unavailable() {
         eprintln!("skipping: {why}");
         return;
     }
-    let (Ok(disk), Ok(initrd)) = (
-        std::env::var("HV2_TEST_DISK"),
-        std::env::var("HV2_TEST_INITRD"),
-    ) else {
-        eprintln!("skipping: HV2_TEST_DISK and HV2_TEST_INITRD are not both set");
+    let Ok(disk) = std::env::var("HV2_TEST_DISK") else {
+        eprintln!("skipping: HV2_TEST_DISK is not set");
         return;
     };
     let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
-    let cmdline = format!("{} root=/dev/vda1 ro", cmdline_base());
+    let cmdline = format!("{} root=/dev/vda1 ro", snapshot_cmdline(cpus));
+    let mut source = BootSource::linux(&kernel).with_cmdline(cmdline);
+    if let Ok(initrd) = std::env::var("HV2_TEST_INITRD") {
+        source = source.with_initrd(initrd);
+    }
     let config = VMConfig {
         name: "linux-whpx-root-test".to_string(),
-        vcpu_count: 1,
+        vcpu_count: cpus,
         memory_size: MEMORY_MIB * 1024 * 1024,
-        boot: Some(
-            BootSource::linux(&kernel)
-                .with_cmdline(cmdline)
-                .with_initrd(initrd),
-        ),
+        boot: Some(source),
         ..Default::default()
     };
     let Ok(vm) = VM::new(config) else {

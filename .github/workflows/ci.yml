@@ -52,6 +52,16 @@ jobs:
             matrix:
                 os: [ubuntu-latest, windows-latest, macos-latest]
         steps:
+            # The Ubuntu runner once ran out of disk mid-link (0 MB free, a
+            # linker bus error). These preinstalled toolchains are unused here
+            # and free several GB; the step is Linux-only and best-effort.
+            - name: Free disk space
+              if: runner.os == 'Linux'
+              run: |
+                  df -h / | tail -1
+                  sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+                  df -h / | tail -1
+
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
             - name: Install Rust toolchain
