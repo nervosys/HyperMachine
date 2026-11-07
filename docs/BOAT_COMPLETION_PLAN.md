@@ -153,13 +153,18 @@ Several results are one run. Each needs three runs in a row, kept.
 
 ## 5. Platform backends
 
-- [ ] **WHPX SMP.** The 2026-10-21 attempt (hypervisor-emulated xAPIC) idled
-      forever and was reverted. Re-scope before retrying: why no tick, and whether
-      a software LAPIC timer is the other route.
-- [ ] **WHPX: second VM in one process** fails at map with `0xC0370008` (reported
-      by Botnix; cause unknown, not reproduced). Reproduce on this host if WHPX is
-      enabled; log retry count and elapsed time at the failure site; test with and
-      without framebuffer and net device, and at different memory sizes.
+- [x] **WHPX SMP** (done on one Windows host; see CHANGELOG `[Unreleased]`). The
+      2026-10-21 attempt idled forever; the emulated-xAPIC route now works: Linux
+      boots with 2, 4 and 8 vCPUs, reads and writes a PCI data disk and mounts a
+      real Ubuntu root from a PCI disk with 2, and a 2-, 4- or 8-vCPU guest
+      restores from a snapshot into a fresh VM. NOT VERIFIED: more than 8 vCPUs;
+      interrupts in flight at snapshot; level-triggered I/O APIC lines; booting
+      the Ubuntu root past the mount; KVM and HVF multi-vCPU snapshots (HVF
+      refuses); any of it in CI (no kernel fixture there).
+- [x] **WHPX: second VM in one process** (`0xC0370008`) was a callback kept alive
+      by the first VM; it is weak now (CHANGELOG), and the fork tests start a
+      second WHPX VM in the same process. NOT VERIFIED: the Botnix report's exact
+      configuration (framebuffer, net device, other memory sizes).
 - [ ] **WHPX guest CPUID** reports the hypervisor-present bit clear (Botnix
       measurement). What each backend does (read from the code, 2026-10-28): KVM sets
       leaf 1 ECX bit 31 (`kvm.rs`, `advertise_hypervisor`) and takes 0x40000000 from
