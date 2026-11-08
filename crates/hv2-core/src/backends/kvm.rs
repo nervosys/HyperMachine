@@ -628,6 +628,7 @@ impl HypervisorBackend for KvmBackend {
             xsave,
             xcrs,
             kvm_events: event_bytes(&events),
+            whp_pending: Vec::new(),
             run_state: match mp_state.mp_state {
                 KVM_MP_STATE_RUNNABLE => RunState::Runnable,
                 KVM_MP_STATE_HALTED => RunState::Halted,

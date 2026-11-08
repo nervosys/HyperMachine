@@ -10,8 +10,8 @@
 //!
 //! Not captured, so the snapshot says so rather than claiming otherwise
 //! ([`VCpuSnapshot::is_complete`] stays `false`): the XSAVE area (the AVX
-//! halves of the vector registers), the pending-interruption and
-//! interrupt-shadow registers, and debug registers. A vCPU is snapshotted between run exits, where an interrupt
+//! halves of the vector registers), the 128-bit pending-event register and debug
+//! registers. The pending-interruption and interrupt-state registers are captured. A vCPU is snapshotted between run exits, where an interrupt
 //! injected on the previous entry has usually been taken, but that is not
 //! guaranteed.
 
@@ -295,9 +295,27 @@ impl WhpxVcpu {
                     value: xcr0,
                 }],
                 kvm_events: Vec::new(),
+                whp_pending: self.capture_pending(),
                 run_state: self.capture_run_state(),
             })
         }
+    }
+
+    /// The pending-interruption and interrupt-state registers as 16 bytes
+    /// (see [`VCpuSnapshot::whp_pending`]); empty when they cannot be read.
+    fn capture_pending(&self) -> Vec<u8> {
+        let Ok(v) = self.get_registers(&[
+            WHV_REGISTER_NAME::WHvX64RegisterPendingInterruption,
+            WHV_REGISTER_NAME::WHvX64RegisterInterruptState,
+        ]) else {
+            return Vec::new();
+        };
+        // SAFETY: both registers are read through their 64-bit member.
+        let (pending, state) = unsafe { (v[0].Reg64, v[1].Reg64) };
+        let mut bytes = Vec::with_capacity(16);
+        bytes.extend_from_slice(&pending.to_le_bytes());
+        bytes.extend_from_slice(&state.to_le_bytes());
+        bytes
     }
 
     /// The vCPU's activity: runnable, halted by `HLT` or idle (the emulated
@@ -447,6 +465,30 @@ impl WhpxVcpu {
                 activity,
             )])?;
         }
+        // An interrupt queued for the next entry, and an interrupt shadow, that
+        // the vCPU had when it was captured. An absent or odd-sized payload
+        // (an older snapshot) leaves both as the vCPU has them. The shadow goes
+        // first, then the queued event, each on its own: WHP refuses some
+        // combinations (a shadow once an NMI is queued; an external interrupt
+        // on a vCPU that has not run), and a refused event is logged, not
+        // fatal, since the restore worked without it before this was captured.
+        if let [p0, p1, p2, p3, p4, p5, p6, p7, q0, q1, q2, q3, q4, q5, q6, q7] = s.whp_pending[..]
+        {
+            self.set_registers_64(&[(
+                WHV_REGISTER_NAME::WHvX64RegisterInterruptState,
+                u64::from_le_bytes([q0, q1, q2, q3, q4, q5, q6, q7]),
+            )])?;
+            let pending = u64::from_le_bytes([p0, p1, p2, p3, p4, p5, p6, p7]);
+            if let Err(e) = self.set_registers_64(&[(
+                WHV_REGISTER_NAME::WHvX64RegisterPendingInterruption,
+                pending,
+            )]) {
+                tracing::warn!(
+                    pending = format_args!("{pending:#x}"),
+                    "WHP refused the interrupt that was queued at capture: {e}"
+                );
+            }
+        }
         Ok(())
     }
 }
@@ -488,6 +530,78 @@ mod tests {
             g: 1,
         };
         assert_eq!(segment_from_whp(&segment_to_whp(&all)), all);
+    }
+
+    /// Put `pending` and `state` into a fresh vCPU, capture, clear both,
+    /// restore, and capture again. `None` where WHP cannot make a partition.
+    #[cfg(target_os = "windows")]
+    fn round_trip(pending: u64, state: u64) -> Option<(Vec<u8>, Vec<u8>, Vec<u8>)> {
+        let Ok(vm) = crate::backends::whpx::WhpxVm::new(1, 16 * 1024 * 1024) else {
+            eprintln!("skipping: WHP cannot create a partition here");
+            return None;
+        };
+        let vcpu = vm.create_vcpu(0).expect("a vCPU");
+        if pending != 0 {
+            vcpu.set_registers_64(&[(
+                WHV_REGISTER_NAME::WHvX64RegisterPendingInterruption,
+                pending,
+            )])
+            .expect("the event can be queued on a fresh vCPU");
+        }
+        if state != 0 {
+            vcpu.set_registers_64(&[(WHV_REGISTER_NAME::WHvX64RegisterInterruptState, state)])
+                .expect("the shadow can be set on a fresh vCPU");
+        }
+        let captured = vcpu.capture_snapshot(0).expect("capture");
+        vcpu.set_registers_64(&[
+            (WHV_REGISTER_NAME::WHvX64RegisterPendingInterruption, 0),
+            (WHV_REGISTER_NAME::WHvX64RegisterInterruptState, 0),
+        ])
+        .expect("clear");
+        let cleared = vcpu.capture_snapshot(0).expect("capture");
+        vcpu.apply_snapshot(&captured).expect("restore");
+        let restored = vcpu.capture_snapshot(0).expect("capture");
+        Some((
+            captured.whp_pending,
+            cleared.whp_pending,
+            restored.whp_pending,
+        ))
+    }
+
+    /// An NMI queued for the next entry survives capture and restore; the
+    /// control (both cleared in between) reads zero, so a restore that skipped
+    /// the register would show.
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn a_queued_nmi_survives_capture_and_restore() {
+        let queued = WHV_X64_PENDING_INTERRUPTION_REGISTER::pending(
+            WHV_X64_PENDING_INTERRUPTION_TYPE::WHvX64PendingNmi,
+            2,
+            None,
+        )
+        .AsUINT64;
+        let Some((captured, cleared, restored)) = round_trip(queued, 0) else {
+            return;
+        };
+        assert_eq!(captured.len(), 16, "the registers were not read");
+        assert_eq!(
+            u64::from_le_bytes(captured[0..8].try_into().unwrap()),
+            queued
+        );
+        assert_eq!(u64::from_le_bytes(cleared[0..8].try_into().unwrap()), 0);
+        assert_eq!(restored, captured, "the queued NMI was not restored");
+    }
+
+    /// The interrupt shadow (the instruction after `STI`) survives too.
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn an_interrupt_shadow_survives_capture_and_restore() {
+        let Some((captured, cleared, restored)) = round_trip(0, 1) else {
+            return;
+        };
+        assert_eq!(u64::from_le_bytes(captured[8..16].try_into().unwrap()), 1);
+        assert_eq!(u64::from_le_bytes(cleared[8..16].try_into().unwrap()), 0);
+        assert_eq!(restored, captured, "the interrupt shadow was not restored");
     }
 
     #[test]

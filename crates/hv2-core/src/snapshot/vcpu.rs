@@ -232,6 +232,16 @@ pub struct VCpuSnapshot {
     /// not fabricated as an all-zero captured event state.
     #[serde(default)]
     pub kvm_events: Vec<u8>,
+    /// WHP's two interruption registers, 16 bytes: the pending-interruption
+    /// register (an interrupt, NMI or exception queued for the next entry) then
+    /// the interrupt-state register (the shadow after `STI` or `MOV SS`), each
+    /// a little-endian `u64`. `WHvRegisterPendingEvent`, the 128-bit register
+    /// for nested events, is not captured.
+    ///
+    /// Empty on other backends, in older snapshots, and when the read failed;
+    /// a restore writes it only when it is exactly 16 bytes.
+    #[serde(default)]
+    pub whp_pending: Vec<u8>,
     pub run_state: RunState,
 }
 
