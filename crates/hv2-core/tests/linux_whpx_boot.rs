@@ -698,6 +698,88 @@ async fn a_second_whpx_vm_with_eight_vcpus_continues_from_a_snapshot() {
     fork_from_snapshot(8).await;
 }
 
+/// A snapshot taken while the guest is still starting its other CPUs, restored
+/// into a fresh VM, which then has to finish booting. The delays are host
+/// milliseconds after `launch`; whether an application processor was still
+/// waiting for its INIT/SIPI at that instant is not observed, only that the
+/// snapshot, whenever it fell, restores into a guest that boots.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_two_vcpu_guest_snapshotted_during_boot_still_boots_when_restored() {
+    for delay_ms in [20u64, 80, 200, 500] {
+        boot_snapshot_restore(2, delay_ms).await;
+    }
+}
+
+async fn boot_snapshot_restore(cpus: u32, delay_ms: u64) {
+    if let Some(why) = unavailable() {
+        skip!("{why}");
+        return;
+    }
+    let (Ok(initrd), Ok(marker), Ok(_)) = (
+        std::env::var("HV2_TEST_INITRD"),
+        std::env::var("HV2_TEST_INITRD_MARKER"),
+        std::env::var("HV2_TEST_INITRD_SHELL"),
+    ) else {
+        skip!("needs HV2_TEST_INITRD, _MARKER and _SHELL");
+        return;
+    };
+    let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
+    let make = |name: &str| VMConfig {
+        name: name.to_string(),
+        vcpu_count: cpus,
+        memory_size: memory_mib() * 1024 * 1024,
+        boot: Some(
+            BootSource::linux(&kernel)
+                .with_cmdline(snapshot_cmdline(cpus))
+                .with_initrd(initrd.clone()),
+        ),
+        ..Default::default()
+    };
+    let path = std::env::temp_dir().join(format!("hv2-whpx-early-{cpus}-{delay_ms}.snap"));
+    {
+        let Ok(vm) = VM::new(make("linux-whpx-early-source")) else {
+            skip!("a VM could not be created here");
+            return;
+        };
+        if !vm.executes_guest_code() {
+            skip!("no backend on this host executes guest code");
+            return;
+        }
+        let vm = Arc::new(vm);
+        if let Err(e) = vm.provision().await {
+            skip!("provision failed ({e})");
+            return;
+        }
+        vm.launch().await.expect("the vCPU loop starts");
+        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+        vm.pause().await.expect("the source pauses");
+        vm.snapshot(&path).await.expect("the source snapshots");
+        let _ = vm.stop().await;
+    }
+    let vm = Arc::new(VM::new(make("linux-whpx-early-copy")).expect("the copy is created"));
+    vm.launch_from_snapshot(&path, hv2_core::snapshot::machine::ClockOnRestore::Fresh)
+        .await
+        .expect("the copy launches from the snapshot");
+    let started = Instant::now();
+    let mut console = String::new();
+    while started.elapsed() < BOOT_DEADLINE && !console.contains(marker.as_str()) {
+        tokio::time::sleep(POLL).await;
+        console = vm.console_output().await;
+    }
+    let _ = vm.stop().await;
+    let _ = std::fs::remove_file(&path);
+    println!(
+        "whpx early snapshot: {cpus} vCPUs, taken {delay_ms} ms after launch, booted after {:?}",
+        started.elapsed()
+    );
+    assert!(
+        console.contains(marker.as_str()),
+        "a snapshot taken {delay_ms} ms after launch never finished booting.
+console:
+{console}"
+    );
+}
+
 async fn fork_from_snapshot(cpus: u32) {
     if let Some(why) = unavailable() {
         skip!("{why}");
