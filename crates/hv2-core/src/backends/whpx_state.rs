@@ -557,8 +557,13 @@ mod tests {
             // The GitHub Windows runner refuses a register read here; the
             // register is not identified, so this is recorded, not fixed.
             Err(e) if e.to_string().contains("0xC0350005") => {
-                eprintln!("skipping: this host refuses a register read: {e}");
-                return None;
+                let refused: Vec<String> = capture_names()
+                    .into_iter()
+                    .filter(|n| vcpu.get_registers(&[*n]).is_err())
+                    .map(|n| format!("{n:?}"))
+                    .collect();
+                // TEMPORARY: fail once so the CI log names the registers.
+                panic!("refused registers: {refused:?} ({e})");
             }
             Err(e) => panic!("capture: {e}"),
         };
