@@ -336,9 +336,18 @@ async fn root_from_pci_disk(cpus: u32) {
         return;
     };
     let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
-    let cmdline = format!("{} root=/dev/vda1 ro", snapshot_cmdline(cpus));
+    // With no initrd the kernel runs the distribution's own `/bin/sh` from the
+    // mounted root as init, which prints a number the command line does not
+    // contain (so the echo of the command line cannot satisfy the check).
+    let initrd = std::env::var("HV2_TEST_INITRD").ok();
+    let init_args = if initrd.is_none() {
+        " init=/bin/sh -- -c \"echo HV2_ROOT_INIT_$((6*7)); exec /bin/sleep 20\""
+    } else {
+        ""
+    };
+    let cmdline = format!("{} root=/dev/vda1 ro{init_args}", snapshot_cmdline(cpus));
     let mut source = BootSource::linux(&kernel).with_cmdline(cmdline);
-    if let Ok(initrd) = std::env::var("HV2_TEST_INITRD") {
+    if let Some(initrd) = &initrd {
         source = source.with_initrd(initrd);
     }
     let config = VMConfig {
@@ -370,7 +379,8 @@ async fn root_from_pci_disk(cpus: u32) {
     let mut console = String::new();
     while started.elapsed() < BOOT_DEADLINE {
         console = vm.console_output().await;
-        if console.contains("EXT4-fs (vda1): mounted filesystem") {
+        let init_ran = initrd.is_some() || console.contains("HV2_ROOT_INIT_42");
+        if console.contains("EXT4-fs (vda1): mounted filesystem") && init_ran {
             break;
         }
         tokio::time::sleep(POLL).await;
@@ -394,6 +404,12 @@ async fn root_from_pci_disk(cpus: u32) {
     assert!(
         console.contains("EXT4-fs (vda1): mounted filesystem"),
         "the root filesystem never mounted within {BOOT_DEADLINE:?}.\nconsole:\n{console}"
+    );
+    assert!(
+        initrd.is_some() || console.contains("HV2_ROOT_INIT_42"),
+        "the distribution's /bin/sh never ran as init from the mounted root.
+console:
+{console}"
     );
 }
 
