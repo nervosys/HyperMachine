@@ -78,6 +78,21 @@ fn reached_userspace_handoff(console: &str) -> bool {
         .any(|marker| console.contains(marker))
 }
 
+/// Say why a test is not running, and fail instead if `HV2_REQUIRE_GUEST` is set.
+///
+/// A skipped test passes, so without this a run where the fixtures are missing
+/// (or WHPX is) reports green having tested nothing. Set `HV2_REQUIRE_GUEST` on a
+/// runner that is meant to have them.
+macro_rules! skip {
+    ($($arg:tt)*) => {{
+        eprintln!("skipping: {}", format_args!($($arg)*));
+        assert!(
+            std::env::var_os("HV2_REQUIRE_GUEST").is_none(),
+            "HV2_REQUIRE_GUEST is set, so a skipped test is a failure"
+        );
+    }};
+}
+
 fn unavailable() -> Option<String> {
     let platform = HypervisorPlatform::detect();
     if platform == HypervisorPlatform::Kvm {
@@ -95,7 +110,7 @@ fn unavailable() -> Option<String> {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_real_linux_kernel_boots_on_a_userspace_pic_backend() {
     if let Some(why) = unavailable() {
-        eprintln!("skipping: {why}");
+        skip!("{why}");
         return;
     }
     let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
@@ -111,11 +126,11 @@ async fn a_real_linux_kernel_boots_on_a_userspace_pic_backend() {
         ..Default::default()
     };
     let Ok(vm) = VM::new(config) else {
-        eprintln!("skipping: a VM could not be created here");
+        skip!("a VM could not be created here");
         return;
     };
     if !vm.executes_guest_code() {
-        eprintln!("skipping: no backend on this host executes guest code");
+        skip!("no backend on this host executes guest code");
         return;
     }
     let vm = Arc::new(vm);
@@ -132,7 +147,7 @@ async fn a_real_linux_kernel_boots_on_a_userspace_pic_backend() {
             .expect("the data disk attaches");
     }
     if let Err(e) = vm.provision().await {
-        eprintln!("skipping: provision failed ({e})");
+        skip!("provision failed ({e})");
         return;
     }
     vm.launch().await.expect("the vCPU loop starts");
@@ -328,11 +343,11 @@ async fn a_root_filesystem_mounts_from_a_virtio_blk_disk_on_pci_with_two_vcpus()
 /// `virtio_blk` and ext4 built in, as the fixture kernel has them).
 async fn root_from_pci_disk(cpus: u32) {
     if let Some(why) = unavailable() {
-        eprintln!("skipping: {why}");
+        skip!("{why}");
         return;
     }
     let Ok(disk) = std::env::var("HV2_TEST_DISK") else {
-        eprintln!("skipping: HV2_TEST_DISK is not set");
+        skip!("HV2_TEST_DISK is not set");
         return;
     };
     let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
@@ -358,11 +373,11 @@ async fn root_from_pci_disk(cpus: u32) {
         ..Default::default()
     };
     let Ok(vm) = VM::new(config) else {
-        eprintln!("skipping: a VM could not be created here");
+        skip!("a VM could not be created here");
         return;
     };
     if !vm.executes_guest_code() {
-        eprintln!("skipping: no backend on this host executes guest code");
+        skip!("no backend on this host executes guest code");
         return;
     }
     let vm = Arc::new(vm);
@@ -370,7 +385,7 @@ async fn root_from_pci_disk(cpus: u32) {
         .await
         .expect("the disk attaches");
     if let Err(e) = vm.provision().await {
-        eprintln!("skipping: provision failed ({e})");
+        skip!("provision failed ({e})");
         return;
     }
     vm.launch().await.expect("the vCPU loop starts");
@@ -424,7 +439,7 @@ console:
 #[tokio::test(flavor = "multi_thread")]
 async fn a_paused_vcpus_state_survives_a_write_back() {
     if let Some(why) = unavailable() {
-        eprintln!("skipping: {why}");
+        skip!("{why}");
         return;
     }
     let (Ok(initrd), Ok(marker), Ok(_)) = (
@@ -432,7 +447,7 @@ async fn a_paused_vcpus_state_survives_a_write_back() {
         std::env::var("HV2_TEST_INITRD_MARKER"),
         std::env::var("HV2_TEST_INITRD_SHELL"),
     ) else {
-        eprintln!("skipping: needs HV2_TEST_INITRD, _MARKER and _SHELL");
+        skip!("needs HV2_TEST_INITRD, _MARKER and _SHELL");
         return;
     };
     let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
@@ -448,16 +463,16 @@ async fn a_paused_vcpus_state_survives_a_write_back() {
         ..Default::default()
     };
     let Ok(vm) = VM::new(config) else {
-        eprintln!("skipping: a VM could not be created here");
+        skip!("a VM could not be created here");
         return;
     };
     if !vm.executes_guest_code() {
-        eprintln!("skipping: no backend on this host executes guest code");
+        skip!("no backend on this host executes guest code");
         return;
     }
     let vm = Arc::new(vm);
     if let Err(e) = vm.provision().await {
-        eprintln!("skipping: provision failed ({e})");
+        skip!("provision failed ({e})");
         return;
     }
     vm.launch().await.expect("the vCPU loop starts");
@@ -540,7 +555,7 @@ fn snapshot_cmdline(cpus: u32) -> String {
 
 async fn snapshot_round_trip(cpus: u32) {
     if let Some(why) = unavailable() {
-        eprintln!("skipping: {why}");
+        skip!("{why}");
         return;
     }
     let (Ok(initrd), Ok(marker), Ok(_)) = (
@@ -548,7 +563,7 @@ async fn snapshot_round_trip(cpus: u32) {
         std::env::var("HV2_TEST_INITRD_MARKER"),
         std::env::var("HV2_TEST_INITRD_SHELL"),
     ) else {
-        eprintln!("skipping: needs HV2_TEST_INITRD, _MARKER and _SHELL");
+        skip!("needs HV2_TEST_INITRD, _MARKER and _SHELL");
         return;
     };
     let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
@@ -564,16 +579,16 @@ async fn snapshot_round_trip(cpus: u32) {
         ..Default::default()
     };
     let Ok(vm) = VM::new(config) else {
-        eprintln!("skipping: a VM could not be created here");
+        skip!("a VM could not be created here");
         return;
     };
     if !vm.executes_guest_code() {
-        eprintln!("skipping: no backend on this host executes guest code");
+        skip!("no backend on this host executes guest code");
         return;
     }
     let vm = Arc::new(vm);
     if let Err(e) = vm.provision().await {
-        eprintln!("skipping: provision failed ({e})");
+        skip!("provision failed ({e})");
         return;
     }
     vm.launch().await.expect("the vCPU loop starts");
@@ -685,7 +700,7 @@ async fn a_second_whpx_vm_with_eight_vcpus_continues_from_a_snapshot() {
 
 async fn fork_from_snapshot(cpus: u32) {
     if let Some(why) = unavailable() {
-        eprintln!("skipping: {why}");
+        skip!("{why}");
         return;
     }
     let (Ok(initrd), Ok(marker), Ok(_)) = (
@@ -693,7 +708,7 @@ async fn fork_from_snapshot(cpus: u32) {
         std::env::var("HV2_TEST_INITRD_MARKER"),
         std::env::var("HV2_TEST_INITRD_SHELL"),
     ) else {
-        eprintln!("skipping: needs HV2_TEST_INITRD, _MARKER and _SHELL");
+        skip!("needs HV2_TEST_INITRD, _MARKER and _SHELL");
         return;
     };
     let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
@@ -713,16 +728,16 @@ async fn fork_from_snapshot(cpus: u32) {
 
     {
         let Ok(vm) = VM::new(make("linux-whpx-fork-source")) else {
-            eprintln!("skipping: a VM could not be created here");
+            skip!("a VM could not be created here");
             return;
         };
         if !vm.executes_guest_code() {
-            eprintln!("skipping: no backend on this host executes guest code");
+            skip!("no backend on this host executes guest code");
             return;
         }
         let vm = Arc::new(vm);
         if let Err(e) = vm.provision().await {
-            eprintln!("skipping: provision failed ({e})");
+            skip!("provision failed ({e})");
             return;
         }
         vm.launch().await.expect("the vCPU loop starts");
@@ -793,7 +808,7 @@ async fn fork_from_snapshot(cpus: u32) {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_restored_whpx_guest_reads_its_pci_data_disk() {
     if let Some(why) = unavailable() {
-        eprintln!("skipping: {why}");
+        skip!("{why}");
         return;
     }
     let (Ok(initrd), Ok(marker), Ok(_)) = (
@@ -801,7 +816,7 @@ async fn a_restored_whpx_guest_reads_its_pci_data_disk() {
         std::env::var("HV2_TEST_INITRD_MARKER"),
         std::env::var("HV2_TEST_INITRD_SHELL"),
     ) else {
-        eprintln!("skipping: needs HV2_TEST_INITRD, _MARKER and _SHELL");
+        skip!("needs HV2_TEST_INITRD, _MARKER and _SHELL");
         return;
     };
     let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
@@ -825,11 +840,11 @@ async fn a_restored_whpx_guest_reads_its_pci_data_disk() {
 
     {
         let Ok(vm) = VM::new(make("linux-whpx-disk-source")) else {
-            eprintln!("skipping: a VM could not be created here");
+            skip!("a VM could not be created here");
             return;
         };
         if !vm.executes_guest_code() {
-            eprintln!("skipping: no backend on this host executes guest code");
+            skip!("no backend on this host executes guest code");
             return;
         }
         let vm = Arc::new(vm);
@@ -837,7 +852,7 @@ async fn a_restored_whpx_guest_reads_its_pci_data_disk() {
             .await
             .expect("the data disk attaches");
         if let Err(e) = vm.provision().await {
-            eprintln!("skipping: provision failed ({e})");
+            skip!("provision failed ({e})");
             return;
         }
         vm.launch().await.expect("the vCPU loop starts");
@@ -932,11 +947,11 @@ async fn a_linux_guest_with_eight_vcpus_brings_all_eight_online() {
 
 async fn every_vcpu_comes_online(cpus: u32) {
     if let Some(why) = unavailable() {
-        eprintln!("skipping: {why}");
+        skip!("{why}");
         return;
     }
     if std::env::var("HV2_TEST_INITRD_SHELL").is_err() {
-        eprintln!("skipping: needs HV2_TEST_INITRD_SHELL (a shell on the console)");
+        skip!("needs HV2_TEST_INITRD_SHELL (a shell on the console)");
         return;
     }
     let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
@@ -955,16 +970,16 @@ async fn every_vcpu_comes_online(cpus: u32) {
         ..Default::default()
     };
     let Ok(vm) = VM::new(config) else {
-        eprintln!("skipping: a VM could not be created here");
+        skip!("a VM could not be created here");
         return;
     };
     if !vm.executes_guest_code() {
-        eprintln!("skipping: no backend on this host executes guest code");
+        skip!("no backend on this host executes guest code");
         return;
     }
     let vm = Arc::new(vm);
     if let Err(e) = vm.provision().await {
-        eprintln!("skipping: provision failed ({e})");
+        skip!("provision failed ({e})");
         return;
     }
     vm.launch().await.expect("the vCPU loop starts");
@@ -1009,11 +1024,11 @@ async fn every_vcpu_comes_online(cpus: u32) {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_linux_guest_runs_two_busy_loops_in_parallel_on_two_vcpus() {
     if let Some(why) = unavailable() {
-        eprintln!("skipping: {why}");
+        skip!("{why}");
         return;
     }
     if std::env::var("HV2_TEST_INITRD_SHELL").is_err() {
-        eprintln!("skipping: needs HV2_TEST_INITRD_SHELL (a shell on the console)");
+        skip!("needs HV2_TEST_INITRD_SHELL (a shell on the console)");
         return;
     }
     let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
@@ -1030,16 +1045,16 @@ async fn a_linux_guest_runs_two_busy_loops_in_parallel_on_two_vcpus() {
         ..Default::default()
     };
     let Ok(vm) = VM::new(config) else {
-        eprintln!("skipping: a VM could not be created here");
+        skip!("a VM could not be created here");
         return;
     };
     if !vm.executes_guest_code() {
-        eprintln!("skipping: no backend on this host executes guest code");
+        skip!("no backend on this host executes guest code");
         return;
     }
     let vm = Arc::new(vm);
     if let Err(e) = vm.provision().await {
-        eprintln!("skipping: provision failed ({e})");
+        skip!("provision failed ({e})");
         return;
     }
     vm.launch().await.expect("the vCPU loop starts");
@@ -1096,18 +1111,18 @@ async fn a_linux_guest_runs_two_busy_loops_in_parallel_on_two_vcpus() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_linux_guest_with_two_vcpus_reads_and_writes_a_pci_data_disk() {
     if let Some(why) = unavailable() {
-        eprintln!("skipping: {why}");
+        skip!("{why}");
         return;
     }
     if std::env::var("HV2_TEST_INITRD_SHELL").is_err() {
-        eprintln!("skipping: needs HV2_TEST_INITRD_SHELL (a shell on the console)");
+        skip!("needs HV2_TEST_INITRD_SHELL (a shell on the console)");
         return;
     }
     let (Ok(initrd), Ok(marker)) = (
         std::env::var("HV2_TEST_INITRD"),
         std::env::var("HV2_TEST_INITRD_MARKER"),
     ) else {
-        eprintln!("skipping: needs HV2_TEST_INITRD and _MARKER");
+        skip!("needs HV2_TEST_INITRD and _MARKER");
         return;
     };
     let kernel = std::env::var("HV2_TEST_KERNEL").expect("checked just above");
@@ -1127,11 +1142,11 @@ async fn a_linux_guest_with_two_vcpus_reads_and_writes_a_pci_data_disk() {
         ..Default::default()
     };
     let Ok(vm) = VM::new(config) else {
-        eprintln!("skipping: a VM could not be created here");
+        skip!("a VM could not be created here");
         return;
     };
     if !vm.executes_guest_code() {
-        eprintln!("skipping: no backend on this host executes guest code");
+        skip!("no backend on this host executes guest code");
         return;
     }
     let vm = Arc::new(vm);
@@ -1139,7 +1154,7 @@ async fn a_linux_guest_with_two_vcpus_reads_and_writes_a_pci_data_disk() {
         .await
         .expect("the data disk attaches");
     if let Err(e) = vm.provision().await {
-        eprintln!("skipping: provision failed ({e})");
+        skip!("provision failed ({e})");
         return;
     }
     vm.launch().await.expect("the vCPU loop starts");
