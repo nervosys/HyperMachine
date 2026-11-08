@@ -3,13 +3,15 @@
 //!
 //! Captured: the general registers, segments, descriptor tables, control
 //! registers, `EFER` and the APIC base, `XCR0`, the x87/SSE registers, and the
-//! MSRs listed in [`MSR_MAP`] (the `TSC` among them).
+//! MSRs listed in [`MSR_MAP`] (the `TSC` among them). When the partition emulates
+//! the local APIC (more than one vCPU), also the APIC's register page and the
+//! internal activity state (startup suspension, halt), which a restored
+//! application processor needs to leave the startup state.
 //!
 //! Not captured, so the snapshot says so rather than claiming otherwise
 //! ([`VCpuSnapshot::is_complete`] stays `false`): the XSAVE area (the AVX
 //! halves of the vector registers), the pending-interruption and
-//! interrupt-shadow registers, debug registers, and a halted/runnable
-//! distinction. A vCPU is snapshotted between run exits, where an interrupt
+//! interrupt-shadow registers, and debug registers. A vCPU is snapshotted between run exits, where an interrupt
 //! injected on the previous entry has usually been taken, but that is not
 //! guaranteed.
 
