@@ -11,7 +11,7 @@
 # `hv2-unikernel`, excluded for the same reason, already spells its values out.
 [package]
 name = "hv1-boot"
-version = "1.1.0"
+version = "1.2.0"
 edition = "2024"  # stable since Rust 1.85; the nightly requirement here is
                   # the `bootloader` build script, which passes -Z flags
 rust-version = "1.95"

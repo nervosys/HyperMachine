@@ -24,7 +24,7 @@ tracing = { workspace = true }
 # The wire format the guest speaks, so the examples decode it rather than
 # guessing at it.
 hv2-agent-proto = { path = "../hv2-agent-proto" }
-hv2-core = { path = "../hv2-core", version = "1.1.0" }
+hv2-core = { path = "../hv2-core", version = "1.2.0" }
 # The forward pass the `inference` example puts behind a capability. A
 # dev-dependency, not a dependency: the command graph decides who may invoke a
 # model and has no business knowing what one is.

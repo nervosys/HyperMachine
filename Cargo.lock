@@ -2564,7 +2564,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hm-cli"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -2599,7 +2599,7 @@ dependencies = [
 
 [[package]]
 name = "hm-gui"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
@@ -2675,7 +2675,7 @@ checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 
 [[package]]
 name = "hv1-arm"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "aarch64-cpu",
  "bitflags 2.13.2",
@@ -2687,7 +2687,7 @@ dependencies = [
 
 [[package]]
 name = "hv1-core"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "bitflags 2.13.2",
  "bootloader_api",
@@ -2703,7 +2703,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-agent"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2727,11 +2727,11 @@ dependencies = [
 
 [[package]]
 name = "hv2-agent-proto"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "hv2-api"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2784,7 +2784,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-cli"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -2803,7 +2803,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-cluster"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -2836,7 +2836,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-context"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "hv2-sandbox",
  "serde",
@@ -2848,7 +2848,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-core"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2893,7 +2893,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-cpu"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "hv2-core",
@@ -2903,7 +2903,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-gpu"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "ash",
@@ -2918,7 +2918,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-guest-agent"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "libc",
  "serde",
@@ -2927,7 +2927,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-infer"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "half",
  "memmap2",
@@ -2936,7 +2936,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-jobs"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "axum",
  "chrono",
@@ -2956,7 +2956,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-net"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2986,7 +2986,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-runtime"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3006,7 +3006,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-sandbox"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "libc",
  "serde",
@@ -3018,7 +3018,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-sandboxd"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -3054,7 +3054,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-swarm"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "hv2-agent-proto",
  "hv2-core",
@@ -3069,7 +3069,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-tls"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "reqwest",
  "rustls",
@@ -3165,7 +3165,7 @@ dependencies = [
 
 [[package]]
 name = "hypermachine"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "hv2-agent",
  "hv2-api",

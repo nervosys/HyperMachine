@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-09
+
 ### Fixed
 - **A WHPX guest now sees the hypervisor-present CPUID bit.** The partition exits on CPUID leaf 1 (exit list `[1]` plus the `X64CpuidExit` extended exit, without which the list does nothing); the monitor returns WHP's own result with ECX bit 31 set and steps past the instruction, as the KVM backend already did. Measured on one Windows host: `/proc/cpuinfo` in a real Ubuntu guest lists `hypervisor` 0 times before and once per vCPU after (1 and 2 vCPUs), and the two root-disk tests now assert it (they fail on the old code). The 17 WHPX Linux tests pass before and after; the guest's TSC calibration lines are unchanged. One of 12 runs with the change mounted in 16.5 s against about 1.4 s (another took 2.6 s), unexplained; 4 of 4 runs without the change were about 1.4 s. NOT VERIFIED: the vendor leaves 0x40000000 and up (Linux logs no hypervisor name); a Windows guest; anything in CI (no kernel fixture there); more than 2 vCPUs with the bit; HVF.
 - **A 2-vCPU WHPX guest snapshotted during boot restores into a guest that finishes booting.** Test `a_two_vcpu_guest_snapshotted_during_boot_still_boots_when_restored` pauses 20, 80, 200 and 500 ms after launch, snapshots, restores into a fresh VM and waits for the initrd's ready marker: all four delays, 3 of 3 runs, one Windows host, not CI. NOT VERIFIED: that an application processor was still waiting for INIT/SIPI at any of those instants (the delays are host time and the state was not read back); more than 2 vCPUs; delays under 20 ms.
