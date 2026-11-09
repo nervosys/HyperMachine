@@ -562,8 +562,8 @@ mod tests {
                     .filter(|n| vcpu.get_registers(&[*n]).is_err())
                     .map(|n| format!("{n:?}"))
                     .collect();
-                // TEMPORARY: fail once so the CI log names the registers.
-                panic!("refused registers: {refused:?} ({e})");
+                eprintln!("skipping: this host refuses register reads {refused:?}: {e}");
+                return None;
             }
             Err(e) => panic!("capture: {e}"),
         };
