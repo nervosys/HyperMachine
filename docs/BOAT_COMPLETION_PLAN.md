@@ -161,6 +161,16 @@ Several results are one run. Each needs three runs in a row, kept.
       interrupts in flight at snapshot; level-triggered I/O APIC lines; booting
       the Ubuntu root past the mount; KVM and HVF multi-vCPU snapshots (HVF
       refuses); any of it in CI (no kernel fixture there).
+      Level lines, surveyed 2026-11-08 by reading the code and running a 2-vCPU
+      Ubuntu guest (`/proc/interrupts`): the disk's INTx is programmed by the
+      guest as EDGE (`10-edge virtio0`, 92 interrupts), so the I/O APIC's level
+      path is not on the disk's path. Only the SCI (IRQ 9) is level, with 0
+      interrupts, and nothing drives it. In the code, `IoApic::eoi` is called
+      only from tests and `set_irq` lowers only the PIC, so a level line that
+      a guest does program would stop after its first interrupt (remote IRR
+      never cleared); a level line asserted while masked is not redelivered on
+      unmask. Not fixed and not exercised by any guest here; a different guest
+      kernel or an ACPI-routed PCI pin could reach it.
 - [x] **WHPX: second VM in one process** (`0xC0370008`) was a callback kept alive
       by the first VM; it is weak now (CHANGELOG), and the fork tests start a
       second WHPX VM in the same process. NOT VERIFIED: the Botnix report's exact
