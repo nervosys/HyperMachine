@@ -198,7 +198,11 @@ Several results are one run. Each needs three runs in a row, kept.
       each). Slow runs occur on both sides, unexplained: 3 of 92 with the change
       took 9.5, 16.5 and 120 s (the last is the boot deadline, a hang); 1 of 84
       without took 120 s. A boot hang of roughly 1 in 80 exists either way; whether
-      the change alters its rate is NOT known. NOT VERIFIED:
+      the change alters its rate is NOT known. One hang's cause was found: a guest
+      kernel panic, `IO-APIC + timer doesn't work!`, at 0.001 s on the 2-vCPU guest
+      (1 of 142 runs; candidate fix `no_timer_check`, not applied, not testable at
+      that rate). Two other runs mounted in 7.0 and 9.4 s with no panic, unexplained.
+      NOT VERIFIED:
       leaves 0x40000000+ (the vendor signature; the kernel logs no "Hypervisor
       detected" line, so Linux treats it as no known hypervisor); a Windows guest;
       any effect in CI (no kernel fixture); more than 2 vCPUs with the bit; HVF.
