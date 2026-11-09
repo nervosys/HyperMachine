@@ -194,8 +194,11 @@ Several results are one run. Each needs three runs in a row, kept.
       two root-disk tests fails on the old code). The 1-vCPU and 2-vCPU guests still
       calibrate the TSC the same way (PIT fails, PMTIMER reference, same MHz), the
       17 WHPX Linux tests pass before and after (94 s vs 104-120 s, 3 runs), and the
-      mount takes 1.2-1.6 s in 10 of 12 runs with the change against 4 of 4 without;
-      one run took 16.5 s and one 2.6 s, unexplained and not repeated. NOT VERIFIED:
+      mount median is 1.21 s with the change and 1.23 s without (40 interleaved runs
+      each). Slow runs occur on both sides, unexplained: 3 of 92 with the change
+      took 9.5, 16.5 and 120 s (the last is the boot deadline, a hang); 1 of 84
+      without took 120 s. A boot hang of roughly 1 in 80 exists either way; whether
+      the change alters its rate is NOT known. NOT VERIFIED:
       leaves 0x40000000+ (the vendor signature; the kernel logs no "Hypervisor
       detected" line, so Linux treats it as no known hypervisor); a Windows guest;
       any effect in CI (no kernel fixture); more than 2 vCPUs with the bit; HVF.
