@@ -37,6 +37,10 @@ The nested guest is still about ten times slower in real time.
 
 - [ ] Re-run the nested boot on the current build and keep the baseline numbers
       (guest time reached in 60 s, userspace exits) as the comparison point.
+      2026-11-09: not started. The WSL fixtures it needs are gone (`/var/tmp/hm-docker/`
+      kernel and tools image, the release `hv2-sandboxd`, the probe; `/dev/kvm` is
+      present). Rebuilding them is `build-kernel.sh --docker --kvm` plus
+      `build-tools-image.sh` plus a release build, which needs downloads and a quiet host.
 - [ ] Memory-light test: a nested guest that does little page-table work, to see
       whether the slowness follows memory activity (nested paging under Hyper-V
       is the leading guess and is a guess).
