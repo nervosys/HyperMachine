@@ -356,7 +356,7 @@ async fn root_from_pci_disk(cpus: u32) {
     // contain (so the echo of the command line cannot satisfy the check).
     let initrd = std::env::var("HV2_TEST_INITRD").ok();
     let init_args = if initrd.is_none() {
-        " init=/bin/sh -- -c \"echo HV2_ROOT_INIT_$((6*7)); exec /bin/sleep 20\""
+        " init=/bin/sh -- -c \"echo HV2_ROOT_INIT_$((6*7)); /bin/mount -t proc proc /proc; echo HV2_HV_$(/bin/grep -c -w hypervisor /proc/cpuinfo); exec /bin/sleep 20\""
     } else {
         ""
     };
@@ -394,7 +394,7 @@ async fn root_from_pci_disk(cpus: u32) {
     let mut console = String::new();
     while started.elapsed() < BOOT_DEADLINE {
         console = vm.console_output().await;
-        let init_ran = initrd.is_some() || console.contains("HV2_ROOT_INIT_42");
+        let init_ran = initrd.is_some() || console.contains("HV2_HV_");
         if console.contains("EXT4-fs (vda1): mounted filesystem") && init_ran {
             break;
         }
@@ -419,6 +419,14 @@ async fn root_from_pci_disk(cpus: u32) {
     assert!(
         console.contains("EXT4-fs (vda1): mounted filesystem"),
         "the root filesystem never mounted within {BOOT_DEADLINE:?}.\nconsole:\n{console}"
+    );
+    // Every vCPU's CPUID leaf 1 carries the hypervisor-present bit, which WHP
+    // does not set by itself; /proc/cpuinfo lists the flag once per vCPU.
+    assert!(
+        initrd.is_some() || console.contains(&format!("HV2_HV_{cpus}")),
+        "the guest does not see the hypervisor bit on each of {cpus} vCPUs.
+console:
+{console}"
     );
     assert!(
         initrd.is_some() || console.contains("HV2_ROOT_INIT_42"),

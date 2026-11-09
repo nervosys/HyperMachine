@@ -149,6 +149,12 @@ ACCEPTED = {
         'context, so Rust never constructs it. The guard compares the context '
         'the platform filled in; whpx_boot_example runs a guest that does OUT.'
     ),
+    ('WHV_RUN_VP_EXIT_REASON', 'WHvRunVpExitReasonX64Cpuid'): (
+        'FFI: WHvRunVirtualProcessor writes the exit reason into the exit '
+        'context, so Rust never constructs it. The guard compares the context '
+        'the platform filled in; the linux_whpx_boot root-disk tests run a '
+        'guest whose kernel executes CPUID leaf 1 and assert the hypervisor flag.'
+    ),
     ('WHV_MEMORY_ACCESS_TYPE', 'WHvMemoryAccessRead'): (
         'FFI: the access type is two bits of an info word the platform writes '
         '(WHV_MEMORY_ACCESS_INFO), compared as a number. Rust never builds it.'

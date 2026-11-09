@@ -734,6 +734,39 @@ impl WhpxVm {
                 }
             }
 
+            // Leaf 1 exits so the monitor can set the hypervisor-present bit
+            // (ECX bit 31), as the KVM backend does; WHP sets no such bit.
+            // The exit list only takes effect with the CPUID exit enabled.
+            let mut exits = std::mem::zeroed::<WHV_PARTITION_PROPERTY>();
+            exits.ExtendedVmExits.X64CpuidExit = 1;
+            let hr = WHvSetPartitionProperty(
+                partition,
+                WHV_PARTITION_PROPERTY_CODE::WHvPartitionPropertyCodeExtendedVmExits,
+                &exits as *const _ as *const VOID,
+                std::mem::size_of::<WHV_PARTITION_PROPERTY>() as UINT32,
+            );
+            if hr != S_OK {
+                WHvDeletePartition(partition);
+                return Err(Error::VM(format!(
+                    "Failed to enable the CPUID exit: HRESULT 0x{:08X}",
+                    hr
+                )));
+            }
+            let cpuid_exits: [UINT32; 1] = [1];
+            let hr = WHvSetPartitionProperty(
+                partition,
+                WHV_PARTITION_PROPERTY_CODE::WHvPartitionPropertyCodeCpuidExitList,
+                cpuid_exits.as_ptr() as *const VOID,
+                std::mem::size_of_val(&cpuid_exits) as UINT32,
+            );
+            if hr != S_OK {
+                WHvDeletePartition(partition);
+                return Err(Error::VM(format!(
+                    "Failed to set the CPUID exit list: HRESULT 0x{:08X}",
+                    hr
+                )));
+            }
+
             // Setup partition (finalize configuration)
             let hr = WHvSetupPartition(partition);
             if hr != S_OK {
@@ -1603,20 +1636,48 @@ impl WhpxVcpu {
         // SAFETY: WHvRunVirtualProcessor is a WHP FFI call. The partition handle and
         // vp_index are valid. The exit context is zeroed and properly sized.
         unsafe {
-            let mut exit_context = std::mem::zeroed::<WHV_RUN_VP_EXIT_CONTEXT>();
+            let mut exit_context;
+            loop {
+                exit_context = std::mem::zeroed::<WHV_RUN_VP_EXIT_CONTEXT>();
 
-            let hr = WHvRunVirtualProcessor(
-                self.partition,
-                self.vp_index,
-                &mut exit_context as *mut _ as *mut VOID,
-                std::mem::size_of::<WHV_RUN_VP_EXIT_CONTEXT>() as UINT32,
-            );
+                let hr = WHvRunVirtualProcessor(
+                    self.partition,
+                    self.vp_index,
+                    &mut exit_context as *mut _ as *mut VOID,
+                    std::mem::size_of::<WHV_RUN_VP_EXIT_CONTEXT>() as UINT32,
+                );
 
-            if hr != S_OK {
-                return Err(Error::VM(format!(
-                    "Failed to run vCPU: HRESULT 0x{:08X}",
-                    hr
-                )));
+                if hr != S_OK {
+                    return Err(Error::VM(format!(
+                        "Failed to run vCPU: HRESULT 0x{:08X}",
+                        hr
+                    )));
+                }
+
+                // CPUID leaf 1: WHP's own answer (it knows the vCPU's APIC id and
+                // feature bits) with the hypervisor-present bit added, then past
+                // the instruction, and run again.
+                if exit_context.ExitReason == WHV_RUN_VP_EXIT_REASON::WHvRunVpExitReasonX64Cpuid {
+                    let c = &exit_context.ExitData.Cpuid;
+                    let length = (exit_context.VpContext.InstructionLengthAndCr8 & 0x0F) as u64;
+                    let ecx = if c.Rax as u32 == 1 {
+                        c.DefaultResultRcx | (1 << 31)
+                    } else {
+                        c.DefaultResultRcx
+                    };
+                    self.set_registers_64(&[
+                        (WHV_REGISTER_NAME::WHvX64RegisterRax, c.DefaultResultRax),
+                        (WHV_REGISTER_NAME::WHvX64RegisterRbx, c.DefaultResultRbx),
+                        (WHV_REGISTER_NAME::WHvX64RegisterRcx, ecx),
+                        (WHV_REGISTER_NAME::WHvX64RegisterRdx, c.DefaultResultRdx),
+                        (
+                            WHV_REGISTER_NAME::WHvX64RegisterRip,
+                            exit_context.VpContext.Rip + length,
+                        ),
+                    ])?;
+                    continue;
+                }
+                break;
             }
 
             // WHP leaves RIP on the instruction that caused a port access:

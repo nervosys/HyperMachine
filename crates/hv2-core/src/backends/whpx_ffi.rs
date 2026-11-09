@@ -178,6 +178,8 @@ pub enum WHV_PARTITION_PROPERTY_CODE {
     WHvPartitionPropertyCodeProcessorCount = 0x00001fff,
     WHvPartitionPropertyCodeProcessorFeatures = 0x00001001,
     WHvPartitionPropertyCodeProcessorClFlushSize = 0x00001002,
+    /// An array of CPUID leaves (u32) whose execution exits to the monitor.
+    WHvPartitionPropertyCodeCpuidExitList = 0x00001003,
     /// 0 = none (userspace APIC), 1 = xAPIC, 2 = x2APIC, emulated by the hypervisor.
     WHvPartitionPropertyCodeLocalApicEmulationMode = 0x00001005,
 }

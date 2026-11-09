@@ -179,17 +179,26 @@ Several results are one run. Each needs three runs in a row, kept.
       by the first VM; it is weak now (CHANGELOG), and the fork tests start a
       second WHPX VM in the same process. NOT VERIFIED: the Botnix report's exact
       configuration (framebuffer, net device, other memory sizes).
-- [ ] **WHPX guest CPUID** reports the hypervisor-present bit clear (Botnix
+- [x] **WHPX guest CPUID** reports the hypervisor-present bit clear (Botnix
       measurement). What each backend does (read from the code, 2026-10-28): KVM sets
       leaf 1 ECX bit 31 (`kvm.rs`, `advertise_hypervisor`) and takes 0x40000000 from
       KVM's supported set; WHPX configures no CPUID at all (`whpx.rs` sets only the
       processor count, no CpuidResultList, no CPUID exit handler), so it gets WHP's
       defaults; HVF has no CPUID emulation. `tsc_early_khz` and `tsc=reliable` are
-      injected on WHPX and HVF only (`vm.rs:1081`). Setting the bit under WHPX needs
-      new code (a CPUID result list or exit handling) and changes how the working
-      1-vCPU guest probes time, so it is NOT done: it needs a WHPX run on this host
-      (both before and after) and a decision. Botnix asked for the signal; the cost
-      of not having it is that a guest sees bare hardware.
+      injected on WHPX and HVF only (`vm.rs:1081`). Done 2026-11-09, decided by the owner's "You decide": WHPX now exits on CPUID
+      leaf 1 only, returns WHP's own result with ECX bit 31 added, steps past the
+      instruction and re-enters (`whpx.rs`: the CPUID exit list `[1]` and the
+      `X64CpuidExit` extended exit, which the list needs; the exit list alone did
+      nothing). Measured on this host: the guest's `/proc/cpuinfo` lists `hypervisor`
+      0 times before and once per vCPU after (1 and 2 vCPUs; the new assertion in the
+      two root-disk tests fails on the old code). The 1-vCPU and 2-vCPU guests still
+      calibrate the TSC the same way (PIT fails, PMTIMER reference, same MHz), the
+      17 WHPX Linux tests pass before and after (94 s vs 104-120 s, 3 runs), and the
+      mount takes 1.2-1.6 s in 10 of 12 runs with the change against 4 of 4 without;
+      one run took 16.5 s and one 2.6 s, unexplained and not repeated. NOT VERIFIED:
+      leaves 0x40000000+ (the vendor signature; the kernel logs no "Hypervisor
+      detected" line, so Linux treats it as no known hypervisor); a Windows guest;
+      any effect in CI (no kernel fixture); more than 2 vCPUs with the bit; HVF.
 - [ ] **HVF (macOS), IRQ 12.** Needs a Mac. **OWNER** hardware.
 - [ ] **Intel nested KVM (VMX).** Needs an Intel host. **OWNER** hardware.
 - [ ] **vCPU reservation** (priority and affinity for vCPU threads, requested by
