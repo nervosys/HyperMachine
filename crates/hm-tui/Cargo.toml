@@ -1,0 +1,30 @@
+[package]
+name = "hm-tui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "HyperMachine terminal dashboard - a Docker Desktop style view of Type 2 VMs and sandbox VMs, in the terminal"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+tokio = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }
+chrono.workspace = true
+
+[[bin]]
+name = "hm-tui"
+path = "src/main.rs"
+
+[lints]
+workspace = true

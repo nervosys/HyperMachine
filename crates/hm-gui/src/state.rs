@@ -1,21 +1,39 @@
 //! Application state management
 
-use crate::api::{VmInfo, VmStateApi};
+use crate::api::{SandboxInfo, VmInfo, VmStateApi};
 use std::collections::HashMap;
+
+/// Which list the sidebar and main content show: Type 2 VMs, from
+/// `backend_url`, or sandbox VMs, from `sandbox_backend_url`. They are two
+/// different backends, so the view also picks which one auto-refresh polls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum View {
+    Vms,
+    Sandboxes,
+}
 
 /// Main application state
 #[derive(Debug, Clone)]
 pub struct AppState {
+    /// Which list is on screen
+    pub view: View,
     /// Connected to backend
     pub connected: bool,
     /// Backend URL
     pub backend_url: String,
+    /// A sandboxd node's URL, for the Sandboxes view
+    pub sandbox_backend_url: String,
     /// Last error message
     pub last_error: Option<String>,
     /// Host information
     pub host_info: Option<HostState>,
     /// All VMs
     pub vms: HashMap<String, VmState>,
+    /// Sandbox VMs, as last listed; sorted by ID so the list doesn't
+    /// reorder itself between refreshes the way a HashMap's iteration would
+    pub sandboxes: Vec<SandboxInfo>,
+    /// Currently selected sandbox
+    pub selected_sandbox: Option<String>,
     /// Currently selected VM
     pub selected_vm: Option<String>,
     /// VM being viewed in console
@@ -39,11 +57,15 @@ pub struct AppState {
 impl Default for AppState {
     fn default() -> Self {
         Self {
+            view: View::Vms,
             connected: false,
             backend_url: "http://localhost:8080".to_string(),
+            sandbox_backend_url: "http://localhost:3980".to_string(),
             last_error: None,
             host_info: None,
             vms: HashMap::new(),
+            sandboxes: Vec::new(),
+            selected_sandbox: None,
             selected_vm: None,
             console_vm: None,
             show_create_dialog: false,
@@ -97,6 +119,23 @@ impl AppState {
     /// Get selected VM state
     pub fn selected_vm_state(&self) -> Option<&VmState> {
         self.selected_vm.as_ref().and_then(|id| self.vms.get(id))
+    }
+
+    /// Replace the sandbox list with a fresh one, sorted by ID.
+    pub fn update_sandboxes(&mut self, mut sandboxes: Vec<SandboxInfo>) {
+        sandboxes.sort_by(|a, b| a.sandbox_id.cmp(&b.sandbox_id));
+        if let Some(selected) = &self.selected_sandbox {
+            if !sandboxes.iter().any(|s| &s.sandbox_id == selected) {
+                self.selected_sandbox = None;
+            }
+        }
+        self.sandboxes = sandboxes;
+    }
+
+    pub fn selected_sandbox_info(&self) -> Option<&SandboxInfo> {
+        self.selected_sandbox
+            .as_ref()
+            .and_then(|id| self.sandboxes.iter().find(|s| &s.sandbox_id == id))
     }
 
     /// Count VMs by state

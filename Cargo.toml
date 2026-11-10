@@ -22,6 +22,7 @@ members = [
     "crates/hv2-cli",
     "crates/hm-cli",
     "crates/hm-gui",
+    "crates/hm-tui",
     "crates/hypermachine",
 ]
 # hv1-boot is not a member, and that is deliberate.

@@ -1,7 +1,7 @@
 //! UI components - sidebar, toolbar, console, etc.
 
 use crate::api::VmStateApi;
-use crate::state::{AppState, VmState};
+use crate::state::{AppState, View, VmState};
 use crate::theme::{icons, primary_button, AppColors};
 use crate::widgets::{connection_status, stats_bar, vm_details_panel, vm_list_item, VmAction};
 use egui::{Color32, CornerRadius, RichText, Ui};
@@ -11,9 +11,26 @@ pub fn toolbar(ui: &mut Ui, state: &mut AppState) -> ToolbarAction {
     egui::MenuBar::new().ui(ui, |ui| {
         ui.label(RichText::new("HyperMachine").strong().size(18.0));
         ui.separator();
+        // Which backend's list the sidebar and main panel show. Switching
+        // clears the other view's selection implicitly, since each view
+        // reads only its own `selected_*` field.
         if ui
-            .add(primary_button(&format!("{} New VM", icons::ADD)))
+            .selectable_label(state.view == View::Vms, "VMs")
             .clicked()
+        {
+            state.view = View::Vms;
+        }
+        if ui
+            .selectable_label(state.view == View::Sandboxes, "Sandboxes")
+            .clicked()
+        {
+            state.view = View::Sandboxes;
+        }
+        ui.separator();
+        if state.view == View::Vms
+            && ui
+                .add(primary_button(&format!("{} New VM", icons::ADD)))
+                .clicked()
         {
             state.show_create_dialog = true;
         }
@@ -30,7 +47,12 @@ pub fn toolbar(ui: &mut Ui, state: &mut AppState) -> ToolbarAction {
                 state.show_about = true;
             }
             ui.separator();
-            connection_status(ui, state.connected, &state.backend_url);
+            let (url, label) = match state.view {
+                View::Vms => (&state.backend_url, "API"),
+                View::Sandboxes => (&state.sandbox_backend_url, "Sandboxd"),
+            };
+            ui.label(label);
+            connection_status(ui, state.connected, url);
         });
     });
     action
@@ -110,6 +132,110 @@ pub enum SidebarAction {
     PauseVm(String),
     ResumeVm(String),
     OpenConsole(String),
+    SelectSandbox(String),
+}
+
+/// The Sandboxes view's sidebar: a plain list, since sandbox VMs don't
+/// carry a console or the VM lifecycle's pause/resume -- they are created
+/// and deleted, not paused, so there is less to show per row than a VM.
+pub fn sandbox_list_sidebar(ui: &mut Ui, state: &mut AppState) -> SidebarAction {
+    let mut action = SidebarAction::None;
+    let colors = AppColors::default();
+
+    ui.vertical(|ui| {
+        ui.horizontal(|ui| {
+            ui.heading("Sandbox VMs");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(
+                    RichText::new(format!("{} total", state.sandboxes.len()))
+                        .color(colors.text_secondary),
+                );
+            });
+        });
+        ui.add_space(8.0);
+        ui.separator();
+        ui.add_space(4.0);
+
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                if state.sandboxes.is_empty() {
+                    ui.vertical_centered(|ui| {
+                        ui.add_space(40.0);
+                        ui.label(
+                            RichText::new("No sandboxes, or no sandboxd node at this URL")
+                                .color(colors.text_secondary),
+                        );
+                    });
+                } else {
+                    let selected_id = state.selected_sandbox.clone();
+                    for sandbox in &state.sandboxes {
+                        let is_selected = selected_id.as_deref() == Some(&sandbox.sandbox_id);
+                        let response = ui.selectable_label(
+                            is_selected,
+                            format!(
+                                "{}  [{}]  {}",
+                                sandbox.sandbox_id, sandbox.state, sandbox.template_id
+                            ),
+                        );
+                        if response.clicked() {
+                            action = SidebarAction::SelectSandbox(sandbox.sandbox_id.clone());
+                        }
+                    }
+                }
+            });
+    });
+    action
+}
+
+/// The Sandboxes view's main panel: the selected sandbox's fields, or a
+/// prompt to pick one.
+pub fn sandbox_content(ui: &mut Ui, state: &AppState) -> ContentAction {
+    let mut action = ContentAction::None;
+    let colors = AppColors::default();
+    match state.selected_sandbox_info() {
+        Some(sandbox) => {
+            ui.heading(&sandbox.sandbox_id);
+            ui.add_space(8.0);
+            egui::Grid::new("sandbox_details")
+                .num_columns(2)
+                .spacing([10.0, 8.0])
+                .show(ui, |ui| {
+                    ui.label("Template:");
+                    ui.label(&sandbox.template_id);
+                    ui.end_row();
+                    ui.label("State:");
+                    ui.label(&sandbox.state);
+                    ui.end_row();
+                    ui.label("CPUs:");
+                    ui.label(sandbox.cpu_count.to_string());
+                    ui.end_row();
+                    ui.label("Memory:");
+                    ui.label(format!("{} MB", sandbox.memory_mb));
+                    ui.end_row();
+                    ui.label("Started:");
+                    ui.label(&sandbox.started_at);
+                    ui.end_row();
+                    ui.label("Node:");
+                    ui.label(&sandbox.node_id);
+                    ui.end_row();
+                });
+            ui.add_space(16.0);
+            if ui.button(format!("{} Delete", icons::DELETE)).clicked() {
+                action = ContentAction::DeleteSandbox(sandbox.sandbox_id.clone());
+            }
+        }
+        None => {
+            ui.vertical_centered(|ui| {
+                ui.add_space(60.0);
+                ui.label(
+                    RichText::new("Select a sandbox from the list to view its details")
+                        .color(colors.text_secondary),
+                );
+            });
+        }
+    }
+    action
 }
 
 pub fn main_content(ui: &mut Ui, state: &mut AppState) -> ContentAction {
@@ -141,6 +267,7 @@ pub enum ContentAction {
     CloseConsole,
     SendKey(String, u32, bool),
     SendMouse(String, i32, i32, u8, i32),
+    DeleteSandbox(String),
 }
 
 impl ContentAction {
@@ -284,6 +411,9 @@ pub fn settings_dialog(ui: &mut Ui, state: &mut AppState) -> bool {
         .show(ui, |ui| {
             ui.label("Backend URL:");
             ui.text_edit_singleline(&mut state.backend_url);
+            ui.end_row();
+            ui.label("Sandboxd URL:");
+            ui.text_edit_singleline(&mut state.sandbox_backend_url);
             ui.end_row();
             ui.label("Auto-refresh:");
             ui.checkbox(&mut state.auto_refresh, "Enabled");

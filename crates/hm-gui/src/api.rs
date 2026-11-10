@@ -8,7 +8,32 @@ use tokio::sync::RwLock;
 #[derive(Clone)]
 pub struct ApiClient {
     base_url: String,
+    /// A sandboxd node's URL, for the `Sandboxes` tab. Sandbox VMs are a
+    /// different service from `base_url`'s Type 2 VMs (no relation beyond
+    /// both being HyperMachine), so this is a second endpoint, not a path
+    /// under the first.
+    sandbox_base_url: String,
     client: reqwest::Client,
+}
+
+/// A sandbox VM, as `GET /sandboxes` on a sandboxd node returns it --
+/// `SandboxRecord::listed` in `hv2-cluster`. The field names are E2B's, so
+/// they are `camelCase` on the wire.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SandboxInfo {
+    #[serde(rename = "sandboxID")]
+    pub sandbox_id: String,
+    #[serde(rename = "templateID")]
+    pub template_id: String,
+    #[serde(rename = "startedAt")]
+    pub started_at: String,
+    #[serde(rename = "cpuCount")]
+    pub cpu_count: u32,
+    #[serde(rename = "memoryMB")]
+    pub memory_mb: u64,
+    pub state: String,
+    #[serde(rename = "nodeID", default)]
+    pub node_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,13 +126,42 @@ pub struct FramebufferData {
 }
 
 impl ApiClient {
+    /// Kept for callers (and tests) that only need the Type 2 VM API and
+    /// are happy with the sandboxd default; `with_sandbox_url` is what the
+    /// app itself uses once it has both URLs.
+    #[allow(dead_code)]
     pub fn new(base_url: &str) -> Self {
+        Self::with_sandbox_url(base_url, "http://localhost:3980")
+    }
+
+    pub fn with_sandbox_url(base_url: &str, sandbox_base_url: &str) -> Self {
         Self {
             base_url: base_url.trim_end_matches('/').to_string(),
+            sandbox_base_url: sandbox_base_url.trim_end_matches('/').to_string(),
             client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(10))
                 .build()
                 .expect("Failed to create HTTP client"),
+        }
+    }
+
+    pub async fn list_sandboxes(&self) -> Result<Vec<SandboxInfo>> {
+        let url = format!("{}/sandboxes", self.sandbox_base_url);
+        let response = self.client.get(&url).send().await?;
+        if response.status().is_success() {
+            response.json().await.context("Failed to parse")
+        } else {
+            anyhow::bail!("Failed to list sandboxes: {}", response.status())
+        }
+    }
+
+    pub async fn delete_sandbox(&self, sandbox_id: &str) -> Result<()> {
+        let url = format!("{}/sandboxes/{}", self.sandbox_base_url, sandbox_id);
+        let response = self.client.delete(&url).send().await?;
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            anyhow::bail!("Failed to delete sandbox: {}", response.status())
         }
     }
 

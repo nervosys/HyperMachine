@@ -2,10 +2,10 @@
 
 use crate::api::{ApiClient, VmConfig};
 use crate::components::{
-    about_dialog, main_content, settings_dialog, toolbar, vm_list_sidebar, ContentAction,
-    SidebarAction, ToolbarAction,
+    about_dialog, main_content, sandbox_content, sandbox_list_sidebar, settings_dialog, toolbar,
+    vm_list_sidebar, ContentAction, SidebarAction, ToolbarAction,
 };
-use crate::state::AppState;
+use crate::state::{AppState, View};
 use crate::theme::configure_dark_theme;
 use crate::widgets::create_vm_dialog;
 
@@ -38,6 +38,8 @@ enum ApiResponse {
     VmPaused(String, Result<crate::api::VmInfo, String>),
     VmDeleted(String, Result<(), String>),
     Framebuffer(String, Result<crate::api::FramebufferData, String>),
+    SandboxList(Vec<crate::api::SandboxInfo>),
+    SandboxDeleted(String, Result<(), String>),
     Error(String),
 }
 
@@ -64,7 +66,8 @@ impl HyperMachineApp {
             .and_then(|s| eframe::get_value(s, "app_state"))
             .unwrap_or_default();
 
-        let api = ApiClient::new(&AppState::default().backend_url);
+        let defaults = AppState::default();
+        let api = ApiClient::with_sandbox_url(&defaults.backend_url, &defaults.sandbox_backend_url);
 
         let mut app = Self {
             state,
@@ -77,6 +80,7 @@ impl HyperMachineApp {
         // Start initial connection check
         app.check_connection();
         app.refresh_vms();
+        app.refresh_sandboxes();
 
         app
     }
@@ -193,6 +197,38 @@ impl HyperMachineApp {
         });
     }
 
+    /// Refresh the sandbox list
+    fn refresh_sandboxes(&self) {
+        let api = self.api.clone();
+        let tx = self.response_tx.clone();
+
+        self.runtime.spawn(async move {
+            match api.list_sandboxes().await {
+                Ok(sandboxes) => {
+                    let _ = tx.send(ApiResponse::SandboxList(sandboxes));
+                }
+                Err(e) => {
+                    let _ = tx.send(ApiResponse::Error(e.to_string()));
+                }
+            }
+        });
+    }
+
+    /// Delete a sandbox VM
+    fn delete_sandbox(&self, sandbox_id: String) {
+        let api = self.api.clone();
+        let tx = self.response_tx.clone();
+        let id = sandbox_id.clone();
+
+        self.runtime.spawn(async move {
+            let result = api.delete_sandbox(&id).await;
+            let _ = tx.send(ApiResponse::SandboxDeleted(
+                id,
+                result.map_err(|e| e.to_string()),
+            ));
+        });
+    }
+
     /// Fetch framebuffer for a VM
     fn fetch_framebuffer(&self, vm_id: String) {
         let api = self.api.clone();
@@ -292,6 +328,17 @@ impl HyperMachineApp {
                         }
                     }
                 }
+                ApiResponse::SandboxList(sandboxes) => {
+                    self.state.update_sandboxes(sandboxes);
+                }
+                ApiResponse::SandboxDeleted(id, result) => {
+                    if result.is_ok() {
+                        self.state.sandboxes.retain(|s| s.sandbox_id != id);
+                        if self.state.selected_sandbox.as_ref() == Some(&id) {
+                            self.state.selected_sandbox = None;
+                        }
+                    }
+                }
                 ApiResponse::Error(e) => {
                     // Connection errors are expected when backend is offline
                     if e.contains("error sending request") || e.contains("connection refused") {
@@ -330,6 +377,9 @@ impl HyperMachineApp {
                 self.state.selected_vm = Some(id.clone());
                 self.fetch_framebuffer(id);
             }
+            SidebarAction::SelectSandbox(id) => {
+                self.state.selected_sandbox = Some(id);
+            }
             SidebarAction::None => {}
         }
     }
@@ -367,6 +417,9 @@ impl HyperMachineApp {
                     let _ = api.send_mouse(&vm_id, x, y, buttons, scroll).await;
                 });
             }
+            ContentAction::DeleteSandbox(id) => {
+                self.delete_sandbox(id);
+            }
             ContentAction::None => {}
         }
     }
@@ -381,9 +434,13 @@ impl eframe::App for HyperMachineApp {
         // Process any pending API responses
         self.process_responses(ctx);
 
-        // Auto-refresh
+        // Auto-refresh: each view polls only its own backend, so switching
+        // tabs doesn't make both APIs chatty for no reason.
         if self.state.should_refresh() {
-            self.refresh_vms();
+            match self.state.view {
+                View::Vms => self.refresh_vms(),
+                View::Sandboxes => self.refresh_sandboxes(),
+            }
         }
 
         // Update framebuffer for console view
@@ -402,23 +459,38 @@ impl eframe::App for HyperMachineApp {
         egui::Panel::top("toolbar").show(ui, |ui| {
             let action = toolbar(ui, &mut self.state);
             if action == ToolbarAction::Refresh {
-                self.refresh_vms();
+                match self.state.view {
+                    View::Vms => self.refresh_vms(),
+                    View::Sandboxes => self.refresh_sandboxes(),
+                }
             }
         });
 
-        // Left sidebar with VM list
+        // Left sidebar: the VM list or the sandbox list, by view
         egui::Panel::left("vm_list")
             .min_size(300.0)
             .default_size(350.0)
-            .show(ui, |ui| {
-                let action = vm_list_sidebar(ui, &mut self.state);
-                self.handle_sidebar_action(action);
+            .show(ui, |ui| match self.state.view {
+                View::Vms => {
+                    let action = vm_list_sidebar(ui, &mut self.state);
+                    self.handle_sidebar_action(action);
+                }
+                View::Sandboxes => {
+                    let action = sandbox_list_sidebar(ui, &mut self.state);
+                    self.handle_sidebar_action(action);
+                }
             });
 
         // Main content area
-        egui::CentralPanel::default().show(ui, |ui| {
-            let action = main_content(ui, &mut self.state);
-            self.handle_content_action(action);
+        egui::CentralPanel::default().show(ui, |ui| match self.state.view {
+            View::Vms => {
+                let action = main_content(ui, &mut self.state);
+                self.handle_content_action(action);
+            }
+            View::Sandboxes => {
+                let action = sandbox_content(ui, &self.state);
+                self.handle_content_action(action);
+            }
         });
 
         // Dialogs
@@ -447,9 +519,13 @@ impl eframe::App for HyperMachineApp {
                 .show(ctx, |ui| {
                     if !settings_dialog(ui, &mut self.state) {
                         self.state.show_settings = false;
-                        // Update API client with new URL
-                        self.api = ApiClient::new(&self.state.backend_url);
+                        // Update API clients with the (possibly new) URLs
+                        self.api = ApiClient::with_sandbox_url(
+                            &self.state.backend_url,
+                            &self.state.sandbox_backend_url,
+                        );
                         self.check_connection();
+                        self.refresh_sandboxes();
                     }
                 });
         }
@@ -521,6 +597,7 @@ impl serde::Serialize for AppState {
         use serde::ser::SerializeStruct;
         let mut state = serializer.serialize_struct("AppState", 4)?;
         state.serialize_field("backend_url", &self.backend_url)?;
+        state.serialize_field("sandbox_backend_url", &self.sandbox_backend_url)?;
         state.serialize_field("auto_refresh", &self.auto_refresh)?;
         state.serialize_field("refresh_interval", &self.refresh_interval)?;
         state.end()
@@ -535,13 +612,19 @@ impl<'de> serde::Deserialize<'de> for AppState {
         #[derive(serde::Deserialize)]
         struct SavedState {
             backend_url: String,
+            #[serde(default = "default_sandbox_backend_url")]
+            sandbox_backend_url: String,
             auto_refresh: bool,
             refresh_interval: u32,
+        }
+        fn default_sandbox_backend_url() -> String {
+            AppState::default().sandbox_backend_url
         }
 
         let saved = SavedState::deserialize(deserializer)?;
         Ok(AppState {
             backend_url: saved.backend_url,
+            sandbox_backend_url: saved.sandbox_backend_url,
             auto_refresh: saved.auto_refresh,
             refresh_interval: saved.refresh_interval,
             ..Default::default()
