@@ -67,8 +67,25 @@ evidence, but no more of it is to be built. The work is on the native path
 - [x] Multi-stage builds and `COPY --from` a stage
       (`2026-10-28/hm-multistage-kvm`, 5 cases and the 6-case build check, 3 of 3 runs each).
 - [x] Compose: networks between services, by service name, on a cluster node
-      (`2026-10-28/compose-network-cluster-kvm`, 6 cases, 3 of 3 runs). Two nodes, UDP and
-      a standalone (non-cluster) node are NOT VERIFIED; a standalone node gets no network.
+      (`2026-10-28/compose-network-cluster-kvm`, 6 cases, 3 of 3 runs). Two nodes and UDP
+      are NOT VERIFIED.
+- [x] Standalone-node VM-to-VM networking, independent of `compose` (2026-11-10): a direct
+      ask from another session (`aircom-b5`, porting Docker e2e tests with three VMs and a
+      mid-test network disconnect/reconnect). `hm sandbox vm network create|list|inspect|
+      rm|connect|disconnect` manages named networks on one node with no cluster or mTLS
+      (`crates/hv2-sandboxd/src/{local_network,networks}.rs`); a sandbox's gateway resolves
+      and dials other members through a `PrivateNetwork` that checks current membership
+      live on every lookup, so a disconnect takes hold on the next one and a reconnect on
+      the one after that, with nothing to restart -- the mid-test disconnect aircom-b5
+      asked about. Dialing a peer goes over `AgentVM::forward_port`'s vsock channel (the
+      published-machine-port primitive), never the peer's own virtio-net device. 9 unit
+      tests on the registry's own bookkeeping (allocation, scoping, disconnect/reconnect,
+      `remove` refusing a nonempty network); `hv2-sandboxd`'s existing 117 pass unchanged.
+      **NOT VERIFIED**: nothing here has run against a live guest -- this repo has no Linux
+      KVM host, and WHPX's own multi-vCPU boot panic (above) is a separate, still-open
+      problem on the only host that could try. `compose` itself does not use this path yet
+      (it still only gets cluster networking); DNS resolution through the gateway's
+      intercept and a real two-guest TCP round trip are both unexercised.
 - [x] Compose: bind mounts, `:ro` and options on volumes: DECLINED 2026-10-29 (owner delegated the
       call). The sandbox API has named volumes only; a host path would be a copy-in with no live
       link, and `:ro` needs a server change. Refused with a message; use a named volume.

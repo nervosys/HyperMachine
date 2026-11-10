@@ -133,11 +133,13 @@ mod identity;
 mod idle;
 mod initramfs;
 mod lit_repos;
+mod local_network;
 #[cfg(target_os = "linux")]
 mod machines;
 #[cfg(not(target_os = "linux"))]
 #[path = "machines_unsupported.rs"]
 mod machines;
+mod networks;
 mod pool;
 mod private_source;
 mod processes;
@@ -938,6 +940,12 @@ struct AppState {
     identity: Option<Arc<identity::Identity>>,
     /// One lock per sandbox that has paused, resumed or forked.
     transitions: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    /// Named networks joining sandboxes on this node to each other, with no
+    /// cluster or mTLS required: see `local_network`. Shared with every
+    /// sandbox's gateway, which looks membership up live on every DNS
+    /// question and every connection, so a `connect` or `disconnect` takes
+    /// effect at once rather than needing the gateway rebuilt.
+    local_networks: Arc<local_network::Registry>,
 }
 
 /// What `/metrics` reports beyond live gauges.
@@ -4693,11 +4701,26 @@ async fn start_network(
 ) -> Result<LiveNetwork, String> {
     let mut builder = Gateway::builder(spec.policy).config(GatewayConfig::default());
     if private {
-        if let Some(private) = private_source::for_gateway(state, sandbox_id, vm)
-            .map_err(|_| "configuring private gateway failed".to_string())?
-        {
-            builder = builder.private_network(private);
-        }
+        // This node's own networks (no cluster or mTLS needed) are always
+        // installed when the sandbox has a network at all: membership can
+        // be granted or revoked after boot through `/networks`, and the
+        // gateway must already hold a handle to look it up live, not just
+        // for sandboxes that happen to have joined one at this moment.
+        let local: Arc<dyn hv2_net::gateway::PrivateNetwork> =
+            Arc::new(local_network::LocalNetwork::new(
+                Arc::clone(&state.local_networks),
+                state,
+                sandbox_id.to_string(),
+            ));
+        let cluster = private_source::for_gateway(state, sandbox_id, vm)
+            .map_err(|_| "configuring private gateway failed".to_string())?;
+        builder = builder.private_network(match cluster {
+            // Cross-node (cluster) membership layers on top of same-node
+            // membership; neither path's `owns_*` claims the other's names
+            // or addresses, so trying local first and falling back is safe.
+            Some(cluster) => Arc::new(LocalThenCluster { local, cluster }),
+            None => local,
+        });
     }
 
     if let Some(authority) = &state.authority {
@@ -4767,6 +4790,56 @@ async fn start_network(
         gateway: handle,
         bridge,
     })
+}
+
+/// Tries this node's own [`local_network::LocalNetwork`] first and falls
+/// back to the cluster's cross-node private networking: the two claim
+/// disjoint names and addresses (this node's own `/16` versus the
+/// cluster's), so there is nothing for them to disagree about.
+struct LocalThenCluster {
+    local: Arc<dyn hv2_net::gateway::PrivateNetwork>,
+    cluster: Arc<dyn hv2_net::gateway::PrivateNetwork>,
+}
+
+#[async_trait::async_trait]
+impl hv2_net::gateway::PrivateNetwork for LocalThenCluster {
+    fn owns_name(&self, name: &str) -> bool {
+        self.local.owns_name(name) || self.cluster.owns_name(name)
+    }
+
+    fn owns_address(&self, address: std::net::IpAddr) -> bool {
+        self.local.owns_address(address) || self.cluster.owns_address(address)
+    }
+
+    async fn resolve(&self, name: &str) -> std::io::Result<Vec<std::net::IpAddr>> {
+        if self.local.owns_name(name) {
+            self.local.resolve(name).await
+        } else {
+            self.cluster.resolve(name).await
+        }
+    }
+
+    async fn dial(
+        &self,
+        destination: std::net::SocketAddr,
+    ) -> std::io::Result<Box<dyn hv2_net::gateway::Upstream>> {
+        if self.local.owns_address(destination.ip()) {
+            self.local.dial(destination).await
+        } else {
+            self.cluster.dial(destination).await
+        }
+    }
+
+    async fn dial_udp(
+        &self,
+        destination: std::net::SocketAddr,
+    ) -> std::io::Result<Box<dyn hv2_net::gateway::Upstream>> {
+        if self.local.owns_address(destination.ip()) {
+            self.local.dial_udp(destination).await
+        } else {
+            self.cluster.dial_udp(destination).await
+        }
+    }
 }
 
 /// Point a guest at its gateway's resolver and make it trust the egress CA.
@@ -5984,6 +6057,11 @@ async fn destroy_sandbox(
 /// Stop a sandbox and everything it had, and say why (`kind` is the cluster
 /// event). Returns whether there was such a sandbox.
 async fn end_sandbox(state: &AppState, sandbox_id: &str, kind: &str) -> bool {
+    // Free its alias and address on every local network at once, whether
+    // it is ending running or paused: harmless if it was in none, and
+    // otherwise lets the same alias be reused immediately rather than
+    // waiting for `dial` to notice the sandbox is gone.
+    state.local_networks.disconnect_all(sandbox_id);
     // Not while it is pausing, resuming or being forked from.
     let lock = transition_lock(state, sandbox_id);
     let held = lock.lock().await;
@@ -6436,6 +6514,7 @@ async fn main() -> std::process::ExitCode {
         opts,
         sandboxes: Mutex::new(HashMap::new()),
         next_cid: Mutex::new(0),
+        local_networks: Arc::new(local_network::Registry::default()),
         routes: Arc::clone(&routes),
         slots: Arc::new(tokio::sync::Semaphore::new(opts_capacity)),
         cold_boot_slots,
@@ -6638,6 +6717,13 @@ async fn main() -> std::process::ExitCode {
             "/sandboxes/{sandboxID}/registration/reconcile",
             post(reconcile_registration),
         )
+        .route("/networks", post(networks::create).get(networks::list))
+        .route(
+            "/networks/{name}",
+            get(networks::inspect).delete(networks::remove),
+        )
+        .route("/networks/{name}/connect", post(networks::connect))
+        .route("/networks/{name}/disconnect", post(networks::disconnect))
         .route("/templates", get(list_templates).post(build_template_route))
         .route("/pool", get(pool_route))
         .route("/sandboxes/{sandboxID}/pause", post(pause_route))
@@ -6926,6 +7012,14 @@ async fn main() -> std::process::ExitCode {
     );
     println!("  POST   /sandboxes/{{id}}/fork     -- checkpoint in place, start `count` copies");
     println!("  GET    /sandboxes/{{id}}/network/decisions -- NOT E2B's; the gateway's audit log");
+    println!(
+        "  POST   /networks                 -- NOT E2B's; create a network joining sandboxes on this node"
+    );
+    println!("  GET    /networks                 -- NOT E2B's; list this node's networks");
+    println!("  GET    /networks/{{name}}         -- NOT E2B's; a network's members and addresses");
+    println!("  DELETE /networks/{{name}}         -- NOT E2B's; remove a network");
+    println!("  POST   /networks/{{name}}/connect    -- NOT E2B's; join a sandbox under an alias");
+    println!("  POST   /networks/{{name}}/disconnect -- NOT E2B's; leave a network");
     println!("{network_line}");
     println!("{template_line}");
     println!();

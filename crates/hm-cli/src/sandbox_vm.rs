@@ -156,6 +156,12 @@ pub enum VmCommand {
         #[command(subcommand)]
         command: DiskCommand,
     },
+    /// Join sandboxes on one node to each other, like `docker network`: no
+    /// cluster or control plane needed, since both ends are on this node
+    Network {
+        #[command(subcommand)]
+        command: NetworkCommand,
+    },
     /// Manage machines: long-lived VMs that boot from their own disk
     Machine {
         #[command(subcommand)]
@@ -942,6 +948,34 @@ pub enum DiskCommand {
     Delete {
         #[arg(value_parser = volume_name)]
         id: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum NetworkCommand {
+    /// Create a network on this node
+    Create { name: String },
+    /// List this node's networks
+    List,
+    /// Inspect a network's members and their addresses
+    Inspect { name: String },
+    /// Remove a network (its members are not disconnected first; remove
+    /// fails while any remain)
+    Delete { name: String },
+    /// Join a sandbox to a network under an alias; other members reach it
+    /// by that alias, and only members of the same network can
+    Connect {
+        network: String,
+        #[arg(long)]
+        sandbox_id: String,
+        #[arg(long)]
+        alias: String,
+    },
+    /// Leave a network; the alias and address are freed at once
+    Disconnect {
+        network: String,
+        #[arg(long)]
+        sandbox_id: String,
     },
 }
 
@@ -2473,6 +2507,54 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             DiskCommand::Delete { id } => {
                 api.request_bounded(Method::DELETE, &["disks", &id], None, 65536)
                     .await?
+            }
+        },
+        VmCommand::Network { command } => match command {
+            NetworkCommand::Create { name } => {
+                api.request_bounded(
+                    Method::POST,
+                    &["networks"],
+                    Some(json!({"name": name})),
+                    65536,
+                )
+                .await?
+            }
+            NetworkCommand::List => {
+                api.request_bounded(Method::GET, &["networks"], None, 1024 * 1024)
+                    .await?
+            }
+            NetworkCommand::Inspect { name } => {
+                api.request_bounded(Method::GET, &["networks", &name], None, 65536)
+                    .await?
+            }
+            NetworkCommand::Delete { name } => {
+                api.request_bounded(Method::DELETE, &["networks", &name], None, 65536)
+                    .await?
+            }
+            NetworkCommand::Connect {
+                network,
+                sandbox_id,
+                alias,
+            } => {
+                api.request_bounded(
+                    Method::POST,
+                    &["networks", &network, "connect"],
+                    Some(json!({"sandboxID": sandbox_id, "alias": alias})),
+                    65536,
+                )
+                .await?
+            }
+            NetworkCommand::Disconnect {
+                network,
+                sandbox_id,
+            } => {
+                api.request_bounded(
+                    Method::POST,
+                    &["networks", &network, "disconnect"],
+                    Some(json!({"sandboxID": sandbox_id})),
+                    65536,
+                )
+                .await?
             }
         },
         VmCommand::TcpStdio { id, name, port } => {
