@@ -202,7 +202,9 @@ Several results are one run. Each needs three runs in a row, kept.
       kernel panic, `IO-APIC + timer doesn't work!`, at 0.001 s on the 2-vCPU guest
       (1 of 142 runs idle; 9 of 60 under 24 busy host threads). `no_timer_check` does not cure it (7 of 28 boots still
       panicked with it on the command line; the 0-of-60 test-path result is not
-      trustworthy). Open; cause unknown. Two other runs mounted in 7.0 and 9.4 s with no panic, unexplained.
+      trustworthy). Open; cause unknown. Raising the vCPU threads' priority (HIGHEST) did not cure it either:
+      8 of 40 boots panicked with it, 5 of 40 without, interleaved under the same 24 busy threads, so
+      host scheduling of the vCPU thread alone does not explain it. Two other runs mounted in 7.0 and 9.4 s with no panic, unexplained.
       NOT VERIFIED:
       leaves 0x40000000+ (the vendor signature; the kernel logs no "Hypervisor
       detected" line, so Linux treats it as no known hypervisor); a Windows guest;
