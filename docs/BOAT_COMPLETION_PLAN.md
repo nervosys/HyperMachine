@@ -200,9 +200,9 @@ Several results are one run. Each needs three runs in a row, kept.
       without took 120 s. A boot hang of roughly 1 in 80 exists either way; whether
       the change alters its rate is NOT known. One hang's cause was found: a guest
       kernel panic, `IO-APIC + timer doesn't work!`, at 0.001 s on the 2-vCPU guest
-      (1 of 142 runs idle; 9 of 60 under 24 busy host threads). `no_timer_check` via the
-      test's command line gave 0 of 60, but injected from vm.rs it gave 4 of 60 and
-      was reverted: not fixed, cause of the difference unknown. Two other runs mounted in 7.0 and 9.4 s with no panic, unexplained.
+      (1 of 142 runs idle; 9 of 60 under 24 busy host threads). `no_timer_check` does not cure it (7 of 28 boots still
+      panicked with it on the command line; the 0-of-60 test-path result is not
+      trustworthy). Open; cause unknown. Two other runs mounted in 7.0 and 9.4 s with no panic, unexplained.
       NOT VERIFIED:
       leaves 0x40000000+ (the vendor signature; the kernel logs no "Hypervisor
       detected" line, so Linux treats it as no known hypervisor); a Windows guest;
@@ -263,3 +263,20 @@ Every box above is closed the same way:
 4. Section 5's WHPX items that are bugs (second VM, CPUID bit), then the owner's
    choice on the vCPU reservation.
 5. Section 6 as the owner provides what is needed.
+
+## Status of the remaining items (2026-11-09)
+
+- **Multi-vCPU WHPX boot panic under load** (`IO-APIC + timer doesn't work!`): OPEN.
+  Reproduced (9 of 60 under 24 busy host threads), cause not found, the one fix
+  tried did not work. In the v1.2.0 release notes as a known issue.
+- **CI fixture for the WHPX Linux tests:** OPEN, decided not to do now. The repo has
+  no recipe for the 6.6.52 kernel or the shell initrd, so a CI build would be
+  written blind; hosting the built files publishes a GPL binary, which is the
+  owner's call. Until one exists, `HV2_REQUIRE_GUEST` cannot be set in CI.
+- **Nested-guest re-run (section 2):** OPEN, decided not to do now. The WSL
+  fixtures are gone and the 2026-10-27 evidence (about 10 times slower, no
+  userspace after 270 s, no variant helped) stands; a rebuild needs downloads, a
+  long build and a quiet host.
+- **OWNER items, not mine to close:** publishing the clients, the CI secrets (Slack,
+  Codecov), HVF and Intel hardware, and the decision on hosting a fixture.
+- **Level-triggered I/O APIC lines:** OPEN, documented above; no guest reaches it.
