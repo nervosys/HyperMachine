@@ -394,7 +394,14 @@ async fn root_from_pci_disk(cpus: u32) {
     let mut console = String::new();
     while started.elapsed() < BOOT_DEADLINE {
         console = vm.console_output().await;
-        let init_ran = initrd.is_some() || console.contains("HV2_HV_");
+        // The command line is echoed in the console too, as `HV2_HV_$(...)`; only
+        // the program's own output line (digits after the prefix) counts.
+        let init_ran = initrd.is_some()
+            || console.lines().any(|l| {
+                l.trim()
+                    .strip_prefix("HV2_HV_")
+                    .is_some_and(|d| !d.is_empty() && d.chars().all(|c| c.is_ascii_digit()))
+            });
         if console.contains("EXT4-fs (vda1): mounted filesystem") && init_ran {
             break;
         }
@@ -423,7 +430,10 @@ async fn root_from_pci_disk(cpus: u32) {
     // Every vCPU's CPUID leaf 1 carries the hypervisor-present bit, which WHP
     // does not set by itself; /proc/cpuinfo lists the flag once per vCPU.
     assert!(
-        initrd.is_some() || console.contains(&format!("HV2_HV_{cpus}")),
+        initrd.is_some()
+            || console
+                .lines()
+                .any(|l| l.trim() == format!("HV2_HV_{cpus}")),
         "the guest does not see the hypervisor bit on each of {cpus} vCPUs.
 console:
 {console}"
@@ -555,7 +565,9 @@ async fn a_two_vcpu_whpx_guest_returns_to_its_snapshot() {
 /// One vCPU keeps the default (`nolapic noapic`); several need their APICs.
 fn snapshot_cmdline(cpus: u32) -> String {
     if cpus > 1 {
-        "console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 panic=1 apic=verbose".to_string()
+        // `HV2_TEST_EXTRA_CMDLINE` adds guest options, to try one at a time.
+        let extra = std::env::var("HV2_TEST_EXTRA_CMDLINE").unwrap_or_default();
+        format!("console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 panic=1 apic=verbose {extra}")
     } else {
         cmdline_base()
     }

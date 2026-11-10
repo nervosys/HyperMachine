@@ -200,8 +200,9 @@ Several results are one run. Each needs three runs in a row, kept.
       without took 120 s. A boot hang of roughly 1 in 80 exists either way; whether
       the change alters its rate is NOT known. One hang's cause was found: a guest
       kernel panic, `IO-APIC + timer doesn't work!`, at 0.001 s on the 2-vCPU guest
-      (1 of 142 runs; candidate fix `no_timer_check`, not applied, not testable at
-      that rate). Two other runs mounted in 7.0 and 9.4 s with no panic, unexplained.
+      (1 of 142 runs idle; 9 of 60 under 24 busy host threads). `no_timer_check` via the
+      test's command line gave 0 of 60, but injected from vm.rs it gave 4 of 60 and
+      was reverted: not fixed, cause of the difference unknown. Two other runs mounted in 7.0 and 9.4 s with no panic, unexplained.
       NOT VERIFIED:
       leaves 0x40000000+ (the vendor signature; the kernel logs no "Hypervisor
       detected" line, so Linux treats it as no known hypervisor); a Windows guest;
