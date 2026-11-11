@@ -585,40 +585,17 @@ mod platform {
     use super::*;
     use std::os::unix::io::{AsRawFd, RawFd};
 
+    #[allow(dead_code)]
     pub struct TapHandle {
         fd: RawFd,
         name: String,
     }
 
     impl TapHandle {
-        pub fn create(config: &TapConfig) -> Result<Self> {
-            // macOS doesn't have native TAP support, but utun provides TUN.
-            // For TAP, third-party drivers like tuntaposx are needed.
-            // Here we implement utun support as a fallback.
-
-            let unit = config
-                .name
-                .strip_prefix("utun")
-                .and_then(|s| s.parse::<u32>().ok())
-                .unwrap_or(0);
-
-            // SAFETY: Creating a PF_SYSTEM socket for utun control. Standard macOS syscall;
-            // `fd` is checked for errors immediately after.
-            let fd =
-                unsafe { libc::socket(libc::PF_SYSTEM, libc::SOCK_DGRAM, libc::SYSPROTO_CONTROL) };
-            if fd < 0 {
-                return Err(NetError::Io(io::Error::last_os_error()));
-            }
-
-            // In a full implementation, we would:
-            // 1. Get the control ID for com.apple.net.utun_control
-            // 2. Connect to the control with the desired unit number
-            // For now, we simulate success
-
-            let name = format!("utun{}", unit);
-            tracing::info!("Created macOS network device: {}", name);
-
-            Ok(Self { fd, name })
+        pub fn create(_config: &TapConfig) -> Result<Self> {
+            Err(NetError::Config(
+                "TAP/utun devices are not implemented on macOS".into(),
+            ))
         }
 
         pub fn name(&self) -> &str {

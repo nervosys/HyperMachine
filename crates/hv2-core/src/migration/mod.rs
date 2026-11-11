@@ -1,7 +1,8 @@
 //! Live migration infrastructure
 //!
-//! This module provides the infrastructure for live migration of virtual machines,
-//! including dirty page tracking, state serialization, and migration protocols.
+//! Building blocks for live migration: dirty page tracking, state serialization,
+//! and a protocol model. There is no transport, so live migration itself is not
+//! implemented and the protocol controller refuses to start.
 
 pub mod dirty_tracking;
 pub mod protocol;

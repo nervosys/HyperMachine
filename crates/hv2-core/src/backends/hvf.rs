@@ -128,6 +128,25 @@ fn write_vmcs(hv_vcpu: HvVcpuId, field: VmcsField, value: u64) -> Result<()> {
     Ok(())
 }
 
+/// VM-exit interruption information (VMCS 0x4404) and its error code (0x4406).
+const VMCS_VM_EXIT_INTR_INFO: u32 = 0x4404;
+const VMCS_VM_EXIT_INTR_ERROR_CODE: u32 = 0x4406;
+
+/// Read a VMCS field by raw encoding, mapping the FFI status to an `Error`.
+fn read_vmcs_raw(hv_vcpu: HvVcpuId, field: u32) -> Result<u64> {
+    let mut value = 0u64;
+    // SAFETY: FFI call with a valid vCPU handle, a VMCS field encoding, and a
+    // valid pointer to a live local.
+    let result = unsafe { hv_vmx_vcpu_read_vmcs(hv_vcpu, field, &mut value) };
+    if result != HV_SUCCESS {
+        return Err(Error::Hypervisor(format!(
+            "Failed to read VMCS field {:#x}: {}",
+            field, result
+        )));
+    }
+    Ok(value)
+}
+
 // -- HvfBackend --
 
 /// Apple Hypervisor Framework backend.
@@ -195,7 +214,7 @@ impl HvfBackend {
         // Determine capabilities based on architecture.
         #[cfg(target_arch = "aarch64")]
         let caps = HypervisorCapabilities {
-            max_vcpus: 128,
+            max_vcpus: 1,
             max_memory: 1024 * 1024 * 1024 * 1024, // 1 TB
             supports_nested_virt: false,
             supports_apic: false, // No APIC on ARM
@@ -206,7 +225,7 @@ impl HvfBackend {
 
         #[cfg(target_arch = "x86_64")]
         let caps = HypervisorCapabilities {
-            max_vcpus: 64,
+            max_vcpus: 1,
             max_memory: 512 * 1024 * 1024 * 1024, // 512 GB
             supports_nested_virt: false,
             supports_apic: true,
@@ -574,6 +593,13 @@ impl HypervisorBackend for HvfBackend {
     }
 
     async fn create_vm(&self, vcpu_count: u32, memory_size: u64) -> Result<HypervisorVm> {
+        if vcpu_count > 1 {
+            return Err(Error::NotSupported(format!(
+                "HVF supports one vCPU only ({} requested): interrupts for additional \
+                 vCPUs are not delivered",
+                vcpu_count
+            )));
+        }
         if vcpu_count > self.capabilities.max_vcpus {
             return Err(Error::Config(format!(
                 "vCPU count {} exceeds maximum {}",
@@ -743,11 +769,11 @@ impl HypervisorBackend for HvfBackend {
         // VMX basic exit reasons (Intel SDM Vol. 3, Appendix C)
         match exit_reason & 0xFFFF {
             VMX_EXIT_REASON_EXCEPTION_NMI => {
-                let qual = self.read_exit_qualification(hv_vcpu)?;
-                let vector = (qual & 0xFF) as u8;
-                let has_error_code = (qual & 0x800) != 0;
+                let info = read_vmcs_raw(hv_vcpu, VMCS_VM_EXIT_INTR_INFO)?;
+                let vector = (info & 0xFF) as u8;
+                let has_error_code = (info & 0x800) != 0;
                 let error_code = if has_error_code {
-                    Some(((qual >> 32) & 0xFFFF_FFFF) as u32)
+                    Some(read_vmcs_raw(hv_vcpu, VMCS_VM_EXIT_INTR_ERROR_CODE)? as u32)
                 } else {
                     None
                 };
@@ -759,16 +785,16 @@ impl HypervisorBackend for HvfBackend {
             VMX_EXIT_REASON_HLT => Ok(VmExit::Hlt),
             VMX_EXIT_REASON_VMCALL => {
                 // Read hypercall number from RAX and first 6 args from RBX, RCX, RDX, RSI, RDI, RBP
-                let mut rax: u64 = 0;
-                // SAFETY: FFI call to hv_vcpu_read_register with valid vCPU handle and valid
-                // mutable pointer. Reading RAX register for hypercall number.
-                unsafe {
-                    hv_vcpu_read_register(hv_vcpu, HvX86Reg::Rax as u32, &mut rax);
-                }
-                Ok(VmExit::Hypercall {
-                    nr: rax,
-                    args: [0; 6],
-                })
+                let nr = read_reg(hv_vcpu, HvX86Reg::Rax)?;
+                let args = [
+                    read_reg(hv_vcpu, HvX86Reg::Rbx)?,
+                    read_reg(hv_vcpu, HvX86Reg::Rcx)?,
+                    read_reg(hv_vcpu, HvX86Reg::Rdx)?,
+                    read_reg(hv_vcpu, HvX86Reg::Rsi)?,
+                    read_reg(hv_vcpu, HvX86Reg::Rdi)?,
+                    read_reg(hv_vcpu, HvX86Reg::Rbp)?,
+                ];
+                Ok(VmExit::Hypercall { nr, args })
             }
             VMX_EXIT_REASON_IO_INSTRUCTION => {
                 let qual = self.read_exit_qualification(hv_vcpu)?;
@@ -823,10 +849,6 @@ impl HypervisorBackend for HvfBackend {
                 })
             }
             VMX_EXIT_REASON_EPT_VIOLATION | VMX_EXIT_REASON_EPT_MISCONFIG => {
-                let qual = self.read_exit_qualification(hv_vcpu)?;
-                let is_write = (qual & 0x2) != 0;
-
-                // Read guest physical address from VMCS
                 let mut gpa: u64 = 0;
                 // SAFETY: FFI call to hv_vmx_vcpu_read_vmcs with valid vCPU handle and valid
                 // mutable pointer to gpa. Reading GUEST_PHYSICAL_ADDRESS from VMCS after EPT violation.
@@ -834,14 +856,10 @@ impl HypervisorBackend for HvfBackend {
                     hv_vmx_vcpu_read_vmcs(hv_vcpu, VMCS_GUEST_PHYSICAL_ADDRESS, &mut gpa);
                 }
 
-                let data = [0u8; 8];
-
-                Ok(VmExit::Mmio {
-                    phys_addr: gpa,
-                    data,
-                    len: 8,
-                    is_write,
-                })
+                Err(Error::NotSupported(format!(
+                    "MMIO exits are not decoded on HVF (guest physical address {:#x})",
+                    gpa
+                )))
             }
             _ => Ok(VmExit::Unknown {
                 reason: (exit_reason & 0xFFFF) as u32,
@@ -851,20 +869,27 @@ impl HypervisorBackend for HvfBackend {
 
     async fn inject_interrupt(&self, vcpu: &VCpu, vector: u8) -> Result<()> {
         let states = self.vcpu_states.read();
-        if let Some(state) = states.get(&vcpu.id()) {
-            state.pending_vector.store(vector as u64, Ordering::SeqCst);
-            state.interrupt_pending.store(true, Ordering::SeqCst);
+        let state = states
+            .get(&vcpu.id())
+            .ok_or_else(|| Error::Hypervisor(format!("HVF vCPU {} not found", vcpu.id())))?;
+        state.pending_vector.store(vector as u64, Ordering::SeqCst);
+        state.interrupt_pending.store(true, Ordering::SeqCst);
 
-            // Also try to wake up the vCPU if it's halted
-            // SAFETY: FFI call to hv_vcpu_interrupt with valid vCPU handle reference.
-            // Waking the vCPU so it can process the queued interrupt.
-            unsafe {
-                hv_vcpu_interrupt(&state.hv_vcpu, 1);
-            }
-
-            tracing::debug!("Queued interrupt {} for vCPU {}", vector, vcpu.id());
+        // Also try to wake up the vCPU if it's halted
+        // SAFETY: FFI call to hv_vcpu_interrupt with valid vCPU handle reference.
+        // Waking the vCPU so it can process the queued interrupt.
+        unsafe {
+            hv_vcpu_interrupt(&state.hv_vcpu, 1);
         }
+
+        tracing::debug!("Queued interrupt {} for vCPU {}", vector, vcpu.id());
         Ok(())
+    }
+
+    async fn kick_vcpu(&self, _vcpu: &VCpu) -> Result<()> {
+        Err(Error::NotSupported(
+            "kicking a vCPU is not implemented on HVF".into(),
+        ))
     }
 
     async fn inject_exception(

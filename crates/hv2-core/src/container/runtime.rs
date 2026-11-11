@@ -851,12 +851,14 @@ impl ContainerRuntime {
         Err(RuntimeError::NotImplemented("starting a container"))
     }
 
-    /// Stop a container
-    pub fn stop(&self, id: &str, timeout: Duration) -> RuntimeResult<()> {
-        let container = self.get(id)?;
-        // In real implementation, would send SIGTERM, wait, then SIGKILL
-        let _ = timeout;
-        container.stop(0)
+    /// Stop a container.
+    ///
+    /// Always an error once the container is resolved: there is no process to
+    /// signal, and moving the state machine alone would report a stop that
+    /// never happened. Like [`Self::start`], an unknown `id` is still `NotFound`.
+    pub fn stop(&self, id: &str, _timeout: Duration) -> RuntimeResult<()> {
+        let _ = self.get(id)?;
+        Err(RuntimeError::NotImplemented("stopping a container"))
     }
 
     /// Kill a container
@@ -1226,6 +1228,24 @@ mod tests {
         assert_eq!(container.state(), ContainerState::Paused);
         container.resume().unwrap();
         assert_eq!(container.state(), ContainerState::Running);
+    }
+
+    #[test]
+    fn stopping_through_the_runtime_is_refused() {
+        let runtime = ContainerRuntime::new();
+        runtime
+            .create("test1", PathBuf::from("/bundle"), ContainerSpec::default())
+            .unwrap();
+
+        let err = runtime
+            .stop("test1", Duration::from_secs(1))
+            .expect_err("there is no process to stop");
+        assert!(matches!(err, RuntimeError::NotImplemented(_)), "got: {err}");
+        assert!(matches!(
+            runtime.stop("nope", Duration::from_secs(1)),
+            Err(RuntimeError::NotFound(_))
+        ));
+        assert_eq!(runtime.get("test1").unwrap().exit_code(), None);
     }
 
     #[test]

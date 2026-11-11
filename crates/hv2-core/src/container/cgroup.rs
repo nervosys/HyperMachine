@@ -713,9 +713,12 @@ impl Cgroup {
         *self.freezer.read().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// Freeze processes
-    pub fn freeze(&self) {
-        *self.freezer.write().unwrap_or_else(|e| e.into_inner()) = FreezerState::Frozen;
+    /// Freeze processes. Always refuses: nothing writes the cgroup freezer
+    /// file, so recording `Frozen` would claim processes stopped that did not.
+    pub fn freeze(&self) -> super::runtime::RuntimeResult<()> {
+        Err(super::runtime::RuntimeError::NotImplemented(
+            "freezing a cgroup",
+        ))
     }
 
     /// Thaw processes
@@ -981,8 +984,8 @@ mod tests {
         let cgroup = Cgroup::new(PathBuf::from("/sys/fs/cgroup/test"), CgroupVersion::V2);
         assert_eq!(cgroup.freezer_state(), FreezerState::Thawed);
 
-        cgroup.freeze();
-        assert_eq!(cgroup.freezer_state(), FreezerState::Frozen);
+        assert!(cgroup.freeze().is_err());
+        assert_eq!(cgroup.freezer_state(), FreezerState::Thawed);
 
         cgroup.thaw();
         assert_eq!(cgroup.freezer_state(), FreezerState::Thawed);

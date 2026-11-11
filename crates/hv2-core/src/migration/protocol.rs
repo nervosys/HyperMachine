@@ -1,7 +1,9 @@
-//! Live migration protocol implementation
+//! Live migration protocol model
 //!
-//! This module implements the pre-copy live migration algorithm for
-//! transferring VM state between hosts with minimal downtime.
+//! This is a model of the pre-copy protocol: message types, stages, statistics
+//! and in-memory queues. It has no network transport, and nothing connects it to
+//! dirty-page tracking of a running guest, so live migration is not implemented.
+//! `MigrationController::start` and `complete` refuse with an error.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -251,6 +253,13 @@ impl MigrationController {
 
     /// Start migration
     pub fn start(&self) -> SerializeResult<()> {
+        Err(SerializeError::Io(
+            "live migration is not implemented: no transport or guest dirty-page tracking".into(),
+        ))
+    }
+
+    #[cfg(test)]
+    fn start_model(&self) -> SerializeResult<()> {
         let mut stage = self.stage.write().unwrap_or_else(|e| e.into_inner());
         if *stage != MigrationStage::Idle {
             return Err(SerializeError::InvalidFormat(
@@ -304,16 +313,9 @@ impl MigrationController {
 
     /// Complete migration
     pub fn complete(&self) -> SerializeResult<()> {
-        let mut stage = self.stage.write().unwrap_or_else(|e| e.into_inner());
-        if *stage != MigrationStage::StopAndCopy && *stage != MigrationStage::PostCopy {
-            return Err(SerializeError::InvalidFormat(
-                "Invalid stage for completion".into(),
-            ));
-        }
-
-        *stage = MigrationStage::Completed;
-
-        Ok(())
+        Err(SerializeError::Io(
+            "live migration is not implemented: nothing was transferred".into(),
+        ))
     }
 
     /// Fail migration
@@ -640,17 +642,12 @@ mod tests {
         let controller =
             MigrationController::new(MigrationRole::Source, MigrationConfig::default());
 
-        assert!(controller.start().is_ok());
-        assert_eq!(controller.stage(), MigrationStage::Setup);
-
-        assert!(controller.begin_precopy().is_ok());
-        assert_eq!(controller.stage(), MigrationStage::PreCopy);
-
-        assert!(controller.begin_stop_and_copy().is_ok());
-        assert_eq!(controller.stage(), MigrationStage::StopAndCopy);
-
-        assert!(controller.complete().is_ok());
-        assert_eq!(controller.stage(), MigrationStage::Completed);
+        assert!(controller.start().is_err());
+        assert_eq!(controller.stage(), MigrationStage::Idle);
+        assert!(controller.begin_precopy().is_err());
+        assert!(controller.begin_stop_and_copy().is_err());
+        assert!(controller.complete().is_err());
+        assert_eq!(controller.stage(), MigrationStage::Idle);
     }
 
     #[test]
@@ -661,11 +658,10 @@ mod tests {
         // Can't begin precopy from Idle
         assert!(controller.begin_precopy().is_err());
 
-        // Start first
-        controller.start().unwrap();
+        controller.start_model().unwrap();
 
         // Can't start again
-        assert!(controller.start().is_err());
+        assert!(controller.start_model().is_err());
     }
 
     #[test]
@@ -786,7 +782,7 @@ mod tests {
         // Set dummy memory reader
         migration.set_memory_reader(|_gpa, size| vec![0xAA; size as usize]);
 
-        controller.start().unwrap();
+        controller.start_model().unwrap();
         controller.begin_precopy().unwrap();
 
         let (pages, dirty_count) = migration.run_iteration().unwrap();
@@ -837,7 +833,6 @@ mod tests {
         let controller =
             MigrationController::new(MigrationRole::Source, MigrationConfig::default());
 
-        controller.start().unwrap();
         controller.fail("test error");
 
         assert_eq!(controller.stage(), MigrationStage::Failed);

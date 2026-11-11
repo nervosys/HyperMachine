@@ -658,12 +658,18 @@ pub enum CpuVendor {
 impl CpuVendor {
     /// Detect CPU vendor from CPUID
     pub fn detect() -> Self {
-        // In a real implementation, this would use CPUID
-        // For now, return a default
         #[cfg(target_arch = "x86_64")]
         {
-            // Would check CPUID leaf 0 for vendor string
-            Self::Intel
+            let leaf = core::arch::x86_64::__cpuid(0);
+            let mut vendor = [0u8; 12];
+            vendor[0..4].copy_from_slice(&leaf.ebx.to_le_bytes());
+            vendor[4..8].copy_from_slice(&leaf.edx.to_le_bytes());
+            vendor[8..12].copy_from_slice(&leaf.ecx.to_le_bytes());
+            match &vendor {
+                b"GenuineIntel" => Self::Intel,
+                b"AuthenticAMD" => Self::Amd,
+                _ => Self::Unknown,
+            }
         }
 
         #[cfg(target_arch = "aarch64")]

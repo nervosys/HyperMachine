@@ -457,8 +457,8 @@ impl RuntimeServices {
         if self.virtual_address_state != VirtualAddressMapState::Virtual {
             return Status::NOT_FOUND;
         }
-        // In a real implementation, would convert physical to virtual address
-        Status::SUCCESS
+        // No virtual map is recorded, so no address can be converted.
+        Status::UNSUPPORTED
     }
 
     /// Get virtual address state
@@ -473,22 +473,17 @@ impl RuntimeServices {
         self.high_monotonic_count.fetch_add(1, Ordering::Relaxed)
     }
 
-    /// Reset system
+    /// Reset system. Always returns `UNSUPPORTED`: no VM reset path is wired
+    /// in here, and the host process must never be taken down for a guest request.
     pub fn reset_system(
         &mut self,
-        reset_type: ResetType,
+        _reset_type: ResetType,
         _status: Status,
         _data_size: u64,
         _reset_data: Option<&[u8]>,
-    ) -> ! {
+    ) -> Status {
         self.stats.reset_calls.fetch_add(1, Ordering::Relaxed);
-        self.reset_requested = Some(reset_type);
-
-        // In a real implementation, this would trigger a VM shutdown.
-        // Using abort() instead of panic!() to avoid stack unwinding
-        // in a context where the VM should simply halt.
-        eprintln!("System reset requested: {:?}", reset_type);
-        std::process::abort();
+        Status::UNSUPPORTED
     }
 
     /// Check if reset was requested (for testing)
@@ -769,7 +764,16 @@ mod tests {
 
         let mut addr = 0x1000u64;
         let status = rs.convert_pointer(0, &mut addr);
-        assert!(status.is_success());
+        assert_eq!(status, Status::UNSUPPORTED);
+        assert_eq!(addr, 0x1000);
+    }
+
+    #[test]
+    fn test_reset_system_does_not_abort() {
+        let mut rs = RuntimeServices::new();
+        let status = rs.reset_system(ResetType::Cold, Status::SUCCESS, 0, None);
+        assert_eq!(status, Status::UNSUPPORTED);
+        assert_eq!(rs.reset_requested(), None);
     }
 
     #[test]

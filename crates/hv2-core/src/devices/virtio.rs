@@ -506,40 +506,13 @@ impl VirtioNet {
         self.tx_buffer.len()
     }
 
-    /// Process RX queue - deliver packets to guest
-    fn process_rx(&mut self) {
-        while let Some(packet) = self.rx_buffer.front() {
-            if !self.rx_queue.is_ready() || !self.rx_queue.has_available() {
-                break;
-            }
+    /// Without guest memory access nothing can be copied to the guest, so
+    /// packets stay queued and descriptors are left untouched.
+    fn process_rx(&mut self) {}
 
-            if let Some(desc_idx) = self.rx_queue.pop_available() {
-                // In a real implementation, we'd copy to guest memory
-                // For now, just mark as used
-                let len = packet.len() as u32;
-                self.rx_queue.push_used(desc_idx, len);
-                self.rx_buffer.pop_front();
-                self.interrupt_pending = true;
-            }
-        }
-    }
-
-    /// Process TX queue - send packets from guest
-    fn process_tx(&mut self) {
-        while self.tx_queue.is_ready() && self.tx_queue.has_available() {
-            if let Some(desc_idx) = self.tx_queue.pop_available() {
-                // In a real implementation, we'd read from guest memory
-                // For testing, we'll create a dummy packet
-                if let Some(desc) = self.tx_queue.get_desc(desc_idx) {
-                    // Simulate packet transmission
-                    let packet = vec![0u8; desc.len as usize];
-                    self.tx_buffer.push_back(packet);
-                    self.tx_queue.push_used(desc_idx, 0);
-                    self.interrupt_pending = true;
-                }
-            }
-        }
-    }
+    /// Without guest memory access guest packets cannot be read, so TX
+    /// descriptors are left untouched rather than completed with fabricated data.
+    fn process_tx(&mut self) {}
 }
 
 impl VirtioDevice for VirtioNet {
@@ -879,12 +852,11 @@ mod tests {
         net.queue_mut(0).unwrap().add_available(0);
         net.receive_packet(vec![1, 2, 3, 4]);
 
-        // Process should raise interrupt
+        // No guest memory: nothing is delivered, no interrupt, packet stays queued
         net.process_queues();
-        assert!(net.has_interrupt());
-
-        net.ack_interrupt();
         assert!(!net.has_interrupt());
+        assert_eq!(net.rx_pending(), 1);
+        assert_eq!(net.tx_count(), 0);
     }
 
     #[test]

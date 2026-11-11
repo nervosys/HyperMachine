@@ -39,6 +39,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - WHPX's synchronous interrupt request answers with an error when the partition is
   gone, instead of falling back to a spawned task that could only log the same
   failure on every timer tick after shutdown.
+- **Code that reported success without doing the work now refuses.** None of it was
+  reachable from a running guest on KVM or WHPX; each returned success for something it
+  did not do:
+  - HVF (macOS): an MMIO exit was reported with zeroed data and no instruction decode,
+    `kick_vcpu` was a silent no-op, an interrupt for an unknown vCPU was accepted, and
+    more than one vCPU was advertised although no interrupt reached the others. These
+    are now errors, and HVF advertises one vCPU. Exception vectors and error codes are
+    read from the VM-exit interruption fields, and hypercall arguments from the guest's
+    registers. Cross-checked for x86_64 macOS with clippy; NOT run on a Mac.
+  - macOS TAP (`hv2-net`): `create` opened a socket, never attached it to utun, and
+    returned a device name. It returns an error.
+  - SEV and TDX launch "measurements" (a copy of the first 48 input bytes), live
+    migration `start`/`complete` (an in-memory queue with no transport), NVMe
+    read/write/identify (success with no data moved), the older `devices::virtio::VirtioNet`
+    (zero-filled packets), `TapBackend::open`/`send`, the Jaeger, Zipkin and OTLP span
+    exporters (buffered, never sent), and container `stop` and cgroup `freeze`.
+  - UEFI `reset_system` called `std::process::abort()` on the host process; it returns
+    `UNSUPPORTED`.
+  - `CpuVendor::detect` always answered Intel on x86_64; it reads CPUID leaf 0.
+- CI: seven steps that could not fail were found to be hiding real results (Miri fails
+  on a KVM test, the security-lint clippy does not compile `hv2-sandbox`, `hv1-boot`
+  does not build, Gitleaks has no licence and scans nothing, the fuzz crate does not
+  build, cargo-geiger runs against a virtual manifest, and the SBOM is 134 bytes). They
+  are still non-fatal, and their names and comments now say so and say why.
 
 ### Added
 - **Standalone-node VM-to-VM networking for sandboxes.** `hm sandbox vm network create|list|inspect|rm|connect|disconnect` joins sandboxes on one node to each other by a DNS alias, with no cluster or mTLS needed -- the gap the existing cluster-only private networking left for a single node. A sandbox's gateway checks its current membership live on every DNS question and connection, so a disconnect or reconnect after boot takes effect at once, with nothing to restart. Dialing a peer goes over its vsock port-forward channel, the same primitive a published machine port already uses, not its virtio-net device. 9 new unit tests on the registry; `hv2-sandboxd`'s existing 117 pass unchanged. NOT VERIFIED against a live guest: this repo has no Linux KVM host to run it on.

@@ -416,7 +416,9 @@ impl MemorySnapshotManager {
         Ok(region.data[offset..offset + size].to_vec())
     }
 
-    /// Capture all memory regions
+    /// Capture all memory regions.
+    ///
+    /// Regions are always recorded as uncompressed, whatever `config.compression` says.
     pub fn capture_all(&mut self) -> Vec<MemoryRegionSnapshot> {
         let start = Instant::now();
         let mut snapshots = Vec::new();
@@ -431,16 +433,6 @@ impl MemorySnapshotManager {
             let zero_pages = self.count_zero_pages(region);
             if self.config.dedupe_zeros && zero_pages > 0 {
                 self.stats.zero_pages_deduped += zero_pages;
-            }
-
-            // Apply compression if enabled
-            if self.config.compression != CompressionType::None {
-                let compressed = self.compress_region(region);
-                if compressed.len() < region.data.len() {
-                    snapshot =
-                        snapshot.with_compression(self.config.compression, compressed.len() as u64);
-                    self.stats.compression_savings += region.size - compressed.len() as u64;
-                }
             }
 
             offset += snapshot.disk_size();
@@ -525,13 +517,6 @@ impl MemorySnapshotManager {
             offset += PAGE_SIZE as usize;
         }
         count
-    }
-
-    /// Compress a region (simplified - actual impl would use real compression)
-    fn compress_region(&self, region: &MemoryRegion) -> Vec<u8> {
-        // Simplified compression simulation
-        // Real implementation would use LZ4, Zstd, etc.
-        region.data.clone()
     }
 }
 

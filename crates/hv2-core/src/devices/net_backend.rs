@@ -657,10 +657,12 @@ impl TapBackend {
         })
     }
 
-    /// Open TAP device in simulated mode (no real I/O)
+    /// Always fails: this backend cannot open a TAP device itself; use `open_fd`.
     pub fn open(&self) -> Result<()> {
-        *self.connected.write().unwrap_or_else(|e| e.into_inner()) = true;
-        Ok(())
+        Err(crate::Error::NotSupported(format!(
+            "TapBackend cannot open TAP device '{}'; attach a configured fd with open_fd()",
+            self.config.name
+        )))
     }
 
     /// Attach a pre-configured TAP file descriptor for real I/O.
@@ -752,12 +754,12 @@ unsafe fn tap_write(fd: std::os::unix::io::RawFd, buf: &[u8]) -> isize {
 impl NetworkBackend for TapBackend {
     fn send(&self, packet: &[u8]) -> Result<()> {
         let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
-        stats.tx_packets += 1;
-        stats.tx_bytes += packet.len() as u64;
 
         if !*self.connected.read().unwrap_or_else(|e| e.into_inner()) {
             stats.tx_errors += 1;
-            return Ok(());
+            return Err(crate::Error::Network(
+                "TAP backend is not connected".to_string(),
+            ));
         }
 
         // Write to real TAP fd if available (unix only)
@@ -769,13 +771,18 @@ impl NetworkBackend for TapBackend {
                 let written = unsafe { tap_write(fd, packet) };
                 if written < 0 {
                     stats.tx_errors += 1;
+                    return Err(crate::Error::Io(std::io::Error::last_os_error()));
                 }
+                stats.tx_packets += 1;
+                stats.tx_bytes += written as u64;
                 return Ok(());
             }
         }
 
-        // Simulated mode: packet is counted but not delivered anywhere
-        Ok(())
+        stats.tx_errors += 1;
+        Err(crate::Error::Network(
+            "TAP backend has no device attached".to_string(),
+        ))
     }
 
     fn recv(&self) -> Result<Option<Vec<u8>>> {
@@ -966,8 +973,9 @@ mod tests {
         assert_eq!(backend.name(), "tap");
         assert_eq!(backend.device_name(), "tap0");
 
-        backend.open().unwrap();
-        assert!(backend.is_connected());
+        assert!(backend.open().is_err());
+        assert!(!backend.is_connected());
+        assert!(backend.send(&[0u8; 64]).is_err());
 
         backend.close();
         assert!(!backend.is_connected());
@@ -977,7 +985,6 @@ mod tests {
     fn test_tap_inject() {
         let config = TapConfig::default();
         let backend = TapBackend::new(config).unwrap();
-        backend.open().unwrap();
 
         let packet = vec![0x42u8; 64];
         backend.inject_packet(packet.clone());

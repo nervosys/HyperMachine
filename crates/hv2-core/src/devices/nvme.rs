@@ -796,11 +796,9 @@ impl NvmeController {
 
     /// Identify command
     fn cmd_identify(&self, sqe: &SubmissionQueueEntry, cid: u16) -> CompletionQueueEntry {
-        let cns = sqe.cdw10 & 0xFF; // Controller or Namespace Structure
-
-        // Data would be written to PRP1 address in real implementation
-        // For now, just return success
-        CompletionQueueEntry::new(cid, 0, 0, StatusCode::Success, true)
+        // No guest-memory access, so identify data cannot be DMA'd to PRP1.
+        let _ = sqe;
+        CompletionQueueEntry::new(cid, 0, 0, StatusCode::InternalError, true)
     }
 
     /// Create I/O Completion Queue
@@ -924,8 +922,8 @@ impl NvmeController {
             return CompletionQueueEntry::new(cid, sq_id, 0, StatusCode::InvalidField, true);
         }
 
-        // In real implementation, data would be DMA'd to PRP1/PRP2
-        CompletionQueueEntry::new(cid, sq_id, 0, StatusCode::Success, true)
+        // No guest-memory access, so data cannot be DMA'd to PRP1/PRP2.
+        CompletionQueueEntry::new(cid, sq_id, 0, StatusCode::DataTransferError, true)
     }
 
     /// Write command
@@ -941,8 +939,8 @@ impl NvmeController {
             return CompletionQueueEntry::new(cid, sq_id, 0, StatusCode::InvalidField, true);
         }
 
-        // In real implementation, data would be DMA'd from PRP1/PRP2
-        CompletionQueueEntry::new(cid, sq_id, 0, StatusCode::Success, true)
+        // No guest-memory access, so data cannot be DMA'd from PRP1/PRP2.
+        CompletionQueueEntry::new(cid, sq_id, 0, StatusCode::DataTransferError, true)
     }
 
     /// Get identify controller data

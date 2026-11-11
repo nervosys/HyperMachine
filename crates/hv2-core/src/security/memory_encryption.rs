@@ -642,28 +642,24 @@ impl SevContext {
         }
     }
 
-    /// Start launch
-    pub fn start_launch(&mut self, policy: u32) {
-        self.state = SevLaunchState::Started;
-        self.policy = policy;
+    /// Start launch. Always refuses: no SEV firmware interface is attached.
+    pub fn start_launch(&mut self, _policy: u32) -> EncryptionResult<()> {
+        Err(EncryptionError::NoBackend(EncryptionTechnology::AmdSev))
     }
 
-    /// Update measurement
-    pub fn update_measurement(&mut self, data: &[u8]) {
-        self.state = SevLaunchState::Measuring;
-        // In real implementation, this would use SHA-256/384
-        let len = data.len().min(48);
-        self.measurement[..len].copy_from_slice(&data[..len]);
+    /// Update measurement. Always refuses: only the PSP can compute a launch measurement.
+    pub fn update_measurement(&mut self, _data: &[u8]) -> EncryptionResult<()> {
+        Err(EncryptionError::NoBackend(EncryptionTechnology::AmdSev))
     }
 
-    /// Finish launch
-    pub fn finish_launch(&mut self) {
-        self.state = SevLaunchState::Finished;
+    /// Finish launch. Always refuses: no SEV firmware interface is attached.
+    pub fn finish_launch(&mut self) -> EncryptionResult<()> {
+        Err(EncryptionError::NoBackend(EncryptionTechnology::AmdSev))
     }
 
-    /// Start running
-    pub fn run(&mut self) {
-        self.state = SevLaunchState::Running;
+    /// Start running. Always refuses: no SEV firmware interface is attached.
+    pub fn run(&mut self) -> EncryptionResult<()> {
+        Err(EncryptionError::NoBackend(EncryptionTechnology::AmdSev))
     }
 
     /// Get measurement
@@ -716,10 +712,9 @@ impl TdxContext {
         self.attributes = attributes;
     }
 
-    /// Update MR_TD
-    pub fn update_mr_td(&mut self, data: &[u8]) {
-        let len = data.len().min(48);
-        self.mr_td[..len].copy_from_slice(&data[..len]);
+    /// Update MR_TD. Always refuses: only the TDX module can extend a TD measurement.
+    pub fn update_mr_td(&mut self, _data: &[u8]) -> EncryptionResult<()> {
+        Err(EncryptionError::NoBackend(EncryptionTechnology::IntelTdx))
     }
 }
 
@@ -1034,19 +1029,18 @@ mod tests {
         let mut ctx = SevContext::new();
         assert_eq!(ctx.state, SevLaunchState::Idle);
 
-        ctx.start_launch(0x01);
-        assert_eq!(ctx.state, SevLaunchState::Started);
-        assert_eq!(ctx.policy, 0x01);
-
-        ctx.update_measurement(b"test measurement data");
-        assert_eq!(ctx.state, SevLaunchState::Measuring);
-        assert_eq!(&ctx.measurement[..4], b"test");
-
-        ctx.finish_launch();
-        assert_eq!(ctx.state, SevLaunchState::Finished);
-
-        ctx.run();
-        assert_eq!(ctx.state, SevLaunchState::Running);
+        let no_backend = |r: EncryptionResult<()>| {
+            matches!(
+                r,
+                Err(EncryptionError::NoBackend(EncryptionTechnology::AmdSev))
+            )
+        };
+        assert!(no_backend(ctx.start_launch(0x01)));
+        assert!(no_backend(ctx.update_measurement(b"test measurement data")));
+        assert!(no_backend(ctx.finish_launch()));
+        assert!(no_backend(ctx.run()));
+        assert_eq!(ctx.state, SevLaunchState::Idle);
+        assert_eq!(ctx.measurement, [0u8; 48]);
     }
 
     #[test]
@@ -1056,8 +1050,11 @@ mod tests {
         ctx.set_attributes(0x12345678);
         assert_eq!(ctx.attributes, 0x12345678);
 
-        ctx.update_mr_td(b"measurement data");
-        assert_eq!(&ctx.mr_td[..11], b"measurement");
+        assert!(matches!(
+            ctx.update_mr_td(b"measurement data"),
+            Err(EncryptionError::NoBackend(EncryptionTechnology::IntelTdx))
+        ));
+        assert_eq!(ctx.mr_td, [0u8; 48]);
     }
 
     #[test]

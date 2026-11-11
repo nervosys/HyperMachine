@@ -175,8 +175,6 @@ impl JaegerConfig {
 pub struct JaegerSpanExporter {
     /// Configuration
     config: JaegerConfig,
-    /// Buffered spans for batch export
-    buffer: Mutex<Vec<JaegerSpan>>,
 }
 
 /// Internal Jaeger span representation
@@ -217,12 +215,10 @@ struct JaegerLog {
 impl JaegerSpanExporter {
     /// Create a new Jaeger exporter
     pub fn new(config: JaegerConfig) -> Self {
-        Self {
-            config,
-            buffer: Mutex::new(Vec::new()),
-        }
+        Self { config }
     }
 
+    #[allow(dead_code)] // wire conversion kept for the transport that does not exist yet
     fn convert_span(&self, span: &SpanData) -> JaegerSpan {
         let trace_bytes = span.context.trace_id.to_bytes();
         let trace_id_high = u64::from_be_bytes(
@@ -310,11 +306,12 @@ impl JaegerSpanExporter {
 
 impl SpanExporter for JaegerSpanExporter {
     fn export(&self, spans: Vec<SpanData>) -> Result<(), TracerError> {
-        let jaeger_spans: Vec<_> = spans.iter().map(|s| self.convert_span(s)).collect();
-        let mut buffer = self.buffer.lock();
-        buffer.extend(jaeger_spans);
-        // In production, would send to UDP agent
-        Ok(())
+        Err(TracerError::ExportError(format!(
+            "no Jaeger transport is implemented; {} span(s) for {}:{} were not sent",
+            spans.len(),
+            self.config.agent_host,
+            self.config.agent_port
+        )))
     }
 
     fn shutdown(&self) -> Result<(), TracerError> {
@@ -361,8 +358,6 @@ impl ZipkinConfig {
 pub struct ZipkinSpanExporter {
     /// Configuration
     config: ZipkinConfig,
-    /// Buffer for batch export
-    buffer: Mutex<Vec<ZipkinSpan>>,
 }
 
 /// Internal Zipkin span representation (v2 format)
@@ -394,12 +389,10 @@ struct ZipkinAnnotation {
 impl ZipkinSpanExporter {
     /// Create a new Zipkin exporter
     pub fn new(config: ZipkinConfig) -> Self {
-        Self {
-            config,
-            buffer: Mutex::new(Vec::new()),
-        }
+        Self { config }
     }
 
+    #[allow(dead_code)] // wire conversion kept for the transport that does not exist yet
     fn convert_span(&self, span: &SpanData) -> ZipkinSpan {
         let kind = match span.kind {
             SpanKind::Client => Some("CLIENT"),
@@ -503,11 +496,11 @@ impl ZipkinSpanExporter {
 
 impl SpanExporter for ZipkinSpanExporter {
     fn export(&self, spans: Vec<SpanData>) -> Result<(), TracerError> {
-        let zipkin_spans: Vec<_> = spans.iter().map(|s| self.convert_span(s)).collect();
-        let mut buffer = self.buffer.lock();
-        buffer.extend(zipkin_spans);
-        // In production, would POST to endpoint
-        Ok(())
+        Err(TracerError::ExportError(format!(
+            "no Zipkin transport is implemented; {} span(s) for {} were not sent",
+            spans.len(),
+            self.config.endpoint
+        )))
     }
 
     fn shutdown(&self) -> Result<(), TracerError> {
@@ -582,17 +575,12 @@ impl OtlpConfig {
 pub struct OtlpSpanExporter {
     /// Configuration
     config: OtlpConfig,
-    /// Export buffer
-    buffer: Mutex<Vec<SpanData>>,
 }
 
 impl OtlpSpanExporter {
     /// Create a new OTLP exporter
     pub fn new(config: OtlpConfig) -> Self {
-        Self {
-            config,
-            buffer: Mutex::new(Vec::new()),
-        }
+        Self { config }
     }
 
     /// Serialize to JSON format
@@ -651,10 +639,11 @@ impl OtlpSpanExporter {
 
 impl SpanExporter for OtlpSpanExporter {
     fn export(&self, spans: Vec<SpanData>) -> Result<(), TracerError> {
-        let mut buffer = self.buffer.lock();
-        buffer.extend(spans);
-        // In production, would send to OTLP endpoint
-        Ok(())
+        Err(TracerError::ExportError(format!(
+            "no OTLP transport is implemented; {} span(s) for {} were not sent",
+            spans.len(),
+            self.config.endpoint
+        )))
     }
 
     fn shutdown(&self) -> Result<(), TracerError> {
@@ -889,6 +878,17 @@ mod tests {
 
         assert!(json.contains("resourceSpans"));
         assert!(json.contains("test-span"));
+    }
+
+    #[test]
+    fn test_network_exporters_refuse_without_transport() {
+        let span = create_test_span();
+        let jaeger = JaegerSpanExporter::new(JaegerConfig::new("svc"));
+        assert!(jaeger.export(vec![span.clone()]).is_err());
+        let zipkin = ZipkinSpanExporter::new(ZipkinConfig::new("svc"));
+        assert!(zipkin.export(vec![span.clone()]).is_err());
+        let otlp = OtlpSpanExporter::new(OtlpConfig::default());
+        assert!(otlp.export(vec![span]).is_err());
     }
 
     #[test]
