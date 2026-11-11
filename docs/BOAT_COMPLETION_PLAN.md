@@ -247,13 +247,16 @@ Several results are one run. Each needs three runs in a row, kept.
       priority) before it. Two more batches of 40, same conditions, run 2026-11-11:
       0 of 80 panicked, bringing the total to 0 of 200. One of those two batches had
       one more unrelated hang (no panic string in the console), the second such hang
-      across these runs -- still not claiming that is fixed, and worth a look of its
-      own if it recurs. The 17 WHPX Linux tests (both fixture runs) and all 2448
-      `hv2-core` unit tests still pass. NOT VERIFIED: whether the earlier
-      "0 of 60" false negative (noted above) means 200 more trustworthy than that one
-      was -- a longer run is the honest next check, not claimed here; HVF (no sync
-      override exists for it, since it never had one for the async path either); any
-      effect in CI (no kernel fixture there); the no-panic-string hang's own cause.
+      across these runs. A further batch of 80, run 2026-11-11 with full console
+      output captured on any non-pass to diagnose a repeat, came back 0 of 80
+      panicked and no hang -- running total 0 of 280 panics, hang still unrepeated
+      and uncaptured, still not claimed fixed. The 17 WHPX Linux tests (both
+      fixture runs) and all 2448 `hv2-core` unit tests still pass. NOT VERIFIED:
+      whether the earlier "0 of 60" false negative (noted above) means 280 more
+      trustworthy than that one was -- a longer run is the honest next check, not
+      claimed here; HVF (no sync override exists for it, since it never had one for
+      the async path either); any effect in CI (no kernel fixture there); the
+      no-panic-string hang's own cause (it has not recurred under capture).
       NOT VERIFIED:
       leaves 0x40000000+ (the vendor signature; the kernel logs no "Hypervisor
       detected" line, so Linux treats it as no known hypervisor); a Windows guest;
