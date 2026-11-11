@@ -2,12 +2,14 @@
 # Build the sandbox guest kernel: Linux 6.6.52, configured by hv2-guest.defconfig.
 #
 #   tools/guest-image/build-kernel.sh -o bzImage [--source linux-6.6.52.tar.xz]
-#       [--config defconfig] [--config-output resolved.config] [--docker] [--kvm]
+#       [--config defconfig] [--config-output resolved.config] [--docker] [--kvm] [--trace]
 #
 # --docker appends docker.fragment: memory cgroups, overlayfs, veth, bridge,
 # user namespaces and NAT, which a container engine needs. --kvm appends
 # kvm.fragment: KVM for AMD and Intel, so the guest has /dev/kvm when its host
-# passes nested virtualization through.
+# passes nested virtualization through. --trace appends trace.fragment: ftrace,
+# tracepoints and perf_events, so `trace-cmd` or `perf` can see what the guest's
+# kernel (including its own KVM, with --kvm) is doing.
 #
 # The defconfig is `make savedefconfig` of the configuration the sandbox
 # guest was first booted and verified with: virtio-mmio devices named on the
@@ -24,7 +26,7 @@ out=""
 source=""
 config="$here/hv2-guest.defconfig"
 config_out=""
-docker="" kvm=""
+docker="" kvm="" trace=""
 while [ $# -gt 0 ]; do
     case "$1" in
         -o|--output) out=$2; shift 2 ;;
@@ -33,7 +35,8 @@ while [ $# -gt 0 ]; do
         --config-output) config_out=$2; shift 2 ;;
         --docker) docker=1; shift ;;
         --kvm) kvm=1; shift ;;
-        -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
+        --trace) trace=1; shift ;;
+        -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
         *) echo "build-kernel.sh: unknown argument $1" >&2; exit 2 ;;
     esac
 done
@@ -58,6 +61,7 @@ cd "$work/linux-$version"
 cp "$config" arch/x86/configs/hv2_guest_defconfig
 [ -z "$docker" ] || cat "$here/docker.fragment" >>arch/x86/configs/hv2_guest_defconfig
 [ -z "$kvm" ] || cat "$here/kvm.fragment" >>arch/x86/configs/hv2_guest_defconfig
+[ -z "$trace" ] || cat "$here/trace.fragment" >>arch/x86/configs/hv2_guest_defconfig
 make -s hv2_guest_defconfig
 # A fixed build identity, so two builds of one tree produce one kernel.
 export KBUILD_BUILD_TIMESTAMP="1970-01-01" KBUILD_BUILD_USER=hv2 KBUILD_BUILD_HOST=hv2

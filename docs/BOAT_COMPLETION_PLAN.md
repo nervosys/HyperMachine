@@ -57,13 +57,25 @@ The nested guest is still about ten times slower in real time.
       neither supported nor refuted**, and the run-to-run spread is doing most of
       what looks like a signal. See
       `docs/benchmarks/2026-11-11/nested-memlight-and-counters/README.md`.
-- [ ] Count where time goes: sandbox-side `perf kvm` or `trace-cmd`, and the
-      per-VM KVM counters sampled every few seconds, not twice. Partly done
-      2026-11-11 (same README as above): counters sampled at 20 s and 50 s again
-      (still twice, not every few seconds) for both the baseline and the
-      memory-light variant -- `halt_exits` stayed 0 throughout both, confirming
-      2026-10-27's finding that the guest is not halted. `perf kvm` / `trace-cmd`
-      inside the sandbox, and a tighter sampling interval, are still not done.
+- [x] Count where time goes: sandbox-side `perf kvm` or `trace-cmd`, and the
+      per-VM KVM counters sampled every few seconds, not twice. Done 2026-11-11
+      with `trace-cmd record -e kvm:*` (the sandbox kernel had no tracing built in
+      -- added a `--trace` flag to `build-kernel.sh` and `trace.fragment` to fix
+      that, a reusable change, not a one-off). The real `kvm_exit` reason
+      breakdown, 116,637 exits in a ~62 s window: `EXIT_INTR` 38.7%, `EXIT_NPF`
+      31.7%, `EXIT_VINTR` 15.5%, `EXIT_IOIO` 13.7%, the rest under 1%. **Interrupt
+      handling (`EXIT_INTR` + `EXIT_VINTR`, 54.2% combined) costs more exits than
+      nested paging (`EXIT_NPF`, 31.7%) -- neither the "NPT faults" nor the
+      "slow timer interrupts" guess from 2026-10-27 is simply right, and this is
+      the first evidence that actually weighs them against each other** rather
+      than ruling one out alone. Also found: `EXIT_NPF`'s true rate (37,001) is
+      roughly double the debugfs `pf_fixed` counter (18,378) from the memory-light
+      run -- the counter-only picture understated NPF-exit volume by about half,
+      though its "not progressively memory-fault-bound" conclusion still stands.
+      `EXIT_IOIO` matches debugfs `io_exits` closely, a cross-check that both
+      measurements agree on. Still not shown: per-exit latency (why each exit
+      costs more nested than not), or a non-nested-host comparison. See
+      `docs/benchmarks/2026-11-11/nested-kvm-trace/README.md`.
 - [ ] Try the same nested boot on a host that is not Hyper-V-nested (a bare-metal
       Linux box or a cloud bare-metal instance) to separate "our KVM backend" from
       "the layer below". **OWNER** if hardware is needed.

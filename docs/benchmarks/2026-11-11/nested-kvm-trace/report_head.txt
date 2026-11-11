@@ -1,0 +1,80 @@
+cpus=2
+          vcpu-0-1594  [000]     8.619386: kvm_entry:             vcpu 0 rip 0x100000
+          vcpu-0-1594  [000]     8.621688: kvm_exit:             reason EXIT_INTR rip 0x100000 info 0 0
+          vcpu-0-1594  [000]     8.621869: kvm_entry:             vcpu 0 rip 0x100000
+          vcpu-0-1594  [000]     8.622029: kvm_exit:             reason EXIT_NPF rip 0x100000 info 100000014 100000
+          vcpu-0-1594  [000]     8.622130: kvm_entry:             vcpu 0 rip 0x100000
+          vcpu-0-1594  [000]     8.622294: kvm_exit:             reason EXIT_NPF rip 0x100008 info 100000006 901e4
+          vcpu-0-1594  [000]     8.622343: kvm_entry:             vcpu 0 rip 0x100008
+          vcpu-0-1594  [000]     8.622504: kvm_exit:             reason EXIT_NPF rip 0x100017 info 100000006 d55012
+          vcpu-0-1594  [000]     8.622554: kvm_entry:             vcpu 0 rip 0x100017
+          vcpu-0-1594  [000]     8.622712: kvm_exit:             reason EXIT_NPF rip 0x100032 info 100000006 d593fc
+          vcpu-0-1594  [000]     8.622878: kvm_entry:             vcpu 0 rip 0x100032
+          vcpu-0-1594  [000]     8.622999: kvm_exit:             reason EXIT_NPF rip 0xd44480 info 100000014 d44000
+          vcpu-0-1594  [000]     8.623052: kvm_entry:             vcpu 0 rip 0xd44480
+          vcpu-0-1594  [000]     8.623174: kvm_exit:             reason EXIT_CPUID rip 0xd44489 info 0 0
+          vcpu-0-1594  [000]     8.623193: kvm_entry:             vcpu 0 rip 0xd4448b
+          vcpu-0-1594  [000]     8.623323: kvm_exit:             reason EXIT_CPUID rip 0xd44507 info 0 0
+          vcpu-0-1594  [000]     8.623342: kvm_entry:             vcpu 0 rip 0xd44509
+          vcpu-0-1594  [000]     8.623470: kvm_exit:             reason EXIT_CPUID rip 0xd4451c info 0 0
+          vcpu-0-1594  [000]     8.623490: kvm_entry:             vcpu 0 rip 0xd4451e
+          vcpu-0-1594  [000]     8.623624: kvm_exit:             reason EXIT_CPUID rip 0xd4452a info 0 0
+          vcpu-0-1594  [000]     8.623644: kvm_entry:             vcpu 0 rip 0xd4452c
+          vcpu-0-1594  [000]     8.623796: kvm_exit:             reason EXIT_CPUID rip 0xd4453f info 0 0
+          vcpu-0-1594  [000]     8.623819: kvm_entry:             vcpu 0 rip 0xd44541
+          vcpu-0-1594  [000]     8.623962: kvm_exit:             reason EXIT_INTR rip 0xd44541 info 0 0
+          vcpu-0-1594  [000]     8.624069: kvm_entry:             vcpu 0 rip 0xd44541
+          vcpu-0-1594  [000]     8.624182: kvm_exit:             reason EXIT_READ_CR4 rip 0x100071 info 8000000000000000 0
+          vcpu-0-1594  [000]     8.624288: kvm_entry:             vcpu 0 rip 0x100074
+          vcpu-0-1594  [000]     8.624425: kvm_exit:             reason EXIT_WRITE_CR4 rip 0x100077 info 8000000000000000 0
+          vcpu-0-1594  [000]     8.624479: kvm_entry:             vcpu 0 rip 0x10007a
+          vcpu-0-1594  [000]     8.624625: kvm_exit:             reason EXIT_NPF rip 0x100089 info 100000006 37d5000
+          vcpu-0-1594  [000]     8.624734: kvm_entry:             vcpu 0 rip 0x100089
+          vcpu-0-1594  [000]     8.624980: kvm_exit:             reason EXIT_NPF rip 0x100089 info 100000006 37d6000
+          vcpu-0-1594  [000]     8.625221: kvm_entry:             vcpu 0 rip 0x100089
+          vcpu-0-1594  [000]     8.625416: kvm_exit:             reason EXIT_NPF rip 0x100089 info 100000006 37d7000
+          vcpu-0-1594  [000]     8.625498: kvm_entry:             vcpu 0 rip 0x100089
+          vcpu-0-1594  [000]     8.625692: kvm_exit:             reason EXIT_NPF rip 0x100089 info 100000006 37d8000
+          vcpu-0-1594  [000]     8.625777: kvm_entry:             vcpu 0 rip 0x100089
+          vcpu-0-1594  [000]     8.625938: kvm_exit:             reason EXIT_NPF rip 0x100089 info 100000006 37d9000
+          vcpu-0-1594  [000]     8.626085: kvm_entry:             vcpu 0 rip 0x100089
+          vcpu-0-1594  [000]     8.626302: kvm_exit:             reason EXIT_NPF rip 0x100089 info 100000006 37da000
+          vcpu-0-1594  [000]     8.626399: kvm_entry:             vcpu 0 rip 0x100089
+          vcpu-0-1594  [000]     8.626617: kvm_exit:             reason EXIT_MSR rip 0x1000eb info 0 0
+          vcpu-0-1594  [000]     8.626640: kvm_msr:              msr_read c0000080 = 0x0
+          vcpu-0-1594  [000]     8.626641: kvm_entry:             vcpu 0 rip 0x1000ed
+          vcpu-0-1594  [000]     8.626855: kvm_exit:             reason EXIT_MSR rip 0x1000f1 info 1 0
+          vcpu-0-1594  [000]     8.626977: kvm_msr:              msr_write c0000080 = 0x100
+          vcpu-0-1594  [000]     8.626983: kvm_entry:             vcpu 0 rip 0x1000f3
+          vcpu-0-1594  [000]     8.627212: kvm_exit:             reason EXIT_CR0_SEL_WRITE rip 0x10011d info 8000000000000000 0
+          vcpu-0-1594  [000]     8.627287: kvm_entry:             vcpu 0 rip 0x100120
+          vcpu-0-1594  [000]     8.627474: kvm_exit:             reason EXIT_NPF rip 0x10025a info 100000006 37c03f8
+          vcpu-0-1594  [000]     8.627603: kvm_entry:             vcpu 0 rip 0x10025a
+          vcpu-0-1594  [000]     8.627800: kvm_exit:             reason EXIT_NPF rip 0xd4aa60 info 100000014 d4a000
+          vcpu-0-1594  [000]     8.627917: kvm_entry:             vcpu 0 rip 0xd4aa60
+          vcpu-0-1594  [000]     8.628116: kvm_exit:             reason EXIT_READ_CR4 rip 0x10026e info 8000000000000000 0
+          vcpu-0-1594  [000]     8.628184: kvm_entry:             vcpu 0 rip 0x100271
+          vcpu-0-1594  [000]     8.628376: kvm_exit:             reason EXIT_WRITE_CR4 rip 0x100276 info 8000000000000000 0
+          vcpu-0-1594  [000]     8.628431: kvm_entry:             vcpu 0 rip 0x100279
+          vcpu-0-1594  [000]     8.628622: kvm_exit:             reason EXIT_NPF rip 0xd485b0 info 100000014 d48000
+          vcpu-0-1594  [000]     8.628686: kvm_entry:             vcpu 0 rip 0xd485b0
+          vcpu-0-1594  [000]     8.628974: kvm_exit:             reason EXIT_NPF rip 0xd48492 info 100000004 91000
+          vcpu-0-1594  [000]     8.629144: kvm_entry:             vcpu 0 rip 0xd48492
+          vcpu-0-1594  [000]     8.629315: kvm_exit:             reason EXIT_NPF rip 0xd484b0 info 100000004 d53416
+          vcpu-0-1594  [000]     8.629378: kvm_entry:             vcpu 0 rip 0xd484b0
+          vcpu-0-1594  [000]     8.629602: kvm_exit:             reason EXIT_CPUID rip 0xd4ac32 info 0 0
+          vcpu-0-1594  [000]     8.629632: kvm_entry:             vcpu 0 rip 0xd4ac34
+          vcpu-0-1594  [000]     8.629813: kvm_exit:             reason EXIT_CPUID rip 0xd4ae4f info 0 0
+          vcpu-0-1594  [000]     8.629905: kvm_entry:             vcpu 0 rip 0xd4ae51
+          vcpu-0-1594  [000]     8.630087: kvm_exit:             reason EXIT_READ_CR4 rip 0xd4ac40 info 8000000000000000 0
+          vcpu-0-1594  [000]     8.630140: kvm_entry:             vcpu 0 rip 0xd4ac43
+          vcpu-0-1594  [000]     8.630324: kvm_exit:             reason EXIT_NPF rip 0x1002a2 info 100000006 37bc3f8
+          vcpu-0-1594  [000]     8.630422: kvm_entry:             vcpu 0 rip 0x1002a2
+          vcpu-0-1594  [000]     8.630625: kvm_exit:             reason EXIT_NPF rip 0x1002a2 info 100000004 d54ff8
+          vcpu-0-1594  [000]     8.630685: kvm_entry:             vcpu 0 rip 0x1002a2
+          vcpu-0-1594  [000]     8.632585: kvm_exit:             reason EXIT_INTR rip 0x1002a2 info 0 0
+          vcpu-0-1594  [000]     8.632945: kvm_entry:             vcpu 0 rip 0x1002a2
+          vcpu-0-1594  [000]     8.633356: kvm_exit:             reason EXIT_NPF rip 0x1002a2 info 100000006 37bbff8
+          vcpu-0-1594  [000]     8.633501: kvm_entry:             vcpu 0 rip 0x1002a2
+          vcpu-0-1594  [000]     8.634126: kvm_exit:             reason EXIT_NPF rip 0x1002a2 info 100000006 37baff8
+          vcpu-0-1594  [000]     8.634519: kvm_entry:             vcpu 0 rip 0x1002a2

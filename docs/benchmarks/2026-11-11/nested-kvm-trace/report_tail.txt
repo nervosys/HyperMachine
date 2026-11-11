@@ -1,0 +1,40 @@
+          vcpu-0-1594  [001]    68.607360: kvm_exit:             reason EXIT_NPF rip 0xffffffffa3467676 info 10000000f fee000b0
+          vcpu-0-1594  [001]    68.607417: kvm_apic:             apic_write APIC_EOI = 0x0
+          vcpu-0-1594  [001]    68.607470: kvm_entry:             vcpu 0 rip 0xffffffffa346767d
+          vcpu-0-1594  [001]    68.607605: kvm_exit:             reason EXIT_INTR rip 0xffffffffa346767d info 0 0
+          vcpu-0-1594  [001]    68.607697: kvm_entry:             vcpu 0 rip 0xffffffffa346767d
+          vcpu-0-1594  [001]    68.607980: kvm_exit:             reason EXIT_INTR rip 0xffffffffa3507489 info 0 0
+          vcpu-0-1594  [001]    68.608063: kvm_entry:             vcpu 0 rip 0xffffffffa3507489
+          vcpu-0-1594  [001]    68.608439: kvm_exit:             reason EXIT_VINTR rip 0xffffffffa3490da8 info 0 0
+          vcpu-0-1594  [001]    68.608458: kvm_inj_virq:         IRQ 0x30
+          vcpu-0-1594  [001]    68.608459: kvm_entry:             vcpu 0 rip 0xffffffffa3490da8
+          vcpu-0-1594  [001]    68.608710: kvm_exit:             reason EXIT_INTR rip 0xffffffffa44003a0 info 0 0
+          vcpu-0-1594  [001]    68.608857: kvm_entry:             vcpu 0 rip 0xffffffffa44003a0
+          vcpu-0-1594  [001]    68.609163: kvm_exit:             reason EXIT_NPF rip 0xffffffffa3467676 info 10000000f fee000b0
+          vcpu-0-1594  [001]    68.609215: kvm_apic:             apic_write APIC_EOI = 0x0
+          vcpu-0-1594  [001]    68.609330: kvm_entry:             vcpu 0 rip 0xffffffffa346767d
+          vcpu-0-1594  [001]    68.609561: kvm_exit:             reason EXIT_INTR rip 0xffffffffa346767d info 0 0
+          vcpu-0-1594  [001]    68.609709: kvm_entry:             vcpu 0 rip 0xffffffffa346767d
+          vcpu-0-1594  [001]    68.610017: kvm_exit:             reason EXIT_INTR rip 0xffffffffa346767d info 0 0
+          vcpu-0-1594  [001]    68.610111: kvm_entry:             vcpu 0 rip 0xffffffffa346767d
+          vcpu-0-1594  [001]    68.610625: kvm_exit:             reason EXIT_VINTR rip 0xffffffffa3490da8 info 0 0
+          vcpu-0-1594  [001]    68.610794: kvm_inj_virq:         IRQ 0x30
+          vcpu-0-1594  [001]    68.610795: kvm_entry:             vcpu 0 rip 0xffffffffa3490da8
+          vcpu-0-1594  [001]    68.611125: kvm_exit:             reason EXIT_INTR rip 0xffffffffa44003a0 info 0 0
+          vcpu-0-1594  [001]    68.611278: kvm_entry:             vcpu 0 rip 0xffffffffa44003a0
+          vcpu-0-1594  [001]    68.611718: kvm_exit:             reason EXIT_INTR rip 0xffffffffa3507459 info 0 0
+          vcpu-0-1594  [001]    68.611883: kvm_entry:             vcpu 0 rip 0xffffffffa3507459
+          vcpu-0-1594  [001]    68.612303: kvm_exit:             reason EXIT_NPF rip 0xffffffffa3467676 info 10000000f fee000b0
+          vcpu-0-1594  [001]    68.619525: kvm_apic:             apic_write APIC_EOI = 0x0
+          vcpu-0-1594  [001]    68.619551: kvm_entry:             vcpu 0 rip 0xffffffffa346767d
+          vcpu-0-1594  [001]    68.620156: kvm_exit:             reason EXIT_INTR rip 0xffffffffa42e6660 info 0 0
+          vcpu-0-1594  [001]    68.620290: kvm_entry:             vcpu 0 rip 0xffffffffa42e6660
+          vcpu-0-1594  [001]    68.620712: kvm_exit:             reason EXIT_INTR rip 0xffffffffa3507462 info 0 0
+          vcpu-0-1594  [001]    68.620776: kvm_entry:             vcpu 0 rip 0xffffffffa3507462
+          vcpu-0-1594  [001]    68.621045: kvm_exit:             reason EXIT_INTR rip 0xffffffffa3507462 info 0 0
+          vcpu-0-1594  [001]    68.621404: kvm_entry:             vcpu 0 rip 0xffffffffa3507462
+          vcpu-0-1594  [001]    68.622098: kvm_exit:             reason EXIT_INTR rip 0xffffffffa3507462 info 0 0
+          vcpu-0-1594  [001]    68.622261: kvm_entry:             vcpu 0 rip 0xffffffffa3507462
+          vcpu-0-1594  [001]    68.622992: kvm_exit:             reason EXIT_INTR rip 0xffffffffa34d051e info 0 0
+          vcpu-0-1594  [001]    68.623078: kvm_entry:             vcpu 0 rip 0xffffffffa34d051e
+          vcpu-0-1594  [001]    68.623376: kvm_exit:             reason EXIT_INTR rip 0xffffffffa42e5ea0 info 0 0

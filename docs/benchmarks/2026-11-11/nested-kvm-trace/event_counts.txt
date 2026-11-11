@@ -1,0 +1,7 @@
+ 116637 kvm_exit:
+ 116637 kvm_entry:
+  18303 kvm_inj_virq:
+  18221 kvm_apic:
+  15927 kvm_pio:
+    228 kvm_msr:
+      1 
