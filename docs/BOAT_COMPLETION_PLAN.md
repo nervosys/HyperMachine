@@ -85,7 +85,19 @@ The nested guest is still about ten times slower in real time.
       `docs/benchmarks/2026-11-11/nested-kvm-trace/README.md`.
 - [ ] Try the same nested boot on a host that is not Hyper-V-nested (a bare-metal
       Linux box or a cloud bare-metal instance) to separate "our KVM backend" from
-      "the layer below". **OWNER** if hardware is needed.
+      "the layer below". **OWNER** if hardware is needed. A partial version done
+      2026-11-11 without new hardware: the same probe, kernel, initramfs and
+      trace-cmd method run directly against WSL2's own KVM, one less nesting
+      layer than the sandboxed run (still not bare metal -- WSL2 itself runs under
+      Hyper-V, so this removes one of two layers, not all of them). It reached
+      userspace in 1.12 s (the sandboxed run never did in 60 s), and every exit
+      reason was dramatically cheaper per occurrence: `EXIT_IOIO` about 37x
+      cheaper, `EXIT_VINTR` about 27x, `EXIT_INTR` about 7x, `EXIT_NPF` about 6x.
+      **The extra nesting layer costs every exit reason, not just one** -- the
+      cleanest evidence yet that nesting itself, not a specific mechanism, is the
+      dominant cost. See `docs/benchmarks/2026-11-11/host-direct-trace/README.md`.
+      Literal bare metal (zero nesting layers) is still not done and still needs
+      hardware not available here.
 - [ ] Decide from the evidence: either fix it, or record it as a limit of nested
       virtualization under WSL2/Hyper-V with the measurements, and mark the
       `BOAT_PARITY.md` row accordingly. Do not claim more than was shown.

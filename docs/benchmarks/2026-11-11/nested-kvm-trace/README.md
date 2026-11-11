@@ -182,7 +182,9 @@ entirely different (KVM-in-KVM) code path; nothing here establishes that the
 same mechanism is at fault.
 
 NOT VERIFIED: the cause of the heavy tail; whether `EXIT_NPF`'s cost is
-inherent to this host's nested-NPT implementation or fixable; a non-nested
-host's equivalent per-exit-reason latency for comparison (would need the
-same trace-cmd method run un-nested, not done here).
+inherent to this host's nested-NPT implementation or fixable. A comparison
+with one less nesting layer (not literal bare metal) is done in
+[`../host-direct-trace/README.md`](../host-direct-trace/README.md): every
+exit reason got dramatically cheaper (6x to 37x) with the extra layer
+removed, pointing at nesting itself rather than any one reason.
 

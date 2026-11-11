@@ -1,0 +1,24 @@
+reason                  count    mean_us  median_us     max_us     total_us  total_%
+EXIT_HLT                  169  342642.07  502862.00   504005.0   57906510.0    99.0%
+EXIT_IOIO               36681      12.75       6.00    11526.0     467570.0     0.8%
+EXIT_NPF                 1106      79.96       3.00    11282.0      88437.0     0.2%
+EXIT_INTR                 366      45.24      16.00     5030.0      16559.0     0.0%
+EXIT_MSR                  972       4.55       4.00       70.0       4419.0     0.0%
+EXIT_CPUID                664       3.45       2.00     1107.0       2294.0     0.0%
+EXIT_VINTR                232       5.11       4.00       63.0       1186.0     0.0%
+EXIT_WRITE_CR4             17       5.59       3.00       27.0         95.0     0.0%
+EXIT_READ_CR4               7       2.29       2.00        5.0         16.0     0.0%
+EXIT_CR0_SEL_WRITE          2       7.50       7.50        8.0         15.0     0.0%
+EXIT_WBINVD                 4       1.75       2.00        2.0          7.0     0.0%
+EXIT_VMMCALL                1       6.00       6.00        6.0          6.0     0.0%
+EXIT_WRITE_DR0              1       5.00       5.00        5.0          5.0     0.0%
+EXIT_XSETBV                 2       2.50       2.50        3.0          5.0     0.0%
+EXIT_WRITE_CR0              2       2.50       2.50        3.0          5.0     0.0%
+EXIT_READ_CR0               2       1.50       1.50        2.0          3.0     0.0%
+
+grand total exit-handling time accounted for: 58.487 s
+(EXIT_HLT dominates because the guest finished booting at 1.12s of guest
+time and then sat idle at an interactive shell for the rest of the 60s
+HV2_SETTLE_SECS window -- each HLT's "exit time" here is however long the
+guest stayed halted waiting for the next interrupt, not a cost of handling
+the exit itself. Excluded from the boot-phase comparison in README.md.)
