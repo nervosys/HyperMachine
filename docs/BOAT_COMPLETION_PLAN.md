@@ -194,8 +194,13 @@ evidence, but no more of it is to be built. The work is on the native path
       vsock, 1 in 20; 1 in 30 with the earlier fork runs). Cause not known.
 - [ ] **Fork restore that never resumes** (run 11 above): a plain fork of a busy or idle
       sandbox did not reproduce it (0 in 560 forks, `2026-10-28/fork-busy-kvm`), but one
-      cold boot of 14 stalled with both vCPUs halted and a timer armed. Cause unknown;
-      next, catch one with the per-VM KVM counters sampled during the stall.
+      cold boot of 14 stalled with both vCPUs halted and a timer armed. Cause unknown.
+      Tried to catch one 2026-11-11, sampling KVM debugfs counters immediately on any
+      stall: 0 caught in 60 more cold boots (roughly 4x the sample that caught the
+      original 1 in 14), all fast (30-300 ms). Combined: 1 failure in 74 cold boots
+      observed across both sessions -- a lower rate estimate than the original 14
+      alone suggested, but one failure is too few to trust the exact number either
+      way. Still open, still rare, still needs a lucky catch or a much longer loop.
 - [x] Published port reached from outside the node: a client in another network
       namespace over a veth pair, 3 of 3 runs (`2026-10-28/docker-netns-proxy-kvm`).
       A second machine is NOT VERIFIED.
