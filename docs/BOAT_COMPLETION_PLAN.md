@@ -244,14 +244,16 @@ Several results are one run. Each needs three runs in a row, kept.
       Three runs of 40 two-vCPU boots each (`apic=verbose`, the same cmdline that
       showed the panic), 24 busy host threads, `--test-threads=1`: 0 of 120 panicked
       with this fix, against 9 of 60, 7 of 28 (`no_timer_check`) and 8 of 40 (vCPU
-      priority) before it. One run had one unrelated hang (no panic string in the
-      console, same as the two such hangs noted above) -- not claiming that is fixed
-      too. The 17 WHPX Linux tests (both fixture runs) and all 2448 `hv2-core` unit
-      tests still pass. NOT VERIFIED: more than three batches; whether the earlier
-      "0 of 60" false negative (noted above) means 120 more trustworthy than that one
+      priority) before it. Two more batches of 40, same conditions, run 2026-11-11:
+      0 of 80 panicked, bringing the total to 0 of 200. One of those two batches had
+      one more unrelated hang (no panic string in the console), the second such hang
+      across these runs -- still not claiming that is fixed, and worth a look of its
+      own if it recurs. The 17 WHPX Linux tests (both fixture runs) and all 2448
+      `hv2-core` unit tests still pass. NOT VERIFIED: whether the earlier
+      "0 of 60" false negative (noted above) means 200 more trustworthy than that one
       was -- a longer run is the honest next check, not claimed here; HVF (no sync
       override exists for it, since it never had one for the async path either); any
-      effect in CI (no kernel fixture there).
+      effect in CI (no kernel fixture there); the no-panic-string hang's own cause.
       NOT VERIFIED:
       leaves 0x40000000+ (the vendor signature; the kernel logs no "Hypervisor
       detected" line, so Linux treats it as no known hypervisor); a Windows guest;
@@ -320,7 +322,7 @@ Every box above is closed the same way:
   interrupt callback synchronously, instead of through a spawned async task
   that queues behind other tokio work under load, took the panic rate from
   9 of 60 (and 7 of 28, 8 of 40 with two other fixes that didn't work) to 0 of
-  120 across three runs. See section 5 for the mechanism and what is not yet
+  200 across five runs. See section 5 for the mechanism and what is not yet
   verified (a longer run; HVF; CI). Still in the v1.2.0 release notes as a
   known issue until more runs confirm it.
 - **CI fixture for the WHPX Linux tests:** the recipe now exists and has been run
