@@ -19,7 +19,7 @@
 | **GPU**         | Vulkan/WebGPU, passthrough, virtual GPU, CUDA/OpenCL                         |
 | **AI-First**    | MCP server, scriptable API, WASM plugins, LLM tool formats                   |
 | **GUI**         | Desktop app, AI-driven automation, semantic control API                      |
-| **Security**    | FIPS 140-3 crypto, seccomp filtering, capability-based access, audit logging |
+| **Security**    | FIPS-approved algorithms (TLS validated in the `fips` build), seccomp filtering, capability-based access, audit logging |
 
 ## Why HyperMachine?
 
@@ -41,7 +41,7 @@ HyperMachine is designed from the ground up for AI agent orchestration:
 
 ### Production Ready
 
-- FIPS 140-3 compliant cryptography
+- FIPS-approved algorithms; TLS runs on a FIPS 140-3 validated module only in the `fips` build (see docs/FIPS.md)
 - Comprehensive audit logging
 - Kubernetes and Terraform deployment support
 - REST and gRPC APIs

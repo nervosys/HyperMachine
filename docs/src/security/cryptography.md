@@ -1,6 +1,6 @@
 # Cryptography
 
-HyperMachine implements FIPS 140-3 compliant cryptographic modules.
+HyperMachine implements FIPS-approved algorithms (not a FIPS 140-3 validated module; see docs/FIPS.md). Only TLS is validated, and only in the build with the `fips` feature, which runs on AWS-LC's FIPS 140-3 validated module.
 
 ## Supported Algorithms
 
@@ -50,14 +50,14 @@ let decapsulated = secret_key.decapsulate(&ciphertext);
 
 ## FIPS Mode
 
-Enable FIPS 140-3 mode:
+The validated TLS module is enabled by building with the `fips` feature and starting the daemons with `--fips` (or `HV2_FIPS=1`); see docs/FIPS.md. The `[crypto]` example below is unverified against the code:
 
 ```toml
 [crypto]
 fips_mode = true
 ```
 
-In FIPS mode, only approved algorithms are available.
+Non-TLS primitives are not run on a validated module in either build, so approved-algorithm use is not enforced by a FIPS mode switch.
 
 ## Performance
 

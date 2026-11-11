@@ -25,8 +25,8 @@ A few of these need more context than a table cell gives:
 - **GPU passthrough** is real VFIO/IOMMU code (`crates/hv2-gpu/src/passthrough.rs`) — it opens `/dev/vfio`, binds the device, and maps BARs via real ioctls — but it is Linux-only and has never run against physical GPU/IOMMU hardware in CI (no such hardware exists there), so the ioctl path is exercised by unit tests on parsed structs, not by an end-to-end attach.
 - **Virtual GPU** (`crates/hv2-gpu/src/vgpu.rs`) is a software GPU built on `wgpu`, not a hardware-virtualized GPU (SR-IOV/mediated device). There is no CUDA or OpenCL runtime anywhere in the codebase; the `cuda-12.4`-style strings that appear are fleet scheduling labels, not an implemented API.
 - **Fleet & multi-agent orchestration** (`hv2-agent::orchestration`, `hv2-runtime::fleet`) coordinates VM claims, locks, and per-host rollout state in-process; it does not itself make network calls to remote hosts, so "distributed" only holds in the sense that the data model tracks per-host state, not that a control plane dispatches work across a network.
-- **WASM plugins were removed from this table**: `wasmtime` is an optional dependency behind hv2-agent's `wasm-scripts` feature, which is not in any default feature set, and no source file in the workspace references `wasmtime` — there is no WASM plugin support to advertise today.
-- There is no full guest-facing TCP/IP stack (e.g. a user-mode network stack like slirp/smoltcp); it was removed from this table for the same reason. Guest networking is TAP/TUN bridging to the host's own stack.
+- **WASM plugins were removed from this table**: there is no WASM plugin support and no `wasmtime` dependency anywhere in the workspace (no `Cargo.toml` mentions it and `Cargo.lock` has no entry for it).
+- **Guest networking** has two links: a TAP/TUN device bridged to the host's stack (needs `CAP_NET_ADMIN`), and a userspace gateway (`crates/hv2-net/src/gateway`) built on `smoltcp` that answers as the guest's router and DNS server, ends each guest TCP connection, and opens the matching host connection only if the sandbox's network policy allows it. It is a policy-enforcing gateway, not a general-purpose slirp replacement; see the module's own header for what it handles.
 - **JIT compilation was removed**: nothing in the workspace implements a CPU JIT/dynamic-recompilation path.
 
 ## Benchmarks
@@ -43,7 +43,7 @@ Measured with [Criterion](https://github.com/bheisler/criterion.rs) on an
 | MCP dispatch ×64 (concurrent) | 47 µs (~0.7 µs/call) | concurrent agent tool calls over the dispatch path |
 | Snapshot — vCPU regs / 10 devices | 18 ns / 21 ns | serialize control registers + device state |
 | Tool-schema projection (OpenAI) | 3.3 µs | render the MCP registry to an LLM tool format |
-| AES-256-GCM (`ring`, AES-NI) | ~9–10 GiB/s | crypto throughput — see [Performance](#performance) |
+| AES-256-GCM (`ring`, AES-NI; measured before the move to IronCrypto, not re-measured) | ~9–10 GiB/s | crypto throughput — see [Performance](#performance) |
 
 The defining number is **O(1) agent spawn**: a copy-on-write clone is ~9 ns
 regardless of fleet size, so 100 idle agents cost roughly one baseline's memory
@@ -57,21 +57,25 @@ A built-in **agent runtime** turns this into a fleet service: agents spawn in O(
 
 ### 2. Dual-Mode Architecture (Type-1 + Type-2)
 
-A single codebase runs as both a **Type-2 hosted hypervisor** (KVM, WHPX, HVF) and a **Type-1 bare-metal hypervisor** (Intel VMX, AMD SVM) with no code duplication. The same VM definitions, device models, and API surface work in both modes — develop on your laptop, deploy bare-metal in production.
+This repository holds two separate implementations: a **Type-2 hosted hypervisor** (`hv2-*`: KVM, WHPX, HVF) and a **Type-1 bare-metal hypervisor** (`hv1-core`: Intel VMX, AMD SVM). They do not share code: `hv1-core` depends on no `hv2` crate and has its own VM, vCPU, device, interrupt and memory models. Type-2 is the one with the agent runtime, API and sandboxes.
+
+Of the Type-2 backends, HVF has never been run on hardware. It does not decode MMIO accesses (it reports a fixed 8-byte access) and has no vCPU kick, so it is not usable for real guests.
 
 ### 3. GPU Fabric with Topology-Aware Placement
 
-HyperMachine models GPU interconnect topology (NVLink, NVSwitch, PCIe) and makes placement decisions based on real bandwidth and latency. Capacity reservations with SLA tiers (platinum/gold/silver/bronze) prevent noisy-neighbor GPU contention. Fleet-wide GPU health monitoring tracks utilization, temperature, and ECC errors across hosts.
+HyperMachine models GPU interconnect topology (NVLink, NVSwitch, PCIe) and makes placement decisions based on real bandwidth and latency. Capacity reservations with SLA tiers (best-effort/standard/premium/dedicated) prevent noisy-neighbor GPU contention. Fleet-wide GPU health monitoring tracks utilization, temperature, and ECC errors across hosts.
 
 ### 4. Post-Quantum Cryptography
 
 Alongside classical FIPS-approved algorithms (AES-GCM, RSA, ECDSA), HyperMachine ships ML-KEM (Kyber) for key encapsulation, ML-DSA (Dilithium) for digital signatures, and SLH-DSA (SPHINCS+) for hash-based signatures — all NIST-standardized and quantum-resistant. ML-KEM and ML-DSA are IronCrypto's, checked against NIST's ACVP vectors for every parameter set; SLH-DSA is the pure-Rust [RustCrypto](https://github.com/RustCrypto) implementation.
 
-### 5. Pure Rust, Zero Unsafe in Business Logic
+### 5. Pure Rust, with `unsafe` Confined to Named Places
 
-~240,000 lines of Rust across 13 crates, in safe Rust, and `cargo clippy -D warnings` clean, on Linux, macOS and Windows. The workspace test suite passes across all three in CI (see the `CI` workflow); it is split across dozens of per-crate and per-platform jobs with overlapping binaries, so a single aggregate test count is not reliably computable from CI logs and is not quoted here — treat any specific number you see elsewhere in this repo's local status notes as a stale, moment-in-time snapshot. That does not mean every module does what its name suggests: `hv2-core`'s `container` module models the OCI runtime spec in types but runs nothing — `ContainerRuntime::start` refuses rather than fabricate a process — and OS-level confinement that is actually enforced lives in `hv2-sandbox` instead (see [Agent Governance](#agent-governance) and `docs/SANDBOXES.md`).
+About 438,000 lines of Rust across 24 workspace crates (plus three excluded bare-metal crates), and `cargo clippy -D warnings` clean, on Linux, macOS and Windows. The workspace test suite passes across all three in CI (see the `CI` workflow); it is split across dozens of per-crate and per-platform jobs with overlapping binaries, so a single aggregate test count is not reliably computable from CI logs and is not quoted here — treat any specific number you see elsewhere in this repo's local status notes as a stale, moment-in-time snapshot. That does not mean every module does what its name suggests: `hv2-core`'s `container` module models the OCI runtime spec in types but runs nothing — `ContainerRuntime::start` refuses rather than fabricate a process — and OS-level confinement that is actually enforced lives in `hv2-sandbox` instead (see [Agent Governance](#agent-governance) and `docs/SANDBOXES.md`).
 
-Every advisory in the dependency graph is triaged in [`deny.toml`](deny.toml), and `cargo deny check` passes on advisories, bans, licenses and sources. Five are accepted with written justification because no upgrade path exists: the `rsa` crate's Marvin-attack timing advisory (no fixed release upstream), two `quick-xml` parser advisories reachable only through the Linux GUI accessibility stack, and two unmaintained-crate notices (`smartstring` via the scripting engine, `ttf-parser` via the desktop GUI's font layer). `wasmtime` is deliberately optional and off by default, which keeps its advisories out of normal builds.
+The API, agent, jobs, runtime and CLI crates (`hv2-api`, `hv2-agent`, `hv2-jobs`, `hv2-runtime`, `hm-cli`) contain no `unsafe`. It lives where the code has to talk to the OS or hardware: the hypervisor backends in `hv2-core`, process confinement in `hv2-sandbox`, the in-guest `hv2-guest-agent`, and `hv2-sandboxd`'s 9P and volume code (`ninep.rs`, `volumes.rs`), which makes libc filesystem calls while serving requests.
+
+Every advisory in the dependency graph is triaged in [`deny.toml`](deny.toml), and `cargo deny check` passes on advisories, bans, licenses and sources. Eight advisory IDs are ignored, each with a written justification, all unmaintained-crate notices with no known vulnerability: `bincode` 1.x (used directly for snapshot serialisation), `paste`, `smartstring` (via the scripting engine), `ttf-parser` (via the desktop GUI's font layer), three `zvariant`/`zbus_names` notices (via the Linux GUI accessibility and file-dialog stack), and `unsafe-libyaml` (via the compose-file reader). The earlier ignores for the `rsa` Marvin advisory and the `quick-xml` advisories were removed once `rsa` left the lockfile and a fixed `quick-xml` resolved. There is no `wasmtime` dependency.
 
 ### 6. Semantic GUI Automation
 
@@ -101,16 +105,16 @@ The REST API ships with 28 composable middleware layers out of the box: rate lim
 
 ## Requirements
 
-- **Rust** 1.95+ (stable) for Type-2 crates; nightly for Type-1 (`hv1-core`, `hv1-boot`)
+- **Rust** 1.95+ (stable) builds the workspace; the bare-metal target builds (`hv1-core` for x86_64-unknown-none, `hv1-boot`) use a pinned nightly in CI
 - **Hypervisor backend** (Type-2 mode): KVM (Linux), WHPX (Windows), or HVF (macOS)
 - **protoc** (Protocol Buffers compiler) for building gRPC components
 
 ## Quick Start
 
 ```bash
-# Build (excludes nightly-only Type-1 crates)
+# Build
 git clone https://github.com/nervosys/HyperMachine && cd HyperMachine
-cargo build --release --workspace --exclude hv1-core --exclude hv1-boot
+cargo build --release --workspace
 
 # Create and boot a VM (Type-2 hosted mode)
 hm t2 create --name myvm --cpu 4 --memory 8 \
@@ -125,8 +129,8 @@ hm t2 create --name unikernel --cpu 1 --memory 1 --image ./kernel.bin
 # memory: it can be started, but there is no guest code to execute.
 hm t2 create --name empty --cpu 2 --memory 4
 
-# Start MCP server for AI agents
-hm mcp serve --api-key "your-key"
+# Start the MCP HTTP server for AI agents (REST port defaults to 8080)
+hm serve --rest-port 8080
 ```
 
 ## AI Agent Integration
@@ -167,7 +171,7 @@ curl -X POST http://localhost:8080/api/v1/agents/reap -d '{"max_idle_secs": 600}
 curl -X DELETE http://localhost:8080/api/v1/agents/<session_id> -H "X-Tenant-Id: acme"
 ```
 
-**Python SDK** (planned — not yet shipped in this repository):
+**Client libraries.** The repository contains `sdk/python` (a stdlib-only client for the machine API), `sdk/typescript`, and `sdk/node` (a process-sandbox wrapper), plus sample scripts in `examples/python` and `examples/typescript`. Nothing is published to PyPI or npm. The snippet below is illustrative of the intended shape, not the exact API of `sdk/python` (see its README):
 
 ```python
 from hypermachine import HyperMachine
@@ -247,11 +251,11 @@ not a FIPS 140-3 _validated module_.
 | Type             | Algorithms                                             |
 | ---------------- | ------------------------------------------------------ |
 | **Symmetric**    | AES-256-GCM, SHA-256/384/512, HMAC, HKDF               |
-| **Asymmetric**   | RSA-2048/3072/4096, ECDSA P-256/P-384[^p521]           |
+| **Asymmetric**   | RSA-2048/3072/4096, ECDSA P-256/P-384/P-521[^p521]     |
 | **Post-Quantum** | ML-KEM (Kyber), ML-DSA (Dilithium), SLH-DSA (SPHINCS+) |
 
-[^p521]: ECDSA P-521 keys can be represented but key generation and signing
-    require a backend other than `ring`, which does not support that curve.
+[^p521]: ECDSA P-521 works through IronCrypto's `ic-ec`. It did not under the
+    earlier `ring` backend, which has no P-521.
 
 ## Agent Governance
 
@@ -326,8 +330,10 @@ cd deploy/terraform && terraform apply -var="environment=production"
 ## Performance
 
 Crypto throughput from `crypto_bench` on an AMD Ryzen 9 9900X (64 KiB blocks).
-AES-GCM and SHA run on the validated `ring` backend (AES-NI hardware
-acceleration), which is enabled by default:
+These figures were measured when `hv2-core` ran AES-GCM and SHA on `ring`
+(AES-NI hardware acceleration). `hv2-core` has since moved to IronCrypto's
+`ic-*` crates and the table has not been re-measured, so treat it as the
+old backend's numbers, not IronCrypto's:
 
 | Operation           | Throughput  |
 | ------------------- | ----------- |
@@ -341,27 +347,42 @@ acceleration), which is enabled by default:
 cargo bench -p hv2-core --bench crypto_bench
 ```
 
-> Numbers are hardware- and backend-dependent. AES-GCM is AES-NI accelerated;
-> SHA throughput reflects `ring`'s software implementation on this CPU. Run the
-> command above to reproduce on your own hardware.
+> Numbers are hardware- and backend-dependent, and these predate the move to
+> IronCrypto. Run the command above to measure the current backend on your own
+> hardware. `ring` is still used elsewhere in the workspace (for example as
+> rustls's default provider); see `docs/FIPS.md`.
 
 ## Project Structure
 
 ```bash
-crates/
-  hm-cli      # CLI + MCP server
-  hm-gui      # Desktop GUI with AI automation API
-  hv1-arm     # ARM64 EL2 hypervisor backend (127 tests)
-  hv1-boot    # Type-1 bare-metal bootloader (nightly)
-  hv1-core    # Type-1 bare-metal hypervisor core (nightly)
-  hv2-core    # Core engine (CPU, memory, devices, crypto)
-  hv2-cpu     # CPU virtualization and instruction decoding
-  hv2-gpu     # GPU virtualization (Vulkan/WebGPU, passthrough)
-  hv2-net     # Networking (TCP/IP stack, TAP/TUN, virtio-net)
-  hv2-agent   # AI agent interface (MCP, WASM plugins)
-  hv2-api     # REST/gRPC API server + GPU Fabric endpoints
-  hv2-cli     # Standalone hypervisor CLI
-  hv2-runtime # Fleet runtime, scheduler, GPU observability
+crates/                  # 24 workspace members; hv1-boot, hv1-multiboot, hv2-unikernel are excluded
+  hm-cli          # CLI + MCP HTTP server
+  hm-gui          # Desktop GUI with AI automation API
+  hm-tui          # Terminal dashboard for Type 2 VMs and sandbox VMs
+  hv1-arm         # ARM64 EL2 hypervisor backend
+  hv1-boot        # Type-1 bare-metal bootloader (nightly, excluded)
+  hv1-core        # Type-1 bare-metal hypervisor core
+  hv1-multiboot   # Boots hv1-core from a Multiboot loader (excluded)
+  hv2-core        # Core engine (CPU, memory, devices, crypto)
+  hv2-cpu         # CPU virtualization and instruction decoding
+  hv2-gpu         # GPU virtualization (Vulkan/WebGPU, passthrough)
+  hv2-net         # Networking (userspace gateway on smoltcp, TAP/TUN, virtio-net)
+  hv2-agent       # AI agent interface (MCP, Rhai scripting)
+  hv2-agent-proto # Framed message format between an agent unikernel and its host
+  hv2-api         # REST/gRPC API server + GPU Fabric endpoints
+  hv2-cli         # Standalone hypervisor CLI
+  hv2-cluster     # Multi-node sandbox cluster: shared store, scheduler, stateless control plane
+  hv2-context     # Context as an environment: addressable event log and confined runtime
+  hv2-guest-agent # Protocol and in-guest binary for running commands in a VM over vsock
+  hv2-infer       # A transformer forward pass over real weights, as a sandbox capability
+  hv2-jobs        # Durable job queue: sandboxed batch work on the host
+  hv2-runtime     # Fleet runtime, scheduler, GPU observability
+  hv2-sandbox     # OS-level process sandboxes with honest capability reporting
+  hv2-sandboxd    # Sandbox node daemon: E2B's API and envd for microVMs on one host
+  hv2-swarm       # Hierarchical command graph for agent swarms
+  hv2-tls         # Where HyperMachine chooses its TLS crypto provider
+  hv2-unikernel   # no_std Multiboot unikernel guest (excluded)
+  hypermachine    # Frontdoor crate re-exporting the hv2 Type-2 stack
 deploy/
   k8s/        # Kubernetes manifests
   helm/       # Helm charts
@@ -374,7 +395,7 @@ deploy/
 - **[API Quickstart](docs/API_QUICKSTART.md)** — REST/gRPC API reference and examples
 - **[Architecture](docs/architecture.md)** — System design and internals
 - **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)** — Production deployment on Kubernetes/Terraform
-- **[GPU Virtualization](docs/gpu.md)** — Vulkan/WebGPU passthrough and virtual GPU
+- **[GPUs](docs/gpu.md)** — what GPU code exists (host-side VFIO, a software `wgpu` device) and what does not (no VM has a GPU)
 - **[Guest Programming Guide](docs/GUEST_PROGRAMMING_GUIDE.md)** — Writing code for guest VMs
 
 ## Troubleshooting
@@ -384,8 +405,7 @@ deploy/
 | `KVM not available`             | Enable VT-x/AMD-V in BIOS; `modprobe kvm_intel` or `kvm_amd`                          |
 | `WHPX not found` (Windows)      | Enable "Windows Hypervisor Platform" in Windows Features                              |
 | `protoc not found`              | Install protobuf compiler: `apt install protobuf-compiler` or `brew install protobuf` |
-| Build fails on nightly crates   | Type-1 crates require nightly; use `--exclude hv1-core --exclude hv1-boot`            |
-| `cargo check --workspace` fails on `bootloader`/`x86_64` with `-Z flag is only accepted on the nightly channel` | Expected on stable: those are `hv1-boot`/`hv1-core` dependencies that need a nightly toolchain and `-Zbuild-std`. Run `cargo check-ws` (an alias defined in `.cargo/config.toml`) or add `--exclude hv1-core --exclude hv1-boot` yourself; see CI's `hv1-check`/`hv1-clippy` jobs for the pinned-nightly invocation |
+| Building `hv1-boot` fails on stable | `hv1-boot` needs nightly and `-Zbuild-std`; it is excluded from the workspace, so `cargo check --workspace` does not touch it. See CI's `hv1-check`/`hv1-clippy` jobs for the pinned-nightly invocation |
 | Permission denied on `/dev/kvm` | Add user to kvm group: `sudo usermod -aG kvm $USER`                                   |
 
 ## Contributing

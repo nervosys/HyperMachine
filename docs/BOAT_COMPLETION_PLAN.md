@@ -24,7 +24,9 @@ Closed with kept evidence (see `docs/benchmarks/2026-10-23` to `2026-10-27`):
 
 Open, in the order sections 2 to 6 take them:
 
-- [ ] A real guest OS in the nested VM (reaches userspace).
+- [x] A real guest OS in the nested VM: decided 2026-11-11, recorded as a limit. It
+      does not reach userspace nested on this host; see section 2 and the `/dev/kvm`
+      row of `BOAT_PARITY.md`.
 - [ ] Docker leftovers, evidence quality, platform backends, owner items, wrap-up.
 
 ## 2. A real guest OS in the nested VM
@@ -102,12 +104,12 @@ The nested guest is still about ten times slower in real time.
       virtualization under WSL2/Hyper-V with the measurements, and mark the
       `BOAT_PARITY.md` row accordingly. Do not claim more than was shown. Decided
       2026-11-11: recorded as a limit, not fixed. The `/dev/kvm` in the guest row
-      in `BOAT_PARITY.md` now says plainly that a real guest OS does not reach
-      userspace nested, with the measured 6x-37x per-exit-reason cost from the
-      host-direct comparison as the reason, and an explicit note that this is a
-      limit of this host's two-layer nesting (WSL2 on Hyper-V), not a known bug in
-      HyperMachine's own KVM backend -- Intel hosts and bare metal are still
-      untested and the row says so.
+      in `BOAT_PARITY.md` now says plainly that a real guest OS was never seen to
+      reach userspace nested, and cites the host-direct comparison (one trace of
+      each: mean exit-handling time 6 to 37 times higher nested, by exit reason).
+      That comparison shows where the time goes, not why, and does not show the
+      KVM backend is free of fault; no fix is known. Intel hosts and bare metal
+      are still untested and the row says so.
 - [ ] If it boots: a checkpoint and a fork while a nested VM is running, and the
       nested guest across a restore.
 
@@ -125,7 +127,8 @@ evidence, but no more of it is to be built. The work is on the native path
 - [x] Compose: networks between services, by service name, on a cluster node
       (`2026-10-28/compose-network-cluster-kvm`, 6 cases, 3 of 3 runs). Two nodes and UDP
       are NOT VERIFIED.
-- [x] Standalone-node VM-to-VM networking, independent of `compose` (2026-11-10): a direct
+- [ ] Standalone-node VM-to-VM networking, independent of `compose` (2026-11-10; code and
+      unit tests only, so not ticked: the rule at the top needs a real-platform check): a direct
       ask from another session (`aircom-b5`, porting Docker e2e tests with three VMs and a
       mid-test network disconnect/reconnect). `hm sandbox vm network create|list|inspect|
       rm|connect|disconnect` manages named networks on one node with no cluster or mTLS
@@ -137,9 +140,9 @@ evidence, but no more of it is to be built. The work is on the native path
       published-machine-port primitive), never the peer's own virtio-net device. 9 unit
       tests on the registry's own bookkeeping (allocation, scoping, disconnect/reconnect,
       `remove` refusing a nonempty network); `hv2-sandboxd`'s existing 117 pass unchanged.
-      **NOT VERIFIED**: nothing here has run against a live guest -- this repo has no Linux
-      KVM host, and WHPX's own multi-vCPU boot panic (above) is a separate, still-open
-      problem on the only host that could try. `compose` itself does not use this path yet
+      **NOT VERIFIED**: nothing here has run against a live guest. No KVM check has been
+      written or run for it (KVM under WSL2 on the development machine could run one; the
+      earlier reason given here, that there was no Linux KVM host, was wrong). `compose` itself does not use this path yet
       (it still only gets cluster networking); DNS resolution through the gateway's
       intercept and a real two-guest TCP round trip are both unexercised.
 - [x] Compose: bind mounts, `:ro` and options on volumes: DECLINED 2026-10-29 (owner delegated the
@@ -365,7 +368,8 @@ Every box above is closed the same way:
 
 - [ ] Every row of `BOAT_PARITY.md` either says "done, with this evidence" or says
       exactly what is missing and why.
-- [ ] Section 2 is resolved one way or the other, with measurements.
+- [x] Section 2 is resolved one way or the other, with measurements. Resolved
+      2026-11-11 as a recorded limit (section 2, "Decide from the evidence").
 - [ ] The owner items in section 6 are done, or are explicitly declined.
 - [ ] A final read of `BOAT_PARITY.md` against `docs/benchmarks/` finds no
       statement without evidence.
@@ -380,14 +384,14 @@ Every box above is closed the same way:
    choice on the vCPU reservation.
 5. Section 6 as the owner provides what is needed.
 
-## Status of the remaining items (2026-11-09)
+## Status of the remaining items (2026-11-09, updated through 2026-11-11)
 
 - **Multi-vCPU WHPX boot panic under load** (`IO-APIC + timer doesn't work!`):
   fixed 2026-11-11, not yet confirmed closed. Delivering the I/O APIC's
   interrupt callback synchronously, instead of through a spawned async task
   that queues behind other tokio work under load, took the panic rate from
   9 of 60 (and 7 of 28, 8 of 40 with two other fixes that didn't work) to 0 of
-  200 across five runs. See section 5 for the mechanism and what is not yet
+  280 across six runs. See section 5 for the mechanism and what is not yet
   verified (a longer run; HVF; CI). Still in the v1.2.0 release notes as a
   known issue until more runs confirm it.
 - **CI fixture for the WHPX Linux tests:** the recipe now exists and has been run
@@ -405,9 +409,10 @@ Every box above is closed the same way:
   baseline (17.7 s, 15,643 exits) within its own run-to-run spread. The
   2026-10-27 evidence (about 10 times slower, no userspace after 270 s, no
   variant helped) stands and is now confirmed current. See
-  `docs/benchmarks/2026-11-11/nested-boot-rerun/README.md`. The rest of
-  section 2 (memory-light test, counting where time goes, a non-nested host)
-  is still open.
+  `docs/benchmarks/2026-11-11/nested-boot-rerun/README.md`. The memory-light
+  test and the count of where time goes were done the same day, and the
+  question was decided as a recorded limit (section 2). Still open there: a
+  host with no nesting at all (bare metal), and an Intel host.
 - **OWNER items, not mine to close:** publishing the clients, the CI secrets (Slack,
   Codecov), HVF and Intel hardware, and the decision on hosting a fixture.
 - **Level-triggered I/O APIC lines:** OPEN, documented above; no guest reaches it.

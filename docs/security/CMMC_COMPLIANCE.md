@@ -313,7 +313,7 @@ This document maps HyperMachine's security controls to the Cybersecurity Maturit
 | SC.L2-3.13.8  | Implement cryptographic mechanisms                  | TLS 1.3, AES-256               | ✅ Implemented |
 | SC.L2-3.13.9  | Terminate network connections                       | Session management             | ✅ Implemented |
 | SC.L2-3.13.10 | Establish and manage cryptographic keys             | Key management                 | ✅ Implemented |
-| SC.L2-3.13.11 | Employ FIPS-validated cryptography                  | FIPS mode available            | ✅ Implemented |
+| SC.L2-3.13.11 | Employ FIPS-validated cryptography                  | TLS only, `fips` build, on AWS-LC's validated module; other crypto not validated (see ../FIPS.md) | 🔄 Partial |
 | SC.L2-3.13.12 | Prohibit remote activation of collaborative devices | N/A - no collaborative devices | N/A           |
 | SC.L2-3.13.13 | Control use of mobile code                          | WASM sandbox                   | ✅ Implemented |
 | SC.L2-3.13.14 | Control use of Voice over IP                        | N/A - no VoIP                  | N/A           |
