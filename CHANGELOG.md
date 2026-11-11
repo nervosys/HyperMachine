@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **The WHPX multi-vCPU IO-APIC timer panic, measured fixed.** The I/O APIC's
+  interrupt callback used to deliver via `runtime.spawn` (`vm.rs`), queuing the
+  actual WHP interrupt-injection call behind whatever else the tokio runtime's
+  worker threads were doing; under host load that could delay a guest's first
+  timer tick past its own IO-APIC calibration window, panicking with
+  `Kernel panic - not syncing: IO-APIC + timer doesn't work!`. A new
+  `HypervisorBackend::request_lapic_interrupt_sync` (default `None`) lets a
+  backend answer without the trait's required `async`; WHPX implements it as a
+  direct call to the existing synchronous FFI call, and the callback now tries
+  it first, only falling back to `spawn` when it answers `None`. Three runs of
+  40 two-vCPU boots each (`apic=verbose`), 24 busy host threads,
+  `--test-threads=1`: 0 of 120 panicked this way, against 9 of 60, 7 of 28
+  (`no_timer_check`) and 8 of 40 (a vCPU-thread priority boost) before it, all
+  three of which are documented in `docs/BOAT_COMPLETION_PLAN.md`. One
+  unrelated hang (no panic string) in the 120 runs; not claiming that is fixed
+  too. The 17 WHPX Linux tests (both fixture runs) and all 2448 `hv2-core`
+  unit tests still pass. NOT VERIFIED: more than three batches of 40; HVF (no
+  sync override exists for it); any effect in CI (no kernel fixture there).
+
 ### Added
 - **Standalone-node VM-to-VM networking for sandboxes.** `hm sandbox vm network create|list|inspect|rm|connect|disconnect` joins sandboxes on one node to each other by a DNS alias, with no cluster or mTLS needed -- the gap the existing cluster-only private networking left for a single node. A sandbox's gateway checks its current membership live on every DNS question and connection, so a disconnect or reconnect after boot takes effect at once, with nothing to restart. Dialing a peer goes over its vsock port-forward channel, the same primitive a published machine port already uses, not its virtio-net device. 9 new unit tests on the registry; `hv2-sandboxd`'s existing 117 pass unchanged. NOT VERIFIED against a live guest: this repo has no Linux KVM host to run it on.
 - **`hm-tui`, a new terminal dashboard** for Type 2 VMs and sandbox VMs over the same APIs `hm-gui` and `hm sandbox vm` already use; and a Sandboxes tab for `hm-gui`, which previously showed only Type 2 VMs.

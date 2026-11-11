@@ -412,13 +412,25 @@ impl HypervisorBackend for WhpxBackend {
         whpx_vcpu.kick()
     }
 
+    fn request_lapic_interrupt_sync(
+        &self,
+        destination: u32,
+        vector: u8,
+        logical: bool,
+    ) -> Option<Result<()>> {
+        let vm = self.vm.read().as_ref().cloned()?;
+        Some(vm.request_interrupt(destination, vector, logical))
+    }
+
     async fn request_lapic_interrupt(
         &self,
         destination: u32,
         vector: u8,
         logical: bool,
     ) -> Result<()> {
-        // (Also used for the PIC's vectors when the APIC is emulated.)
+        // (Also used for the PIC's vectors when the APIC is emulated.) The
+        // sync path above is what the I/O APIC callback actually calls; this
+        // stays as the trait's required async signature and as a fallback.
         let vm = self
             .vm
             .read()

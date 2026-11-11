@@ -391,6 +391,23 @@ pub trait HypervisorBackend: Send + Sync {
         Ok(None)
     }
 
+    /// The same delivery as [`Self::request_lapic_interrupt`], called from a
+    /// plain (non-async) context on the hot path from the emulated I/O APIC,
+    /// for a backend whose underlying call is itself synchronous (no I/O, no
+    /// lock that can block on guest activity). `None` from a backend that has
+    /// no such fast path, in which case the caller falls back to the async
+    /// version -- which, going through a spawned task, queues behind
+    /// whatever else the async runtime's worker threads are doing.
+    fn request_lapic_interrupt_sync(
+        &self,
+        destination: u32,
+        vector: u8,
+        logical: bool,
+    ) -> Option<Result<()>> {
+        let _ = (destination, vector, logical);
+        None
+    }
+
     /// Deliver a fixed, edge-triggered interrupt `vector` to the local APIC
     /// whose ID (or, when `logical`, whose logical mask) is `destination`, for a backend whose hypervisor emulates the
     /// local APIC and so takes interrupts from the host side. A backend that

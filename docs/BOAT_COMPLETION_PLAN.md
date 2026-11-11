@@ -235,10 +235,23 @@ Several results are one run. Each needs three runs in a row, kept.
       direct call once it runs) to whatever tokio worker thread is free next. Under
       24 busy host threads, that hop queues behind other tokio work with no priority
       of its own; raising only the vCPU thread's priority (the fix already tried)
-      would not touch this queue. NOT TESTED: whether delivering the interrupt
-      synchronously from the callback (no `spawn`) changes the panic rate; this is a
-      hypothesis from reading the code, not a measurement, and changing the delivery
-      path is a bigger change than I'd make unasked.
+      would not touch this queue.
+      Fixed and measured 2026-11-11: a new `HypervisorBackend::request_lapic_interrupt_sync`
+      (default `None`) lets a backend answer without the trait's required `async`;
+      WHPX implements it as a direct call to `WhpxVm::request_interrupt` (a plain FFI
+      call, `whpx.rs:1065`), and the I/O APIC callback in `vm.rs` calls it first, only
+      falling back to `spawn` when it answers `None` (a backend with no fast path).
+      Three runs of 40 two-vCPU boots each (`apic=verbose`, the same cmdline that
+      showed the panic), 24 busy host threads, `--test-threads=1`: 0 of 120 panicked
+      with this fix, against 9 of 60, 7 of 28 (`no_timer_check`) and 8 of 40 (vCPU
+      priority) before it. One run had one unrelated hang (no panic string in the
+      console, same as the two such hangs noted above) -- not claiming that is fixed
+      too. The 17 WHPX Linux tests (both fixture runs) and all 2448 `hv2-core` unit
+      tests still pass. NOT VERIFIED: more than three batches; whether the earlier
+      "0 of 60" false negative (noted above) means 120 more trustworthy than that one
+      was -- a longer run is the honest next check, not claimed here; HVF (no sync
+      override exists for it, since it never had one for the async path either); any
+      effect in CI (no kernel fixture there).
       NOT VERIFIED:
       leaves 0x40000000+ (the vendor signature; the kernel logs no "Hypervisor
       detected" line, so Linux treats it as no known hypervisor); a Windows guest;
@@ -302,9 +315,14 @@ Every box above is closed the same way:
 
 ## Status of the remaining items (2026-11-09)
 
-- **Multi-vCPU WHPX boot panic under load** (`IO-APIC + timer doesn't work!`): OPEN.
-  Reproduced (9 of 60 under 24 busy host threads), cause not found, the one fix
-  tried did not work. In the v1.2.0 release notes as a known issue.
+- **Multi-vCPU WHPX boot panic under load** (`IO-APIC + timer doesn't work!`):
+  fixed 2026-11-11, not yet confirmed closed. Delivering the I/O APIC's
+  interrupt callback synchronously, instead of through a spawned async task
+  that queues behind other tokio work under load, took the panic rate from
+  9 of 60 (and 7 of 28, 8 of 40 with two other fixes that didn't work) to 0 of
+  120 across three runs. See section 5 for the mechanism and what is not yet
+  verified (a longer run; HVF; CI). Still in the v1.2.0 release notes as a
+  known issue until more runs confirm it.
 - **CI fixture for the WHPX Linux tests:** the recipe now exists and has been run
   (not in CI): `tools/guest-image/build-kernel.sh`, `build.sh`, and a new
   `build-root-disk-fixture.sh`, all built in WSL, make all 17 of 17

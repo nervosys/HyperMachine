@@ -1265,14 +1265,35 @@ impl VM {
                     let Some(backend) = backend.upgrade() else {
                         return;
                     };
-                    runtime.spawn(async move {
-                        if let Err(e) = backend
-                            .request_lapic_interrupt(u32::from(destination), vector, logical)
-                            .await
-                        {
-                            tracing::warn!("I/O APIC interrupt not delivered: {e}");
+                    // The sync path calls straight into the backend (a plain
+                    // FFI call on WHPX, no I/O) with no scheduling hop. Only
+                    // a backend with no such fast path falls back to
+                    // spawning the async version, which queues behind
+                    // whatever else the runtime's worker threads are doing
+                    // -- under host load, long enough to miss a guest's
+                    // IO-APIC timer calibration window.
+                    match backend.request_lapic_interrupt_sync(
+                        u32::from(destination),
+                        vector,
+                        logical,
+                    ) {
+                        Some(Ok(())) => {}
+                        Some(Err(e)) => tracing::warn!("I/O APIC interrupt not delivered: {e}"),
+                        None => {
+                            runtime.spawn(async move {
+                                if let Err(e) = backend
+                                    .request_lapic_interrupt(
+                                        u32::from(destination),
+                                        vector,
+                                        logical,
+                                    )
+                                    .await
+                                {
+                                    tracing::warn!("I/O APIC interrupt not delivered: {e}");
+                                }
+                            });
                         }
-                    });
+                    }
                 });
                 self.devices
                     .register_device(
