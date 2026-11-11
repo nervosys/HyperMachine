@@ -63,7 +63,10 @@ hm t2 list
 ### Start API Servers
 
 ```bash
-hm serve --grpc-port 50051 --rest-port 8080
+hm serve --rest-port 8080
+
+# gRPC is disabled in this build: --grpc-port is accepted and ignored.
+# `hm serve` starts the REST/MCP HTTP server (--rest-port, default 8080).
 ```
 
 ### REST API Examples
@@ -116,7 +119,6 @@ async fn main() -> anyhow::Result<()> {
         .name("agent-vm")
         .cpu_cores(4)
         .memory_gb(8)
-        .enable_gpu(true)
         .with_tracing()
         .build()
         .await?;
@@ -253,10 +255,10 @@ HyperMachine includes several examples:
 
 ```bash
 # Basic VM management
-cargo run --example basic
+cargo run -p hv2-agent --example basic
 
 # AI agent scripting
-cargo run --example agent_script
+cargo run -p hv2-agent --example agent_script
 ```
 
 ## Troubleshooting

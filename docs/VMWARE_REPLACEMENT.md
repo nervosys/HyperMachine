@@ -42,6 +42,11 @@ workloads. Against vSphere and GovCloud, the gaps found were:
 | FIPS 140-3 | AWS-LC's validated FIPS module (through `aws-lc-rs`) for TLS and the primitives that need a validated module. IronCrypto stays for everything else until it has its own CMVP certificate |
 | Deployment | A fleet of EC2 bare-metal hosts (a hardened AMI with systemd services), not EKS |
 
+The FIPS choice is `aws-lc-rs`, but only TLS runs on that validated module, in the
+[FIPS build](FIPS.md). The non-TLS primitives (workload-identity token signing, API-key
+digests, the audit MAC and SSO sessions) do not: they use `ring`, RustCrypto or
+IronCrypto, none of which is a validated module here.
+
 ## Hosting on GovCloud
 
 KVM needs hardware virtualisation, which on EC2 means a `.metal` instance. GovCloud
@@ -88,7 +93,7 @@ Status is one of: not started, in progress, done (with evidence link).
 | Resource-aware placement (CPU, memory, affinity) | not started |
 | Shared datastores (EBS, FSx or Ceph); several disks per VM; hot-plug over virtio-pci | not started |
 | Several NICs per VM; bridged and VLAN networking; IPAM | not started |
-| Disk snapshots and clones | not started |
+| Disk snapshots and clones | **partial**: snapshots exist for a stopped [machine's disk](MACHINES.md#snapshots) (`crates/hv2-sandboxd/src/machines/snapshots.rs`): taken, restored and downloaded as a raw image, files and not memory, refused while the machine runs; their files are read without booting it. [Checked on KVM](benchmarks/2026-10-12/machine-snapshots-kvm/README.md) in one run of 7 checks on a template machine with a 1 GiB disk on ext4, so block sharing on XFS or Btrfs was not run; a machine from a disk image, large disks, the control plane and an interrupted snapshot are not shown there. File reads of a snapshot: [snapshot-files-kvm](benchmarks/2026-10-12/snapshot-files-kvm/README.md); archive: [machine-snapshot-archive-kvm](benchmarks/2026-10-22/machine-snapshot-archive-kvm/README.md). Snapshots of a running machine, with memory, and clones: not started. Resizing a stopped machine (`resize.rs`) is a separate item, [checked on KVM](benchmarks/2026-10-11/machine-resize-kvm/README.md) in one run |
 | VMDK and OVA import | not started |
 
 ### Phase 4: Enterprise and Windows
@@ -100,3 +105,21 @@ Status is one of: not started, in progress, done (with evidence link).
 | A vTPM device a guest can reach; Secure Boot in the firmware path | not started |
 | PIV/CAC client-certificate sign-in; SAML; group-based roles | not started |
 | A vCenter-style UI: inventory, lifecycle, console, alarms | not started |
+
+## Not in this plan
+
+Capabilities an ESXi and vCenter replacement normally needs that this page does not mention:
+
+- Backup and changed-block-tracking APIs
+- Load rebalancing after initial placement
+- Storage migration
+- A template or content library, and guest customization at scale
+- Host lifecycle and patching
+- A distributed switch, a firewall and microsegmentation
+- vSphere API or Terraform-provider compatibility, and P2V/V2V tooling beyond VMDK import
+- Per-VM resource pools and quotas
+- USB and PCI passthrough for machines
+- Memory ballooning and overcommit policy
+- STIG/SCAP hardening evidence
+- Multi-AZ control-plane availability
+- Performance-metric history
