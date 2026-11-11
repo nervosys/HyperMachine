@@ -288,10 +288,15 @@ Every box above is closed the same way:
 - **Multi-vCPU WHPX boot panic under load** (`IO-APIC + timer doesn't work!`): OPEN.
   Reproduced (9 of 60 under 24 busy host threads), cause not found, the one fix
   tried did not work. In the v1.2.0 release notes as a known issue.
-- **CI fixture for the WHPX Linux tests:** OPEN, decided not to do now. The repo has
-  no recipe for the 6.6.52 kernel or the shell initrd, so a CI build would be
-  written blind; hosting the built files publishes a GPL binary, which is the
-  owner's call. Until one exists, `HV2_REQUIRE_GUEST` cannot be set in CI.
+- **CI fixture for the WHPX Linux tests:** the recipe now exists and has been run
+  (not in CI): `tools/guest-image/build-kernel.sh` and `build.sh`, built in WSL,
+  make 15 of 17 `linux_whpx_boot.rs` tests pass genuinely (serial run,
+  `HV2_REQUIRE_GUEST=1`). See
+  `docs/benchmarks/2026-11-10/whpx-boot-fixture-windows/README.md`. Still OPEN:
+  wiring it into CI (GitHub-hosted Windows runners likely lack WHPX/nested-virt,
+  not tested) and hosting the built GPL kernel/initrd are both the owner's call,
+  deliberately not done here. The remaining 2 tests need a separate ext4 root-disk
+  fixture, not yet built.
 - **Nested-guest re-run (section 2):** OPEN, decided not to do now. The WSL
   fixtures are gone and the 2026-10-27 evidence (about 10 times slower, no
   userspace after 270 s, no variant helped) stands; a rebuild needs downloads, a
