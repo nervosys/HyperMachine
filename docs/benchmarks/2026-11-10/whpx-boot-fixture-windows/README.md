@@ -1,12 +1,13 @@
-# A reproducible kernel+initrd fixture for `linux_whpx_boot.rs`, built in WSL
+# A reproducible kernel+initrd+disk fixture for `linux_whpx_boot.rs`, built in WSL
 
 `crates/hv2-core/tests/linux_whpx_boot.rs` has always taken its guest image from
 environment variables (`HV2_TEST_KERNEL`, `HV2_TEST_INITRD`, ...); nothing in the repo
 built one, so the suite silently skipped on every host, including this one. The repo
 already ships the recipe (`tools/guest-image/build-kernel.sh`, `tools/guest-image/build.sh`);
-it had just never been run here. This fixture closes that gap locally. It is **not**
-wired into CI (see "Not done" below) and the built kernel/initrd are not committed or
-published — both decisions are the owner's to make, not mine.
+it had just never been run here. This fixture closes that gap locally, making all 17
+tests pass. It is **not** wired into CI (see "Not done" below) and the built kernel,
+initrd, and disk image are not committed or published — both decisions are the owner's
+to make, not mine.
 
 ## Recipe (WSL2, Ubuntu)
 
@@ -39,7 +40,14 @@ not `bash -c`) — a non-login shell does not source the profile where rustup's 
 export lives, so `rustc`/`cargo` report "command not found" even though they are
 installed.
 
-## Result: 15 of 17 tests pass against this fixture
+## Result: 17 of 17 tests pass, in two runs
+
+The suite needs two separate invocations, because the two root-disk tests need
+`HV2_TEST_INITRD` *unset* (the test's own comment: "With `HV2_TEST_INITRD` unset the
+kernel mounts the root itself") while the other 15 need it set; one process's env can't
+satisfy both. Both runs use `HV2_REQUIRE_GUEST=1` and `--test-threads=1`.
+
+### Run 1: 15 tests, with the kernel+initrd fixture
 
 Env vars used:
 
@@ -64,18 +72,46 @@ being swallowed as skips, not real boots.
 test result: FAILED. 15 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out
 ```
 
-The 15 that pass cover: multi-vCPU boot (2/4/8 vCPUs), parallel busy loops, PCI data-disk
+These 15 cover: multi-vCPU boot (2/4/8 vCPUs), parallel busy loops, PCI data-disk
 read/write, snapshot/fork/restore (including mid-boot and 2/4/8-vCPU variants), paused-vCPU
 state round-trip, and the userspace-PIC backend boot path.
 
-The 2 that fail are both named `a_root_filesystem_mounts_from_a_virtio_blk_disk_on_pci*`
-(one and two vCPUs). Both time out at the suite's 120 s `BOOT_DEADLINE` because the test
-unconditionally asserts the kernel log contains `EXT4-fs (vda1): mounted filesystem` —
-reading the test source (`root_from_pci_disk`, around line 342–446), that assertion has
-no `initrd.is_some() ||` guard the way neighboring assertions do. Neither a blank
-`data.img` nor this fixture's `init` script (which never mounts `/dev/vda1`) can produce
-that line. A real ext4-formatted root-disk image, plus an `init` that mounts it and emits
-a matching log line, would be a separate, larger fixture — not built here.
+### Run 2: the 2 root-disk tests, with a separate ext4 disk image and no initrd
+
+`a_root_filesystem_mounts_from_a_virtio_blk_disk_on_pci` and its two-vCPU variant assert
+the kernel log contains `EXT4-fs (vda1): mounted filesystem` with no `initrd.is_some() ||`
+guard, unlike neighboring assertions in the same test (`root_from_pci_disk`,
+`crates/hv2-core/tests/linux_whpx_boot.rs` around line 342–446) — so they need the kernel
+itself to mount an ext4-formatted `/dev/vda1` and run `/bin/sh` from it as `init` (the
+`root=/dev/vda1 ro init=/bin/sh -- -c "..."` command line the test builds when
+`HV2_TEST_INITRD` is unset). Neither the blank `data.img` nor the kernel+initrd fixture
+from Run 1 can produce that line.
+
+`tools/guest-image/build-root-disk-fixture.sh` (new, this change) builds that image: a
+32 MiB file, one MBR partition (`sfdisk ... type=83`), formatted ext4, populated with
+static busybox and symlinks for `sh`, `mount`, `grep`, `sleep`. It needs root in WSL
+(`losetup --partscan`, `mount`) and is not part of the normal guest-image build — it is a
+one-off local test fixture, not something CI builds:
+
+```
+sudo tools/guest-image/build-root-disk-fixture.sh -o root-disk.img --busybox /usr/bin/busybox
+```
+
+Env vars for this run (note `HV2_TEST_INITRD` and its related vars are **unset**, unlike
+Run 1):
+
+```
+HV2_TEST_KERNEL=.../bzImage
+HV2_TEST_DISK=.../root-disk.img
+HV2_REQUIRE_GUEST=1
+```
+
+```
+test a_root_filesystem_mounts_from_a_virtio_blk_disk_on_pci ... ok
+test a_root_filesystem_mounts_from_a_virtio_blk_disk_on_pci_with_two_vcpus ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out
+```
 
 ## Not done
 
@@ -83,6 +119,6 @@ a matching log line, would be a separate, larger fixture — not built here.
   virtualization passthrough, so they likely cannot create a WHPX partition at all; this
   was not tested against an actual runner, and no `.github/workflows` file was touched.
   This is a deliberate choice, not an oversight.
-- **Kernel/initrd are not committed or published.** They are GPL-licensed build output;
-  hosting them is the owner's call, same as the prior status entry said.
-- **The ext4 root-disk fixture** for the 2 remaining tests is not built.
+- **Kernel/initrd/disk image are not committed or published.** The kernel and busybox are
+  GPL-licensed build output; hosting them is the owner's call, same as the prior status
+  entry said.
