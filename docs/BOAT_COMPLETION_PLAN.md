@@ -222,6 +222,23 @@ Several results are one run. Each needs three runs in a row, kept.
       trustworthy). Open; cause unknown. Raising the vCPU threads' priority (HIGHEST) did not cure it either:
       8 of 40 boots panicked with it, 5 of 40 without, interleaved under the same 24 busy threads, so
       host scheduling of the vCPU thread alone does not explain it. Two other runs mounted in 7.0 and 9.4 s with no panic, unexplained.
+      A candidate mechanism, read from the code 2026-11-11, not yet tested: on WHPX
+      (and HVF) the PIT, PIC and I/O APIC are emulated in userspace, unlike KVM's
+      in-kernel irqchip (`KVM_CREATE_IRQCHIP`/`kvm_create_pit2`), which never takes
+      this path and has never shown the panic. `TimerDevice::tick` raises IRQ 0 on
+      the `Pic8259` (`devices/timer.rs:466`); its line observer remaps IRQ 0 to GSI
+      2 and calls `IoApic::raise_irq` (`vm.rs:1289-1291`); the I/O APIC's interrupt
+      callback, when it decides to deliver, does not inject the interrupt directly --
+      it does `runtime.spawn(async move { backend.request_lapic_interrupt(...).await
+      })` (`vm.rs:1264-1275`), handing the actual WHP call
+      (`WhpxBackend::request_lapic_interrupt`, `whpx.rs:415-429`, itself a fast
+      direct call once it runs) to whatever tokio worker thread is free next. Under
+      24 busy host threads, that hop queues behind other tokio work with no priority
+      of its own; raising only the vCPU thread's priority (the fix already tried)
+      would not touch this queue. NOT TESTED: whether delivering the interrupt
+      synchronously from the callback (no `spawn`) changes the panic rate; this is a
+      hypothesis from reading the code, not a measurement, and changing the delivery
+      path is a bigger change than I'd make unasked.
       NOT VERIFIED:
       leaves 0x40000000+ (the vendor signature; the kernel logs no "Hypervisor
       detected" line, so Linux treats it as no known hypervisor); a Windows guest;
