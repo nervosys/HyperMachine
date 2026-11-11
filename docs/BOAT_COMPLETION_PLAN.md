@@ -98,9 +98,16 @@ The nested guest is still about ten times slower in real time.
       dominant cost. See `docs/benchmarks/2026-11-11/host-direct-trace/README.md`.
       Literal bare metal (zero nesting layers) is still not done and still needs
       hardware not available here.
-- [ ] Decide from the evidence: either fix it, or record it as a limit of nested
+- [x] Decide from the evidence: either fix it, or record it as a limit of nested
       virtualization under WSL2/Hyper-V with the measurements, and mark the
-      `BOAT_PARITY.md` row accordingly. Do not claim more than was shown.
+      `BOAT_PARITY.md` row accordingly. Do not claim more than was shown. Decided
+      2026-11-11: recorded as a limit, not fixed. The `/dev/kvm` in the guest row
+      in `BOAT_PARITY.md` now says plainly that a real guest OS does not reach
+      userspace nested, with the measured 6x-37x per-exit-reason cost from the
+      host-direct comparison as the reason, and an explicit note that this is a
+      limit of this host's two-layer nesting (WSL2 on Hyper-V), not a known bug in
+      HyperMachine's own KVM backend -- Intel hosts and bare metal are still
+      untested and the row says so.
 - [ ] If it boots: a checkpoint and a fork while a nested VM is running, and the
       nested guest across a restore.
 
