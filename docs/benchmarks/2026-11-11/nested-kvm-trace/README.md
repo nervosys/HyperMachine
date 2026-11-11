@@ -115,3 +115,74 @@ Raw samples: [`report_head.txt`](report_head.txt) and
 [`report_tail.txt`](report_tail.txt) (80 and 40 lines of the 285,954-line
 report). `daemon.log` is not committed (`*.log` is gitignored, same as every
 prior directory in this series).
+
+## Per-exit latency: by total time, nested paging dominates, not interrupts
+
+The count-based breakdown above answers "how many of each exit." It does not
+answer "which one costs the most wall-clock time" -- a reason with fewer
+exits but a higher cost per exit can still dominate the total. This section
+does that measurement, the one the first pass of this README explicitly
+left undone.
+
+Pulled the full `trace.dat` back this time (not just summarized counts) --
+needed two fixes to do it: the sandbox exec endpoint's response is capped at
+exactly 1,048,576 bytes (1 MiB; a first attempt at one `base64 -w0` pull came
+back silently truncated there), so it was pulled in 700000-byte `dd` blocks
+instead; and each block's base64 text has to be decoded on its own and the
+*decoded bytes* concatenated, not the base64 *text* concatenated -- a block
+whose byte length isn't a multiple of 3 ends in `=` padding, and joining
+base64 strings with padding in the middle corrupts anything decoded from the
+joined text (a real failure hit and fixed here: the first corrected attempt
+still came back with a 2-byte sha256 mismatch from exactly this). The final
+pull verified by sha256 against the sandbox's own `sha256sum`.
+
+A small script (`trace-cmd report`, then pairing each `kvm_exit` timestamp
+with the next `kvm_entry` timestamp -- the gap between them is time spent
+outside the guest handling that exit; grouped by the exit's `reason` field)
+gives, for a run with 70,467 exits in this window:
+
+| Reason | Count | Mean (µs) | Median (µs) | Max (µs) | Total (µs) | Share of total time |
+|---|---|---|---|---|---|---|
+| `EXIT_NPF` | 25,966 | 475.7 | 203.0 | 59,629 | 12,351,574 | **44.8%** |
+| `EXIT_IOIO` | 15,969 | 466.6 | 294.0 | 58,209 | 7,450,843 | 27.0% |
+| `EXIT_INTR` | 21,145 | 317.6 | 146.0 | 32,856 | 6,715,042 | 24.4% |
+| `EXIT_VINTR` | 6,938 | 139.1 | 50.0 | 10,340 | 965,104 | 3.5% |
+| everything else | 445 | -- | -- | 4,773 | 71,696 | 0.3% |
+
+Total exit-handling time accounted for: 27.6 s, out of a run whose guest
+clock reached only 12.6 s in about 66 s of wall time -- more than a full
+guest-second of exit-handling overhead for every guest-second of progress.
+
+**This changes the picture from the count-only breakdown.** By count,
+interrupt-related exits (`EXIT_INTR` + `EXIT_VINTR`) outnumbered `EXIT_NPF`.
+By total time, `EXIT_NPF` alone (44.8%) outweighs `EXIT_INTR` + `EXIT_VINTR`
+combined (27.9%) -- each nested-page-fault exit costs more on average (475.7
+µs mean) than each interrupt exit (317.6 µs mean), enough to flip which one
+actually dominates wall-clock cost. Read plainly: **nested paging is the
+single largest cost by total time, which does support the first-touch-NPT-
+fault guess from 2026-10-27 more than the count-based trace alone suggested**
+-- though "first-touch" specifically (faults only on newly-touched pages,
+cheap after the first touch) is not quite what a 475 µs mean and a 59.6 ms
+max look like; those numbers look more like faults that are each individually
+expensive under nesting, not merely numerous early on. `pf_fixed` staying
+flat in the memory-light run's debugfs counters (true, and still means the
+*newly-fixed* count stops growing) is a different measurement from this one
+(the *cost per occurrence* of all NPF exits, fixed or not) and the two are
+not in tension, just answering different questions.
+
+The heavy tail is itself notable: `EXIT_NPF` and `EXIT_IOIO` each have a
+single occurrence taking roughly 58-60 ms, two to three orders of magnitude
+above their own medians (203 µs and 294 µs). A handful of exits taking tens
+of milliseconds, on top of a few hundred microseconds typical, looks like
+occasional host-scheduling delay reaching the exit-handling path -- the same
+shape of problem (something that should be fast getting queued behind
+unrelated work) as the WHPX I/O-APIC interrupt-delivery fix found and fixed
+elsewhere in this plan, though that fix is WHPX-specific and this is an
+entirely different (KVM-in-KVM) code path; nothing here establishes that the
+same mechanism is at fault.
+
+NOT VERIFIED: the cause of the heavy tail; whether `EXIT_NPF`'s cost is
+inherent to this host's nested-NPT implementation or fixable; a non-nested
+host's equivalent per-exit-reason latency for comparison (would need the
+same trace-cmd method run un-nested, not done here).
+

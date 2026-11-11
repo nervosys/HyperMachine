@@ -61,20 +61,27 @@ The nested guest is still about ten times slower in real time.
       per-VM KVM counters sampled every few seconds, not twice. Done 2026-11-11
       with `trace-cmd record -e kvm:*` (the sandbox kernel had no tracing built in
       -- added a `--trace` flag to `build-kernel.sh` and `trace.fragment` to fix
-      that, a reusable change, not a one-off). The real `kvm_exit` reason
-      breakdown, 116,637 exits in a ~62 s window: `EXIT_INTR` 38.7%, `EXIT_NPF`
-      31.7%, `EXIT_VINTR` 15.5%, `EXIT_IOIO` 13.7%, the rest under 1%. **Interrupt
-      handling (`EXIT_INTR` + `EXIT_VINTR`, 54.2% combined) costs more exits than
-      nested paging (`EXIT_NPF`, 31.7%) -- neither the "NPT faults" nor the
-      "slow timer interrupts" guess from 2026-10-27 is simply right, and this is
-      the first evidence that actually weighs them against each other** rather
-      than ruling one out alone. Also found: `EXIT_NPF`'s true rate (37,001) is
-      roughly double the debugfs `pf_fixed` counter (18,378) from the memory-light
-      run -- the counter-only picture understated NPF-exit volume by about half,
-      though its "not progressively memory-fault-bound" conclusion still stands.
-      `EXIT_IOIO` matches debugfs `io_exits` closely, a cross-check that both
-      measurements agree on. Still not shown: per-exit latency (why each exit
-      costs more nested than not), or a non-nested-host comparison. See
+      that, a reusable change, not a one-off). By exit *count* in one run (70,467
+      exits): `EXIT_NPF` 36.9%, `EXIT_INTR` 30.0%, `EXIT_IOIO` 22.7%, `EXIT_VINTR`
+      9.8%. By per-exit *latency*, pairing each `kvm_exit` with the next
+      `kvm_entry` on the pulled-back `trace.dat`: **`EXIT_NPF` costs the most
+      total wall-clock time of any reason, 44.8% of all exit-handling time,
+      against 24.4% for `EXIT_INTR` and 3.5% for `EXIT_VINTR`** -- each NPF exit
+      costs more on average (475.7 us mean) than each interrupt exit (317.6 us),
+      enough to flip which reason actually dominates once latency, not just
+      count, is the measure. This supports the "NPT faults" guess from
+      2026-10-27 more than a count-only trace suggested, though the shape (a 475
+      us mean and a 59.6 ms max) looks like individually expensive faults under
+      nesting, not the "first-touch, cheap after" story the guess originally
+      proposed. Total exit-handling time measured, 27.6 s, against a run that
+      only reached 12.6 s of guest time in about 66 s wall -- more than a full
+      guest-second of overhead per guest-second of progress. A heavy tail (a few
+      exits in the tens of milliseconds, two to three orders of magnitude over
+      their own medians) looks like occasional host-scheduling delay, the same
+      *shape* of problem the WHPX I/O-APIC fix found elsewhere in this plan, but
+      nothing here shows the same mechanism -- this is a different (KVM-in-KVM)
+      code path. Still not shown: the cause of the heavy tail, or a non-nested-
+      host comparison at the same latency granularity. See
       `docs/benchmarks/2026-11-11/nested-kvm-trace/README.md`.
 - [ ] Try the same nested boot on a host that is not Hyper-V-nested (a bare-metal
       Linux box or a cloud bare-metal instance) to separate "our KVM backend" from
