@@ -196,11 +196,12 @@ evidence, but no more of it is to be built. The work is on the native path
       sandbox did not reproduce it (0 in 560 forks, `2026-10-28/fork-busy-kvm`), but one
       cold boot of 14 stalled with both vCPUs halted and a timer armed. Cause unknown.
       Tried to catch one 2026-11-11, sampling KVM debugfs counters immediately on any
-      stall: 0 caught in 60 more cold boots (roughly 4x the sample that caught the
-      original 1 in 14), all fast (30-300 ms). Combined: 1 failure in 74 cold boots
-      observed across both sessions -- a lower rate estimate than the original 14
-      alone suggested, but one failure is too few to trust the exact number either
-      way. Still open, still rare, still needs a lucky catch or a much longer loop.
+      stall: 0 caught in 60 more cold boots, then 0 more in a further 500-trial
+      unattended loop (all fast, 20-300 ms each). Combined: 1 failure in 574 cold
+      boots observed across all three sessions -- a much lower rate estimate than
+      the original 14 alone suggested, but still just one failure, too few to trust
+      the exact rate. Still open, still uncaught, still unexplained; would need a
+      loop an order of magnitude longer again, or luck, to catch a second one.
 - [x] Published port reached from outside the node: a client in another network
       namespace over a veth pair, 3 of 3 runs (`2026-10-28/docker-netns-proxy-kvm`).
       A second machine is NOT VERIFIED.
