@@ -35,12 +35,17 @@ PIT creation failing, exit-handling cost, the guest halting, first-touch memory
 faults, a slow sandbox vCPU, and missing `kvm-clock` (fixed, did not cure it).
 The nested guest is still about ten times slower in real time.
 
-- [ ] Re-run the nested boot on the current build and keep the baseline numbers
+- [x] Re-run the nested boot on the current build and keep the baseline numbers
       (guest time reached in 60 s, userspace exits) as the comparison point.
-      2026-11-09: not started. The WSL fixtures it needs are gone (`/var/tmp/hm-docker/`
-      kernel and tools image, the release `hv2-sandboxd`, the probe; `/dev/kvm` is
-      present). Rebuilding them is `build-kernel.sh --docker --kvm` plus
-      `build-tools-image.sh` plus a release build, which needs downloads and a quiet host.
+      Done 2026-11-11, after rebuilding the lost WSL fixtures from scratch (kernel
+      with `build-kernel.sh --docker --kvm`, tools image with `build-tools-image.sh`,
+      `hv2-sandboxd` and `linux_boot_probe` release builds; needed `protoc` installed
+      first). Result: 19.3 s of guest time and 15,641 userspace exits in 60 s wall,
+      no userspace reached -- matches the 2026-10-27 baseline (17.7 s, 15,643 exits,
+      no userspace) within the run-to-run spread that README already shows. The guest
+      still sees KVM, `kvm-clock` and a real TSC frequency (the `advertise_hypervisor`
+      fix still holds). **Unchanged: still slow, cause still unknown.** See
+      `docs/benchmarks/2026-11-11/nested-boot-rerun/README.md`.
 - [ ] Memory-light test: a nested guest that does little page-table work, to see
       whether the slowness follows memory activity (nested paging under Hyper-V
       is the leading guess and is a guess).
@@ -337,10 +342,15 @@ Every box above is closed the same way:
   wiring it into CI (GitHub-hosted Windows runners likely lack WHPX/nested-virt,
   not tested) and hosting the built GPL kernel/initrd/disk image are both the
   owner's call, deliberately not done here.
-- **Nested-guest re-run (section 2):** OPEN, decided not to do now. The WSL
-  fixtures are gone and the 2026-10-27 evidence (about 10 times slower, no
-  userspace after 270 s, no variant helped) stands; a rebuild needs downloads, a
-  long build and a quiet host.
+- **Nested-guest re-run (section 2):** done 2026-11-11. Rebuilt the WSL
+  fixtures (kernel, tools image, release builds) and re-ran the probe: 19.3 s
+  guest time and 15,641 exits in 60 s, no userspace -- matches the 2026-10-27
+  baseline (17.7 s, 15,643 exits) within its own run-to-run spread. The
+  2026-10-27 evidence (about 10 times slower, no userspace after 270 s, no
+  variant helped) stands and is now confirmed current. See
+  `docs/benchmarks/2026-11-11/nested-boot-rerun/README.md`. The rest of
+  section 2 (memory-light test, counting where time goes, a non-nested host)
+  is still open.
 - **OWNER items, not mine to close:** publishing the clients, the CI secrets (Slack,
   Codecov), HVF and Intel hardware, and the decision on hosting a fixture.
 - **Level-triggered I/O APIC lines:** OPEN, documented above; no guest reaches it.
