@@ -110,8 +110,11 @@ jobs:
         with:
           components: clippy
 
-      - name: Run Clippy with security lints
+      # Currently exits non-zero (a deny-level lint in hv2-sandbox: "could not
+      # compile `hv2-sandbox` due to 1 previous error"); non-fatal until fixed.
+      - name: Run Clippy with security lints (advisory - cannot fail the build)
         run: |
+          set -o pipefail
           cargo clippy --workspace --all-targets -- \
             -D clippy::unwrap_used \
             -D clippy::expect_used \
@@ -152,7 +155,10 @@ jobs:
       - name: Setup Miri
         run: cargo +nightly miri setup
 
-      - name: Run Miri on hv2-core
+      # Currently Miri aborts on hv2-core test
+      # backends::kvm::tests::a_second_vm_on_one_backend_is_refused ("test
+      # failed"); `|| true` hides it, so non-fatal until that is fixed.
+      - name: Run Miri on hv2-core (advisory - cannot fail the build)
         run: |
           # Keep the whole run, then show the head and the tail of it. Piping
           # straight into `head -500` truncated the output before the summary
@@ -186,7 +192,11 @@ jobs:
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz
 
-      - name: Check fuzz targets compile
+      # The fuzz/ directory exists, so the check does run, but `cd fuzz &&
+      # cargo check` currently exits 101 ("current package believes it's in a
+      # workspace when it's not": fuzz is neither a workspace member nor
+      # excluded); non-fatal until that is fixed.
+      - name: Check fuzz targets compile (advisory - cannot fail the build)
         run: |
           if [ -d "fuzz" ]; then
             cd fuzz && cargo check
@@ -208,11 +218,14 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
-      - name: Generate SBOM
+      # Exits 0, but the uploaded sbom.json is only 134 bytes: cargo-cyclonedx
+      # writes per-crate files, not stdout, so the artifact is nearly empty.
+      # Non-fatal until it produces a real SBOM.
+      - name: Generate SBOM (advisory - cannot fail the build)
+        continue-on-error: true
         run: |
           cargo install cargo-cyclonedx
           cargo cyclonedx --format json > sbom.json
-        continue-on-error: true
 
       - name: Upload SBOM
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -249,7 +262,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Gitleaks
+      # Currently fails immediately: "missing gitleaks license" (the repo is
+      # under an organization and has no GITLEAKS_LICENSE secret), so nothing
+      # is scanned; non-fatal until the license exists.
+      - name: Run Gitleaks (advisory - cannot fail the build)
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -272,7 +288,10 @@ jobs:
         run: cargo install cargo-geiger
         continue-on-error: true
 
-      - name: Run unsafe code audit
+      # Currently does nothing: cargo geiger prints "manifest path ... is a
+      # virtual manifest, but this command requires running against an actual
+      # package" and `|| true` hides it; non-fatal until it targets a package.
+      - name: Run unsafe code audit (advisory - cannot fail the build)
         run: |
           cargo geiger --all-features --all-targets \
             --output-format=ascii 2>&1 | tee geiger-report.txt || true

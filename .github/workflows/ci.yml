@@ -636,7 +636,9 @@ jobs:
             # host target as well -- so it is not our configuration and not
             # nightly drift. Non-blocking until upstream ships a fix; the step
             # still runs and its result is still visible.
-            - name: Check hv1-boot (x86_64-unknown-none)
+            # Still failing in the latest master run (exit 101: could not compile
+            # `bootloader-x86_64-uefi`); non-fatal until upstream ships a fix.
+            - name: Check hv1-boot (x86_64-unknown-none) (advisory - cannot fail the build)
               continue-on-error: true
               run: >
                   cargo +nightly-2026-08-17 check --manifest-path crates/hv1-boot/Cargo.toml
