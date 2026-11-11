@@ -46,11 +46,24 @@ The nested guest is still about ten times slower in real time.
       still sees KVM, `kvm-clock` and a real TSC frequency (the `advertise_hypervisor`
       fix still holds). **Unchanged: still slow, cause still unknown.** See
       `docs/benchmarks/2026-11-11/nested-boot-rerun/README.md`.
-- [ ] Memory-light test: a nested guest that does little page-table work, to see
+- [x] Memory-light test: a nested guest that does little page-table work, to see
       whether the slowness follows memory activity (nested paging under Hyper-V
-      is the leading guess and is a guess).
+      is the leading guess and is a guess). Done 2026-11-11: a 96 MiB variant
+      reached *less* guest time in 60 s (16.6 s) than the 256 MiB baseline in the
+      same run (25.8 s) -- the opposite of the guess's prediction, but the
+      2026-10-27 README's own three-variant run showed the reversal in the other
+      direction, and `pf_fixed` (nested page faults fixed) was flat for the
+      baseline both times. One run each session, no controlled A/B: **the guess is
+      neither supported nor refuted**, and the run-to-run spread is doing most of
+      what looks like a signal. See
+      `docs/benchmarks/2026-11-11/nested-memlight-and-counters/README.md`.
 - [ ] Count where time goes: sandbox-side `perf kvm` or `trace-cmd`, and the
-      per-VM KVM counters sampled every few seconds, not twice.
+      per-VM KVM counters sampled every few seconds, not twice. Partly done
+      2026-11-11 (same README as above): counters sampled at 20 s and 50 s again
+      (still twice, not every few seconds) for both the baseline and the
+      memory-light variant -- `halt_exits` stayed 0 throughout both, confirming
+      2026-10-27's finding that the guest is not halted. `perf kvm` / `trace-cmd`
+      inside the sandbox, and a tighter sampling interval, are still not done.
 - [ ] Try the same nested boot on a host that is not Hyper-V-nested (a bare-metal
       Linux box or a cloud bare-metal instance) to separate "our KVM backend" from
       "the layer below". **OWNER** if hardware is needed.

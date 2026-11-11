@@ -1,0 +1,14 @@
+vm=/sys/kernel/debug/kvm/1642-12
+exits=63837
+halt_exits=0
+halt_successful_poll=0
+halt_attempted_poll=0
+halt_wakeup=0
+halt_poll_success_ns=0
+halt_poll_fail_ns=0
+irq_exits=19024
+io_exits=16353
+mmio_exits=0
+irq_injections=6607
+pf_fixed=14798
+tlb_flush=9
