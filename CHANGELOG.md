@@ -27,6 +27,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unit tests still pass. NOT VERIFIED: more than three batches of 40; HVF (no
   sync override exists for it); any effect in CI (no kernel fixture there).
 
+### Changed
+
+- **`enable_gpu` on a VM is refused instead of ignored.** The flag was accepted by
+  the REST API, gRPC, the MCP `vm.create` tool (`gpu_enabled`) and
+  `AgentVMBuilder::enable_gpu`, and nothing read it: a caller asking for a GPU VM got
+  a VM with no GPU and no error. `VM::new` and `VM::new_with_backend` now return a
+  configuration error when it is set. The schemas say so, and `docs/gpu.md` is
+  rewritten to describe what GPU code exists (host-side VFIO, a software `wgpu`
+  device) and what does not.
+- WHPX's synchronous interrupt request answers with an error when the partition is
+  gone, instead of falling back to a spawned task that could only log the same
+  failure on every timer tick after shutdown.
+
 ### Added
 - **Standalone-node VM-to-VM networking for sandboxes.** `hm sandbox vm network create|list|inspect|rm|connect|disconnect` joins sandboxes on one node to each other by a DNS alias, with no cluster or mTLS needed -- the gap the existing cluster-only private networking left for a single node. A sandbox's gateway checks its current membership live on every DNS question and connection, so a disconnect or reconnect after boot takes effect at once, with nothing to restart. Dialing a peer goes over its vsock port-forward channel, the same primitive a published machine port already uses, not its virtio-net device. 9 new unit tests on the registry; `hv2-sandboxd`'s existing 117 pass unchanged. NOT VERIFIED against a live guest: this repo has no Linux KVM host to run it on.
 - **`hm-tui`, a new terminal dashboard** for Type 2 VMs and sandbox VMs over the same APIs `hm-gui` and `hm sandbox vm` already use; and a Sandboxes tab for `hm-gui`, which previously showed only Type 2 VMs.

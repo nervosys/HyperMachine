@@ -37,7 +37,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .name("advanced-demo")
         .cpu_cores(4)
         .memory_gb(4)
-        .enable_gpu(true)
         .enable_networking(true)
         .build()
         .await?;

@@ -706,7 +706,7 @@ impl McpServer {
                         },
                         "gpu_enabled": {
                             "type": "boolean",
-                            "description": "Enable GPU passthrough/virtualization",
+                            "description": "Not implemented: VM creation attaches no GPU, so true is refused",
                             "default": false
                         },
                         "network_enabled": {

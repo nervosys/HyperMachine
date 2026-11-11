@@ -51,7 +51,7 @@ curl https://hypermachine.local/api/v1/vms \
 curl -X POST https://hypermachine.local/api/v1/vms \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '{"name": "ai-worker", "vcpu_count": 4, "memory_gb": 16, "enable_gpu": true}'
+  -d '{"name": "ai-worker", "vcpu_count": 4, "memory_gb": 16}'
 
 # Execute an agent script
 curl -X POST https://hypermachine.local/api/v1/vms/ai-worker/script \

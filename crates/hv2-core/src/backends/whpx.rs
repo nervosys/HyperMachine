@@ -418,7 +418,11 @@ impl HypervisorBackend for WhpxBackend {
         vector: u8,
         logical: bool,
     ) -> Option<Result<()>> {
-        let vm = self.vm.read().as_ref().cloned()?;
+        // `None` means "no fast path, use the async one", which would only fail
+        // the same way a task later; a missing partition is an answer.
+        let Some(vm) = self.vm.read().as_ref().cloned() else {
+            return Some(Err(Error::VM("WHPX partition not created".to_string())));
+        };
         Some(vm.request_interrupt(destination, vector, logical))
     }
 

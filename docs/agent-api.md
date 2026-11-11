@@ -16,7 +16,6 @@ async fn main() -> anyhow::Result<()> {
         .name("my-agent-vm")
         .cpu_cores(4)
         .memory_gb(8)
-        .enable_gpu(true)
         .with_tracing()
         .build()
         .await?;

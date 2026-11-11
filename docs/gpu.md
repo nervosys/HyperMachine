@@ -1,111 +1,44 @@
-# GPU Virtualization in AetherVM
+# GPUs in HyperMachine
 
-## Overview
+What exists, and what does not. The short version: there is host-side GPU
+code in `hv2-gpu`, and **no VM created by this project has a GPU in it**.
 
-AetherVM provides two GPU virtualization approaches:
+## What does not exist
 
-1. **Virtual GPU (vGPU)**: Software-emulated GPU using WebGPU/Vulkan
-2. **GPU Passthrough**: Direct hardware access via VFIO
+- **`enable_gpu` on a VM is refused.** `VMConfig::enable_gpu`, the
+  `enable_gpu` field of `POST /api/v1/vms`, the `gpu_enabled` argument of the
+  MCP `vm.create` tool, and `AgentVMBuilder::enable_gpu(true)` all reach
+  `VM::new_with_backend`, which returns a configuration error when the flag is
+  set. Nothing in VM creation attaches a GPU device to a guest, so the flag
+  used to be accepted and ignored; it is now refused instead.
+- **No CUDA, OpenCL, ROCm or DirectX runtime.** Strings such as `cuda-12.4`
+  that appear in fleet metadata are scheduling labels.
+- **No hardware-virtualized GPU** (SR-IOV or mediated devices).
 
-## Virtual GPU
+## What exists
 
-### Architecture
+### Passthrough (`crates/hv2-gpu/src/passthrough.rs`), Linux only
 
-The virtual GPU uses WebGPU as its backend, providing:
-- Cross-platform compatibility
-- Shader compilation and execution
-- Graphics pipeline emulation
-- Compute shader support
+Host-side VFIO code: it opens `/dev/vfio`, binds a device and maps its BARs
+with real ioctls. It refuses on other platforms.
 
-### Usage
+NOT VERIFIED: it has never run against a physical GPU and IOMMU (CI has no
+such hardware; its tests exercise parsed structures). It is not connected to
+a guest: there is no IOMMU DMA mapping of guest memory and no interrupt
+routing into a VM, so "attach" here means the host has opened the device, not
+that a guest can use it.
 
-```rust
-use aethervm_gpu::vgpu::VirtualGpu;
+Host preparation, when someone does run it on hardware, is the usual VFIO
+setup: IOMMU enabled in firmware and on the kernel command line
+(`intel_iommu=on iommu=pt`, or AMD-Vi), the GPU alone in its IOMMU group, and
+the device unbound from its host driver and bound to `vfio-pci`.
 
-let mut vgpu = VirtualGpu::new("default-gpu");
-vgpu.init().await?;
-```
+### Virtual GPU (`crates/hv2-gpu/src/vgpu.rs`)
 
-## GPU Passthrough
+A software GPU built on `wgpu` (Vulkan/WebGPU) that runs in the host process.
+It is not presented to a guest as a device.
 
-### Requirements
+### Fleet metadata and placement (`hv2-runtime`)
 
-- IOMMU enabled in BIOS
-- VT-d (Intel) or AMD-Vi support
-- GPU in separate IOMMU group
-- Host driver unbound from device
-
-### Configuration
-
-```toml
-[gpu]
-enabled = true
-passthrough = true
-device = "0000:01:00.0"
-vendor_id = "10de"  # NVIDIA
-```
-
-### Setup on Linux
-
-```bash
-# Enable IOMMU in kernel parameters
-# Add to /etc/default/grub:
-GRUB_CMDLINE_LINUX="intel_iommu=on iommu=pt"
-
-# Update grub
-sudo update-grub
-
-# Unbind GPU from host driver
-echo "0000:01:00.0" > /sys/bus/pci/drivers/nvidia/unbind
-
-# Bind to vfio-pci
-echo "10de 1b80" > /sys/bus/pci/drivers/vfio-pci/new_id
-```
-
-## Supported Workloads
-
-- **Graphics**: OpenGL, Vulkan, DirectX
-- **Compute**: CUDA, OpenCL, ROCm
-- **AI/ML**: TensorFlow, PyTorch GPU acceleration
-- **Gaming**: Cloud gaming, game streaming
-
-## Performance
-
-| Mode        | Latency | Throughput | Compatibility |
-| ----------- | ------- | ---------- | ------------- |
-| vGPU        | Medium  | Medium     | High          |
-| Passthrough | Low     | Native     | Medium        |
-
-## Examples
-
-### CUDA Workload
-
-```rust
-let vm = AgentVM::builder()
-    .name("cuda-vm")
-    .cpu_cores(8)
-    .memory_gb(16)
-    .enable_gpu(true)
-    .build()
-    .await?;
-
-// GPU is available inside VM
-vm.execute_agent_script(r#"
-    // Run CUDA code
-    cuda_available()
-"#).await?;
-```
-
-### Gaming VM
-
-```rust
-let vm = AgentVM::builder()
-    .name("gaming-vm")
-    .cpu_cores(6)
-    .memory_gb(16)
-    .enable_gpu(true)
-    .build()
-    .await?;
-
-// Optimized for low latency
-```
+GPU classes, interconnect topology and capacity reservations are a data model
+used for placement decisions. They describe GPUs; they do not drive one.

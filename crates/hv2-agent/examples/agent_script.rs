@@ -16,7 +16,6 @@ async fn main() -> Result<()> {
         .name("ai-agent-vm")
         .cpu_cores(4)
         .memory_gb(8)
-        .enable_gpu(true)
         .with_tracing()
         .script_timeout(Duration::from_secs(60))
         .build()

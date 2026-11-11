@@ -133,6 +133,19 @@ fn default_parallel_vcpu() -> bool {
 }
 
 impl VMConfig {
+    fn refuse_gpu(&self) -> Result<()> {
+        // Nothing in VM creation attaches a GPU, so a VM made with this set
+        // would report success and have none.
+        if self.enable_gpu {
+            return Err(Error::Config(
+                "enable_gpu is set, but creating a VM does not attach a GPU device; \
+                 refusing rather than starting a VM without one"
+                    .to_string(),
+            ));
+        }
+        Ok(())
+    }
+
     /// Validate the optional [`Self::vcpu_affinity`] map.
     ///
     /// Every entry must reference a vCPU that exists in this config and a host
@@ -853,6 +866,9 @@ impl VM {
             return Err(Error::Config("Memory size must be > 0".to_string()));
         }
 
+        // Before the backend, so the answer does not depend on the host.
+        config.refuse_gpu()?;
+
         // Create hypervisor backend
         let backend = Arc::from(crate::hypervisor::create_backend()?);
 
@@ -871,6 +887,8 @@ impl VM {
         if config.memory_size == 0 {
             return Err(Error::Config("Memory size must be > 0".to_string()));
         }
+
+        config.refuse_gpu()?;
 
         // Reject a malformed vCPU affinity map instead of silently ignoring it.
         config.validate_affinity()?;
@@ -6755,6 +6773,19 @@ mod tests {
             ..Default::default()
         };
         assert!(VM::new(config).is_err());
+    }
+
+    #[test]
+    fn vm_new_refuses_enable_gpu_on_any_host() {
+        let config = VMConfig {
+            enable_gpu: true,
+            ..Default::default()
+        };
+        match VM::new(config) {
+            Err(Error::Config(why)) => assert!(why.contains("enable_gpu"), "{why}"),
+            Err(other) => panic!("refused for another reason: {other}"),
+            Ok(_) => panic!("a VM with enable_gpu set was created"),
+        }
     }
 
     #[tokio::test]

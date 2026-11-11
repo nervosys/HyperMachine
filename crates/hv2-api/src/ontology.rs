@@ -1557,7 +1557,7 @@ impl HyperMachineOntology {
                             "name": { "type": "string", "minLength": 1, "maxLength": 64, "description": "Human-readable VM name" },
                             "vcpu_count": { "type": "integer", "minimum": 1, "maximum": 256, "default": 2, "description": "Number of virtual CPUs" },
                             "memory_gb": { "type": "integer", "minimum": 1, "maximum": 4096, "default": 4, "description": "Memory in gigabytes" },
-                            "enable_gpu": { "type": "boolean", "default": false, "description": "Enable GPU passthrough" },
+                            "enable_gpu": { "type": "boolean", "default": false, "description": "Not implemented: VM creation attaches no GPU, so a request with this set to true is refused" },
                             "enable_networking": { "type": "boolean", "default": false, "description": "Enable network access" }
                         },
                         "required": ["name"]
@@ -1591,8 +1591,7 @@ impl HyperMachineOntology {
                         request: Some(serde_json::json!({
                             "name": "my-ai-worker",
                             "vcpu_count": 4,
-                            "memory_gb": 8,
-                            "enable_gpu": true
+                            "memory_gb": 8
                         })),
                         response: serde_json::json!({
                             "id": "vm-456",
