@@ -1,0 +1,16 @@
+ok: 1 https://example.com/ one hop, 200, verified; node saw only example.com 
+ok: 2 http://github.com/ 301 then a second hop in a different sandbox 
+ok: 3 expired.badssl.com: verified false with a reason, response still fetched 
+ok: 4 pinned to example.com, asked for www.wikipedia.org: refused by the node 
+ok: 5a --resolve to another public site's address: refused and recorded 
+ok: 5b --resolve 169.254.169.254 (cloud metadata): refused and recorded 
+ok: 5c --resolve to the node's gateway and its DNS address: refused and recorded 
+ok: 5d --resolve to this host's own address: refused and recorded 
+ok: 7 with no allow rule, example.com cannot be fetched 
+ok: 8 a URL with shell metacharacters reaches the tracer byte for byte 
+ok: 9 URL validation rejects hostile input 
+ok: 10 (characterisation) allowOut alone does not pin: the node defaults to allow once a rule exists 
+ok: 6 no hop's sandbox exists afterwards 
+success
+exit=0
+     17 Detected hypervisor platform: Kvm

@@ -73,6 +73,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are still non-fatal, and their names and comments now say so and say why.
 
 ### Added
+- **URL tracing in throwaway microVMs** ([docs/URL_TRACING.md](docs/URL_TRACING.md)). For
+  following a possibly malicious link without opening it: `tools/urltrace.py URL` runs one
+  fresh sandbox per hop, each allowed to reach only that hop's host name, with the new
+  `hv2-urltrace` program as the guest's one job (one request, no redirect followed, one JSON
+  report: certificate chain and whether it validated, status, headers, next URL, body hash).
+  The guest is assumed compromised, so each hop also keeps the node's own record of what the
+  sandbox tried to reach, and the driver flags any disagreement. Checked on KVM, 13 cases, 3
+  of 3 runs (`docs/benchmarks/2026-11-11/urltrace-kvm`): a sandbox pinned to one name was
+  refused another name, another site's address, the metadata address and the host. Known
+  gaps: it fetches and does not render (no JavaScript); the image still holds a busybox
+  shell because the node's exec runs commands through `sh -c`; an `allowOut` list alone does
+  not pin a sandbox (E2B semantics: what is not denied is allowed), so the driver sends a
+  deny-all with it; no real malicious site has been traced.
 - **Standalone-node VM-to-VM networking for sandboxes.** `hm sandbox vm network create|list|inspect|rm|connect|disconnect` joins sandboxes on one node to each other by a DNS alias, with no cluster or mTLS needed -- the gap the existing cluster-only private networking left for a single node. A sandbox's gateway checks its current membership live on every DNS question and connection, so a disconnect or reconnect after boot takes effect at once, with nothing to restart. Dialing a peer goes over its vsock port-forward channel, the same primitive a published machine port already uses, not its virtio-net device. 9 new unit tests on the registry; `hv2-sandboxd`'s existing 117 pass unchanged. NOT VERIFIED against a live guest: this repo has no Linux KVM host to run it on.
 - **`hm-tui`, a new terminal dashboard** for Type 2 VMs and sandbox VMs over the same APIs `hm-gui` and `hm sandbox vm` already use; and a Sandboxes tab for `hm-gui`, which previously showed only Type 2 VMs.
 

@@ -1,0 +1,341 @@
+{
+  "hops": [
+    {
+      "url": "https://www.wikipedia.org/",
+      "host": "www.wikipedia.org",
+      "pinned_to": [
+        "www.wikipedia.org"
+      ],
+      "sandbox_id": "sbx-ccbf091f9dd344c1b3fd",
+      "tracer_args": [],
+      "guest_report": {
+        "tool": {
+          "name": "hv2-urltrace",
+          "version": "1.2.0"
+        },
+        "input_url": "https://www.wikipedia.org/",
+        "url": {
+          "scheme": "https",
+          "host": "www.wikipedia.org",
+          "port": 443,
+          "path_and_query": "/"
+        },
+        "resolved": [
+          "198.35.26.224:443"
+        ],
+        "connected_to": "198.35.26.224:443",
+        "tls": {
+          "protocol_version": "TLSv1_3",
+          "cipher_suite": "TLS13_AES_128_GCM_SHA256",
+          "alpn": "http/1.1",
+          "verified": true,
+          "verification_error": null,
+          "certificates": [
+            {
+              "sha256": "14a7accb60f49ba0bedc0986c99750b37d25f0151312eb9d8f1a8a3f8748426f",
+              "subject": "CN=*.wikipedia.org",
+              "issuer": "C=US, O=Let's Encrypt, CN=YE2",
+              "serial": "06db158652f329309a86e7d0e9ddfed9a4b2",
+              "not_before": 1791138891,
+              "not_after": 1798914890,
+              "san_dns": [
+                "*.m.mediawiki.org",
+                "*.m.wikibooks.org",
+                "*.m.wikidata.org",
+                "*.m.wikimedia.org",
+                "*.m.wikinews.org",
+                "*.m.wikipedia.org",
+                "*.m.wikiquote.org",
+                "*.m.wikisource.org",
+                "*.m.wikiversity.org",
+                "*.m.wikivoyage.org",
+                "*.m.wiktionary.org",
+                "*.mediawiki.org",
+                "*.planet.wikimedia.org",
+                "*.wikibooks.org",
+                "*.wikidata.org",
+                "*.wikifunctions.org",
+                "*.wikimedia.org",
+                "*.wikimediafoundation.org",
+                "*.wikinews.org",
+                "*.wikipedia.org",
+                "*.wikiquote.org",
+                "*.wikisource.org",
+                "*.wikiversity.org",
+                "*.wikivoyage.org",
+                "*.wiktionary.org",
+                "*.wmfusercontent.org",
+                "mediawiki.org",
+                "w.wiki",
+                "wikibooks.org",
+                "wikidata.org",
+                "wikifunctions.org",
+                "wikimedia.org",
+                "wikimediafoundation.org",
+                "wikinews.org",
+                "wikipedia.org",
+                "wikiquote.org",
+                "wikisource.org",
+                "wikiversity.org",
+                "wikivoyage.org",
+                "wiktionary.org",
+                "wmfusercontent.org"
+              ],
+              "san_dns_truncated": false,
+              "parse_error": null
+            },
+            {
+              "sha256": "97658de8c68dfa98ace1e5028a63d54a1aae911b3e21471076c6850cd08cbab4",
+              "subject": "C=US, O=Let's Encrypt, CN=YE2",
+              "issuer": "C=US, O=ISRG, CN=Root YE",
+              "serial": "4df3b15dd6c0784c507cd37b58e6f115",
+              "not_before": 1756857600,
+              "not_after": 1851551999,
+              "san_dns": [],
+              "san_dns_truncated": false,
+              "parse_error": null
+            },
+            {
+              "sha256": "0fc0901cca2bae9e9fdbb02d50d02f1094f7b36672086991b9e897626dc485f0",
+              "subject": "C=US, O=ISRG, CN=Root YE",
+              "issuer": "C=US, O=Internet Security Research Group, CN=ISRG Root X2",
+              "serial": "00872165fc34b6e5fba8add5b3705fb53a",
+              "not_before": 1778630400,
+              "not_after": 1977782399,
+              "san_dns": [],
+              "san_dns_truncated": false,
+              "parse_error": null
+            },
+            {
+              "sha256": "ee5f7abd6981bb0255632cd8f49283451b4b18844d12040b44ee00f07b8fe2c6",
+              "subject": "C=US, O=Internet Security Research Group, CN=ISRG Root X2",
+              "issuer": "C=US, O=Internet Security Research Group, CN=ISRG Root X1",
+              "serial": "6c8f1dc727c7117f7baf853ac980f9cd",
+              "not_before": 1778630400,
+              "not_after": 1977782399,
+              "san_dns": [],
+              "san_dns_truncated": false,
+              "parse_error": null
+            }
+          ],
+          "certificates_truncated": false
+        },
+        "request": {
+          "request_line": "GET / HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "www.wikipedia.org"
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Accept-Encoding",
+              "identity"
+            ],
+            [
+              "Connection",
+              "close"
+            ]
+          ]
+        },
+        "response": {
+          "http_version": "HTTP/1.1",
+          "status": 200,
+          "reason": "OK",
+          "headers": [
+            [
+              "date",
+              "Wed, 11 Nov 2026 07:26:32 GMT"
+            ],
+            [
+              "cache-control",
+              "s-maxage=86400, must-revalidate, max-age=3600"
+            ],
+            [
+              "server",
+              "ATS/9.2.16"
+            ],
+            [
+              "etag",
+              "W/\"1de8a-65fe76abb2e40\""
+            ],
+            [
+              "last-modified",
+              "Tue, 10 Nov 2026 07:56:33 GMT"
+            ],
+            [
+              "content-type",
+              "text/html"
+            ],
+            [
+              "age",
+              "67120"
+            ],
+            [
+              "accept-ranges",
+              "bytes"
+            ],
+            [
+              "x-cache",
+              "cp4041 miss, cp4041 hit/335390"
+            ],
+            [
+              "x-cache-status",
+              "hit-front"
+            ],
+            [
+              "strict-transport-security",
+              "max-age=106384710; includeSubDomains; preload"
+            ],
+            [
+              "report-to",
+              "{ \"group\": \"wm_nel\", \"max_age\": 604800, \"endpoints\": [{ \"url\": \"https://intake-logging.wikimedia.org/v1/events?stream=w3c.reportingapi.network_error&schema_uri=/w3c/reportingapi/network_error/1.0.0\" }] }"
+            ],
+            [
+              "nel",
+              "{ \"report_to\": \"wm_nel\", \"max_age\": 604800, \"failure_fraction\": 0.05, \"success_fraction\": 0.0}"
+            ],
+            [
+              "set-cookie",
+              "WMF-Last-Access=12-Nov-2026;Path=/;HttpOnly;secure;Expires=Mon, 14 Dec 2026 00:00:00 GMT"
+            ],
+            [
+              "set-cookie",
+              "WMF-Last-Access-Global=12-Nov-2026;Path=/;Domain=.wikipedia.org;HttpOnly;secure;Expires=Mon, 14 Dec 2026 00:00:00 GMT"
+            ],
+            [
+              "x-client-ip",
+              "23.234.113.70"
+            ],
+            [
+              "set-cookie",
+              "GeoIP=US:UT:Salt_Lake_City:40.76:-111.89:v4; Path=/; secure; Domain=.wikipedia.org"
+            ],
+            [
+              "set-cookie",
+              "NetworkProbeLimit=0.001;Path=/;Secure;SameSite=None;Max-Age=3600"
+            ],
+            [
+              "set-cookie",
+              "WMF-Uniq=WaYdQxBqtmmjScfgduntLQQWAAAAAFvdVH4EVB5nAgMzeqZQ8ydVyY_crPruIMlt;Domain=.wikipedia.org;Path=/;HttpOnly;secure;SameSite=None;Expires=Fri, 12 Nov 2027 00:00:00 GMT"
+            ],
+            [
+              "content-length",
+              "122506"
+            ],
+            [
+              "x-request-id",
+              "23e2cd39-4fdb-41d7-8df3-a56867e783c0"
+            ],
+            [
+              "x-analytics",
+              ""
+            ],
+            [
+              "server-timing",
+              "cache;desc=\"hit-front\", host;desc=\"cp4041\",co_id;desc=\"2829712848\""
+            ],
+            [
+              "connection",
+              "close"
+            ]
+          ],
+          "headers_truncated": false,
+          "lossy": false,
+          "location": null,
+          "next_url": null,
+          "content_type": "text/html",
+          "body_bytes_read": 65536,
+          "body_truncated": true,
+          "body_sha256": "0bdc1e5f92400852df05d8d31e2db2688384862e126c180355c16a8e5e4b003e",
+          "body_sample_encoding": "base64",
+          "body_sample": "PCFET0NUWVBFIGh0bWw+CjxodG1sIGxhbmc9ImVuIiBjbGFzcz0ibm8tanMiPgo8aGVhZD4KPG1ldGEgY2hhcnNldD0idXRmLTgiPgo8dGl0bGU+V2lraXBlZGlhPC90aXRsZT4KPG1ldGEgbmFtZT0iZGVzY3JpcHRpb24iIGNvbnRlbnQ9Ildpa2lwZWRpYSBpcyBhIGZyZWUgb25saW5lIGVuY3ljbG9wZWRpYSwgY3JlYXRlZCBhbmQgZWRpdGVkIGJ5IHZvbHVudGVlcnMgYXJvdW5kIHRoZSB3b3JsZCBhbmQgaG9zdGVkIGJ5IHRoZSBXaWtpbWVkaWEgRm91bmRhdGlvbi4iPgo8c2NyaXB0Pgpkb2N1bWVudC5kb2N1bWVudEVsZW1lbnQuY2xhc3NOYW1lID0gZG9jdW1lbnQuZG9jdW1lbnRFbGVtZW50LmNsYXNzTmFtZS5yZXBsYWNlKCAvKF58XHMpbm8tanMoXHN8JCkvLCAiJDFqcy1lbmFibGVkJDIiICk7Cjwvc2NyaXB0Pgo8bWV0YSBuYW1lPSJ2aWV3cG9ydCIgY29udGVudD0iaW5pdGlhbC1zY2FsZT0xLHVzZXItc2NhbGFibGU9eWVzIj4KPGxpbmsgcmVsPSJhcHBsZS10b3VjaC1pY29uIiBocmVmPSIvc3RhdGljL2FwcGxlLXRvdWNoL3dpa2lwZWRpYS5wbmciPgo8bGluayByZWw9InNob3J0Y3V0IGljb24iIGhyZWY9Ii9zdGF0aWMvZmF2aWNvbi93aWtpcGVkaWEuaWNvIj4KPGxpbmsgcmVsPSJsaWNlbnNlIiBocmVmPSIvL2NyZWF0aXZlY29tbW9ucy5vcmcvbGljZW5zZXMvYnktc2EvNC4wLyI+CjxzdHlsZT4KLnNwcml0ZXtiYWNrZ3JvdW5kLWltYWdlOmxpbmVhci1ncmFkaWVudCh0cmFuc3BhcmVudCx0cmFuc3BhcmVudCksdXJsKHBvcnRhbC93aWtpcGVkaWEub3JnL2Fzc2V0cy9pbWcvc3ByaXRlLWU0OWZiZjMyLnN2Zyk7YmFja2dyb3VuZC1yZXBlYXQ6bm8tcmVwZWF0O2Rpc3BsYXk6aW5saW5lLWJsb2NrO3ZlcnRpY2FsLWFsaWduOm1pZGRsZX0uc3ZnLUNvbW1vbnMtbG9nb19zaXN0ZXJ7YmFja2dyb3VuZC1wb3NpdGlvbjowIDA7d2lkdGg6NDdweDtoZWlnaHQ6NDdweH0uc3ZnLU1lZGlhV2lraS1sb2dvX3Npc3RlcntiYWNrZ3JvdW5kLXBvc2l0aW9uOjAgLTQ3cHg7d2lkdGg6NDJweDtoZWlnaHQ6NDJweH0uc3ZnLU1ldGEtV2lraS1sb2dvX3Npc3RlcntiYWNrZ3JvdW5kLXBvc2l0aW9uOjAgLTg5cHg7d2lkdGg6MzdweDtoZWlnaHQ6MzdweH0uc3ZnLVdpa2lib29rcy1sb2dvX3Npc3RlcntiYWNrZ3JvdW5kLXBvc2l0aW9uOjAgLTEyNnB4O3dpZHRoOjM3cHg7aGVpZ2h0OjM3cHh9LnN2Zy1XaWtpZGF0YS1sb2dvX3Npc3RlcntiYWNrZ3JvdW5kLXBvc2l0aW9uOjAgLTE2M3B4O3dpZHRoOjQ5cHg7aGVpZ2h0OjQ5cHh9LnN2Zy1XaWtpZnVuY3Rpb25zLWxvZ29fc2lzdGVye2JhY2tncm91bmQtcG9zaXRpb246MCAtMjEycHg7d2lkdGg6NTBweDtoZWlnaHQ6NTBweH0uc3ZnLVdpa2ltZWRpYS1sb2dvX2JsYWNre2JhY2tncm91bmQtcG9zaXRpb246MCAtMjYycHg7d2lkdGg6NDJweDtoZWlnaHQ6NDJweH0uc3ZnLVdpa2lwZWRpYV93b3JkbWFya3tiYWNrZ3JvdW5kLXBvc2l0aW9uOjAgLTMwNHB4O3dpZHRoOjE3NnB4O2hlaWdodDozMnB4fS5zdmctV2lraXF1b3RlLWxvZ29fc2lzdGVye2JhY2tncm91bmQtcG9zaXRpb246MCAtMzM2cHg7d2lkdGg6NDJweDtoZWlnaHQ6NDJweH0uc3ZnLVdpa2lzb3VyY2UtbG9nb19zaXN0ZXJ7YmFja2dyb3VuZC1wb3NpdGlvbjowIC0zNzhweDt3aWR0aDozOXB4O2hlaWdodDozOXB4fS5zdmctV2lraXNwZWNpZXMtbG9nb19zaXN0ZXJ7YmFja2dyb3VuZC1wb3NpdGlvbjowIC00MTdweDt3aWR0aDo0MnB4O2hlaWdodDo0MnB4fS5zdmctV2lraXZlcnNpdHktbG9nb19zaXN0ZXJ7YmFja2dyb3VuZC1wb3NpdGlvbjowIC00NTlweDt3aWR0aDo0M3B4O2hlaWdodDozN3B4fS5zdmctV2lraXZveWFnZS1sb2dvX3Npc3RlcntiYWNrZ3JvdW5kLXBvc2l0aW9uOjAgLTQ5NnB4O3dpZHRoOjM2cHg7aGVpZ2h0OjM2cHh9LnN2Zy1XaWt0aW9uYXJ5LWxvZ29fc2lzdGVye2JhY2tncm91bmQtcG9zaXRpb246MCAtNTMycHg7d2lkdGg6MzdweDtoZWlnaHQ6MzdweH0uc3ZnLWFycm93LWRvd257YmFja2dyb3VuZC1wb3NpdGlvbjowIC01NjlweDt3aWR0aDoxMnB4O2hlaWc="
+        },
+        "hints": [],
+        "timings_ms": {
+          "resolve": 68,
+          "connect": 2123,
+          "tls": 175,
+          "first_byte": 1933,
+          "total": 4513
+        },
+        "errors": [],
+        "notes": []
+      },
+      "node_decisions": {
+        "decisions": [
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "www.wikipedia.org",
+            "reason": "resolved",
+            "verdict": "allow"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "www.wikipedia.org",
+            "reason": "resolved",
+            "verdict": "allow"
+          },
+          {
+            "destination": "198.35.26.224:443",
+            "kind": "tcp",
+            "name": null,
+            "reason": "default allow",
+            "verdict": "allow"
+          }
+        ],
+        "stats": {
+          "connectionsAllowed": 1,
+          "connectionsRefused": 0,
+          "dnsAnswered": 2,
+          "dnsRefused": 0,
+          "intercepted": 0
+        }
+      },
+      "flags": {
+        "unexpected_network_activity": [
+          {
+            "entry": {
+              "destination": "198.35.26.224:443",
+              "kind": "tcp",
+              "name": null,
+              "reason": "default allow",
+              "verdict": "allow"
+            },
+            "why": "connection allowed for a reason other than the hop's name rule (the pin is not in effect)"
+          }
+        ],
+        "denied": [],
+        "notes": []
+      },
+      "errors": [],
+      "timing": {
+        "create_s": 0.034,
+        "exec_s": 4.536,
+        "total_s": 4.635
+      },
+      "create_request": {
+        "templateID": "base",
+        "timeout": 180,
+        "network": {
+          "allowOut": [
+            "example.com"
+          ]
+        }
+      },
+      "exit_code": 0,
+      "timed_out": false,
+      "guest_stderr": "",
+      "deleted": true
+    }
+  ]
+}

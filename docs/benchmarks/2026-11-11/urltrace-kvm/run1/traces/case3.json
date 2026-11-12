@@ -1,0 +1,230 @@
+{
+  "hops": [
+    {
+      "url": "https://expired.badssl.com/",
+      "host": "expired.badssl.com",
+      "pinned_to": [
+        "expired.badssl.com"
+      ],
+      "sandbox_id": "sbx-4684f262ae2f49ec8187",
+      "tracer_args": [],
+      "guest_report": {
+        "tool": {
+          "name": "hv2-urltrace",
+          "version": "1.2.0"
+        },
+        "input_url": "https://expired.badssl.com/",
+        "url": {
+          "scheme": "https",
+          "host": "expired.badssl.com",
+          "port": 443,
+          "path_and_query": "/"
+        },
+        "resolved": [
+          "104.154.89.105:443"
+        ],
+        "connected_to": "104.154.89.105:443",
+        "tls": {
+          "protocol_version": "TLSv1_2",
+          "cipher_suite": "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+          "alpn": "http/1.1",
+          "verified": false,
+          "verification_error": "invalid peer certificate: certificate expired: verification time 1794449031 (UNIX), but certificate is not valid after 1428883199 (365565832 seconds ago)",
+          "certificates": [
+            {
+              "sha256": "ba105ce02bac76888ecee47cd4eb7941653e9ac993b61b2eb3dcc82014d21b4f",
+              "subject": "OU=Domain Control Validated, OU=PositiveSSL Wildcard, CN=*.badssl.com",
+              "issuer": "C=GB, ST=Greater Manchester, L=Salford, O=COMODO CA Limited, CN=COMODO RSA Domain Validation Secure Server CA",
+              "serial": "4ae79549fa9abe3f100f17a478e16909",
+              "not_before": 1428537600,
+              "not_after": 1428883199,
+              "san_dns": [
+                "*.badssl.com",
+                "badssl.com"
+              ],
+              "san_dns_truncated": false,
+              "parse_error": null
+            },
+            {
+              "sha256": "02ab57e4e67a0cb48dd2ff34830e8ac40f4476fb08ca6be3f5cd846f646840f0",
+              "subject": "C=GB, ST=Greater Manchester, L=Salford, O=COMODO CA Limited, CN=COMODO RSA Domain Validation Secure Server CA",
+              "issuer": "C=GB, ST=Greater Manchester, L=Salford, O=COMODO CA Limited, CN=COMODO RSA Certification Authority",
+              "serial": "2b2e6eead975366c148a6edba37c8c07",
+              "not_before": 1392163200,
+              "not_after": 1865548799,
+              "san_dns": [],
+              "san_dns_truncated": false,
+              "parse_error": null
+            },
+            {
+              "sha256": "4f32d5dc00f715250abcc486511e37f501a899deb3bf7ea8adbbd3aef1c412da",
+              "subject": "C=GB, ST=Greater Manchester, L=Salford, O=COMODO CA Limited, CN=COMODO RSA Certification Authority",
+              "issuer": "C=SE, O=AddTrust AB, OU=AddTrust External TTP Network, CN=AddTrust External CA Root",
+              "serial": "2766ee56eb49f38eabd770a2fc84de22",
+              "not_before": 959683718,
+              "not_after": 1590835718,
+              "san_dns": [],
+              "san_dns_truncated": false,
+              "parse_error": null
+            }
+          ],
+          "certificates_truncated": false
+        },
+        "request": {
+          "request_line": "GET / HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "expired.badssl.com"
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Accept-Encoding",
+              "identity"
+            ],
+            [
+              "Connection",
+              "close"
+            ]
+          ]
+        },
+        "response": {
+          "http_version": "HTTP/1.1",
+          "status": 200,
+          "reason": "OK",
+          "headers": [
+            [
+              "Server",
+              "nginx/1.10.3 (Ubuntu)"
+            ],
+            [
+              "Date",
+              "Thu, 12 Nov 2026 02:03:52 GMT"
+            ],
+            [
+              "Content-Type",
+              "text/html"
+            ],
+            [
+              "Content-Length",
+              "494"
+            ],
+            [
+              "Last-Modified",
+              "Tue, 10 Nov 2026 21:00:48 GMT"
+            ],
+            [
+              "Connection",
+              "close"
+            ],
+            [
+              "ETag",
+              "\"6af38600-1ee\""
+            ],
+            [
+              "Cache-Control",
+              "no-store"
+            ],
+            [
+              "Accept-Ranges",
+              "bytes"
+            ]
+          ],
+          "headers_truncated": false,
+          "lossy": false,
+          "location": null,
+          "next_url": null,
+          "content_type": "text/html",
+          "body_bytes_read": 494,
+          "body_truncated": false,
+          "body_sha256": "782d81d1cb3156b3ad32ec7cd4028c998f03f3556c5593ed1faa4ca591d214fb",
+          "body_sample_encoding": "base64",
+          "body_sample": "PCFET0NUWVBFIGh0bWw+CjxodG1sPgo8aGVhZD4KICA8bWV0YSBjaGFyc2V0PSJ1dGYtOCI+CiAgPG1ldGEgbmFtZT0idmlld3BvcnQiIGNvbnRlbnQ9IndpZHRoPWRldmljZS13aWR0aCwgaW5pdGlhbC1zY2FsZT0xIj4KICA8bGluayByZWw9InNob3J0Y3V0IGljb24iIGhyZWY9Ii9pY29ucy9mYXZpY29uLXJlZC5pY28iLz4KICA8bGluayByZWw9ImFwcGxlLXRvdWNoLWljb24iIGhyZWY9Ii9pY29ucy9pY29uLXJlZC5wbmciLz4KICA8dGl0bGU+ZXhwaXJlZC5iYWRzc2wuY29tPC90aXRsZT4KICA8bGluayByZWw9InN0eWxlc2hlZXQiIGhyZWY9Ii9zdHlsZS5jc3MiPgogIDxzdHlsZT5ib2R5IHsgYmFja2dyb3VuZDogcmVkOyB9PC9zdHlsZT4KPC9oZWFkPgo8Ym9keT4KPGRpdiBpZD0iY29udGVudCI+CiAgPGgxIHN0eWxlPSJmb250LXNpemU6IDEydnc7Ij4KICAgIGV4cGlyZWQuPGJyPmJhZHNzbC5jb20KICA8L2gxPgo8L2Rpdj4KCjwvYm9keT4KPC9odG1sPgo="
+        },
+        "hints": [],
+        "timings_ms": {
+          "resolve": 462,
+          "connect": 1152,
+          "tls": 44110,
+          "first_byte": 95,
+          "total": 45823
+        },
+        "errors": [],
+        "notes": []
+      },
+      "node_decisions": {
+        "decisions": [
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "expired.badssl.com",
+            "reason": "resolved",
+            "verdict": "allow"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "expired.badssl.com",
+            "reason": "resolved",
+            "verdict": "allow"
+          },
+          {
+            "destination": "104.154.89.105:443",
+            "kind": "tcp",
+            "name": "expired.badssl.com",
+            "reason": "allowOut name, by this gateway's DNS answer",
+            "verdict": "allow"
+          }
+        ],
+        "stats": {
+          "connectionsAllowed": 1,
+          "connectionsRefused": 0,
+          "dnsAnswered": 2,
+          "dnsRefused": 0,
+          "intercepted": 0
+        }
+      },
+      "flags": {
+        "unexpected_network_activity": [],
+        "denied": [],
+        "notes": []
+      },
+      "errors": [],
+      "timing": {
+        "create_s": 0.058,
+        "exec_s": 45.875,
+        "total_s": 45.97
+      },
+      "create_request": {
+        "templateID": "base",
+        "timeout": 180,
+        "network": {
+          "allowOut": [
+            "expired.badssl.com"
+          ],
+          "denyOut": [
+            "0.0.0.0/0",
+            "::/0"
+          ]
+        }
+      },
+      "exit_code": 0,
+      "timed_out": false,
+      "guest_stderr": "",
+      "deleted": true,
+      "view": {
+        "status": 200,
+        "verified": false,
+        "verification_error": "invalid peer certificate: certificate expired: verification time 1794449031 (UNIX), but certificate is not valid after 1428883199 (365565832 seconds ago)",
+        "next_url": null
+      }
+    }
+  ]
+}

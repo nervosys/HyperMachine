@@ -1,0 +1,133 @@
+{
+  "hops": [
+    {
+      "url": "https://example.com/",
+      "host": "example.com",
+      "pinned_to": [
+        "example.com"
+      ],
+      "sandbox_id": "sbx-14b3b0cb63704a848440",
+      "tracer_args": [],
+      "guest_report": {
+        "tool": {
+          "name": "hv2-urltrace",
+          "version": "1.2.0"
+        },
+        "input_url": "https://example.com/",
+        "url": {
+          "scheme": "https",
+          "host": "example.com",
+          "port": 443,
+          "path_and_query": "/"
+        },
+        "resolved": [],
+        "connected_to": null,
+        "tls": null,
+        "request": null,
+        "response": null,
+        "hints": [],
+        "timings_ms": {
+          "resolve": 5010,
+          "connect": null,
+          "tls": null,
+          "first_byte": null,
+          "total": 5010
+        },
+        "errors": [
+          {
+            "stage": "resolve",
+            "message": "failed to lookup address information: Try again"
+          }
+        ],
+        "notes": []
+      },
+      "node_decisions": {
+        "decisions": [
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          }
+        ],
+        "stats": {
+          "connectionsAllowed": 0,
+          "connectionsRefused": 0,
+          "dnsAnswered": 0,
+          "dnsRefused": 4,
+          "intercepted": 0
+        }
+      },
+      "flags": {
+        "unexpected_network_activity": [],
+        "denied": [
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          }
+        ],
+        "notes": []
+      },
+      "errors": [],
+      "timing": {
+        "create_s": 0.047,
+        "exec_s": 5.044,
+        "total_s": 5.124
+      },
+      "create_request": {
+        "templateID": "base",
+        "timeout": 180
+      },
+      "exit_code": 0,
+      "timed_out": false,
+      "guest_stderr": "",
+      "deleted": true
+    }
+  ]
+}

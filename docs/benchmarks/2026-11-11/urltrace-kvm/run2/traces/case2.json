@@ -1,0 +1,435 @@
+{
+  "hops": [
+    {
+      "url": "http://github.com/",
+      "host": "github.com",
+      "pinned_to": [
+        "github.com"
+      ],
+      "sandbox_id": "sbx-923815559f8f48fba2fe",
+      "tracer_args": [],
+      "guest_report": {
+        "tool": {
+          "name": "hv2-urltrace",
+          "version": "1.2.0"
+        },
+        "input_url": "http://github.com/",
+        "url": {
+          "scheme": "http",
+          "host": "github.com",
+          "port": 80,
+          "path_and_query": "/"
+        },
+        "resolved": [
+          "140.82.114.4:80"
+        ],
+        "connected_to": "140.82.114.4:80",
+        "tls": null,
+        "request": {
+          "request_line": "GET / HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "github.com"
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Accept-Encoding",
+              "identity"
+            ],
+            [
+              "Connection",
+              "close"
+            ]
+          ]
+        },
+        "response": {
+          "http_version": "HTTP/1.1",
+          "status": 301,
+          "reason": "Moved Permanently",
+          "headers": [
+            [
+              "Content-Length",
+              "0"
+            ],
+            [
+              "Location",
+              "https://github.com/"
+            ],
+            [
+              "connection",
+              "close"
+            ]
+          ],
+          "headers_truncated": false,
+          "lossy": false,
+          "location": "https://github.com/",
+          "next_url": "https://github.com/",
+          "content_type": null,
+          "body_bytes_read": 0,
+          "body_truncated": false,
+          "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "body_sample_encoding": "base64",
+          "body_sample": ""
+        },
+        "hints": [],
+        "timings_ms": {
+          "resolve": 86,
+          "connect": 117,
+          "tls": null,
+          "first_byte": 111,
+          "total": 317
+        },
+        "errors": [],
+        "notes": []
+      },
+      "node_decisions": {
+        "decisions": [
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "github.com",
+            "reason": "resolved",
+            "verdict": "allow"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "github.com",
+            "reason": "resolved",
+            "verdict": "allow"
+          },
+          {
+            "destination": "140.82.114.4:80",
+            "kind": "tcp",
+            "name": "github.com",
+            "reason": "allowOut name, by this gateway's DNS answer",
+            "verdict": "allow"
+          }
+        ],
+        "stats": {
+          "connectionsAllowed": 1,
+          "connectionsRefused": 0,
+          "dnsAnswered": 2,
+          "dnsRefused": 0,
+          "intercepted": 0
+        }
+      },
+      "flags": {
+        "unexpected_network_activity": [],
+        "denied": [],
+        "notes": []
+      },
+      "errors": [],
+      "timing": {
+        "create_s": 0.043,
+        "exec_s": 0.343,
+        "total_s": 0.437
+      },
+      "create_request": {
+        "templateID": "base",
+        "timeout": 180,
+        "network": {
+          "allowOut": [
+            "github.com"
+          ],
+          "denyOut": [
+            "0.0.0.0/0",
+            "::/0"
+          ]
+        }
+      },
+      "exit_code": 0,
+      "timed_out": false,
+      "guest_stderr": "",
+      "deleted": true,
+      "view": {
+        "status": 301,
+        "verified": null,
+        "verification_error": null,
+        "next_url": "https://github.com/"
+      }
+    },
+    {
+      "url": "https://github.com/",
+      "host": "github.com",
+      "pinned_to": [
+        "github.com"
+      ],
+      "sandbox_id": "sbx-bf07161836504f99a9b5",
+      "tracer_args": [],
+      "guest_report": {
+        "tool": {
+          "name": "hv2-urltrace",
+          "version": "1.2.0"
+        },
+        "input_url": "https://github.com/",
+        "url": {
+          "scheme": "https",
+          "host": "github.com",
+          "port": 443,
+          "path_and_query": "/"
+        },
+        "resolved": [
+          "140.82.114.4:443"
+        ],
+        "connected_to": "140.82.114.4:443",
+        "tls": {
+          "protocol_version": "TLSv1_3",
+          "cipher_suite": "TLS13_AES_128_GCM_SHA256",
+          "alpn": "http/1.1",
+          "verified": true,
+          "verification_error": null,
+          "certificates": [
+            {
+              "sha256": "7dc4d85cf1e310971225bc9a9257679043a243d70a3cc2a91cc5d389892c2776",
+              "subject": "CN=github.com",
+              "issuer": "C=GB, O=Sectigo Limited, CN=Sectigo Public Server Authentication CA DV E36",
+              "serial": "3e1d6026b4b0aea279dca2efbbced82b",
+              "not_before": 1793318400,
+              "not_after": 1801094399,
+              "san_dns": [
+                "github.com",
+                "www.github.com"
+              ],
+              "san_dns_truncated": false,
+              "parse_error": null
+            },
+            {
+              "sha256": "873f0ba80e3ac222656dfd04158cc15c2927d42d5d05f01dee4a47eb43a916df",
+              "subject": "C=GB, O=Sectigo Limited, CN=Sectigo Public Server Authentication CA DV E36",
+              "issuer": "C=GB, O=Sectigo Limited, CN=Sectigo Public Server Authentication Root E46",
+              "serial": "36e059ed888dd57aedd570b6727f9bda",
+              "not_before": 1616371200,
+              "not_after": 2089756799,
+              "san_dns": [],
+              "san_dns_truncated": false,
+              "parse_error": null
+            },
+            {
+              "sha256": "ea6b89ed6907a209ff9188676fb164e7aced894b8996dfbe5ce5bbcc22de4ddd",
+              "subject": "C=GB, O=Sectigo Limited, CN=Sectigo Public Server Authentication Root E46",
+              "issuer": "C=US, ST=New Jersey, L=Jersey City, O=The USERTRUST Network, CN=USERTrust ECC Certification Authority",
+              "serial": "1a9eafec6de8e19b5c193141b68d90dd",
+              "not_before": 1616371200,
+              "not_after": 2147471999,
+              "san_dns": [],
+              "san_dns_truncated": false,
+              "parse_error": null
+            }
+          ],
+          "certificates_truncated": false
+        },
+        "request": {
+          "request_line": "GET / HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "github.com"
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Accept-Encoding",
+              "identity"
+            ],
+            [
+              "Connection",
+              "close"
+            ]
+          ]
+        },
+        "response": {
+          "http_version": "HTTP/1.1",
+          "status": 200,
+          "reason": "OK",
+          "headers": [
+            [
+              "Date",
+              "Thu, 12 Nov 2026 02:04:16 GMT"
+            ],
+            [
+              "Content-Type",
+              "text/html; charset=utf-8"
+            ],
+            [
+              "Vary",
+              "X-PJAX, X-PJAX-Container, Turbo-Visit, Turbo-Frame, X-Requested-With, X-GitHub-Client-Version, Accept-Language, Sec-Fetch-Site,Accept-Encoding, Accept, X-Requested-With"
+            ],
+            [
+              "content-language",
+              "en-US"
+            ],
+            [
+              "ETag",
+              "W/\"d2072426d62f3978a8b6d8a059da2100\""
+            ],
+            [
+              "Cache-Control",
+              "max-age=0, private, must-revalidate"
+            ],
+            [
+              "Strict-Transport-Security",
+              "max-age=31536000; includeSubdomains; preload"
+            ],
+            [
+              "X-Frame-Options",
+              "deny"
+            ],
+            [
+              "X-Content-Type-Options",
+              "nosniff"
+            ],
+            [
+              "X-XSS-Protection",
+              "0"
+            ],
+            [
+              "Referrer-Policy",
+              "origin-when-cross-origin, strict-origin-when-cross-origin"
+            ],
+            [
+              "Content-Security-Policy",
+              "default-src 'none'; base-uri 'self'; child-src github.githubassets.com github.com/assets-cdn/worker/ github.com/assets/ gist.github.com/assets-cdn/worker/; connect-src 'self' uploads.github.com www.githubstatus.com collector.github.com raw.githubusercontent.com api.github.com github-cloud.s3.amazonaws.com github-production-repository-file-5c1aeb.s3.amazonaws.com github-production-upload-manifest-file-7fdce7.s3.amazonaws.com github-production-user-asset-6210df.s3.amazonaws.com *.rel.tunnels.api.visualstudio.com wss://*.rel.tunnels.api.visualstudio.com github.githubassets.com objects-origin.githubusercontent.com copilot-proxy.githubusercontent.com proxy.individual.githubcopilot.com proxy.business.githubcopilot.com proxy.enterprise.githubcopilot.com *.actions.githubusercontent.com wss://*.actions.githubusercontent.com productionresultssa0.blob.core.windows.net productionresultssa1.blob.core.windows.net productionresultssa2.blob.core.windows.net productionresultssa3.blob.core.windows.net productionresultssa4.blob.core.windows.net productionresultssa5.blob.core.windows.net productionresultssa6.blob.core.windows.net productionresultssa7.blob.core.windows.net productionresultssa8.blob.core.windows.net productionresultssa9.blob.core.windows.net productionresultssa10.blob.core.windows.net productionresultssa11.blob.core.windows.net productionresultssa12.blob.core.windows.net productionresultssa13.blob.core.windows.net productionresultssa14.blob.core.windows.net productionresultssa15.blob.core.windows.net productionresultssa16.blob.core.windows.net productionresultssa17.blob.core.windows.net productionresultssa18.blob.core.windows.net productionresultssa19.blob.core.windows.net productionresultssa30.blob.core.windows.net productionresultssa31.blob.core.windows.net productionresultssa32.blob.core.windows.net github-production-repository-image-32fea6.s3.amazonaws.com github-production-release-asset-2e65be.s3.amazonaws.com insights.github.com wss://alive.github.com wss://alive-staging.github.com api.githubcopilot.com api.individual.githubcopilot.com api.business.githubcopilot.com api.enterprise.githubcopilot.com wss://production-copilot-host.webpubsub.azure.com wss://production-copilot-host-centralus.webpubsub.azure.com wss://production-copilot-host-centralus-02.webpubsub.azure.com wss://production-copilot-host-westus.webpubsub.azure.com wss://production-copilot-host-westus3.webpubsub.azure.com wss://production-copilot-host-eastasia.webpubsub.azure.com wss://production-copilot-host-austriaeast.webpubsub.azure.com api.github.com/cmc_internal/api/ edge.fullstory.com rs.fullstory.com; font-src github.githubassets.com; form-action 'self' github.com gist.github.com copilot-workspace.githubnext.com objects-origin.githubusercontent.com; frame-ancestors 'none'; frame-src viewscreen.githubusercontent.com notebooks.githubusercontent.com www.youtube-nocookie.com; img-src 'self' data: blob: github.githubassets.com media.githubusercontent.com camo.githubusercontent.com identicons.github.com avatars.githubusercontent.com private-avatars.githubusercontent.com github-cloud.s3.amazonaws.com objects.githubusercontent.com release-assets.githubusercontent.com secured-user-images.githubusercontent.com user-images.githubusercontent.com private-user-images.githubusercontent.com opengraph.githubassets.com repository-images.githubusercontent.com marketplace-screenshots.githubusercontent.com copilotprodattachments.blob.core.windows.net/github-production-copilot-attachments/ github-production-user-asset-6210df.s3.amazonaws.com customer-stories-feed.github.com spotlights-feed.github.com explore-feed.github.com *.googleusercontent.com objects-origin.githubusercontent.com *.githubusercontent.com images.ctfassets.net/8aevphvgewt8/; manifest-src 'self'; media-src github.com user-images.githubusercontent.com secured-user-images.githubusercontent.com private-user-images.githubusercontent.com github-production-user-asset-6210df.s3.amazonaws.com gist.github.com github.githubassets.com assets.ctfassets.net/8aevphvgewt8/ videos.ctfassets.net/8aevphvgewt8/; script-src github.githubassets.com 'sha256-6AKuI+cDd1MoUL1u4eqrA9PXmnPAkOB4h7421hPUUm0='; style-src 'unsafe-inline' github.githubassets.com; upgrade-insecure-requests; worker-src github.githubassets.com github.com/assets-cdn/worker/ github.com/assets/ gist.github.com/assets-cdn/worker/"
+            ],
+            [
+              "Server",
+              "github.com"
+            ],
+            [
+              "Accept-Ranges",
+              "bytes"
+            ],
+            [
+              "Set-Cookie",
+              "_gh_sess=GgN3DiWuuZ1aLCzUni%2Flo2T4HYSOoKEOPTrNHUWoEh10ZP%2BlLpKI%2FJfYWp9LUBnsDseG0Zu4qU%2FCsqlGD3cAETCOOVOJW1oVkooDiWZ8iKfiyehOAg5d9upVjFscazWgIcptu0cd7XMbjU%2B%2BicqAgHyRGR5RRtVUBGTVEA1edQytZIV7Mqcy3BATEnaWZpsMs1VbGMNoCVW0J%2BL4zKSbvQQZfIxg1xnSArY5JCOims22JTX8dqEZnKrG5f545fULYPoMwWFn4dhvqzd35AnsRQ%3D%3D--txQP61Y%2Fg9f7W%2FNb--HduD9IYjGwaEzPJVPtYH1g%3D%3D; path=/; HttpOnly; secure; SameSite=Lax"
+            ],
+            [
+              "Set-Cookie",
+              "_octo=GH1.1.1026040334.1794449060; expires=Fri, 12 Nov 2027 02:04:20 GMT; domain=.github.com; path=/; secure; SameSite=Lax"
+            ],
+            [
+              "Set-Cookie",
+              "logged_in=no; expires=Fri, 12 Nov 2027 02:04:20 GMT; domain=.github.com; path=/; HttpOnly; secure; SameSite=Lax"
+            ],
+            [
+              "X-GitHub-Request-Id",
+              "CE94:43727:16EC374:1ECC02E:6AF51EA4"
+            ],
+            [
+              "x-github-edge-region",
+              "iad"
+            ],
+            [
+              "connection",
+              "close"
+            ],
+            [
+              "Transfer-Encoding",
+              "chunked"
+            ]
+          ],
+          "headers_truncated": false,
+          "lossy": false,
+          "location": null,
+          "next_url": null,
+          "content_type": "text/html; charset=utf-8",
+          "body_bytes_read": 65536,
+          "body_truncated": true,
+          "body_sha256": "6dddcae3a6840601b105ccd5fd2f7af90ea5472c07dd76b632285b457bd63292",
+          "body_sample_encoding": "base64",
+          "body_sample": "CgoKCgoKCgo8IURPQ1RZUEUgaHRtbD4KPGh0bWwKICBsYW5nPSJlbiIKICAKICBkYXRhLWNvbG9yLW1vZGU9ImxpZ2h0IiBkYXRhLWxpZ2h0LXRoZW1lPSJsaWdodCIgZGF0YS1kYXJrLXRoZW1lPSJkYXJrIgogIGRhdGEtYTExeS1hbmltYXRlZC1pbWFnZXM9InN5c3RlbSIgZGF0YS1hMTF5LWxpbmstdW5kZXJsaW5lcz0idHJ1ZSIKICBkYXRhLWNzcy1mZWF0dXJlcz0ic2l0ZV9kaXNhYmxlX3Ntb290aF9zY3JvbGxpbmciCiAgPgoKCgoKICA8aGVhZD4KICAgIDxtZXRhIGNoYXJzZXQ9InV0Zi04Ij4KICA8bGluayByZWw9ImRucy1wcmVmZXRjaCIgaHJlZj0iaHR0cHM6Ly9naXRodWIuZ2l0aHViYXNzZXRzLmNvbSI+CiAgPGxpbmsgcmVsPSJkbnMtcHJlZmV0Y2giIGhyZWY9Imh0dHBzOi8vYXZhdGFycy5naXRodWJ1c2VyY29udGVudC5jb20iPgogIDxsaW5rIHJlbD0iZG5zLXByZWZldGNoIiBocmVmPSJodHRwczovL2dpdGh1Yi1jbG91ZC5zMy5hbWF6b25hd3MuY29tIj4KICA8bGluayByZWw9ImRucy1wcmVmZXRjaCIgaHJlZj0iaHR0cHM6Ly91c2VyLWltYWdlcy5naXRodWJ1c2VyY29udGVudC5jb20vIj4KICA8bGluayByZWw9InByZWNvbm5lY3QiIGhyZWY9Imh0dHBzOi8vZ2l0aHViLmdpdGh1YmFzc2V0cy5jb20iIGNyb3Nzb3JpZ2luPgogIDxsaW5rIHJlbD0icHJlY29ubmVjdCIgaHJlZj0iaHR0cHM6Ly9hdmF0YXJzLmdpdGh1YnVzZXJjb250ZW50LmNvbSI+Cgo8c2NyaXB0IHR5cGU9ImltcG9ydG1hcCI+eyJpbXBvcnRzIjp7InJlYWN0IjoiaHR0cHM6Ly9naXRodWIuZ2l0aHViYXNzZXRzLmNvbS9hc3NldHMvcmVhY3QtZmE1ZTJlODJlNmUwZWNjMC5qcyIsInJlYWN0LWRvbSI6Imh0dHBzOi8vZ2l0aHViLmdpdGh1YmFzc2V0cy5jb20vYXNzZXRzL3JlYWN0LWRvbS1jN2Y1MjU0MGJiNmI3N2VkLmpzIiwicmVhY3QtZG9tL2NsaWVudCI6Imh0dHBzOi8vZ2l0aHViLmdpdGh1YmFzc2V0cy5jb20vYXNzZXRzL3JlYWN0LWRvbS1jbGllbnQtMzViMzA4MTI2OTk1ZGU4NS5qcyIsInJlYWN0LWlzIjoiaHR0cHM6Ly9naXRodWIuZ2l0aHViYXNzZXRzLmNvbS9hc3NldHMvcmVhY3QtaXMtZTBiNTkzOTU0YjQ3MDZkOC5qcyIsInJlYWN0LXJlY29uY2lsZXIiOiJodHRwczovL2dpdGh1Yi5naXRodWJhc3NldHMuY29tL2Fzc2V0cy9yZWFjdC1yZWNvbmNpbGVyLThlOTllNTA1YzQ0Mjk2MDUuanMiLCJyZWFjdC9jb21waWxlci1ydW50aW1lIjoiaHR0cHM6Ly9naXRodWIuZ2l0aHViYXNzZXRzLmNvbS9hc3NldHMvcmVhY3QtY29tcGlsZXItcnVudGltZS00NjEwYmQ2ZDNkZTljMDQ5LmpzIiwicmVhY3QvanN4LWRldi1ydW50aW1lIjoiaHR0cHM6Ly9naXRodWIuZ2l0aHViYXNzZXRzLmNvbS9hc3NldHMvcmVhY3QtanN4LWRldi1ydW50aW1lLWVhNTVkNjg2NjdkNTU5ZTUuanMiLCJyZWFjdC9qc3gtcnVudGltZSI6Imh0dHBzOi8vZ2l0aHViLmdpdGh1YmFzc2V0cy5jb20vYXNzZXRzL3JlYWN0LWpzeC1ydW50aW1lLTQ5MTVjYjBmNWIzYWZmMDQuanMiLCJzY2hlZHVsZXIiOiJodHRwczovL2dpdGh1Yi5naXRodWJhc3NldHMuY29tL2Fzc2V0cy9zY2hlZHVsZXItNThiODYwYjA0OWNhMzA3Yy5qcyJ9fTwvc2NyaXB0Pgo8bWV0YSBuYW1lPSJyZWFjdC1wcm9maWxpbmciIGNvbnRlbnQ9IjAiIGRhdGEtdHVyYm8tdHJhbnNpZW50PSJ0cnVlIiAvPgo8bWV0YSBuYW1lPSJyZWFjdC1pbXBvcnQtbWFwIiBjb250ZW50PSJyZWFjdCxyZWFjdC1kb20scmVhY3QtZG9tL2NsaWVudCxyZWFjdC1kb20vcHJvZmlsaW5nLHJlYWN0LWlzLHJlYWN0LXJlY29uY2lsZXIscmVhY3QvY29tcGlsZXItcnVudGltZSxyZWFjdC9qc3gtZGV2LXJ1bnRpbWUscmVhY3QvanN4LXJ1bnRpbWUsc2NoZWR1bGVyQGQ1NzUwMDkzZmFjZiIgZGF0YS10dXJiby10cmFjaz0icmVsb2FkIiAvPgo8bGluayBjcm9zc29yaWdpbj0iYW5vbnltb3VzIiByZWw9Im1vZHVsZXByZWxvYWQiIGhyZWY9Imh0dHBzOi8vZ2l0aHViLmdpdGh1YmFzc2V0cy5jb20vYXNzZXRzL3JlYWN0LWZhNWUyZTgyZTZlMGVjYzAuanMiIC8+CjxsaW5rIGNyb3Nzb3I="
+        },
+        "hints": [],
+        "timings_ms": {
+          "resolve": 81,
+          "connect": 1121,
+          "tls": 119,
+          "first_byte": 1068,
+          "total": 3711
+        },
+        "errors": [],
+        "notes": []
+      },
+      "node_decisions": {
+        "decisions": [
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "github.com",
+            "reason": "resolved",
+            "verdict": "allow"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "github.com",
+            "reason": "resolved",
+            "verdict": "allow"
+          },
+          {
+            "destination": "140.82.114.4:443",
+            "kind": "tcp",
+            "name": "github.com",
+            "reason": "allowOut name, by this gateway's DNS answer",
+            "verdict": "allow"
+          }
+        ],
+        "stats": {
+          "connectionsAllowed": 1,
+          "connectionsRefused": 0,
+          "dnsAnswered": 2,
+          "dnsRefused": 0,
+          "intercepted": 0
+        }
+      },
+      "flags": {
+        "unexpected_network_activity": [],
+        "denied": [],
+        "notes": []
+      },
+      "errors": [],
+      "timing": {
+        "create_s": 0.033,
+        "exec_s": 3.738,
+        "total_s": 3.816
+      },
+      "create_request": {
+        "templateID": "base",
+        "timeout": 180,
+        "network": {
+          "allowOut": [
+            "github.com"
+          ],
+          "denyOut": [
+            "0.0.0.0/0",
+            "::/0"
+          ]
+        }
+      },
+      "exit_code": 0,
+      "timed_out": false,
+      "guest_stderr": "",
+      "deleted": true,
+      "view": {
+        "status": 200,
+        "verified": true,
+        "verification_error": null,
+        "next_url": null
+      }
+    }
+  ]
+}

@@ -1,0 +1,248 @@
+{
+  "hops": [
+    {
+      "url": "http://github.com/",
+      "host": "github.com",
+      "pinned_to": [
+        "github.com"
+      ],
+      "sandbox_id": "sbx-2880d82ecea94055b028",
+      "tracer_args": [],
+      "guest_report": {
+        "tool": {
+          "name": "hv2-urltrace",
+          "version": "1.2.0"
+        },
+        "input_url": "http://github.com/",
+        "url": {
+          "scheme": "http",
+          "host": "github.com",
+          "port": 80,
+          "path_and_query": "/"
+        },
+        "resolved": [
+          "140.82.114.3:80"
+        ],
+        "connected_to": "140.82.114.3:80",
+        "tls": null,
+        "request": {
+          "request_line": "GET / HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "github.com"
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Accept-Encoding",
+              "identity"
+            ],
+            [
+              "Connection",
+              "close"
+            ]
+          ]
+        },
+        "response": {
+          "http_version": "HTTP/1.1",
+          "status": 301,
+          "reason": "Moved Permanently",
+          "headers": [
+            [
+              "Content-Length",
+              "0"
+            ],
+            [
+              "Location",
+              "https://github.com/"
+            ],
+            [
+              "connection",
+              "close"
+            ]
+          ],
+          "headers_truncated": false,
+          "lossy": false,
+          "location": "https://github.com/",
+          "next_url": "https://github.com/",
+          "content_type": null,
+          "body_bytes_read": 0,
+          "body_truncated": false,
+          "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "body_sample_encoding": "base64",
+          "body_sample": ""
+        },
+        "hints": [],
+        "timings_ms": {
+          "resolve": 64,
+          "connect": 1142,
+          "tls": null,
+          "first_byte": 114,
+          "total": 1323
+        },
+        "errors": [],
+        "notes": []
+      },
+      "node_decisions": {
+        "decisions": [
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "github.com",
+            "reason": "resolved",
+            "verdict": "allow"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "github.com",
+            "reason": "resolved",
+            "verdict": "allow"
+          },
+          {
+            "destination": "140.82.114.3:80",
+            "kind": "tcp",
+            "name": "github.com",
+            "reason": "allowOut name, by this gateway's DNS answer",
+            "verdict": "allow"
+          }
+        ],
+        "stats": {
+          "connectionsAllowed": 1,
+          "connectionsRefused": 0,
+          "dnsAnswered": 2,
+          "dnsRefused": 0,
+          "intercepted": 0
+        }
+      },
+      "flags": {
+        "unexpected_network_activity": [],
+        "denied": [],
+        "notes": []
+      },
+      "errors": [],
+      "timing": {
+        "create_s": 0.046,
+        "exec_s": 1.346,
+        "total_s": 1.465
+      },
+      "create_request": {
+        "templateID": "base",
+        "timeout": 150,
+        "network": {
+          "allowOut": [
+            "github.com"
+          ],
+          "denyOut": [
+            "0.0.0.0/0",
+            "::/0"
+          ]
+        }
+      },
+      "exit_code": 0,
+      "timed_out": false,
+      "guest_stderr": "",
+      "deleted": true,
+      "view": {
+        "status": 301,
+        "verified": null,
+        "verification_error": null,
+        "next_url": "https://github.com/"
+      }
+    },
+    {
+      "url": "https://github.com/",
+      "host": "github.com",
+      "pinned_to": [
+        "github.com"
+      ],
+      "sandbox_id": "sbx-e4f7dc05bd724e14ad60",
+      "tracer_args": [],
+      "guest_report": null,
+      "node_decisions": {
+        "decisions": [
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "github.com",
+            "reason": "resolved",
+            "verdict": "allow"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "github.com",
+            "reason": "resolved",
+            "verdict": "allow"
+          },
+          {
+            "destination": "140.82.114.3:443",
+            "kind": "tcp",
+            "name": "github.com",
+            "reason": "allowOut name, by this gateway's DNS answer",
+            "verdict": "allow"
+          }
+        ],
+        "stats": {
+          "connectionsAllowed": 1,
+          "connectionsRefused": 0,
+          "dnsAnswered": 2,
+          "dnsRefused": 0,
+          "intercepted": 0
+        }
+      },
+      "flags": {
+        "unexpected_network_activity": [],
+        "denied": [],
+        "notes": [
+          "allowed connection to 140.82.114.3, not in the host's own lookup of github.com (a CDN may rotate addresses)"
+        ]
+      },
+      "errors": [
+        {
+          "stage": "exec",
+          "message": "the program ran past its time limit and was killed"
+        },
+        {
+          "stage": "report",
+          "message": "the guest printed no report"
+        }
+      ],
+      "timing": {
+        "create_s": 0.049,
+        "exec_s": 28.032,
+        "total_s": 28.125
+      },
+      "create_request": {
+        "templateID": "base",
+        "timeout": 150,
+        "network": {
+          "allowOut": [
+            "github.com"
+          ],
+          "denyOut": [
+            "0.0.0.0/0",
+            "::/0"
+          ]
+        }
+      },
+      "exit_code": null,
+      "timed_out": true,
+      "guest_stderr": "",
+      "deleted": true,
+      "view": {
+        "status": null,
+        "verified": null,
+        "verification_error": null,
+        "next_url": null
+      }
+    }
+  ]
+}

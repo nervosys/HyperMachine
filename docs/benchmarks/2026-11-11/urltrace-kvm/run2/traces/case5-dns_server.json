@@ -1,0 +1,116 @@
+{
+  "hops": [
+    {
+      "url": "http://example.com/",
+      "host": "example.com",
+      "pinned_to": [
+        "example.com"
+      ],
+      "sandbox_id": "sbx-c0ecf887b99f4b8e9c74",
+      "tracer_args": [
+        "--resolve",
+        "10.0.2.3"
+      ],
+      "guest_report": {
+        "tool": {
+          "name": "hv2-urltrace",
+          "version": "1.2.0"
+        },
+        "input_url": "http://example.com/",
+        "url": {
+          "scheme": "http",
+          "host": "example.com",
+          "port": 80,
+          "path_and_query": "/"
+        },
+        "resolved": [
+          "10.0.2.3:80"
+        ],
+        "connected_to": null,
+        "tls": null,
+        "request": null,
+        "response": null,
+        "hints": [],
+        "timings_ms": {
+          "resolve": 0,
+          "connect": 9,
+          "tls": null,
+          "first_byte": null,
+          "total": 9
+        },
+        "errors": [
+          {
+            "stage": "connect",
+            "message": "10.0.2.3:80: Connection refused (os error 111)"
+          }
+        ],
+        "notes": []
+      },
+      "node_decisions": {
+        "decisions": [
+          {
+            "destination": "10.0.2.3:80",
+            "kind": "tcp",
+            "name": null,
+            "reason": "the gateway runs no TCP services",
+            "verdict": "deny"
+          }
+        ],
+        "stats": {
+          "connectionsAllowed": 0,
+          "connectionsRefused": 1,
+          "dnsAnswered": 0,
+          "dnsRefused": 0,
+          "intercepted": 0
+        }
+      },
+      "flags": {
+        "unexpected_network_activity": [
+          {
+            "entry": {
+              "destination": "10.0.2.3:80",
+              "kind": "tcp",
+              "name": null,
+              "reason": "the gateway runs no TCP services",
+              "verdict": "deny"
+            },
+            "why": "connection attempt to an address that is not the hop's host's, with no name"
+          }
+        ],
+        "denied": [
+          {
+            "destination": "10.0.2.3:80",
+            "kind": "tcp",
+            "name": null,
+            "reason": "the gateway runs no TCP services",
+            "verdict": "deny"
+          }
+        ],
+        "notes": []
+      },
+      "errors": [],
+      "timing": {
+        "create_s": 0.045,
+        "exec_s": 0.034,
+        "total_s": 0.129
+      },
+      "create_request": {
+        "templateID": "base",
+        "timeout": 180,
+        "network": {
+          "allowOut": [
+            "example.com"
+          ],
+          "denyOut": [
+            "0.0.0.0/0",
+            "::/0"
+          ]
+        }
+      },
+      "exit_code": 0,
+      "timed_out": false,
+      "guest_stderr": "",
+      "deleted": true
+    }
+  ]
+}

@@ -1,0 +1,286 @@
+[2m2026-11-12T01:57:50.476949Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T01:57:50.477651Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T01:57:50.477748Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T01:57:50.477756Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T01:57:50.530935Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'template' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-12T01:57:50.551858Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-11-12T01:57:50.551971Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template': loaded linux boot image (17131338 bytes), entry 0x100000
+[2m2026-11-12T01:57:50.553852Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'template' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-12T01:57:50.554404Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'template' with 1 vCPUs
+[2m2026-11-12T01:57:50.554424Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-12T01:57:50.554917Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T01:57:51.342453Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' paused
+[2m2026-11-12T01:57:52.298762Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' snapshotted to /tmp/hv2-sandboxd-503-base/template.snap
+[2m2026-11-12T01:57:52.298913Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' resumed
+[2m2026-11-12T01:57:52.298996Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=447)
+[2m2026-11-12T01:57:52.299276Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'template'
+[2m2026-11-12T01:57:52.299352Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' stopped
+[2m2026-11-12T01:57:52.299374Z[0m [32m INFO[0m [2mhv2_sandboxd[0m[2m:[0m template ready in 1.822550664s at /tmp/hv2-sandboxd-503-base/template.snap; working set 0 pages in 0 ranges
+[2m2026-11-12T01:57:52.329485Z[0m [32m INFO[0m [2mhv2_api::sandbox_proxy[0m[2m:[0m sandbox proxy listening on 0.0.0.0:53585
+hv2-sandboxd: listening on 0.0.0.0:58503, capacity 4
+  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)
+  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)
+  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls
+  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener
+  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules
+  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back, and with autoResume so does a request through the proxy
+  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies
+  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log
+  POST   /networks                 -- NOT E2B's; create a network joining sandboxes on this node
+  GET    /networks                 -- NOT E2B's; list this node's networks
+  GET    /networks/{name}         -- NOT E2B's; a network's members and addresses
+  DELETE /networks/{name}         -- NOT E2B's; remove a network
+  POST   /networks/{name}/connect    -- NOT E2B's; join a sandbox under an alias
+  POST   /networks/{name}/disconnect -- NOT E2B's; leave a network
+sandboxes get a network, egress default Deny for a sandbox that configures none
+sandboxes are restored from template snapshots: base
+
+sandbox proxy on 0.0.0.0:53585 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>
+  grpcurl -plaintext -authority 49983-$SBX.local -H "X-Access-Token: $TOKEN" -import-path crates/hv2-api/proto -proto process.proto \
+      -d '{"process":{"cmd":"/bin/sh","args":["-c","echo hi"]}}' \
+      localhost:53585 process.Process/Start
+[2m2026-11-12T01:57:52.475565Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T01:57:52.476455Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-3d665754b9c94cf6a2aa': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T01:57:52.476585Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-3d665754b9c94cf6a2aa': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T01:57:52.476596Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T01:57:52.559690Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-3d665754b9c94cf6a2aa' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-12T01:57:52.560289Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-3d665754b9c94cf6a2aa' restored from /tmp/hv2-sandboxd-503-base/template.snap
+[2m2026-11-12T01:57:52.560327Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-3d665754b9c94cf6a2aa' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-12T01:57:52.560590Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-3d665754b9c94cf6a2aa' with 1 vCPUs
+[2m2026-11-12T01:57:52.560602Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-12T01:57:52.560866Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T01:57:52.860717Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"example.com" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"resolved"
+[2m2026-11-12T01:57:52.925155Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"example.com" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"resolved"
+[2m2026-11-12T01:57:53.020910Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m104.20.23.154:443 [3mname[0m[2m=[0m"example.com" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"allowOut name, by this gateway's DNS answer"
+[2m2026-11-12T01:57:53.254702Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=103)
+[2m2026-11-12T01:57:53.254928Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-3d665754b9c94cf6a2aa'
+[2m2026-11-12T01:57:53.254984Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-3d665754b9c94cf6a2aa' stopped
+[2m2026-11-12T01:57:53.566489Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T01:57:53.583257Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-bcfb9571f4b64df3834a': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T01:57:53.583440Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-bcfb9571f4b64df3834a': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T01:57:53.583457Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T01:57:53.631690Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-bcfb9571f4b64df3834a' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-12T01:57:53.632224Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-bcfb9571f4b64df3834a' restored from /tmp/hv2-sandboxd-503-base/template.snap
+[2m2026-11-12T01:57:53.632255Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-bcfb9571f4b64df3834a' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-12T01:57:53.632488Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-bcfb9571f4b64df3834a' with 1 vCPUs
+[2m2026-11-12T01:57:53.632498Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-12T01:57:53.632749Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T01:57:54.096908Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"github.com" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"resolved"
+[2m2026-11-12T01:57:54.192324Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"github.com" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"resolved"
+[2m2026-11-12T01:57:54.318638Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m140.82.114.3:80 [3mname[0m[2m=[0m"github.com" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"allowOut name, by this gateway's DNS answer"
+[2m2026-11-12T01:57:54.458031Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=83)
+[2m2026-11-12T01:57:54.458287Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-bcfb9571f4b64df3834a'
+[2m2026-11-12T01:57:54.458332Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-bcfb9571f4b64df3834a' stopped
+[2m2026-11-12T01:57:54.773386Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T01:57:54.774181Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-ab058e0a708149ddb299': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T01:57:54.774349Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-ab058e0a708149ddb299': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T01:57:54.774360Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T01:57:54.776413Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-ab058e0a708149ddb299' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-12T01:57:54.777014Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-ab058e0a708149ddb299' restored from /tmp/hv2-sandboxd-503-base/template.snap
+[2m2026-11-12T01:57:54.777038Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-ab058e0a708149ddb299' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-12T01:57:54.777228Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-ab058e0a708149ddb299' with 1 vCPUs
+[2m2026-11-12T01:57:54.777237Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-12T01:57:54.777486Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T01:57:55.160492Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"github.com" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"resolved"
+[2m2026-11-12T01:57:55.302975Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"github.com" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"resolved"
+[2m2026-11-12T01:57:55.431251Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m140.82.114.3:443 [3mname[0m[2m=[0m"github.com" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"allowOut name, by this gateway's DNS answer"
+[2m2026-11-12T01:58:04.748646Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=408)
+[2m2026-11-12T01:58:04.748811Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-ab058e0a708149ddb299'
+[2m2026-11-12T01:58:04.748828Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-ab058e0a708149ddb299' stopped
+[2m2026-11-12T01:58:05.062999Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T01:58:05.063734Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-a7da48ee27ae43799e6c': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T01:58:05.063927Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-a7da48ee27ae43799e6c': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T01:58:05.063937Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T01:58:05.097518Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-a7da48ee27ae43799e6c' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-12T01:58:05.098128Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-a7da48ee27ae43799e6c' restored from /tmp/hv2-sandboxd-503-base/template.snap
+[2m2026-11-12T01:58:05.098154Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-a7da48ee27ae43799e6c' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-12T01:58:05.098429Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-a7da48ee27ae43799e6c' with 1 vCPUs
+[2m2026-11-12T01:58:05.098444Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-12T01:58:05.098768Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T01:58:05.470275Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"expired.badssl.com" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"resolved"
+[2m2026-11-12T01:58:05.486128Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"expired.badssl.com" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"resolved"
+[2m2026-11-12T01:58:06.637686Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m104.154.89.105:443 [3mname[0m[2m=[0m"expired.badssl.com" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"allowOut name, by this gateway's DNS answer"
+[2m2026-11-12T01:58:07.674078Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=132)
+[2m2026-11-12T01:58:07.683249Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-a7da48ee27ae43799e6c'
+[2m2026-11-12T01:58:07.683301Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-a7da48ee27ae43799e6c' stopped
+[2m2026-11-12T01:58:08.129721Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T01:58:08.131019Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-ae354b738efc4fbd93d3': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T01:58:08.131135Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-ae354b738efc4fbd93d3': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T01:58:08.131147Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T01:58:08.149692Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-ae354b738efc4fbd93d3' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-12T01:58:08.150099Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-ae354b738efc4fbd93d3' restored from /tmp/hv2-sandboxd-503-base/template.snap
+[2m2026-11-12T01:58:08.150115Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-ae354b738efc4fbd93d3' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-12T01:58:08.150371Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-ae354b738efc4fbd93d3' with 1 vCPUs
+[2m2026-11-12T01:58:08.150379Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-12T01:58:08.150625Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T01:58:08.269449Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"www.wikipedia.org" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T01:58:08.270504Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"www.wikipedia.org" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T01:58:10.760108Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"www.wikipedia.org" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T01:58:10.760495Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"www.wikipedia.org" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T01:58:13.268914Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=93)
+[2m2026-11-12T01:58:13.269080Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-ae354b738efc4fbd93d3'
+[2m2026-11-12T01:58:13.269094Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-ae354b738efc4fbd93d3' stopped
+[2m2026-11-12T01:58:13.987515Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T01:58:13.988135Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-dcd0f780a9084aefa31e': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T01:58:13.988248Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-dcd0f780a9084aefa31e': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T01:58:13.988261Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T01:58:13.997254Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-dcd0f780a9084aefa31e' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-12T01:58:14.002531Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-dcd0f780a9084aefa31e' restored from /tmp/hv2-sandboxd-503-base/template.snap
+[2m2026-11-12T01:58:14.002669Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-dcd0f780a9084aefa31e' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-12T01:58:14.003682Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-dcd0f780a9084aefa31e' with 1 vCPUs
+[2m2026-11-12T01:58:14.003780Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-12T01:58:14.004234Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T01:58:14.257915Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m198.35.26.224:443 [3mname[0m[2m=[0m"example.com" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the name does not resolve to the address connected to"
+[2m2026-11-12T01:58:14.265134Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=61)
+[2m2026-11-12T01:58:14.267877Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-dcd0f780a9084aefa31e'
+[2m2026-11-12T01:58:14.267979Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-dcd0f780a9084aefa31e' stopped
+[2m2026-11-12T01:58:14.426542Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T01:58:14.427277Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-4518067e688c4ba6a041': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T01:58:14.427411Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-4518067e688c4ba6a041': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T01:58:14.427420Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T01:58:14.429710Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-4518067e688c4ba6a041' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-12T01:58:14.430130Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-4518067e688c4ba6a041' restored from /tmp/hv2-sandboxd-503-base/template.snap
+[2m2026-11-12T01:58:14.430153Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-4518067e688c4ba6a041' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-12T01:58:14.430330Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-4518067e688c4ba6a041' with 1 vCPUs
+[2m2026-11-12T01:58:14.430337Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-12T01:58:14.430561Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T01:58:14.643411Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m198.35.26.224:80 [3mname[0m[2m=[0m"example.com" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the name does not resolve to the address connected to"
+[2m2026-11-12T01:58:14.650527Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=53)
+[2m2026-11-12T01:58:14.650661Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-4518067e688c4ba6a041'
+[2m2026-11-12T01:58:14.650677Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-4518067e688c4ba6a041' stopped
+[2m2026-11-12T01:58:14.776390Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T01:58:14.777144Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1e25b16f76614661a835': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T01:58:14.777293Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1e25b16f76614661a835': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T01:58:14.777307Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T01:58:14.791275Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1e25b16f76614661a835' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-12T01:58:14.791949Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1e25b16f76614661a835' restored from /tmp/hv2-sandboxd-503-base/template.snap
+[2m2026-11-12T01:58:14.791984Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1e25b16f76614661a835' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-12T01:58:14.792250Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1e25b16f76614661a835' with 1 vCPUs
+[2m2026-11-12T01:58:14.792264Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-12T01:58:14.792629Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T01:58:14.873901Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m169.254.169.254:80 [3mname[0m[2m=[0m"" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"reserved address"
+[2m2026-11-12T01:58:14.881949Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=42)
+[2m2026-11-12T01:58:14.882170Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1e25b16f76614661a835'
+[2m2026-11-12T01:58:14.882197Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1e25b16f76614661a835' stopped
+[2m2026-11-12T01:58:14.997945Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T01:58:14.998635Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-45782d4dab044e2f92c3': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T01:58:14.999084Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-45782d4dab044e2f92c3': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T01:58:14.999100Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T01:58:15.036450Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-45782d4dab044e2f92c3' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-12T01:58:15.039681Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-45782d4dab044e2f92c3' restored from /tmp/hv2-sandboxd-503-base/template.snap
+[2m2026-11-12T01:58:15.040395Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-45782d4dab044e2f92c3' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-12T01:58:15.040919Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-45782d4dab044e2f92c3' with 1 vCPUs
+[2m2026-11-12T01:58:15.040934Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-12T01:58:15.041461Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T01:58:15.137018Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m169.254.169.254:443 [3mname[0m[2m=[0m"" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"reserved address"
+[2m2026-11-12T01:58:15.153923Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=41)
+[2m2026-11-12T01:58:15.154072Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-45782d4dab044e2f92c3'
+[2m2026-11-12T01:58:15.154098Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-45782d4dab044e2f92c3' stopped
+[2m2026-11-12T01:58:15.273077Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T01:58:15.273953Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-c1832166692d4614a86d': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T01:58:15.274093Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-c1832166692d4614a86d': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T01:58:15.274106Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T01:58:15.277069Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-c1832166692d4614a86d' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-12T01:58:15.277718Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-c1832166692d4614a86d' restored from /tmp/hv2-sandboxd-503-base/template.snap
+[2m2026-11-12T01:58:15.277738Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-c1832166692d4614a86d' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-12T01:58:15.277927Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-c1832166692d4614a86d' with 1 vCPUs
+[2m2026-11-12T01:58:15.277936Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-12T01:58:15.278178Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T01:58:15.365536Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m10.0.2.2:80 [3mname[0m[2m=[0m"" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the gateway runs no TCP services"
+[2m2026-11-12T01:58:15.377499Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=42)
+[2m2026-11-12T01:58:15.377742Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-c1832166692d4614a86d'
+[2m2026-11-12T01:58:15.377758Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-c1832166692d4614a86d' stopped
+[2m2026-11-12T01:58:15.627885Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T01:58:15.628524Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-64ef6712788d45d5ae93': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T01:58:15.628629Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-64ef6712788d45d5ae93': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T01:58:15.628638Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T01:58:15.641791Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-64ef6712788d45d5ae93' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-12T01:58:15.642802Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-64ef6712788d45d5ae93' restored from /tmp/hv2-sandboxd-503-base/template.snap
+[2m2026-11-12T01:58:15.642831Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-64ef6712788d45d5ae93' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-12T01:58:15.643334Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-64ef6712788d45d5ae93' with 1 vCPUs
+[2m2026-11-12T01:58:15.643347Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-12T01:58:15.643673Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T01:58:15.740264Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m10.0.2.3:80 [3mname[0m[2m=[0m"" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the gateway runs no TCP services"
+[2m2026-11-12T01:58:15.751164Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=48)
+[2m2026-11-12T01:58:15.751332Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-64ef6712788d45d5ae93'
+[2m2026-11-12T01:58:15.751354Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-64ef6712788d45d5ae93' stopped
+[2m2026-11-12T01:58:15.903371Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T01:58:15.904015Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-b7f8ededc14f4564bc04': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T01:58:15.904119Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-b7f8ededc14f4564bc04': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T01:58:15.904127Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T01:58:15.908686Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-b7f8ededc14f4564bc04' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-12T01:58:15.909104Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-b7f8ededc14f4564bc04' restored from /tmp/hv2-sandboxd-503-base/template.snap
+[2m2026-11-12T01:58:15.909125Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-b7f8ededc14f4564bc04' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-12T01:58:15.909532Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-b7f8ededc14f4564bc04' with 1 vCPUs
+[2m2026-11-12T01:58:15.922303Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-12T01:58:15.922808Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T01:58:16.009395Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m172.28.97.192:80 [3mname[0m[2m=[0m"" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"reserved address"
+[2m2026-11-12T01:58:16.018664Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=48)
+[2m2026-11-12T01:58:16.018842Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-b7f8ededc14f4564bc04'
+[2m2026-11-12T01:58:16.018868Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-b7f8ededc14f4564bc04' stopped
+[2m2026-11-12T01:58:16.237831Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T01:58:16.240358Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-d519393c59f640529f92': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T01:58:16.240693Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-d519393c59f640529f92': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T01:58:16.240712Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T01:58:16.252146Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-d519393c59f640529f92' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-12T01:58:16.252710Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-d519393c59f640529f92' restored from /tmp/hv2-sandboxd-503-base/template.snap
+[2m2026-11-12T01:58:16.252735Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-d519393c59f640529f92' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-12T01:58:16.253132Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-d519393c59f640529f92' with 1 vCPUs
+[2m2026-11-12T01:58:16.253142Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-12T01:58:16.254129Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T01:58:16.346023Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"example.com" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T01:58:16.347092Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"example.com" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T01:58:18.844615Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"example.com" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T01:58:18.844647Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"example.com" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T01:58:21.356827Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=84)
+[2m2026-11-12T01:58:21.356920Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-d519393c59f640529f92'
+[2m2026-11-12T01:58:21.356934Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-d519393c59f640529f92' stopped
+[2m2026-11-12T01:58:21.430978Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T01:58:21.431547Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-eb25f30b56ff49a3ba22': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T01:58:21.431644Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-eb25f30b56ff49a3ba22': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T01:58:21.431654Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T01:58:21.434010Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-eb25f30b56ff49a3ba22' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-12T01:58:21.434398Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-eb25f30b56ff49a3ba22' restored from /tmp/hv2-sandboxd-503-base/template.snap
+[2m2026-11-12T01:58:21.434412Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-eb25f30b56ff49a3ba22' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-12T01:58:21.434566Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-eb25f30b56ff49a3ba22' with 1 vCPUs
+[2m2026-11-12T01:58:21.434573Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-12T01:58:21.434780Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T01:58:21.480965Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"example.com" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T01:58:21.481794Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"example.com" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T01:58:23.981385Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"example.com" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T01:58:23.981702Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"example.com" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T01:58:26.490538Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=94)
+[2m2026-11-12T01:58:26.490696Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-eb25f30b56ff49a3ba22'
+[2m2026-11-12T01:58:26.490714Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-eb25f30b56ff49a3ba22' stopped
+[2m2026-11-12T01:58:26.608645Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T01:58:26.609383Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-984f7e94214941c7a9e7': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T01:58:26.609515Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-984f7e94214941c7a9e7': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T01:58:26.609529Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T01:58:26.674951Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-984f7e94214941c7a9e7' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-12T01:58:26.675542Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-984f7e94214941c7a9e7' restored from /tmp/hv2-sandboxd-503-base/template.snap
+[2m2026-11-12T01:58:26.675589Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-984f7e94214941c7a9e7' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-12T01:58:26.676011Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-984f7e94214941c7a9e7' with 1 vCPUs
+[2m2026-11-12T01:58:26.676065Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-12T01:58:26.676428Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T01:58:26.846705Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"example.com" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"resolved"
+[2m2026-11-12T01:58:26.847895Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"example.com" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"resolved"
+[2m2026-11-12T01:58:26.920803Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m104.20.23.154:80 [3mname[0m[2m=[0m"example.com" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"allowOut name, by this gateway's DNS answer"
+[2m2026-11-12T01:58:27.001137Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=84)
+[2m2026-11-12T01:58:27.001318Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-984f7e94214941c7a9e7'
+[2m2026-11-12T01:58:27.001343Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-984f7e94214941c7a9e7' stopped
+[2m2026-11-12T01:58:27.086610Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T01:58:27.087115Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-9fc32b7800204897885f': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T01:58:27.087225Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-9fc32b7800204897885f': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T01:58:27.087236Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T01:58:27.089202Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-9fc32b7800204897885f' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-12T01:58:27.089540Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-9fc32b7800204897885f' restored from /tmp/hv2-sandboxd-503-base/template.snap
+[2m2026-11-12T01:58:27.089561Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-9fc32b7800204897885f' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-12T01:58:27.089733Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-9fc32b7800204897885f' with 1 vCPUs
+[2m2026-11-12T01:58:27.089741Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-12T01:58:27.089936Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T01:58:27.277962Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"www.wikipedia.org" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"resolved"
+[2m2026-11-12T01:58:27.280068Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"www.wikipedia.org" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"resolved"
+[2m2026-11-12T01:58:27.370237Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m198.35.26.224:443 [3mname[0m[2m=[0m"" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"default allow"
+[2m2026-11-12T01:58:28.366363Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=177)
+[2m2026-11-12T01:58:28.366520Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-9fc32b7800204897885f'
+[2m2026-11-12T01:58:28.366564Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-9fc32b7800204897885f' stopped

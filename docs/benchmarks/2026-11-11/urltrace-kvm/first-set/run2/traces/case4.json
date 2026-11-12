@@ -1,0 +1,184 @@
+{
+  "hops": [
+    {
+      "url": "https://www.wikipedia.org/",
+      "host": "www.wikipedia.org",
+      "pinned_to": [
+        "example.com"
+      ],
+      "sandbox_id": "sbx-ca9bee4e5b5042248ccf",
+      "tracer_args": [],
+      "guest_report": {
+        "tool": {
+          "name": "hv2-urltrace",
+          "version": "1.2.0"
+        },
+        "input_url": "https://www.wikipedia.org/",
+        "url": {
+          "scheme": "https",
+          "host": "www.wikipedia.org",
+          "port": 443,
+          "path_and_query": "/"
+        },
+        "resolved": [],
+        "connected_to": null,
+        "tls": null,
+        "request": null,
+        "response": null,
+        "hints": [],
+        "timings_ms": {
+          "resolve": 5012,
+          "connect": null,
+          "tls": null,
+          "first_byte": null,
+          "total": 5012
+        },
+        "errors": [
+          {
+            "stage": "resolve",
+            "message": "failed to lookup address information: Try again"
+          }
+        ],
+        "notes": []
+      },
+      "node_decisions": {
+        "decisions": [
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "www.wikipedia.org",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "www.wikipedia.org",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "www.wikipedia.org",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "www.wikipedia.org",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          }
+        ],
+        "stats": {
+          "connectionsAllowed": 0,
+          "connectionsRefused": 0,
+          "dnsAnswered": 0,
+          "dnsRefused": 4,
+          "intercepted": 0
+        }
+      },
+      "flags": {
+        "unexpected_network_activity": [
+          {
+            "entry": {
+              "destination": "10.0.2.3:53",
+              "kind": "dns",
+              "name": "www.wikipedia.org",
+              "reason": "the policy would refuse where this name leads",
+              "verdict": "deny"
+            },
+            "why": "dns lookup of a name other than the hop's host"
+          },
+          {
+            "entry": {
+              "destination": "10.0.2.3:53",
+              "kind": "dns",
+              "name": "www.wikipedia.org",
+              "reason": "the policy would refuse where this name leads",
+              "verdict": "deny"
+            },
+            "why": "dns lookup of a name other than the hop's host"
+          },
+          {
+            "entry": {
+              "destination": "10.0.2.3:53",
+              "kind": "dns",
+              "name": "www.wikipedia.org",
+              "reason": "the policy would refuse where this name leads",
+              "verdict": "deny"
+            },
+            "why": "dns lookup of a name other than the hop's host"
+          },
+          {
+            "entry": {
+              "destination": "10.0.2.3:53",
+              "kind": "dns",
+              "name": "www.wikipedia.org",
+              "reason": "the policy would refuse where this name leads",
+              "verdict": "deny"
+            },
+            "why": "dns lookup of a name other than the hop's host"
+          }
+        ],
+        "denied": [
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "www.wikipedia.org",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "www.wikipedia.org",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "www.wikipedia.org",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "www.wikipedia.org",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          }
+        ],
+        "notes": [],
+        "guest_reported_a_different_host": "www.wikipedia.org"
+      },
+      "errors": [],
+      "timing": {
+        "create_s": 0.088,
+        "exec_s": 5.049,
+        "total_s": 5.167
+      },
+      "create_request": {
+        "templateID": "base",
+        "timeout": 150,
+        "network": {
+          "allowOut": [
+            "example.com"
+          ],
+          "denyOut": [
+            "0.0.0.0/0",
+            "::/0"
+          ]
+        }
+      },
+      "exit_code": 0,
+      "timed_out": false,
+      "guest_stderr": "",
+      "deleted": true
+    }
+  ]
+}

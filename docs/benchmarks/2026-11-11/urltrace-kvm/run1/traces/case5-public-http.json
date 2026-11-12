@@ -1,0 +1,130 @@
+{
+  "hops": [
+    {
+      "url": "http://example.com/",
+      "host": "example.com",
+      "pinned_to": [
+        "example.com"
+      ],
+      "sandbox_id": "sbx-3f5a4dd9e2cb4742b791",
+      "tracer_args": [
+        "--resolve",
+        "198.35.26.224"
+      ],
+      "guest_report": {
+        "tool": {
+          "name": "hv2-urltrace",
+          "version": "1.2.0"
+        },
+        "input_url": "http://example.com/",
+        "url": {
+          "scheme": "http",
+          "host": "example.com",
+          "port": 80,
+          "path_and_query": "/"
+        },
+        "resolved": [
+          "198.35.26.224:80"
+        ],
+        "connected_to": "198.35.26.224:80",
+        "tls": null,
+        "request": {
+          "request_line": "GET / HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "example.com"
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Accept-Encoding",
+              "identity"
+            ],
+            [
+              "Connection",
+              "close"
+            ]
+          ]
+        },
+        "response": null,
+        "hints": [],
+        "timings_ms": {
+          "resolve": 0,
+          "connect": 20,
+          "tls": null,
+          "first_byte": null,
+          "total": 107
+        },
+        "errors": [
+          {
+            "stage": "response_head",
+            "message": "reading the status line: Connection reset by peer (os error 104)"
+          }
+        ],
+        "notes": []
+      },
+      "node_decisions": {
+        "decisions": [
+          {
+            "destination": "198.35.26.224:80",
+            "kind": "tcp",
+            "name": "example.com",
+            "reason": "the name does not resolve to the address connected to",
+            "verdict": "deny"
+          }
+        ],
+        "stats": {
+          "connectionsAllowed": 0,
+          "connectionsRefused": 1,
+          "dnsAnswered": 0,
+          "dnsRefused": 0,
+          "intercepted": 0
+        }
+      },
+      "flags": {
+        "unexpected_network_activity": [],
+        "denied": [
+          {
+            "destination": "198.35.26.224:80",
+            "kind": "tcp",
+            "name": "example.com",
+            "reason": "the name does not resolve to the address connected to",
+            "verdict": "deny"
+          }
+        ],
+        "notes": [],
+        "guest_reported_connection_the_node_did_not_allow": "198.35.26.224:80"
+      },
+      "errors": [],
+      "timing": {
+        "create_s": 0.064,
+        "exec_s": 0.141,
+        "total_s": 0.247
+      },
+      "create_request": {
+        "templateID": "base",
+        "timeout": 180,
+        "network": {
+          "allowOut": [
+            "example.com"
+          ],
+          "denyOut": [
+            "0.0.0.0/0",
+            "::/0"
+          ]
+        }
+      },
+      "exit_code": 0,
+      "timed_out": false,
+      "guest_stderr": "",
+      "deleted": true
+    }
+  ]
+}

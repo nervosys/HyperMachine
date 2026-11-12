@@ -1,0 +1,192 @@
+{
+  "hops": [
+    {
+      "url": "http://example.com/?q=$(id);echo$IFS$HOME&x=*&y=%27",
+      "host": "example.com",
+      "pinned_to": [
+        "example.com"
+      ],
+      "sandbox_id": "sbx-984f7e94214941c7a9e7",
+      "tracer_args": [],
+      "guest_report": {
+        "tool": {
+          "name": "hv2-urltrace",
+          "version": "1.2.0"
+        },
+        "input_url": "http://example.com/?q=$(id);echo$IFS$HOME&x=*&y=%27",
+        "url": {
+          "scheme": "http",
+          "host": "example.com",
+          "port": 80,
+          "path_and_query": "/?q=$(id);echo$IFS$HOME&x=*&y=%27"
+        },
+        "resolved": [
+          "104.20.23.154:80",
+          "172.66.147.243:80"
+        ],
+        "connected_to": "104.20.23.154:80",
+        "tls": null,
+        "request": {
+          "request_line": "GET /?q=$(id);echo$IFS$HOME&x=*&y=%27 HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "example.com"
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Accept-Encoding",
+              "identity"
+            ],
+            [
+              "Connection",
+              "close"
+            ]
+          ]
+        },
+        "response": {
+          "http_version": "HTTP/1.1",
+          "status": 200,
+          "reason": "OK",
+          "headers": [
+            [
+              "Date",
+              "Thu, 12 Nov 2026 01:58:26 GMT"
+            ],
+            [
+              "Content-Type",
+              "text/html; charset=utf-8"
+            ],
+            [
+              "Transfer-Encoding",
+              "chunked"
+            ],
+            [
+              "Connection",
+              "close"
+            ],
+            [
+              "Server",
+              "cloudflare"
+            ],
+            [
+              "Last-Modified",
+              "Sun, 08 Nov 2026 18:05:34 GMT"
+            ],
+            [
+              "Allow",
+              "GET, HEAD"
+            ],
+            [
+              "Accept-Ranges",
+              "bytes"
+            ],
+            [
+              "Age",
+              "251"
+            ],
+            [
+              "cf-cache-status",
+              "HIT"
+            ],
+            [
+              "CF-RAY",
+              "a591ee8238501e11-LAX"
+            ],
+            [
+              "alt-svc",
+              "h3=\":443\"; ma=86400"
+            ]
+          ],
+          "headers_truncated": false,
+          "lossy": false,
+          "location": null,
+          "next_url": null,
+          "content_type": "text/html; charset=utf-8",
+          "body_bytes_read": 577,
+          "body_truncated": false,
+          "body_sha256": "25ddf2c883e0d1958ea971d279a7e4f0fd446724ee3db7db19dadabd4a62e484",
+          "body_sample_encoding": "base64",
+          "body_sample": "PCFkb2N0eXBlIGh0bWw+PGh0bWwgbGFuZz1lbj48aGVhZD48bWV0YSBjaGFyc2V0PXV0Zi04PjxsaW5rIHJlbD1pY29uIGhyZWY9ZGF0YTosPjxtZXRhIG5hbWU9dmlld3BvcnQgY29udGVudD0id2lkdGg9ZGV2aWNlLXdpZHRoLGluaXRpYWwtc2NhbGU9MSI+PHRpdGxlPkV4YW1wbGUgRG9tYWluPC90aXRsZT48c3R5bGU+aHRtbHtjb2xvci1zY2hlbWU6bGlnaHQgZGFyaztiYWNrZ3JvdW5kOmxpZ2h0LWRhcmsoI2VlZSwjMjIyKX1ib2R5e2ZvbnQ6MTZweC8xLjYgc3lzdGVtLXVpLHNhbnMtc2VyaWY7bWF4LXdpZHRoOjI2ZW07bWFyZ2luOmF1dG87cGFkZGluZzoyNXZoIDJlbSAyZW07dGV4dC1hbGlnbjpjZW50ZXJ9PC9zdHlsZT48L2hlYWQ+PGJvZHk+PHA+VGhpcyBkb21haW4gaXMgZm9yIHVzZSBpbiBkb2N1bWVudGF0aW9uIGV4YW1wbGVzIHdpdGhvdXQgbmVlZGluZyBwZXJtaXNzaW9uLiBUaGlzIGlzIG5vdCBhIHNlcnZpY2U7IGF2b2lkIHJlbHlpbmcgb24gaXQgZm9yIHRlc3RpbmcgYW5kIG1vbml0b3JpbmcgcHVycG9zZXMuPC9wPjxzY3JpcHQgc3JjPS9zLmpzPjwvc2NyaXB0PjwvYm9keT48L2h0bWw+Cg=="
+        },
+        "hints": [],
+        "timings_ms": {
+          "resolve": 100,
+          "connect": 70,
+          "tls": null,
+          "first_byte": 73,
+          "total": 246
+        },
+        "errors": [],
+        "notes": []
+      },
+      "node_decisions": {
+        "decisions": [
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "resolved",
+            "verdict": "allow"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "resolved",
+            "verdict": "allow"
+          },
+          {
+            "destination": "104.20.23.154:80",
+            "kind": "tcp",
+            "name": "example.com",
+            "reason": "allowOut name, by this gateway's DNS answer",
+            "verdict": "allow"
+          }
+        ],
+        "stats": {
+          "connectionsAllowed": 1,
+          "connectionsRefused": 0,
+          "dnsAnswered": 2,
+          "dnsRefused": 0,
+          "intercepted": 0
+        }
+      },
+      "flags": {
+        "unexpected_network_activity": [],
+        "denied": [],
+        "notes": []
+      },
+      "errors": [],
+      "timing": {
+        "create_s": 0.108,
+        "exec_s": 0.283,
+        "total_s": 0.432
+      },
+      "create_request": {
+        "templateID": "base",
+        "timeout": 150,
+        "network": {
+          "allowOut": [
+            "example.com"
+          ],
+          "denyOut": [
+            "0.0.0.0/0",
+            "::/0"
+          ]
+        }
+      },
+      "exit_code": 0,
+      "timed_out": false,
+      "guest_stderr": "",
+      "deleted": true
+    }
+  ]
+}
