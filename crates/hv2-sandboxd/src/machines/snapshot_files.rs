@@ -48,6 +48,7 @@ const ARCHIVE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(180)
 const EXT_MAGIC_AT: u64 = 1080;
 const EXT_MAGIC: [u8; 2] = [0x53, 0xEF];
 const SECTOR: u64 = 512;
+const SCRATCH_PREFIX: &str = "hv2-snapshot-dump-";
 
 /// One directory entry.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -428,7 +429,10 @@ fn archive(
             ),
         ));
     }
-    let scratch = tempfile::tempdir().map_err(|e| internal(format!("a scratch directory: {e}")))?;
+    let scratch = tempfile::Builder::new()
+        .prefix(SCRATCH_PREFIX)
+        .tempdir()
+        .map_err(|e| internal(format!("a scratch directory: {e}")))?;
     let mut spec = image.as_os_str().to_owned();
     if offset != 0 {
         spec.push(format!("?offset={offset}"));
@@ -713,12 +717,17 @@ mod tests {
         assert_eq!(e.0, StatusCode::BAD_REQUEST, "{e:?}");
         let mut after = Vec::new();
         scratch(&mut after);
-        assert!(
-            after
-                .iter()
-                .all(|p| before.contains(p) || !p.to_string_lossy().contains(".tmp")),
-            "a scratch directory was left: {after:?}"
-        );
+        // By the dump's own prefix: the temporary directory is shared with
+        // every other test running now, and their files come and go.
+        let left: Vec<_> = after
+            .iter()
+            .filter(|p| !before.contains(p))
+            .filter(|p| {
+                p.file_name()
+                    .is_some_and(|n| n.to_string_lossy().starts_with(SCRATCH_PREFIX))
+            })
+            .collect();
+        assert!(left.is_empty(), "a scratch directory was left: {left:?}");
     }
 
     #[test]
