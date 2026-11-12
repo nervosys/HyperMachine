@@ -3764,6 +3764,7 @@ mod tests {
     /// both VMs' vCPU 0 land on the same `vcpu_map` key and `load_boot` then
     /// resolved whichever VM was created last.
     #[tokio::test]
+    #[cfg_attr(miri, ignore = "opens /dev/kvm, which Miri cannot do")]
     async fn a_second_vm_on_one_backend_is_refused() {
         let Ok(backend) = KvmBackend::new() else {
             eprintln!("KVM not available — skipping");

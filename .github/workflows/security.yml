@@ -110,8 +110,9 @@ jobs:
         with:
           components: clippy
 
-      # Currently exits non-zero (a deny-level lint in hv2-sandbox: "could not
-      # compile `hv2-sandbox` due to 1 previous error"); non-fatal until fixed.
+      # hv2-sandbox's library now passes; the step still fails on unwrap/expect
+      # in 10 other crates (hv2-core, hv2-jobs, hv2-infer, hv2-context, hm-gui,
+      # hm-tui, hv2-guest-agent, hv1-arm, hv1-core, hv2-agent-proto) and in tests.
       - name: Run Clippy with security lints (advisory - cannot fail the build)
         run: |
           set -o pipefail
@@ -155,9 +156,8 @@ jobs:
       - name: Setup Miri
         run: cargo +nightly miri setup
 
-      # Currently Miri aborts on hv2-core test
-      # backends::kvm::tests::a_second_vm_on_one_backend_is_refused ("test
-      # failed"); `|| true` hides it, so non-fatal until that is fixed.
+      # That test is now ignored under Miri (it opens /dev/kvm), but other
+      # kvm.rs tests also call KvmBackend::new(); no clean Miri run seen yet.
       - name: Run Miri on hv2-core (advisory - cannot fail the build)
         run: |
           # Keep the whole run, then show the head and the tail of it. Piping
@@ -192,18 +192,14 @@ jobs:
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz
 
-      # The fuzz/ directory exists, so the check does run, but `cd fuzz &&
-      # cargo check` currently exits 101 ("current package believes it's in a
-      # workspace when it's not": fuzz is neither a workspace member nor
-      # excluded); non-fatal until that is fixed.
-      - name: Check fuzz targets compile (advisory - cannot fail the build)
+      # fuzz/ is excluded from the root workspace, so it checks as its own package.
+      - name: Check fuzz targets compile
         run: |
           if [ -d "fuzz" ]; then
             cd fuzz && cargo check
           else
             echo "No fuzz directory found - consider adding fuzz targets"
           fi
-        continue-on-error: true
 
   # ============================================================================
   # Supply Chain Security
@@ -218,20 +214,19 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
-      # Exits 0, but the uploaded sbom.json is only 134 bytes: cargo-cyclonedx
-      # writes per-crate files, not stdout, so the artifact is nearly empty.
-      # Non-fatal until it produces a real SBOM.
-      - name: Generate SBOM (advisory - cannot fail the build)
-        continue-on-error: true
+      # cargo-cyclonedx writes one <crate>.cdx.json beside each crate's
+      # Cargo.toml and prints nothing useful to stdout.
+      - name: Generate SBOM
         run: |
           cargo install cargo-cyclonedx
-          cargo cyclonedx --format json > sbom.json
+          cargo cyclonedx --format json
 
       - name: Upload SBOM
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: sbom
-          path: sbom.json
+          path: "**/*.cdx.json"
+          if-no-files-found: error
           retention-days: 14
         if: always()
 

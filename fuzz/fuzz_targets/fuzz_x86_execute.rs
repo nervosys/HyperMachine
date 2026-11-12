@@ -10,6 +10,6 @@ fuzz_target!(|data: &[u8]| {
     // Pad to minimum 256 bytes so RIP=0 has room to read
     memory.resize(memory.len().max(256), 0);
     let mut cpu = hv2_cpu::x86_64::X86_64Cpu::new();
-    cpu.regs.rip = 0;
+    cpu.registers_mut().rip = 0;
     let _ = cpu.execute_with_memory(&mut memory);
 });

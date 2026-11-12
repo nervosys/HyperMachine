@@ -913,7 +913,12 @@ fn plan_filesystem(
         // Mirrored at the same path inside the root, so a workload finds
         // /usr/bin/sh where it expects it and the caller does not have to
         // describe a mapping it would then have to keep in step.
-        let relative = source.strip_prefix("/").expect("checked absolute above");
+        let relative = source.strip_prefix("/").map_err(|_| {
+            invalid(format!(
+                "the mounted path {} must be absolute",
+                source.display()
+            ))
+        })?;
         let target = root.join(relative);
         let created = if metadata.is_dir() {
             std::fs::create_dir_all(&target)
