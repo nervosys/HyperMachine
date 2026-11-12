@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **A sandbox could erase its own first entries from the node's egress record.** The
+  record held 512 decisions and dropped the oldest, so a guest making hundreds of refused
+  lookups pushed out the entries for what it did first. It now keeps the first 256 and the
+  most recent 256. `GET /sandboxes/{id}/network/decisions` gives each entry a sequence
+  number `seq` and a time `at` (milliseconds since the epoch), and reports `recorded` and
+  `dropped`, so a gap is visible instead of silent. Checked on KVM, 3 of 3 runs
+  (`docs/benchmarks/2026-11-11/urltrace-decision-log-kvm`): after 723 recorded decisions,
+  the first fetch's entries were still entries 1 to 3, 211 were reported dropped, and the
+  URL-tracing driver flagged the record as incomplete.
 - **An `allowOut` list alone did not restrict a sandbox on a deny-default node.** Once a
   request configured anything, the policy's default became allow, so a sandbox created
   with only `allowOut: ["example.com"]` could reach any site, and a tenant could turn the

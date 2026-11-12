@@ -1,0 +1,272 @@
+{
+  "hops": [
+    {
+      "url": "https://example.com/",
+      "host": "example.com",
+      "pinned_to": [
+        "example.com"
+      ],
+      "sandbox_id": "sbx-b1767bf0d04f413baec1",
+      "tracer_args": [],
+      "guest_report": {
+        "tool": {
+          "name": "hv2-urltrace",
+          "version": "1.2.0"
+        },
+        "input_url": "https://example.com/",
+        "url": {
+          "scheme": "https",
+          "host": "example.com",
+          "port": 443,
+          "path_and_query": "/"
+        },
+        "resolved": [
+          "104.20.23.154:443",
+          "172.66.147.243:443"
+        ],
+        "connected_to": "104.20.23.154:443",
+        "tls": {
+          "protocol_version": "TLSv1_3",
+          "cipher_suite": "TLS13_AES_256_GCM_SHA384",
+          "alpn": "http/1.1",
+          "verified": true,
+          "verification_error": null,
+          "certificates": [
+            {
+              "sha256": "85ca6ab068e9bcce88b6c4aa3c47f7d17228134a457f870d3800e6223a0df07a",
+              "subject": "CN=example.com",
+              "issuer": "C=US, O=SSL Corporation, CN=Cloudflare TLS Issuing ECC CA 3",
+              "serial": "01eee6aabb521d5e14fc315fd9985690",
+              "not_before": 1790462951,
+              "not_after": 1798239395,
+              "san_dns": [
+                "example.com",
+                "*.example.com"
+              ],
+              "san_dns_truncated": false,
+              "parse_error": null
+            },
+            {
+              "sha256": "f15f29abef73aa4dd9ab754baeae3685bdd3874b46b525071177628685718026",
+              "subject": "C=US, O=SSL Corporation, CN=Cloudflare TLS Issuing ECC CA 3",
+              "issuer": "C=US, O=SSL Corporation, CN=SSL.com TLS Transit ECC CA R2",
+              "serial": "31eee88afb87cd9ef8336604743f9b27",
+              "not_before": 1748548185,
+              "not_after": 2063908184,
+              "san_dns": [],
+              "san_dns_truncated": false,
+              "parse_error": null
+            },
+            {
+              "sha256": "5d1bc399274e649e1c72697de91a54ad725088c5221cb61e17ee9c290bc42a92",
+              "subject": "C=US, O=SSL Corporation, CN=SSL.com TLS Transit ECC CA R2",
+              "issuer": "C=US, O=SSL Corporation, CN=SSL.com TLS ECC Root CA 2022",
+              "serial": "604d8af8d00ba8748b955853172c5f2e",
+              "not_before": 1666371743,
+              "not_after": 2139411742,
+              "san_dns": [],
+              "san_dns_truncated": false,
+              "parse_error": null
+            },
+            {
+              "sha256": "ba06d3d3e348fce7478cc84b422d0e638e9e221ef1a0b53adc14cc70e04b8ab8",
+              "subject": "C=US, O=SSL Corporation, CN=SSL.com TLS ECC Root CA 2022",
+              "issuer": "C=GB, ST=Greater Manchester, L=Salford, O=Comodo CA Limited, CN=AAA Certificate Services",
+              "serial": "173dca60ea9f8e1026dafcd72810e48e",
+              "not_before": 1754006400,
+              "not_after": 1861919999,
+              "san_dns": [],
+              "san_dns_truncated": false,
+              "parse_error": null
+            }
+          ],
+          "certificates_truncated": false
+        },
+        "request": {
+          "request_line": "GET / HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "example.com"
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Accept-Encoding",
+              "identity"
+            ],
+            [
+              "Connection",
+              "close"
+            ]
+          ]
+        },
+        "response": {
+          "http_version": "HTTP/1.1",
+          "status": 200,
+          "reason": "OK",
+          "headers": [
+            [
+              "Date",
+              "Thu, 12 Nov 2026 05:52:57 GMT"
+            ],
+            [
+              "Content-Type",
+              "text/html; charset=utf-8"
+            ],
+            [
+              "Transfer-Encoding",
+              "chunked"
+            ],
+            [
+              "Connection",
+              "close"
+            ],
+            [
+              "Server",
+              "cloudflare"
+            ],
+            [
+              "last-modified",
+              "Sun, 08 Nov 2026 18:05:34 GMT"
+            ],
+            [
+              "allow",
+              "GET, HEAD"
+            ],
+            [
+              "Accept-Ranges",
+              "bytes"
+            ],
+            [
+              "Age",
+              "1"
+            ],
+            [
+              "cf-cache-status",
+              "HIT"
+            ],
+            [
+              "CF-RAY",
+              "a59346074c652ae3-LAX"
+            ],
+            [
+              "alt-svc",
+              "h3=\":443\"; ma=86400"
+            ]
+          ],
+          "headers_truncated": false,
+          "lossy": false,
+          "location": null,
+          "next_url": null,
+          "content_type": "text/html; charset=utf-8",
+          "body_bytes_read": 577,
+          "body_truncated": false,
+          "body_sha256": "25ddf2c883e0d1958ea971d279a7e4f0fd446724ee3db7db19dadabd4a62e484",
+          "body_sample_encoding": "base64",
+          "body_sample": "PCFkb2N0eXBlIGh0bWw+PGh0bWwgbGFuZz1lbj48aGVhZD48bWV0YSBjaGFyc2V0PXV0Zi04PjxsaW5rIHJlbD1pY29uIGhyZWY9ZGF0YTosPjxtZXRhIG5hbWU9dmlld3BvcnQgY29udGVudD0id2lkdGg9ZGV2aWNlLXdpZHRoLGluaXRpYWwtc2NhbGU9MSI+PHRpdGxlPkV4YW1wbGUgRG9tYWluPC90aXRsZT48c3R5bGU+aHRtbHtjb2xvci1zY2hlbWU6bGlnaHQgZGFyaztiYWNrZ3JvdW5kOmxpZ2h0LWRhcmsoI2VlZSwjMjIyKX1ib2R5e2ZvbnQ6MTZweC8xLjYgc3lzdGVtLXVpLHNhbnMtc2VyaWY7bWF4LXdpZHRoOjI2ZW07bWFyZ2luOmF1dG87cGFkZGluZzoyNXZoIDJlbSAyZW07dGV4dC1hbGlnbjpjZW50ZXJ9PC9zdHlsZT48L2hlYWQ+PGJvZHk+PHA+VGhpcyBkb21haW4gaXMgZm9yIHVzZSBpbiBkb2N1bWVudGF0aW9uIGV4YW1wbGVzIHdpdGhvdXQgbmVlZGluZyBwZXJtaXNzaW9uLiBUaGlzIGlzIG5vdCBhIHNlcnZpY2U7IGF2b2lkIHJlbHlpbmcgb24gaXQgZm9yIHRlc3RpbmcgYW5kIG1vbml0b3JpbmcgcHVycG9zZXMuPC9wPjxzY3JpcHQgc3JjPS9zLmpzPjwvc2NyaXB0PjwvYm9keT48L2h0bWw+Cg=="
+        },
+        "hints": [],
+        "timings_ms": {
+          "resolve": 101,
+          "connect": 77,
+          "tls": 89,
+          "first_byte": 86,
+          "total": 355
+        },
+        "errors": [],
+        "notes": []
+      },
+      "node_decisions": {
+        "decisions": [
+          {
+            "at": 1794462777294,
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "resolved",
+            "seq": 1,
+            "verdict": "allow"
+          },
+          {
+            "at": 1794462777295,
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "resolved",
+            "seq": 2,
+            "verdict": "allow"
+          },
+          {
+            "at": 1794462777380,
+            "destination": "104.20.23.154:443",
+            "kind": "tcp",
+            "name": "example.com",
+            "reason": "allowOut name, by this gateway's DNS answer",
+            "seq": 3,
+            "verdict": "allow"
+          }
+        ],
+        "dropped": 0,
+        "recorded": 3,
+        "stats": {
+          "connectionsAllowed": 1,
+          "connectionsRefused": 0,
+          "dnsAnswered": 2,
+          "dnsRefused": 0,
+          "intercepted": 0
+        }
+      },
+      "flags": {
+        "unexpected_network_activity": [],
+        "denied": [],
+        "notes": []
+      },
+      "errors": [],
+      "timing": {
+        "create_s": 0.061,
+        "exec_s": 0.377,
+        "total_s": 0.498
+      },
+      "create_request": {
+        "templateID": "base",
+        "timeout": 180,
+        "network": {
+          "allowOut": [
+            "example.com"
+          ],
+          "denyOut": [
+            "0.0.0.0/0",
+            "::/0"
+          ]
+        }
+      },
+      "exec_argv": [
+        "/bin/hv2-urltrace",
+        "https://example.com/",
+        "--timeout",
+        "60",
+        "--user-agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "--max-body",
+        "65536"
+      ],
+      "exit_code": 0,
+      "timed_out": false,
+      "guest_stderr": "",
+      "deleted": true,
+      "view": {
+        "status": 200,
+        "verified": true,
+        "verification_error": null,
+        "next_url": null
+      }
+    }
+  ]
+}

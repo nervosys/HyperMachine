@@ -208,6 +208,10 @@ impl Dialer for SystemDialer {
 /// One thing the gateway decided, for the audit log.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Decision {
+    /// Position in recording order, from 1, never reused: a gap in the
+    /// sequence of a read-out is an entry that was dropped.
+    pub seq: u64,
+    /// Wall-clock time of the decision.
     pub at: SystemTime,
     /// `tcp`, `dns`, `https-intercept` or `http-inject`.
     pub kind: &'static str,
@@ -228,8 +232,55 @@ pub struct GatewayStats {
     pub intercepted: u64,
 }
 
-/// How many decisions are kept.
-const DECISION_LOG: usize = 512;
+/// How many of the first decisions ever recorded are kept.
+pub const DECISION_HEAD: usize = 256;
+/// How many of the most recent decisions are kept, after the first ones.
+pub const DECISION_TAIL: usize = 256;
+
+/// What the decision log holds: the first [`DECISION_HEAD`] entries ever
+/// recorded and the most recent [`DECISION_TAIL`], with the count of those
+/// between that were let go. A guest that floods the log cannot push out
+/// its earliest activity.
+#[derive(Debug, Default)]
+struct DecisionLog {
+    head: Vec<Decision>,
+    tail: VecDeque<Decision>,
+    /// Entries ever recorded.
+    recorded: u64,
+}
+
+impl DecisionLog {
+    fn push(&mut self, mut decision: Decision) {
+        self.recorded += 1;
+        decision.seq = self.recorded;
+        if self.head.len() < DECISION_HEAD {
+            self.head.push(decision);
+            return;
+        }
+        if self.tail.len() == DECISION_TAIL {
+            self.tail.pop_front();
+        }
+        self.tail.push_back(decision);
+    }
+
+    fn snapshot(&self) -> DecisionSnapshot {
+        let decisions: Vec<Decision> = self.head.iter().chain(self.tail.iter()).cloned().collect();
+        DecisionSnapshot {
+            dropped: self.recorded - decisions.len() as u64,
+            recorded: self.recorded,
+            decisions,
+        }
+    }
+}
+
+/// The decision log as read: kept entries in sequence order, how many were
+/// ever recorded, and how many of those are not in `decisions`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecisionSnapshot {
+    pub decisions: Vec<Decision>,
+    pub recorded: u64,
+    pub dropped: u64,
+}
 
 /// DNS answers remembered, address to the names that produced it.
 const RESOLVED_LIMIT: usize = 8192;
@@ -248,7 +299,7 @@ struct Shared {
     /// Credentials the host sends for the guest to certain HTTPS remotes.
     host_credentials: RwLock<Option<Arc<crate::host_credentials::HostCredentials>>>,
     resolved: Mutex<HashMap<IpAddr, BTreeSet<String>>>,
-    log: Mutex<VecDeque<Decision>>,
+    log: Mutex<DecisionLog>,
     stats: Mutex<GatewayStats>,
 }
 
@@ -288,11 +339,8 @@ impl Shared {
                 (_, Verdict::Deny) => stats.connections_refused += 1,
             }
         }
-        let mut log = self.log.lock();
-        if log.len() == DECISION_LOG {
-            log.pop_front();
-        }
-        log.push_back(Decision {
+        self.log.lock().push(Decision {
+            seq: 0, // assigned by the log
             at: SystemTime::now(),
             kind,
             destination,
@@ -398,10 +446,31 @@ impl GatewayHandle {
         Ok(())
     }
 
-    /// The most recent decisions, oldest first.
+    /// The decisions kept, in sequence order: the first [`DECISION_HEAD`]
+    /// ever recorded, then the most recent [`DECISION_TAIL`]. See
+    /// [`Self::decision_log`] for what fell between.
     #[must_use]
     pub fn decisions(&self) -> Vec<Decision> {
-        self.0.log.lock().iter().cloned().collect()
+        self.0.log.lock().snapshot().decisions
+    }
+
+    /// The kept decisions with the count ever recorded and the count dropped.
+    #[must_use]
+    pub fn decision_log(&self) -> DecisionSnapshot {
+        self.0.log.lock().snapshot()
+    }
+
+    /// Decisions ever recorded, kept or not.
+    #[must_use]
+    pub fn decisions_recorded(&self) -> u64 {
+        self.0.log.lock().recorded
+    }
+
+    /// Decisions recorded and no longer kept (between the first and the
+    /// most recent ones).
+    #[must_use]
+    pub fn decisions_dropped(&self) -> u64 {
+        self.decision_log().dropped
     }
 
     #[must_use]
@@ -499,7 +568,7 @@ impl GatewayBuilder {
             secrets: RwLock::new(None),
             host_credentials: RwLock::new(None),
             resolved: Mutex::new(HashMap::new()),
-            log: Mutex::new(VecDeque::new()),
+            log: Mutex::new(DecisionLog::default()),
             stats: Mutex::new(GatewayStats::default()),
         });
 

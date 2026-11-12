@@ -1,0 +1,722 @@
+{
+  "success": true,
+  "cases": [
+    {
+      "name": "1 https://example.com/ one hop, 200, verified; node saw only example.com",
+      "success": true,
+      "detail": {
+        "chain": [
+          {
+            "url": "https://example.com/",
+            "status": 200,
+            "verified": true,
+            "next": null
+          }
+        ],
+        "decisions": [
+          [
+            "dns",
+            "example.com",
+            "10.0.2.3:53",
+            "allow",
+            "resolved"
+          ],
+          [
+            "dns",
+            "example.com",
+            "10.0.2.3:53",
+            "allow",
+            "resolved"
+          ],
+          [
+            "tcp",
+            "example.com",
+            "104.20.23.154:443",
+            "allow",
+            "allowOut name, by this gateway's DNS answer"
+          ]
+        ],
+        "sandbox": "sbx-f406bbb3823e48d19ccb",
+        "timing": {
+          "create_s": 0.038,
+          "exec_s": 0.354,
+          "total_s": 0.426
+        }
+      },
+      "seconds": 0.485
+    },
+    {
+      "name": "2 http://github.com/ 301 then a second hop in a different sandbox",
+      "success": true,
+      "detail": {
+        "chain": [
+          {
+            "url": "http://github.com/",
+            "status": 301,
+            "verified": null,
+            "next": "https://github.com/"
+          },
+          {
+            "url": "https://github.com/",
+            "status": 200,
+            "verified": true,
+            "next": null
+          }
+        ],
+        "sandboxes": [
+          "sbx-7ac1d68142f94ea1b705",
+          "sbx-ca413a63706f4ec7b523"
+        ],
+        "decisions": [
+          [
+            [
+              "dns",
+              "github.com",
+              "10.0.2.3:53",
+              "allow",
+              "resolved"
+            ],
+            [
+              "dns",
+              "github.com",
+              "10.0.2.3:53",
+              "allow",
+              "resolved"
+            ],
+            [
+              "tcp",
+              "github.com",
+              "140.82.114.3:80",
+              "allow",
+              "allowOut name, by this gateway's DNS answer"
+            ]
+          ],
+          [
+            [
+              "dns",
+              "github.com",
+              "10.0.2.3:53",
+              "allow",
+              "resolved"
+            ],
+            [
+              "dns",
+              "github.com",
+              "10.0.2.3:53",
+              "allow",
+              "resolved"
+            ],
+            [
+              "tcp",
+              "github.com",
+              "140.82.114.3:443",
+              "allow",
+              "allowOut name, by this gateway's DNS answer"
+            ]
+          ]
+        ]
+      },
+      "seconds": 1.848
+    },
+    {
+      "name": "3 expired.badssl.com: verified false with a reason, response still fetched",
+      "success": true,
+      "detail": {
+        "status": 200,
+        "verification_error": "invalid peer certificate: certificate expired: verification time 1794463929 (UNIX), but certificate is not valid after 1428883199 (365580730 seconds ago)",
+        "ended": "final"
+      },
+      "seconds": 1.086
+    },
+    {
+      "name": "4 pinned to example.com, asked for www.wikipedia.org: refused by the node",
+      "success": true,
+      "detail": {
+        "guest_errors": [
+          {
+            "stage": "resolve",
+            "message": "failed to lookup address information: Try again"
+          }
+        ],
+        "decisions": [
+          [
+            "dns",
+            "www.wikipedia.org",
+            "10.0.2.3:53",
+            "deny",
+            "the policy would refuse where this name leads"
+          ],
+          [
+            "dns",
+            "www.wikipedia.org",
+            "10.0.2.3:53",
+            "deny",
+            "the policy would refuse where this name leads"
+          ],
+          [
+            "dns",
+            "www.wikipedia.org",
+            "10.0.2.3:53",
+            "deny",
+            "the policy would refuse where this name leads"
+          ],
+          [
+            "dns",
+            "www.wikipedia.org",
+            "10.0.2.3:53",
+            "deny",
+            "the policy would refuse where this name leads"
+          ]
+        ],
+        "stats": {
+          "connectionsAllowed": 0,
+          "connectionsRefused": 0,
+          "dnsAnswered": 0,
+          "dnsRefused": 4,
+          "intercepted": 0
+        }
+      },
+      "seconds": 5.164
+    },
+    {
+      "name": "5a --resolve to another public site's address: refused and recorded",
+      "success": true,
+      "detail": {
+        "other_site": "www.wikipedia.org",
+        "other_address": "198.35.26.224",
+        "example_com_addresses": [
+          "104.20.23.154",
+          "172.66.147.243"
+        ],
+        "https_to_other_public_address": {
+          "guest_errors": [
+            {
+              "stage": "tls",
+              "message": "TLS handshake: Connection reset by peer (os error 104)"
+            }
+          ],
+          "decisions": [
+            [
+              "tcp",
+              "example.com",
+              "198.35.26.224:443",
+              "deny",
+              "the name does not resolve to the address connected to"
+            ]
+          ]
+        },
+        "http_to_other_public_address": {
+          "guest_errors": [
+            {
+              "stage": "response_head",
+              "message": "reading the status line: Connection reset by peer (os error 104)"
+            }
+          ],
+          "decisions": [
+            [
+              "tcp",
+              "example.com",
+              "198.35.26.224:80",
+              "deny",
+              "the name does not resolve to the address connected to"
+            ]
+          ]
+        }
+      },
+      "seconds": 0.616
+    },
+    {
+      "name": "5b --resolve 169.254.169.254 (cloud metadata): refused and recorded",
+      "success": true,
+      "detail": {
+        "http": {
+          "guest_errors": [
+            {
+              "stage": "connect",
+              "message": "169.254.169.254:80: Connection refused (os error 111)"
+            }
+          ],
+          "decisions": [
+            [
+              "tcp",
+              null,
+              "169.254.169.254:80",
+              "deny",
+              "reserved address"
+            ]
+          ]
+        },
+        "https": {
+          "guest_errors": [
+            {
+              "stage": "connect",
+              "message": "169.254.169.254:443: Connection refused (os error 111)"
+            }
+          ],
+          "decisions": [
+            [
+              "tcp",
+              null,
+              "169.254.169.254:443",
+              "deny",
+              "reserved address"
+            ]
+          ]
+        }
+      },
+      "seconds": 0.283
+    },
+    {
+      "name": "5c --resolve to the node's gateway and its DNS address: refused and recorded",
+      "success": true,
+      "detail": {
+        "gateway": {
+          "guest_errors": [
+            {
+              "stage": "connect",
+              "message": "10.0.2.2:80: Connection refused (os error 111)"
+            }
+          ],
+          "decisions": [
+            [
+              "tcp",
+              null,
+              "10.0.2.2:80",
+              "deny",
+              "the gateway runs no TCP services"
+            ]
+          ]
+        },
+        "dns_server": {
+          "guest_errors": [
+            {
+              "stage": "connect",
+              "message": "10.0.2.3:80: Connection refused (os error 111)"
+            }
+          ],
+          "decisions": [
+            [
+              "tcp",
+              null,
+              "10.0.2.3:80",
+              "deny",
+              "the gateway runs no TCP services"
+            ]
+          ]
+        }
+      },
+      "seconds": 0.338
+    },
+    {
+      "name": "5d --resolve to this host's own address: refused and recorded",
+      "success": true,
+      "detail": {
+        "host_address": "172.28.97.192",
+        "http": {
+          "guest_errors": [
+            {
+              "stage": "connect",
+              "message": "172.28.97.192:80: Connection refused (os error 111)"
+            }
+          ],
+          "decisions": [
+            [
+              "tcp",
+              null,
+              "172.28.97.192:80",
+              "deny",
+              "reserved address"
+            ]
+          ]
+        }
+      },
+      "seconds": 0.173
+    },
+    {
+      "name": "7 with no allow rule, example.com cannot be fetched",
+      "success": true,
+      "detail": {
+        "no_network_object": {
+          "guest_errors": [
+            {
+              "stage": "resolve",
+              "message": "failed to lookup address information: Try again"
+            }
+          ],
+          "driver_errors": [],
+          "exit_code": 0,
+          "decisions": [
+            [
+              "dns",
+              "example.com",
+              "10.0.2.3:53",
+              "deny",
+              "the policy would refuse where this name leads"
+            ],
+            [
+              "dns",
+              "example.com",
+              "10.0.2.3:53",
+              "deny",
+              "the policy would refuse where this name leads"
+            ],
+            [
+              "dns",
+              "example.com",
+              "10.0.2.3:53",
+              "deny",
+              "the policy would refuse where this name leads"
+            ],
+            [
+              "dns",
+              "example.com",
+              "10.0.2.3:53",
+              "deny",
+              "the policy would refuse where this name leads"
+            ]
+          ]
+        },
+        "deny_all": {
+          "guest_errors": [
+            {
+              "stage": "resolve",
+              "message": "failed to lookup address information: Try again"
+            }
+          ],
+          "decisions": [
+            [
+              "dns",
+              "example.com",
+              "10.0.2.3:53",
+              "deny",
+              "the policy would refuse where this name leads"
+            ],
+            [
+              "dns",
+              "example.com",
+              "10.0.2.3:53",
+              "deny",
+              "the policy would refuse where this name leads"
+            ],
+            [
+              "dns",
+              "example.com",
+              "10.0.2.3:53",
+              "deny",
+              "the policy would refuse where this name leads"
+            ],
+            [
+              "dns",
+              "example.com",
+              "10.0.2.3:53",
+              "deny",
+              "the policy would refuse where this name leads"
+            ]
+          ]
+        }
+      },
+      "seconds": 10.344
+    },
+    {
+      "name": "8 a URL with shell metacharacters reaches the tracer byte for byte",
+      "success": true,
+      "detail": {
+        "request_line": "GET /?q=$(id);echo$IFS$HOME&x=*&y=%27 HTTP/1.1",
+        "status": 200
+      },
+      "seconds": 0.363
+    },
+    {
+      "name": "9 URL validation rejects hostile input",
+      "success": true,
+      "detail": {
+        "rejected": 26,
+        "accepted_ok": 3
+      },
+      "seconds": 0.0
+    },
+    {
+      "name": "10 allowOut: [example.com] alone on a deny-default node: another site refused, example.com reached",
+      "success": true,
+      "detail": {
+        "other_site": {
+          "status": null,
+          "guest_errors": [
+            {
+              "stage": "resolve",
+              "message": "failed to lookup address information: Try again"
+            }
+          ],
+          "decisions": [
+            [
+              "dns",
+              "www.wikipedia.org",
+              "10.0.2.3:53",
+              "deny",
+              "the policy would refuse where this name leads"
+            ],
+            [
+              "dns",
+              "www.wikipedia.org",
+              "10.0.2.3:53",
+              "deny",
+              "the policy would refuse where this name leads"
+            ],
+            [
+              "dns",
+              "www.wikipedia.org",
+              "10.0.2.3:53",
+              "deny",
+              "the policy would refuse where this name leads"
+            ],
+            [
+              "dns",
+              "www.wikipedia.org",
+              "10.0.2.3:53",
+              "deny",
+              "the policy would refuse where this name leads"
+            ]
+          ],
+          "refusal_reasons": [
+            "the policy would refuse where this name leads"
+          ]
+        },
+        "allowed_site": {
+          "status": 200,
+          "decisions": [
+            [
+              "dns",
+              "example.com",
+              "10.0.2.3:53",
+              "allow",
+              "resolved"
+            ],
+            [
+              "dns",
+              "example.com",
+              "10.0.2.3:53",
+              "allow",
+              "resolved"
+            ],
+            [
+              "tcp",
+              "example.com",
+              "104.20.23.154:443",
+              "allow",
+              "allowOut name, by this gateway's DNS answer"
+            ]
+          ]
+        },
+        "create_request": {
+          "templateID": "base",
+          "timeout": 180,
+          "network": {
+            "allowOut": [
+              "example.com"
+            ]
+          }
+        }
+      },
+      "seconds": 6.795
+    },
+    {
+      "name": "11 no shell in the image: /bin/sh, /bin/busybox and the cmd form all fail because the file does not exist",
+      "success": true,
+      "detail": {
+        "argv_sh_c_echo_x": {
+          "http_status": 500,
+          "answer": {
+            "error": "exec_in_guest: Script error: the guest agent could not run /bin/sh: could not start /bin/sh: No such file or directory (os error 2)"
+          }
+        },
+        "argv_busybox_sh": {
+          "http_status": 500,
+          "answer": {
+            "error": "exec_in_guest: Script error: the guest agent could not run /bin/busybox: could not start /bin/busybox: No such file or directory (os error 2)"
+          }
+        },
+        "cmd_form_echo_x": {
+          "http_status": 500,
+          "answer": {
+            "error": "exec_in_guest: Script error: the guest agent could not run /bin/sh: could not start /bin/sh: No such file or directory (os error 2)"
+          }
+        },
+        "argv_tracer_still_runs": {
+          "http_status": 200,
+          "answer": {
+            "exit_code": 2,
+            "stdout": "",
+            "stderr": "hv2-urltrace: unknown option --help\nusage: hv2-urltrace <URL> [--max-body BYTES] [--timeout SECS] [--user-agent STRING] [--resolve IPV4]\n",
+            "timed_out": false
+          }
+        }
+      },
+      "seconds": 0.063
+    },
+    {
+      "name": "12 PID 1 is the guest agent (/proc/1/exe, run once with no shell, names itself)",
+      "success": true,
+      "detail": {
+        "processes_listing": {
+          "http_status": 502,
+          "answer": {
+            "code": 502,
+            "message": "listing the guest's processes: Script error: the guest agent could not run /bin/sh: could not start /bin/sh: No such file or directory (os error 2)"
+          }
+        },
+        "proc_1_exe": {
+          "http_status": 200,
+          "answer": {
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "hv2-guest-agentd: Address already in use (os error 98)\n",
+            "timed_out": false
+          }
+        },
+        "pid1_line_in_daemon_log": false
+      },
+      "seconds": 0.025
+    },
+    {
+      "name": "13 the image's file list (from the cpio) holds no busybox, sh or bash, only init, the agent and the tracer",
+      "success": true,
+      "detail": {
+        "files": [
+          ".",
+          "bin",
+          "bin/hv2-guest-agentd",
+          "bin/hv2-urltrace",
+          "dev",
+          "etc",
+          "init",
+          "proc",
+          "root",
+          "sys",
+          "tmp"
+        ]
+      },
+      "seconds": 0.052
+    },
+    {
+      "name": "14 a guest cannot push its first entries out of the node's record",
+      "success": true,
+      "detail": {
+        "execs": 180,
+        "flood_seconds": 541.1,
+        "recorded_after_first_run": 3,
+        "recorded": 723,
+        "dropped": 211,
+        "kept": 512,
+        "lowest_seqs": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "kept_head_entries": [
+          [
+            "dns",
+            "example.com",
+            "10.0.2.3:53",
+            "allow",
+            "resolved"
+          ],
+          [
+            "dns",
+            "example.com",
+            "10.0.2.3:53",
+            "allow",
+            "resolved"
+          ],
+          [
+            "tcp",
+            "example.com",
+            "104.20.23.154:443",
+            "allow",
+            "allowOut name, by this gateway's DNS answer"
+          ]
+        ],
+        "first_tail_seq": 468,
+        "last_seq": 723,
+        "at_window_ms": [
+          1794463954127,
+          1794464495704
+        ],
+        "at_min_max_ms": [
+          1794463954320,
+          1794464495199
+        ],
+        "flag": {
+          "dropped": 211,
+          "recorded": 723,
+          "entries": 512
+        }
+      },
+      "seconds": 541.762
+    },
+    {
+      "name": "6 no hop's sandbox exists afterwards",
+      "success": true,
+      "detail": {
+        "sandboxes_made": 19
+      },
+      "seconds": 0.016
+    }
+  ],
+  "input_sha256": {
+    "daemon": "2c4ca97223808059fb468e583ced2679f755a5e41060553cb883017bf66992b3",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "e1e285cfdbddb5a0f318ebdbf3ef4540da51ead79a2bc327fe9042afd6860ec7",
+    "tracer": "2ad9bb1538874f4ceb8deac8dff6cf1c7628578686d96bad24d4daafc3906eee"
+  },
+  "input_names": {
+    "daemon": "hv2-sandboxd",
+    "kernel": "bzImage",
+    "initrd": "urltrace.cpio.gz",
+    "tracer": "hv2-urltrace"
+  },
+  "driver_sha256": "5f1676c808eab9e6fd0b805dbc6bb7cd08183c11626d45395e9281e5e034fad1",
+  "check_sha256": "cb96debcdebc08a2d0bddd72f2915b24266345b4224c7ef6a9a6b9f518f9a3a7",
+  "host_cpus": 24,
+  "memory_mb": 512,
+  "hop_timeout": 60,
+  "max_body": 65536,
+  "daemon_flags": [
+    "--port",
+    "57777",
+    "--proxy-port",
+    "43371",
+    "--network",
+    "--egress-default",
+    "deny",
+    "--memory-mb",
+    "512",
+    "--cpu-cores",
+    "1",
+    "--capacity",
+    "4"
+  ],
+  "hypervisor_platform": [
+    "Kvm",
+    "Kvm",
+    "Kvm",
+    "Kvm",
+    "Kvm",
+    "Kvm",
+    "Kvm",
+    "Kvm",
+    "Kvm",
+    "Kvm",
+    "Kvm",
+    "Kvm",
+    "Kvm",
+    "Kvm",
+    "Kvm",
+    "Kvm",
+    "Kvm",
+    "Kvm",
+    "Kvm",
+    "Kvm"
+  ]
+}

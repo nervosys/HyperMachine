@@ -6016,11 +6016,28 @@ async fn network_decisions(
 
 /// A gateway's audit log and counters, as the decisions routes answer.
 fn gateway_decisions(gateway: &GatewayHandle) -> serde_json::Value {
-    let decisions: Vec<_> = gateway
-        .decisions()
+    decisions_json(gateway.decision_log(), gateway.stats())
+}
+
+/// The JSON of a decisions answer. `seq` orders entries and shows gaps; `at`
+/// is the gateway's wall-clock time in milliseconds since the Unix epoch;
+/// `recorded` counts every decision ever made and `dropped` those of them
+/// that are not in `decisions` (the log keeps the first and the most recent
+/// ones).
+fn decisions_json(
+    log: hv2_net::gateway::DecisionSnapshot,
+    stats: hv2_net::gateway::GatewayStats,
+) -> serde_json::Value {
+    let decisions: Vec<_> = log
+        .decisions
         .into_iter()
         .map(|d| {
+            let at =
+                d.at.duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |t| u64::try_from(t.as_millis()).unwrap_or(u64::MAX));
             json!({
+                "seq": d.seq,
+                "at": at,
                 "kind": d.kind,
                 "destination": d.destination.to_string(),
                 "name": d.name,
@@ -6029,9 +6046,10 @@ fn gateway_decisions(gateway: &GatewayHandle) -> serde_json::Value {
             })
         })
         .collect();
-    let stats = gateway.stats();
     json!({
         "decisions": decisions,
+        "recorded": log.recorded,
+        "dropped": log.dropped,
         "stats": {
             "connectionsAllowed": stats.connections_allowed,
             "connectionsRefused": stats.connections_refused,
@@ -7886,5 +7904,42 @@ mod startup_cleanup_tests {
         vm.ping_guest(Duration::from_secs(5)).await.unwrap();
         vm.stop().await.unwrap();
         assert_eq!(vm.state(), hv2_core::VMState::Stopped);
+    }
+}
+
+#[cfg(test)]
+mod decisions_json_tests {
+    use super::*;
+    use hv2_net::gateway::{Decision, DecisionSnapshot, GatewayStats};
+
+    #[test]
+    fn decisions_json_carries_seq_at_recorded_and_dropped() {
+        let at = std::time::UNIX_EPOCH + Duration::from_millis(1_700_000_123_456);
+        let log = DecisionSnapshot {
+            decisions: vec![Decision {
+                seq: 7,
+                at,
+                kind: "dns",
+                destination: "10.0.2.2:53".parse().unwrap(),
+                name: Some("example.com".into()),
+                verdict: Verdict::Allow,
+                reason: "allowed".into(),
+            }],
+            recorded: 900,
+            dropped: 899,
+        };
+        let v = decisions_json(log, GatewayStats::default());
+        assert_eq!(v["recorded"], 900);
+        assert_eq!(v["dropped"], 899);
+        let d = &v["decisions"][0];
+        assert_eq!(d["seq"], 7);
+        assert_eq!(d["at"], 1_700_000_123_456_u64);
+        // Existing fields keep their names and meanings.
+        assert_eq!(d["kind"], "dns");
+        assert_eq!(d["destination"], "10.0.2.2:53");
+        assert_eq!(d["name"], "example.com");
+        assert_eq!(d["verdict"], "allow");
+        assert_eq!(d["reason"], "allowed");
+        assert_eq!(v["stats"]["dnsRefused"], 0);
     }
 }

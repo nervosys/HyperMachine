@@ -1475,3 +1475,60 @@ async fn private_udp_expired_fragments_refuse_and_reassembly_slots_recover() {
     wait_private_datagrams(&private, 1).await;
     assert_eq!(*private.received.lock().unwrap(), vec![payload]);
 }
+
+fn log_with(count: u64) -> DecisionLog {
+    let mut log = DecisionLog::default();
+    for n in 0..count {
+        log.push(Decision {
+            seq: 0,
+            at: SystemTime::now(),
+            kind: "dns",
+            destination: "10.0.2.2:53".parse().unwrap(),
+            name: Some(format!("n{n}.example")),
+            verdict: Verdict::Deny,
+            reason: String::new(),
+        });
+    }
+    log
+}
+
+fn seqs(snapshot: &DecisionSnapshot) -> Vec<u64> {
+    snapshot.decisions.iter().map(|d| d.seq).collect()
+}
+
+#[test]
+fn decision_log_keeps_all_below_the_limit() {
+    let snap = log_with(100).snapshot();
+    assert_eq!(seqs(&snap), (1..=100).collect::<Vec<_>>());
+    assert_eq!((snap.recorded, snap.dropped), (100, 0));
+}
+
+#[test]
+fn decision_log_keeps_exactly_head_plus_tail() {
+    let snap = log_with(512).snapshot();
+    assert_eq!(seqs(&snap), (1..=512).collect::<Vec<_>>());
+    assert_eq!((snap.recorded, snap.dropped), (512, 0));
+}
+
+#[test]
+fn decision_log_keeps_first_and_last_and_counts_between() {
+    let snap = log_with(1000).snapshot();
+    let mut want: Vec<u64> = (1..=256).collect();
+    want.extend(745..=1000);
+    assert_eq!(seqs(&snap), want);
+    assert_eq!((snap.recorded, snap.dropped), (1000, 488));
+    // The earliest entry is still the first one recorded.
+    assert_eq!(snap.decisions[0].name.as_deref(), Some("n0.example"));
+}
+
+#[test]
+fn decision_log_sequence_is_increasing_and_gap_free_within_each_part() {
+    let log = log_with(5000);
+    let snap = log.snapshot();
+    let (head, tail) = snap.decisions.split_at(DECISION_HEAD);
+    assert!(head.windows(2).all(|w| w[1].seq == w[0].seq + 1));
+    assert!(tail.windows(2).all(|w| w[1].seq == w[0].seq + 1));
+    assert!(head.last().unwrap().seq < tail[0].seq);
+    assert_eq!(snap.dropped, 5000 - 512);
+    assert_eq!(log.head.len() + log.tail.len(), 512);
+}

@@ -1,0 +1,161 @@
+{
+  "hops": [
+    {
+      "url": "https://example.com/",
+      "host": "example.com",
+      "pinned_to": [
+        "example.com"
+      ],
+      "sandbox_id": "sbx-6f90f4de99254434b318",
+      "tracer_args": [],
+      "guest_report": {
+        "tool": {
+          "name": "hv2-urltrace",
+          "version": "1.2.0"
+        },
+        "input_url": "https://example.com/",
+        "url": {
+          "scheme": "https",
+          "host": "example.com",
+          "port": 443,
+          "path_and_query": "/"
+        },
+        "resolved": [],
+        "connected_to": null,
+        "tls": null,
+        "request": null,
+        "response": null,
+        "hints": [],
+        "timings_ms": {
+          "resolve": 5011,
+          "connect": null,
+          "tls": null,
+          "first_byte": null,
+          "total": 5011
+        },
+        "errors": [
+          {
+            "stage": "resolve",
+            "message": "failed to lookup address information: Try again"
+          }
+        ],
+        "notes": []
+      },
+      "node_decisions": {
+        "decisions": [
+          {
+            "at": 1794463936499,
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "seq": 1,
+            "verdict": "deny"
+          },
+          {
+            "at": 1794463936500,
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "seq": 2,
+            "verdict": "deny"
+          },
+          {
+            "at": 1794463939000,
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "seq": 3,
+            "verdict": "deny"
+          },
+          {
+            "at": 1794463939001,
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "seq": 4,
+            "verdict": "deny"
+          }
+        ],
+        "dropped": 0,
+        "recorded": 4,
+        "stats": {
+          "connectionsAllowed": 0,
+          "connectionsRefused": 0,
+          "dnsAnswered": 0,
+          "dnsRefused": 4,
+          "intercepted": 0
+        }
+      },
+      "flags": {
+        "unexpected_network_activity": [],
+        "denied": [
+          {
+            "at": 1794463936499,
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "seq": 1,
+            "verdict": "deny"
+          },
+          {
+            "at": 1794463936500,
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "seq": 2,
+            "verdict": "deny"
+          },
+          {
+            "at": 1794463939000,
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "seq": 3,
+            "verdict": "deny"
+          },
+          {
+            "at": 1794463939001,
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "seq": 4,
+            "verdict": "deny"
+          }
+        ],
+        "notes": []
+      },
+      "errors": [],
+      "timing": {
+        "create_s": 0.04,
+        "exec_s": 5.029,
+        "total_s": 5.121
+      },
+      "create_request": {
+        "templateID": "base",
+        "timeout": 180
+      },
+      "exec_argv": [
+        "/bin/hv2-urltrace",
+        "https://example.com/",
+        "--timeout",
+        "60",
+        "--user-agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "--max-body",
+        "65536"
+      ],
+      "exit_code": 0,
+      "timed_out": false,
+      "guest_stderr": "",
+      "deleted": true
+    }
+  ]
+}

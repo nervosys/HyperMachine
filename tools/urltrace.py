@@ -47,7 +47,7 @@ GUEST_TRACER = "/bin/hv2-urltrace"
 MAX_URL_LEN = 2048
 MAX_REPORT_BYTES = 4 * 1024 * 1024       # the node's exec answer, in total
 MAX_DECISIONS_BYTES = 4 * 1024 * 1024
-DECISION_LOG_CAPACITY = 512              # hv2_net::gateway::DECISION_LOG
+DECISION_LOG_CAPACITY = 512              # only for nodes that report no "dropped": their whole log
 DEFAULT_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36")
 LABEL = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?<!-)$")
@@ -237,11 +237,22 @@ def compare(host, report, node_decisions, host_ips):
     if not isinstance(entries, list):
         flags["notes"].append("node_decisions_malformed")
         return flags
-    stats = node_decisions.get("stats") if isinstance(node_decisions.get("stats"), dict) else {}
-    counted = sum(v for v in stats.values() if isinstance(v, int))
-    if counted > len(entries) or len(entries) >= DECISION_LOG_CAPACITY:
-        flags["decision_log_incomplete"] = {
-            "entries": len(entries), "counted_by_stats": counted, "capacity": DECISION_LOG_CAPACITY}
+    dropped, recorded = node_decisions.get("dropped"), node_decisions.get("recorded")
+    if isinstance(dropped, int) and not isinstance(dropped, bool):
+        # The node's own count: it keeps the first and the most recent entries and says how
+        # many between were let go.
+        if dropped > 0:
+            flags["decision_log_incomplete"] = {
+                "dropped": dropped, "recorded": recorded if isinstance(recorded, int) else None,
+                "entries": len(entries)}
+    else:
+        # An older node, which reports no count: infer from its counters.
+        stats = node_decisions.get("stats") if isinstance(node_decisions.get("stats"), dict) else {}
+        counted = sum(v for v in stats.values() if isinstance(v, int))
+        flags["notes"].append("node_reports_no_dropped_count")
+        if counted > len(entries) or len(entries) >= DECISION_LOG_CAPACITY:
+            flags["decision_log_incomplete"] = {
+                "entries": len(entries), "counted_by_stats": counted, "capacity": DECISION_LOG_CAPACITY}
     allowed_connections = set()
     for entry in entries:
         if not isinstance(entry, dict):
@@ -500,8 +511,11 @@ def summary_lines(result):
             for e in flags["denied"][:10]:
                 lines.append(f"      {clean(e.get('kind'), 20)} name={clean(e.get('name'), 80)} dest={clean(e.get('destination'), 60)} "
                              f"({clean(e.get('reason'), 100)})")
+        if "decision_log_incomplete" in flags:
+            lines.append(f"    DECISION LOG INCOMPLETE: {clean(json.dumps(flags['decision_log_incomplete']), 300)} "
+                         "(the node let go entries between the first and the most recent it kept)")
         for key in ("guest_reported_connection_the_node_did_not_allow", "node_allowed_connection_the_guest_did_not_report",
-                    "guest_reported_a_different_host", "decision_log_incomplete", "next_url_differs_from_location"):
+                    "guest_reported_a_different_host", "next_url_differs_from_location"):
             if key in flags:
                 lines.append(f"    DISAGREEMENT {key}: {clean(json.dumps(flags[key]), 300)}")
     ended = result["ended"]

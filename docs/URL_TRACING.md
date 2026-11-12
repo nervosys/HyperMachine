@@ -112,9 +112,14 @@ request), the verdict in `ended`, and a short `chain` (URL, status, verified, ne
 - Requests leave from the host's own IP address.
 - It does not prove the report is true. A compromised guest can print any report; the node's
   record is the check on what it did on the network, not on what the server sent.
-- The node's decision log keeps 512 entries. The driver compares the count with the node's
-  cumulative counters and flags `decision_log_incomplete` if they disagree, but whether a hostile
-  guest can flood the log to hide earlier entries was not tested.
+- The node's decision log keeps the first 256 entries ever recorded and the most recent 256, and
+  counts what fell between them (`dropped`; `recorded` is the total). Every entry has a `seq`
+  (from 1, never reused) and `at` (milliseconds since the Unix epoch), so a gap is visible. A guest
+  that floods the log with refused lookups can still push its *middle* activity out of the record,
+  but not its first 256 entries nor its last 256; the driver sets `decision_log_incomplete` on the
+  hop, and prints DECISION LOG INCOMPLETE, whenever the node reports `dropped` > 0
+  (`docs/benchmarks/2026-11-11/urltrace-decision-log-kvm/`). A hop that legitimately makes more
+  than 256 connections before the interesting one is not covered by that.
 - Data can still leave through the one allowed name: in DNS lookups of it, in the request it
   makes, and (per hop) nothing limits what the guest sends to that host. UDP other than DNS is
   dropped by the gateway according to its source; that was not tested.
@@ -127,8 +132,8 @@ request), the verdict in `ended`, and a short `chain` (URL, status, verified, ne
   agent as PID 1 does not reap orphans. Only the process listing was run, and its failure recorded.
   The egress CA written through the agent's file operations was not checked by a client in the guest
   trusting it (the tracer carries its own roots).
-- Decisions carry no timestamps in the API (the daemon's log has them), so the order of entries is
-  known and their timing is not.
+- The `at` of a decision is the node's wall clock when it was recorded; it is as trustworthy as
+  the node's clock, and nothing here checks that clock.
 - The guest today is a Linux kernel plus two programs (the agent as PID 1, and the tracer). The intention is to replace it with the
   owner's own OS, Botnix, once it has TCP and TLS. The host protocol does not change: one URL in,
   one JSON report out.
@@ -141,6 +146,9 @@ request), the verdict in `ended`, and a short `chain` (URL, status, verified, ne
 `docs/benchmarks/2026-11-11/urltrace-kvm/` (busybox image): three passing runs of the check, an earlier set with
 one failure (a slow target, explained there), the guest image's file list, the node's logs, and
 every hop's report and decisions, with the list of what was not verified.
+
+`docs/benchmarks/2026-11-11/urltrace-decision-log-kvm/`: three runs of 17 cases (the 16 of the next entry plus a
+flood of the decision log), with the head-and-tail log, `seq`, `at`, `recorded` and `dropped`.
 
 `docs/benchmarks/2026-11-11/urltrace-noshell-kvm/` (no shell, `argv` exec, agent as PID 1): three
 passing runs of 16 cases, the image's file list, each run's daemon log and report, every hop's

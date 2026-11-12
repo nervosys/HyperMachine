@@ -34,6 +34,12 @@ so one broken case does not hide the others:
 13. the image's file list (from the cpio on the host) holds no busybox, sh or bash:
     only /init, the agent, the tracer and empty directories.
 
+14. a guest cannot push its first entries out of the node's record: after one allowed fetch of
+    example.com, many refused lookups (one tracer exec each) push the log past its 512 kept
+    entries; the node must report dropped > 0, keep the first entries (lowest seq, the
+    allowed lookup and connection), give strictly increasing seq and an `at` inside the run's
+    wall-clock window, and the driver's comparison must set decision_log_incomplete.
+
 Writes report.json, the daemon's log (daemon-log.txt) and one trace file per case into
 --output. Needs root and /dev/kvm. Exit status is 1 if any case failed.
 """
@@ -84,6 +90,10 @@ def only_host(hop, host):
     expect(not denied(hop), f"a refusal was recorded: {denied(hop)}")
     flags = hop["flags"]
     expect(not flags["unexpected_network_activity"] and "decision_log_incomplete" not in flags, flags)
+    node_record = hop["node_decisions"]
+    expect(node_record.get("dropped") == 0, f"the node reports dropped={node_record.get('dropped')!r}")
+    expect(isinstance(node_record.get("recorded"), int) and node_record["recorded"] == len(entries), node_record.get("recorded"))
+    expect(all(isinstance(e.get("seq"), int) and isinstance(e.get("at"), int) for e in entries), "an entry lacks seq or at")
 
 
 def public_address_of_another_site(not_in):
@@ -393,6 +403,87 @@ def main():
             expect(set(names) == expected, f"unexpected contents: extra {sorted(set(names) - expected)}, missing {sorted(expected - set(names))}")
             return {"files": sorted(names)}
         case("13 the image's file list (from the cpio) holds no busybox, sh or bash, only init, the agent and the tracer", c13)
+
+        def c14():
+            # A compromised guest floods the node's record with refused lookups. The first
+            # entries (its real activity, here an allowed fetch of example.com) must survive.
+            body = {"templateID": "base", "timeout": 1800,
+                    "network": {"allowOut": ["example.com"], "denyOut": ["0.0.0.0/0", "::/0"]}}
+            status, made = node.request("POST", "/sandboxes", body, timeout=180)
+            expect(status in (200, 201) and isinstance(made, dict), f"create: HTTP {status} {made}")
+            sid = made["sandboxID"]
+            sandboxes.append(sid)
+            decisions_path = f"/sandboxes/{sid}/network/decisions"
+
+            def run_tracer(url):
+                argv = [ut.GUEST_TRACER, url, "--timeout", "3", "--user-agent", ut.DEFAULT_UA,
+                        "--max-body", str(args.max_body)]
+                return node.request("POST", f"/sandboxes/{sid}/exec", {"argv": argv, "timeout_secs": 15}, timeout=60)
+
+            def fetch():
+                st, got = node.request("GET", decisions_path, timeout=30, limit=ut.MAX_DECISIONS_BYTES)
+                expect(st == 200 and isinstance(got, dict), f"decisions: HTTP {st} {got}")
+                return got
+
+            try:
+                window_start_ms = int(time.time() * 1000)
+                st, first_run = run_tracer("https://example.com/")
+                expect(st == 200 and isinstance(first_run, dict), f"first run: HTTP {st} {first_run}")
+                after_first = fetch()
+                first_entries = after_first["decisions"]
+                expect(after_first["dropped"] == 0, after_first)
+                expect(any(e["kind"] == "dns" and e["verdict"] == "allow" and e["name"] == "example.com" for e in first_entries)
+                       and any(e["kind"] == "tcp" and e["verdict"] == "allow" and e["name"] == "example.com" for e in first_entries),
+                       f"the allowed fetch left no allowed lookup and connection: {compact({'node_decisions': after_first})}")
+                first_count = after_first["recorded"]
+                execs, began = 0, time.monotonic()
+                recorded = first_count
+                while recorded <= 700:
+                    execs += 1
+                    expect(execs <= 600 and time.monotonic() - began < 1500,
+                           f"gave up after {execs} execs, recorded {recorded}")
+                    run_tracer(f"https://flood-{execs}.example.org/")
+                    if execs % 10 == 0 or recorded + 10 > 700:
+                        recorded = fetch()["recorded"]
+                flood_seconds = round(time.monotonic() - began, 1)
+                final = fetch()
+                window_end_ms = int(time.time() * 1000)
+                entries = final["decisions"]
+                seqs = [e["seq"] for e in entries]
+                expect(final["dropped"] > 0, f"nothing dropped: recorded {final['recorded']}, kept {len(entries)}")
+                expect(final["recorded"] == len(entries) + final["dropped"], final["recorded"])
+                expect(all(isinstance(s, int) for s in seqs) and all(b > a for a, b in zip(seqs, seqs[1:])),
+                       "seq values are not strictly increasing")
+                head = entries[:first_count]
+                expect([e["seq"] for e in head] == list(range(1, first_count + 1)),
+                       f"the lowest sequence numbers are {seqs[:first_count + 2]}, not 1..{first_count}")
+                expect(all(e["name"] == "example.com" and e["verdict"] == "allow" for e in head),
+                       f"the first entries are not the allowed example.com ones: {compact({'node_decisions': {'decisions': head}})}")
+                expect(head == first_entries, "the first entries changed after the flood")
+                expect(any(e["kind"] == "dns" for e in head) and any(e["kind"] == "tcp" for e in head), "head lacks dns or tcp")
+                slack = 5000
+                bad_at = [e for e in entries if not (isinstance(e.get("at"), int) and not isinstance(e["at"], bool)
+                                                     and window_start_ms - slack <= e["at"] <= window_end_ms + slack)]
+                expect(not bad_at, f"`at` outside the host's window {window_start_ms}..{window_end_ms}: {bad_at[:3]}")
+                expect(all(b["at"] >= a["at"] for a, b in zip(entries, entries[1:])), "`at` goes backwards")
+                flags = ut.compare("example.com", None, final, ut._resolve_v4("example.com"))
+                expect("decision_log_incomplete" in flags, f"the driver did not flag it: {flags.get('notes')}")
+                expect(flags["decision_log_incomplete"]["dropped"] == final["dropped"], flags["decision_log_incomplete"])
+                traces["case14"] = [{"url": "https://example.com/ then flood-N.example.org", "sandbox_id": sid,
+                                     "node_decisions": final, "flags": flags, "execs": execs}]
+                return {"execs": execs, "flood_seconds": flood_seconds, "recorded_after_first_run": first_count,
+                        "recorded": final["recorded"], "dropped": final["dropped"], "kept": len(entries),
+                        "lowest_seqs": seqs[:first_count + 2], "kept_head_entries": compact({"node_decisions": {"decisions": head}}),
+                        "first_tail_seq": seqs[len([s for s in seqs if s <= 256])] if len(seqs) > 256 else None,
+                        "last_seq": seqs[-1], "at_window_ms": [window_start_ms, window_end_ms],
+                        "at_min_max_ms": [min(e["at"] for e in entries), max(e["at"] for e in entries)],
+                        "flag": flags["decision_log_incomplete"]}
+            finally:
+                st_del, _ = node.request("DELETE", f"/sandboxes/{sid}", timeout=60)
+                st_gone, _ = node.request("GET", f"/sandboxes/{sid}", timeout=30)
+                for h in traces.get("case14", []):
+                    h["deleted"] = st_del in (200, 204) and st_gone == 404
+        case("14 a guest cannot push its first entries out of the node's record", c14)
 
         def c6():
             if probe.get("id"):

@@ -179,7 +179,11 @@ The rules mean what they mean for a sandbox:
   rules say, unless the operator granted the range with `--tenant-reserved-cidr`.
 - The network is stored with the machine and decided again at every boot.
   `GET /machines/{name}/network/decisions` shows what the gateway allowed and
-  refused since the last boot.
+  refused since the last boot. The log keeps the first 256 and the most recent
+  256 decisions; each has a `seq` (from 1, so a gap shows) and `at` (milliseconds
+  since the Unix epoch), and the answer's `recorded` and `dropped` give the total
+  made and the number not returned. `GET /sandboxes/{id}/network/decisions`
+  answers the same way.
 
 The guest's address, route and resolver come from the kernel command line, so
 the guest needs no DHCP client. On a node run with `--network`, the egress CA is
