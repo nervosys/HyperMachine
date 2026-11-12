@@ -3182,6 +3182,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hv2-urltrace"
+version = "1.2.0"
+dependencies = [
+ "base64 0.22.1",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2",
+ "webpki-roots",
+ "x509-parser",
+]
+
+[[package]]
 name = "hybrid-array"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
