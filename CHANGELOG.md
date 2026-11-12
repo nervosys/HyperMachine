@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Standalone VM networking gave a rejoining sandbox an address still in use.** A
+  member's address was chosen by counting members, so after any member but the newest
+  left, the next to join was given one another member held, and a connection to its
+  alias could reach the wrong VM (3 of 7 probes did). It is now the lowest address no
+  current member holds. Found by the feature's first check on real KVM
+  (`tools/check-standalone-network-kvm.py`, three sandboxes with a disconnect and
+  reconnect): the reconnect case failed 3 of 3 runs before the fix and all nine cases
+  pass 3 of 3 after it (`docs/benchmarks/2026-11-11/standalone-network-kvm`).
 - **The WHPX multi-vCPU IO-APIC timer panic, measured fixed.** The I/O APIC's
   interrupt callback used to deliver via `runtime.spawn` (`vm.rs`), queuing the
   actual WHP interrupt-injection call behind whatever else the tokio runtime's

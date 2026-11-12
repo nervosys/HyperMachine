@@ -1,0 +1,133 @@
+[2m2026-11-12T00:38:58.607570Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T00:38:58.608667Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T00:38:58.608855Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T00:38:58.608888Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T00:38:58.966681Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'template' on the Kvm backend (2 vCPUs, 2048 MiB)
+[2m2026-11-12T00:38:59.321668Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-11-12T00:38:59.321741Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template': loaded linux boot image (201648592 bytes), entry 0x100000
+[2m2026-11-12T00:38:59.369030Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'template' with 2 vCPUs and 2 GB memory (parallel=true)
+[2m2026-11-12T00:38:59.369669Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'template' with 2 vCPUs
+[2m2026-11-12T00:38:59.369742Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 2 vCPU tasks
+[2m2026-11-12T00:38:59.370255Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 1 task started
+[2m2026-11-12T00:38:59.370436Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T00:39:05.257416Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' paused
+[2m2026-11-12T00:39:09.051615Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' snapshotted to /tmp/hv2-sandboxd-23777-base/template.snap
+[2m2026-11-12T00:39:09.051929Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' resumed
+[2m2026-11-12T00:39:09.052017Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 1 task exited (exits=4057)
+[2m2026-11-12T00:39:09.052017Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=384)
+[2m2026-11-12T00:39:09.069016Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'template'
+[2m2026-11-12T00:39:09.069172Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' stopped
+[2m2026-11-12T00:39:09.069207Z[0m [32m INFO[0m [2mhv2_sandboxd[0m[2m:[0m template ready in 10.461770216s at /tmp/hv2-sandboxd-23777-base/template.snap; working set 0 pages in 0 ranges
+[2m2026-11-12T00:39:09.157880Z[0m [32m INFO[0m [2mhv2_api::sandbox_proxy[0m[2m:[0m sandbox proxy listening on 0.0.0.0:59417
+hv2-sandboxd: listening on 0.0.0.0:48111, capacity 4
+  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)
+  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)
+  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls
+  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener
+  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules
+  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back, and with autoResume so does a request through the proxy
+  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies
+  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log
+  POST   /networks                 -- NOT E2B's; create a network joining sandboxes on this node
+  GET    /networks                 -- NOT E2B's; list this node's networks
+  GET    /networks/{name}         -- NOT E2B's; a network's members and addresses
+  DELETE /networks/{name}         -- NOT E2B's; remove a network
+  POST   /networks/{name}/connect    -- NOT E2B's; join a sandbox under an alias
+  POST   /networks/{name}/disconnect -- NOT E2B's; leave a network
+sandboxes get a network, egress default Deny for a sandbox that configures none
+sandboxes are restored from template snapshots: base
+
+sandbox proxy on 0.0.0.0:59417 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>
+  grpcurl -plaintext -authority 49983-$SBX.local -H "X-Access-Token: $TOKEN" -import-path crates/hv2-api/proto -proto process.proto \
+      -d '{"process":{"cmd":"/bin/sh","args":["-c","echo hi"]}}' \
+      localhost:59417 process.Process/Start
+[2m2026-11-12T00:39:09.361747Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T00:39:09.362505Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-dfc9ca5222f04be3bfa9': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T00:39:09.362622Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-dfc9ca5222f04be3bfa9': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T00:39:09.362634Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T00:39:09.369842Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-dfc9ca5222f04be3bfa9' on the Kvm backend (2 vCPUs, 2048 MiB)
+[2m2026-11-12T00:39:09.375329Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-dfc9ca5222f04be3bfa9' restored from /tmp/hv2-sandboxd-23777-base/template.snap
+[2m2026-11-12T00:39:09.375456Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-dfc9ca5222f04be3bfa9' with 2 vCPUs and 2 GB memory (parallel=true)
+[2m2026-11-12T00:39:09.376202Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-dfc9ca5222f04be3bfa9' with 2 vCPUs
+[2m2026-11-12T00:39:09.376221Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 2 vCPU tasks
+[2m2026-11-12T00:39:09.376606Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T00:39:09.377768Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 1 task started
+[2m2026-11-12T00:39:09.535148Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T00:39:09.535940Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-aefe573e74144e3ba479': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T00:39:09.536171Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-aefe573e74144e3ba479': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T00:39:09.536186Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T00:39:09.537723Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-aefe573e74144e3ba479' on the Kvm backend (2 vCPUs, 2048 MiB)
+[2m2026-11-12T00:39:09.538508Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-aefe573e74144e3ba479' restored from /tmp/hv2-sandboxd-23777-base/template.snap
+[2m2026-11-12T00:39:09.538556Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-aefe573e74144e3ba479' with 2 vCPUs and 2 GB memory (parallel=true)
+[2m2026-11-12T00:39:09.538915Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-aefe573e74144e3ba479' with 2 vCPUs
+[2m2026-11-12T00:39:09.538927Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 2 vCPU tasks
+[2m2026-11-12T00:39:09.539446Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T00:39:09.539446Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 1 task started
+[2m2026-11-12T00:39:09.736706Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T00:39:09.737704Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-57f510f8c06940e5b81d': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T00:39:09.737845Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-57f510f8c06940e5b81d': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T00:39:09.737878Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T00:39:09.739558Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-57f510f8c06940e5b81d' on the Kvm backend (2 vCPUs, 2048 MiB)
+[2m2026-11-12T00:39:09.740379Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-57f510f8c06940e5b81d' restored from /tmp/hv2-sandboxd-23777-base/template.snap
+[2m2026-11-12T00:39:09.740459Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-57f510f8c06940e5b81d' with 2 vCPUs and 2 GB memory (parallel=true)
+[2m2026-11-12T00:39:09.740684Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-57f510f8c06940e5b81d' with 2 vCPUs
+[2m2026-11-12T00:39:09.740700Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 2 vCPU tasks
+[2m2026-11-12T00:39:09.741321Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T00:39:09.741770Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 1 task started
+[2m2026-11-12T00:39:09.949235Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-12T00:39:09.950028Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-6ae61ce93f584e1eb86d': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-12T00:39:09.950197Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-6ae61ce93f584e1eb86d': network device attached at 0xd0020000 (MAC 52:54:00:00:00:01, IRQ 6) -- no backend
+[2m2026-11-12T00:39:09.950212Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-12T00:39:09.952083Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-6ae61ce93f584e1eb86d' on the Kvm backend (2 vCPUs, 2048 MiB)
+[2m2026-11-12T00:39:09.952752Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-6ae61ce93f584e1eb86d' restored from /tmp/hv2-sandboxd-23777-base/template.snap
+[2m2026-11-12T00:39:09.952784Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-6ae61ce93f584e1eb86d' with 2 vCPUs and 2 GB memory (parallel=true)
+[2m2026-11-12T00:39:09.953010Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-6ae61ce93f584e1eb86d' with 2 vCPUs
+[2m2026-11-12T00:39:09.953023Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 2 vCPU tasks
+[2m2026-11-12T00:39:09.953396Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 1 task started
+[2m2026-11-12T00:39:09.953762Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-12T00:39:12.583702Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"b.test" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"private network lookup"
+[2m2026-11-12T00:39:12.598788Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m10.200.0.3:9000 [3mname[0m[2m=[0m"" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"private network"
+[2m2026-11-12T00:39:15.404038Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"c.test" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"private network lookup"
+[2m2026-11-12T00:39:15.417434Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m10.200.0.4:9000 [3mname[0m[2m=[0m"" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"private network"
+[2m2026-11-12T00:39:15.688418Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"b.test" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"private network lookup"
+[2m2026-11-12T00:39:15.709909Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m10.200.0.3:9000 [3mname[0m[2m=[0m"" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"private network"
+[2m2026-11-12T00:39:15.899627Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"a.test" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"private network lookup"
+[2m2026-11-12T00:39:15.909969Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m10.200.0.2:9000 [3mname[0m[2m=[0m"" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"private network"
+[2m2026-11-12T00:39:16.215376Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"a.test" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"private network lookup"
+[2m2026-11-12T00:39:16.259836Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m10.200.0.2:9000 [3mname[0m[2m=[0m"" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"private network"
+[2m2026-11-12T00:39:17.153154Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"b.test" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T00:39:17.158065Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"b.test" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T00:39:17.160795Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"b.test.0.2.15" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T00:39:17.162018Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"b.test.0.2.15" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T00:39:17.530250Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m10.200.0.3:9000 [3mname[0m[2m=[0m"" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"reserved address"
+[2m2026-11-12T00:39:17.712259Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"b.test" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T00:39:17.713818Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"b.test" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T00:39:17.714884Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"b.test.0.2.15" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T00:39:17.717531Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"b.test.0.2.15" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T00:39:17.885776Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m10.200.0.3:9000 [3mname[0m[2m=[0m"" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"reserved address"
+[2m2026-11-12T00:39:18.115041Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"a.test" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T00:39:18.117148Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"a.test" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T00:39:18.118416Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"a.test.0.2.15" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T00:39:18.119660Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"a.test.0.2.15" [3mverdict[0m[2m=[0mDeny [3mreason[0m[2m=[0m"the policy would refuse where this name leads"
+[2m2026-11-12T00:39:18.288261Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"c.test" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"private network lookup"
+[2m2026-11-12T00:39:18.300605Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m10.200.0.4:9000 [3mname[0m[2m=[0m"" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"private network"
+[2m2026-11-12T00:39:18.472286Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"b.test" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"private network lookup"
+[2m2026-11-12T00:39:18.484066Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m10.200.0.3:9000 [3mname[0m[2m=[0m"" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"private network"
+[2m2026-11-12T00:39:18.679865Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"dns" [3mdestination[0m[2m=[0m10.0.2.3:53 [3mname[0m[2m=[0m"a.test" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"private network lookup"
+[2m2026-11-12T00:39:18.700466Z[0m [32m INFO[0m [2mhv2_net::egress::audit[0m[2m:[0m egress decision [3mkind[0m[2m=[0m"tcp" [3mdestination[0m[2m=[0m10.200.0.2:9000 [3mname[0m[2m=[0m"" [3mverdict[0m[2m=[0mAllow [3mreason[0m[2m=[0m"private network"
+[2m2026-11-12T00:39:18.761205Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=62)
+[2m2026-11-12T00:39:18.761237Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 1 task exited (exits=144)
+[2m2026-11-12T00:39:18.761333Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-57f510f8c06940e5b81d'
+[2m2026-11-12T00:39:18.761348Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-57f510f8c06940e5b81d' stopped
+[2m2026-11-12T00:39:18.825654Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 1 task exited (exits=264)
+[2m2026-11-12T00:39:18.825653Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=135)
+[2m2026-11-12T00:39:18.825840Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-dfc9ca5222f04be3bfa9'
+[2m2026-11-12T00:39:18.825876Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-dfc9ca5222f04be3bfa9' stopped
+[2m2026-11-12T00:39:18.894223Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=73)
+[2m2026-11-12T00:39:18.894245Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 1 task exited (exits=211)
+[2m2026-11-12T00:39:18.894405Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-aefe573e74144e3ba479'
+[2m2026-11-12T00:39:18.894419Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-aefe573e74144e3ba479' stopped
+[2m2026-11-12T00:39:18.955979Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 1 task exited (exits=90)
+[2m2026-11-12T00:39:18.955993Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=30)
+[2m2026-11-12T00:39:18.956234Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-6ae61ce93f584e1eb86d'
+[2m2026-11-12T00:39:18.956258Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-6ae61ce93f584e1eb86d' stopped

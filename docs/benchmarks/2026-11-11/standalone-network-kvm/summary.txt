@@ -1,0 +1,2 @@
+run1 run2 run3 (before the fix): cases 1-6 and 8 pass, case 7 FAILS (reconnected B given the address C holds: 10.200.0.4).
+fixed-run1 fixed-run2 fixed-run3 (after the fix, rebuilt daemon): all nine cases pass. See README.md.

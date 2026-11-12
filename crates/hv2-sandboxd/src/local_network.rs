@@ -116,18 +116,20 @@ struct Network {
 
 impl Network {
     /// `.0` is the network address and `.1` the (unused) reserved gateway
-    /// address; members start at `.2`.
+    /// address; members start at `.2`. The lowest address no current member
+    /// holds: counting members instead hands out one that is still in use
+    /// once any member but the newest has left.
     fn next_address(&self) -> Option<Ipv4Addr> {
-        let host = u8::try_from(self.by_alias.len() + 2).ok()?;
-        if host == 255 {
-            return None;
-        }
-        Some(Ipv4Addr::new(
-            LOCAL_NETWORK_BASE[0],
-            LOCAL_NETWORK_BASE[1],
-            self.index,
-            host,
-        ))
+        (2..=254u8)
+            .map(|host| {
+                Ipv4Addr::new(
+                    LOCAL_NETWORK_BASE[0],
+                    LOCAL_NETWORK_BASE[1],
+                    self.index,
+                    host,
+                )
+            })
+            .find(|address| self.by_alias.values().all(|m| m.address != *address))
     }
 }
 
@@ -431,6 +433,23 @@ mod tests {
         registry
             .connect("site", "siem2", "siem.example.internal")
             .unwrap();
+    }
+
+    #[test]
+    fn a_member_rejoining_is_never_given_an_address_still_in_use() {
+        let registry = Registry::default();
+        registry.create("wan").unwrap();
+        let a = registry.connect("wan", "a", "a.test").unwrap();
+        registry.connect("wan", "b", "b.test").unwrap();
+        let c = registry.connect("wan", "c", "c.test").unwrap();
+
+        registry.disconnect("wan", "b").unwrap();
+        let b = registry.connect("wan", "b", "b.test").unwrap();
+
+        assert_ne!(b, a);
+        assert_ne!(b, c);
+        assert_eq!(registry.owner_of("a", b), Some("b".to_string()));
+        assert_eq!(registry.owner_of("a", c), Some("c".to_string()));
     }
 
     #[test]

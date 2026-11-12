@@ -1,0 +1,209 @@
+{
+  "success": true,
+  "cases": [
+    {
+      "name": "1 create network; in list and inspect",
+      "success": true,
+      "detail": {
+        "created": {
+          "members": [],
+          "name": "standalone-check"
+        },
+        "list": [
+          {
+            "members": [],
+            "name": "standalone-check"
+          }
+        ],
+        "inspect": {
+          "members": [],
+          "name": "standalone-check"
+        }
+      },
+      "seconds": 0.003
+    },
+    {
+      "name": "2 two sandboxes join under aliases; inspect shows both with addresses",
+      "success": true,
+      "detail": {
+        "a.test": {
+          "address": "10.200.0.2",
+          "alias": "a.test",
+          "sandboxID": "sbx-1839c204548545769213"
+        },
+        "b.test": {
+          "address": "10.200.0.3",
+          "alias": "b.test",
+          "sandboxID": "sbx-3494f100c6ef4ae7995e"
+        }
+      },
+      "seconds": 0.002
+    },
+    {
+      "name": "3 A resolves B's alias and gets B's token over TCP",
+      "success": true,
+      "detail": {
+        "listener_b": "LOCAL TOKEN-B",
+        "a_to_b": {
+          "resolved": "10.200.0.3",
+          "token": "TOKEN-B"
+        }
+      },
+      "seconds": 2.793
+    },
+    {
+      "name": "3b third member C joins; A->C, C->A, C->B",
+      "success": true,
+      "detail": {
+        "listener_a": "LOCAL TOKEN-A",
+        "listener_c": "LOCAL TOKEN-C",
+        "a_to_c": {
+          "resolved": "10.200.0.4",
+          "token": "TOKEN-C"
+        },
+        "c_to_b": {
+          "resolved": "10.200.0.3",
+          "token": "TOKEN-B"
+        },
+        "c_to_a": {
+          "resolved": "10.200.0.2",
+          "token": "TOKEN-A"
+        }
+      },
+      "seconds": 3.021
+    },
+    {
+      "name": "4 reverse direction, B to A",
+      "success": true,
+      "detail": {
+        "resolved": "10.200.0.2",
+        "token": "TOKEN-A"
+      },
+      "seconds": 0.123
+    },
+    {
+      "name": "5 a non-member cannot resolve or reach a member",
+      "success": true,
+      "detail": {
+        "by_name": {
+          "resolve_error": "gaierror(-3, 'Temporary failure in name resolution')"
+        },
+        "by_address": {
+          "resolved": "10.200.0.3",
+          "connect_error": "ConnectionRefusedError(111, 'Connection refused')"
+        }
+      },
+      "seconds": 0.982
+    },
+    {
+      "name": "6 disconnect B: A cannot look up or reach it; A->C unaffected",
+      "success": true,
+      "detail": {
+        "a_by_name": {
+          "resolve_error": "gaierror(-3, 'Temporary failure in name resolution')"
+        },
+        "a_by_old_address": {
+          "resolved": "10.200.0.3",
+          "connect_error": "ConnectionRefusedError(111, 'Connection refused')"
+        },
+        "b_to_a": {
+          "resolve_error": "gaierror(-3, 'Temporary failure in name resolution')"
+        },
+        "a_to_c_still": {
+          "resolved": "10.200.0.4",
+          "token": "TOKEN-C"
+        }
+      },
+      "seconds": 0.331
+    },
+    {
+      "name": "7 reconnect B: works again both ways, nothing restarted",
+      "success": true,
+      "detail": {
+        "old_address": "10.200.0.3",
+        "new_address": "10.200.0.3",
+        "a_to_b": {
+          "resolved": "10.200.0.3",
+          "token": "TOKEN-B"
+        },
+        "b_to_a": {
+          "resolved": "10.200.0.2",
+          "token": "TOKEN-A"
+        }
+      },
+      "seconds": 0.164
+    },
+    {
+      "name": "8 remove refused with members; deleted sandbox leaves; remove succeeds when empty",
+      "success": true,
+      "detail": {
+        "refused": [
+          409,
+          {
+            "code": 409,
+            "message": "the network still has a member; disconnect it first"
+          }
+        ],
+        "deleted_member_left": true
+      },
+      "seconds": 0.076
+    }
+  ],
+  "network": "standalone-check",
+  "port": 9000,
+  "purpose": "functional verification of standalone-node networks through the HTTP API and live guests; no timing claim",
+  "input_sha256": {
+    "daemon": "049b0357ff0080e5dd18783ab5e1bbdea410e06092fcf4123f55c169bd708406",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "a22419caa282550c4bcd2b907a8aa9201c75fc8bb9859a1709ce023f6873174e",
+    "driver": "3441be792b8c9ff5199da5be601ccca09ceee63da0fc2469753a39b0482dfdce"
+  },
+  "input_names": {
+    "daemon": "hv2-sandboxd",
+    "kernel": "bzImage",
+    "initrd": "tools.cpio.gz"
+  },
+  "egress_default_flag": null,
+  "host_cpus": 24,
+  "daemon_flags": [
+    "--port",
+    "33567",
+    "--proxy-port",
+    "54593",
+    "--network",
+    "--memory-mb",
+    "2048",
+    "--cpu-cores",
+    "2",
+    "--capacity",
+    "4"
+  ],
+  "sandbox_boot_seconds": 0.5,
+  "guest_net": {
+    "a": "#MANUAL\nnameserver 10.0.2.3\n1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue qlen 1000\n    inet 127.0.0.1/8 scope host lo\n       valid_lft forever preferred_lft forever\n2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast qlen 1000\n    inet 10.0.2.15/24 brd 10.0.2.255 scope global eth0\n       valid_lft forever preferred_lft forever\ndefault via 10.0.2.2 dev eth0 \n10.0.2.0/24 dev eth0 scope link  src 10.0.2.15 \n"
+  },
+  "after_reconnect_members": {
+    "a.test": {
+      "address": "10.200.0.2",
+      "alias": "a.test",
+      "sandboxID": "sbx-1839c204548545769213"
+    },
+    "b.test": {
+      "address": "10.200.0.3",
+      "alias": "b.test",
+      "sandboxID": "sbx-3494f100c6ef4ae7995e"
+    },
+    "c.test": {
+      "address": "10.200.0.4",
+      "alias": "c.test",
+      "sandboxID": "sbx-57699b17b92945149446"
+    }
+  },
+  "hypervisor_platform": [
+    "Kvm",
+    "Kvm",
+    "Kvm",
+    "Kvm",
+    "Kvm"
+  ]
+}
