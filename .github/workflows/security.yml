@@ -192,6 +192,9 @@ jobs:
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz
 
+      - name: Install protoc
+        run: python tools/ci-install-protoc.py
+
       # fuzz/ is excluded from the root workspace, so it checks as its own package.
       - name: Check fuzz targets compile
         run: |
