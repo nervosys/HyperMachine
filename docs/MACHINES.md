@@ -171,6 +171,10 @@ The rules mean what they mean for a sandbox:
 
 - An empty `network` (`{}`) takes the node's default, which is deny unless the
   operator set `--egress-default allow`.
+- Under the deny default, `allowOut` sent alone (no `allowInternetAccess`, no
+  `denyOut`) is exclusive: only what it names is reachable. With
+  `--egress-default allow` an `allowOut` list alone restricts nothing (E2B's
+  reading); send `denyOut: ["0.0.0.0/0", "::/0"]` with it to pin on any node.
 - Private, link-local and cloud metadata addresses are refused whatever the
   rules say, unless the operator granted the range with `--tenant-reserved-cidr`.
 - The network is stored with the machine and decided again at every boot.

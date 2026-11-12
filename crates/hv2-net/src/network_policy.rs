@@ -202,9 +202,18 @@ impl NetworkPolicy {
 
     /// Build from E2B's fields.
     ///
-    /// `operator_default` applies only when the request configured nothing at
-    /// all -- neither `allow_internet_access` nor any list. Once a caller has
-    /// said anything, E2B's semantics hold: what is not denied is allowed.
+    /// `operator_default` applies when the request configured nothing at all
+    /// -- neither `allow_internet_access` nor any list. Once a caller has said
+    /// anything, E2B's semantics hold: what is not denied is allowed.
+    ///
+    /// One exception, because an allow-list that allows everything is a trap
+    /// and would let a tenant turn the operator's deny into allow by naming one
+    /// host: when `operator_default` is [`Verdict::Deny`] and the request gives
+    /// `allow_out` and nothing else -- no `allow_internet_access`, no
+    /// `deny_out` -- the default stays deny, and the list is exclusive. Under
+    /// an operator default of allow, an `allow_out` list alone restricts
+    /// nothing (E2B's reading); sending `deny_out: ["0.0.0.0/0", "::/0"]` with
+    /// it is the portable way to pin.
     ///
     /// # Errors
     ///
@@ -220,7 +229,11 @@ impl NetworkPolicy {
     ) -> Result<Self, PolicyError> {
         let configured =
             allow_internet_access.is_some() || !allow_out.is_empty() || !deny_out.is_empty();
-        let mut policy = Self::new(if configured {
+        let exclusive_allow_list = operator_default == Verdict::Deny
+            && !allow_out.is_empty()
+            && allow_internet_access.is_none()
+            && deny_out.is_empty();
+        let mut policy = Self::new(if configured && !exclusive_allow_list {
             Verdict::Allow
         } else {
             operator_default
@@ -462,6 +475,98 @@ mod tests {
         assert_eq!(
             p.decide_address(ip("8.8.8.8")),
             AddressVerdict::Deny("denyOut address")
+        );
+    }
+
+    fn strings(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    /// Under a deny default, an allow-list alone is exclusive: it must not
+    /// turn the operator's deny into allow.
+    #[test]
+    fn an_allow_list_alone_is_exclusive_under_a_deny_default() {
+        let p = NetworkPolicy::from_e2b(None, &strings(&["example.com"]), &[], &[], Verdict::Deny)
+            .unwrap();
+        assert!(p.may_resolve("example.com"));
+        assert!(!p.may_resolve("evil.com"));
+        assert_eq!(
+            p.decide(ip("93.184.216.34"), "example.com"),
+            (Verdict::Allow, "allowOut name")
+        );
+        assert_eq!(
+            p.decide(ip("1.1.1.1"), "evil.com"),
+            (Verdict::Deny, "default deny")
+        );
+        // Only a name could still open an address; the gateway has to ask.
+        assert_eq!(p.decide_address(ip("1.1.1.1")), AddressVerdict::NeedsName);
+    }
+
+    #[test]
+    fn an_allow_list_alone_restricts_nothing_under_an_allow_default() {
+        let p = NetworkPolicy::from_e2b(None, &strings(&["example.com"]), &[], &[], Verdict::Allow)
+            .unwrap();
+        assert_eq!(
+            p.decide_address(ip("1.1.1.1")),
+            AddressVerdict::Allow("default allow")
+        );
+        assert!(p.may_resolve("evil.com"));
+    }
+
+    #[test]
+    fn a_deny_list_with_the_allow_list_keeps_e2b_semantics() {
+        let p = NetworkPolicy::from_e2b(
+            None,
+            &strings(&["example.com"]),
+            &strings(&["0.0.0.0/0"]),
+            &[],
+            Verdict::Deny,
+        )
+        .unwrap();
+        assert_eq!(
+            p.decide(ip("93.184.216.34"), "example.com"),
+            (Verdict::Allow, "allowOut name")
+        );
+        assert_eq!(
+            p.decide(ip("1.1.1.1"), "evil.com"),
+            (Verdict::Deny, "denyOut address")
+        );
+        assert!(!p.may_resolve("evil.com"));
+    }
+
+    #[test]
+    fn allow_internet_access_true_with_an_allow_list_is_default_allow() {
+        let p = NetworkPolicy::from_e2b(
+            Some(true),
+            &strings(&["example.com"]),
+            &[],
+            &[],
+            Verdict::Deny,
+        )
+        .unwrap();
+        assert_eq!(
+            p.decide_address(ip("1.1.1.1")),
+            AddressVerdict::Allow("default allow")
+        );
+    }
+
+    #[test]
+    fn an_allow_list_of_a_cidr_alone_is_exclusive_under_a_deny_default() {
+        let p = NetworkPolicy::from_e2b(
+            None,
+            &strings(&["93.184.216.0/24"]),
+            &[],
+            &[],
+            Verdict::Deny,
+        )
+        .unwrap();
+        assert_eq!(
+            p.decide_address(ip("93.184.216.34")),
+            AddressVerdict::Allow("allowOut address")
+        );
+        assert_eq!(
+            p.decide_address(ip("1.1.1.1")),
+            AddressVerdict::Deny("default deny")
         );
     }
 

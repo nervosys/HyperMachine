@@ -16,9 +16,11 @@ any other platform, and not run against a real malicious site.
    the hops after it, and each hop starts from a clean image.
 2. **Egress pinned per hop.** The sandbox may reach that hop's host name and nothing else. The
    node is started with networking on and the default egress policy deny; each sandbox is created
-   with `allowOut: [host]` and `denyOut: [0.0.0.0/0, ::/0]`. The deny is required: with only
-   `allowOut`, the node's policy defaults to allow, whatever `--egress-default` says (the
-   check's case 10 shows it). The gateway answers DNS only for the allowed name, refuses TCP to
+   with `allowOut: [host]` and `denyOut: [0.0.0.0/0, ::/0]`. A node with the default deny now treats an
+   `allowOut` list sent alone as exclusive, but the driver still sends the deny-all as well, so a
+   sandbox stays pinned on a node configured differently: with `--egress-default allow`, `allowOut`
+   alone restricts nothing (E2B's reading). Earlier nodes allowed everything once any rule existed
+   (the check's case 10 recorded that). The gateway answers DNS only for the allowed name, refuses TCP to
    reserved addresses (loopback, link-local including `169.254.169.254`, RFC 1918, the gateway
    itself), and only accepts an allowed name on an address that name really resolves to.
 3. **Two records per hop.** The guest's JSON report is a claim by a machine that has just parsed
@@ -115,8 +117,9 @@ request), the verdict in `ended`, and a short `chain` (URL, status, verified, ne
 - The guest today is a Linux kernel plus one binary. The intention is to replace it with the
   owner's own OS, Botnix, once it has TCP and TLS. The host protocol does not change: one URL in,
   one JSON report out.
-- `allowOut` alone does not pin on the node (see above). The driver compensates; other clients of
-  the same API need to know.
+- `allowOut` alone pins only on a node whose egress default is deny (see above); under
+  `--egress-default allow` it restricts nothing. The driver always sends the deny-all as well; other
+  clients of the same API should do the same to be portable.
 
 ## Evidence
 

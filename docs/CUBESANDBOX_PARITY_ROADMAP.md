@@ -945,7 +945,11 @@ meant to carry.
 
 **Where this differs from E2B, on purpose.** A sandbox that configures
 nothing gets the operator's `--egress-default`, which is `deny` unless told
-otherwise; E2B's is allow. And an `egressProxy` that resolves into a private
+otherwise; E2B's is allow. Under that deny default an `allowOut` list sent
+alone is exclusive (only what it names is reachable), where E2B would allow
+everything not denied; with `--egress-default allow` it restricts nothing, as
+in E2B, and `denyOut: ["0.0.0.0/0", "::/0"]` sent with it is the portable way
+to pin. And an `egressProxy` that resolves into a private
 range is refused unless the operator passes `--allow-private-egress-proxy`,
 which matches E2B's own check.
 
