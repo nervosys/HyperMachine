@@ -1,0 +1,11 @@
+drwx------   2 root     root            0 Dec 31  1969 .
+drwxr-xr-x   2 root     root            0 Dec 31  1969 bin
+-rwxr-xr-x   1 root     root      1754984 Dec 31  1969 bin/hv2-guest-agentd
+-rwxr-xr-x   1 root     root      2036736 Dec 31  1969 bin/hv2-urltrace
+drwxr-xr-x   2 root     root            0 Dec 31  1969 dev
+drwxr-xr-x   2 root     root            0 Dec 31  1969 etc
+-rwxr-xr-x   1 root     root      1754984 Dec 31  1969 init
+drwxr-xr-x   2 root     root            0 Dec 31  1969 proc
+drwxr-xr-x   2 root     root            0 Dec 31  1969 root
+drwxr-xr-x   2 root     root            0 Dec 31  1969 sys
+drwxr-xr-x   2 root     root            0 Dec 31  1969 tmp

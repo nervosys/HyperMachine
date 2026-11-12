@@ -4,8 +4,11 @@
 Every hop runs in its own throwaway microVM; the host decides what the VM may reach, and keeps its
 own record of what the VM actually did. The guest tracer is `crates/hv2-urltrace`.
 
-Status: built and run on KVM under WSL2 (`docs/benchmarks/2026-11-11/urltrace-kvm/`). Not run on
-any other platform, and not run against a real malicious site.
+Status: run on KVM under WSL2 only, in two sets of three runs. The earlier busybox image passed
+all its cases (`docs/benchmarks/2026-11-11/urltrace-kvm/`). The current image, with no shell and
+the tracer started by the `argv` exec form, passed all 16 cases in each of three runs
+(`docs/benchmarks/2026-11-11/urltrace-noshell-kvm/`). Not run on any other platform, and not run
+against a real malicious site.
 
 ## The design, and why
 
@@ -20,7 +23,10 @@ any other platform, and not run against a real malicious site.
    `allowOut` list sent alone as exclusive, but the driver still sends the deny-all as well, so a
    sandbox stays pinned on a node configured differently: with `--egress-default allow`, `allowOut`
    alone restricts nothing (E2B's reading). Earlier nodes allowed everything once any rule existed
-   (the check's case 10 recorded that). The gateway answers DNS only for the allowed name, refuses TCP to
+   (`urltrace-kvm` case 10 recorded that). On a live guest of the current image, with no `denyOut`
+   sent, a sandbox given only `allowOut: [example.com]` could not resolve `www.wikipedia.org` (four refused
+   lookups, reason `the policy would refuse where this name leads`) and reached example.com with a 200,
+   in all three runs (`urltrace-noshell-kvm` case 10). The gateway answers DNS only for the allowed name, refuses TCP to
    reserved addresses (loopback, link-local including `169.254.169.254`, RFC 1918, the gateway
    itself), and only accepts an allowed name on an address that name really resolves to.
 3. **Two records per hop.** The guest's JSON report is a claim by a machine that has just parsed
@@ -33,9 +39,9 @@ any other platform, and not run against a real malicious site.
 4. **The guest is not trusted, the host is.** The driver treats the report as hostile data: size
    limits, type checks, nothing evaluated or executed, no report text in a shell or a path, every
    string capped and stripped of terminal control characters before it is printed. The URL goes to
-   the guest as one argument of an argv list, never interpolated into a shell string: the exec
-   request is `cmd = 'exec /bin/hv2-urltrace "$@"'` with the URL in `args`, and the shell's `"$@"`
-   does not parse its elements again. Before anything runs, the URL is validated (http or https, a
+   the guest as one element of an argv list, never interpolated into a shell string: the exec
+   request is `argv = ["/bin/hv2-urltrace", URL, ...]`, run directly by the guest agent with no shell, so
+   nothing parses its elements. Before anything runs, the URL is validated (http or https, a
    DNS name rather than an address, no userinfo, ASCII only, no whitespace, control characters,
    quotes, backticks or backslashes, at most 2048 characters). A `next_url` from the guest goes
    through the same validation before it is followed.
@@ -59,10 +65,19 @@ already running, pass `--node http://127.0.0.1:PORT`; it must have been started 
 and the default egress policy deny, which the driver cannot check. `--tracer` only records the
 tracer's sha256.
 
-The image holds the guest agent, busybox and the tracer. Build it with:
+The image is a Linux kernel (passed separately) plus an initramfs of two programs and empty
+directories: `/init` (the guest agent itself as PID 1, which mounts `/proc`, `/sys`, `/dev`, `/tmp`
+and links `resolv.conf`; `docs/GUEST_AGENT.md`), the same agent again as `/bin/hv2-guest-agentd`,
+and `/bin/hv2-urltrace`. No busybox, no `sh`, no `bash`; the file list is in
+`docs/benchmarks/2026-11-11/urltrace-noshell-kvm/image-files.txt`. The driver runs the tracer with
+the exec API's `argv` form (`{"argv": ["/bin/hv2-urltrace", URL, ...]}`), which the guest agent
+executes directly (`argv[0]` an absolute path). The node creates sandboxes from such an image
+because, when the guest has no `/bin/sh`, it no longer fails: the agent as PID 1 links
+`resolv.conf`, and the node installs its egress CA through the agent's file read and write
+operations. Build the image with (`--no-busybox` requires `--init`, a static PID 1):
 
 ```
-tools/guest-image/build.sh -o urltrace.cpio.gz --init tools/guest-image/init-urltrace \
+tools/guest-image/build.sh -o urltrace.cpio.gz --no-busybox --init /path/to/static/hv2-guest-agentd \
   --extra /path/to/static/hv2-urltrace
 ```
 
@@ -107,14 +122,14 @@ request), the verdict in `ended`, and a short `chain` (URL, status, verified, ne
 
 ## Known gaps
 
-- The guest image still contains busybox, used by `init` and by the node's exec path (every exec
-  runs `/bin/sh -c`). There is no console shell and only five applets are linked, but a shell
-  binary is present and a compromised tracer could run it. Removing it needs a static init program
-  and an exec path that does not use `sh`. The `bash-shim` that `build.sh` always installs is also
-  present.
+- With no shell in the image, the node features that run a shell in the guest (process listing,
+  environment variables, checkpoint files, builds, disks, the machines path) do not work, and the
+  agent as PID 1 does not reap orphans. Only the process listing was run, and its failure recorded.
+  The egress CA written through the agent's file operations was not checked by a client in the guest
+  trusting it (the tracer carries its own roots).
 - Decisions carry no timestamps in the API (the daemon's log has them), so the order of entries is
   known and their timing is not.
-- The guest today is a Linux kernel plus one binary. The intention is to replace it with the
+- The guest today is a Linux kernel plus two programs (the agent as PID 1, and the tracer). The intention is to replace it with the
   owner's own OS, Botnix, once it has TCP and TLS. The host protocol does not change: one URL in,
   one JSON report out.
 - `allowOut` alone pins only on a node whose egress default is deny (see above); under
@@ -123,6 +138,11 @@ request), the verdict in `ended`, and a short `chain` (URL, status, verified, ne
 
 ## Evidence
 
-`docs/benchmarks/2026-11-11/urltrace-kvm/`: three passing runs of the check, an earlier set with
+`docs/benchmarks/2026-11-11/urltrace-kvm/` (busybox image): three passing runs of the check, an earlier set with
 one failure (a slow target, explained there), the guest image's file list, the node's logs, and
 every hop's report and decisions, with the list of what was not verified.
+
+`docs/benchmarks/2026-11-11/urltrace-noshell-kvm/` (no shell, `argv` exec, agent as PID 1): three
+passing runs of 16 cases, the image's file list, each run's daemon log and report, every hop's
+trace, what it took to get there (two intermediate runs are described there but not kept), and its
+own list of what was not verified.

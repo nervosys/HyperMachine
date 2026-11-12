@@ -1490,9 +1490,15 @@ async fn require_cluster_token(
 
 #[derive(Debug, Deserialize)]
 struct ExecRequest {
-    cmd: String,
+    /// A shell line, run as `/bin/sh -c`. Exactly one of `cmd` and `argv`.
+    #[serde(default)]
+    cmd: Option<String>,
     #[serde(default)]
     args: Vec<String>,
+    /// A program and its arguments, run directly with no shell anywhere:
+    /// `argv[0]` is an absolute path. Exactly one of `cmd` and `argv`.
+    #[serde(default)]
+    argv: Option<Vec<String>>,
     timeout_secs: Option<u64>,
     /// Run it as this user, by name or number; root if absent.
     #[serde(default)]
@@ -1505,6 +1511,73 @@ struct ExecResponse {
     stdout: String,
     stderr: String,
     timed_out: bool,
+}
+
+/// Most elements an exec `argv` may have.
+const EXEC_ARGV_MAX_ELEMENTS: usize = 64;
+/// Longest single element of an exec `argv`, in bytes.
+const EXEC_ARGV_MAX_ELEMENT_BYTES: usize = 8192;
+
+/// What to run for an exec request: the program, its arguments, and the line
+/// recorded in the command history.
+///
+/// `cmd` keeps its old meaning exactly: `/bin/sh -c cmd args...`. `argv` is
+/// run directly. Both or neither is refused, and so is `args` beside `argv`
+/// (it would be a second place for arguments to hide).
+fn exec_program(
+    cmd: Option<String>,
+    args: Vec<String>,
+    argv: Option<Vec<String>>,
+) -> Result<(String, Vec<String>, String), String> {
+    match (cmd, argv) {
+        (Some(_), Some(_)) => Err("give either \"cmd\" or \"argv\", not both".to_string()),
+        (None, None) => {
+            Err("give \"cmd\" (a shell line) or \"argv\" (a program and its arguments)".to_string())
+        }
+        (Some(cmd), None) => {
+            let history = std::iter::once(cmd.as_str())
+                .chain(args.iter().map(String::as_str))
+                .collect::<Vec<_>>()
+                .join(" ");
+            let args = ["-c".to_string(), cmd].into_iter().chain(args).collect();
+            Ok(("/bin/sh".to_string(), args, history))
+        }
+        (None, Some(argv)) => {
+            if !args.is_empty() {
+                return Err(
+                    "\"args\" goes with \"cmd\"; with \"argv\" put every argument in it"
+                        .to_string(),
+                );
+            }
+            if argv.is_empty() {
+                return Err("\"argv\" must not be empty".to_string());
+            }
+            if argv.len() > EXEC_ARGV_MAX_ELEMENTS {
+                return Err(format!(
+                    "\"argv\" has {} elements; at most {EXEC_ARGV_MAX_ELEMENTS}",
+                    argv.len()
+                ));
+            }
+            if let Some(i) = argv
+                .iter()
+                .position(|a| a.len() > EXEC_ARGV_MAX_ELEMENT_BYTES)
+            {
+                return Err(format!(
+                    "\"argv\"[{i}] is longer than {EXEC_ARGV_MAX_ELEMENT_BYTES} bytes"
+                ));
+            }
+            if let Some(i) = argv.iter().position(|a| a.contains('\0')) {
+                return Err(format!("\"argv\"[{i}] contains a NUL byte"));
+            }
+            if !argv[0].starts_with('/') {
+                return Err("\"argv\"[0] must be an absolute path".to_string());
+            }
+            let history = argv.join(" ");
+            let mut it = argv.into_iter();
+            let program = it.next().unwrap_or_default();
+            Ok((program, it.collect(), history))
+        }
+    }
 }
 
 /// `POST /sandboxes`: E2B's v1 route, whose default lifetime is 15 seconds.
@@ -4856,14 +4929,35 @@ async fn configure_guest_network(vm: &AgentVM, ca: Option<&str>) -> Result<(), S
             " && mkdir -p /etc/ssl/certs && printf '%s' '{ca}' >> /etc/ssl/certs/ca-certificates.crt"
         ));
     }
-    let setup = vm
+    let setup = match vm
         .exec_in_guest(
             "/bin/sh",
             &["-c".to_string(), script],
             Duration::from_secs(10),
         )
         .await
-        .map_err(|e| format!("configuring the guest's network: {e}"))?;
+    {
+        Ok(setup) => setup,
+        // A guest whose agent is its init links resolv.conf itself, which
+        // leaves the CA, and that goes in through the agent's file writes.
+        Err(e) if guest_has_no_shell(&e.to_string()) => {
+            const BUNDLE: &str = "/etc/ssl/certs/ca-certificates.crt";
+            let Some(ca) = ca else { return Ok(()) };
+            let wait = Duration::from_secs(10);
+            // An image with no shell usually has no bundle either; one that
+            // does keeps it, with the CA after it as the shell path appends.
+            let mut bundle = vm
+                .read_file_in_guest(BUNDLE, 4 << 20, wait)
+                .await
+                .unwrap_or_default();
+            bundle.extend_from_slice(ca.as_bytes());
+            return vm
+                .write_file_in_guest(BUNDLE, bundle, wait)
+                .await
+                .map_err(|e| format!("configuring the guest's network: writing the CA: {e}"));
+        }
+        Err(e) => return Err(format!("configuring the guest's network: {e}")),
+    };
     if setup.exit_code != Some(0) {
         return Err(format!(
             "configuring the guest's network exited {:?}: {}",
@@ -4871,6 +4965,12 @@ async fn configure_guest_network(vm: &AgentVM, ca: Option<&str>) -> Result<(), S
         ));
     }
     Ok(())
+}
+
+/// Whether an exec failed because the guest image has no shell at all, which
+/// is a supported kind of image (`build.sh --no-busybox`), not a fault.
+fn guest_has_no_shell(error: &str) -> bool {
+    error.contains("could not start /bin/sh") && error.contains("No such file or directory")
 }
 
 /// The vsock CID and NIC MAC every template-restored sandbox has: the
@@ -5771,13 +5871,19 @@ async fn build_template(
         }
         // Touch the paths a sandbox's first requests take, so their pages are
         // in the image rather than faulted in by every sandbox.
-        vm.exec_in_guest(
-            "/bin/sh",
-            &["-c".into(), "true".into()],
-            Duration::from_secs(5),
-        )
-        .await
-        .map_err(|e| format!("warming the template: {e}"))?;
+        if let Err(e) = vm
+            .exec_in_guest(
+                "/bin/sh",
+                &["-c".into(), "true".into()],
+                Duration::from_secs(5),
+            )
+            .await
+        {
+            // Only an optimisation, and there is no shell path to warm.
+            if !guest_has_no_shell(&e.to_string()) {
+                return Err(format!("warming the template: {e}"));
+            }
+        }
         vm.snapshot_to(&template.snapshot)
             .await
             .map_err(|e| format!("snapshotting the template: {e}"))
@@ -5985,15 +6091,16 @@ async fn exec(
         }
     };
 
+    let (program, program_args, history_cmd) = match exec_program(req.cmd, req.args, req.argv) {
+        Ok(parts) => parts,
+        Err(message) => return api_error(StatusCode::BAD_REQUEST, message),
+    };
     let timeout = Duration::from_secs(req.timeout_secs.unwrap_or(30));
     let n = history::begin(
         &sandbox_id,
         history::Begun {
             source: "exec",
-            cmd: std::iter::once(req.cmd.as_str())
-                .chain(req.args.iter().map(String::as_str))
-                .collect::<Vec<_>>()
-                .join(" "),
+            cmd: history_cmd,
             cwd: None,
             user: None,
             tag: None,
@@ -6006,15 +6113,7 @@ async fn exec(
     // meant as a shell line, which is the common case for a code-exec
     // endpoint (E2B's own run_code passes a whole script, not argv).
     let result = vm
-        .exec_in_guest_as(
-            "/bin/sh",
-            &["-c".to_string(), req.cmd]
-                .into_iter()
-                .chain(req.args)
-                .collect::<Vec<_>>(),
-            req.user.as_deref(),
-            timeout,
-        )
+        .exec_in_guest_as(&program, &program_args, req.user.as_deref(), timeout)
         .await;
 
     match &result {
@@ -7152,6 +7251,85 @@ mod tests {
     }
 
     use super::*;
+
+    fn exec_req(json: serde_json::Value) -> ExecRequest {
+        serde_json::from_value(json).unwrap()
+    }
+    fn exec_parts(json: serde_json::Value) -> Result<(String, Vec<String>, String), String> {
+        let r = exec_req(json);
+        exec_program(r.cmd, r.args, r.argv)
+    }
+
+    #[test]
+    fn a_missing_shell_is_told_apart_from_other_exec_failures() {
+        assert!(guest_has_no_shell(
+            "Script error: the guest agent could not run /bin/sh: could not start /bin/sh: \
+             No such file or directory (os error 2)"
+        ));
+        assert!(!guest_has_no_shell(
+            "the guest agent could not run /bin/true: could not start /bin/true: \
+             No such file or directory (os error 2)"
+        ));
+        assert!(!guest_has_no_shell(
+            "could not start /bin/sh: Permission denied (os error 13)"
+        ));
+        assert!(!guest_has_no_shell("Timeout: no answer from a guest agent"));
+    }
+
+    #[test]
+    fn exec_cmd_still_runs_through_sh_dash_c() {
+        let (program, args, line) =
+            exec_parts(json!({"cmd": "echo \"$1\"", "args": ["a", "b"]})).unwrap();
+        assert_eq!(program, "/bin/sh");
+        assert_eq!(args, ["-c", "echo \"$1\"", "a", "b"]);
+        assert_eq!(line, "echo \"$1\" a b");
+    }
+
+    #[test]
+    fn exec_argv_alone_runs_the_program_directly() {
+        let (program, args, line) =
+            exec_parts(json!({"argv": ["/bin/hv2-urltrace", "http://x/;id", "--timeout", "5"]}))
+                .unwrap();
+        assert_eq!(program, "/bin/hv2-urltrace");
+        assert_eq!(args, ["http://x/;id", "--timeout", "5"]);
+        assert_eq!(line, "/bin/hv2-urltrace http://x/;id --timeout 5");
+        assert!(exec_parts(json!({"argv": ["/bin/true"]})).is_ok());
+    }
+
+    #[test]
+    fn exec_needs_exactly_one_of_cmd_and_argv() {
+        let both = exec_parts(json!({"cmd": "true", "argv": ["/bin/true"]})).unwrap_err();
+        assert!(both.contains("not both"), "{both}");
+        let neither = exec_parts(json!({"timeout_secs": 3})).unwrap_err();
+        assert!(
+            neither.contains("\"cmd\"") && neither.contains("\"argv\""),
+            "{neither}"
+        );
+        // Arguments beside argv would be a second, unchecked place for them.
+        assert!(exec_parts(json!({"argv": ["/bin/true"], "args": ["x"]})).is_err());
+    }
+
+    #[test]
+    fn exec_argv_is_bounded_and_absolute() {
+        let err = |v: serde_json::Value| exec_parts(v).unwrap_err();
+        assert!(err(json!({"argv": []})).contains("empty"));
+        assert!(err(json!({"argv": ["bin/true"]})).contains("absolute"));
+        assert!(err(json!({"argv": ["true"]})).contains("absolute"));
+        assert!(err(json!({"argv": [""]})).contains("absolute"));
+        let long = "a".repeat(EXEC_ARGV_MAX_ELEMENT_BYTES + 1);
+        assert!(err(json!({"argv": ["/bin/true", long]})).contains("longer"));
+        let ok = "a".repeat(EXEC_ARGV_MAX_ELEMENT_BYTES);
+        assert!(exec_parts(json!({"argv": ["/bin/true", ok]})).is_ok());
+        let many: Vec<String> = std::iter::once("/bin/true".to_string())
+            .chain((0..EXEC_ARGV_MAX_ELEMENTS).map(|i| i.to_string()))
+            .collect();
+        assert!(err(json!({"argv": many})).contains("elements"));
+        let at_limit: Vec<String> = std::iter::once("/bin/true".to_string())
+            .chain((1..EXEC_ARGV_MAX_ELEMENTS).map(|i| i.to_string()))
+            .collect();
+        assert!(exec_parts(json!({"argv": at_limit})).is_ok());
+        assert!(err(json!({"argv": ["/bin/true", "a\u{0}b"]})).contains("NUL"));
+    }
 
     #[test]
     fn creator_context_requires_authenticated_cluster_and_one_valid_header() {

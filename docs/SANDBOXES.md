@@ -678,6 +678,21 @@ expansion nobody would have written down.
 Unknown request fields are rejected rather than ignored, because a misspelled
 `allow_network` should not silently become the default in either direction.
 
+## Exec in a microVM sandbox without a shell
+
+`hv2-sandboxd`'s `POST /sandboxes/{id}/exec` takes either `cmd` (a shell line, run as
+`/bin/sh -c`, with `args` as `$0`, `$1`, ...) or `argv`, never both and never neither (400). `argv` is
+for a guest image that has no shell: `argv[0]` must be an absolute path, and that program is run
+directly by the guest agent with the remaining elements as its arguments, so nothing is interpreted
+by a shell, not the program name and not any argument. `argv` has at most 64 elements of at most
+8192 bytes each, none containing a NUL byte, and `args` is refused beside it. `timeout_secs`, `user`
+and the output caps apply as for `cmd`. A program that is not in the image fails as an exec error.
+A node can now create sandboxes from an image with no shell and run programs in them by `argv`
+(three runs on KVM, `docs/benchmarks/2026-11-11/urltrace-noshell-kvm/`); the node features that
+still need a shell in the guest are process listing, environment variables, checkpoint files,
+builds, disks and the machines path, and with such an image they do not work (only the process
+listing's failure was exercised).
+
 ## What this does not replace
 
 `hv2-agent`'s `Sandbox` still bounds Rhai scripts in-process, and that is a

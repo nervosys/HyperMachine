@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **An `allowOut` list alone did not restrict a sandbox on a deny-default node.** Once a
+  request configured anything, the policy's default became allow, so a sandbox created
+  with only `allowOut: ["example.com"]` could reach any site, and a tenant could turn the
+  operator's deny into allow by naming one host. When the operator's default is deny and
+  the request gives an allow-list and nothing else, the default now stays deny. Every
+  other combination keeps E2B's semantics. Shown on a live guest (case 10 of the URL
+  tracing check, 3 of 3 runs).
+- Two tests that failed CI for reasons unrelated to the code under test: one scanned the
+  shared temporary directory for any new entry, the other matched its marker digits
+  anywhere in any process's command line.
 - **Standalone VM networking gave a rejoining sandbox an address still in use.** A
   member's address was chosen by counting members, so after any member but the newest
   left, the next to join was given one another member held, and a connection to its
@@ -81,11 +91,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The guest is assumed compromised, so each hop also keeps the node's own record of what the
   sandbox tried to reach, and the driver flags any disagreement. Checked on KVM, 13 cases, 3
   of 3 runs (`docs/benchmarks/2026-11-11/urltrace-kvm`): a sandbox pinned to one name was
-  refused another name, another site's address, the metadata address and the host. Known
-  gaps: it fetches and does not render (no JavaScript); the image still holds a busybox
-  shell because the node's exec runs commands through `sh -c`; an `allowOut` list alone does
-  not pin a sandbox (E2B semantics: what is not denied is allowed), so the driver sends a
-  deny-all with it; no real malicious site has been traced.
+  refused another name, another site's address, the metadata address and the host. The
+  guest image has no shell: it is a kernel, the guest agent as PID 1 and the tracer, built
+  with the new `build.sh --no-busybox`, and the driver runs the tracer through the exec
+  API's new `argv` form, which no shell interprets. That image passes 16 cases, 3 of 3
+  runs (`docs/benchmarks/2026-11-11/urltrace-noshell-kvm`). Known gaps: it fetches and does
+  not render (no JavaScript); no real malicious site has been traced; other node features
+  that run a shell in the guest (process listing, builds, and more) do not work with a
+  shell-less image.
+- **`POST /sandboxes/{id}/exec` takes `argv`**: a program and its arguments run directly,
+  with no shell. `cmd` is unchanged; giving both, or neither, is refused.
+- **The guest agent can be the guest's init.** As PID 1 it mounts `/proc`, `/sys`, `/dev`
+  and `/tmp` and links `resolv.conf` before serving, so an image needs no shell script to
+  boot. A node can now create sandboxes from such an image: it installs its egress CA
+  through the agent's file operations when the guest has no `/bin/sh`.
 - **Standalone-node VM-to-VM networking for sandboxes.** `hm sandbox vm network create|list|inspect|rm|connect|disconnect` joins sandboxes on one node to each other by a DNS alias, with no cluster or mTLS needed -- the gap the existing cluster-only private networking left for a single node. A sandbox's gateway checks its current membership live on every DNS question and connection, so a disconnect or reconnect after boot takes effect at once, with nothing to restart. Dialing a peer goes over its vsock port-forward channel, the same primitive a published machine port already uses, not its virtio-net device. 9 new unit tests on the registry; `hv2-sandboxd`'s existing 117 pass unchanged. NOT VERIFIED against a live guest: this repo has no Linux KVM host to run it on.
 - **`hm-tui`, a new terminal dashboard** for Type 2 VMs and sandbox VMs over the same APIs `hm-gui` and `hm sandbox vm` already use; and a Sandboxes tab for `hm-gui`, which previously showed only Type 2 VMs.
 

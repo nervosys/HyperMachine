@@ -22,8 +22,17 @@ so one broken case does not hide the others:
     example.com (once with no network object at all, once with every address denied).
  8. a hostile-looking URL reaches the tracer byte for byte (no shell interpretation).
  9. the driver's own URL validation rejects what it must, without starting a VM.
-10. characterisation: allowOut alone (no denyOut) does NOT pin; the node then defaults to
-    allow whatever --egress-default says. The driver therefore sends denyOut too.
+10. the allow-list rule: on this deny-default node a sandbox created with ONLY
+    allowOut: ["example.com"] (no denyOut) is refused another site, with the node's
+    decisions showing the default deny, and still reaches example.com. The driver sends
+    the deny-all as well on real hops.
+11. no shell in the image: exec with argv /bin/sh -c, argv /bin/busybox sh and the old
+    `cmd` form all fail because the file does not exist (errors recorded).
+12. PID 1 is the guest agent: /proc/1/exe, run once with no shell, names itself. Whether the
+    agent's "running as PID 1" line reached the daemon log is recorded, not required: that
+    log does not carry the guest's console.
+13. the image's file list (from the cpio on the host) holds no busybox, sh or bash:
+    only /init, the agent, the tracer and empty directories.
 
 Writes report.json, the daemon's log (daemon-log.txt) and one trace file per case into
 --output. Needs root and /dev/kvm. Exit status is 1 if any case failed.
@@ -32,6 +41,7 @@ import argparse
 import json
 import os
 import socket
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -281,18 +291,112 @@ def main():
         case("9 URL validation rejects hostile input", c9)
 
         def c10():
-            # Characterisation, not a control: the node's own semantics, which is why the
-            # driver sends denyOut as well. If the node ever makes allowOut alone a pin,
-            # this case fails and the driver's extra denyOut becomes redundant, not wrong.
-            h = hop("case10", "https://www.wikipedia.org/", network={"allowOut": ["example.com"]})
+            # The allow-list rule: on a node whose default is deny, `allowOut` alone is
+            # exclusive (hv2_net::network_policy::from_e2b). No denyOut is sent here, on
+            # purpose: the driver still sends one on real hops, but this case shows what
+            # the node does without it.
+            h = hop("case10-other-site", "https://www.wikipedia.org/", network={"allowOut": ["example.com"]})
             v = view(h)
-            expect(v["status"] is not None, f"allowOut alone now blocks other hosts (status {v['status']}): {compact(h)}")
-            expect(allowed(h, "tcp"), f"no connection allowed: {compact(h)}")
-            return {"status": v["status"], "decisions": compact(h),
-                    "meaning": "allowOut: [example.com] with the node's default deny still reached www.wikipedia.org"}
-        case("10 (characterisation) allowOut alone does not pin: the node defaults to allow once a rule exists", c10)
+            expect(v["status"] is None, f"a response came back from another site: status {v['status']}: {compact(h)}")
+            expect(not allowed(h), f"something was allowed: {allowed(h)}")
+            refused = [e for e in denied(h) if e["kind"] == "dns" and e["name"] == "www.wikipedia.org"]
+            expect(refused, f"no refused lookup of www.wikipedia.org: {compact(h)}")
+            # A lookup is refused for where the name would lead, so its reason does not say
+            # "default deny"; what must never appear is a default *allow*.
+            reasons = sorted({str(e.get("reason", "")) for e in denied(h)})
+            expect(not any("allow" in r.lower() for r in reasons), f"a reason speaks of allowing: {reasons}")
+            h2 = hop("case10-allowed-site", "https://example.com/", network={"allowOut": ["example.com"]})
+            v2 = view(h2)
+            expect(v2["status"] == 200, f"example.com was not reached: status {v2['status']}: {compact(h2)}")
+            expect(allowed(h2, "tcp"), f"no connection allowed: {compact(h2)}")
+            return {"other_site": {"status": v["status"], "guest_errors": v["errors"], "decisions": compact(h),
+                                   "refusal_reasons": reasons},
+                    "allowed_site": {"status": v2["status"], "decisions": compact(h2)},
+                    "create_request": h["create_request"]}
+        case("10 allowOut: [example.com] alone on a deny-default node: another site refused, example.com reached", c10)
+
+        # One throwaway sandbox for the cases that need the guest and not the tracer.
+        probe = {}
+
+        def probe_sandbox():
+            if "id" not in probe:
+                body = {"templateID": "base", "timeout": 300,
+                        "network": {"allowOut": ["example.com"], "denyOut": ["0.0.0.0/0", "::/0"]}}
+                status, made = node.request("POST", "/sandboxes", body, timeout=180)
+                expect(status in (200, 201) and isinstance(made, dict), f"create: HTTP {status} {made}")
+                probe["id"] = made["sandboxID"]
+                sandboxes.append(probe["id"])
+            return probe["id"]
+
+        def exec_raw(body):
+            status, ran = node.request("POST", f"/sandboxes/{probe_sandbox()}/exec", dict(body, timeout_secs=10), timeout=60)
+            return {"http_status": status, "answer": ran}
+
+        def text_of(result):
+            return json.dumps(result["answer"]) if not isinstance(result["answer"], str) else result["answer"]
+
+        def failed_for_a_missing_file(result):
+            ran = result["answer"]
+            ok_exit = isinstance(ran, dict) and ran.get("exit_code") == 0
+            expect(result["http_status"] != 200 or not ok_exit, f"it ran and succeeded: {result}")
+            expect("No such file or directory" in text_of(result), f"not a missing-file error: {result}")
+            expect(not (isinstance(ran, dict) and "x" in str(ran.get("stdout", "")).split()), f"it printed x: {result}")
+
+        def c11():
+            out = {}
+            out["argv_sh_c_echo_x"] = exec_raw({"argv": ["/bin/sh", "-c", "echo x"]})
+            out["argv_busybox_sh"] = exec_raw({"argv": ["/bin/busybox", "sh"]})
+            out["cmd_form_echo_x"] = exec_raw({"cmd": "echo x"})
+            for key, result in out.items():
+                try:
+                    failed_for_a_missing_file(result)
+                except AssertionError as error:
+                    raise AssertionError(f"{key}: {error}")
+            out["argv_tracer_still_runs"] = exec_raw({"argv": ["/bin/hv2-urltrace", "--help"]})
+            return out
+        case("11 no shell in the image: /bin/sh, /bin/busybox and the cmd form all fail because the file does not exist", c11)
+
+        def c12():
+            out = {}
+            # Without a shell, the processes listing (which reads /proc through one) cannot work either.
+            status, listed = node.request("GET", f"/sandboxes/{probe_sandbox()}/processes", timeout=60)
+            out["processes_listing"] = {"http_status": status, "answer": listed}
+            # /proc/1/exe is PID 1's binary. Running it as a second process makes it try to
+            # bind the agent's vsock port, which the real one holds: it fails, and what it
+            # prints first is its own name. That is PID 1's identity seen from inside the
+            # guest with no shell and no other program.
+            probe_run = exec_raw({"argv": ["/proc/1/exe"]})
+            out["proc_1_exe"] = probe_run
+            ran = probe_run["answer"]
+            expect(isinstance(ran, dict), f"no answer: {probe_run}")
+            expect("hv2-guest-agentd" in str(ran.get("stderr", "")) or "hv2-guest-agentd" in text_of(probe_run),
+                   f"/proc/1/exe did not identify itself as the agent: {probe_run}")
+            log = node.log_path.read_bytes().decode(errors="replace") if node.log_path.exists() else ""
+            line = "hv2-guest-agentd: running as PID 1 (init)"
+            # Recorded, not required: the node's log does not carry the guest's console.
+            out["pid1_line_in_daemon_log"] = line in log
+            return out
+        case("12 PID 1 is the guest agent (/proc/1/exe, run once with no shell, names itself)", c12)
+
+        def c13():
+            import gzip
+            raw = gzip.decompress(args.initrd.read_bytes())
+            def cpio(flag):
+                done = subprocess.run(["cpio", flag, "--quiet"], input=raw, capture_output=True, check=True)
+                return done.stdout.decode()
+            names = [n for n in cpio("-t").splitlines() if n]
+            (args.output / "image-files.txt").write_text(cpio("-tv"))
+            shells = {"busybox", "sh", "bash", "dash", "ash", "zsh", "ksh", "csh", "tcsh", "fish"}
+            found = [n for n in names if os.path.basename(n) in shells]
+            expect(not found, f"shell-like files in the image: {found}")
+            expected = {".", "init", "bin", "bin/hv2-guest-agentd", "bin/hv2-urltrace", "dev", "etc", "proc", "root", "sys", "tmp"}
+            expect(set(names) == expected, f"unexpected contents: extra {sorted(set(names) - expected)}, missing {sorted(expected - set(names))}")
+            return {"files": sorted(names)}
+        case("13 the image's file list (from the cpio) holds no busybox, sh or bash, only init, the agent and the tracer", c13)
 
         def c6():
+            if probe.get("id"):
+                node.request("DELETE", f"/sandboxes/{probe['id']}", timeout=60)
             unique = sorted(set(sandboxes))
             expect(unique, "no sandboxes were made")
             lingering = []

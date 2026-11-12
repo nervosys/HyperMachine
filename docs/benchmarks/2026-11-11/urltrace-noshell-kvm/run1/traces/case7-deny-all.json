@@ -1,0 +1,148 @@
+{
+  "hops": [
+    {
+      "url": "https://example.com/",
+      "host": "example.com",
+      "pinned_to": [],
+      "sandbox_id": "sbx-7f69e31e17b9495d900f",
+      "tracer_args": [],
+      "guest_report": {
+        "tool": {
+          "name": "hv2-urltrace",
+          "version": "1.2.0"
+        },
+        "input_url": "https://example.com/",
+        "url": {
+          "scheme": "https",
+          "host": "example.com",
+          "port": 443,
+          "path_and_query": "/"
+        },
+        "resolved": [],
+        "connected_to": null,
+        "tls": null,
+        "request": null,
+        "response": null,
+        "hints": [],
+        "timings_ms": {
+          "resolve": 5009,
+          "connect": null,
+          "tls": null,
+          "first_byte": null,
+          "total": 5009
+        },
+        "errors": [
+          {
+            "stage": "resolve",
+            "message": "failed to lookup address information: Try again"
+          }
+        ],
+        "notes": []
+      },
+      "node_decisions": {
+        "decisions": [
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          }
+        ],
+        "stats": {
+          "connectionsAllowed": 0,
+          "connectionsRefused": 0,
+          "dnsAnswered": 0,
+          "dnsRefused": 4,
+          "intercepted": 0
+        }
+      },
+      "flags": {
+        "unexpected_network_activity": [],
+        "denied": [
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          },
+          {
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "example.com",
+            "reason": "the policy would refuse where this name leads",
+            "verdict": "deny"
+          }
+        ],
+        "notes": []
+      },
+      "errors": [],
+      "timing": {
+        "create_s": 0.045,
+        "exec_s": 5.027,
+        "total_s": 5.114
+      },
+      "create_request": {
+        "templateID": "base",
+        "timeout": 180,
+        "network": {
+          "allowOut": [],
+          "denyOut": [
+            "0.0.0.0/0",
+            "::/0"
+          ]
+        }
+      },
+      "exec_argv": [
+        "/bin/hv2-urltrace",
+        "https://example.com/",
+        "--timeout",
+        "60",
+        "--user-agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "--max-body",
+        "65536"
+      ],
+      "exit_code": 0,
+      "timed_out": false,
+      "guest_stderr": "",
+      "deleted": true
+    }
+  ]
+}

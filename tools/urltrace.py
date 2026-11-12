@@ -40,10 +40,9 @@ import urllib.request
 from pathlib import Path
 
 GUEST_TRACER = "/bin/hv2-urltrace"
-# `sh -c CMD ARG0 ARG...`: the node runs `cmd` as a shell script and the rest of the
-# request's `args` become $0, $1, ... Nothing hostile is ever in CMD; the URL travels
-# as an element of "$@", which the shell does not parse again.
-EXEC_SCRIPT = 'exec ' + GUEST_TRACER + ' "$@"'
+# The exec request is {"argv": [GUEST_TRACER, URL, ...]}: the guest agent runs argv[0]
+# directly with the rest as its arguments. There is no shell in the image or in the path,
+# so nothing in the URL is ever interpreted by anything but the tracer's own parser.
 
 MAX_URL_LEN = 2048
 MAX_REPORT_BYTES = 4 * 1024 * 1024       # the node's exec answer, in total
@@ -298,10 +297,11 @@ def run_hop(node, url, pin_host=None, hop_timeout=30, user_agent=DEFAULT_UA, ext
     characterising the node, never for a real hop). extra_args go to the tracer after the URL
     (the containment checks use --resolve).
 
-    The policy is allowOut: [host] AND denyOut: every address. allowOut alone is NOT a
-    pin: once any allow/deny field is present the node's policy defaults to allow
-    (hv2_net::network_policy::from_e2b, E2B's semantics), whatever --egress-default
-    says. The name rule overrides the address deny, which is what makes a pin."""
+    The policy is allowOut: [host] AND denyOut: every address. On a node whose
+    --egress-default is deny, allowOut alone is also exclusive now
+    (hv2_net::network_policy::from_e2b), but under --egress-default allow it restricts
+    nothing (E2B's reading), so the deny-all is always sent too. The name rule overrides
+    the address deny, which is what makes a pin."""
     host, _ = validate_url(url)
     pin = pin_host if pin_host is not None else host
     allow = [pin] if allow_out is None else list(allow_out)
@@ -325,14 +325,15 @@ def run_hop(node, url, pin_host=None, hop_timeout=30, user_agent=DEFAULT_UA, ext
         hop["sandbox_id"] = sandbox
         hop["timing"]["create_s"] = round(time.monotonic() - t, 3)
 
-        # exec: argv, not a shell string. "$@" does not re-parse its elements.
-        args = ["hv2-urltrace", url, "--timeout", str(hop_timeout), "--user-agent", user_agent]
+        # exec: argv, run directly by the guest agent. No shell anywhere.
+        argv = [GUEST_TRACER, url, "--timeout", str(hop_timeout), "--user-agent", user_agent]
         if max_body is not None:
-            args += ["--max-body", str(int(max_body))]
-        args += list(extra_args)
+            argv += ["--max-body", str(int(max_body))]
+        argv += list(extra_args)
+        hop["exec_argv"] = argv
         t = time.monotonic()
         status, ran = node.request("POST", f"/sandboxes/{sandbox}/exec",
-                                   {"cmd": EXEC_SCRIPT, "args": args, "timeout_secs": hop_timeout + 5},
+                                   {"argv": argv, "timeout_secs": hop_timeout + 5},
                                    timeout=hop_timeout + 30)
         hop["timing"]["exec_s"] = round(time.monotonic() - t, 3)
         if status != 200 or not isinstance(ran, dict):

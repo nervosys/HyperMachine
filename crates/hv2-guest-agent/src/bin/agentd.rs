@@ -30,6 +30,13 @@ fn main() {
     {
         if let Err(e) = linux::run() {
             eprintln!("hv2-guest-agentd: {e}");
+            if linux::is_pid1() {
+                // PID 1 exiting panics the kernel, which hides the message
+                // above; stay up so the console keeps it.
+                loop {
+                    std::thread::sleep(std::time::Duration::from_secs(3600));
+                }
+            }
             std::process::exit(1);
         }
     }
@@ -99,7 +106,203 @@ mod linux {
         }
     }
 
+    /// One filesystem the agent mounts when it is the guest's init.
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct MountSpec {
+        pub source: &'static str,
+        pub target: &'static str,
+        pub fstype: &'static str,
+    }
+
+    /// What init mounts, in order. `/dev/pts` follows `/dev` because it is a
+    /// directory inside it, and the agent's own pty support needs it.
+    pub fn pid1_mounts() -> Vec<MountSpec> {
+        let m = |source, target, fstype| MountSpec {
+            source,
+            target,
+            fstype,
+        };
+        vec![
+            m("proc", "/proc", "proc"),
+            m("sysfs", "/sys", "sysfs"),
+            m("devtmpfs", "/dev", "devtmpfs"),
+            m("devpts", "/dev/pts", "devpts"),
+            m("tmpfs", "/tmp", "tmpfs"),
+        ]
+    }
+
+    /// Make `ROOT/etc/resolv.conf` a link to `/proc/net/pnp` unless something
+    /// is already there. The kernel writes the nameserver it got from `ip=` on
+    /// its command line to that file, in resolv.conf's own format. Takes the
+    /// root as an argument so a test can use a temporary directory.
+    pub fn ensure_resolv_conf(root: &std::path::Path) -> std::io::Result<()> {
+        let etc = root.join("etc");
+        std::fs::create_dir_all(&etc)?;
+        let link = etc.join("resolv.conf");
+        // symlink_metadata, so that even a dangling link counts as "there".
+        match std::fs::symlink_metadata(&link) {
+            Ok(_) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                std::os::unix::fs::symlink("/proc/net/pnp", &link)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    fn mount_one(spec: &MountSpec) -> std::io::Result<()> {
+        use std::ffi::CString;
+        let nul = |s: &str| {
+            CString::new(s).map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))
+        };
+        let (source, target, fstype) = (nul(spec.source)?, nul(spec.target)?, nul(spec.fstype)?);
+        // SAFETY: three NUL-terminated strings that outlive the call, no
+        // flags, and a null data pointer, which mount(2) accepts; the return
+        // value is checked.
+        let rc = unsafe {
+            libc::mount(
+                source.as_ptr(),
+                target.as_ptr(),
+                fstype.as_ptr(),
+                0,
+                std::ptr::null(),
+            )
+        };
+        if rc == 0 {
+            return Ok(());
+        }
+        let err = std::io::Error::last_os_error();
+        // Already mounted (the kernel can mount devtmpfs itself): not a failure.
+        if err.raw_os_error() == Some(libc::EBUSY) {
+            return Ok(());
+        }
+        Err(err)
+    }
+
+    /// If the kernel gave init no standard streams (no /dev/console in the
+    /// initramfs when it started), open the console now that /dev exists, so
+    /// that the log lines below and the children's stderr have somewhere to go.
+    fn ensure_stdio() {
+        // SAFETY: `fcntl` with F_GETFD on a small integer descriptor; -1 means
+        // it is not open, which is what is being asked.
+        if unsafe { libc::fcntl(2, libc::F_GETFD) } >= 0 {
+            return;
+        }
+        // SAFETY: a NUL-terminated literal path; the result is checked.
+        let fd = unsafe { libc::open(c"/dev/console".as_ptr(), libc::O_RDWR | libc::O_NOCTTY) };
+        if fd < 0 {
+            return;
+        }
+        for target in 0..3 {
+            // SAFETY: `fd` is open, checked above; dup2 onto 0, 1 and 2.
+            unsafe { libc::dup2(fd, target) };
+        }
+        if fd > 2 {
+            // SAFETY: `fd` is the descriptor opened above and not used again.
+            unsafe { libc::close(fd) };
+        }
+    }
+
+    /// What an init does before it serves, when this process is PID 1. Each
+    /// step's failure is reported and does not stop the others.
+    ///
+    /// Orphans are not reaped here: a `waitpid(-1)` loop would take exit
+    /// statuses that the agent's own child handling is waiting for, and a
+    /// guest that lives for one command can carry a few zombies.
+    fn become_init() {
+        for spec in pid1_mounts() {
+            if let Err(e) = std::fs::create_dir_all(spec.target) {
+                eprintln!("hv2-guest-agentd: init: mkdir {}: {e}", spec.target);
+            }
+            if let Err(e) = mount_one(&spec) {
+                eprintln!(
+                    "hv2-guest-agentd: init: mount {} on {}: {e}",
+                    spec.fstype, spec.target
+                );
+            }
+            if spec.target == "/dev" {
+                ensure_stdio();
+            }
+        }
+        if let Err(e) = ensure_resolv_conf(std::path::Path::new("/")) {
+            eprintln!("hv2-guest-agentd: init: /etc/resolv.conf: {e}");
+        }
+        // Single-threaded here, before the first thread is started.
+        std::env::set_var("PATH", "/bin");
+        std::env::set_var("HOME", "/root");
+        eprintln!("hv2-guest-agentd: running as PID 1 (init)");
+    }
+
+    /// Whether this process is the guest's init.
+    pub fn is_pid1() -> bool {
+        std::process::id() == 1
+    }
+
+    #[cfg(test)]
+    mod init_tests {
+        use super::*;
+
+        #[test]
+        fn init_mounts_proc_sys_dev_and_a_tmpfs_tmp_in_order() {
+            let list: Vec<(&str, &str)> =
+                pid1_mounts().iter().map(|m| (m.fstype, m.target)).collect();
+            assert_eq!(
+                list,
+                [
+                    ("proc", "/proc"),
+                    ("sysfs", "/sys"),
+                    ("devtmpfs", "/dev"),
+                    ("devpts", "/dev/pts"),
+                    ("tmpfs", "/tmp"),
+                ]
+            );
+        }
+
+        fn scratch(name: &str) -> std::path::PathBuf {
+            let dir =
+                std::env::temp_dir().join(format!("hv2-agentd-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            dir
+        }
+
+        #[test]
+        fn resolv_conf_becomes_a_link_to_the_kernels_pnp_file() {
+            let root = scratch("resolv-new");
+            // No /etc yet: it is created too.
+            ensure_resolv_conf(&root).unwrap();
+            let link = root.join("etc/resolv.conf");
+            assert_eq!(
+                std::fs::read_link(&link).unwrap(),
+                std::path::Path::new("/proc/net/pnp")
+            );
+            // Running it again changes nothing.
+            ensure_resolv_conf(&root).unwrap();
+            let _ = std::fs::remove_dir_all(&root);
+        }
+
+        #[test]
+        fn an_existing_resolv_conf_is_left_alone() {
+            let root = scratch("resolv-existing");
+            std::fs::create_dir_all(root.join("etc")).unwrap();
+            std::fs::write(root.join("etc/resolv.conf"), "nameserver 192.0.2.1\n").unwrap();
+            ensure_resolv_conf(&root).unwrap();
+            assert_eq!(
+                std::fs::read_to_string(root.join("etc/resolv.conf")).unwrap(),
+                "nameserver 192.0.2.1\n"
+            );
+            let _ = std::fs::remove_dir_all(&root);
+        }
+
+        #[test]
+        fn the_test_process_is_not_init() {
+            assert!(!is_pid1());
+        }
+    }
+
     pub fn run() -> std::io::Result<()> {
+        if is_pid1() {
+            become_init();
+        }
         let listener = bind()?;
         boot_trace("agent_listening");
         eprintln!("hv2-guest-agentd {AGENT_VERSION} listening on vsock port {GUEST_AGENT_PORT}");

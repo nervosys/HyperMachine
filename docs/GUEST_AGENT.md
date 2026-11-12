@@ -87,6 +87,22 @@ For an initramfs with no init system, one line in the init script is enough:
 /usr/local/bin/hv2-guest-agentd &
 ```
 
+### As the guest's init
+
+`hv2-guest-agentd` can also be the guest's PID 1, so an image needs no shell and no init script
+(`tools/guest-image/build.sh --no-busybox --init hv2-guest-agentd`, `docs/URL_TRACING.md`). When its
+process id is 1, before it serves it mounts `proc` on `/proc`, `sysfs` on `/sys`, `devtmpfs` on
+`/dev` (already mounted is fine), `devpts` on `/dev/pts` and a `tmpfs` on `/tmp`, creating the mount
+points if absent; creates `/etc` and, if `/etc/resolv.conf` does not exist, links it to
+`/proc/net/pnp` (where the kernel writes the nameserver it got from `ip=` on the command line, in
+resolv.conf's format); sets `PATH=/bin` and `HOME=/root` for what it runs; and logs
+`hv2-guest-agentd: running as PID 1 (init)` to the console. Each step's failure is logged and does
+not stop the others. If serving ever fails it stays alive rather than exit, because PID 1 exiting
+panics the kernel. If the kernel gave it no standard streams it opens `/dev/console` once `/dev`
+exists. Not done: it does not bring up `lo`, remount the root larger, or reap orphans (a
+`waitpid(-1)` loop would steal the exit statuses the agent's own children report; a guest that lives
+for one command can carry a few zombies). Run any other way (PID not 1) it behaves as before.
+
 The vsock transport module is `vmw_vsock_virtio_transport`. Stock distribution
 kernels load it automatically once the device is probed; a minimal kernel needs
 `CONFIG_VSOCKETS=y` and `CONFIG_VIRTIO_VSOCKETS=y`.
