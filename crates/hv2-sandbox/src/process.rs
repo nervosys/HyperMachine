@@ -2034,10 +2034,10 @@ CLOSED"
             .output()
             .expect("ps");
         let listing = String::from_utf8_lossy(&survivors.stdout);
-        let strays: Vec<&str> = listing
-            .lines()
-            .filter(|l| l.contains(&marker.to_string()) && !l.contains("ps -eo"))
-            .collect();
+        // The whole command line, not the digits anywhere in one: another
+        // process on the machine can carry the same digits in its name.
+        let ours = format!("/bin/sleep {marker}");
+        let strays: Vec<&str> = listing.lines().filter(|l| l.trim() == ours).collect();
         assert!(
             strays.is_empty(),
             "the deadline killed the workload and left {} of its processes \
