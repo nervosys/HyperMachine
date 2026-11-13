@@ -1083,6 +1083,13 @@ mod linux {
                 mode,
                 recursive,
             } => set_attr(&path, owner.as_deref(), mode, recursive),
+            Operation::ReadLink { path } => read_link(&path),
+            Operation::MakeSymlink {
+                target,
+                path,
+                owner,
+            } => make_symlink(&target, &path, owner.as_deref()),
+            Operation::SignalProcess { pid, signal } => signal_process(pid, signal),
             // Served in `serve`, which owns the connection it takes.
             Operation::Forward { .. }
             | Operation::Listen { .. }
@@ -1484,6 +1491,80 @@ mod linux {
             }
         }
         OpResult::Acknowledged
+    }
+
+    /// See [`Operation::ReadLink`].
+    fn read_link(path: &str) -> OpResult {
+        match std::fs::read_link(path) {
+            Ok(target) => match target.into_os_string().into_string() {
+                Ok(target) => OpResult::LinkTarget { target },
+                Err(_) => fs_failed("reading the link", path, &"its target is not valid UTF-8"),
+            },
+            // EINVAL is "not a symlink"; the OS's own words say so.
+            Err(e) => fs_failed("reading the link", path, &e),
+        }
+    }
+
+    /// See [`Operation::MakeSymlink`].
+    fn make_symlink(target: &str, path: &str, owner: Option<&str>) -> OpResult {
+        if path.is_empty() {
+            return fs_failed("linking", "an empty path", &"nothing to make");
+        }
+        if target.is_empty() || target.contains('\0') || path.contains('\0') {
+            return fs_failed("linking", path, &"empty or NUL-bearing target");
+        }
+        let account = match resolve_owner(owner) {
+            Ok(account) => account,
+            Err(e) => return fs_failed("owning", path, &e),
+        };
+        // `symlink(2)` never follows and fails with EEXIST on anything at all
+        // there, a dangling link included.
+        if let Err(e) = std::os::unix::fs::symlink(target, path) {
+            return fs_failed("linking", path, &e);
+        }
+        if let Some(account) = account {
+            if let Err(e) = std::os::unix::fs::lchown(path, Some(account.uid), Some(account.gid)) {
+                // Do not leave a root-owned link where the caller was told none exists.
+                let _ = std::fs::remove_file(path);
+                return fs_failed("giving the owner", path, &e);
+            }
+        }
+        OpResult::Acknowledged
+    }
+
+    /// See [`Operation::SignalProcess`].
+    fn signal_process(pid: u32, signal: hv2_guest_agent::SignalName) -> OpResult {
+        use hv2_guest_agent::SignalName;
+        if pid <= 1 || pid > i32::MAX as u32 {
+            return OpResult::Failed {
+                message: format!("refusing to signal pid {pid}"),
+            };
+        }
+        if pid == std::process::id() {
+            return OpResult::Failed {
+                message: "refusing to signal the agent itself".into(),
+            };
+        }
+        let number = match signal {
+            SignalName::Stop => libc::SIGSTOP,
+            SignalName::Cont => libc::SIGCONT,
+            SignalName::Term => libc::SIGTERM,
+            SignalName::Hup => libc::SIGHUP,
+            SignalName::Int => libc::SIGINT,
+        };
+        // SAFETY: `kill` with a pid checked above to be neither 0/1 nor this
+        // agent, and a signal from a closed set.
+        if unsafe { libc::kill(pid as libc::pid_t, number) } == 0 {
+            return OpResult::Acknowledged;
+        }
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() == Some(libc::ESRCH) {
+            OpResult::NoSuchProcess
+        } else {
+            OpResult::Failed {
+                message: format!("signalling pid {pid}: {error}"),
+            }
+        }
     }
 
     /// See [`Operation::Restored`]: clock first, then a forced reseed.
@@ -2475,6 +2556,138 @@ mod linux {
                 failure(set_attr(s(&root), Some("no-such-user-xyz"), None, false))
                     .contains("no user")
             );
+        }
+
+        #[test]
+        fn read_link_returns_the_target_verbatim_and_refuses_non_links() {
+            let root = scratch("readlink");
+            symlink("../x/./y", root.join("l")).unwrap();
+            symlink("/nowhere", root.join("dangling")).unwrap();
+            std::fs::write(root.join("f"), b"").unwrap();
+            assert_eq!(
+                read_link(s(&root.join("l"))),
+                OpResult::LinkTarget {
+                    target: "../x/./y".into()
+                }
+            );
+            assert_eq!(
+                read_link(s(&root.join("dangling"))),
+                OpResult::LinkTarget {
+                    target: "/nowhere".into()
+                }
+            );
+            assert!(failure(read_link(s(&root.join("f")))).contains("reading the link"));
+            assert!(failure(read_link(s(&root.join("nope")))).contains("No such file"));
+            // Not UTF-8: refused, not converted into some other path.
+            let odd = std::ffi::OsStr::from_bytes(b"bad-\xff-target");
+            symlink(odd, root.join("odd")).unwrap();
+            assert!(failure(read_link(s(&root.join("odd")))).contains("UTF-8"));
+        }
+
+        #[test]
+        fn make_symlink_does_not_follow_and_does_not_replace() {
+            let root = scratch("mksymlink");
+            std::fs::create_dir(root.join("real")).unwrap();
+            assert_eq!(
+                make_symlink("real", s(&root.join("l")), None),
+                OpResult::Acknowledged
+            );
+            assert_eq!(
+                std::fs::read_link(root.join("l")).unwrap(),
+                Path::new("real")
+            );
+            // An existing path, a symlink (even dangling) and a missing parent all fail.
+            assert!(failure(make_symlink("x", s(&root.join("l")), None)).contains("exists"));
+            symlink("/nowhere", root.join("dangling")).unwrap();
+            assert!(failure(make_symlink("x", s(&root.join("dangling")), None)).contains("exists"));
+            assert!(failure(make_symlink("x", s(&root.join("a/b")), None)).contains("No such"));
+            // The link at `l` is not followed to put a new one inside `real`.
+            assert!(failure(make_symlink("x", s(&root.join("l")), None)).contains("exists"));
+            assert!(!root.join("real/l").exists());
+            assert!(failure(make_symlink("", s(&root.join("e")), None)).contains("empty"));
+        }
+
+        #[test]
+        fn make_symlink_gives_the_link_an_owner_without_touching_its_target() {
+            use std::os::unix::fs::MetadataExt;
+            if unsafe { libc::geteuid() } != 0 {
+                return;
+            }
+            let root = scratch("mksymlink-owner");
+            std::fs::write(root.join("target"), b"").unwrap();
+            std::os::unix::fs::chown(root.join("target"), Some(12345), Some(12345)).unwrap();
+            assert_eq!(
+                make_symlink("target", s(&root.join("l")), Some("0")),
+                OpResult::Acknowledged
+            );
+            let link = std::fs::symlink_metadata(root.join("l")).unwrap();
+            assert_eq!((link.uid(), link.gid()), (0, 0));
+            let target = std::fs::metadata(root.join("target")).unwrap();
+            assert_eq!(target.uid(), 12345);
+            assert!(failure(make_symlink(
+                "t",
+                s(&root.join("m")),
+                Some("no-such-user-xyz")
+            ))
+            .contains("no user"));
+            assert!(!root.join("m").exists());
+        }
+
+        fn stat_state(pid: u32) -> char {
+            let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).unwrap();
+            // The state follows the last ")" (the command name may contain one).
+            let after = &stat[stat.rfind(')').unwrap() + 2..];
+            after.chars().next().unwrap()
+        }
+
+        fn wait_for_state(pid: u32, want: &[char]) -> char {
+            for _ in 0..200 {
+                let state = stat_state(pid);
+                if want.contains(&state) {
+                    return state;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            stat_state(pid)
+        }
+
+        #[test]
+        fn signal_process_stops_and_continues_a_process_it_did_not_start() {
+            use hv2_guest_agent::SignalName;
+            let mut child = std::process::Command::new("sleep")
+                .arg("60")
+                .spawn()
+                .unwrap();
+            let pid = child.id();
+            assert_eq!(
+                signal_process(pid, SignalName::Stop),
+                OpResult::Acknowledged
+            );
+            assert_eq!(wait_for_state(pid, &['T']), 'T');
+            assert_eq!(
+                signal_process(pid, SignalName::Cont),
+                OpResult::Acknowledged
+            );
+            assert_ne!(wait_for_state(pid, &['S', 'R']), 'T');
+            assert_eq!(
+                signal_process(pid, SignalName::Term),
+                OpResult::Acknowledged
+            );
+            child.wait().unwrap();
+            // Reaped: the pid is gone, which is reported distinctly.
+            assert_eq!(
+                signal_process(pid, SignalName::Cont),
+                OpResult::NoSuchProcess
+            );
+        }
+
+        #[test]
+        fn signal_process_refuses_init_zero_and_the_agent_itself() {
+            use hv2_guest_agent::SignalName;
+            for pid in [0, 1, std::process::id(), u32::MAX] {
+                let message = failure(signal_process(pid, SignalName::Stop));
+                assert!(message.contains("refusing"), "{pid}: {message}");
+            }
         }
     }
 

@@ -109,7 +109,7 @@ kernels load it automatically once the device is probed; a minimal kernel needs
 
 ## Filesystem operations
 
-Five operations let the host inspect and change a guest's files with no shell,
+Five operations (and three more below) let the host inspect and change a guest's files with no shell,
 `mkdir`, `rm`, `stat` or `tar` in the image. They are additive: the protocol
 version is still 3. Each is an `Operation` (tagged by `kind`) and, on the host,
 an `AgentVM::*_in_guest` method.
@@ -121,6 +121,21 @@ an `AgentVM::*_in_guest` method.
 | `make_dir {path, parents, owner, mode}` | `acknowledged` | `mkdir -p` with `parents`; `owner` and `mode` go only to directories this call created; `mode` is exact, not masked by umask |
 | `remove {path, recursive, missing_ok}` | `acknowledged` | never follows a symlink; refuses `""`, `/` and paths ending in `.` or `..`; a missing path fails unless `missing_ok` |
 | `set_attr {path, owner, mode, recursive}` | `acknowledged` | `lchown` and `chmod`; a symlink's mode is left alone; recursion does not follow symlinks |
+
+Three more, for links and signals, are added the same way (still version 3):
+
+| Operation | Answered with | Notes |
+|---|---|---|
+| `read_link {path}` | `link_target {target}` | `readlink`, never following; fails if `path` is not a symlink, and refuses a target that is not UTF-8 rather than converting it lossily |
+| `make_symlink {target, path, owner}` | `acknowledged` | `symlink(2)`: the target is stored verbatim; fails if anything exists at `path` (a dangling link included); the parent must exist; `owner` is applied with `lchown` and a failed `lchown` removes the link again |
+| `signal_process {pid, signal}` | `acknowledged`, or `no_such_process` | `signal` is one of `stop`, `cont`, `term`, `hup`, `int` (a lowercase name, never a number; there is deliberately no `kill`). Reaches any pid, unlike the older `signal`, which takes a raw number and only a program the agent started. Refuses pid 0, pid 1 and the agent's own pid. `no_such_process` (`ESRCH`) is routine for a caller sweeping `/proc` and is reported apart from `failed`; the host method returns `Ok(false)` for it |
+
+The host methods are `read_link_in_guest`, `make_symlink_in_guest` and
+`signal_process_in_guest` (the last is not `signal_in_guest`, which sends the
+older raw-number `signal`). They are used by the checkpoint reader (freeze with
+`signal_process stop` on every pid in `/proc`; `.../archive` built on the host
+from `stat`/`list_dir`/`read_file`/`read_link`) and by repository unpacking
+(symlinks via `make_symlink`).
 
 `owner` is a user by name or number, or `@template` for the template's user,
 as for `write_file`. Optional fields are omitted from the frame when unset.

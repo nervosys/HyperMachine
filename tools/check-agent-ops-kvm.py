@@ -12,8 +12,18 @@ c. An environment's file and Git repository written into a sandbox, then read ba
    through its checkpoint (GET /sandboxes/{id}/checkpoints/{name}/files and /file): the
    file's bytes, the repository's tree with modes and one owner, no archive left, a
    missing path 404, a file listed 400, a directory read 400.
-d. GET .../archive: 200 and a tar of the directory on an image with a shell; 400 naming
-   the missing /bin/sh on one with none (the archive is still built by tar in the guest).
+d. GET .../archive of /etc/app: 200 and a tar holding config.toml with its bytes, on every
+   image, shell or none: the host walks the checkpoint with the agent's stat, list_dir,
+   read_file and read_link (an old agent: the shell's tar).
+e. GET .../archive of the repository /srv/app, which holds two symlinks (one to a file, one
+   to a directory): the tar holds both as symlink entries with the right targets, the
+   x-hv2-archive-skipped header is present, and the checkpoint's `files` listing names
+   them symlinks (the unpack made them with make_symlink; an old agent: the shell's tar).
+f. The checkpoint reader's freeze: a long-running process is started (`setsid sleep 4321`,
+   images with a shell only), a checkpoint is read, and the daemon log must show the freeze
+   took the agent path (`using agent op (freeze)`) on a new agent and the shell path
+   (`falling back to shell (freeze)`) on an old one. Where the reader's /proc/<pid>/stat
+   can be read through the checkpoint's file route, its state must be `T` (stopped).
 
 --agent-ops says which code path the image must take: `new` (the agent has the file
 operations: the daemon log must show "using agent op" and never "falling back to
@@ -75,6 +85,9 @@ def main():
     (src / "src").mkdir()
     (src / "src" / "app.py").write_text("print('main')\n")
     (src / "README.md").write_text("on main\n")
+    # A symlink to a file and one to a directory, as the unpack and the archive must keep them.
+    os.symlink("README.md", src / "link-to-readme")
+    os.symlink("src", src / "link-to-src")
     git("add", ".", cwd=src)
     git("commit", "-q", "-m", "main", cwd=src)
     served = work / "served"
@@ -245,7 +258,7 @@ def main():
         def repository():
             listed = json.loads(query(sandbox, "one", "files", "/srv/app"))["entries"]
             names = {e["name"]: e for e in listed}
-            assert {"README.md", "src", ".git"} <= set(names), sorted(names)
+            assert {"README.md", "src", ".git", "link-to-readme", "link-to-src"} <= set(names), sorted(names)
             order = [e["name"] for e in listed]
             assert order.index(".git") > order.index("src"), order  # dot files after the rest, as `* .*`
             assert names["README.md"]["type"] == "file" and names["README.md"]["mode"] == "644", names["README.md"]
@@ -260,26 +273,113 @@ def main():
             assert len(owners) == 1, owners
             # Every file the repository holds, byte for byte.
             tracked = git("ls-files", cwd=src).split()
-            for rel in tracked:
+            links = {rel for rel in tracked if (src / rel).is_symlink()}
+            assert links == {"link-to-readme", "link-to-src"}, links
+            for rel in [t for t in tracked if t not in links]:
                 assert query(sandbox, "one", "file", f"/srv/app/{rel}") == (src / rel).read_bytes(), rel
             # No archive left behind.
             tmp = [e["name"] for e in json.loads(query(sandbox, "one", "files", "/tmp"))["entries"]]
             assert not [n for n in tmp if "hm-repository" in n], tmp
-            return {"tree_owner": sorted(owners), "git_entries": len(git_dir), "tracked": tracked}
+            return {"tree_owner": sorted(owners), "git_entries": len(git_dir), "tracked": tracked,
+                    "symlinks_listed": {n: names[n]["type"] for n in sorted(links)}}
         case("an environment's Git repository is unpacked, one owner, modes kept, no archive left", repository)
 
+        def fetch_archive(sandbox_id, name, path, want=200):
+            req = urllib.request.Request(base + f"/sandboxes/{sandbox_id}/checkpoints/{name}/archive?"
+                                         + urllib.parse.urlencode({"path": path}))
+            try:
+                response = urllib.request.urlopen(req, timeout=300)
+            except urllib.error.HTTPError as error:
+                response = error
+            with response:
+                data = response.read()
+                assert response.status == want, (path, response.status, data[:300])
+                return response.headers, data
+
+        def tar_of(data):
+            return tarfile.open(fileobj=io.BytesIO(data), mode="r:gz")
+
         def archive():
-            status, value = request("GET", f"{sbx}/checkpoints/one/archive?"
-                                    + urllib.parse.urlencode({"path": "/etc/app"}), raw=True)
+            headers, data = fetch_archive(sandbox, "one", "/etc/app")
+            tar = tar_of(data)
+            members = {m.name.removeprefix("./"): m for m in tar.getmembers()}
+            assert "config.toml" in members, sorted(members)
+            assert members["config.toml"].isfile(), members["config.toml"]
+            assert tar.extractfile(members["config.toml"]).read() == b"port = 9090\n"
+            assert headers.get("content-type") == "application/gzip", headers
+            assert headers.get("x-hv2-archive-skipped") is not None, dict(headers)
+            return {"status": 200, "entries": sorted(members), "skipped_header": headers["x-hv2-archive-skipped"]}
+        case("the archive route: 200 on every image, config.toml with its bytes", archive)
+
+        def repository_archive():
+            headers, data = fetch_archive(sandbox, "one", "/srv/app")
+            tar = tar_of(data)
+            members = {m.name.removeprefix("./"): m for m in tar.getmembers()}
+            for link, target in [("link-to-readme", "README.md"), ("link-to-src", "src")]:
+                assert link in members, sorted(members)[:40]
+                assert members[link].issym() and members[link].linkname == target, (
+                    link, members[link].type, members[link].linkname)
+            assert tar.extractfile(members["README.md"]).read() == b"on main\n"
+            assert tar.extractfile(members["src/app.py"]).read() == b"print('main')\n"
+            assert members["src"].isdir() and members["README.md"].isfile()
+            # The checkpoint's own listing names them symlinks.
+            listed = {e["name"]: e for e in json.loads(query(sandbox, "one", "files", "/srv/app"))["entries"]}
+            assert listed["link-to-readme"]["type"] == "symlink", listed["link-to-readme"]
+            assert listed["link-to-src"]["type"] == "symlink", listed["link-to-src"]
+            skipped = headers.get("x-hv2-archive-skipped")
+            assert skipped is not None, dict(headers)
+            return {"status": 200, "members": len(members),
+                    "symlinks": {n: members[n].linkname for n in ("link-to-readme", "link-to-src")},
+                    "listing_types": {n: listed[n]["type"] for n in ("link-to-readme", "link-to-src")},
+                    "skipped_header": skipped}
+        case("the archive of the repository holds both symlinks; the listing names them symlinks",
+             repository_archive)
+
+        def freeze():
+            def counts():
+                text = log_path.read_text(errors="replace")
+                return (text.count("using agent op (freeze)"), text.count("falling back to shell (freeze)"))
+            detail = {}
+            pid = None
             if has_shell:
-                assert status == 200, (status, value)
-                names = [m.name.removeprefix("./") for m in tarfile.open(fileobj=io.BytesIO(value), mode="r:gz").getmembers()]
-                assert "config.toml" in names, names
-                return {"status": status, "entries": names}
-            assert status == 400, (status, value)
-            assert "no /bin/sh" in value["message"], value
-            return {"status": status, "message": value["message"]}
-        case("the archive route: 200 with a shell, 400 naming the missing /bin/sh without one", archive)
+                # Case a left one running; start another only if it is gone.
+                sleeper = [p for p in ps(sbx)["processes"] if p["args"] == "sleep 4321"]
+                if not sleeper:
+                    sh(sandbox, "setsid sleep 4321 >/dev/null 2>&1 &")
+                    time.sleep(0.5)
+                    sleeper = [p for p in ps(sbx)["processes"] if p["args"] == "sleep 4321"]
+                assert len(sleeper) == 1 and sleeper[0]["state"] == "S", sleeper
+                pid = sleeper[0]["pid"]
+                detail["sleeper_pid"] = pid
+            else:
+                detail["sleeper"] = ("none: a guest with no shell runs only its agent here, "
+                                     "so only the code path is shown")
+            status, value = request("POST", f"{sbx}/checkpoints", {"name": "two"})
+            assert status in (200, 201, 204), (status, value)
+            before = counts()
+            query(sandbox, "two", "file", "/etc/app/config.toml")  # opens a reader: restore, freeze
+            after = counts()
+            agent_delta, shell_delta = after[0] - before[0], after[1] - before[1]
+            detail["freeze_log_lines"] = {"using agent op (freeze)": agent_delta,
+                                          "falling back to shell (freeze)": shell_delta}
+            if args.agent_ops == "new":
+                assert agent_delta >= 1 and shell_delta == 0, detail
+            else:
+                assert shell_delta >= 1 and agent_delta == 0, detail
+            detail["stopped_state"] = "not observed"
+            if pid is not None:
+                status, value = request("GET", f"{sbx}/checkpoints/two/file?"
+                                        + urllib.parse.urlencode({"path": f"/proc/{pid}/stat"}), raw=True)
+                if status == 200:
+                    text = value.decode(errors="replace")
+                    state_letter = text.rsplit(")", 1)[1].split()[0]
+                    detail["proc_stat"] = text.strip()[:120]
+                    assert state_letter == "T", ("the frozen process is not stopped", text)
+                    detail["stopped_state"] = "T"
+                else:
+                    detail["stopped_state"] = f"not observed: file of /proc/{pid}/stat answered {status}: {value}"
+            return detail
+        case("the checkpoint reader's freeze takes the expected path (state T where readable)", freeze)
 
         request("DELETE", sbx)
         request("POST", f"/machines/{MACHINE}/stop", {})
@@ -304,7 +404,7 @@ def main():
                 else:
                     assert text.count(SHELL_LOG) > 0 and text.count(AGENT_LOG) == 0, report["code_path_lines"]
                 assert report["platform_lines"]["Tcg"] == 0, report["platform_lines"]
-                report["success"] = len(report["cases"]) == 5
+                report["success"] = len(report["cases"]) == 7
                 print("ok: the daemon took the expected code path", report["code_path_lines"], flush=True)
             except AssertionError as error:
                 report["code_path_error"] = repr(error)

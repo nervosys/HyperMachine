@@ -347,6 +347,55 @@ pub enum Operation {
         #[serde(default)]
         recursive: bool,
     },
+
+    /// Read a symlink's target without following it (`readlink`).
+    ///
+    /// Answered with [`OpResult::LinkTarget`]. A path that is not a symlink,
+    /// or whose target is not valid UTF-8 (refused rather than converted
+    /// lossily, which would hand back a different path), is
+    /// [`OpResult::Failed`]. An agent from before this operation existed
+    /// drops the connection instead of answering.
+    ReadLink { path: String },
+
+    /// Create a symlink at `path` pointing at `target`, verbatim (`ln -s`).
+    ///
+    /// Never follows: if anything exists at `path`, even a dangling symlink,
+    /// it fails. The parent directory must already exist. `owner` (as for
+    /// [`Operation::MakeDir`]) owns the link itself (`lchown`).
+    ///
+    /// Answered with [`OpResult::Acknowledged`].
+    MakeSymlink {
+        target: String,
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        owner: Option<String>,
+    },
+
+    /// Send a named signal to any process in the guest by pid.
+    ///
+    /// Unlike [`Operation::Signal`], which reaches only a program this agent
+    /// started and takes a raw number, this reaches any pid -- so it takes
+    /// only the names in [`SignalName`], and refuses pid 1, pid 0 and below
+    /// and the agent's own pid. The freeze of a checkpoint is the use: stop
+    /// every process, whoever started it.
+    ///
+    /// Answered with [`OpResult::Acknowledged`], or [`OpResult::NoSuchProcess`]
+    /// when the pid is gone (it exited between listing `/proc` and here, which
+    /// a caller sweeping `/proc` should expect and ignore).
+    SignalProcess { pid: u32, signal: SignalName },
+}
+
+/// The signals [`Operation::SignalProcess`] may send, on the wire as
+/// lowercase names rather than numbers (which differ by architecture).
+/// Deliberately no `kill`: nothing here needs to be unstoppable.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SignalName {
+    Stop,
+    Cont,
+    Term,
+    Hup,
+    Int,
 }
 
 /// The most entries one [`OpResult::DirEntries`] carries.
@@ -541,6 +590,11 @@ pub enum OpResult {
     },
     /// Answer to [`Operation::Stat`].
     FileStat(DirEntry),
+    /// Answer to [`Operation::ReadLink`].
+    LinkTarget { target: String },
+    /// Answer to [`Operation::SignalProcess`] when no such process exists
+    /// (`ESRCH`): distinct from [`OpResult::Failed`] because it is routine.
+    NoSuchProcess,
     /// The request could not be carried out at all.
     Failed { message: String },
 }
@@ -1051,6 +1105,78 @@ mod filesystem_op_tests {
                 .expect("a frame");
             assert_eq!(back.result, result);
         }
+    }
+
+    #[test]
+    fn link_and_signal_operations_survive_a_round_trip() {
+        let ops = [
+            Operation::ReadLink {
+                path: "/etc/mtab".into(),
+            },
+            Operation::MakeSymlink {
+                target: "../proc/self/mounts".into(),
+                path: "/etc/mtab".into(),
+                owner: Some(TEMPLATE_USER.into()),
+            },
+            Operation::SignalProcess {
+                pid: 42,
+                signal: SignalName::Stop,
+            },
+        ];
+        for op in ops {
+            let request = Request {
+                id: 3,
+                version: PROTOCOL_VERSION,
+                op: op.clone(),
+            };
+            let bytes = encode(&request).expect("encode");
+            let (back, _) = decode::<Request>(&bytes).expect("decode").expect("a frame");
+            assert_eq!(back.op, op);
+        }
+        for result in [
+            OpResult::LinkTarget {
+                target: "a/b".into(),
+            },
+            OpResult::NoSuchProcess,
+        ] {
+            let response = Response {
+                id: 3,
+                version: PROTOCOL_VERSION,
+                result: result.clone(),
+            };
+            let bytes = encode(&response).expect("encode");
+            let (back, _) = decode::<Response>(&bytes)
+                .expect("decode")
+                .expect("a frame");
+            assert_eq!(back.result, result);
+        }
+    }
+
+    #[test]
+    fn the_new_operations_have_a_stable_wire_shape() {
+        // `signal` is the older raw-number operation; this one must not collide.
+        let json = serde_json::to_string(&Operation::SignalProcess {
+            pid: 7,
+            signal: SignalName::Cont,
+        })
+        .unwrap();
+        assert_eq!(json, r#"{"kind":"signal_process","pid":7,"signal":"cont"}"#);
+        let json = serde_json::to_string(&Operation::MakeSymlink {
+            target: "t".into(),
+            path: "/p".into(),
+            owner: None,
+        })
+        .unwrap();
+        assert_eq!(json, r#"{"kind":"make_symlink","target":"t","path":"/p"}"#);
+        // A raw number is not a signal name.
+        assert!(serde_json::from_str::<Operation>(
+            r#"{"kind":"signal_process","pid":7,"signal":9}"#
+        )
+        .is_err());
+        assert!(serde_json::from_str::<Operation>(
+            r#"{"kind":"signal_process","pid":7,"signal":"kill"}"#
+        )
+        .is_err());
     }
 
     #[test]

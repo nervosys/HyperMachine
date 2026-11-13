@@ -66,7 +66,7 @@ pub(crate) async fn write_files(vm: &AgentVM, files: &[GuestFile]) -> Result<(),
         // A cloned repository goes in through the agent's file operations,
         // with no archive written to the guest and no `tar`, `chown` or shell
         // in it. Only an agent that predates them, or an archive the agent
-        // cannot reproduce (it has no symlink operation), uses the shell.
+        // cannot reproduce (a hard link or special file), uses the shell.
         if let Some(into) = &file.unpack_into {
             match unpack_by_agent(vm, &bytes, into).await {
                 Ok(()) => {
@@ -129,6 +129,11 @@ enum Member {
         mode: u32,
         data: Vec<u8>,
     },
+    /// Created verbatim with the agent's `make_symlink`, never followed.
+    Symlink {
+        rel: String,
+        target: String,
+    },
 }
 
 /// What stopped the agent from unpacking a tar.
@@ -140,11 +145,21 @@ enum Unpack {
 }
 
 /// A tar's members, or why the agent's file operations cannot reproduce it:
-/// they have no symlink, hard link or device. Nothing is skipped silently.
+/// they have no hard link or device. Nothing is skipped silently.
+///
+/// A symlink is created verbatim, whatever it points at: a repository's
+/// links are its own business inside its own guest. What must not happen is
+/// a *later member being written through one*: the agent's `write_file` and
+/// `make_dir` follow symlinks in a path's parents (as `open(2)` does), so a
+/// tar holding `a -> /etc` and then `a/passwd` would write outside the tree.
+/// A member whose path is, or lies under, an earlier symlink member is
+/// therefore refused outright (what `tar -x` would also not be asked to do
+/// for a real repository, whose tree has no such path).
 fn members(tar_bytes: &[u8]) -> Result<Vec<Member>, Unpack> {
     let bad = |e: std::io::Error| Unpack::Failed(format!("reading the repository's archive: {e}"));
     let mut archive = tar::Archive::new(tar_bytes);
     let mut out = Vec::new();
+    let mut links: Vec<String> = Vec::new();
     for entry in archive.entries().map_err(bad)? {
         let mut entry = entry.map_err(bad)?;
         let kind = entry.header().entry_type();
@@ -166,7 +181,36 @@ fn members(tar_bytes: &[u8]) -> Result<Vec<Member>, Unpack> {
             }
         }
         let rel = parts.join("/");
-        if kind.is_dir() {
+        if links
+            .iter()
+            .any(|link| rel == *link || rel.starts_with(&format!("{link}/")))
+            && !kind.is_pax_global_extensions()
+            && !kind.is_pax_local_extensions()
+        {
+            return Err(Unpack::Failed(format!(
+                "the repository's archive holds {path:?} through a symlink it made earlier"
+            )));
+        }
+        if kind.is_symlink() {
+            if rel.is_empty() {
+                return Err(Unpack::Failed(
+                    "the repository's archive makes its own root a symlink".into(),
+                ));
+            }
+            let target = entry
+                .link_name_bytes()
+                .map(|t| t.into_owned())
+                .and_then(|t| String::from_utf8(t).ok())
+                .filter(|t| !t.is_empty())
+                .ok_or_else(|| {
+                    Unpack::Failed(format!(
+                        "the repository's archive holds symlink {path:?} with no usable \
+                         (UTF-8) target"
+                    ))
+                })?;
+            links.push(rel.clone());
+            out.push(Member::Symlink { rel, target });
+        } else if kind.is_dir() {
             out.push(Member::Dir { rel, mode });
         } else if kind.is_file() {
             // Whatever `chown` would have left: it clears set-user-ID and
@@ -182,7 +226,7 @@ fn members(tar_bytes: &[u8]) -> Result<Vec<Member>, Unpack> {
             // Metadata for the entry after it, which the reader applied.
         } else {
             return Err(Unpack::Shell(format!(
-                "{path:?} is not a file or directory (a link or special file)"
+                "{path:?} is not a file, directory or symlink (a hard link or special file)"
             )));
         }
     }
@@ -245,6 +289,20 @@ async fn unpack_by_agent(vm: &AgentVM, tar_bytes: &[u8], into: &str) -> Result<(
                 vm.set_attr_in_guest(&path, None, Some(*mode), false, wait)
                     .await
                     .map_err(|e| fail(&path, e))?;
+            }
+            Member::Symlink { rel, target } => {
+                let path = join_guest(into, rel);
+                match vm.make_symlink_in_guest(target, &path, owner, wait).await {
+                    Ok(()) => {}
+                    // An agent between versions: the shell redoes the whole
+                    // tree, overwriting what was written so far.
+                    Err(e) if hv2_agent::is_unsupported_op(&e) => {
+                        return Err(Unpack::Shell(
+                            "the guest's agent predates the symlink operation".into(),
+                        ))
+                    }
+                    Err(e) => return Err(fail(&path, e)),
+                }
             }
         }
     }
@@ -430,10 +488,64 @@ mod tests {
     }
 
     #[test]
-    fn a_symlink_in_the_tar_is_left_to_the_shell_and_never_dropped() {
+    fn a_symlink_in_the_tar_is_kept_verbatim_even_if_absolute_or_dotted() {
         let bytes = tar_of(|b| {
             let mut h = header(tar::EntryType::Symlink, 0o777, 0);
-            b.append_link(&mut h, "./link", "target").unwrap();
+            b.append_link(&mut h, "./link", "../../etc/x").unwrap();
+            let mut h = header(tar::EntryType::Symlink, 0o777, 0);
+            b.append_link(&mut h, "abs", "/etc").unwrap();
+        });
+        assert_eq!(
+            members(&bytes).unwrap(),
+            vec![
+                Member::Symlink {
+                    rel: "link".into(),
+                    target: "../../etc/x".into()
+                },
+                Member::Symlink {
+                    rel: "abs".into(),
+                    target: "/etc".into()
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn a_member_written_through_an_earlier_symlink_is_refused() {
+        // `a -> /etc` then `a/passwd` would make the agent's write follow the
+        // link out of the tree.
+        for later in ["a/passwd", "a", "./a/b/c"] {
+            let bytes = tar_of(|b| {
+                let mut h = header(tar::EntryType::Symlink, 0o777, 0);
+                b.append_link(&mut h, "a", "/etc").unwrap();
+                b.append_data(
+                    &mut header(tar::EntryType::Regular, 0o644, 1),
+                    later,
+                    &b"x"[..],
+                )
+                .unwrap();
+            });
+            assert!(matches!(members(&bytes), Err(Unpack::Failed(_))), "{later}");
+        }
+        // A sibling that merely shares a prefix is fine.
+        let bytes = tar_of(|b| {
+            let mut h = header(tar::EntryType::Symlink, 0o777, 0);
+            b.append_link(&mut h, "a", "/etc").unwrap();
+            b.append_data(
+                &mut header(tar::EntryType::Regular, 0o644, 1),
+                "ab",
+                &b"x"[..],
+            )
+            .unwrap();
+        });
+        assert_eq!(members(&bytes).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn a_hard_link_is_still_left_to_the_shell_and_never_dropped() {
+        let bytes = tar_of(|b| {
+            let mut h = header(tar::EntryType::Link, 0o644, 0);
+            b.append_link(&mut h, "./hard", "target").unwrap();
         });
         assert!(matches!(members(&bytes), Err(Unpack::Shell(_))));
     }

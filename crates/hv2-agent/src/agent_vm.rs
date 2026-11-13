@@ -881,6 +881,59 @@ impl AgentVM {
         .await
     }
 
+    /// Read a symlink's target in the guest, without following it.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::list_dir_in_guest`]; a non-symlink or a non-UTF-8 target is
+    /// the guest's refusal.
+    pub async fn read_link_in_guest(&self, path: &str, timeout: Duration) -> Result<String> {
+        let path = path.to_string();
+        self.fs_op("link read", timeout, move |a| a.read_link(&path, timeout))
+            .await
+    }
+
+    /// Create a symlink in the guest, verbatim and never following; the
+    /// link is owned by `owner` (as for [`Self::write_file_in_guest_as`]).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::list_dir_in_guest`]; an existing path is the guest's refusal.
+    pub async fn make_symlink_in_guest(
+        &self,
+        target: &str,
+        path: &str,
+        owner: Option<&str>,
+        timeout: Duration,
+    ) -> Result<()> {
+        let (target, path) = (target.to_string(), path.to_string());
+        let owner = owner.map(str::to_string);
+        self.fs_op("symlink creation", timeout, move |a| {
+            a.make_symlink(&target, &path, owner.as_deref(), timeout)
+        })
+        .await
+    }
+
+    /// Send a named signal to any pid in the guest (unlike
+    /// [`Self::signal_in_guest`], which reaches only a started program and
+    /// takes a raw number). `Ok(false)` means the process was already gone.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::list_dir_in_guest`]; pid 0, 1 and the agent's own are the
+    /// guest's refusal.
+    pub async fn signal_process_in_guest(
+        &self,
+        pid: u32,
+        signal: hv2_guest_agent::SignalName,
+        timeout: Duration,
+    ) -> Result<bool> {
+        self.fs_op("signal", timeout, move |a| {
+            a.signal_process(pid, signal, timeout)
+        })
+        .await
+    }
+
     /// The guest channel, for moving files: gated as running a command is,
     /// since writing any file is as much power over the guest.
     fn file_channel(

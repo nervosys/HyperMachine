@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Checkpoint archive and freeze no longer need a shell in the guest.**
+  Three new additive guest-agent operations (`read_link`, `make_symlink`,
+  `signal_process` with named signals only, never pid 1 or the agent;
+  protocol still 3) let the node build `.../checkpoints/{name}/archive`
+  itself (symlinks kept; devices, sockets and FIFOs counted in an
+  `x-hv2-archive-skipped` header; 413 past 64 MiB compressed, 256 MiB read,
+  64 MiB per file or 200,000 entries) and stop the reader's programs with
+  no `/bin/sh`. A shell-free guest now gets a working archive (was 400)
+  and a frozen checkpoint read. A repository's symlinks unpack through
+  the agent too; a member written through an earlier symlink in the same
+  archive is refused. Old agents keep the shell path. See
+  `docs/benchmarks/2026-11-13/agent-ops-archive-kvm`.
 - **Node-initiated guest commands now use the guest agent's filesystem
   operations first.** Process listing (`GET /sandboxes/{id}/processes`,
   `GET /machines/{name}/processes`), the unpack of an environment's

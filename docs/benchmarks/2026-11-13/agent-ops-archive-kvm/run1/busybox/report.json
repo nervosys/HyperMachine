@@ -1,0 +1,196 @@
+{
+  "success": true,
+  "label": "run1 busybox",
+  "agent_ops": "new",
+  "shell": true,
+  "purpose": "functional verification of node-initiated guest commands through the agent's file operations, on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "1d4f510d76e0efb3834ce5c2d91761158537b730431a47247f13350975f25602",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "c9516420f5e522d345080672fc2b817e0318371d163c48dbf8ba07bc3ad1eb28",
+    "driver": "98667e5a3f61178bcf0147b69b3a3f75279e4e02c780039cb97ad7dbd658858f"
+  },
+  "cases": [
+    {
+      "name": "a sandbox's processes: PID 1, the agent's command line, kernel threads only with all",
+      "success": true,
+      "detail": {
+        "count": 2,
+        "with_kernel_threads": 42,
+        "init": {
+          "args": "sh",
+          "command": "sh",
+          "cpuSeconds": 0.11,
+          "pid": 1,
+          "ppid": 0,
+          "rssKiB": 1408,
+          "startedSecondsAgo": 1.04,
+          "state": "S",
+          "threads": 1,
+          "uid": 0
+        },
+        "agent": {
+          "args": "/bin/hv2-guest-agentd",
+          "command": "hv2-guest-agent",
+          "cpuSeconds": 0.82,
+          "pid": 55,
+          "ppid": 1,
+          "rssKiB": 22144,
+          "startedSecondsAgo": 0.77,
+          "state": "S",
+          "threads": 4,
+          "uid": 0
+        },
+        "sleeper": {
+          "args": "sleep 4321",
+          "command": "sleep",
+          "cpuSeconds": 0.0,
+          "pid": 445,
+          "ppid": 1,
+          "rssKiB": 1280,
+          "startedSecondsAgo": 0.52,
+          "state": "S",
+          "threads": 1,
+          "uid": 0
+        }
+      }
+    },
+    {
+      "name": "a machine's processes, the same way",
+      "success": true,
+      "detail": {
+        "count": 2,
+        "init": {
+          "args": "sh",
+          "command": "sh",
+          "cpuSeconds": 0.09,
+          "pid": 1,
+          "ppid": 0,
+          "rssKiB": 1408,
+          "startedSecondsAgo": 0.33,
+          "state": "S",
+          "threads": 1,
+          "uid": 0
+        },
+        "agent": {
+          "args": "/bin/hv2-guest-agentd",
+          "command": "hv2-guest-agent",
+          "cpuSeconds": 0.21,
+          "pid": 60,
+          "ppid": 1,
+          "rssKiB": 22272,
+          "startedSecondsAgo": 0.06,
+          "state": "R",
+          "threads": 3,
+          "uid": 0
+        }
+      }
+    },
+    {
+      "name": "an environment's file is listed and read through the checkpoint",
+      "success": true,
+      "detail": {
+        "entry": {
+          "gid": 0,
+          "mode": "644",
+          "name": "config.toml",
+          "size": 12,
+          "type": "file",
+          "uid": 0
+        },
+        "root": [
+          "bin",
+          "dev",
+          "etc",
+          "init",
+          "proc",
+          "root",
+          "sbin",
+          "srv",
+          "sys",
+          "tmp"
+        ],
+        "refused": {
+          "no such path": "no \"/etc/nothing\" in the checkpoint",
+          "no such file": "no \"/etc/nothing\" in the checkpoint",
+          "a file listed": "\"/etc/app/config.toml\" is not a directory",
+          "a directory read": "\"/etc/app\" is not a regular file",
+          "a relative path": "path must be absolute"
+        }
+      }
+    },
+    {
+      "name": "an environment's Git repository is unpacked, one owner, modes kept, no archive left",
+      "success": true,
+      "detail": {
+        "tree_owner": [
+          [
+            0,
+            0
+          ]
+        ],
+        "git_entries": 11,
+        "tracked": [
+          "README.md",
+          "link-to-readme",
+          "link-to-src",
+          "src/app.py"
+        ],
+        "symlinks_listed": {
+          "link-to-readme": "symlink",
+          "link-to-src": "symlink"
+        }
+      }
+    },
+    {
+      "name": "the archive route: 200 on every image, config.toml with its bytes",
+      "success": true,
+      "detail": {
+        "status": 200,
+        "entries": [
+          ".",
+          "config.toml"
+        ],
+        "skipped_header": "0"
+      }
+    },
+    {
+      "name": "the archive of the repository holds both symlinks; the listing names them symlinks",
+      "success": true,
+      "detail": {
+        "status": 200,
+        "members": 62,
+        "symlinks": {
+          "link-to-readme": "README.md",
+          "link-to-src": "src"
+        },
+        "listing_types": {
+          "link-to-readme": "symlink",
+          "link-to-src": "symlink"
+        },
+        "skipped_header": "0"
+      }
+    },
+    {
+      "name": "the checkpoint reader's freeze takes the expected path (state T where readable)",
+      "success": true,
+      "detail": {
+        "sleeper_pid": 445,
+        "freeze_log_lines": {
+          "using agent op (freeze)": 1,
+          "falling back to shell (freeze)": 0
+        },
+        "stopped_state": "T",
+        "proc_stat": "445 (sleep) T 1 445 445 0 -1 4194304 103 0 0 0 0 0 0 0 20 0 1 0 248 2359296 320 18446744073709551615 4198400 5816965 140"
+      }
+    }
+  ],
+  "platform_lines": {
+    "Kvm": 23,
+    "Tcg": 0
+  },
+  "code_path_lines": {
+    "using agent op": 44,
+    "falling back to shell": 0
+  }
+}

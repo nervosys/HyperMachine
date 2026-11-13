@@ -29,7 +29,7 @@ use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use hv2_agent::{is_unsupported_op, AgentError, AgentVM};
-use hv2_guest_agent::{DirEntry, DirEntryKind};
+use hv2_guest_agent::{DirEntry, DirEntryKind, SignalName};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -42,6 +42,26 @@ const MAX_FILE: u64 = 64 << 20;
 /// The largest archive downloaded: the compressed tar, as built in the
 /// reader's guest, whose memory it takes.
 const MAX_ARCHIVE: u64 = 64 << 20;
+
+/// The most file content an archive built on the host reads from the guest,
+/// before compression. Larger than [`MAX_ARCHIVE`] because the tar is
+/// compressed and a tree of text shrinks several-fold, but bounded: the cost
+/// of the walk is vsock round trips and host CPU, and a highly compressible
+/// tree would otherwise let a small download cost unbounded work.
+const MAX_ARCHIVE_INPUT: u64 = 256 << 20;
+
+/// The largest single file put in a host-built archive. The agent's read
+/// returns a whole file, so this bounds the host's memory for one.
+const MAX_ARCHIVE_FILE: u64 = 64 << 20;
+
+/// The most entries (directories, files, links) a host-built archive holds.
+const MAX_ARCHIVE_ENTRIES: usize = 200_000;
+
+/// How long building one archive on the host may take.
+const ARCHIVE_DEADLINE: Duration = Duration::from_secs(180);
+
+/// What an archive of `/` leaves out, as `ARCHIVE` does.
+const SKIPPED_AT_ROOT: [&str; 4] = ["proc", "sys", "dev", "run"];
 
 /// Where the reader's guest builds an archive. In memory, like all of it.
 const ARCHIVE_AT: &str = "/dev/shm/.hv2-checkpoint-archive.tgz";
@@ -308,22 +328,29 @@ async fn open(state: &AppState, sandbox_id: &str, name: &str) -> Result<Reader, 
             .after_restore(state.opts.ready_timeout)
             .await
             .map_err(|e| format!("its agent: {e}"))?;
-        // The agent can signal only what it started, so stopping the
-        // checkpoint's programs takes a shell. A guest with none is read
-        // unfrozen: its programs are whatever its agent started.
-        match reader
-            .vm
-            .exec_in_guest("/bin/sh", &["-c".into(), FREEZE.into()], READ_TIMEOUT)
-            .await
-        {
-            Ok(frozen) if frozen.exit_code != Some(0) => {
-                return Err(format!("stopping its programs: {}", frozen.stderr.trim()));
+        // Stop the checkpoint's programs through the agent's `signal_process`;
+        // only an agent that predates it needs a shell, and a guest with
+        // neither is read unfrozen.
+        match freeze_by_agent(&reader.vm).await {
+            Ok(()) => tracing::debug!("checkpoint reader: using agent op (freeze)"),
+            Err(FreezeError::Unsupported) => {
+                tracing::debug!("checkpoint reader: falling back to shell (freeze)");
+                match reader
+                    .vm
+                    .exec_in_guest("/bin/sh", &["-c".into(), FREEZE.into()], READ_TIMEOUT)
+                    .await
+                {
+                    Ok(frozen) if frozen.exit_code != Some(0) => {
+                        return Err(format!("stopping its programs: {}", frozen.stderr.trim()));
+                    }
+                    Ok(_) => {}
+                    Err(e) if guest_has_no_shell(&e.to_string()) => {
+                        tracing::debug!("checkpoint reader: no shell, reading unfrozen");
+                    }
+                    Err(e) => return Err(format!("stopping its programs: {e}")),
+                }
             }
-            Ok(_) => {}
-            Err(e) if guest_has_no_shell(&e.to_string()) => {
-                tracing::debug!("checkpoint reader: no shell, reading unfrozen");
-            }
-            Err(e) => return Err(format!("stopping its programs: {e}")),
+            Err(FreezeError::Failed(e)) => return Err(format!("stopping its programs: {e}")),
         }
         Ok(())
     }
@@ -336,6 +363,56 @@ async fn open(state: &AppState, sandbox_id: &str, name: &str) -> Result<Reader, 
         ));
     }
     Ok(reader)
+}
+
+/// Why the agent could not freeze the guest.
+enum FreezeError {
+    /// The agent predates `signal_process`: the shell may do it.
+    Unsupported,
+    Failed(String),
+}
+
+/// The pids in `/proc`'s listing a freeze signals: every number but 1. (The
+/// agent's own pid is among them; it refuses, and that refusal is ignored.)
+fn freeze_targets(listed: &[DirEntry]) -> Vec<u32> {
+    listed
+        .iter()
+        .filter_map(|entry| entry.name.parse::<u32>().ok())
+        .filter(|pid| *pid > 1)
+        .collect()
+}
+
+/// Whether an agent's failure is its refusal to signal pid 1 or itself.
+fn is_signal_refusal(error: &AgentError) -> bool {
+    matches!(error, AgentError::Script(m) if m.starts_with("refusing to signal"))
+}
+
+/// Stop every process but init and the agent with `signal_process`, with no
+/// shell in the guest. A process that exits between the listing and its
+/// signal is not a failure.
+async fn freeze_by_agent(vm: &AgentVM) -> Result<(), FreezeError> {
+    let (listed, truncated) = match vm.list_dir_in_guest("/proc", 0, READ_TIMEOUT).await {
+        Ok(listed) => listed,
+        Err(e) if is_unsupported_op(&e) => return Err(FreezeError::Unsupported),
+        Err(e) => return Err(FreezeError::Failed(format!("listing /proc: {e}"))),
+    };
+    if truncated {
+        return Err(FreezeError::Failed(
+            "/proc lists more processes than one reply carries".into(),
+        ));
+    }
+    for pid in freeze_targets(&listed) {
+        match vm
+            .signal_process_in_guest(pid, SignalName::Stop, READ_TIMEOUT)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) if is_unsupported_op(&e) => return Err(FreezeError::Unsupported),
+            Err(e) if is_signal_refusal(&e) => {}
+            Err(e) => return Err(FreezeError::Failed(format!("signalling pid {pid}: {e}"))),
+        }
+    }
+    Ok(())
 }
 
 /// What `stat -c %F` says, as a machine snapshot's listing says it.
@@ -515,6 +592,205 @@ pub(crate) async fn file(
     }
 }
 
+/// The guest's tree as the agent's operations show it: what the archive
+/// walk reads, so the walk can be tested without a guest.
+trait GuestTree {
+    async fn stat(&self, path: &str) -> Result<DirEntry, AgentError>;
+    async fn list(&self, path: &str) -> Result<(Vec<DirEntry>, bool), AgentError>;
+    async fn read(&self, path: &str, limit: u64) -> Result<Vec<u8>, AgentError>;
+    async fn link(&self, path: &str) -> Result<String, AgentError>;
+}
+
+impl GuestTree for AgentVM {
+    async fn stat(&self, path: &str) -> Result<DirEntry, AgentError> {
+        self.stat_in_guest(path, false, READ_TIMEOUT).await
+    }
+    async fn list(&self, path: &str) -> Result<(Vec<DirEntry>, bool), AgentError> {
+        self.list_dir_in_guest(path, 0, READ_TIMEOUT).await
+    }
+    async fn read(&self, path: &str, limit: u64) -> Result<Vec<u8>, AgentError> {
+        self.read_file_in_guest(path, limit, READ_TIMEOUT).await
+    }
+    async fn link(&self, path: &str) -> Result<String, AgentError> {
+        self.read_link_in_guest(path, READ_TIMEOUT).await
+    }
+}
+
+/// A gzipped tar built on the host, and how many entries it left out.
+struct Archived {
+    bytes: Vec<u8>,
+    skipped: u64,
+}
+
+/// A tar header for `entry`: its mode, owner and modification time (a time
+/// before the epoch is written as the epoch).
+fn tar_header(entry: &DirEntry, kind: tar::EntryType, size: u64) -> tar::Header {
+    let mut header = tar::Header::new_gnu();
+    header.set_entry_type(kind);
+    header.set_mode(entry.mode);
+    header.set_uid(u64::from(entry.uid));
+    header.set_gid(u64::from(entry.gid));
+    header.set_size(size);
+    header.set_mtime(u64::try_from(entry.mtime_secs).unwrap_or(0));
+    header
+}
+
+fn too_big(what: impl std::fmt::Display) -> Refused {
+    refused(StatusCode::PAYLOAD_TOO_LARGE, what)
+}
+
+/// Build the gzipped tar of the directory `root` on the host, by walking it
+/// with the agent's `stat`, `list_dir`, `read_file` and `read_link` -- no
+/// shell, `tar` or `gzip` in the guest. Contents are at the top of the tar
+/// (names relative, as `tar -C dir .`), except that an archive of `/` names
+/// its top-level entries bare and omits [`SKIPPED_AT_ROOT`].
+///
+/// Holds directories (mode, owner, time), regular files (mode, owner, time,
+/// contents) and symlinks (target verbatim). **Not held, and counted in
+/// `skipped`:** devices, sockets and FIFOs (nothing to read), a symlink whose
+/// target is not UTF-8 (the agent will not report it lossily), and hard
+/// links, which appear as the separate files they are. A path that vanishes
+/// during the walk is left out without comment, as `ARCHIVE` does.
+///
+/// Refused with 413 over [`MAX_ARCHIVE`] compressed, [`MAX_ARCHIVE_INPUT`] of
+/// file content, [`MAX_ARCHIVE_FILE`] for one file, [`MAX_ARCHIVE_ENTRIES`]
+/// entries, or a directory with more entries than one listing carries.
+///
+/// `Ok(None)` when the agent predates one of the operations: use the shell.
+async fn build_archive<G: GuestTree>(guest: &G, root: &str) -> Result<Option<Archived>, Refused> {
+    let started = std::time::Instant::now();
+    let top = match guest.stat(root).await {
+        Ok(entry) => entry,
+        Err(e) if is_unsupported_op(&e) => return Ok(None),
+        Err(e) => return Err(agent_refusal(root, &e)),
+    };
+    // As `ARCHIVE`: a symlink to a directory is not a directory.
+    if top.kind != DirEntryKind::Dir {
+        return Err(refused(
+            StatusCode::BAD_REQUEST,
+            format!("{root:?} is not a directory"),
+        ));
+    }
+    let at_root = root.trim_end_matches('/').is_empty();
+    let io = |e: std::io::Error| {
+        refused(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("building the archive: {e}"),
+        )
+    };
+    let mut tar = tar::Builder::new(flate2::write::GzEncoder::new(
+        Vec::new(),
+        flate2::Compression::fast(),
+    ));
+    // (guest path, name in the tar -- empty for the top of an archive of `/`,
+    // entry), walked depth-first with each directory's names in order.
+    let mut stack = vec![(
+        root.trim_end_matches('/').to_string(),
+        if at_root { String::new() } else { ".".into() },
+        top,
+    )];
+    let (mut entries, mut input, mut skipped) = (0usize, 0u64, 0u64);
+    while let Some((path, name, entry)) = stack.pop() {
+        if started.elapsed() > ARCHIVE_DEADLINE {
+            return Err(refused(
+                StatusCode::GATEWAY_TIMEOUT,
+                format!("the archive of {root:?} took over {ARCHIVE_DEADLINE:?} to build"),
+            ));
+        }
+        entries += 1;
+        if entries > MAX_ARCHIVE_ENTRIES {
+            return Err(too_big(format!(
+                "{root:?} holds more than {MAX_ARCHIVE_ENTRIES} entries"
+            )));
+        }
+        let shown = if path.is_empty() { "/" } else { &path };
+        match entry.kind {
+            DirEntryKind::Dir => {
+                if !name.is_empty() {
+                    let archived = if name == "." { "./" } else { &name };
+                    let mut header = tar_header(&entry, tar::EntryType::Directory, 0);
+                    tar.append_data(&mut header, archived, std::io::empty())
+                        .map_err(io)?;
+                }
+                let (children, truncated) = match guest.list(shown).await {
+                    Ok(listed) => listed,
+                    Err(e) if is_unsupported_op(&e) => return Ok(None),
+                    Err(e) if is_missing(&e.to_string()) => continue,
+                    Err(e) => return Err(agent_refusal(shown, &e)),
+                };
+                if truncated {
+                    return Err(too_big(format!(
+                        "{shown:?} holds more entries than one listing carries"
+                    )));
+                }
+                for child in children.into_iter().rev() {
+                    if at_root && name.is_empty() && SKIPPED_AT_ROOT.contains(&child.name.as_str())
+                    {
+                        continue;
+                    }
+                    let child_path = format!("{path}/{}", child.name);
+                    let child_name = if name.is_empty() {
+                        child.name.clone()
+                    } else {
+                        format!("{name}/{}", child.name)
+                    };
+                    stack.push((child_path, child_name, child));
+                }
+            }
+            DirEntryKind::File => {
+                let room = MAX_ARCHIVE_INPUT - input;
+                let limit = MAX_ARCHIVE_FILE.min(room);
+                if entry.size > limit {
+                    return Err(too_big(format!(
+                        "{shown:?} is {} bytes; an archive reads at most {MAX_ARCHIVE_FILE} of \
+                         one file and {MAX_ARCHIVE_INPUT} in all",
+                        entry.size
+                    )));
+                }
+                let data = match guest.read(shown, limit).await {
+                    Ok(data) => data,
+                    Err(e) if is_missing(&e.to_string()) => continue,
+                    Err(e) => return Err(agent_refusal(shown, &e)),
+                };
+                input += data.len() as u64;
+                let mut header = tar_header(&entry, tar::EntryType::Regular, data.len() as u64);
+                tar.append_data(&mut header, &name, &data[..]).map_err(io)?;
+            }
+            DirEntryKind::Symlink => {
+                let target = match guest.link(shown).await {
+                    Ok(target) => target,
+                    Err(e) if is_unsupported_op(&e) => return Ok(None),
+                    Err(e) if is_missing(&e.to_string()) => continue,
+                    Err(e) if e.to_string().contains("UTF-8") => {
+                        skipped += 1;
+                        continue;
+                    }
+                    Err(e) => return Err(agent_refusal(shown, &e)),
+                };
+                let mut header = tar_header(&entry, tar::EntryType::Symlink, 0);
+                tar.append_link(&mut header, &name, &target).map_err(io)?;
+            }
+            DirEntryKind::Other => skipped += 1,
+        }
+        if tar.get_ref().get_ref().len() as u64 > MAX_ARCHIVE {
+            return Err(too_big(format!(
+                "the archive of {root:?} is over {MAX_ARCHIVE} bytes compressed"
+            )));
+        }
+    }
+    let bytes = tar
+        .into_inner()
+        .and_then(flate2::write::GzEncoder::finish)
+        .map_err(io)?;
+    if bytes.len() as u64 > MAX_ARCHIVE {
+        return Err(too_big(format!(
+            "the archive of {root:?} is {} bytes; at most {MAX_ARCHIVE} are downloaded",
+            bytes.len()
+        )));
+    }
+    Ok(Some(Archived { bytes, skipped }))
+}
+
 /// `GET /sandboxes/{id}/checkpoints/{name}/archive?path=`: the directory's
 /// tree as a gzipped tar, with the directory's contents at its top.
 pub(crate) async fn archive(
@@ -530,6 +806,13 @@ pub(crate) async fn archive(
         Err((status, why)) => return api_error(status, why),
     };
     let read = async {
+        match build_archive(&reader.vm, &at.path).await? {
+            Some(archived) => {
+                tracing::debug!("checkpoint reader: using agent op (archive)");
+                return Ok(archived);
+            }
+            None => tracing::debug!("checkpoint reader: falling back to shell (archive)"),
+        }
         // The script's `$ARCHIVE_AT` is the constant above, put into its text.
         let script = ARCHIVE.replace("$ARCHIVE_AT", ARCHIVE_AT);
         let size = match reader.sh(&script, &at.path).await? {
@@ -554,6 +837,7 @@ pub(crate) async fn archive(
             .vm
             .read_file_in_guest(ARCHIVE_AT, MAX_ARCHIVE, READ_TIMEOUT)
             .await
+            .map(|bytes| Archived { bytes, skipped: 0 })
             .map_err(|e| {
                 refused(
                     StatusCode::BAD_GATEWAY,
@@ -564,12 +848,17 @@ pub(crate) async fn archive(
     .await;
     reader.close().await;
     match read {
-        Ok(bytes) => (
+        Ok(Archived { bytes, skipped }) => (
             [
                 (header::CONTENT_TYPE, "application/gzip".to_string()),
                 (
                     header::CONTENT_DISPOSITION,
                     format!("attachment; filename=\"{}.tar.gz\"", archive_name(&name)),
+                ),
+                // Devices and the like the archive could not hold; 0 when none.
+                (
+                    header::HeaderName::from_static("x-hv2-archive-skipped"),
+                    skipped.to_string(),
                 ),
             ],
             bytes,
@@ -677,6 +966,218 @@ mod tests {
         let script = ARCHIVE.replace("$ARCHIVE_AT", ARCHIVE_AT);
         assert!(!script.contains("ARCHIVE_AT"), "{script}");
         assert!(script.contains(ARCHIVE_AT));
+    }
+
+    #[test]
+    fn a_freeze_signals_every_numbered_process_but_init() {
+        let listed = vec![
+            dir_entry("1", DirEntryKind::Dir, 0o555),
+            dir_entry("2", DirEntryKind::Dir, 0o555),
+            dir_entry("self", DirEntryKind::Symlink, 0o777),
+            dir_entry("cpuinfo", DirEntryKind::File, 0o444),
+            dir_entry("341", DirEntryKind::Dir, 0o555),
+            dir_entry("0", DirEntryKind::Dir, 0o555),
+        ];
+        assert_eq!(freeze_targets(&listed), vec![2, 341]);
+        assert!(is_signal_refusal(&AgentError::Script(
+            "refusing to signal the agent itself".into()
+        )));
+        assert!(!is_signal_refusal(&AgentError::Script(
+            "signalling pid 5: Operation not permitted".into()
+        )));
+    }
+
+    /// A guest tree in memory: path -> (entry, file bytes or link target).
+    #[derive(Default)]
+    struct Fake {
+        nodes: std::collections::BTreeMap<String, (DirEntry, String)>,
+        /// Paths whose `read_link` the agent would refuse as non-UTF-8.
+        odd_links: Vec<String>,
+    }
+
+    impl Fake {
+        fn add(&mut self, path: &str, kind: DirEntryKind, mode: u32, content: &str) {
+            let mut entry = dir_entry(path.rsplit('/').next().unwrap(), kind, mode);
+            entry.size = content.len() as u64;
+            self.nodes
+                .insert(path.to_string(), (entry, content.to_string()));
+        }
+    }
+
+    impl GuestTree for Fake {
+        async fn stat(&self, path: &str) -> Result<DirEntry, AgentError> {
+            if path == "/" {
+                return Ok(dir_entry("/", DirEntryKind::Dir, 0o755));
+            }
+            self.nodes.get(path).map(|(e, _)| e.clone()).ok_or_else(|| {
+                AgentError::Script(format!("stat {path}: No such file or directory"))
+            })
+        }
+        async fn list(&self, path: &str) -> Result<(Vec<DirEntry>, bool), AgentError> {
+            let prefix = format!("{}/", path.trim_end_matches('/'));
+            Ok((
+                self.nodes
+                    .iter()
+                    .filter(|(p, _)| {
+                        p.strip_prefix(&prefix)
+                            .is_some_and(|rest| !rest.contains('/'))
+                    })
+                    .map(|(_, (e, _))| e.clone())
+                    .collect(),
+                false,
+            ))
+        }
+        async fn read(&self, path: &str, limit: u64) -> Result<Vec<u8>, AgentError> {
+            let (entry, content) = &self.nodes[path];
+            assert!(entry.size <= limit);
+            Ok(content.clone().into_bytes())
+        }
+        async fn link(&self, path: &str) -> Result<String, AgentError> {
+            if self.odd_links.iter().any(|p| p == path) {
+                return Err(AgentError::Script(format!(
+                    "reading the link {path}: its target is not valid UTF-8"
+                )));
+            }
+            Ok(self.nodes[path].1.clone())
+        }
+    }
+
+    /// Everything in a gzipped tar: (name, type, mode, link target or data).
+    fn unpacked(bytes: &[u8]) -> Vec<(String, tar::EntryType, u32, String)> {
+        use std::io::Read;
+        let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(bytes));
+        archive
+            .entries()
+            .unwrap()
+            .map(|entry| {
+                let mut entry = entry.unwrap();
+                let name = entry.path().unwrap().to_string_lossy().into_owned();
+                let kind = entry.header().entry_type();
+                let mode = entry.header().mode().unwrap();
+                let content = match entry.link_name().unwrap() {
+                    Some(target) => target.to_string_lossy().into_owned(),
+                    None => {
+                        let mut s = String::new();
+                        entry.read_to_string(&mut s).unwrap();
+                        s
+                    }
+                };
+                (name, kind, mode, content)
+            })
+            .collect()
+    }
+
+    fn tree() -> Fake {
+        let mut g = Fake::default();
+        g.add("/srv", DirEntryKind::Dir, 0o755, "");
+        g.add("/srv/a.txt", DirEntryKind::File, 0o640, "hello");
+        g.add("/srv/link", DirEntryKind::Symlink, 0o777, "../etc/passwd");
+        g.add("/srv/sub", DirEntryKind::Dir, 0o700, "");
+        g.add("/srv/sub/b", DirEntryKind::File, 0o600, "");
+        g.add("/srv/tty", DirEntryKind::Other, 0o666, "");
+        g.add("/proc", DirEntryKind::Dir, 0o555, "");
+        g.add("/proc/1", DirEntryKind::Dir, 0o555, "");
+        g.add("/bin", DirEntryKind::Dir, 0o755, "");
+        g.add("/bin/sh", DirEntryKind::File, 0o755, "#!");
+        g
+    }
+
+    #[tokio::test]
+    async fn an_archive_holds_files_dirs_and_symlinks_with_contents_at_the_top() {
+        let got = build_archive(&tree(), "/srv").await.unwrap().unwrap();
+        assert_eq!(got.skipped, 1, "the device");
+        let t = tar::EntryType::Regular;
+        assert_eq!(
+            unpacked(&got.bytes),
+            vec![
+                ("./".into(), tar::EntryType::Directory, 0o755, String::new()),
+                ("a.txt".into(), t, 0o640, "hello".into()),
+                (
+                    "link".into(),
+                    tar::EntryType::Symlink,
+                    0o777,
+                    "../etc/passwd".into()
+                ),
+                (
+                    "sub".into(),
+                    tar::EntryType::Directory,
+                    0o700,
+                    String::new()
+                ),
+                ("sub/b".into(), t, 0o600, String::new()),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn an_archive_of_root_leaves_out_what_the_kernel_makes_up() {
+        let got = build_archive(&tree(), "/").await.unwrap().unwrap();
+        let names: Vec<_> = unpacked(&got.bytes).into_iter().map(|e| e.0).collect();
+        assert_eq!(
+            names,
+            vec![
+                "bin",
+                "bin/sh",
+                "srv",
+                "srv/a.txt",
+                "srv/link",
+                "srv/sub",
+                "srv/sub/b"
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn an_archive_refuses_what_is_not_a_directory_or_not_there() {
+        let g = tree();
+        let not_dir = build_archive(&g, "/srv/a.txt").await.err().unwrap();
+        assert_eq!(not_dir.0, StatusCode::BAD_REQUEST);
+        // A symlink to a directory is not one, as the script has it.
+        let link = build_archive(&g, "/srv/link").await.err().unwrap();
+        assert_eq!(link.0, StatusCode::BAD_REQUEST);
+        let missing = build_archive(&g, "/nope").await.err().unwrap();
+        assert_eq!(missing.0, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn an_archive_skips_a_link_the_agent_will_not_report() {
+        let mut g = tree();
+        g.odd_links.push("/srv/link".into());
+        let got = build_archive(&g, "/srv").await.unwrap().unwrap();
+        assert_eq!(got.skipped, 2);
+        assert!(unpacked(&got.bytes).iter().all(|e| e.0 != "link"));
+    }
+
+    #[tokio::test]
+    async fn an_archive_over_a_cap_is_a_413() {
+        let mut g = tree();
+        g.add("/srv/big", DirEntryKind::File, 0o644, "x");
+        g.nodes.get_mut("/srv/big").unwrap().0.size = MAX_ARCHIVE_FILE + 1;
+        let err = build_archive(&g, "/srv").await.err().unwrap();
+        assert_eq!(err.0, StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    #[tokio::test]
+    async fn an_agent_that_predates_an_operation_means_use_the_shell() {
+        struct Old;
+        impl GuestTree for Old {
+            async fn stat(&self, _: &str) -> Result<DirEntry, AgentError> {
+                Err(AgentError::Script(format!(
+                    "{} stat (it closed the connection on the request)",
+                    hv2_agent::UNSUPPORTED_OP_PREFIX
+                )))
+            }
+            async fn list(&self, _: &str) -> Result<(Vec<DirEntry>, bool), AgentError> {
+                unreachable!()
+            }
+            async fn read(&self, _: &str, _: u64) -> Result<Vec<u8>, AgentError> {
+                unreachable!()
+            }
+            async fn link(&self, _: &str) -> Result<String, AgentError> {
+                unreachable!()
+            }
+        }
+        assert!(build_archive(&Old, "/").await.unwrap().is_none());
     }
 
     #[test]

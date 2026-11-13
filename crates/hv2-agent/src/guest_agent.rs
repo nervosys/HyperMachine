@@ -1049,6 +1049,69 @@ impl GuestAgent {
         self.acknowledged("set_attr", op, "an attribute change", timeout)
     }
 
+    /// Read a symlink's target in the guest; see [`Operation::ReadLink`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::list_dir`]; a path that is not a symlink, or whose target is
+    /// not UTF-8, is the guest's refusal.
+    pub fn read_link(&mut self, path: &str, timeout: Duration) -> Result<String> {
+        let op = Operation::ReadLink {
+            path: path.to_string(),
+        };
+        match self.request_fs_op("read_link", op, timeout)? {
+            OpResult::LinkTarget { target } => Ok(target),
+            OpResult::Failed { message } => Err(AgentError::Script(message)),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a link read with {other:?}"
+            ))),
+        }
+    }
+
+    /// Create a symlink in the guest; see [`Operation::MakeSymlink`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::list_dir`]; an existing path is the guest's refusal.
+    pub fn make_symlink(
+        &mut self,
+        target: &str,
+        path: &str,
+        owner: Option<&str>,
+        timeout: Duration,
+    ) -> Result<()> {
+        let op = Operation::MakeSymlink {
+            target: target.to_string(),
+            path: path.to_string(),
+            owner: owner.map(str::to_string),
+        };
+        self.acknowledged("make_symlink", op, "a symlink creation", timeout)
+    }
+
+    /// Send a named signal to any pid in the guest; see
+    /// [`Operation::SignalProcess`]. `Ok(true)` if delivered, `Ok(false)` if
+    /// the process no longer exists.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::list_dir`]; pid 1, 0 and the agent's own are the guest's refusal.
+    pub fn signal_process(
+        &mut self,
+        pid: u32,
+        signal: hv2_guest_agent::SignalName,
+        timeout: Duration,
+    ) -> Result<bool> {
+        let op = Operation::SignalProcess { pid, signal };
+        match self.request_fs_op("signal_process", op, timeout)? {
+            OpResult::Acknowledged => Ok(true),
+            OpResult::NoSuchProcess => Ok(false),
+            OpResult::Failed { message } => Err(AgentError::Script(message)),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a signal with {other:?}"
+            ))),
+        }
+    }
+
     fn acknowledged(
         &mut self,
         name: &'static str,
@@ -1290,11 +1353,17 @@ mod tests {
             new()
                 .set_attr("/a", None, Some(0o755), false, t)
                 .unwrap_err(),
+            new().read_link("/a", t).unwrap_err(),
+            new().make_symlink("x", "/a", None, t).unwrap_err(),
+            new()
+                .signal_process(5, hv2_guest_agent::SignalName::Stop, t)
+                .unwrap_err(),
         ];
         for error in &errors {
             assert!(is_unsupported_op(error), "{error}");
         }
         assert!(errors[0].to_string().contains("list_dir"));
+        assert!(errors[7].to_string().contains("signal_process"));
         // The same hang-up on an operation every agent knows is no such thing.
         let error = new().ping(t).unwrap_err();
         assert!(!is_unsupported_op(&error), "{error}");
@@ -1355,6 +1424,44 @@ mod tests {
         agent.set_attr("/d/x", None, Some(0o755), true, t).unwrap();
         agent.remove("/d/x", true, false, t).unwrap();
         let refused = agent.remove("/", true, false, t).unwrap_err();
+        assert!(refused.to_string().contains("refusing"));
+        assert!(!is_unsupported_op(&refused));
+    }
+
+    #[test]
+    fn link_and_signal_answers_come_through() {
+        use hv2_guest_agent::SignalName;
+        let mut agent = GuestAgent::new(FakeGuest::new(|request| {
+            let result = match request.op {
+                Operation::ReadLink { path } if path == "/l" => OpResult::LinkTarget {
+                    target: "../t".into(),
+                },
+                Operation::ReadLink { .. } => OpResult::Failed {
+                    message: "not a symlink".into(),
+                },
+                Operation::SignalProcess { pid: 9, .. } => OpResult::NoSuchProcess,
+                Operation::SignalProcess { pid: 1, .. } => OpResult::Failed {
+                    message: "refusing to signal pid 1".into(),
+                },
+                _ => OpResult::Acknowledged,
+            };
+            Some(Response {
+                id: request.id,
+                version: PROTOCOL_VERSION,
+                result,
+            })
+        }));
+        let t = Duration::from_secs(1);
+        assert_eq!(agent.read_link("/l", t).unwrap(), "../t");
+        assert!(agent
+            .read_link("/f", t)
+            .unwrap_err()
+            .to_string()
+            .contains("not a symlink"));
+        agent.make_symlink("t", "/x", Some("0"), t).unwrap();
+        assert!(agent.signal_process(5, SignalName::Stop, t).unwrap());
+        assert!(!agent.signal_process(9, SignalName::Cont, t).unwrap());
+        let refused = agent.signal_process(1, SignalName::Stop, t).unwrap_err();
         assert!(refused.to_string().contains("refusing"));
         assert!(!is_unsupported_op(&refused));
     }
