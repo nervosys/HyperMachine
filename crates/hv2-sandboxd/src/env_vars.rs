@@ -119,7 +119,7 @@ pub(crate) async fn write_files(vm: &AgentVM, files: &[GuestFile]) -> Result<(),
 /// One entry of a repository's tar, with its path relative to the tree's
 /// root (empty for the root itself).
 #[derive(Debug, PartialEq, Eq)]
-enum Member {
+pub(crate) enum Member {
     Dir {
         rel: String,
         mode: u32,
@@ -138,7 +138,7 @@ enum Member {
 
 /// What stopped the agent from unpacking a tar.
 #[derive(Debug)]
-enum Unpack {
+pub(crate) enum Unpack {
     /// Not through the agent: the shell may do it. Says why.
     Shell(String),
     Failed(String),
@@ -156,7 +156,13 @@ enum Unpack {
 /// therefore refused outright (what `tar -x` would also not be asked to do
 /// for a real repository, whose tree has no such path).
 fn members(tar_bytes: &[u8]) -> Result<Vec<Member>, Unpack> {
-    let bad = |e: std::io::Error| Unpack::Failed(format!("reading the repository's archive: {e}"));
+    members_of(tar_bytes, "the repository's archive")
+}
+
+/// [`members`] for any tar, `what` naming it in the errors (a COPY's files
+/// are read the same way, and refused for the same reasons).
+pub(crate) fn members_of(tar_bytes: &[u8], what: &str) -> Result<Vec<Member>, Unpack> {
+    let bad = |e: std::io::Error| Unpack::Failed(format!("reading {what}: {e}"));
     let mut archive = tar::Archive::new(tar_bytes);
     let mut out = Vec::new();
     let mut links: Vec<String> = Vec::new();
@@ -165,16 +171,15 @@ fn members(tar_bytes: &[u8]) -> Result<Vec<Member>, Unpack> {
         let kind = entry.header().entry_type();
         let mode = entry.header().mode().map_err(bad)? & 0o7777;
         let raw = entry.path_bytes().into_owned();
-        let path = String::from_utf8(raw).map_err(|_| {
-            Unpack::Failed("the repository's archive holds a name that is not UTF-8".into())
-        })?;
+        let path = String::from_utf8(raw)
+            .map_err(|_| Unpack::Failed(format!("{what} holds a name that is not UTF-8")))?;
         let mut parts = Vec::new();
         for part in path.split('/') {
             match part {
                 "" | "." => {}
                 ".." => {
                     return Err(Unpack::Failed(format!(
-                        "the repository's archive holds {path:?}, which leaves its tree"
+                        "{what} holds {path:?}, which leaves its tree"
                     )))
                 }
                 p => parts.push(p),
@@ -188,14 +193,14 @@ fn members(tar_bytes: &[u8]) -> Result<Vec<Member>, Unpack> {
             && !kind.is_pax_local_extensions()
         {
             return Err(Unpack::Failed(format!(
-                "the repository's archive holds {path:?} through a symlink it made earlier"
+                "{what} holds {path:?} through a symlink it made earlier"
             )));
         }
         if kind.is_symlink() {
             if rel.is_empty() {
-                return Err(Unpack::Failed(
-                    "the repository's archive makes its own root a symlink".into(),
-                ));
+                return Err(Unpack::Failed(format!(
+                    "{what} makes its own root a symlink"
+                )));
             }
             let target = entry
                 .link_name_bytes()
@@ -204,8 +209,7 @@ fn members(tar_bytes: &[u8]) -> Result<Vec<Member>, Unpack> {
                 .filter(|t| !t.is_empty())
                 .ok_or_else(|| {
                     Unpack::Failed(format!(
-                        "the repository's archive holds symlink {path:?} with no usable \
-                         (UTF-8) target"
+                        "{what} holds symlink {path:?} with no usable (UTF-8) target"
                     ))
                 })?;
             links.push(rel.clone());
@@ -234,7 +238,7 @@ fn members(tar_bytes: &[u8]) -> Result<Vec<Member>, Unpack> {
 }
 
 /// `into` and `rel` joined, as a guest path.
-fn join_guest(into: &str, rel: &str) -> String {
+pub(crate) fn join_guest(into: &str, rel: &str) -> String {
     let base = into.trim_end_matches('/');
     if rel.is_empty() {
         if base.is_empty() {

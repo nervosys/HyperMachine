@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Template builds work on a shell-free image.** COPY lays its files in
+  through the guest agent (directories, files, symlinks; owner and octal
+  `--chmod` per listed path), WORKDIR is made by the agent, USER of a user
+  already in `/etc/passwd` runs nothing, and the base environment falls
+  back to the agent's own when there is no busybox. RUN steps, a
+  non-octal `--chmod`, `--chown user:group`, an owner missing from
+  `/etc/passwd` (a bare uid included) and creating a user still use the
+  shell, and on a shell-free image fail with a message saying so. A COPY
+  with an owner now also sets that user's group, and file times are not
+  kept. See `docs/benchmarks/2026-11-13/build-noshell-kvm`.
 - **Mounting a sandbox's disk no longer needs a shell in the guest.** A
   new additive guest-agent operation, `mount_block` (only `/dev/vd*`
   devices, only ext4, an absolute target other than `/`), waits for the

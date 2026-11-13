@@ -1,0 +1,343 @@
+{
+  "success": true,
+  "label": "shell-free",
+  "shell": false,
+  "purpose": "functional verification of template builds (COPY, ENV, WORKDIR, USER) through the guest agent's file operations, on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "0cf628784805b80eb385c1e693b4ec5488b0a1b994f8d3ccce9748326a2e4fb3",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "acb882968a8659ddcb332d28dd7004d21e65078e42dd6ae6fb8c219c19de36ec",
+    "driver": "e3a23c3cf559258a7b477b9c24496aea78fca1688cca1760278fd4a0900e81b0"
+  },
+  "cases": [
+    {
+      "name": "a. COPY (file+octal chmod, directory with symlinks, owned by a user), ENV, WORKDIR, USER",
+      "success": true,
+      "detail": {
+        "hello.txt": {
+          "gid": 0,
+          "mode": "640",
+          "name": "hello.txt",
+          "size": 6,
+          "type": "file",
+          "uid": 0
+        },
+        "tree": {
+          "link": "symlink",
+          "linkdir": "symlink",
+          "sub": "directory"
+        },
+        "work": {
+          "/srv/work": {
+            "gid": 0,
+            "mode": "755",
+            "name": "work",
+            "size": null,
+            "type": "directory",
+            "uid": 0
+          },
+          "sub": {
+            "gid": 1000,
+            "mode": "755",
+            "name": "sub",
+            "size": null,
+            "type": "directory",
+            "uid": 1000
+          },
+          "owned.txt": {
+            "gid": 1000,
+            "mode": "644",
+            "name": "owned.txt",
+            "size": 6,
+            "type": "file",
+            "uid": 1000
+          }
+        },
+        "env": {
+          "GREETING": "hi",
+          "PATH": "/bin",
+          "PATHX": "/x:/bin"
+        },
+        "cwd": "lrwxrwxrwx    1 root     0                0 Nov 13 18:50 /proc/self/cwd -> /srv/work/sub"
+      }
+    },
+    {
+      "name": "b. a RUN step: works with a shell, fails clearly without one",
+      "success": true,
+      "detail": {
+        "status": "error",
+        "step": "2",
+        "message": "a RUN step runs through /bin/sh: this guest's image has no /bin/sh, and this route runs its command through one (Script error: the guest agent could not start /bin/sh: could not start /bin/sh: No such file or directory (os error 2))"
+      }
+    },
+    {
+      "name": "c. COPY owned by a user the image lacks fails at its step, naming the user",
+      "success": true,
+      "detail": {
+        "message": "this COPY needs the shell (owner ghost is not in /etc/passwd): this guest's image has no /bin/sh, and this route runs its command through one (Script error: the guest agent could not start /bin/sh: could not start /bin/sh: No such file or directory (os error 2))"
+      }
+    },
+    {
+      "name": "d. COPY --chmod=u+x (not octal): the shell's; clear failure without one",
+      "success": true,
+      "detail": {
+        "message": "this COPY needs the shell (--chmod \"u+x\" is not an octal number): this guest's image has no /bin/sh, and this route runs its command through one (Script error: the guest agent could not start /bin/sh: could not start /bin/sh: No such file or directory (os error 2))"
+      }
+    },
+    {
+      "name": "e. USER of a user the image lacks: the shell script runs; clear failure without a shell",
+      "success": true,
+      "detail": {
+        "message": "user builder is not in the image's /etc/passwd and the image has no shell to create it: this guest's image has no /bin/sh, and this route runs its command through one (Script error: the guest agent could not start /bin/sh: could not start /bin/sh: No such file or directory (os error 2))"
+      }
+    },
+    {
+      "name": "f. COPY owned by a bare uid not in passwd: the shell's chown on a shell image, clear failure without one",
+      "success": true,
+      "detail": {
+        "message": "this COPY needs the shell (owner 4242 is not in /etc/passwd): this guest's image has no /bin/sh, and this route runs its command through one (Script error: the guest agent could not start /bin/sh: could not start /bin/sh: No such file or directory (os error 2))"
+      }
+    }
+  ],
+  "log_counts": {
+    "copy_agent": 5,
+    "copy_shell": 3,
+    "workdir_agent": 2,
+    "workdir_shell": 0,
+    "user_agent": 1,
+    "user_shell": 1,
+    "env_busybox": 0,
+    "env_proc": 6,
+    "kvm_lines": 18,
+    "tcg_lines": 0
+  },
+  "log_counts_expected": {
+    "copy_agent": 5,
+    "copy_shell": 3,
+    "workdir_agent": 2,
+    "workdir_shell": 0,
+    "user_agent": 1,
+    "user_shell": 1,
+    "env_busybox": 0,
+    "env_proc": 6
+  },
+  "builds": {
+    "nsb-ok": {
+      "status": "ready",
+      "reason": null,
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-d4f58a89",
+        "[1/8] COPY passwd /etc/passwd",
+        "1 paths, 2 KiB",
+        "[2/8] COPY hello.txt /opt/app/hello.txt",
+        "1 paths, 2 KiB",
+        "[3/8] COPY tree /opt/tree",
+        "5 paths, 4 KiB",
+        "[4/8] ENV GREETING hi PATHX /x:$PATH",
+        "[5/8] WORKDIR /srv/work",
+        "[6/8] USER app",
+        "[7/8] COPY owned.txt /srv/work/owned.txt",
+        "1 paths, 2 KiB",
+        "[8/8] WORKDIR sub",
+        "Steps kept as build-cache-0f2949343b3bb4f4 in 110.441824ms",
+        "Template nsb-ok ready: snapshot of 7 MiB in 31.236269ms"
+      ]
+    },
+    "nsb-run": {
+      "status": "error",
+      "reason": {
+        "logEntries": [
+          {
+            "level": "warn",
+            "message": "this node gives sandboxes no network: steps run offline",
+            "step": "base",
+            "timestamp": "2026-11-13T18:51:00.015Z"
+          },
+          {
+            "level": "info",
+            "message": "Building in build-ba5a62d3",
+            "step": "base",
+            "timestamp": "2026-11-13T18:51:00.928Z"
+          },
+          {
+            "level": "info",
+            "message": "[1/2] COPY hello.txt /opt/app/hello.txt",
+            "step": "1",
+            "timestamp": "2026-11-13T18:51:01.092Z"
+          },
+          {
+            "level": "info",
+            "message": "1 paths, 2 KiB",
+            "step": "1",
+            "timestamp": "2026-11-13T18:51:01.093Z"
+          },
+          {
+            "level": "info",
+            "message": "[2/2] RUN echo from-run > /ran.txt",
+            "step": "2",
+            "timestamp": "2026-11-13T18:51:01.129Z"
+          }
+        ],
+        "message": "a RUN step runs through /bin/sh: this guest's image has no /bin/sh, and this route runs its command through one (Script error: the guest agent could not start /bin/sh: could not start /bin/sh: No such file or directory (os error 2))",
+        "step": "2"
+      },
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-ba5a62d3",
+        "[1/2] COPY hello.txt /opt/app/hello.txt",
+        "1 paths, 2 KiB",
+        "[2/2] RUN echo from-run > /ran.txt"
+      ]
+    },
+    "nsb-ghost": {
+      "status": "error",
+      "reason": {
+        "logEntries": [
+          {
+            "level": "warn",
+            "message": "this node gives sandboxes no network: steps run offline",
+            "step": "base",
+            "timestamp": "2026-11-13T18:51:01.549Z"
+          },
+          {
+            "level": "info",
+            "message": "Building in build-257c837a",
+            "step": "base",
+            "timestamp": "2026-11-13T18:51:02.147Z"
+          },
+          {
+            "level": "info",
+            "message": "[1/1] COPY hello.txt /opt/app/hello.txt",
+            "step": "1",
+            "timestamp": "2026-11-13T18:51:02.230Z"
+          },
+          {
+            "level": "info",
+            "message": "1 paths, 2 KiB",
+            "step": "1",
+            "timestamp": "2026-11-13T18:51:02.231Z"
+          }
+        ],
+        "message": "this COPY needs the shell (owner ghost is not in /etc/passwd): this guest's image has no /bin/sh, and this route runs its command through one (Script error: the guest agent could not start /bin/sh: could not start /bin/sh: No such file or directory (os error 2))",
+        "step": "1"
+      },
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-257c837a",
+        "[1/1] COPY hello.txt /opt/app/hello.txt",
+        "1 paths, 2 KiB"
+      ]
+    },
+    "nsb-symmode": {
+      "status": "error",
+      "reason": {
+        "logEntries": [
+          {
+            "level": "warn",
+            "message": "this node gives sandboxes no network: steps run offline",
+            "step": "base",
+            "timestamp": "2026-11-13T18:51:03.063Z"
+          },
+          {
+            "level": "info",
+            "message": "Building in build-07cb8ab8",
+            "step": "base",
+            "timestamp": "2026-11-13T18:51:04.017Z"
+          },
+          {
+            "level": "info",
+            "message": "[1/1] COPY hello.txt /opt/app/hello.txt",
+            "step": "1",
+            "timestamp": "2026-11-13T18:51:04.178Z"
+          },
+          {
+            "level": "info",
+            "message": "1 paths, 2 KiB",
+            "step": "1",
+            "timestamp": "2026-11-13T18:51:04.178Z"
+          }
+        ],
+        "message": "this COPY needs the shell (--chmod \"u+x\" is not an octal number): this guest's image has no /bin/sh, and this route runs its command through one (Script error: the guest agent could not start /bin/sh: could not start /bin/sh: No such file or directory (os error 2))",
+        "step": "1"
+      },
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-07cb8ab8",
+        "[1/1] COPY hello.txt /opt/app/hello.txt",
+        "1 paths, 2 KiB"
+      ]
+    },
+    "nsb-user": {
+      "status": "error",
+      "reason": {
+        "logEntries": [
+          {
+            "level": "warn",
+            "message": "this node gives sandboxes no network: steps run offline",
+            "step": "base",
+            "timestamp": "2026-11-13T18:51:04.579Z"
+          },
+          {
+            "level": "info",
+            "message": "Building in build-71c2e295",
+            "step": "base",
+            "timestamp": "2026-11-13T18:51:05.259Z"
+          },
+          {
+            "level": "info",
+            "message": "[1/1] USER builder",
+            "step": "1",
+            "timestamp": "2026-11-13T18:51:05.325Z"
+          }
+        ],
+        "message": "user builder is not in the image's /etc/passwd and the image has no shell to create it: this guest's image has no /bin/sh, and this route runs its command through one (Script error: the guest agent could not start /bin/sh: could not start /bin/sh: No such file or directory (os error 2))",
+        "step": "1"
+      },
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-71c2e295",
+        "[1/1] USER builder"
+      ]
+    },
+    "nsb-numeric": {
+      "status": "error",
+      "reason": {
+        "logEntries": [
+          {
+            "level": "warn",
+            "message": "this node gives sandboxes no network: steps run offline",
+            "step": "base",
+            "timestamp": "2026-11-13T18:51:05.593Z"
+          },
+          {
+            "level": "info",
+            "message": "Building in build-29901dc1",
+            "step": "base",
+            "timestamp": "2026-11-13T18:51:06.050Z"
+          },
+          {
+            "level": "info",
+            "message": "[1/1] COPY hello.txt /opt/app/hello.txt",
+            "step": "1",
+            "timestamp": "2026-11-13T18:51:06.233Z"
+          },
+          {
+            "level": "info",
+            "message": "1 paths, 2 KiB",
+            "step": "1",
+            "timestamp": "2026-11-13T18:51:06.233Z"
+          }
+        ],
+        "message": "this COPY needs the shell (owner 4242 is not in /etc/passwd): this guest's image has no /bin/sh, and this route runs its command through one (Script error: the guest agent could not start /bin/sh: could not start /bin/sh: No such file or directory (os error 2))",
+        "step": "1"
+      },
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-29901dc1",
+        "[1/1] COPY hello.txt /opt/app/hello.txt",
+        "1 paths, 2 KiB"
+      ]
+    }
+  }
+}

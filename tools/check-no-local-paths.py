@@ -18,6 +18,8 @@ ALLOWED = {
     'user', 'username', 'you', 'me', 'name', 'runner', 'test', 'ubuntu', 'root',
     'admin', 'alice', 'bob', 'example', 'someone', 'default', 'public', 'shared',
     'all', 'guest',
+    # The guest account tools/check-build-noshell-kvm.py's USER step makes.
+    'builder',
 }
 PATTERNS = [
     re.compile(r'(?i)[\\/]Users[\\/]+([A-Za-z0-9._-]+)'),

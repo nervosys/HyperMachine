@@ -33,6 +33,7 @@ use super::{
     sizes_of, snapshots, valid_template_name, AppState, Arc, Deserialize, IntoResponse, Json,
     NetworkSpec, Path, Query, Response, Running, Sizes, State, StatusCode,
 };
+use crate::env_vars::{join_guest, Member, Unpack};
 use crate::oci::Credentials;
 
 /// The longest one `RUN` -- or a readiness check, all attempts -- may take.
@@ -701,17 +702,7 @@ async fn steps_then_snapshot(
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         .unwrap_or_default();
-    let base_env: BTreeMap<String, String> = vm
-        .exec_in_guest("/bin/busybox", &["env".to_string()], AGENT_TIMEOUT)
-        .await
-        .map(|out| {
-            out.stdout
-                .lines()
-                .filter_map(|l| l.split_once('='))
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect()
-        })
-        .unwrap_or_default();
+    let base_env = base_environment(vm, &inherited.env).await;
     let mut context = Context {
         env: inherited.env,
         cwd: inherited.cwd.unwrap_or_else(|| "/".into()),
@@ -747,6 +738,13 @@ async fn steps_then_snapshot(
                     .unwrap_or(&context.user);
                 run_command(vm, build, &name, command, user, &context)
                     .await
+                    .map_err(|e| {
+                        if crate::guest_setup::guest_has_no_shell(&e) {
+                            format!("a RUN step runs through /bin/sh: {e}")
+                        } else {
+                            e
+                        }
+                    })
                     .map_err(&fail)?;
             }
             "ENV" => {
@@ -765,12 +763,22 @@ async fn steps_then_snapshot(
                     .first()
                     .ok_or_else(|| fail("WORKDIR without a path".into()))?;
                 let dir = resolve(&context.cwd, dir);
-                let owner = (context.user != "root")
-                    .then(|| format!(" && chown {} {}", quote(&context.user), quote(&dir)));
-                let script = format!("mkdir -p {}{}", quote(&dir), owner.unwrap_or_default());
-                run_command(vm, build, &name, &script, "root", &context)
-                    .await
-                    .map_err(&fail)?;
+                // Through the agent's file operations: no shell, no `mkdir`.
+                // Only an agent that predates them runs the script.
+                match workdir_by_agent(vm, &dir, &context.user).await {
+                    Ok(()) => tracing::debug!("WORKDIR {dir}: using agent op"),
+                    Err(Unpack::Failed(e)) => return Err(fail(e)),
+                    Err(Unpack::Shell(why)) => {
+                        tracing::debug!("WORKDIR {dir}: falling back to shell ({why})");
+                        let owner = (context.user != "root")
+                            .then(|| format!(" && chown {} {}", quote(&context.user), quote(&dir)));
+                        let script =
+                            format!("mkdir -p {}{}", quote(&dir), owner.unwrap_or_default());
+                        run_command(vm, build, &name, &script, "root", &context)
+                            .await
+                            .map_err(&fail)?;
+                    }
+                }
                 context.cwd = dir;
             }
             "USER" => {
@@ -1119,7 +1127,7 @@ async fn run_command(
             AGENT_TIMEOUT,
         )
         .await
-        .map_err(|e| format!("starting: {e}"))?;
+        .map_err(|e| start_failure(&e.to_string()))?;
     match finished(vm, pid, Some((build, step))).await? {
         Some(0) => Ok(()),
         Some(code) => Err(format!("{command:?} exited {code}")),
@@ -1175,13 +1183,277 @@ async fn ensure_user(
     if user == "root" || user == "0" {
         return Ok(());
     }
+    // An image that already has the user needs nothing run, so a build on an
+    // image with no shell can say `USER app` when it has one.
+    match vm
+        .read_file_in_guest("/etc/passwd", 1 << 20, AGENT_TIMEOUT)
+        .await
+    {
+        Ok(bytes) if passwd_has_user(&String::from_utf8_lossy(&bytes), user) => {
+            tracing::debug!("USER {user}: using agent op (found in /etc/passwd, nothing to run)");
+            return Ok(());
+        }
+        _ => {}
+    }
+    tracing::debug!("USER {user}: not in /etc/passwd, falling back to shell");
     let u = quote(user);
     let script = format!(
         "id -u {u} >/dev/null 2>&1 || {{ \
            if command -v useradd >/dev/null 2>&1; then useradd -m -s /bin/sh {u}; \
            else /bin/busybox adduser -D -h /home/{user} -s /bin/sh {u}; fi; }}"
     );
-    run_command(vm, build, step, &script, "root", context).await
+    run_command(vm, build, step, &script, "root", context)
+        .await
+        .map_err(|e| {
+            if crate::guest_setup::guest_has_no_shell(&e) {
+                format!(
+                    "user {user} is not in the image's /etc/passwd and the image has no \
+                     shell to create it: {e}"
+                )
+            } else {
+                e
+            }
+        })
+}
+
+/// The agent's own environment, which every program it starts inherits (the
+/// template's defaults and the request's variables go over it): the base a
+/// step's `ENV` expands against. `busybox env` reports exactly that, so it
+/// is asked first; an image with no busybox is read from the agent instead.
+async fn base_environment(
+    vm: &AgentVM,
+    defaults: &BTreeMap<String, String>,
+) -> BTreeMap<String, String> {
+    if let Ok(out) = vm
+        .exec_in_guest("/bin/busybox", &["env".to_string()], AGENT_TIMEOUT)
+        .await
+    {
+        tracing::debug!("reading the base environment: using busybox env");
+        return out
+            .stdout
+            .lines()
+            .filter_map(|l| l.split_once('='))
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+    }
+    tracing::debug!("reading the base environment: falling back to /proc/self/environ");
+    let environ = vm
+        .read_file_in_guest("/proc/self/environ", 1 << 20, AGENT_TIMEOUT)
+        .await
+        .unwrap_or_default();
+    let stat = vm
+        .read_file_in_guest("/proc/self/stat", 4096, AGENT_TIMEOUT)
+        .await
+        .unwrap_or_default();
+    let mut env = agent_environment(&environ, &stat);
+    // `busybox env` shows the template's defaults over the agent's variables.
+    env.extend(defaults.iter().map(|(k, v)| (k.clone(), v.clone())));
+    env
+}
+
+/// What the agent's `/proc/self/environ` and `/proc/self/stat` say its
+/// children inherit. `environ` is the environment the agent was *started*
+/// with, which the kernel keeps unchanged: the agent as PID 1 sets `PATH`
+/// and `HOME` itself afterwards (setenv), which `environ` does not show, so
+/// they are added when `stat`'s first field says the agent is PID 1.
+fn agent_environment(environ: &[u8], stat: &[u8]) -> BTreeMap<String, String> {
+    let mut env: BTreeMap<String, String> = environ
+        .split(|b| *b == 0)
+        .filter_map(|entry| {
+            let entry = String::from_utf8_lossy(entry);
+            let (key, value) = entry.split_once('=')?;
+            (!key.is_empty()).then(|| (key.to_string(), value.to_string()))
+        })
+        .collect();
+    let pid = String::from_utf8_lossy(stat)
+        .split_whitespace()
+        .next()
+        .and_then(|p| p.parse::<u32>().ok());
+    if pid == Some(1) {
+        env.insert("PATH".into(), "/bin".into());
+        env.insert("HOME".into(), "/root".into());
+    }
+    env
+}
+
+/// Whether `/etc/passwd` has `user`, by name or by uid.
+fn passwd_has_user(passwd: &str, user: &str) -> bool {
+    !user.is_empty()
+        && passwd.lines().any(|line| {
+            let mut fields = line.split(':');
+            let (name, _, uid) = (fields.next(), fields.next(), fields.next());
+            line.split(':').count() >= 6 && (name == Some(user) || uid == Some(user))
+        })
+}
+
+/// A `--chmod` that is an octal number of at most four digits, as `chmod`
+/// reads one; anything else (`u+x`) is the shell's to interpret.
+fn parse_octal_mode(mode: &str) -> Option<u32> {
+    let valid =
+        !mode.is_empty() && mode.len() <= 4 && mode.bytes().all(|b| (b'0'..=b'7').contains(&b));
+    valid.then(|| u32::from_str_radix(mode, 8).ok()).flatten()
+}
+
+/// What a failure to start a shell-form command says: a guest with no
+/// `/bin/sh` is a supported kind of image, and gets an explanation.
+fn start_failure(error: &str) -> String {
+    if crate::guest_setup::guest_has_no_shell(error) {
+        crate::guest_setup::no_shell_message(false, error)
+    } else {
+        format!("starting: {error}")
+    }
+}
+
+/// An agent op's failure, as the unpack code reports it: an agent that
+/// predates the operation is the shell's to cover for.
+fn by_agent(what: &str, e: hv2_agent::AgentError) -> Unpack {
+    if hv2_agent::is_unsupported_op(&e) {
+        Unpack::Shell(format!("the guest's agent predates {what}"))
+    } else {
+        Unpack::Failed(format!("{what}: {e}"))
+    }
+}
+
+/// Refuse, as the shell's to do, an `owner` the agent cannot resolve: it
+/// looks owners up in `/etc/passwd` only, where `chown` also takes a bare
+/// uid with no entry.
+async fn owner_for_agent(vm: &AgentVM, owner: &str) -> Result<(), Unpack> {
+    if owner == "root" || owner == "0" {
+        return Ok(());
+    }
+    let known = vm
+        .read_file_in_guest("/etc/passwd", 4 << 20, AGENT_TIMEOUT)
+        .await
+        .map(|bytes| passwd_has_user(&String::from_utf8_lossy(&bytes), owner))
+        .unwrap_or(false);
+    if known {
+        Ok(())
+    } else {
+        Err(Unpack::Shell(format!(
+            "owner {owner} is not in /etc/passwd"
+        )))
+    }
+}
+
+/// `dir` made with its parents, and given to `user` unless that is root, as
+/// `mkdir -p` and `chown` would, through the agent.
+async fn workdir_by_agent(vm: &AgentVM, dir: &str, user: &str) -> Result<(), Unpack> {
+    let wait = AGENT_TIMEOUT;
+    owner_for_agent(vm, user).await?;
+    vm.make_dir_in_guest(dir, true, None, None, wait)
+        .await
+        .map_err(|e| by_agent(&format!("making {dir}"), e))?;
+    if user != "root" {
+        vm.set_attr_in_guest(dir, Some(user), None, false, wait)
+            .await
+            .map_err(|e| by_agent(&format!("giving {dir} to {user}"), e))?;
+    }
+    Ok(())
+}
+
+/// Remove what is at `path` if it is not a directory, so that writing a
+/// member replaces it (as `tar` does) rather than writing through a link.
+async fn clear_for_member(vm: &AgentVM, path: &str) -> Result<(), Unpack> {
+    let wait = AGENT_TIMEOUT;
+    match vm.stat_in_guest(path, false, wait).await {
+        Ok(entry) if entry.kind != hv2_guest_agent::DirEntryKind::Dir => vm
+            .remove_in_guest(path, false, true, wait)
+            .await
+            .map_err(|e| by_agent(&format!("replacing {path}"), e)),
+        _ => Ok(()),
+    }
+}
+
+/// A COPY's repacked `archive` (paths relative to `/`) laid into the guest
+/// through the agent: directories made, files written, links made, then
+/// `owner` and `mode` given to each of `paths` as `chown -h` and `chmod`
+/// over the list would. Not recursive, as they were not.
+///
+/// Where this is not the same as the shell script, and why it is accepted:
+/// the owner's primary group is set too (`chown user` keeps the group); a
+/// symlink's mode is left alone (`chmod` would change its target's);
+/// setuid/setgid bits of a file are dropped (a `chown` would clear them
+/// anyway, and root-owned files are rare in a build context); modification
+/// times are not kept.
+async fn copy_by_agent(
+    vm: &AgentVM,
+    archive: &[u8],
+    paths: &[String],
+    owner: &str,
+    mode: Option<&str>,
+) -> Result<(), Unpack> {
+    let wait = AGENT_TIMEOUT * 6;
+    let mode = match mode {
+        None => None,
+        Some(m) => Some(
+            parse_octal_mode(m)
+                .ok_or_else(|| Unpack::Shell(format!("--chmod {m:?} is not an octal number")))?,
+        ),
+    };
+    if owner.contains(':') {
+        return Err(Unpack::Shell(format!("--chown {owner:?} names a group")));
+    }
+    owner_for_agent(vm, owner).await?;
+    // Read it all first: an archive the agent cannot reproduce is found
+    // before anything is written.
+    let members = crate::env_vars::members_of(archive, "the COPY's files")?;
+    let fail = |path: &str, e: hv2_agent::AgentError| by_agent(path, e);
+    // One cheap new-protocol operation first, so an agent that predates them
+    // is found before anything is written.
+    if let Err(e) = vm.stat_in_guest("/", false, wait).await {
+        if hv2_agent::is_unsupported_op(&e) {
+            return Err(by_agent("file operations", e));
+        }
+    }
+    for member in &members {
+        match member {
+            Member::Dir { rel, mode } => {
+                let path = join_guest("/", rel);
+                vm.make_dir_in_guest(&path, true, None, Some(*mode), wait)
+                    .await
+                    .map_err(|e| fail(&format!("making {path}"), e))?;
+                vm.set_attr_in_guest(&path, None, Some(*mode), false, wait)
+                    .await
+                    .map_err(|e| fail(&format!("setting the mode of {path}"), e))?;
+            }
+            Member::File { rel, mode, data } => {
+                let path = join_guest("/", rel);
+                clear_for_member(vm, &path).await?;
+                vm.write_file_in_guest_as(&path, data.clone(), None, wait)
+                    .await
+                    .map_err(|e| fail(&format!("writing {path}"), e))?;
+                vm.set_attr_in_guest(&path, None, Some(*mode), false, wait)
+                    .await
+                    .map_err(|e| fail(&format!("setting the mode of {path}"), e))?;
+            }
+            Member::Symlink { rel, target } => {
+                let path = join_guest("/", rel);
+                if let Some((parent, _)) = path.rsplit_once('/') {
+                    if !parent.is_empty() {
+                        vm.make_dir_in_guest(parent, true, None, None, wait)
+                            .await
+                            .map_err(|e| fail(&format!("making {parent}"), e))?;
+                    }
+                }
+                clear_for_member(vm, &path).await?;
+                vm.make_symlink_in_guest(target, &path, None, wait)
+                    .await
+                    .map_err(|e| fail(&format!("linking {path}"), e))?;
+            }
+        }
+    }
+    let owner = (owner != "root" && owner != "0").then_some(owner);
+    if owner.is_some() || mode.is_some() {
+        for path in paths {
+            vm.set_attr_in_guest(path, owner, mode, false, wait)
+                .await
+                .map_err(|e| match owner {
+                    Some(o) => fail(&format!("giving {path} to {o}"), e),
+                    None => fail(&format!("setting the mode of {path}"), e),
+                })?;
+        }
+    }
+    Ok(())
 }
 
 /// `COPY src dest [user] [mode]`: the upload's entries under `src`, laid
@@ -1223,6 +1495,19 @@ async fn copy(
         Some(step_name),
         format!("{} paths, {} KiB", paths.len(), archive.len() >> 10),
     );
+    // Through the agent's file operations: no archive staged, no `tar`,
+    // `chown`, `chmod` or shell in the guest. Only an agent that predates
+    // them, an archive it cannot reproduce (a hard link or special file), or
+    // a mode or owner it cannot express (`u+x`, `user:group`) uses the shell.
+    let why = match copy_by_agent(vm, &archive, &paths, &owner, mode.as_deref()).await {
+        Ok(()) => {
+            tracing::debug!("COPY step {step_name}: using agent op");
+            return Ok(());
+        }
+        Err(Unpack::Failed(e)) => return Err(e),
+        Err(Unpack::Shell(why)) => why,
+    };
+    tracing::debug!("COPY step {step_name}: falling back to shell ({why})");
     let staged = format!("/tmp/.hv2-copy-{}.tar", uuid::Uuid::new_v4().simple());
     let list = format!("{staged}.list");
     vm.write_file_in_guest(&staged, archive, AGENT_TIMEOUT * 10)
@@ -1256,7 +1541,15 @@ async fn copy(
         quote(&staged),
         quote(&list)
     );
-    run_command(vm, build, step_name, &script, "root", context).await
+    run_command(vm, build, step_name, &script, "root", context)
+        .await
+        .map_err(|e| {
+            if crate::guest_setup::guest_has_no_shell(&e) {
+                format!("this COPY needs the shell ({why}): {e}")
+            } else {
+                e
+            }
+        })
 }
 
 /// The upload's entries for `src`, as a tar of their paths at `dest`, and
@@ -1480,6 +1773,145 @@ mod tests {
         assert_eq!(resolve("/home/user", "app"), "/home/user/app");
         assert_eq!(resolve("/", "app"), "/app");
         assert_eq!(resolve("/x", "/abs"), "/abs");
+    }
+
+    #[test]
+    fn a_chmod_is_octal_or_the_shells() {
+        assert_eq!(parse_octal_mode("755"), Some(0o755));
+        assert_eq!(parse_octal_mode("0644"), Some(0o644));
+        assert_eq!(parse_octal_mode("4755"), Some(0o4755));
+        assert_eq!(parse_octal_mode("7"), Some(7));
+        for bad in ["", "u+x", "758", "-1", "07555", "0x1f", " 755"] {
+            assert_eq!(parse_octal_mode(bad), None, "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn a_user_is_in_passwd_by_name_or_uid() {
+        let passwd =
+            "root:x:0:0:root:/root:/bin/sh\napp:x:1000:1000::/srv/app:/bin/sh\nshort:x:5\n";
+        assert!(passwd_has_user(passwd, "app"));
+        assert!(passwd_has_user(passwd, "1000"));
+        assert!(passwd_has_user(passwd, "root"));
+        assert!(!passwd_has_user(passwd, "ap"));
+        assert!(!passwd_has_user(passwd, "1001"));
+        assert!(!passwd_has_user(passwd, ""));
+        // A malformed line is no account.
+        assert!(!passwd_has_user(passwd, "short"));
+        assert!(!passwd_has_user("", "app"));
+    }
+
+    #[test]
+    fn the_agents_environment_is_read_from_proc() {
+        let environ = b"TERM=linux\0A=1=2\0=skipped\0noequals\0EMPTY=\0";
+        let env = agent_environment(environ, b"42 (agentd) S 1 1");
+        let want: BTreeMap<String, String> = [("TERM", "linux"), ("A", "1=2"), ("EMPTY", "")]
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .into();
+        assert_eq!(env, want);
+        // As PID 1 it sets PATH and HOME after starting, which environ lacks.
+        let env = agent_environment(b"HOME=/\0TERM=linux\0", b"1 (hv2-guest-agent) S 0 1");
+        assert_eq!(env["PATH"], "/bin");
+        assert_eq!(env["HOME"], "/root");
+        assert_eq!(env["TERM"], "linux");
+        assert!(agent_environment(b"", b"").is_empty());
+    }
+
+    #[test]
+    fn a_missing_shell_is_explained_at_start() {
+        let e = "could not start /bin/sh: No such file or directory (os error 2)";
+        let msg = start_failure(e);
+        assert!(msg.contains("no /bin/sh") && msg.contains(e), "{msg}");
+        assert_eq!(start_failure("boom"), "starting: boom");
+    }
+
+    /// What a COPY's repacked archive asks of the agent: the same members
+    /// `repack` laid out, with their final paths below `/`.
+    #[test]
+    fn a_copys_archive_is_read_as_members_below_root() {
+        let mut builder = tar::Builder::new(Vec::new());
+        let mut h = tar::Header::new_gnu();
+        h.set_entry_type(tar::EntryType::Directory);
+        h.set_mode(0o755);
+        h.set_size(0);
+        h.set_cksum();
+        builder.append_data(&mut h, "app/lib", &[][..]).unwrap();
+        let mut h = tar::Header::new_gnu();
+        h.set_entry_type(tar::EntryType::Regular);
+        h.set_mode(0o755);
+        h.set_size(2);
+        h.set_cksum();
+        builder
+            .append_data(&mut h, "app/lib/run.sh", &b"#!"[..])
+            .unwrap();
+        let mut h = tar::Header::new_gnu();
+        h.set_entry_type(tar::EntryType::Symlink);
+        h.set_mode(0o777);
+        h.set_size(0);
+        h.set_cksum();
+        builder.append_link(&mut h, "app/current", "lib").unwrap();
+        let bytes = builder.into_inner().unwrap();
+        let got = crate::env_vars::members_of(&bytes, "the COPY's files").unwrap();
+        assert_eq!(
+            got,
+            [
+                Member::Dir {
+                    rel: "app/lib".into(),
+                    mode: 0o755
+                },
+                Member::File {
+                    rel: "app/lib/run.sh".into(),
+                    mode: 0o755,
+                    data: b"#!".to_vec()
+                },
+                Member::Symlink {
+                    rel: "app/current".into(),
+                    target: "lib".into()
+                },
+            ]
+        );
+        assert_eq!(join_guest("/", "app/lib"), "/app/lib");
+        assert_eq!(join_guest("/", ""), "/");
+    }
+
+    /// A member written through a symlink an earlier one made is refused,
+    /// naming the COPY; `..` and hard links are not the agent's.
+    #[test]
+    fn a_copys_archive_cannot_write_through_its_own_symlink() {
+        let link = |b: &mut tar::Builder<Vec<u8>>, kind: tar::EntryType, name: &str, to: &str| {
+            let mut h = tar::Header::new_gnu();
+            h.set_entry_type(kind);
+            h.set_mode(0o777);
+            h.set_size(0);
+            h.set_cksum();
+            b.append_link(&mut h, name, to).unwrap();
+        };
+        let file = |b: &mut tar::Builder<Vec<u8>>, name: &str| {
+            let mut h = tar::Header::new_gnu();
+            h.set_entry_type(tar::EntryType::Regular);
+            h.set_mode(0o644);
+            h.set_size(1);
+            h.set_cksum();
+            b.append_data(&mut h, name, &b"x"[..]).unwrap();
+        };
+        let mut b = tar::Builder::new(Vec::new());
+        link(&mut b, tar::EntryType::Symlink, "app/etc", "/etc");
+        file(&mut b, "app/etc/passwd");
+        match crate::env_vars::members_of(&b.into_inner().unwrap(), "the COPY's files") {
+            Err(Unpack::Failed(e)) => {
+                assert!(
+                    e.contains("the COPY's files") && e.contains("symlink"),
+                    "{e}"
+                );
+            }
+            other => panic!("{other:?}"),
+        }
+        let mut b = tar::Builder::new(Vec::new());
+        link(&mut b, tar::EntryType::Link, "app/hard", "app/file");
+        assert!(matches!(
+            crate::env_vars::members_of(&b.into_inner().unwrap(), "x"),
+            Err(Unpack::Shell(_))
+        ));
     }
 
     /// A scratch directory, gone with the value.
