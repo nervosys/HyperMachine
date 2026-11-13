@@ -321,8 +321,8 @@ mod tests {
         for n in 1..=40 {
             index.push(headline(n));
         }
-        for level in 0..index.tier_count() {
-            let count = index.tiers[level].len();
+        for (level, tier) in index.tiers.iter().enumerate() {
+            let count = tier.len();
             assert!(count <= 3, "tier {level} holds {count} blocks");
         }
     }

@@ -215,10 +215,8 @@ impl InterruptCoalescer {
 
     /// Flush the current window and start a new one
     fn flush_window(&mut self) {
-        for i in 0..16 {
-            if self.pending[i].is_some() {
-                self.pending[i] = None;
-            }
+        for slot in self.pending.iter_mut().take(16) {
+            *slot = None;
         }
     }
 

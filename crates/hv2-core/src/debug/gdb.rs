@@ -281,8 +281,8 @@ impl GdbRegisters {
         let mut result = String::with_capacity(GdbRegister::COUNT * 16);
 
         // GPRs (64-bit each, little endian)
-        for i in 0..16 {
-            result.push_str(&format!("{:016x}", self.gprs[i].swap_bytes()));
+        for gpr in self.gprs.iter().take(16) {
+            result.push_str(&format!("{:016x}", gpr.swap_bytes()));
         }
 
         // RIP
@@ -319,9 +319,9 @@ impl GdbRegisters {
         let mut offset = 0;
 
         // 16 GPRs (8 bytes each, byte-swapped)
-        for i in 0..16 {
+        for gpr in regs.gprs.iter_mut().take(16) {
             let val = u64::from_be_bytes(bytes[offset..offset + 8].try_into().ok()?);
-            regs.gprs[i] = val.swap_bytes();
+            *gpr = val.swap_bytes();
             offset += 8;
         }
 

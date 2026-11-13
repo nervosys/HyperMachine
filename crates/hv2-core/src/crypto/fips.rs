@@ -451,9 +451,9 @@ impl FipsCrypto {
         // periodically reseeded from the OS random source.
         // On Windows that source is BCryptGenRandom / ProcessPrng.
         // On Linux it is getrandom(2) or /dev/urandom.
-        rand::rng()
-            .try_fill_bytes(buffer)
-            .map_err(|e| CryptoError::RngFailed(e.to_string()))?;
+        // ThreadRng cannot fail (its error type is `Infallible`); the pattern
+        // stops compiling if a future rand gives it a real error to handle.
+        let Ok(()) = rand::rng().try_fill_bytes(buffer);
 
         Ok(())
     }

@@ -239,10 +239,7 @@ impl ApiKeyPolicy {
             ["events", ..] => ApiScope::Events,
             _ => return false,
         };
-        if self.scopes.contains(&family) {
-            return true;
-        }
-        false
+        self.scopes.contains(&family)
     }
 }
 

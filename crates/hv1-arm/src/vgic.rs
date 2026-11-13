@@ -133,14 +133,14 @@ impl VirtualDistributor {
         }
 
         // SGIs are edge-triggered and always enabled by default
-        for i in 0..(SGI_END as usize) {
-            self.irqs[i].trigger = TriggerType::Edge;
-            self.irqs[i].enabled = true;
+        for irq in &mut self.irqs[..SGI_END as usize] {
+            irq.trigger = TriggerType::Edge;
+            irq.enabled = true;
         }
 
         // PPIs default: disabled, level-triggered
-        for i in (SGI_END as usize)..(PPI_END as usize) {
-            self.irqs[i].trigger = TriggerType::Level;
+        for irq in &mut self.irqs[SGI_END as usize..PPI_END as usize] {
+            irq.trigger = TriggerType::Level;
         }
 
         self.initialized = true;
@@ -221,8 +221,7 @@ impl VirtualDistributor {
         let mut best_id: Option<u32> = None;
         let mut best_prio: u8 = 0xFF;
 
-        for i in 0..MAX_INTID {
-            let irq = &self.irqs[i];
+        for (i, irq) in self.irqs.iter().enumerate().take(MAX_INTID) {
             if !irq.enabled {
                 continue;
             }

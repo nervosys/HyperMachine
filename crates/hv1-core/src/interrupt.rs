@@ -364,12 +364,7 @@ impl VirtualApic {
 
     /// Check if there's a pending interrupt
     pub fn has_pending_interrupt(&self) -> bool {
-        for i in 0..8 {
-            if self.irr[i] != 0 {
-                return true;
-            }
-        }
-        false
+        self.irr.iter().take(8).any(|&w| w != 0)
     }
 
     /// Get the highest priority pending interrupt

@@ -189,8 +189,8 @@ impl DirtyBitmap {
         let remaining_bits = self.num_pages % PAGES_PER_WORD;
 
         // Set all full words to MAX
-        for i in 0..full_words {
-            self.bitmap[i].store(u64::MAX, Ordering::Release);
+        for word in self.bitmap.iter().take(full_words) {
+            word.store(u64::MAX, Ordering::Release);
         }
 
         // Set only valid bits in the last partial word
