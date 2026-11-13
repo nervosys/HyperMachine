@@ -151,15 +151,11 @@ pub(crate) async fn get(
         Ok(found) => found,
         Err(response) => return response,
     };
+    // Read, not `test -e`: an image with no coreutils still answers file reads.
     let ready = vm
-        .exec_in_guest(
-            "/bin/test",
-            &["-e".to_string(), seed::DESKTOP_READY.to_string()],
-            ACT_TIMEOUT,
-        )
+        .read_file_in_guest(seed::DESKTOP_READY, 4096, ACT_TIMEOUT)
         .await
-        .map(|ran| ran.exit_code == Some(0))
-        .unwrap_or(false);
+        .is_ok();
     Json(json!({
         "width": size.width,
         "height": size.height,

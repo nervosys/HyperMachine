@@ -565,6 +565,12 @@ pub(super) async fn launch(
         .await
     {
         Ok(pid) => pid,
+        Err(e) if crate::guest_setup::guest_has_no_shell(&e.to_string()) => {
+            return Err(api_error(
+                StatusCode::BAD_REQUEST,
+                crate::guest_setup::no_shell_message(false, &e.to_string()),
+            ))
+        }
         Err(e) => {
             return Err(api_error(
                 StatusCode::BAD_GATEWAY,

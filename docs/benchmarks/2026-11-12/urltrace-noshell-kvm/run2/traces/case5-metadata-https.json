@@ -1,0 +1,136 @@
+{
+  "hops": [
+    {
+      "url": "https://example.com/",
+      "host": "example.com",
+      "pinned_to": [
+        "example.com"
+      ],
+      "sandbox_id": "sbx-960d4fed5a3c41418717",
+      "tracer_args": [
+        "--resolve",
+        "169.254.169.254"
+      ],
+      "guest_report": {
+        "tool": {
+          "name": "hv2-urltrace",
+          "version": "1.2.0"
+        },
+        "input_url": "https://example.com/",
+        "url": {
+          "scheme": "https",
+          "host": "example.com",
+          "port": 443,
+          "path_and_query": "/"
+        },
+        "resolved": [
+          "169.254.169.254:443"
+        ],
+        "connected_to": null,
+        "tls": null,
+        "request": null,
+        "response": null,
+        "hints": [],
+        "timings_ms": {
+          "resolve": 0,
+          "connect": 10,
+          "tls": null,
+          "first_byte": null,
+          "total": 10
+        },
+        "errors": [
+          {
+            "stage": "connect",
+            "message": "169.254.169.254:443: Connection refused (os error 111)"
+          }
+        ],
+        "notes": []
+      },
+      "node_decisions": {
+        "decisions": [
+          {
+            "at": 1794539874809,
+            "destination": "169.254.169.254:443",
+            "kind": "tcp",
+            "name": null,
+            "reason": "reserved address",
+            "seq": 1,
+            "verdict": "deny"
+          }
+        ],
+        "dropped": 0,
+        "recorded": 1,
+        "stats": {
+          "connectionsAllowed": 0,
+          "connectionsRefused": 1,
+          "dnsAnswered": 0,
+          "dnsRefused": 0,
+          "intercepted": 0
+        }
+      },
+      "flags": {
+        "unexpected_network_activity": [
+          {
+            "entry": {
+              "at": 1794539874809,
+              "destination": "169.254.169.254:443",
+              "kind": "tcp",
+              "name": null,
+              "reason": "reserved address",
+              "seq": 1,
+              "verdict": "deny"
+            },
+            "why": "connection attempt to an address that is not the hop's host's, with no name"
+          }
+        ],
+        "denied": [
+          {
+            "at": 1794539874809,
+            "destination": "169.254.169.254:443",
+            "kind": "tcp",
+            "name": null,
+            "reason": "reserved address",
+            "seq": 1,
+            "verdict": "deny"
+          }
+        ],
+        "notes": []
+      },
+      "errors": [],
+      "timing": {
+        "create_s": 0.031,
+        "exec_s": 0.023,
+        "total_s": 0.094
+      },
+      "create_request": {
+        "templateID": "base",
+        "timeout": 180,
+        "network": {
+          "allowOut": [
+            "example.com"
+          ],
+          "denyOut": [
+            "0.0.0.0/0",
+            "::/0"
+          ]
+        }
+      },
+      "exec_argv": [
+        "/bin/hv2-urltrace",
+        "https://example.com/",
+        "--timeout",
+        "60",
+        "--user-agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "--max-body",
+        "65536",
+        "--resolve",
+        "169.254.169.254"
+      ],
+      "exit_code": 0,
+      "timed_out": false,
+      "guest_stderr": "",
+      "deleted": true
+    }
+  ]
+}

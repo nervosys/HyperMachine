@@ -362,6 +362,11 @@ def main():
                     failed_for_a_missing_file(result)
                 except AssertionError as error:
                     raise AssertionError(f"{key}: {error}")
+            # The shell form, and only it, is a caller error with advice.
+            cmd = out["cmd_form_echo_x"]
+            expect(cmd["http_status"] == 400 and "argv" in text_of(cmd), f"cmd form: not a 400 pointing at argv: {cmd}")
+            for key in ("argv_sh_c_echo_x", "argv_busybox_sh"):
+                expect("instead of cmd" not in text_of(out[key]), f"{key}: argv told to use argv: {out[key]}")
             out["argv_tracer_still_runs"] = exec_raw({"argv": ["/bin/hv2-urltrace", "--help"]})
             return out
         case("11 no shell in the image: /bin/sh, /bin/busybox and the cmd form all fail because the file does not exist", c11)

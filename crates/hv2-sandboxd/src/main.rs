@@ -117,6 +117,8 @@ use hv2_net::gateway::socks::Socks5Proxy;
 use hv2_net::gateway::{mitm::Authority, Gateway, GatewayConfig, GatewayHandle};
 use hv2_net::network_policy::{Cidr, Headers, NetworkPolicy, Verdict};
 
+use guest_setup::{append_ca_without_shell, guest_has_no_shell};
+
 mod boot_diagnostics;
 mod builds;
 mod checkpoint_files;
@@ -128,6 +130,7 @@ mod disks;
 mod env_vars;
 mod forwards;
 mod git_repos;
+mod guest_setup;
 mod history;
 mod identity;
 mod idle;
@@ -4941,20 +4944,10 @@ async fn configure_guest_network(vm: &AgentVM, ca: Option<&str>) -> Result<(), S
         // A guest whose agent is its init links resolv.conf itself, which
         // leaves the CA, and that goes in through the agent's file writes.
         Err(e) if guest_has_no_shell(&e.to_string()) => {
-            const BUNDLE: &str = "/etc/ssl/certs/ca-certificates.crt";
-            let Some(ca) = ca else { return Ok(()) };
-            let wait = Duration::from_secs(10);
-            // An image with no shell usually has no bundle either; one that
-            // does keeps it, with the CA after it as the shell path appends.
-            let mut bundle = vm
-                .read_file_in_guest(BUNDLE, 4 << 20, wait)
-                .await
-                .unwrap_or_default();
-            bundle.extend_from_slice(ca.as_bytes());
-            return vm
-                .write_file_in_guest(BUNDLE, bundle, wait)
-                .await
-                .map_err(|e| format!("configuring the guest's network: writing the CA: {e}"));
+            return match ca {
+                Some(ca) => append_ca_without_shell(vm, ca).await,
+                None => Ok(()),
+            };
         }
         Err(e) => return Err(format!("configuring the guest's network: {e}")),
     };
@@ -4965,12 +4958,6 @@ async fn configure_guest_network(vm: &AgentVM, ca: Option<&str>) -> Result<(), S
         ));
     }
     Ok(())
-}
-
-/// Whether an exec failed because the guest image has no shell at all, which
-/// is a supported kind of image (`build.sh --no-busybox`), not a fault.
-fn guest_has_no_shell(error: &str) -> bool {
-    error.contains("could not start /bin/sh") && error.contains("No such file or directory")
 }
 
 /// The vsock CID and NIC MAC every template-restored sandbox has: the
@@ -6109,6 +6096,9 @@ async fn exec(
         }
     };
 
+    // Only the shell form earns the "send argv instead" answer: an argv that
+    // names /bin/sh itself fails the same way and gets the plain error.
+    let shell_form = req.cmd.is_some();
     let (program, program_args, history_cmd) = match exec_program(req.cmd, req.args, req.argv) {
         Ok(parts) => parts,
         Err(message) => return api_error(StatusCode::BAD_REQUEST, message),
@@ -6152,6 +6142,10 @@ async fn exec(
             timed_out: exec.timed_out,
         })
         .into_response(),
+        Err(e) if shell_form && guest_has_no_shell(&e.to_string()) => api_error(
+            StatusCode::BAD_REQUEST,
+            guest_setup::no_shell_message(true, &e.to_string()),
+        ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": format!("exec_in_guest: {e}") })),

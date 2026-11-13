@@ -1,0 +1,166 @@
+{
+  "hops": [
+    {
+      "url": "https://www.wikipedia.org/",
+      "host": "www.wikipedia.org",
+      "pinned_to": [
+        "www.wikipedia.org"
+      ],
+      "sandbox_id": "sbx-6d8fa8fe77e24012a157",
+      "tracer_args": [],
+      "guest_report": {
+        "tool": {
+          "name": "hv2-urltrace",
+          "version": "1.2.0"
+        },
+        "input_url": "https://www.wikipedia.org/",
+        "url": {
+          "scheme": "https",
+          "host": "www.wikipedia.org",
+          "port": 443,
+          "path_and_query": "/"
+        },
+        "resolved": [],
+        "connected_to": null,
+        "tls": null,
+        "request": null,
+        "response": null,
+        "hints": [],
+        "timings_ms": {
+          "resolve": 5009,
+          "connect": null,
+          "tls": null,
+          "first_byte": null,
+          "total": 5009
+        },
+        "errors": [
+          {
+            "stage": "resolve",
+            "message": "failed to lookup address information: Try again"
+          }
+        ],
+        "notes": []
+      },
+      "node_decisions": {
+        "decisions": [
+          {
+            "at": 1794539887227,
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "www.wikipedia.org",
+            "reason": "the policy would refuse where this name leads",
+            "seq": 1,
+            "verdict": "deny"
+          },
+          {
+            "at": 1794539887227,
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "www.wikipedia.org",
+            "reason": "the policy would refuse where this name leads",
+            "seq": 2,
+            "verdict": "deny"
+          },
+          {
+            "at": 1794539889729,
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "www.wikipedia.org",
+            "reason": "the policy would refuse where this name leads",
+            "seq": 3,
+            "verdict": "deny"
+          },
+          {
+            "at": 1794539889731,
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "www.wikipedia.org",
+            "reason": "the policy would refuse where this name leads",
+            "seq": 4,
+            "verdict": "deny"
+          }
+        ],
+        "dropped": 0,
+        "recorded": 4,
+        "stats": {
+          "connectionsAllowed": 0,
+          "connectionsRefused": 0,
+          "dnsAnswered": 0,
+          "dnsRefused": 4,
+          "intercepted": 0
+        }
+      },
+      "flags": {
+        "unexpected_network_activity": [],
+        "denied": [
+          {
+            "at": 1794539887227,
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "www.wikipedia.org",
+            "reason": "the policy would refuse where this name leads",
+            "seq": 1,
+            "verdict": "deny"
+          },
+          {
+            "at": 1794539887227,
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "www.wikipedia.org",
+            "reason": "the policy would refuse where this name leads",
+            "seq": 2,
+            "verdict": "deny"
+          },
+          {
+            "at": 1794539889729,
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "www.wikipedia.org",
+            "reason": "the policy would refuse where this name leads",
+            "seq": 3,
+            "verdict": "deny"
+          },
+          {
+            "at": 1794539889731,
+            "destination": "10.0.2.3:53",
+            "kind": "dns",
+            "name": "www.wikipedia.org",
+            "reason": "the policy would refuse where this name leads",
+            "seq": 4,
+            "verdict": "deny"
+          }
+        ],
+        "notes": []
+      },
+      "errors": [],
+      "timing": {
+        "create_s": 0.025,
+        "exec_s": 5.023,
+        "total_s": 5.095
+      },
+      "create_request": {
+        "templateID": "base",
+        "timeout": 180,
+        "network": {
+          "allowOut": [
+            "example.com"
+          ]
+        }
+      },
+      "exec_argv": [
+        "/bin/hv2-urltrace",
+        "https://www.wikipedia.org/",
+        "--timeout",
+        "60",
+        "--user-agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "--max-body",
+        "65536"
+      ],
+      "exit_code": 0,
+      "timed_out": false,
+      "guest_stderr": "",
+      "deleted": true
+    }
+  ]
+}

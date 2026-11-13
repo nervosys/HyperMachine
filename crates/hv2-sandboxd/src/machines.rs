@@ -553,20 +553,31 @@ async fn boot(state: &Arc<AppState>, machine: &Stored) -> Result<(), String> {
 async fn configure_network(vm: &AgentVM, ca: Option<&str>) -> Result<(), String> {
     let mut script = String::from("mkdir -p /etc && ln -sf /proc/net/pnp /etc/resolv.conf");
     // A line of the certificate's base64 body: enough to recognise it by.
-    let marker = ca.and_then(|ca| ca.lines().nth(1));
+    let marker = ca.and_then(crate::guest_setup::ca_marker);
     if let (Some(ca), Some(marker)) = (ca, marker) {
         script.push_str(&format!(
             " && mkdir -p /etc/ssl/certs && {{ grep -qF '{marker}' /etc/ssl/certs/ca-certificates.crt 2>/dev/null || printf '%s' '{ca}' >> /etc/ssl/certs/ca-certificates.crt; }}"
         ));
     }
-    let setup = vm
+    let setup = match vm
         .exec_in_guest(
             "/bin/sh",
             &["-c".to_string(), script],
             Duration::from_secs(10),
         )
         .await
-        .map_err(|e| format!("configuring the guest's network: {e}"))?;
+    {
+        Ok(setup) => setup,
+        // An image whose agent is its init links resolv.conf itself; only the
+        // CA is left, and that goes in through the agent's file writes.
+        Err(e) if crate::guest_setup::guest_has_no_shell(&e.to_string()) => {
+            return match ca {
+                Some(ca) => crate::guest_setup::append_ca_without_shell(vm, ca).await,
+                None => Ok(()),
+            };
+        }
+        Err(e) => return Err(format!("configuring the guest's network: {e}")),
+    };
     if setup.exit_code != Some(0) {
         return Err(format!(
             "configuring the guest's network exited {:?}: {}",
@@ -1438,6 +1449,10 @@ pub(crate) async fn exec(
             "stderr": out.stderr,
         }))
         .into_response(),
+        Err(e) if crate::guest_setup::guest_has_no_shell(&e.to_string()) => api_error(
+            StatusCode::BAD_REQUEST,
+            crate::guest_setup::no_shell_message(false, &e.to_string()),
+        ),
         Err(e) => api_error(StatusCode::BAD_GATEWAY, format!("exec: {e}")),
     }
 }

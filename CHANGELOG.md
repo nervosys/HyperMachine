@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Every CI job failed on rustc 1.100.** Its new unreachable-code lint
+  rejected `e.to_string()` on `ThreadRng`'s `Infallible` error in
+  `hv2-core` `crypto::fips` (now an irrefutable `let Ok(())`), and its
+  clippy flagged index-only range loops in hv2-core (gdb, dirty tracking,
+  perf), hv1-arm (vGIC), hv1-core (interrupts) and hv2-context, and a
+  needless bool in hv2-cluster; all rewritten as iterators.
+- **Guests with no shell broke three more node paths.** Machine boot's
+  network setup now adds the egress CA through the agent's file writes
+  when `/bin/sh` is missing (and, like the shell path, skips a CA the
+  bundle already holds); shell-form exec on such a guest answers 400 with
+  advice instead of 500 (sandbox exec points at `argv`; machine exec and
+  runs say the route needs a shell); and desktop readiness reads its
+  marker file instead of running `/bin/test`. Checked on KVM for sandbox
+  exec (docs/benchmarks/2026-11-12/urltrace-noshell-kvm); the machine
+  paths are not yet run on a guest.
 - **Seven hv2-cluster tests failed on Windows CI with error 10013.** Each
   bound an ephemeral TCP port and then UDP on the same number, but Windows
   reserves port ranges per protocol, so a port free for TCP can be
