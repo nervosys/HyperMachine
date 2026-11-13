@@ -268,6 +268,124 @@ pub enum Operation {
     /// root filesystem. Answered with [`OpResult::Stats`] -- one round trip,
     /// for a host sampling every sandbox every few seconds.
     Stats,
+
+    /// List a directory without a shell: one [`DirEntry`] per name in it,
+    /// each as `lstat` sees it (a symlink is reported as a symlink, never
+    /// followed). Not recursive; `.` and `..` are omitted.
+    ///
+    /// `limit` caps the entries returned (`0` means [`MAX_DIR_ENTRIES`], and
+    /// nothing above that is honoured); the answer is also bounded by
+    /// [`MAX_DIR_REPLY_BYTES`], and says `truncated` when either cut it short.
+    /// The entries returned are sorted by name.
+    ///
+    /// Answered with [`OpResult::DirEntries`]. An agent from before this
+    /// operation existed drops the connection instead of answering.
+    ListDir {
+        path: String,
+        #[serde(default)]
+        limit: u32,
+    },
+
+    /// `stat` one path (`lstat` unless `follow`).
+    ///
+    /// Answered with [`OpResult::FileStat`], whose `name` is `path` as given;
+    /// a missing path is [`OpResult::Failed`] with the OS's reason.
+    Stat {
+        path: String,
+        #[serde(default)]
+        follow: bool,
+    },
+
+    /// Make a directory (`mkdir`, or `mkdir -p` with `parents`).
+    ///
+    /// Without `parents`, an existing path is an error and a missing parent
+    /// is too. With it, an existing directory is success and untouched.
+    /// `owner` (as for [`Operation::WriteFile`]: a user by name or number, or
+    /// [`TEMPLATE_USER`]) and `mode` (permission bits, `0o7777` at most, applied
+    /// exactly, not through the umask) are given to every directory this call
+    /// created, and only those.
+    ///
+    /// Answered with [`OpResult::Acknowledged`].
+    MakeDir {
+        path: String,
+        #[serde(default)]
+        parents: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        owner: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mode: Option<u32>,
+    },
+
+    /// Delete a file, symlink or directory (`rm`, or `rm -r` with
+    /// `recursive`). A symlink is removed itself and never followed, at the
+    /// top or inside a tree. An empty path and `/` (however spelled, and any
+    /// path ending in `.` or `..`) are refused. A missing path is an error
+    /// unless `missing_ok`. A directory needs `recursive` unless empty.
+    ///
+    /// Answered with [`OpResult::Acknowledged`].
+    Remove {
+        path: String,
+        #[serde(default)]
+        recursive: bool,
+        #[serde(default)]
+        missing_ok: bool,
+    },
+
+    /// `chown` and `chmod`: `owner` as for [`Operation::MakeDir`] (an
+    /// explicit root is applied), `mode` permission bits (`0o7777` at most).
+    /// A symlink has its own owner changed (`lchown`) and its mode left
+    /// alone, since a link has none. `recursive` walks a directory's tree
+    /// without following any symlink. At least one of the two is required.
+    ///
+    /// Answered with [`OpResult::Acknowledged`].
+    SetAttr {
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        owner: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mode: Option<u32>,
+        #[serde(default)]
+        recursive: bool,
+    },
+}
+
+/// The most entries one [`OpResult::DirEntries`] carries.
+pub const MAX_DIR_ENTRIES: usize = 10_000;
+
+/// The most an [`OpResult::DirEntries`] may weigh, estimated at its entries'
+/// JSON size with worst-case escaping, so the frame stays well under
+/// [`MAX_FRAME_BYTES`].
+pub const MAX_DIR_REPLY_BYTES: usize = 4 * 1024 * 1024;
+
+/// What a [`DirEntry`] is.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DirEntryKind {
+    File,
+    Dir,
+    Symlink,
+    /// A device, socket, FIFO...
+    Other,
+}
+
+/// One filesystem entry, from `lstat` or `stat`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DirEntry {
+    /// The entry's name in a listing; the requested path in a [`OpResult::FileStat`].
+    /// A name that is not UTF-8 is converted lossily.
+    pub name: String,
+    /// Named `type` on the wire: `kind` is the tag of [`OpResult::FileStat`],
+    /// which carries this struct flattened into it.
+    #[serde(rename = "type")]
+    pub kind: DirEntryKind,
+    /// Size in bytes (a symlink's is its target's length).
+    pub size: u64,
+    /// Permission bits including setuid/setgid/sticky (`0o7777`), not the type.
+    pub mode: u32,
+    pub uid: u32,
+    pub gid: u32,
+    /// Last modification, seconds since the Unix epoch (negative before it).
+    pub mtime_secs: i64,
 }
 
 /// The most file data one [`Operation::WriteFile`] or
@@ -414,6 +532,15 @@ pub enum OpResult {
     },
     /// Answer to [`Operation::Stats`].
     Stats(GuestStats),
+    /// Answer to [`Operation::ListDir`].
+    DirEntries {
+        entries: Vec<DirEntry>,
+        /// More entries exist than were returned (the entry or byte cap).
+        #[serde(default)]
+        truncated: bool,
+    },
+    /// Answer to [`Operation::Stat`].
+    FileStat(DirEntry),
     /// The request could not be carried out at all.
     Failed { message: String },
 }
@@ -842,5 +969,155 @@ mod b64_tests {
         for bad in ["Zg=", "Z===", "Zg==Zg==", "Zm9v!", "Zg=a"] {
             assert_eq!(b64::decode(bad), None, "{bad}");
         }
+    }
+}
+
+#[cfg(test)]
+mod filesystem_op_tests {
+    use super::*;
+
+    fn entry(name: &str, kind: DirEntryKind) -> DirEntry {
+        DirEntry {
+            name: name.to_string(),
+            kind,
+            size: 12,
+            mode: 0o644,
+            uid: 1000,
+            gid: 1000,
+            mtime_secs: -5,
+        }
+    }
+
+    #[test]
+    fn every_filesystem_operation_and_answer_survives_a_round_trip() {
+        let ops = [
+            Operation::ListDir {
+                path: "/etc".into(),
+                limit: 50,
+            },
+            Operation::Stat {
+                path: "/etc/passwd".into(),
+                follow: true,
+            },
+            Operation::MakeDir {
+                path: "/a/b".into(),
+                parents: true,
+                owner: Some(TEMPLATE_USER.into()),
+                mode: Some(0o750),
+            },
+            Operation::Remove {
+                path: "/tmp/x".into(),
+                recursive: true,
+                missing_ok: true,
+            },
+            Operation::SetAttr {
+                path: "/srv".into(),
+                owner: Some("1000".into()),
+                mode: Some(0o755),
+                recursive: true,
+            },
+        ];
+        for op in ops {
+            let request = Request {
+                id: 9,
+                version: PROTOCOL_VERSION,
+                op: op.clone(),
+            };
+            let bytes = encode(&request).expect("encode");
+            let (back, _) = decode::<Request>(&bytes).expect("decode").expect("a frame");
+            assert_eq!(back.op, op);
+        }
+        let results = [
+            OpResult::DirEntries {
+                entries: vec![
+                    entry("f", DirEntryKind::File),
+                    entry("d", DirEntryKind::Dir),
+                    entry("l", DirEntryKind::Symlink),
+                    entry("p", DirEntryKind::Other),
+                ],
+                truncated: true,
+            },
+            OpResult::FileStat(entry("/etc/passwd", DirEntryKind::File)),
+        ];
+        for result in results {
+            let response = Response {
+                id: 9,
+                version: PROTOCOL_VERSION,
+                result: result.clone(),
+            };
+            let bytes = encode(&response).expect("encode");
+            let (back, _) = decode::<Response>(&bytes)
+                .expect("decode")
+                .expect("a frame");
+            assert_eq!(back.result, result);
+        }
+    }
+
+    #[test]
+    fn a_frame_without_the_optional_fields_still_decodes() {
+        let op: Operation = serde_json::from_str(r#"{"kind":"list_dir","path":"/"}"#).unwrap();
+        assert_eq!(
+            op,
+            Operation::ListDir {
+                path: "/".into(),
+                limit: 0
+            }
+        );
+        let op: Operation = serde_json::from_str(r#"{"kind":"stat","path":"/x"}"#).unwrap();
+        assert_eq!(
+            op,
+            Operation::Stat {
+                path: "/x".into(),
+                follow: false
+            }
+        );
+        let op: Operation = serde_json::from_str(r#"{"kind":"make_dir","path":"/x"}"#).unwrap();
+        assert_eq!(
+            op,
+            Operation::MakeDir {
+                path: "/x".into(),
+                parents: false,
+                owner: None,
+                mode: None
+            }
+        );
+        let op: Operation = serde_json::from_str(r#"{"kind":"remove","path":"/x"}"#).unwrap();
+        assert_eq!(
+            op,
+            Operation::Remove {
+                path: "/x".into(),
+                recursive: false,
+                missing_ok: false
+            }
+        );
+        let op: Operation = serde_json::from_str(r#"{"kind":"set_attr","path":"/x"}"#).unwrap();
+        assert_eq!(
+            op,
+            Operation::SetAttr {
+                path: "/x".into(),
+                owner: None,
+                mode: None,
+                recursive: false
+            }
+        );
+        // And the compact side: unset options are not sent at all.
+        let json = serde_json::to_string(&Operation::MakeDir {
+            path: "/x".into(),
+            parents: false,
+            owner: None,
+            mode: None,
+        })
+        .unwrap();
+        assert_eq!(json, r#"{"kind":"make_dir","path":"/x","parents":false}"#);
+    }
+
+    #[test]
+    fn the_answers_have_a_stable_shape() {
+        let json =
+            serde_json::to_string(&OpResult::FileStat(entry("/a", DirEntryKind::Symlink))).unwrap();
+        assert_eq!(
+            json,
+            r#"{"kind":"file_stat","name":"/a","type":"symlink","size":12,"mode":420,"uid":1000,"gid":1000,"mtime_secs":-5}"#
+        );
     }
 }

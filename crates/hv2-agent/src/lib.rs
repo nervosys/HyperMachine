@@ -91,10 +91,13 @@ pub use events::{
 };
 pub use gpu_host::{GpuDescriptor, GpuHost, InMemoryGpuHost};
 pub use guest_agent::{
-    GuestAgent, GuestChannel, GuestExec, GuestOutput, VsockChannel, VsockStream,
+    is_unsupported_op, GuestAgent, GuestChannel, GuestExec, GuestOutput, VsockChannel, VsockStream,
+    UNSUPPORTED_OP_PREFIX,
 };
 /// A terminal size, re-exported so callers need no direct guest-agent dependency.
 pub use hv2_guest_agent::PtySize;
+/// Directory entries, re-exported for the guest filesystem operations.
+pub use hv2_guest_agent::{DirEntry, DirEntryKind};
 pub use image_host::{AdmissionVerdict, ImageDescriptor, ImageHost, RegistryImageHost};
 pub use learning::{
     ActionValue, Experience, ExperienceBuffer, LearningConfig, LearningError, LearningRateSchedule,

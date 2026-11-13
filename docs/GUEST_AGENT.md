@@ -107,6 +107,32 @@ The vsock transport module is `vmw_vsock_virtio_transport`. Stock distribution
 kernels load it automatically once the device is probed; a minimal kernel needs
 `CONFIG_VSOCKETS=y` and `CONFIG_VIRTIO_VSOCKETS=y`.
 
+## Filesystem operations
+
+Five operations let the host inspect and change a guest's files with no shell,
+`mkdir`, `rm`, `stat` or `tar` in the image. They are additive: the protocol
+version is still 3. Each is an `Operation` (tagged by `kind`) and, on the host,
+an `AgentVM::*_in_guest` method.
+
+| Operation | Answered with | Notes |
+|---|---|---|
+| `list_dir {path, limit}` | `dir_entries {entries, truncated}` | `lstat` per entry, sorted by name, no `.`/`..`; at most 10 000 entries and about 4 MiB (`limit` 0 means the cap); `truncated` when either cut it |
+| `stat {path, follow}` | `file_stat {name, type, size, mode, uid, gid, mtime_secs}` | `lstat` unless `follow`; `name` is the requested path |
+| `make_dir {path, parents, owner, mode}` | `acknowledged` | `mkdir -p` with `parents`; `owner` and `mode` go only to directories this call created; `mode` is exact, not masked by umask |
+| `remove {path, recursive, missing_ok}` | `acknowledged` | never follows a symlink; refuses `""`, `/` and paths ending in `.` or `..`; a missing path fails unless `missing_ok` |
+| `set_attr {path, owner, mode, recursive}` | `acknowledged` | `lchown` and `chmod`; a symlink's mode is left alone; recursion does not follow symlinks |
+
+`owner` is a user by name or number, or `@template` for the template's user,
+as for `write_file`. Optional fields are omitted from the frame when unset.
+
+A guest image built before these existed cannot answer them: its agent fails
+to parse the request and drops the connection. The host reports that as
+`hv2_agent::is_unsupported_op(&err)` (the message starts
+`this guest agent does not support <op>`), but only after a ping on a fresh
+connection is answered, so a guest that simply died is not mistaken for an old
+one. A caller that must work on old images falls back to its shell path on
+that error.
+
 ## Trust
 
 The agent runs whatever the host asks, as whatever user started it, and does no

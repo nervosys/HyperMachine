@@ -745,6 +745,142 @@ impl AgentVM {
         .map_err(|e| AgentError::Script(format!("guest file read task failed: {e}")))?
     }
 
+    /// Run one filesystem operation on a fresh agent connection.
+    ///
+    /// An agent from before these operations hangs up on the request, which
+    /// the client reports as [`crate::is_unsupported_op`]; a guest that died
+    /// does the same. So that error is believed only if a ping on a new
+    /// connection is answered; otherwise it is the transport failure it is.
+    async fn fs_op<T: Send + 'static>(
+        &self,
+        what: &'static str,
+        timeout: Duration,
+        run: impl FnOnce(&mut GuestAgent) -> Result<T> + Send + 'static,
+    ) -> Result<T> {
+        let device = self.file_channel()?;
+        tokio::task::spawn_blocking(move || {
+            let mut agent = GuestAgent::over_vsock(device.clone(), timeout)?;
+            match run(&mut agent) {
+                Err(e) if crate::is_unsupported_op(&e) => {
+                    drop(agent);
+                    match GuestAgent::over_vsock(device, timeout).and_then(|mut a| a.ping(timeout))
+                    {
+                        Ok(_) => Err(e),
+                        Err(_) => Err(AgentError::Script(format!(
+                            "the connection to the guest agent closed during {what}"
+                        ))),
+                    }
+                }
+                other => other,
+            }
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest {what} task failed: {e}")))?
+    }
+
+    /// List a directory in the guest: its entries, sorted by name and as
+    /// `lstat` sees them, and whether the list was cut short at `limit`
+    /// (0 is the agent's cap of `hv2_guest_agent::MAX_DIR_ENTRIES`).
+    ///
+    /// # Errors
+    ///
+    /// Requires the `GuestExec` capability; propagates the guest's refusal.
+    /// [`crate::is_unsupported_op`] says the guest image's agent predates
+    /// this, and the caller may fall back to a shell.
+    pub async fn list_dir_in_guest(
+        &self,
+        path: &str,
+        limit: u32,
+        timeout: Duration,
+    ) -> Result<(Vec<hv2_guest_agent::DirEntry>, bool)> {
+        let path = path.to_string();
+        self.fs_op("directory listing", timeout, move |a| {
+            a.list_dir(&path, limit, timeout)
+        })
+        .await
+    }
+
+    /// `stat` a path in the guest (`lstat` unless `follow`).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::list_dir_in_guest`]; a missing path is the guest's refusal.
+    pub async fn stat_in_guest(
+        &self,
+        path: &str,
+        follow: bool,
+        timeout: Duration,
+    ) -> Result<hv2_guest_agent::DirEntry> {
+        let path = path.to_string();
+        self.fs_op("stat", timeout, move |a| a.stat(&path, follow, timeout))
+            .await
+    }
+
+    /// Make a directory in the guest (`mkdir -p` with `parents`), owned by
+    /// `owner` (as for [`Self::write_file_in_guest_as`]) with `mode`: both
+    /// given to the directories made, not to ones already there.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::list_dir_in_guest`].
+    pub async fn make_dir_in_guest(
+        &self,
+        path: &str,
+        parents: bool,
+        owner: Option<&str>,
+        mode: Option<u32>,
+        timeout: Duration,
+    ) -> Result<()> {
+        let path = path.to_string();
+        let owner = owner.map(str::to_string);
+        self.fs_op("directory creation", timeout, move |a| {
+            a.make_dir(&path, parents, owner.as_deref(), mode, timeout)
+        })
+        .await
+    }
+
+    /// Delete a path in the guest, never following a symlink; `/` is refused.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::list_dir_in_guest`]; a missing path is the guest's refusal
+    /// unless `missing_ok`.
+    pub async fn remove_in_guest(
+        &self,
+        path: &str,
+        recursive: bool,
+        missing_ok: bool,
+        timeout: Duration,
+    ) -> Result<()> {
+        let path = path.to_string();
+        self.fs_op("removal", timeout, move |a| {
+            a.remove(&path, recursive, missing_ok, timeout)
+        })
+        .await
+    }
+
+    /// `chown` and/or `chmod` a path in the guest, optionally through its
+    /// tree without following symlinks.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::list_dir_in_guest`].
+    pub async fn set_attr_in_guest(
+        &self,
+        path: &str,
+        owner: Option<&str>,
+        mode: Option<u32>,
+        recursive: bool,
+        timeout: Duration,
+    ) -> Result<()> {
+        let path = path.to_string();
+        let owner = owner.map(str::to_string);
+        self.fs_op("attribute change", timeout, move |a| {
+            a.set_attr(&path, owner.as_deref(), mode, recursive, timeout)
+        })
+        .await
+    }
+
     /// The guest channel, for moving files: gated as running a command is,
     /// since writing any file is as much power over the guest.
     fn file_channel(

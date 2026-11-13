@@ -57,8 +57,9 @@ fn main() {
 #[cfg(target_os = "linux")]
 mod linux {
     use hv2_guest_agent::{
-        decode, encode, truncate_utf8, OpResult, Operation, PtySize, Request, Response,
-        TemplateDefaults, GUEST_AGENT_PORT, MAX_FRAME_BYTES, MAX_OUTPUT_BYTES, PROTOCOL_VERSION,
+        decode, encode, truncate_utf8, DirEntry, DirEntryKind, OpResult, Operation, PtySize,
+        Request, Response, TemplateDefaults, GUEST_AGENT_PORT, MAX_DIR_ENTRIES,
+        MAX_DIR_REPLY_BYTES, MAX_FRAME_BYTES, MAX_OUTPUT_BYTES, PROTOCOL_VERSION,
         TEMPLATE_DEFAULTS_PATH, TEMPLATE_USER,
     };
     use std::collections::{BTreeMap, HashMap};
@@ -1063,6 +1064,25 @@ mod linux {
                 length,
             } => read_file(&path, offset, length),
             Operation::Stats => OpResult::Stats(stats()),
+            Operation::ListDir { path, limit } => list_dir(&path, limit),
+            Operation::Stat { path, follow } => stat_path(&path, follow),
+            Operation::MakeDir {
+                path,
+                parents,
+                owner,
+                mode,
+            } => make_dir(&path, parents, owner.as_deref(), mode),
+            Operation::Remove {
+                path,
+                recursive,
+                missing_ok,
+            } => remove(&path, recursive, missing_ok),
+            Operation::SetAttr {
+                path,
+                owner,
+                mode,
+                recursive,
+            } => set_attr(&path, owner.as_deref(), mode, recursive),
             // Served in `serve`, which owns the connection it takes.
             Operation::Forward { .. }
             | Operation::Listen { .. }
@@ -1227,6 +1247,243 @@ mod linux {
             data: hv2_guest_agent::b64::encode(&buf[..got]),
             size,
         }
+    }
+
+    /// One entry as `meta` (from `lstat` unless the caller followed) sees it.
+    fn dir_entry(name: String, meta: &std::fs::Metadata) -> DirEntry {
+        use std::os::unix::fs::MetadataExt;
+        let file_type = meta.file_type();
+        let kind = if file_type.is_symlink() {
+            DirEntryKind::Symlink
+        } else if file_type.is_dir() {
+            DirEntryKind::Dir
+        } else if file_type.is_file() {
+            DirEntryKind::File
+        } else {
+            DirEntryKind::Other
+        };
+        DirEntry {
+            name,
+            kind,
+            size: meta.size(),
+            mode: meta.mode() & 0o7777,
+            uid: meta.uid(),
+            gid: meta.gid(),
+            mtime_secs: meta.mtime(),
+        }
+    }
+
+    fn fs_failed(what: &str, path: &str, e: &dyn std::fmt::Display) -> OpResult {
+        OpResult::Failed {
+            message: format!("{what} {path}: {e}"),
+        }
+    }
+
+    /// An owner as [`Operation::WriteFile`] names one, but an explicit root
+    /// is kept: `chown root` is a request, where a write's root is "leave it".
+    fn resolve_owner(owner: Option<&str>) -> Result<Option<Account>, String> {
+        let owner = match owner {
+            Some(TEMPLATE_USER) => template_defaults().user,
+            other => other.map(str::to_string),
+        };
+        owner.as_deref().map(Account::of).transpose()
+    }
+
+    /// See [`Operation::ListDir`].
+    fn list_dir(path: &str, limit: u32) -> OpResult {
+        let cap = match limit {
+            0 => MAX_DIR_ENTRIES,
+            n => (n as usize).min(MAX_DIR_ENTRIES),
+        };
+        let reader = match std::fs::read_dir(path) {
+            Ok(reader) => reader,
+            Err(e) => return fs_failed("listing", path, &e),
+        };
+        let mut entries = Vec::new();
+        let mut weight = 0usize;
+        let mut truncated = false;
+        for item in reader {
+            let item = match item {
+                Ok(item) => item,
+                Err(e) => return fs_failed("listing", path, &e),
+            };
+            let name = item.file_name().to_string_lossy().into_owned();
+            let meta = match std::fs::symlink_metadata(item.path()) {
+                Ok(meta) => meta,
+                // Gone between the directory read and the stat.
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(e) => return fs_failed("listing", path, &e),
+            };
+            // Fixed keys and numbers, plus the name at JSON's worst escaping.
+            let cost = 200 + name.len() * 6;
+            if entries.len() >= cap || weight + cost > MAX_DIR_REPLY_BYTES {
+                truncated = true;
+                break;
+            }
+            weight += cost;
+            entries.push(dir_entry(name, &meta));
+        }
+        entries.sort_by(|a, b| a.name.cmp(&b.name));
+        OpResult::DirEntries { entries, truncated }
+    }
+
+    /// See [`Operation::Stat`].
+    fn stat_path(path: &str, follow: bool) -> OpResult {
+        let meta = if follow {
+            std::fs::metadata(path)
+        } else {
+            std::fs::symlink_metadata(path)
+        };
+        match meta {
+            Ok(meta) => OpResult::FileStat(dir_entry(path.to_string(), &meta)),
+            Err(e) => fs_failed("stat", path, &e),
+        }
+    }
+
+    /// See [`Operation::MakeDir`].
+    fn make_dir(path: &str, parents: bool, owner: Option<&str>, mode: Option<u32>) -> OpResult {
+        use std::os::unix::fs::PermissionsExt;
+        if path.is_empty() {
+            return fs_failed("making", "an empty path", &"nothing to make");
+        }
+        if mode.is_some_and(|m| m > 0o7777) {
+            return fs_failed("making", path, &"mode is more than the 0o7777 bits");
+        }
+        let account = match resolve_owner(owner) {
+            Ok(account) => account,
+            Err(e) => return fs_failed("owning", path, &e),
+        };
+        // What this call makes, outermost first: only those are given the
+        // owner and mode, never a directory that was already there.
+        let mut made = Vec::new();
+        if parents {
+            let mut missing = Some(std::path::Path::new(path));
+            while let Some(dir) = missing
+                .filter(|d| !d.as_os_str().is_empty() && std::fs::symlink_metadata(d).is_err())
+            {
+                made.push(dir.to_path_buf());
+                missing = dir.parent();
+            }
+            made.reverse();
+            if let Err(e) = std::fs::create_dir_all(path) {
+                return fs_failed("making", path, &e);
+            }
+        } else {
+            if let Err(e) = std::fs::create_dir(path) {
+                return fs_failed("making", path, &e);
+            }
+            made.push(std::path::PathBuf::from(path));
+        }
+        for dir in &made {
+            let shown = dir.display().to_string();
+            if let Some(account) = &account {
+                if let Err(e) = std::os::unix::fs::chown(dir, Some(account.uid), Some(account.gid))
+                {
+                    return fs_failed("giving the owner", &shown, &e);
+                }
+            }
+            if let Some(mode) = mode {
+                if let Err(e) = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(mode))
+                {
+                    return fs_failed("setting the mode of", &shown, &e);
+                }
+            }
+        }
+        OpResult::Acknowledged
+    }
+
+    /// See [`Operation::Remove`].
+    fn remove(path: &str, recursive: bool, missing_ok: bool) -> OpResult {
+        let trimmed = path.trim_end_matches('/');
+        let last = std::path::Path::new(path).components().next_back();
+        if trimmed.is_empty()
+            || trimmed == "."
+            || trimmed.ends_with("/.")
+            || !matches!(last, Some(std::path::Component::Normal(_)))
+        {
+            return fs_failed(
+                "refusing to remove",
+                &format!("{path:?}"),
+                &"not inside the tree",
+            );
+        }
+        let meta = match std::fs::symlink_metadata(path) {
+            Ok(meta) => meta,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound && missing_ok => {
+                return OpResult::Acknowledged
+            }
+            Err(e) => return fs_failed("removing", path, &e),
+        };
+        // `lstat`, so a link to a directory is a link: removed, not entered.
+        // The standard library's recursive removal does not follow links it
+        // meets inside the tree either.
+        let done = if meta.is_dir() {
+            if recursive {
+                std::fs::remove_dir_all(path)
+            } else {
+                std::fs::remove_dir(path)
+            }
+        } else {
+            std::fs::remove_file(path)
+        };
+        match done {
+            Ok(()) => OpResult::Acknowledged,
+            Err(e) => fs_failed("removing", path, &e),
+        }
+    }
+
+    /// See [`Operation::SetAttr`].
+    fn set_attr(path: &str, owner: Option<&str>, mode: Option<u32>, recursive: bool) -> OpResult {
+        use std::os::unix::fs::PermissionsExt;
+        if owner.is_none() && mode.is_none() {
+            return fs_failed("changing", path, &"neither an owner nor a mode was given");
+        }
+        if mode.is_some_and(|m| m > 0o7777) {
+            return fs_failed("changing", path, &"mode is more than the 0o7777 bits");
+        }
+        let account = match resolve_owner(owner) {
+            Ok(account) => account,
+            Err(e) => return fs_failed("owning", path, &e),
+        };
+        let mut stack = vec![std::path::PathBuf::from(path)];
+        while let Some(entry) = stack.pop() {
+            let shown = entry.display().to_string();
+            let meta = match std::fs::symlink_metadata(&entry) {
+                Ok(meta) => meta,
+                Err(e) => return fs_failed("changing", &shown, &e),
+            };
+            // Read before changing: a mode with no read bit would hide it.
+            if recursive && meta.is_dir() {
+                match std::fs::read_dir(&entry) {
+                    Ok(reader) => {
+                        for child in reader {
+                            match child {
+                                Ok(child) => stack.push(child.path()),
+                                Err(e) => return fs_failed("listing", &shown, &e),
+                            }
+                        }
+                    }
+                    Err(e) => return fs_failed("listing", &shown, &e),
+                }
+            }
+            // Owner first: changing it clears setuid and setgid.
+            if let Some(account) = &account {
+                if let Err(e) =
+                    std::os::unix::fs::lchown(&entry, Some(account.uid), Some(account.gid))
+                {
+                    return fs_failed("giving the owner", &shown, &e);
+                }
+            }
+            // A link has no mode, and chmod would change its target's.
+            if let Some(mode) = mode.filter(|_| !meta.file_type().is_symlink()) {
+                if let Err(e) =
+                    std::fs::set_permissions(&entry, std::fs::Permissions::from_mode(mode))
+                {
+                    return fs_failed("setting the mode of", &shown, &e);
+                }
+            }
+        }
+        OpResult::Acknowledged
     }
 
     /// See [`Operation::Restored`]: clock first, then a forced reseed.
@@ -1973,6 +2230,251 @@ mod linux {
             stderr,
             truncated: out_cut || err_cut,
             timed_out,
+        }
+    }
+
+    #[cfg(test)]
+    mod filesystem_op_tests {
+        use super::*;
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        use std::path::{Path, PathBuf};
+
+        fn scratch(name: &str) -> PathBuf {
+            let dir =
+                std::env::temp_dir().join(format!("hv2-agentd-fs-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            dir
+        }
+
+        fn s(p: &Path) -> &str {
+            p.to_str().unwrap()
+        }
+
+        fn failure(result: OpResult) -> String {
+            match result {
+                OpResult::Failed { message } => message,
+                other => panic!("expected a failure, got {other:?}"),
+            }
+        }
+
+        fn mode(p: &Path) -> u32 {
+            std::fs::metadata(p).unwrap().permissions().mode() & 0o7777
+        }
+
+        #[test]
+        fn list_dir_reports_each_kind_without_following_links() {
+            let root = scratch("list");
+            std::fs::write(root.join("f"), b"hello").unwrap();
+            std::fs::create_dir(root.join("d")).unwrap();
+            symlink("/etc", root.join("l")).unwrap();
+            let OpResult::DirEntries { entries, truncated } = list_dir(s(&root), 0) else {
+                panic!("not a listing")
+            };
+            assert!(!truncated);
+            let seen: Vec<_> = entries.iter().map(|e| (e.name.as_str(), e.kind)).collect();
+            assert_eq!(
+                seen,
+                [
+                    ("d", DirEntryKind::Dir),
+                    ("f", DirEntryKind::File),
+                    ("l", DirEntryKind::Symlink)
+                ]
+            );
+            assert_eq!(entries[1].size, 5);
+            assert_eq!(entries[1].mode & 0o600, 0o600);
+            assert!(failure(list_dir(s(&root.join("f")), 0)).contains("listing"));
+            assert!(failure(list_dir(s(&root.join("nope")), 0)).contains("No such file"));
+        }
+
+        #[test]
+        fn list_dir_truncates_at_the_limit_and_the_cap() {
+            let root = scratch("trunc");
+            for i in 0..5 {
+                std::fs::write(root.join(format!("f{i}")), b"").unwrap();
+            }
+            let OpResult::DirEntries { entries, truncated } = list_dir(s(&root), 3) else {
+                panic!("not a listing")
+            };
+            assert_eq!((entries.len(), truncated), (3, true));
+            let OpResult::DirEntries { entries, truncated } = list_dir(s(&root), 5) else {
+                panic!("not a listing")
+            };
+            assert_eq!((entries.len(), truncated), (5, false));
+            // The cap is a constant no limit can raise.
+            let big = scratch("trunc-big");
+            for i in 0..(MAX_DIR_ENTRIES + 5) {
+                std::fs::write(big.join(format!("{i:05}")), b"").unwrap();
+            }
+            let OpResult::DirEntries { entries, truncated } = list_dir(s(&big), u32::MAX) else {
+                panic!("not a listing")
+            };
+            assert_eq!((entries.len(), truncated), (MAX_DIR_ENTRIES, true));
+            let answer = Response {
+                id: 1,
+                version: PROTOCOL_VERSION,
+                result: OpResult::DirEntries { entries, truncated },
+            };
+            assert!(encode(&answer).unwrap().len() < MAX_FRAME_BYTES);
+        }
+
+        #[test]
+        fn stat_follows_a_link_only_when_asked() {
+            let root = scratch("stat");
+            std::fs::create_dir(root.join("d")).unwrap();
+            symlink(root.join("d"), root.join("l")).unwrap();
+            let OpResult::FileStat(link) = stat_path(s(&root.join("l")), false) else {
+                panic!("no stat")
+            };
+            assert_eq!(link.kind, DirEntryKind::Symlink);
+            assert_eq!(link.name, s(&root.join("l")));
+            let OpResult::FileStat(target) = stat_path(s(&root.join("l")), true) else {
+                panic!("no stat")
+            };
+            assert_eq!(target.kind, DirEntryKind::Dir);
+            assert!(failure(stat_path(s(&root.join("x")), false)).contains("No such file"));
+            // A dangling link is a link to lstat and an error to stat.
+            symlink(root.join("gone"), root.join("dangling")).unwrap();
+            assert!(matches!(
+                stat_path(s(&root.join("dangling")), false),
+                OpResult::FileStat(_)
+            ));
+            assert!(matches!(
+                stat_path(s(&root.join("dangling")), true),
+                OpResult::Failed { .. }
+            ));
+        }
+
+        #[test]
+        fn make_dir_needs_parents_to_make_them() {
+            let root = scratch("mkdir");
+            let deep = root.join("a/b/c");
+            assert!(failure(make_dir(s(&deep), false, None, None)).contains("No such file"));
+            assert_eq!(
+                make_dir(s(&deep), true, None, Some(0o750)),
+                OpResult::Acknowledged
+            );
+            for dir in ["a", "a/b", "a/b/c"] {
+                assert_eq!(mode(&root.join(dir)), 0o750, "{dir}");
+            }
+            // Existing: fine with parents, an error without, and untouched.
+            assert_eq!(
+                make_dir(s(&deep), true, None, Some(0o700)),
+                OpResult::Acknowledged
+            );
+            assert_eq!(mode(&deep), 0o750);
+            assert!(failure(make_dir(s(&deep), false, None, None)).contains("exists"));
+            std::fs::write(root.join("file"), b"").unwrap();
+            assert!(matches!(
+                make_dir(s(&root.join("file")), true, None, None),
+                OpResult::Failed { .. }
+            ));
+            assert!(matches!(
+                make_dir(s(&root.join("m")), false, None, Some(0o10000)),
+                OpResult::Failed { .. }
+            ));
+        }
+
+        #[test]
+        fn remove_recursive_does_not_follow_a_link_out_of_the_tree() {
+            let root = scratch("rm");
+            let outside = root.join("outside");
+            std::fs::create_dir(&outside).unwrap();
+            std::fs::write(outside.join("keep"), b"x").unwrap();
+            let tree = root.join("tree");
+            std::fs::create_dir_all(tree.join("sub")).unwrap();
+            std::fs::write(tree.join("sub/f"), b"x").unwrap();
+            symlink(&outside, tree.join("sub/link")).unwrap();
+            assert!(matches!(
+                remove(s(&tree), false, false),
+                OpResult::Failed { .. }
+            ));
+            assert_eq!(remove(s(&tree), true, false), OpResult::Acknowledged);
+            assert!(!tree.exists());
+            assert!(outside.join("keep").exists());
+            // A link at the top is removed itself.
+            symlink(&outside, root.join("top")).unwrap();
+            assert_eq!(
+                remove(s(&root.join("top")), true, false),
+                OpResult::Acknowledged
+            );
+            assert!(std::fs::symlink_metadata(root.join("top")).is_err());
+            assert!(outside.join("keep").exists());
+        }
+
+        #[test]
+        fn remove_refuses_the_root_and_reports_a_missing_path() {
+            for path in ["", "/", "//", "/.", "/..", ".", "..", "/tmp/..", "/etc/."] {
+                let message = failure(remove(path, true, true));
+                assert!(message.contains("refusing"), "{path:?}: {message}");
+            }
+            let root = scratch("rm-missing");
+            let gone = s(&root.join("gone")).to_string();
+            assert!(failure(remove(&gone, false, false)).contains("No such file"));
+            assert_eq!(remove(&gone, false, true), OpResult::Acknowledged);
+            std::fs::write(root.join("f"), b"").unwrap();
+            assert_eq!(
+                remove(s(&root.join("f")), false, false),
+                OpResult::Acknowledged
+            );
+        }
+
+        #[test]
+        fn set_attr_changes_modes_through_a_tree_but_not_through_links() {
+            let root = scratch("attr");
+            let outside = root.join("outside");
+            std::fs::write(&outside, b"x").unwrap();
+            std::fs::set_permissions(&outside, std::fs::Permissions::from_mode(0o600)).unwrap();
+            let tree = root.join("tree");
+            std::fs::create_dir_all(tree.join("sub")).unwrap();
+            std::fs::write(tree.join("sub/f"), b"x").unwrap();
+            symlink(&outside, tree.join("sub/link")).unwrap();
+            assert_eq!(
+                set_attr(s(&tree), None, Some(0o750), true),
+                OpResult::Acknowledged
+            );
+            assert_eq!(mode(&tree), 0o750);
+            assert_eq!(mode(&tree.join("sub")), 0o750);
+            assert_eq!(mode(&tree.join("sub/f")), 0o750);
+            assert_eq!(mode(&outside), 0o600);
+            // Not recursive: only the named path.
+            assert_eq!(
+                set_attr(s(&tree), None, Some(0o700), false),
+                OpResult::Acknowledged
+            );
+            assert_eq!((mode(&tree), mode(&tree.join("sub"))), (0o700, 0o750));
+            assert!(failure(set_attr(s(&tree), None, None, false)).contains("neither"));
+            assert!(
+                failure(set_attr(s(&root.join("x")), None, Some(0o700), false))
+                    .contains("No such file")
+            );
+        }
+
+        #[test]
+        fn set_attr_and_make_dir_give_an_owner() {
+            use std::os::unix::fs::MetadataExt;
+            // Giving files away takes root; elsewhere there is nothing to check.
+            if unsafe { libc::geteuid() } != 0 {
+                return;
+            }
+            let root = scratch("owner");
+            let dir = root.join("a/b");
+            assert_eq!(
+                make_dir(s(&dir), true, Some("0"), None),
+                OpResult::Acknowledged
+            );
+            std::fs::write(root.join("f"), b"").unwrap();
+            std::os::unix::fs::chown(root.join("f"), Some(12345), Some(12345)).unwrap();
+            assert_eq!(
+                set_attr(s(&root.join("f")), Some("root"), None, false),
+                OpResult::Acknowledged
+            );
+            let meta = std::fs::metadata(root.join("f")).unwrap();
+            assert_eq!((meta.uid(), meta.gid()), (0, 0));
+            assert!(
+                failure(set_attr(s(&root), Some("no-such-user-xyz"), None, false))
+                    .contains("no user")
+            );
         }
     }
 

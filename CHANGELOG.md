@@ -111,6 +111,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are still non-fatal, and their names and comments now say so and say why.
 
 ### Added
+- **Guest-agent filesystem operations, for guests with no shell.** `list_dir`, `stat`,
+  `make_dir`, `remove` and `set_attr` (protocol version unchanged, additive) let the host list,
+  inspect, create, delete and chown/chmod guest files without running `/bin/sh`, `mkdir`, `rm`,
+  `stat` or `tar` in the guest; `AgentVM` gets matching `*_in_guest` methods. `remove` never
+  follows symlinks and refuses `/`. An older agent drops the connection on them, which the host
+  reports as `is_unsupported_op` (after confirming the agent is alive) so callers can fall back
+  to a shell. Documented in [docs/GUEST_AGENT.md](docs/GUEST_AGENT.md). Tested against
+  tempdirs and a scripted channel; not yet run in a real guest, and no route uses them yet.
 - **URL tracing in throwaway microVMs** ([docs/URL_TRACING.md](docs/URL_TRACING.md)). For
   following a possibly malicious link without opening it: `tools/urltrace.py URL` runs one
   fresh sandbox per hop, each allowed to reach only that hop's host name, with the new

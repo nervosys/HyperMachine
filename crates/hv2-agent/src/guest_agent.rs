@@ -43,6 +43,38 @@ use std::time::{Duration, Instant};
 /// against spinning.
 const POLL_INTERVAL: Duration = Duration::from_millis(5);
 
+/// What an [`AgentError::Script`] begins with when the guest agent does not
+/// know the operation sent: see [`is_unsupported_op`].
+pub const UNSUPPORTED_OP_PREFIX: &str = "this guest agent does not support";
+
+/// Whether `error` says the guest's agent predates the operation sent (the
+/// filesystem operations: `list_dir`, `stat`, `make_dir`, `remove`,
+/// `set_attr`), so a caller can fall back to running a shell for it.
+///
+/// An old agent cannot say so itself: it fails to parse a request it does
+/// not know and drops the connection. `unsupported_if_dropped` turns that
+/// into this; the caller must confirm the agent is otherwise alive.
+#[must_use]
+pub fn is_unsupported_op(error: &AgentError) -> bool {
+    matches!(error, AgentError::Script(message) if message.starts_with(UNSUPPORTED_OP_PREFIX))
+}
+
+/// Recognise "the connection closed with no answer" as an agent that does not
+/// know operation `name`; any other error passes through.
+fn unsupported_if_dropped(name: &str, error: AgentError) -> AgentError {
+    match &error {
+        AgentError::Script(message)
+            if message.contains("closed before it answered")
+                || message.contains("closed mid-request") =>
+        {
+            AgentError::Script(format!(
+                "{UNSUPPORTED_OP_PREFIX} {name} (it closed the connection on the request)"
+            ))
+        }
+        _ => error,
+    }
+}
+
 /// A byte channel to a program inside the guest.
 ///
 /// The client is written against this rather than against the vsock device so
@@ -886,6 +918,153 @@ impl GuestAgent {
         }
     }
 
+    /// Send one of the filesystem operations, which an agent built before
+    /// they existed cannot answer. It does not answer an operation it cannot
+    /// parse: it drops the connection. That, from this end, looks the same as
+    /// a guest that died mid-request, so it is reported as "unsupported"
+    /// ([`is_unsupported_op`]) and the caller that can tell the two apart
+    /// ([`AgentVM`](crate::AgentVM) pings on a fresh connection) does.
+    fn request_fs_op(
+        &mut self,
+        name: &'static str,
+        op: Operation,
+        timeout: Duration,
+    ) -> Result<OpResult> {
+        self.request(op, timeout)
+            .map_err(|e| unsupported_if_dropped(name, e))
+    }
+
+    /// List `path` in the guest: its entries (sorted by name, as `lstat`
+    /// sees them) and whether the list was cut short. `limit` of 0 is the
+    /// agent's own cap, [`hv2_guest_agent::MAX_DIR_ENTRIES`].
+    ///
+    /// # Errors
+    ///
+    /// The guest's reason for refusing, a transport failure, or
+    /// [`is_unsupported_op`] for an agent from before this existed.
+    pub fn list_dir(
+        &mut self,
+        path: &str,
+        limit: u32,
+        timeout: Duration,
+    ) -> Result<(Vec<hv2_guest_agent::DirEntry>, bool)> {
+        let op = Operation::ListDir {
+            path: path.to_string(),
+            limit,
+        };
+        match self.request_fs_op("list_dir", op, timeout)? {
+            OpResult::DirEntries { entries, truncated } => Ok((entries, truncated)),
+            OpResult::Failed { message } => Err(AgentError::Script(message)),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a directory listing with {other:?}"
+            ))),
+        }
+    }
+
+    /// `stat` one path in the guest (`lstat` unless `follow`).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::list_dir`]; a missing path is the guest's refusal.
+    pub fn stat(
+        &mut self,
+        path: &str,
+        follow: bool,
+        timeout: Duration,
+    ) -> Result<hv2_guest_agent::DirEntry> {
+        let op = Operation::Stat {
+            path: path.to_string(),
+            follow,
+        };
+        match self.request_fs_op("stat", op, timeout)? {
+            OpResult::FileStat(entry) => Ok(entry),
+            OpResult::Failed { message } => Err(AgentError::Script(message)),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a stat with {other:?}"
+            ))),
+        }
+    }
+
+    /// Make a directory in the guest; see [`Operation::MakeDir`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::list_dir`].
+    pub fn make_dir(
+        &mut self,
+        path: &str,
+        parents: bool,
+        owner: Option<&str>,
+        mode: Option<u32>,
+        timeout: Duration,
+    ) -> Result<()> {
+        let op = Operation::MakeDir {
+            path: path.to_string(),
+            parents,
+            owner: owner.map(str::to_string),
+            mode,
+        };
+        self.acknowledged("make_dir", op, "a directory creation", timeout)
+    }
+
+    /// Delete a path in the guest; see [`Operation::Remove`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::list_dir`].
+    pub fn remove(
+        &mut self,
+        path: &str,
+        recursive: bool,
+        missing_ok: bool,
+        timeout: Duration,
+    ) -> Result<()> {
+        let op = Operation::Remove {
+            path: path.to_string(),
+            recursive,
+            missing_ok,
+        };
+        self.acknowledged("remove", op, "a removal", timeout)
+    }
+
+    /// `chown` and `chmod` in the guest; see [`Operation::SetAttr`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::list_dir`].
+    pub fn set_attr(
+        &mut self,
+        path: &str,
+        owner: Option<&str>,
+        mode: Option<u32>,
+        recursive: bool,
+        timeout: Duration,
+    ) -> Result<()> {
+        let op = Operation::SetAttr {
+            path: path.to_string(),
+            owner: owner.map(str::to_string),
+            mode,
+            recursive,
+        };
+        self.acknowledged("set_attr", op, "an attribute change", timeout)
+    }
+
+    fn acknowledged(
+        &mut self,
+        name: &'static str,
+        op: Operation,
+        what: &str,
+        timeout: Duration,
+    ) -> Result<()> {
+        match self.request_fs_op(name, op, timeout)? {
+            OpResult::Acknowledged => Ok(()),
+            OpResult::Failed { message } => Err(AgentError::Script(message)),
+            other => Err(AgentError::Script(format!(
+                "the guest answered {what} with {other:?}"
+            ))),
+        }
+    }
+
     /// Send a signal to a started program.
     ///
     /// # Errors
@@ -1076,6 +1255,108 @@ mod tests {
                 timed_out: false,
             },
         }
+    }
+
+    /// An agent from before the filesystem operations: it cannot parse the
+    /// request, so it hangs up without a word.
+    struct HangsUpOnUnknown {
+        open: bool,
+    }
+
+    impl GuestChannel for HangsUpOnUnknown {
+        fn send(&mut self, data: &[u8]) -> Result<usize> {
+            self.open = false;
+            Ok(data.len())
+        }
+
+        fn recv(&mut self) -> Result<Vec<u8>> {
+            Ok(Vec::new())
+        }
+
+        fn open(&self) -> bool {
+            self.open
+        }
+    }
+
+    #[test]
+    fn an_old_agent_dropping_the_connection_reads_as_an_unsupported_op() {
+        let t = Duration::from_secs(1);
+        let new = || GuestAgent::new(Box::new(HangsUpOnUnknown { open: true }));
+        let errors = [
+            new().list_dir("/", 0, t).unwrap_err(),
+            new().stat("/", false, t).unwrap_err(),
+            new().make_dir("/a", true, None, None, t).unwrap_err(),
+            new().remove("/a", true, false, t).unwrap_err(),
+            new()
+                .set_attr("/a", None, Some(0o755), false, t)
+                .unwrap_err(),
+        ];
+        for error in &errors {
+            assert!(is_unsupported_op(error), "{error}");
+        }
+        assert!(errors[0].to_string().contains("list_dir"));
+        // The same hang-up on an operation every agent knows is no such thing.
+        let error = new().ping(t).unwrap_err();
+        assert!(!is_unsupported_op(&error), "{error}");
+        // Nor is a refusal, or a timeout.
+        assert!(!is_unsupported_op(&AgentError::Script(
+            "no such file".into()
+        )));
+        assert!(!is_unsupported_op(&AgentError::Timeout(
+            "the guest agent did not answer request 1 in time".into()
+        )));
+    }
+
+    #[test]
+    fn a_current_agents_filesystem_answers_come_through() {
+        let entry = hv2_guest_agent::DirEntry {
+            name: "f".into(),
+            kind: hv2_guest_agent::DirEntryKind::File,
+            size: 3,
+            mode: 0o644,
+            uid: 0,
+            gid: 0,
+            mtime_secs: 1,
+        };
+        let answer = entry.clone();
+        let mut agent = GuestAgent::new(FakeGuest::new(move |request| {
+            let result = match request.op {
+                Operation::ListDir { path, limit } => {
+                    assert_eq!((path.as_str(), limit), ("/d", 7));
+                    OpResult::DirEntries {
+                        entries: vec![answer.clone()],
+                        truncated: true,
+                    }
+                }
+                Operation::Stat { follow, .. } => {
+                    assert!(follow);
+                    OpResult::FileStat(answer.clone())
+                }
+                Operation::Remove { path, .. } if path == "/" => OpResult::Failed {
+                    message: "refusing to remove \"/\"".into(),
+                },
+                _ => OpResult::Acknowledged,
+            };
+            Some(Response {
+                id: request.id,
+                version: PROTOCOL_VERSION,
+                result,
+            })
+        }));
+        let t = Duration::from_secs(1);
+        assert_eq!(
+            agent.list_dir("/d", 7, t).unwrap(),
+            (vec![entry.clone()], true)
+        );
+        assert_eq!(agent.stat("/d/f", true, t).unwrap(), entry);
+        agent
+            .make_dir("/d/x", true, Some("1000"), Some(0o700), t)
+            .unwrap();
+        agent.set_attr("/d/x", None, Some(0o755), true, t).unwrap();
+        agent.remove("/d/x", true, false, t).unwrap();
+        let refused = agent.remove("/", true, false, t).unwrap_err();
+        assert!(refused.to_string().contains("refusing"));
+        assert!(!is_unsupported_op(&refused));
     }
 
     #[test]
