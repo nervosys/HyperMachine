@@ -410,6 +410,29 @@ pub enum Operation {
         #[serde(default)]
         drop_caches: bool,
     },
+
+    /// Run several filesystem operations in order, on this one connection,
+    /// and answer once: a tree of thousands of files costs a handful of
+    /// round trips rather than several per file.
+    ///
+    /// Only the operations [`batchable`] names are allowed, and at most
+    /// [`MAX_BATCH_OPS`]; otherwise the whole batch is refused with
+    /// [`OpResult::Failed`] and nothing runs. The operations run in order
+    /// and a failing one does *not* stop the rest: its [`OpResult::Failed`]
+    /// is its own entry in the answer, and the caller reads the entries in
+    /// order (a directory made before the files in it, so a failed `make_dir`
+    /// shows up as its own failure and the files' own). The agent stops
+    /// early only when the results so far reach [`MAX_BATCH_REPLY_BYTES`]:
+    /// the answer then has fewer results than there were operations, and
+    /// the ones not run are the caller's to send again.
+    ///
+    /// A `write_file` in a batch is whole-file as always: the caller keeps
+    /// the request under [`MAX_FRAME_BYTES`] by sending a file larger than
+    /// a few hundred KiB as its own chunked writes instead.
+    ///
+    /// Answered with [`OpResult::Batch`]. An agent from before this
+    /// operation existed drops the connection instead of answering.
+    Batch { ops: Vec<Operation> },
 }
 
 /// The filesystems [`Operation::MountBlock`] may mount, on the wire as
@@ -457,6 +480,80 @@ pub fn validate_mount_block<'a>(device: &'a str, target: &str) -> Result<&'a str
         ));
     }
     Ok(&device["/dev/".len()..])
+}
+
+/// The most operations one [`Operation::Batch`] may carry. A longer batch is
+/// refused whole, before anything runs.
+pub const MAX_BATCH_OPS: usize = 512;
+
+/// How much of an [`OpResult::Batch`] the agent lets pile up before it stops
+/// running the batch's remaining operations, in bytes of the results' JSON.
+///
+/// The check is made after each operation and its result is always kept, so
+/// a reply is at most this plus one result -- and one result is bounded by
+/// [`FILE_CHUNK`] of base64 or [`MAX_DIR_REPLY_BYTES`], which keeps the
+/// frame under [`MAX_FRAME_BYTES`]. Nothing is run and then thrown away, so
+/// the host can send the operations that were not run in a new batch with no
+/// risk of doing one twice.
+pub const MAX_BATCH_REPLY_BYTES: usize = 2 * 1024 * 1024;
+
+/// The largest file a caller should put in a batch as one `write_file`, in
+/// bytes of its data. A file above this is written as its own chunked
+/// writes instead (`GuestAgent::write_file_as`), so one huge file cannot
+/// crowd a batch's request past [`MAX_FRAME_BYTES`]. A hint to callers, not
+/// something the agent enforces: the frame limit is what it enforces.
+pub const MAX_BATCHED_WRITE: usize = 256 * 1024;
+
+/// Whether `op` may be carried in an [`Operation::Batch`]: only the
+/// filesystem operations -- `stat`, `list_dir`, `read_file`, `read_link`,
+/// `make_dir`, `write_file`, `make_symlink`, `set_attr` and `remove`.
+/// Anything that runs a program, signals, mounts, or takes the connection
+/// (and a nested batch) is not.
+#[must_use]
+pub fn batchable(op: &Operation) -> bool {
+    matches!(
+        op,
+        Operation::Stat { .. }
+            | Operation::ListDir { .. }
+            | Operation::ReadFile { .. }
+            | Operation::ReadLink { .. }
+            | Operation::MakeDir { .. }
+            | Operation::WriteFile { .. }
+            | Operation::MakeSymlink { .. }
+            | Operation::SetAttr { .. }
+            | Operation::Remove { .. }
+    )
+}
+
+/// The operation's wire name, for messages.
+#[must_use]
+pub fn op_name(op: &Operation) -> String {
+    serde_json::to_value(op)
+        .ok()
+        .and_then(|v| v.get("kind").and_then(|k| k.as_str().map(str::to_string)))
+        .unwrap_or_else(|| "unknown".into())
+}
+
+/// Check a batch before any of it runs.
+///
+/// # Errors
+///
+/// Says why the whole batch is refused: too many operations, or one that is
+/// not [`batchable`].
+pub fn validate_batch(ops: &[Operation]) -> Result<(), String> {
+    if ops.len() > MAX_BATCH_OPS {
+        return Err(format!(
+            "refusing a batch of {} operations: at most {MAX_BATCH_OPS}",
+            ops.len()
+        ));
+    }
+    if let Some((i, op)) = ops.iter().enumerate().find(|(_, op)| !batchable(op)) {
+        return Err(format!(
+            "refusing a batch: operation {i} ({}) is not a filesystem operation",
+            op_name(op)
+        ));
+    }
+    Ok(())
 }
 
 /// The signals [`Operation::SignalProcess`] may send, on the wire as
@@ -672,6 +769,10 @@ pub enum OpResult {
     /// Answer to [`Operation::MountBlock`] when `expect_sectors` was set and
     /// the device never reported that size.
     DeviceSizeNotSeen,
+    /// Answer to [`Operation::Batch`]: one result per operation run, in
+    /// order; shorter than the batch when the agent stopped at
+    /// [`MAX_BATCH_REPLY_BYTES`].
+    Batch { results: Vec<OpResult> },
     /// The request could not be carried out at all.
     Failed { message: String },
 }
@@ -1335,6 +1436,95 @@ mod filesystem_op_tests {
                 "{target:?}"
             );
         }
+    }
+
+    #[test]
+    fn batch_survives_a_round_trip_and_has_a_stable_shape() {
+        let op = Operation::Batch {
+            ops: vec![
+                Operation::Stat {
+                    path: "/a".into(),
+                    follow: false,
+                },
+                Operation::MakeDir {
+                    path: "/d".into(),
+                    parents: true,
+                    owner: None,
+                    mode: None,
+                },
+            ],
+        };
+        let request = Request {
+            id: 9,
+            version: PROTOCOL_VERSION,
+            op: op.clone(),
+        };
+        let bytes = encode(&request).expect("encode");
+        let (back, _) = decode::<Request>(&bytes).expect("decode").expect("a frame");
+        assert_eq!(back.op, op);
+        assert_eq!(
+            serde_json::to_string(&op).unwrap(),
+            r#"{"kind":"batch","ops":[{"kind":"stat","path":"/a","follow":false},{"kind":"make_dir","path":"/d","parents":true}]}"#
+        );
+        let result = OpResult::Batch {
+            results: vec![
+                OpResult::Acknowledged,
+                OpResult::Failed {
+                    message: "no".into(),
+                },
+            ],
+        };
+        assert_eq!(
+            serde_json::to_string(&result).unwrap(),
+            r#"{"kind":"batch","results":[{"kind":"acknowledged"},{"kind":"failed","message":"no"}]}"#
+        );
+        let back: OpResult =
+            serde_json::from_str(&serde_json::to_string(&result).unwrap()).unwrap();
+        assert_eq!(back, result);
+    }
+
+    #[test]
+    fn only_filesystem_operations_may_be_batched() {
+        let fs = [
+            r#"{"kind":"stat","path":"/"}"#,
+            r#"{"kind":"list_dir","path":"/"}"#,
+            r#"{"kind":"read_file","path":"/x","offset":0,"length":1}"#,
+            r#"{"kind":"read_link","path":"/x"}"#,
+            r#"{"kind":"make_dir","path":"/x"}"#,
+            r#"{"kind":"write_file","path":"/x","data":""}"#,
+            r#"{"kind":"make_symlink","target":"a","path":"/x"}"#,
+            r#"{"kind":"set_attr","path":"/x","mode":420}"#,
+            r#"{"kind":"remove","path":"/x"}"#,
+        ];
+        for json in fs {
+            let op: Operation = serde_json::from_str(json).unwrap();
+            assert!(batchable(&op), "{json}");
+        }
+        let other = [
+            r#"{"kind":"ping"}"#,
+            r#"{"kind":"exec","program":"/bin/true","timeout_ms":1}"#,
+            r#"{"kind":"start","program":"/bin/true"}"#,
+            r#"{"kind":"poll","pid":1}"#,
+            r#"{"kind":"signal_process","pid":5,"signal":"stop"}"#,
+            r#"{"kind":"mount_block","device":"/dev/vda","target":"/m","fstype":"ext4"}"#,
+            r#"{"kind":"mount_volume","path":"/m"}"#,
+            r#"{"kind":"forward","port":1}"#,
+            r#"{"kind":"batch","ops":[]}"#,
+        ];
+        for json in other {
+            let op: Operation = serde_json::from_str(json).unwrap();
+            assert!(!batchable(&op), "{json}");
+        }
+        let stat = Operation::Stat {
+            path: "/".into(),
+            follow: false,
+        };
+        assert!(validate_batch(&[]).is_ok());
+        assert!(validate_batch(&vec![stat.clone(); MAX_BATCH_OPS]).is_ok());
+        let too_many = validate_batch(&vec![stat.clone(); MAX_BATCH_OPS + 1]).unwrap_err();
+        assert!(too_many.contains("at most"), "{too_many}");
+        let nested = validate_batch(&[stat, Operation::Ping]).unwrap_err();
+        assert!(nested.contains("operation 1 (ping)"), "{nested}");
     }
 
     #[test]

@@ -109,7 +109,7 @@ kernels load it automatically once the device is probed; a minimal kernel needs
 
 ## Filesystem operations
 
-Five operations (and three more below) let the host inspect and change a guest's files with no shell,
+Five operations (and more below) let the host inspect and change a guest's files with no shell,
 `mkdir`, `rm`, `stat` or `tar` in the image. They are additive: the protocol
 version is still 3. Each is an `Operation` (tagged by `kind`) and, on the host,
 an `AgentVM::*_in_guest` method.
@@ -147,6 +147,42 @@ The host methods are `GuestAgent::mount_block` and `AgentVM::mount_block_in_gues
 the sandbox daemon's disk attach uses them (`expect_sectors` and `drop_caches`
 for a disk swapped in behind a template's placeholder) and keeps the old
 busybox script only for an agent that answers `is_unsupported_op`.
+
+One more, for trees of many files (still version 3):
+
+| Operation | Answered with | Notes |
+|---|---|---|
+| `batch {ops}` | `batch {results}` | Runs the filesystem operations in `ops` in order on this one connection and answers once. Allowed inside: `stat`, `list_dir`, `read_file`, `read_link`, `make_dir`, `write_file` (its `owner` is the "as" form), `make_symlink`, `set_attr`, `remove`. Anything else (`exec`, `start`, `poll`, `signal*`, `mount_block`, a nested `batch`, ...) makes the **whole batch** `failed` before any operation runs, naming the first offender; so does more than 512 operations |
+
+Semantics, all of which the tests pin:
+
+- **Order and errors.** Operations run in order, and a failing one does *not* stop the rest: its
+  `failed {message}` is that operation's own entry in `results`, with the message the single operation
+  would have given. The caller reads the results in order and treats the first failure as the one a
+  one-operation-per-connection run would have stopped at (the callers all give up there; nothing later is
+  rolled back, but a caller that gives up never depends on it). Stop-on-first-error was not chosen because
+  a batch of reads has no reason to stop at a path that vanished, and a writer already has the order it
+  needs (a directory made before the files in it) in the list itself.
+- **Reply cap.** The agent adds up the size of the results as it goes and stops running further operations
+  once they reach 2 MiB (`MAX_BATCH_REPLY_BYTES`), keeping the result that crossed the line. `results` is
+  then shorter than `ops`: the operations after the last result were **not run**, and the caller sends them
+  again. A reply is at most 2 MiB plus one result (a `read_file` is at most 4 MiB of data, 5.4 MiB of base64),
+  inside the 8 MiB frame limit. Nothing is run and then dropped, so resending cannot repeat an `append`.
+- **Request size.** `write_file` carries its data inline as base64 in the operation, as ever, so a batch's
+  request is bounded by the 8 MiB frame. `GuestAgent::batch` splits what it is given into requests of at
+  most 512 operations and 4 MiB of JSON (`BATCH_REQUEST_BYTES`) and resends any tail the agent stopped
+  short of, so callers do not size batches themselves; callers send only a file of at most 256 KiB
+  (`MAX_BATCHED_WRITE`) as a batched `write_file` and write a larger one with `GuestAgent::write_file_as`
+  (chunked, one connection) between batches. A single operation that is itself over a frame is an error.
+- **Old agents.** An agent from before `batch` drops the connection on it, which the host reports as
+  `is_unsupported_op`; nothing ran. The callers below then use one operation per connection, as before
+  (logged at debug as "has no batch operation, using one op per connection").
+
+The host methods are `GuestAgent::batch(Vec<Operation>, timeout) -> Vec<OpResult>` (one result per operation, in
+order) and `AgentVM::batch_in_guest`. Used by the repository unpack (`unpack_by_agent`), a template COPY
+(`copy_by_agent`, `workdir_by_agent`) and the checkpoint archive (`build_archive` prefetches the small files and
+symlinks that come next in its walk: one batch of up to 256 reads for dozens of files; limits and 413s are
+unchanged because the walk still applies them to each file as it reaches it).
 
 `owner` is a user by name or number, or `@template` for the template's user,
 as for `write_file`. Optional fields are omitted from the frame when unset.

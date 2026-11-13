@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Large trees through the guest agent were up to 17x slower than the
+  shell.** Each file operation opened its own connection (2-3 ms). A new
+  additive `batch` operation runs up to 512 filesystem operations on one
+  connection (2 MiB reply cap, files over 256 KiB still written alone);
+  repo unpack, template COPY and the checkpoint archive use it, and fall
+  back to one operation per connection on an older agent. At 5,000 files
+  unpack and COPY are now level with the shell path and the archive about
+  2x (was 8x, 8x and 17x); timings taken on a busy host. See
+  `docs/benchmarks/2026-11-13/agent-ops-batch-kvm`.
 - **Template builds work on a shell-free image.** COPY lays its files in
   through the guest agent (directories, files, symlinks; owner and octal
   `--chmod` per listed path), WORKDIR is made by the agent, USER of a user

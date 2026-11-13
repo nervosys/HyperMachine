@@ -251,6 +251,217 @@ pub(crate) fn join_guest(into: &str, rel: &str) -> String {
     }
 }
 
+/// One step of laying a tree into a guest, to be run through the agent's
+/// batch operation where it has one.
+pub(crate) enum Step<'a> {
+    /// A filesystem operation; `what` names it for an error (the caller
+    /// decides how it reads).
+    Op {
+        what: String,
+        op: hv2_guest_agent::Operation,
+    },
+    /// Write `data` to `path`, `owner`'s. Small ones ride in a batch; one
+    /// above [`hv2_guest_agent::MAX_BATCHED_WRITE`] is its own chunked write.
+    Write {
+        what: String,
+        path: String,
+        data: &'a [u8],
+        owner: Option<&'static str>,
+    },
+}
+
+/// The first failed entry of a batch's `results`, as its step's `what` and
+/// the guest's message: steps ran in order and a failure did not stop the
+/// rest, so the first is the one a one-op-per-connection run would have
+/// stopped at.
+pub(crate) fn first_failure(
+    whats: &[String],
+    results: &[hv2_guest_agent::OpResult],
+) -> Option<(String, String)> {
+    if results.len() != whats.len() {
+        return Some((
+            whats.first().cloned().unwrap_or_default(),
+            format!(
+                "the guest answered {} operations with {} results",
+                whats.len(),
+                results.len()
+            ),
+        ));
+    }
+    whats
+        .iter()
+        .zip(results)
+        .find_map(|(what, result)| match result {
+            hv2_guest_agent::OpResult::Failed { message } => Some((what.clone(), message.clone())),
+            _ => None,
+        })
+}
+
+/// Run `steps` in order through the agent's batch operation: a handful of
+/// round trips for thousands of files, where one operation per connection
+/// costs two to three milliseconds each.
+///
+/// Each failed step is reported as `(what, error)` for the first of them; the
+/// steps after it in the same batch will have run, which only matters to a
+/// caller that does not then give up (all of ours do). An error for which
+/// [`hv2_agent::is_unsupported_op`] is true means the agent has no batch
+/// operation and **nothing ran**: the caller does it one operation at a time.
+pub(crate) async fn run_steps(
+    vm: &AgentVM,
+    steps: Vec<Step<'_>>,
+    wait: Duration,
+) -> Result<(), (String, hv2_agent::AgentError)> {
+    // A batch is sent once it holds this much request, which keeps what is
+    // held in memory (each write's data is base64 once it is an operation)
+    // to a megabyte or so; the client splits further if it must.
+    const FLUSH_BYTES: usize = 1 << 20;
+    let mut whats: Vec<String> = Vec::new();
+    let mut ops: Vec<hv2_guest_agent::Operation> = Vec::new();
+    let mut weight = 0usize;
+    async fn flush(
+        vm: &AgentVM,
+        whats: &mut Vec<String>,
+        ops: &mut Vec<hv2_guest_agent::Operation>,
+        weight: &mut usize,
+        wait: Duration,
+    ) -> Result<(), (String, hv2_agent::AgentError)> {
+        if ops.is_empty() {
+            return Ok(());
+        }
+        let (names, sent) = (std::mem::take(whats), std::mem::take(ops));
+        *weight = 0;
+        let results = vm
+            .batch_in_guest(sent, wait)
+            .await
+            .map_err(|e| (names[0].clone(), e))?;
+        match first_failure(&names, &results) {
+            None => Ok(()),
+            Some((what, message)) => Err((what, hv2_agent::AgentError::Script(message))),
+        }
+    }
+    for step in steps {
+        match step {
+            Step::Op { what, op } => {
+                weight += 256;
+                whats.push(what);
+                ops.push(op);
+            }
+            Step::Write {
+                what,
+                path,
+                data,
+                owner,
+            } if data.len() <= hv2_guest_agent::MAX_BATCHED_WRITE => {
+                weight += data.len() / 3 * 4 + 256;
+                whats.push(what);
+                ops.push(hv2_guest_agent::Operation::WriteFile {
+                    path,
+                    data: hv2_guest_agent::b64::encode(data),
+                    append: false,
+                    owner: owner.map(str::to_string),
+                });
+            }
+            Step::Write {
+                what,
+                path,
+                data,
+                owner,
+            } => {
+                flush(vm, &mut whats, &mut ops, &mut weight, wait).await?;
+                vm.write_file_in_guest_as(&path, data.to_vec(), owner, wait)
+                    .await
+                    .map_err(|e| (what, e))?;
+            }
+        }
+        if ops.len() >= hv2_guest_agent::MAX_BATCH_OPS || weight >= FLUSH_BYTES {
+            flush(vm, &mut whats, &mut ops, &mut weight, wait).await?;
+        }
+    }
+    flush(vm, &mut whats, &mut ops, &mut weight, wait).await
+}
+
+/// The steps that lay a repository's `members` into `into` as
+/// [`unpack_by_agent`] does: `into` made, each directory made and given its
+/// mode (one that was there keeps its own from `make_dir`, which `tar`
+/// would have changed), each file written and given its mode, each symlink
+/// made, and last `into` given to the template's user, recursively.
+pub(crate) fn unpack_steps<'a>(into: &str, members: &'a [Member]) -> Vec<Step<'a>> {
+    use hv2_guest_agent::Operation;
+    let owner = Some(hv2_guest_agent::TEMPLATE_USER);
+    let op = |what: &str, op: Operation| Step::Op {
+        what: what.to_string(),
+        op,
+    };
+    let mut steps = vec![op(
+        "making it",
+        Operation::MakeDir {
+            path: into.to_string(),
+            parents: true,
+            owner: owner.map(str::to_string),
+            mode: None,
+        },
+    )];
+    for member in members {
+        match member {
+            Member::Dir { rel, mode } => {
+                let path = join_guest(into, rel);
+                steps.push(op(
+                    &path,
+                    Operation::MakeDir {
+                        path: path.clone(),
+                        parents: true,
+                        owner: owner.map(str::to_string),
+                        mode: Some(*mode),
+                    },
+                ));
+                steps.push(op(&path, set_mode(&path, *mode)));
+            }
+            Member::File { rel, mode, data } => {
+                let path = join_guest(into, rel);
+                steps.push(Step::Write {
+                    what: path.clone(),
+                    path: path.clone(),
+                    data,
+                    owner,
+                });
+                steps.push(op(&path, set_mode(&path, *mode)));
+            }
+            Member::Symlink { rel, target } => {
+                let path = join_guest(into, rel);
+                steps.push(op(
+                    &path,
+                    Operation::MakeSymlink {
+                        target: target.clone(),
+                        path: path.clone(),
+                        owner: owner.map(str::to_string),
+                    },
+                ));
+            }
+        }
+    }
+    // `chown -R` over the whole of `into`, what was in it before included.
+    steps.push(op(
+        "giving it to the template's user",
+        Operation::SetAttr {
+            path: into.to_string(),
+            owner: owner.map(str::to_string),
+            mode: None,
+            recursive: true,
+        },
+    ));
+    steps
+}
+
+/// A `chmod` of `path` to `mode`, as an operation.
+pub(crate) fn set_mode(path: &str, mode: u32) -> hv2_guest_agent::Operation {
+    hv2_guest_agent::Operation::SetAttr {
+        path: path.to_string(),
+        owner: None,
+        mode: Some(mode),
+        recursive: false,
+    }
+}
+
 /// Unpack a repository's tar into `into` through the agent, every file and
 /// directory owned by the template's user, as `unpack_command` leaves them:
 /// modes from the archive, modification times not kept.
@@ -263,6 +474,17 @@ async fn unpack_by_agent(vm: &AgentVM, tar_bytes: &[u8], into: &str) -> Result<(
     // Read the whole archive first, so one the agent cannot reproduce is
     // found before anything is written.
     let members = members(tar_bytes)?;
+    // The batch operation first: the same steps in a few round trips. An
+    // agent without it ran none of them, and the loop below does it one
+    // operation per connection.
+    match run_steps(vm, unpack_steps(into, &members), wait).await {
+        Ok(()) => return Ok(()),
+        Err((what, e)) if !hv2_agent::is_unsupported_op(&e) => return Err(fail(&what, e)),
+        Err(_) => tracing::debug!(
+            "unpacking a repository into {into}: the guest's agent has no batch operation, \
+             using one op per connection"
+        ),
+    }
     match vm.make_dir_in_guest(into, true, owner, None, wait).await {
         Ok(()) => {}
         Err(e) if hv2_agent::is_unsupported_op(&e) => {
@@ -543,6 +765,105 @@ mod tests {
             .unwrap();
         });
         assert_eq!(members(&bytes).unwrap().len(), 2);
+    }
+
+    fn step_summary(steps: &[Step<'_>]) -> Vec<String> {
+        steps
+            .iter()
+            .map(|s| match s {
+                Step::Op { what, op } => format!("{}:{what}", hv2_guest_agent::op_name(op)),
+                Step::Write { what, data, .. } => format!("write_file:{what}:{}", data.len()),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_repository_is_laid_out_dirs_before_files_and_chown_last() {
+        let members = vec![
+            Member::Dir {
+                rel: String::new(),
+                mode: 0o755,
+            },
+            Member::Dir {
+                rel: "src".into(),
+                mode: 0o700,
+            },
+            Member::File {
+                rel: "src/a".into(),
+                mode: 0o644,
+                data: b"abc".to_vec(),
+            },
+            Member::Symlink {
+                rel: "l".into(),
+                target: "src/a".into(),
+            },
+        ];
+        let steps = unpack_steps("/srv/app", &members);
+        assert_eq!(
+            step_summary(&steps),
+            [
+                "make_dir:making it",
+                "make_dir:/srv/app",
+                "set_attr:/srv/app",
+                "make_dir:/srv/app/src",
+                "set_attr:/srv/app/src",
+                "write_file:/srv/app/src/a:3",
+                "set_attr:/srv/app/src/a",
+                "make_symlink:/srv/app/l",
+                "set_attr:giving it to the template's user",
+            ]
+        );
+        // The last is the recursive chown of the whole tree.
+        let Some(Step::Op { op, .. }) = steps.last() else {
+            panic!("no last step")
+        };
+        assert_eq!(
+            *op,
+            hv2_guest_agent::Operation::SetAttr {
+                path: "/srv/app".into(),
+                owner: Some(hv2_guest_agent::TEMPLATE_USER.into()),
+                mode: None,
+                recursive: true,
+            }
+        );
+        // The first makes the directory with the template's user as owner.
+        let Some(Step::Op { op, .. }) = steps.first() else {
+            panic!("no first step")
+        };
+        assert!(matches!(
+            op,
+            hv2_guest_agent::Operation::MakeDir { parents: true, owner: Some(o), mode: None, .. }
+                if o == hv2_guest_agent::TEMPLATE_USER
+        ));
+    }
+
+    #[test]
+    fn the_first_failure_of_a_batch_names_its_step() {
+        use hv2_guest_agent::OpResult;
+        let whats: Vec<String> = ["a", "b", "c"].iter().map(|s| s.to_string()).collect();
+        let failed = |m: &str| OpResult::Failed {
+            message: m.to_string(),
+        };
+        assert_eq!(
+            first_failure(
+                &whats,
+                &[
+                    OpResult::Acknowledged,
+                    OpResult::Acknowledged,
+                    OpResult::Acknowledged
+                ]
+            ),
+            None
+        );
+        assert_eq!(
+            first_failure(
+                &whats,
+                &[OpResult::Acknowledged, failed("b broke"), failed("c broke")]
+            ),
+            Some(("b".to_string(), "b broke".to_string()))
+        );
+        // Fewer answers than steps is a failure, not a success.
+        assert!(first_failure(&whats, &[OpResult::Acknowledged]).is_some());
     }
 
     #[test]

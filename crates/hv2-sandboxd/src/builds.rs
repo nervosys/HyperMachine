@@ -1340,6 +1340,42 @@ async fn owner_for_agent(vm: &AgentVM, owner: &str) -> Result<(), Unpack> {
 async fn workdir_by_agent(vm: &AgentVM, dir: &str, user: &str) -> Result<(), Unpack> {
     let wait = AGENT_TIMEOUT;
     owner_for_agent(vm, user).await?;
+    // The two operations in one round trip, where the agent batches; an
+    // agent that does not ran neither, and they go one at a time below.
+    {
+        use hv2_guest_agent::Operation;
+        let mut ops = vec![Operation::MakeDir {
+            path: dir.to_string(),
+            parents: true,
+            owner: None,
+            mode: None,
+        }];
+        if user != "root" {
+            ops.push(Operation::SetAttr {
+                path: dir.to_string(),
+                owner: Some(user.to_string()),
+                mode: None,
+                recursive: false,
+            });
+        }
+        let whats = [format!("making {dir}"), format!("giving {dir} to {user}")];
+        match vm.batch_in_guest(ops, wait).await {
+            Ok(results) => {
+                return match crate::env_vars::first_failure(&whats[..results.len()], &results) {
+                    None => Ok(()),
+                    Some((what, message)) => {
+                        Err(by_agent(&what, hv2_agent::AgentError::Script(message)))
+                    }
+                };
+            }
+            Err(e) if hv2_agent::is_unsupported_op(&e) => {
+                tracing::debug!(
+                    "making {dir}: the guest's agent has no batch operation, using one op per connection"
+                );
+            }
+            Err(e) => return Err(by_agent(&format!("making {dir}"), e)),
+        }
+    }
     vm.make_dir_in_guest(dir, true, None, None, wait)
         .await
         .map_err(|e| by_agent(&format!("making {dir}"), e))?;
@@ -1361,6 +1397,187 @@ async fn clear_for_member(vm: &AgentVM, path: &str) -> Result<(), Unpack> {
             .await
             .map_err(|e| by_agent(&format!("replacing {path}"), e)),
         _ => Ok(()),
+    }
+}
+
+/// The steps of a COPY's `members` laid at `/` as [`copy_by_agent`] does, in
+/// the order it does them. `replace` holds the paths that had something that
+/// is not a directory on them (see [`clear_for_member`]), which is removed
+/// first so that the write replaces it rather than going through a link.
+fn copy_steps<'a>(
+    members: &'a [Member],
+    replace: &std::collections::HashSet<String>,
+    paths: &[String],
+    owner: Option<&str>,
+    mode: Option<u32>,
+) -> Vec<crate::env_vars::Step<'a>> {
+    use crate::env_vars::{set_mode, Step};
+    use hv2_guest_agent::Operation;
+    let op = |what: String, op: Operation| Step::Op { what, op };
+    let clear = |path: &str| {
+        op(
+            format!("replacing {path}"),
+            Operation::Remove {
+                path: path.to_string(),
+                recursive: false,
+                missing_ok: true,
+            },
+        )
+    };
+    let mut steps = Vec::new();
+    for member in members {
+        match member {
+            Member::Dir { rel, mode } => {
+                let path = join_guest("/", rel);
+                steps.push(op(
+                    format!("making {path}"),
+                    Operation::MakeDir {
+                        path: path.clone(),
+                        parents: true,
+                        owner: None,
+                        mode: Some(*mode),
+                    },
+                ));
+                steps.push(op(
+                    format!("setting the mode of {path}"),
+                    set_mode(&path, *mode),
+                ));
+            }
+            Member::File { rel, mode, data } => {
+                let path = join_guest("/", rel);
+                if replace.contains(&path) {
+                    steps.push(clear(&path));
+                }
+                steps.push(Step::Write {
+                    what: format!("writing {path}"),
+                    path: path.clone(),
+                    data,
+                    owner: None,
+                });
+                steps.push(op(
+                    format!("setting the mode of {path}"),
+                    set_mode(&path, *mode),
+                ));
+            }
+            Member::Symlink { rel, target } => {
+                let path = join_guest("/", rel);
+                if let Some((parent, _)) = path.rsplit_once('/') {
+                    if !parent.is_empty() {
+                        steps.push(op(
+                            format!("making {parent}"),
+                            Operation::MakeDir {
+                                path: parent.to_string(),
+                                parents: true,
+                                owner: None,
+                                mode: None,
+                            },
+                        ));
+                    }
+                }
+                if replace.contains(&path) {
+                    steps.push(clear(&path));
+                }
+                steps.push(op(
+                    format!("linking {path}"),
+                    Operation::MakeSymlink {
+                        target: target.clone(),
+                        path,
+                        owner: None,
+                    },
+                ));
+            }
+        }
+    }
+    if owner.is_some() || mode.is_some() {
+        for path in paths {
+            let what = match owner {
+                Some(o) => format!("giving {path} to {o}"),
+                None => format!("setting the mode of {path}"),
+            };
+            steps.push(op(
+                what,
+                Operation::SetAttr {
+                    path: path.clone(),
+                    owner: owner.map(str::to_string),
+                    mode,
+                    recursive: false,
+                },
+            ));
+        }
+    }
+    steps
+}
+
+/// Whether two members name one path. Batching looks at what is on each path
+/// before anything is written, which an earlier member of the same archive
+/// would make stale; such an archive (a COPY's never is) takes the slow way.
+fn has_repeated_paths(members: &[Member]) -> bool {
+    let mut seen = std::collections::HashSet::new();
+    members.iter().any(|m| {
+        let rel = match m {
+            Member::Dir { rel, .. } | Member::File { rel, .. } | Member::Symlink { rel, .. } => rel,
+        };
+        !seen.insert(rel.as_str())
+    })
+}
+
+/// [`copy_by_agent`] through the agent's batch operation: one batch to see
+/// what is on each file and link path, then the steps in a few more.
+/// `Ok(false)`: not done and nothing written -- the agent has no batch
+/// operation, or the archive repeats a path -- so the caller goes one
+/// operation at a time.
+async fn copy_batched(
+    vm: &AgentVM,
+    members: &[Member],
+    paths: &[String],
+    owner: Option<&str>,
+    mode: Option<u32>,
+    wait: Duration,
+) -> Result<bool, Unpack> {
+    use hv2_guest_agent::{DirEntryKind, OpResult, Operation};
+    if has_repeated_paths(members) {
+        tracing::debug!("COPY: the archive repeats a path, using one op per connection");
+        return Ok(false);
+    }
+    let mut checked = Vec::new();
+    for member in members {
+        if let Member::File { rel, .. } | Member::Symlink { rel, .. } = member {
+            checked.push(join_guest("/", rel));
+        }
+    }
+    let stats = checked
+        .iter()
+        .map(|path| Operation::Stat {
+            path: path.clone(),
+            follow: false,
+        })
+        .collect();
+    let results = match vm.batch_in_guest(stats, AGENT_TIMEOUT * 6).await {
+        Ok(results) => results,
+        Err(e) if hv2_agent::is_unsupported_op(&e) => {
+            tracing::debug!(
+                "COPY: the guest's agent has no batch operation, using one op per connection"
+            );
+            return Ok(false);
+        }
+        Err(e) => return Err(by_agent("looking at what the COPY replaces", e)),
+    };
+    // A path with nothing on it, or one that cannot be looked at, is not one
+    // to clear, as `clear_for_member` has it.
+    let replace: std::collections::HashSet<String> = checked
+        .into_iter()
+        .zip(results)
+        .filter(|(_, result)| {
+            matches!(result, OpResult::FileStat(entry) if entry.kind != DirEntryKind::Dir)
+        })
+        .map(|(path, _)| path)
+        .collect();
+    let steps = copy_steps(members, &replace, paths, owner, mode);
+    match crate::env_vars::run_steps(vm, steps, wait).await {
+        Ok(()) => Ok(true),
+        // An agent that took the first batch takes the rest; by_agent maps
+        // a surprise to the shell anyway.
+        Err((what, e)) => Err(by_agent(&what, e)),
     }
 }
 
@@ -1398,6 +1615,12 @@ async fn copy_by_agent(
     // before anything is written.
     let members = crate::env_vars::members_of(archive, "the COPY's files")?;
     let fail = |path: &str, e: hv2_agent::AgentError| by_agent(path, e);
+    // Through the agent's batch operation where it has one: the same steps in
+    // a few round trips instead of several per file.
+    let kept_owner = (owner != "root" && owner != "0").then_some(owner);
+    if copy_batched(vm, &members, paths, kept_owner, mode, wait).await? {
+        return Ok(());
+    }
     // One cheap new-protocol operation first, so an agent that predates them
     // is found before anything is written.
     if let Err(e) = vm.stat_in_guest("/", false, wait).await {
@@ -1667,6 +1890,103 @@ pub(crate) type Builds = parking_lot::Mutex<HashMap<String, Arc<Build>>>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_copy_clears_non_directories_first_and_gives_owner_and_mode_last() {
+        use crate::env_vars::Step;
+        let members = vec![
+            Member::Dir {
+                rel: "app".into(),
+                mode: 0o755,
+            },
+            Member::File {
+                rel: "app/a".into(),
+                mode: 0o644,
+                data: b"x".to_vec(),
+            },
+            Member::File {
+                rel: "app/new".into(),
+                mode: 0o600,
+                data: b"y".to_vec(),
+            },
+            Member::Symlink {
+                rel: "app/l".into(),
+                target: "a".into(),
+            },
+        ];
+        let replace: std::collections::HashSet<String> =
+            ["/app/a".to_string(), "/app/l".to_string()].into();
+        let paths = vec!["/app/a".to_string(), "/app/new".to_string()];
+        let steps = copy_steps(&members, &replace, &paths, Some("node"), Some(0o640));
+        let named: Vec<String> = steps
+            .iter()
+            .map(|s| match s {
+                Step::Op { what, op } => format!("{}:{what}", hv2_guest_agent::op_name(op)),
+                Step::Write { what, .. } => format!("write_file:{what}"),
+            })
+            .collect();
+        assert_eq!(
+            named,
+            [
+                "make_dir:making /app",
+                "set_attr:setting the mode of /app",
+                "remove:replacing /app/a",
+                "write_file:writing /app/a",
+                "set_attr:setting the mode of /app/a",
+                "write_file:writing /app/new",
+                "set_attr:setting the mode of /app/new",
+                "make_dir:making /app",
+                "remove:replacing /app/l",
+                "make_symlink:linking /app/l",
+                "set_attr:giving /app/a to node",
+                "set_attr:giving /app/new to node",
+            ]
+        );
+        // The removal is the one `clear_for_member` made: not recursive, and
+        // quiet about a path that is already gone.
+        assert!(matches!(
+            &steps[2],
+            Step::Op {
+                op: hv2_guest_agent::Operation::Remove {
+                    recursive: false,
+                    missing_ok: true,
+                    ..
+                },
+                ..
+            }
+        ));
+        // Neither owner nor mode: nothing at the end.
+        let plain = copy_steps(&members, &Default::default(), &paths, None, None);
+        assert_eq!(
+            plain.len(),
+            steps.len() - 2 - 2,
+            "no removes, no owner or mode"
+        );
+        // Mode only is a chmod.
+        let mode_only = copy_steps(&members, &Default::default(), &paths, None, Some(0o700));
+        assert!(matches!(
+            mode_only.last(),
+            Some(Step::Op { what, .. }) if what == "setting the mode of /app/new"
+        ));
+    }
+
+    #[test]
+    fn an_archive_that_repeats_a_path_is_not_batched() {
+        let file = |rel: &str| Member::File {
+            rel: rel.into(),
+            mode: 0o644,
+            data: Vec::new(),
+        };
+        assert!(!has_repeated_paths(&[file("a"), file("b")]));
+        assert!(has_repeated_paths(&[
+            file("a"),
+            Member::Symlink {
+                rel: "a".into(),
+                target: "b".into()
+            }
+        ]));
+        assert!(!has_repeated_paths(&[]));
+    }
 
     fn upload(files: &[(&str, Option<&[u8]>)]) -> tempdir::Dir {
         let mut builder = tar::Builder::new(Vec::new());

@@ -1,0 +1,269 @@
+{
+  "success": true,
+  "label": "busybox-new-agent",
+  "shell": true,
+  "purpose": "functional verification of template builds (COPY, ENV, WORKDIR, USER) through the guest agent's file operations, on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "8aee91d7a98230a59471565a8bc1f8ae232623a0d73162516b24a54981987e07",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "85d929acc80d0f0eadfae26e7187f92bcac31c3acf2802a6d46f99dffd3ab485",
+    "driver": "e3a23c3cf559258a7b477b9c24496aea78fca1688cca1760278fd4a0900e81b0"
+  },
+  "cases": [
+    {
+      "name": "a. COPY (file+octal chmod, directory with symlinks, owned by a user), ENV, WORKDIR, USER",
+      "success": true,
+      "detail": {
+        "hello.txt": {
+          "gid": 0,
+          "mode": "640",
+          "name": "hello.txt",
+          "size": 6,
+          "type": "file",
+          "uid": 0
+        },
+        "tree": {
+          "link": "symlink",
+          "linkdir": "symlink",
+          "sub": "directory"
+        },
+        "work": {
+          "/srv/work": {
+            "gid": 0,
+            "mode": "755",
+            "name": "work",
+            "size": null,
+            "type": "directory",
+            "uid": 0
+          },
+          "sub": {
+            "gid": 1000,
+            "mode": "755",
+            "name": "sub",
+            "size": null,
+            "type": "directory",
+            "uid": 1000
+          },
+          "owned.txt": {
+            "gid": 1000,
+            "mode": "644",
+            "name": "owned.txt",
+            "size": 6,
+            "type": "file",
+            "uid": 1000
+          }
+        },
+        "env": {
+          "GREETING": "hi",
+          "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "PATHX": "/x:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        },
+        "cwd": "lrwxrwxrwx    1 root     0                0 Nov 13 21:03 /proc/self/cwd -> /srv/work/sub"
+      }
+    },
+    {
+      "name": "b. a RUN step: works with a shell, fails clearly without one",
+      "success": true,
+      "detail": {
+        "status": "ready"
+      }
+    },
+    {
+      "name": "c. COPY owned by a user the image lacks fails at its step, naming the user",
+      "success": true,
+      "detail": {
+        "message": "\"/bin/busybox tar -xf '/tmp/.hv2-copy-2c25612c49594139aa7d35c9341e2b2a.tar' -C / && /bin/busybox xargs -0 chown -h 'ghost' < '/tmp/.hv2-copy-2c25612c49594139aa7d35c9341e2b2a.tar.list' ; status=$?; rm -f '/tmp/.hv2-copy-2c25612c49594139aa7d35c9341e2b2a.tar' '/tmp/.hv2-copy-2c25612c49594139aa7d35c9341e2b2a.tar.list'; exit $status\" exited 123"
+      }
+    },
+    {
+      "name": "d. COPY --chmod=u+x (not octal): the shell's; clear failure without one",
+      "success": true,
+      "detail": {
+        "mode": "744"
+      }
+    },
+    {
+      "name": "e. USER of a user the image lacks: the shell script runs; clear failure without a shell",
+      "success": true,
+      "detail": {
+        "status": "error",
+        "message": "\"id -u 'builder' >/dev/null 2>&1 || { if command -v useradd >/dev/null 2>&1; then useradd -m -s /bin/sh 'builder'; else /bin/busybox adduser -D -h /home/builder -s /bin/sh 'builder'; fi; }\" exited 127"
+      }
+    },
+    {
+      "name": "f. COPY owned by a bare uid not in passwd: the shell's chown on a shell image, clear failure without one",
+      "success": true,
+      "detail": {
+        "uid": 4242
+      }
+    }
+  ],
+  "log_counts": {
+    "copy_agent": 5,
+    "copy_shell": 3,
+    "workdir_agent": 2,
+    "workdir_shell": 0,
+    "user_agent": 1,
+    "user_shell": 1,
+    "env_busybox": 6,
+    "env_proc": 0,
+    "kvm_lines": 23,
+    "tcg_lines": 0
+  },
+  "log_counts_expected": {
+    "copy_agent": 5,
+    "copy_shell": 3,
+    "workdir_agent": 2,
+    "workdir_shell": 0,
+    "user_agent": 1,
+    "user_shell": 1,
+    "env_busybox": 6,
+    "env_proc": 0
+  },
+  "builds": {
+    "nsb-ok": {
+      "status": "ready",
+      "reason": null,
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-909d5032",
+        "[1/8] COPY passwd /etc/passwd",
+        "1 paths, 2 KiB",
+        "[2/8] COPY hello.txt /opt/app/hello.txt",
+        "1 paths, 2 KiB",
+        "[3/8] COPY tree /opt/tree",
+        "5 paths, 4 KiB",
+        "[4/8] ENV GREETING hi PATHX /x:$PATH",
+        "[5/8] WORKDIR /srv/work",
+        "[6/8] USER app",
+        "[7/8] COPY owned.txt /srv/work/owned.txt",
+        "1 paths, 2 KiB",
+        "[8/8] WORKDIR sub",
+        "Steps kept as build-cache-0f2949343b3bb4f4 in 26.313026ms",
+        "Template nsb-ok ready: snapshot of 6 MiB in 16.940093ms"
+      ]
+    },
+    "nsb-run": {
+      "status": "ready",
+      "reason": null,
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-aaf52e56",
+        "[1/2] COPY hello.txt /opt/app/hello.txt",
+        "1 paths, 2 KiB",
+        "[2/2] RUN echo from-run > /ran.txt",
+        "Steps kept as build-cache-5c0fe040f6628578 in 8.539797ms",
+        "Template nsb-run ready: snapshot of 1 MiB in 6.76783ms"
+      ]
+    },
+    "nsb-ghost": {
+      "status": "error",
+      "reason": {
+        "logEntries": [
+          {
+            "level": "warn",
+            "message": "this node gives sandboxes no network: steps run offline",
+            "step": "base",
+            "timestamp": "2026-11-13T21:03:19.507Z"
+          },
+          {
+            "level": "info",
+            "message": "Building in build-5024e650",
+            "step": "base",
+            "timestamp": "2026-11-13T21:03:19.604Z"
+          },
+          {
+            "level": "info",
+            "message": "[1/1] COPY hello.txt /opt/app/hello.txt",
+            "step": "1",
+            "timestamp": "2026-11-13T21:03:19.664Z"
+          },
+          {
+            "level": "info",
+            "message": "1 paths, 2 KiB",
+            "step": "1",
+            "timestamp": "2026-11-13T21:03:19.664Z"
+          },
+          {
+            "level": "info",
+            "message": "chown: unknown user ghost",
+            "step": "1",
+            "timestamp": "2026-11-13T21:03:19.907Z"
+          }
+        ],
+        "message": "\"/bin/busybox tar -xf '/tmp/.hv2-copy-2c25612c49594139aa7d35c9341e2b2a.tar' -C / && /bin/busybox xargs -0 chown -h 'ghost' < '/tmp/.hv2-copy-2c25612c49594139aa7d35c9341e2b2a.tar.list' ; status=$?; rm -f '/tmp/.hv2-copy-2c25612c49594139aa7d35c9341e2b2a.tar' '/tmp/.hv2-copy-2c25612c49594139aa7d35c9341e2b2a.tar.list'; exit $status\" exited 123",
+        "step": "1"
+      },
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-5024e650",
+        "[1/1] COPY hello.txt /opt/app/hello.txt",
+        "1 paths, 2 KiB",
+        "chown: unknown user ghost"
+      ]
+    },
+    "nsb-symmode": {
+      "status": "ready",
+      "reason": null,
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-7de63d44",
+        "[1/1] COPY hello.txt /opt/app/hello.txt",
+        "1 paths, 2 KiB",
+        "Steps kept as build-cache-2c23f523d3f87e66 in 26.863106ms",
+        "Template nsb-symmode ready: snapshot of 2 MiB in 19.530358ms"
+      ]
+    },
+    "nsb-user": {
+      "status": "error",
+      "reason": {
+        "logEntries": [
+          {
+            "level": "warn",
+            "message": "this node gives sandboxes no network: steps run offline",
+            "step": "base",
+            "timestamp": "2026-11-13T21:03:21.027Z"
+          },
+          {
+            "level": "info",
+            "message": "Building in build-67d3c7e1",
+            "step": "base",
+            "timestamp": "2026-11-13T21:03:21.121Z"
+          },
+          {
+            "level": "info",
+            "message": "[1/1] USER builder",
+            "step": "1",
+            "timestamp": "2026-11-13T21:03:21.188Z"
+          },
+          {
+            "level": "info",
+            "message": "adduser: applet not found",
+            "step": "1",
+            "timestamp": "2026-11-13T21:03:21.425Z"
+          }
+        ],
+        "message": "\"id -u 'builder' >/dev/null 2>&1 || { if command -v useradd >/dev/null 2>&1; then useradd -m -s /bin/sh 'builder'; else /bin/busybox adduser -D -h /home/builder -s /bin/sh 'builder'; fi; }\" exited 127",
+        "step": "1"
+      },
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-67d3c7e1",
+        "[1/1] USER builder",
+        "adduser: applet not found"
+      ]
+    },
+    "nsb-numeric": {
+      "status": "ready",
+      "reason": null,
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-26026958",
+        "[1/1] COPY hello.txt /opt/app/hello.txt",
+        "1 paths, 2 KiB",
+        "Steps kept as build-cache-567c93ac4161ebd7 in 42.495587ms",
+        "Template nsb-numeric ready: snapshot of 2 MiB in 56.151085ms"
+      ]
+    }
+  }
+}

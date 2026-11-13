@@ -1097,6 +1097,7 @@ mod linux {
                 expect_sectors,
                 drop_caches,
             } => mount_block(&device, &target, fstype, expect_sectors, drop_caches),
+            Operation::Batch { ops } => batch(ops),
             // Served in `serve`, which owns the connection it takes.
             Operation::Forward { .. }
             | Operation::Listen { .. }
@@ -1115,6 +1116,45 @@ mod linux {
             version: PROTOCOL_VERSION,
             result,
         }
+    }
+
+    /// See [`Operation::Batch`]: refused whole unless every operation may be
+    /// batched; otherwise run in order, each failure its own entry, stopping
+    /// early only once the results weigh [`hv2_guest_agent::MAX_BATCH_REPLY_BYTES`].
+    fn batch(ops: Vec<Operation>) -> OpResult {
+        if let Err(message) = hv2_guest_agent::validate_batch(&ops) {
+            return OpResult::Failed { message };
+        }
+        let mut results = Vec::with_capacity(ops.len());
+        let mut weight = 0usize;
+        for op in ops {
+            // Only filesystem operations get here, so `handle` cannot recurse
+            // into another batch. The version is the one just checked.
+            let result = handle(Request {
+                id: 0,
+                version: PROTOCOL_VERSION,
+                op,
+            })
+            .result;
+            // Sizing a result costs a serialisation; only the kinds that can
+            // be large are worth it, the rest are counted as a small constant.
+            weight += match &result {
+                OpResult::FileData { data, .. } => data.len() + 64,
+                OpResult::DirEntries { entries, .. } => {
+                    entries
+                        .iter()
+                        .map(|e| e.name.len() * 6 + 160)
+                        .sum::<usize>()
+                        + 64
+                }
+                _ => 256,
+            };
+            results.push(result);
+            if weight >= hv2_guest_agent::MAX_BATCH_REPLY_BYTES {
+                break;
+            }
+        }
+        OpResult::Batch { results }
     }
 
     /// See [`Operation::WriteFile`].
@@ -2419,6 +2459,193 @@ mod linux {
 
         fn mode(p: &Path) -> u32 {
             std::fs::metadata(p).unwrap().permissions().mode() & 0o7777
+        }
+
+        fn batch_results(result: OpResult) -> Vec<OpResult> {
+            match result {
+                OpResult::Batch { results } => results,
+                other => panic!("expected a batch answer, got {other:?}"),
+            }
+        }
+
+        #[test]
+        fn a_batch_runs_filesystem_operations_in_order_and_a_failure_does_not_stop_it() {
+            let root = scratch("batch-mix");
+            let (dir, file, link) = (root.join("d"), root.join("d/f"), root.join("d/l"));
+            let results = batch_results(batch(vec![
+                Operation::MakeDir {
+                    path: s(&dir).into(),
+                    parents: false,
+                    owner: None,
+                    mode: Some(0o750),
+                },
+                Operation::WriteFile {
+                    path: s(&file).into(),
+                    data: hv2_guest_agent::b64::encode(b"hello"),
+                    append: false,
+                    owner: None,
+                },
+                // Fails (the parent is missing), and the rest still run.
+                Operation::MakeDir {
+                    path: s(&root.join("x/y")).into(),
+                    parents: false,
+                    owner: None,
+                    mode: None,
+                },
+                Operation::MakeSymlink {
+                    target: "f".into(),
+                    path: s(&link).into(),
+                    owner: None,
+                },
+                Operation::SetAttr {
+                    path: s(&file).into(),
+                    owner: None,
+                    mode: Some(0o600),
+                    recursive: false,
+                },
+                Operation::Stat {
+                    path: s(&file).into(),
+                    follow: false,
+                },
+                Operation::ReadFile {
+                    path: s(&file).into(),
+                    offset: 0,
+                    length: 100,
+                },
+                Operation::ReadLink {
+                    path: s(&link).into(),
+                },
+                Operation::ListDir {
+                    path: s(&dir).into(),
+                    limit: 0,
+                },
+                Operation::Remove {
+                    path: s(&link).into(),
+                    recursive: false,
+                    missing_ok: false,
+                },
+            ]));
+            assert_eq!(results.len(), 10);
+            assert_eq!(results[0], OpResult::Acknowledged);
+            assert_eq!(results[1], OpResult::Acknowledged);
+            assert!(failure(results[2].clone()).contains("No such file"));
+            assert_eq!(results[3], OpResult::Acknowledged);
+            assert_eq!(results[4], OpResult::Acknowledged);
+            let OpResult::FileStat(stat) = &results[5] else {
+                panic!("{:?}", results[5])
+            };
+            assert_eq!((stat.size, stat.mode), (5, 0o600));
+            let OpResult::FileData { data, size } = &results[6] else {
+                panic!("{:?}", results[6])
+            };
+            assert_eq!(hv2_guest_agent::b64::decode(data).unwrap(), b"hello");
+            assert_eq!(*size, 5);
+            assert_eq!(results[7], OpResult::LinkTarget { target: "f".into() });
+            let OpResult::DirEntries { entries, .. } = &results[8] else {
+                panic!("{:?}", results[8])
+            };
+            assert_eq!(entries.len(), 2);
+            assert_eq!(results[9], OpResult::Acknowledged);
+            assert_eq!(mode(&dir), 0o750);
+            assert!(std::fs::symlink_metadata(&link).is_err());
+        }
+
+        #[test]
+        fn a_batch_with_a_disallowed_operation_is_refused_whole_and_runs_nothing() {
+            let root = scratch("batch-refuse");
+            let made = root.join("made");
+            for bad in [
+                Operation::Ping,
+                Operation::Exec {
+                    program: "/bin/true".into(),
+                    args: vec![],
+                    cwd: None,
+                    stdin: None,
+                    timeout_ms: 1000,
+                    user: None,
+                },
+                Operation::Poll { pid: 1 },
+                Operation::MountBlock {
+                    device: "/dev/vda".into(),
+                    target: "/m".into(),
+                    fstype: hv2_guest_agent::MountFsType::Ext4,
+                    expect_sectors: None,
+                    drop_caches: false,
+                },
+                Operation::Batch { ops: vec![] },
+            ] {
+                let message = failure(batch(vec![
+                    Operation::MakeDir {
+                        path: s(&made).into(),
+                        parents: false,
+                        owner: None,
+                        mode: None,
+                    },
+                    bad,
+                ]));
+                assert!(message.contains("operation 1"), "{message}");
+                assert!(!made.exists(), "the first operation ran");
+            }
+            // Over the operation cap: refused, nothing run.
+            let mkdir = Operation::MakeDir {
+                path: s(&made).into(),
+                parents: true,
+                owner: None,
+                mode: None,
+            };
+            let message = failure(batch(vec![mkdir; hv2_guest_agent::MAX_BATCH_OPS + 1]));
+            assert!(message.contains("at most"), "{message}");
+            assert!(!made.exists());
+            // An empty batch is a batch.
+            assert!(batch_results(batch(vec![])).is_empty());
+        }
+
+        #[test]
+        fn a_batch_stops_at_the_reply_cap_and_the_rest_can_be_sent_again() {
+            let root = scratch("batch-cap");
+            // Each read answers about 1.4 MiB of base64: the cap is reached
+            // on the second, so the third is not run.
+            let big = vec![7u8; 1024 * 1024];
+            for name in ["a", "b", "c"] {
+                std::fs::write(root.join(name), &big).unwrap();
+            }
+            let reads: Vec<Operation> = ["a", "b", "c"]
+                .iter()
+                .map(|name| Operation::ReadFile {
+                    path: s(&root.join(name)).into(),
+                    offset: 0,
+                    length: u64::MAX,
+                })
+                .collect();
+            let results = batch_results(batch(reads.clone()));
+            assert_eq!(results.len(), 2, "stopped once the cap was reached");
+            assert!(results
+                .iter()
+                .all(|r| matches!(r, OpResult::FileData { size, .. } if *size == 1 << 20)));
+            // The reply fits the frame, with room to spare.
+            let frame = encode(&Response {
+                id: 1,
+                version: PROTOCOL_VERSION,
+                result: OpResult::Batch { results },
+            })
+            .unwrap();
+            assert!(frame.len() < MAX_FRAME_BYTES);
+            // The remainder is the caller's to send again.
+            let rest = batch_results(batch(reads[2..].to_vec()));
+            assert_eq!(rest.len(), 1);
+            // Writers are never cut short: their results are small.
+            let writes: Vec<Operation> = (0..hv2_guest_agent::MAX_BATCH_OPS)
+                .map(|i| Operation::WriteFile {
+                    path: s(&root.join(format!("w{i}"))).into(),
+                    data: String::new(),
+                    append: true,
+                    owner: None,
+                })
+                .collect();
+            assert_eq!(
+                batch_results(batch(writes)).len(),
+                hv2_guest_agent::MAX_BATCH_OPS
+            );
         }
 
         #[test]

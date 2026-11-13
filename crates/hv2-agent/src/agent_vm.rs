@@ -957,6 +957,25 @@ impl AgentVM {
         .await
     }
 
+    /// Run filesystem operations in order on one agent connection; see
+    /// [`GuestAgent::batch`]. One result per operation, in order; a failing
+    /// operation is its own [`hv2_guest_agent::OpResult::Failed`] and the
+    /// rest still ran.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::list_dir_in_guest`]: [`crate::is_unsupported_op`] says the
+    /// agent predates batching and the caller falls back to one operation
+    /// per connection.
+    pub async fn batch_in_guest(
+        &self,
+        ops: Vec<hv2_guest_agent::Operation>,
+        timeout: Duration,
+    ) -> Result<Vec<hv2_guest_agent::OpResult>> {
+        self.fs_op("batch", timeout, move |a| a.batch(ops, timeout))
+            .await
+    }
+
     /// The guest channel, for moving files: gated as running a command is,
     /// since writing any file is as much power over the guest.
     fn file_channel(

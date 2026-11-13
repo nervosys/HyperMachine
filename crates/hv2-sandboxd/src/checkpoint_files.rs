@@ -21,6 +21,7 @@
 //!   sandbox's size, over and above `--capacity`, for the length of one
 //!   request.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -29,7 +30,7 @@ use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use hv2_agent::{is_unsupported_op, AgentError, AgentVM};
-use hv2_guest_agent::{DirEntry, DirEntryKind, SignalName};
+use hv2_guest_agent::{DirEntry, DirEntryKind, OpResult, Operation, SignalName};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -599,6 +600,12 @@ trait GuestTree {
     async fn list(&self, path: &str) -> Result<(Vec<DirEntry>, bool), AgentError>;
     async fn read(&self, path: &str, limit: u64) -> Result<Vec<u8>, AgentError>;
     async fn link(&self, path: &str) -> Result<String, AgentError>;
+    /// Several reads in one round trip, in order; `Ok(None)` if the guest's
+    /// agent has no batch operation (the default: one operation per read).
+    async fn batch(&self, ops: Vec<Operation>) -> Result<Option<Vec<OpResult>>, AgentError> {
+        let _ = ops;
+        Ok(None)
+    }
 }
 
 impl GuestTree for AgentVM {
@@ -614,9 +621,164 @@ impl GuestTree for AgentVM {
     async fn link(&self, path: &str) -> Result<String, AgentError> {
         self.read_link_in_guest(path, READ_TIMEOUT).await
     }
+    async fn batch(&self, ops: Vec<Operation>) -> Result<Option<Vec<OpResult>>, AgentError> {
+        match self.batch_in_guest(ops, READ_TIMEOUT).await {
+            Ok(results) => Ok(Some(results)),
+            Err(e) if is_unsupported_op(&e) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
 }
 
-/// A gzipped tar built on the host, and how many entries it left out.
+/// A file at most this large is read in a batch with the files after it in
+/// the walk, rather than on a connection of its own; a larger one is read as
+/// before, so a batch's reply stays small whatever the tree holds.
+const BATCH_READ_FILE: u64 = 64 << 10;
+
+/// The most file data one prefetch asks for, by the files' sizes.
+const BATCH_READ_BYTES: u64 = 4 << 20;
+
+/// The most operations one prefetch holds.
+const BATCH_READ_OPS: usize = 256;
+
+/// The most prefetched data kept waiting for the walk to reach it, in bytes
+/// of the agent's base64 (a third more than the files).
+const PREFETCH_HELD: usize = 8 << 20;
+
+/// How far down the walk's stack one prefetch looks for files to read.
+const PREFETCH_LOOKAHEAD: usize = 4096;
+
+/// Reads of the walk's next files and links, made together in a batch ahead
+/// of when the walk needs them: one round trip for dozens of files where
+/// one each costs two to three milliseconds. What is read is exactly what
+/// the walk then reads one at a time -- a result that is not a clean, whole
+/// answer (the file changed, the answer is odd) is dropped and the walk
+/// reads that path itself, so every limit and error is the walk's own.
+struct Prefetch {
+    /// False once the agent has no batch operation, or a batch failed.
+    on: bool,
+    held: HashMap<String, OpResult>,
+    held_bytes: usize,
+}
+
+impl Prefetch {
+    fn new() -> Self {
+        Self {
+            on: true,
+            held: HashMap::new(),
+            held_bytes: 0,
+        }
+    }
+
+    /// The operation that reads `entry` at `path` ahead, if it is worth one.
+    fn read_for(path: &str, entry: &DirEntry) -> Option<Operation> {
+        match entry.kind {
+            DirEntryKind::File if entry.size <= BATCH_READ_FILE => Some(Operation::ReadFile {
+                path: path.to_string(),
+                offset: 0,
+                length: BATCH_READ_FILE,
+            }),
+            DirEntryKind::Symlink => Some(Operation::ReadLink {
+                path: path.to_string(),
+            }),
+            _ => None,
+        }
+    }
+
+    /// Take what was read for `path`, if anything.
+    fn take(&mut self, path: &str) -> Option<OpResult> {
+        let result = self.held.remove(path)?;
+        if let OpResult::FileData { data, .. } = &result {
+            self.held_bytes = self.held_bytes.saturating_sub(data.len());
+        }
+        Some(result)
+    }
+
+    /// Read `first` and the files and links below it on the walk's `stack`
+    /// (the next to be walked are at its end) in one batch, as far as the
+    /// caps allow.
+    async fn fill<G: GuestTree>(
+        &mut self,
+        guest: &G,
+        first: (&str, &DirEntry),
+        stack: &[(String, String, DirEntry)],
+    ) {
+        let mut paths = vec![first.0.to_string()];
+        let mut ops: Vec<Operation> = Vec::new();
+        ops.extend(Self::read_for(first.0, first.1));
+        let mut bytes = first.1.size;
+        for (path, _, entry) in stack.iter().rev().take(PREFETCH_LOOKAHEAD) {
+            if self.held.contains_key(path) {
+                continue;
+            }
+            let Some(op) = Self::read_for(path, entry) else {
+                continue;
+            };
+            if ops.len() >= BATCH_READ_OPS
+                || bytes + entry.size > BATCH_READ_BYTES
+                || self.held_bytes + (bytes as usize) / 3 * 4 > PREFETCH_HELD
+            {
+                break;
+            }
+            bytes += entry.size;
+            paths.push(path.clone());
+            ops.push(op);
+        }
+        // `paths` has `first` first whether or not it had an operation.
+        if Self::read_for(first.0, first.1).is_none() {
+            paths.remove(0);
+        }
+        if ops.is_empty() {
+            return;
+        }
+        match guest.batch(ops).await {
+            Ok(Some(results)) if results.len() == paths.len() => {
+                for (path, result) in paths.into_iter().zip(results) {
+                    if let OpResult::FileData { data, .. } = &result {
+                        self.held_bytes += data.len();
+                    }
+                    self.held.insert(path, result);
+                }
+            }
+            Ok(Some(_)) | Err(_) => {
+                tracing::debug!("checkpoint reader: a prefetch failed, reading one at a time");
+                self.on = false;
+            }
+            Ok(None) => {
+                tracing::debug!(
+                    "checkpoint reader: the guest's agent has no batch operation, \
+                     using one op per connection (archive)"
+                );
+                self.on = false;
+            }
+        }
+    }
+}
+
+/// A prefetched file read as the walk's own `read` would return it: `None`
+/// if it is not a clean, whole answer within `limit`, and the walk reads
+/// the path itself.
+fn prefetched_file(result: OpResult, limit: u64) -> Option<Result<Vec<u8>, AgentError>> {
+    match result {
+        OpResult::FileData { data, size } if size <= limit.min(BATCH_READ_FILE) => {
+            let bytes = hv2_guest_agent::b64::decode(&data)?;
+            (bytes.len() as u64 >= size).then_some(Ok(bytes))
+        }
+        OpResult::Failed { message } => Some(Err(AgentError::Script(message))),
+        _ => None,
+    }
+}
+
+/// A prefetched link target as the walk's own `link` would return it.
+fn prefetched_link(result: OpResult) -> Option<Result<String, AgentError>> {
+    match result {
+        OpResult::LinkTarget { target } => Some(Ok(target)),
+        OpResult::Failed { message } => Some(Err(AgentError::Script(message))),
+        _ => None,
+    }
+}
+
+// A gzipped tar built on the host, and how many entries it left out.
 struct Archived {
     bytes: Vec<u8>,
     skipped: u64,
@@ -690,6 +852,7 @@ async fn build_archive<G: GuestTree>(guest: &G, root: &str) -> Result<Option<Arc
         top,
     )];
     let (mut entries, mut input, mut skipped) = (0usize, 0u64, 0u64);
+    let mut ahead = Prefetch::new();
     while let Some((path, name, entry)) = stack.pop() {
         if started.elapsed() > ARCHIVE_DEADLINE {
             return Err(refused(
@@ -747,7 +910,14 @@ async fn build_archive<G: GuestTree>(guest: &G, root: &str) -> Result<Option<Arc
                         entry.size
                     )));
                 }
-                let data = match guest.read(shown, limit).await {
+                if ahead.on && entry.size <= BATCH_READ_FILE && !ahead.held.contains_key(shown) {
+                    ahead.fill(guest, (shown, &entry), &stack).await;
+                }
+                let read = match ahead.take(shown).and_then(|r| prefetched_file(r, limit)) {
+                    Some(read) => read,
+                    None => guest.read(shown, limit).await,
+                };
+                let data = match read {
                     Ok(data) => data,
                     Err(e) if is_missing(&e.to_string()) => continue,
                     Err(e) => return Err(agent_refusal(shown, &e)),
@@ -757,7 +927,14 @@ async fn build_archive<G: GuestTree>(guest: &G, root: &str) -> Result<Option<Arc
                 tar.append_data(&mut header, &name, &data[..]).map_err(io)?;
             }
             DirEntryKind::Symlink => {
-                let target = match guest.link(shown).await {
+                if ahead.on && !ahead.held.contains_key(shown) {
+                    ahead.fill(guest, (shown, &entry), &stack).await;
+                }
+                let read = match ahead.take(shown).and_then(prefetched_link) {
+                    Some(read) => read,
+                    None => guest.link(shown).await,
+                };
+                let target = match read {
                     Ok(target) => target,
                     Err(e) if is_unsupported_op(&e) => return Ok(None),
                     Err(e) if is_missing(&e.to_string()) => continue,
@@ -993,6 +1170,14 @@ mod tests {
         nodes: std::collections::BTreeMap<String, (DirEntry, String)>,
         /// Paths whose `read_link` the agent would refuse as non-UTF-8.
         odd_links: Vec<String>,
+        /// Whether the agent has a batch operation; if so the sizes of the
+        /// batches it was sent, and how many reads went one at a time.
+        batching: bool,
+        batch_fails: bool,
+        batches: std::sync::Mutex<Vec<usize>>,
+        single_reads: std::sync::atomic::AtomicUsize,
+        /// Paths that vanish between the listing and the read.
+        vanished: Vec<String>,
     }
 
     impl Fake {
@@ -1028,9 +1213,54 @@ mod tests {
             ))
         }
         async fn read(&self, path: &str, limit: u64) -> Result<Vec<u8>, AgentError> {
+            self.single_reads
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if self.vanished.iter().any(|p| p == path) {
+                return Err(AgentError::Script(format!(
+                    "reading {path}: No such file or directory (os error 2)"
+                )));
+            }
             let (entry, content) = &self.nodes[path];
             assert!(entry.size <= limit);
             Ok(content.clone().into_bytes())
+        }
+        async fn batch(&self, ops: Vec<Operation>) -> Result<Option<Vec<OpResult>>, AgentError> {
+            if !self.batching {
+                return Ok(None);
+            }
+            if self.batch_fails {
+                return Err(AgentError::Timeout("the guest did not answer".into()));
+            }
+            self.batches.lock().unwrap().push(ops.len());
+            let mut out = Vec::new();
+            for op in ops {
+                out.push(match op {
+                    Operation::ReadFile { path, length, .. } => {
+                        if self.vanished.contains(&path) {
+                            OpResult::Failed {
+                                message: format!(
+                                    "reading {path}: No such file or directory (os error 2)"
+                                ),
+                            }
+                        } else {
+                            let (entry, content) = &self.nodes[&path];
+                            assert!(entry.size <= length, "a batch read of a big file");
+                            OpResult::FileData {
+                                data: hv2_guest_agent::b64::encode(content.as_bytes()),
+                                size: entry.size,
+                            }
+                        }
+                    }
+                    Operation::ReadLink { path } => match self.link(&path).await {
+                        Ok(target) => OpResult::LinkTarget { target },
+                        Err(e) => OpResult::Failed {
+                            message: e.to_string(),
+                        },
+                    },
+                    other => panic!("not a read: {other:?}"),
+                });
+            }
+            Ok(Some(out))
         }
         async fn link(&self, path: &str) -> Result<String, AgentError> {
             if self.odd_links.iter().any(|p| p == path) {
@@ -1146,6 +1376,125 @@ mod tests {
         let got = build_archive(&g, "/srv").await.unwrap().unwrap();
         assert_eq!(got.skipped, 2);
         assert!(unpacked(&got.bytes).iter().all(|e| e.0 != "link"));
+    }
+
+    /// A tree of many small files in several directories, plus a link, a
+    /// device and a file too big to batch.
+    fn wide_tree() -> Fake {
+        let mut g = Fake::default();
+        g.add("/w", DirEntryKind::Dir, 0o755, "");
+        for d in 0..4 {
+            g.add(&format!("/w/d{d}"), DirEntryKind::Dir, 0o755, "");
+            for f in 0..120 {
+                g.add(
+                    &format!("/w/d{d}/f{f:03}"),
+                    DirEntryKind::File,
+                    0o644,
+                    &format!("file {d}/{f}"),
+                );
+            }
+            g.add(
+                &format!("/w/d{d}/zlink"),
+                DirEntryKind::Symlink,
+                0o777,
+                "f000",
+            );
+        }
+        g.add("/w/tty", DirEntryKind::Other, 0o666, "");
+        g.add("/w/big", DirEntryKind::File, 0o644, "x");
+        g.nodes.get_mut("/w/big").unwrap().0.size = BATCH_READ_FILE + 1;
+        g
+    }
+
+    fn singles(g: &Fake) -> usize {
+        g.single_reads.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    #[tokio::test]
+    async fn batched_reads_give_the_same_archive_in_far_fewer_round_trips() {
+        // The slow way: no batch operation.
+        let plain = wide_tree();
+        let want = build_archive(&plain, "/w").await.unwrap().unwrap();
+        assert_eq!(singles(&plain), 4 * 120 + 1);
+
+        let mut fast = wide_tree();
+        fast.batching = true;
+        let got = build_archive(&fast, "/w").await.unwrap().unwrap();
+        assert_eq!(unpacked(&got.bytes), unpacked(&want.bytes));
+        assert_eq!(got.skipped, 1);
+        let batches = fast.batches.lock().unwrap().clone();
+        // 480 files and 4 links in a handful of batches; the big file alone.
+        assert_eq!(batches.iter().sum::<usize>(), 4 * 120 + 4);
+        assert!(batches.len() <= 6, "{batches:?}");
+        assert!(batches.iter().all(|n| *n <= BATCH_READ_OPS));
+        assert_eq!(singles(&fast), 1, "only the file too big to batch");
+    }
+
+    #[tokio::test]
+    async fn a_batch_that_fails_or_is_unsupported_falls_back_to_one_at_a_time() {
+        let want = build_archive(&wide_tree(), "/w").await.unwrap().unwrap();
+        // Failing: the walk reads one at a time and still finishes.
+        let mut g = wide_tree();
+        g.batching = true;
+        g.batch_fails = true;
+        let got = build_archive(&g, "/w").await.unwrap().unwrap();
+        assert_eq!(unpacked(&got.bytes), unpacked(&want.bytes));
+        assert_eq!(singles(&g), 4 * 120 + 1);
+        assert!(g.batches.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_batched_walk_drops_a_vanished_file_and_a_non_utf8_link_as_before() {
+        let mut g = wide_tree();
+        g.batching = true;
+        g.vanished.push("/w/d1/f007".into());
+        g.odd_links.push("/w/d2/zlink".into());
+        let got = build_archive(&g, "/w").await.unwrap().unwrap();
+        let names: Vec<String> = unpacked(&got.bytes).into_iter().map(|e| e.0).collect();
+        assert!(!names.contains(&"d1/f007".to_string()));
+        assert!(names.contains(&"d1/f006".to_string()) && names.contains(&"d1/f008".to_string()));
+        assert!(!names.contains(&"d2/zlink".to_string()));
+        assert!(names.contains(&"d1/zlink".to_string()));
+        assert_eq!(got.skipped, 2, "the device and the odd link");
+    }
+
+    #[tokio::test]
+    async fn a_batched_walk_still_refuses_what_is_over_a_cap() {
+        let mut g = wide_tree();
+        g.batching = true;
+        g.nodes.get_mut("/w/big").unwrap().0.size = MAX_ARCHIVE_FILE + 1;
+        let err = build_archive(&g, "/w").await.err().unwrap();
+        assert_eq!(err.0, StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    #[test]
+    fn a_prefetched_answer_is_used_only_when_whole_and_within_the_limit() {
+        let ok = |size: u64, text: &str| OpResult::FileData {
+            data: hv2_guest_agent::b64::encode(text.as_bytes()),
+            size,
+        };
+        assert_eq!(prefetched_file(ok(2, "hi"), 100).unwrap().unwrap(), b"hi");
+        // Over the walk's limit: the walk's own read says so.
+        assert!(prefetched_file(ok(2, "hi"), 1).is_none());
+        // The file grew past what was asked for, or less came than its size.
+        assert!(prefetched_file(ok(BATCH_READ_FILE + 1, "hi"), u64::MAX).is_none());
+        assert!(prefetched_file(ok(5, "hi"), 100).is_none());
+        assert!(prefetched_file(OpResult::Acknowledged, 100).is_none());
+        let failed = prefetched_file(
+            OpResult::Failed {
+                message: "No such file".into(),
+            },
+            100,
+        )
+        .unwrap();
+        assert!(failed.unwrap_err().to_string().contains("No such file"));
+        assert_eq!(
+            prefetched_link(OpResult::LinkTarget { target: "t".into() })
+                .unwrap()
+                .unwrap(),
+            "t"
+        );
+        assert!(prefetched_link(OpResult::Acknowledged).is_none());
     }
 
     #[tokio::test]

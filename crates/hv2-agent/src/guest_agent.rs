@@ -59,6 +59,10 @@ pub fn is_unsupported_op(error: &AgentError) -> bool {
     matches!(error, AgentError::Script(message) if message.starts_with(UNSUPPORTED_OP_PREFIX))
 }
 
+/// How much request one batch carries at most, in bytes of JSON: half the
+/// frame limit, so framing never pushes a batch over it.
+pub const BATCH_REQUEST_BYTES: usize = MAX_FRAME_BYTES / 2;
+
 /// Recognise "the connection closed with no answer" as an agent that does not
 /// know operation `name`; any other error passes through.
 fn unsupported_if_dropped(name: &str, error: AgentError) -> AgentError {
@@ -1145,6 +1149,78 @@ impl GuestAgent {
         }
     }
 
+    /// Run filesystem operations in order on this one connection, one round
+    /// trip per batch the agent takes rather than one per operation; see
+    /// [`Operation::Batch`]. Returns one result per operation, in order:
+    /// a failing operation is its own [`OpResult::Failed`] entry and the rest
+    /// still ran, so the caller reads them in order.
+    ///
+    /// The operations are split into batches of at most
+    /// [`hv2_guest_agent::MAX_BATCH_OPS`] and about [`BATCH_REQUEST_BYTES`] of
+    /// request, and any the agent stopped short of (its reply cap) are sent
+    /// again in the next, so the caller need not size anything. A single
+    /// `write_file` whose data does not fit one frame is not supported here:
+    /// write such a file with [`Self::write_file_as`].
+    ///
+    /// # Errors
+    ///
+    /// A transport failure; the guest refusing the whole batch (an operation
+    /// that is not a filesystem one, which is refused here first); an
+    /// operation too large for a frame; [`is_unsupported_op`] for an agent
+    /// from before batching existed.
+    pub fn batch(&mut self, ops: Vec<Operation>, timeout: Duration) -> Result<Vec<OpResult>> {
+        if let Some(op) = ops.iter().find(|op| !hv2_guest_agent::batchable(op)) {
+            return Err(AgentError::Script(format!(
+                "refusing a batch: {} is not a filesystem operation",
+                hv2_guest_agent::op_name(op)
+            )));
+        }
+        let total = ops.len();
+        let mut results = Vec::with_capacity(total);
+        let mut ops = ops.into_iter().peekable();
+        while ops.peek().is_some() {
+            let mut chunk = Vec::new();
+            let mut bytes = 0usize;
+            while chunk.len() < hv2_guest_agent::MAX_BATCH_OPS {
+                let Some(op) = ops.peek() else { break };
+                let size = serde_json::to_vec(op).map_or(0, |v| v.len()) + 1;
+                // One op always goes, so the frame check reports one too big.
+                if !chunk.is_empty() && bytes + size > BATCH_REQUEST_BYTES {
+                    break;
+                }
+                bytes += size;
+                chunk.extend(ops.next());
+            }
+            let sent = chunk.len();
+            match self.request_fs_op("batch", Operation::Batch { ops: chunk.clone() }, timeout)? {
+                OpResult::Batch { results: got } => {
+                    if got.is_empty() || got.len() > sent {
+                        return Err(AgentError::Script(format!(
+                            "the guest answered a batch of {sent} operations with {} results",
+                            got.len()
+                        )));
+                    }
+                    let ran = got.len();
+                    results.extend(got);
+                    // What the agent stopped short of goes first in the next.
+                    if ran < sent {
+                        let rest = chunk.split_off(ran);
+                        let tail: Vec<Operation> = rest.into_iter().chain(ops).collect();
+                        ops = tail.into_iter().peekable();
+                    }
+                }
+                OpResult::Failed { message } => return Err(AgentError::Script(message)),
+                other => {
+                    return Err(AgentError::Script(format!(
+                        "the guest answered a batch with {other:?}"
+                    )))
+                }
+            }
+        }
+        debug_assert_eq!(results.len(), total);
+        Ok(results)
+    }
+
     fn acknowledged(
         &mut self,
         name: &'static str,
@@ -1500,6 +1576,182 @@ mod tests {
         let refused = agent.signal_process(1, SignalName::Stop, t).unwrap_err();
         assert!(refused.to_string().contains("refusing"));
         assert!(!is_unsupported_op(&refused));
+    }
+
+    fn stat_op(path: &str) -> Operation {
+        Operation::Stat {
+            path: path.into(),
+            follow: false,
+        }
+    }
+
+    /// A guest that answers every batch by acknowledging at most `take` of
+    /// its operations, and records the size of each batch it was sent.
+    fn batching_guest(take: usize, seen: Arc<Mutex<Vec<(usize, usize)>>>) -> Box<FakeGuest> {
+        FakeGuest::new(move |request| {
+            let Operation::Batch { ops } = request.op else {
+                return None;
+            };
+            let frame = encode(&Request {
+                id: 0,
+                version: PROTOCOL_VERSION,
+                op: Operation::Batch { ops: ops.clone() },
+            })
+            .unwrap();
+            seen.lock().push((ops.len(), frame.len()));
+            let results = ops
+                .iter()
+                .take(take)
+                .map(|op| match op {
+                    Operation::Stat { path, .. } if path.contains("bad") => OpResult::Failed {
+                        message: format!("stat {path}: No such file or directory"),
+                    },
+                    Operation::Stat { path, .. } => OpResult::LinkTarget {
+                        target: path.clone(),
+                    },
+                    _ => OpResult::Acknowledged,
+                })
+                .collect();
+            Some(Response {
+                id: request.id,
+                version: PROTOCOL_VERSION,
+                result: OpResult::Batch { results },
+            })
+        })
+    }
+
+    #[test]
+    fn a_batch_returns_results_in_order_and_a_failure_is_its_own_entry() {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut agent = GuestAgent::new(batching_guest(usize::MAX, seen.clone()));
+        let t = Duration::from_secs(5);
+        let results = agent
+            .batch(vec![stat_op("/a"), stat_op("/bad"), stat_op("/c")], t)
+            .unwrap();
+        assert_eq!(results.len(), 3);
+        assert_eq!(
+            results[0],
+            OpResult::LinkTarget {
+                target: "/a".into()
+            }
+        );
+        assert!(matches!(&results[1], OpResult::Failed { message } if message.contains("/bad")));
+        assert_eq!(
+            results[2],
+            OpResult::LinkTarget {
+                target: "/c".into()
+            }
+        );
+        assert_eq!(seen.lock().len(), 1, "one round trip");
+        assert!(agent.batch(vec![], t).unwrap().is_empty());
+        assert_eq!(seen.lock().len(), 1, "an empty batch sends nothing");
+    }
+
+    #[test]
+    fn a_long_batch_is_split_at_the_operation_cap() {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut agent = GuestAgent::new(batching_guest(usize::MAX, seen.clone()));
+        let ops: Vec<Operation> = (0..1200).map(|i| stat_op(&format!("/f{i}"))).collect();
+        let results = agent.batch(ops, Duration::from_secs(5)).unwrap();
+        assert_eq!(results.len(), 1200);
+        // In order across the split.
+        assert_eq!(
+            results[1199],
+            OpResult::LinkTarget {
+                target: "/f1199".into()
+            }
+        );
+        let sizes: Vec<usize> = seen.lock().iter().map(|s| s.0).collect();
+        assert_eq!(sizes, [512, 512, 176]);
+    }
+
+    #[test]
+    fn a_batch_the_agent_stops_short_of_is_continued_without_repeats() {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut agent = GuestAgent::new(batching_guest(2, seen.clone()));
+        let ops: Vec<Operation> = (0..5).map(|i| stat_op(&format!("/f{i}"))).collect();
+        let results = agent.batch(ops, Duration::from_secs(5)).unwrap();
+        let targets: Vec<String> = results
+            .into_iter()
+            .map(|r| match r {
+                OpResult::LinkTarget { target } => target,
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(targets, ["/f0", "/f1", "/f2", "/f3", "/f4"]);
+        let sizes: Vec<usize> = seen.lock().iter().map(|s| s.0).collect();
+        assert_eq!(sizes, [5, 3, 1], "each resend holds only what was not run");
+    }
+
+    #[test]
+    fn a_batch_of_large_writes_is_split_to_fit_the_request_budget() {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut agent = GuestAgent::new(batching_guest(usize::MAX, seen.clone()));
+        // 40 writes of 300 KiB of data each: about 16 MiB of base64 in all.
+        let data = hv2_guest_agent::b64::encode(&vec![1u8; 300 * 1024]);
+        let ops: Vec<Operation> = (0..40)
+            .map(|i| Operation::WriteFile {
+                path: format!("/w{i}"),
+                data: data.clone(),
+                append: false,
+                owner: None,
+            })
+            .collect();
+        let results = agent.batch(ops, Duration::from_secs(10)).unwrap();
+        assert_eq!(results.len(), 40);
+        assert!(results.iter().all(|r| *r == OpResult::Acknowledged));
+        let seen = seen.lock();
+        assert!(seen.len() >= 4, "{seen:?}");
+        for (_, frame) in seen.iter() {
+            assert!(*frame < MAX_FRAME_BYTES, "{frame}");
+        }
+        assert_eq!(seen.iter().map(|s| s.0).sum::<usize>(), 40);
+    }
+
+    #[test]
+    fn only_filesystem_operations_are_sent_in_a_batch() {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut agent = GuestAgent::new(batching_guest(usize::MAX, seen.clone()));
+        let error = agent
+            .batch(vec![stat_op("/a"), Operation::Ping], Duration::from_secs(1))
+            .unwrap_err();
+        assert!(error.to_string().contains("ping"), "{error}");
+        assert!(!is_unsupported_op(&error));
+        assert!(seen.lock().is_empty(), "nothing was sent");
+    }
+
+    #[test]
+    fn a_whole_batch_refused_by_the_guest_is_an_error() {
+        let mut agent = GuestAgent::new(FakeGuest::new(|request| {
+            Some(Response {
+                id: request.id,
+                version: PROTOCOL_VERSION,
+                result: OpResult::Failed {
+                    message: "refusing a batch: nope".into(),
+                },
+            })
+        }));
+        let error = agent
+            .batch(vec![stat_op("/a")], Duration::from_secs(1))
+            .unwrap_err();
+        assert!(error.to_string().contains("nope"));
+        assert!(!is_unsupported_op(&error));
+        // An agent that answers with nothing run, or more than was sent, is
+        // not believed.
+        let mut agent = GuestAgent::new(batching_guest(0, Arc::new(Mutex::new(Vec::new()))));
+        assert!(agent
+            .batch(vec![stat_op("/a")], Duration::from_secs(1))
+            .is_err());
+    }
+
+    #[test]
+    fn an_old_agent_dropping_the_connection_on_a_batch_is_an_unsupported_op() {
+        let mut agent = GuestAgent::new(Box::new(HangsUpOnUnknown { open: true }));
+        let error = agent
+            .batch(vec![stat_op("/a")], Duration::from_secs(1))
+            .unwrap_err();
+        assert!(is_unsupported_op(&error), "{error}");
+        assert!(error.to_string().contains("batch"));
     }
 
     #[test]
