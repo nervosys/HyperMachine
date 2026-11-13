@@ -300,9 +300,7 @@ mod tests {
     }
     #[tokio::test]
     async fn same_port_protocol_changes_preserve_existing_listener() {
-        let probe = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let port = probe.local_addr().unwrap().port();
-        drop(probe);
+        let port = crate::test_ports::dual_port("127.0.0.1".parse().unwrap()).await;
         let mut binding =
             NativePortBinding::bind("127.0.0.1".parse().unwrap(), row(port, PortProtocol::Tcp))
                 .await
@@ -339,9 +337,8 @@ mod tests {
     }
     #[tokio::test]
     async fn ipv6_dual_protocol_datagrams_and_exclusive_bind() {
-        let probe = TcpListener::bind("[::1]:0").await.unwrap();
-        let address = probe.local_addr().unwrap();
-        drop(probe);
+        let ip = "::1".parse().unwrap();
+        let address = SocketAddr::new(ip, crate::test_ports::dual_port(ip).await);
         let binding =
             NativePortBinding::bind(address.ip(), row(address.port(), PortProtocol::Both))
                 .await
@@ -397,8 +394,7 @@ mod tests {
         );
     }
     async fn free_port() -> u16 {
-        let socket = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        socket.local_addr().unwrap().port()
+        crate::test_ports::dual_port("127.0.0.1".parse().unwrap()).await
     }
     #[tokio::test]
     async fn registry_recovers_same_ports_and_fails_closed_on_update() {

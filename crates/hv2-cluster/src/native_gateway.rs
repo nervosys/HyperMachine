@@ -383,9 +383,8 @@ mod tests {
         .unwrap()
     }
     async fn setup() -> (Arc<MemoryStore>, std::net::SocketAddr, PortAllocation) {
-        let probe = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = probe.local_addr().unwrap();
-        drop(probe);
+        let ip = "127.0.0.1".parse().unwrap();
+        let address = std::net::SocketAddr::new(ip, crate::test_ports::dual_port(ip).await);
         let store = Arc::new(MemoryStore::new());
         store
             .put_node(

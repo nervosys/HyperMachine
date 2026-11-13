@@ -628,7 +628,9 @@ pub(crate) mod tests {
         for ipv6 in [false, true] {
             let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
             let node_address = listener.local_addr().unwrap();
-            let socket = crate::udp_socket::bind(if ipv6 { "[::1]:0" } else { "127.0.0.1:0" })
+            let ip: std::net::IpAddr = if ipv6 { "::1" } else { "127.0.0.1" }.parse().unwrap();
+            let port = crate::test_ports::dual_port(ip).await;
+            let socket = crate::udp_socket::bind(std::net::SocketAddr::new(ip, port))
                 .await
                 .unwrap();
             let address = socket.local_addr().unwrap();
@@ -810,9 +812,8 @@ pub(crate) mod tests {
         let identity = identity(DEFAULT_NODE_NAME);
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let node_address = listener.local_addr().unwrap();
-        let probe = crate::udp_socket::bind("127.0.0.1:0").await.unwrap();
-        let address = probe.local_addr().unwrap();
-        drop(probe);
+        let ip = "127.0.0.1".parse().unwrap();
+        let address = std::net::SocketAddr::new(ip, crate::test_ports::dual_port(ip).await);
         let store = Arc::new(MemoryStore::new());
         records(&store, format!("https://{node_address}")).await;
         store

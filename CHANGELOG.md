@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Seven hv2-cluster tests failed on Windows CI with error 10013.** Each
+  bound an ephemeral TCP port and then UDP on the same number, but Windows
+  reserves port ranges per protocol, so a port free for TCP can be
+  forbidden for UDP. The tests now use a port they have bound for both.
 - **A sandbox could erase its own first entries from the node's egress record.** The
   record held 512 decisions and dropped the oldest, so a guest making hundreds of refused
   lookups pushed out the entries for what it did first. It now keeps the first 256 and the

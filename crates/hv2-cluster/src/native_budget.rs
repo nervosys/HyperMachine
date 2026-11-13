@@ -116,7 +116,8 @@ mod tests {
             tasks: Mutex::new(JoinSet::new()),
             opened: AtomicUsize::new(0),
         });
-        let tcp = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = crate::test_ports::dual_port("127.0.0.1".parse().unwrap()).await;
+        let tcp = TcpListener::bind(("127.0.0.1", port)).await.unwrap();
         let address = tcp.local_addr().unwrap();
         let udp = crate::udp_socket::bind(address).await.unwrap();
         let tcp_limits =
