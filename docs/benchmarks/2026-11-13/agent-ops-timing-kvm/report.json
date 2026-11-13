@@ -1,0 +1,1821 @@
+{
+  "label": "HEAD 3b27beb7",
+  "sizes": [
+    100,
+    1000,
+    5000
+  ],
+  "runs": 3,
+  "paths": [
+    "repo",
+    "archive",
+    "copy"
+  ],
+  "memory_mb": 1024,
+  "input_sha256": {
+    "daemon": "0cf628784805b80eb385c1e693b4ec5488b0a1b994f8d3ccce9748326a2e4fb3",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd-agent": "12577fb386d9649fbea4961478c4279812ab594e27fbad028e37c5342b837bd9",
+    "initrd-shell": "2952bbbe585a1b2e780aa3f3c02ffa722c203065f0341717653bb20dec33cca0",
+    "driver": "cb6d9b393024f599c9f925784a8b00ae6bd020f7a86d8cfb15b23c1b92ed4106"
+  },
+  "host_load": [
+    {
+      "batch": "run0-baselines",
+      "windows_cpu_percent": 100.0,
+      "loadavg": [
+        "11.58",
+        "5.71",
+        "3.36"
+      ],
+      "waited_seconds": 60.0,
+      "quiet": false
+    },
+    {
+      "batch": "run0-size100",
+      "windows_cpu_percent": 100.0,
+      "loadavg": [
+        "17.73",
+        "8.05",
+        "4.32"
+      ],
+      "waited_seconds": 60.0,
+      "quiet": false
+    },
+    {
+      "batch": "run0-size1000",
+      "windows_cpu_percent": 100.0,
+      "loadavg": [
+        "18.44",
+        "10.10",
+        "5.38"
+      ],
+      "waited_seconds": 60.0,
+      "quiet": false
+    },
+    {
+      "batch": "run0-size5000",
+      "windows_cpu_percent": 100.0,
+      "loadavg": [
+        "8.81",
+        "8.79",
+        "5.43"
+      ],
+      "waited_seconds": 60.0,
+      "quiet": false
+    },
+    {
+      "batch": "run1-baselines",
+      "windows_cpu_percent": 100.0,
+      "loadavg": [
+        "14.30",
+        "10.27",
+        "6.78"
+      ],
+      "waited_seconds": 60.0,
+      "quiet": false
+    },
+    {
+      "batch": "run1-size100",
+      "windows_cpu_percent": 100.0,
+      "loadavg": [
+        "5.68",
+        "8.58",
+        "6.46"
+      ],
+      "waited_seconds": 60.0,
+      "quiet": false
+    },
+    {
+      "batch": "run1-size1000",
+      "windows_cpu_percent": 100.0,
+      "loadavg": [
+        "23.04",
+        "12.50",
+        "7.96"
+      ],
+      "waited_seconds": 60.0,
+      "quiet": false
+    },
+    {
+      "batch": "run1-size5000",
+      "windows_cpu_percent": 100.0,
+      "loadavg": [
+        "21.59",
+        "18.22",
+        "11.22"
+      ],
+      "waited_seconds": 60.0,
+      "quiet": false
+    },
+    {
+      "batch": "run2-baselines",
+      "windows_cpu_percent": 100.0,
+      "loadavg": [
+        "4.22",
+        "10.42",
+        "9.64"
+      ],
+      "waited_seconds": 60.0,
+      "quiet": false
+    },
+    {
+      "batch": "run2-size100",
+      "windows_cpu_percent": 100.0,
+      "loadavg": [
+        "2.68",
+        "8.56",
+        "9.05"
+      ],
+      "waited_seconds": 60.0,
+      "quiet": false
+    },
+    {
+      "batch": "run2-size1000",
+      "windows_cpu_percent": 100.0,
+      "loadavg": [
+        "1.48",
+        "5.96",
+        "8.01"
+      ],
+      "waited_seconds": 60.0,
+      "quiet": false
+    },
+    {
+      "batch": "run2-size5000",
+      "windows_cpu_percent": 100.0,
+      "loadavg": [
+        "1.42",
+        "4.67",
+        "7.33"
+      ],
+      "waited_seconds": 60.0,
+      "quiet": false
+    }
+  ],
+  "measurements": [
+    {
+      "path": "repo",
+      "image": "agent",
+      "size": 1,
+      "run": 0,
+      "baseline": true,
+      "seconds": 2.0786109339996983,
+      "status": 201,
+      "complete": true
+    },
+    {
+      "path": "copy",
+      "image": "agent",
+      "size": 1,
+      "run": 0,
+      "baseline": true,
+      "seconds": 1.0432680959997924,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 6,
+        "expected": 6,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "repo",
+      "image": "shell",
+      "size": 1,
+      "run": 0,
+      "baseline": true,
+      "seconds": 1.1287436349998643,
+      "status": 201,
+      "complete": true
+    },
+    {
+      "path": "copy",
+      "image": "shell",
+      "size": 1,
+      "run": 0,
+      "baseline": true,
+      "seconds": 0.5114218439998695,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 6,
+        "expected": 6,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "archive",
+      "image": "agent",
+      "size": 100,
+      "run": 0,
+      "baseline": false,
+      "seconds": 0.5422269480000068,
+      "status": 200,
+      "complete": true,
+      "detail": {
+        "members": 106,
+        "expected": 106,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      },
+      "archive_bytes": 5883,
+      "skipped_header": "0"
+    },
+    {
+      "path": "repo",
+      "image": "agent",
+      "size": 100,
+      "run": 0,
+      "baseline": false,
+      "seconds": 1.628326781999931,
+      "status": 201,
+      "checkpoint_seconds": 0.017218322999724478,
+      "complete": true,
+      "detail": {
+        "members": 106,
+        "expected": 106,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "copy",
+      "image": "agent",
+      "size": 100,
+      "run": 0,
+      "baseline": false,
+      "seconds": 1.1504499920001763,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 106,
+        "expected": 106,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "archive",
+      "image": "shell",
+      "size": 100,
+      "run": 0,
+      "baseline": false,
+      "seconds": 0.22511655200014502,
+      "status": 200,
+      "complete": true,
+      "detail": {
+        "members": 106,
+        "expected": 106,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      },
+      "archive_bytes": 5180,
+      "skipped_header": "0"
+    },
+    {
+      "path": "repo",
+      "image": "shell",
+      "size": 100,
+      "run": 0,
+      "baseline": false,
+      "seconds": 0.3700146470000618,
+      "status": 201,
+      "checkpoint_seconds": 0.014143970000077388,
+      "complete": true,
+      "detail": {
+        "members": 106,
+        "expected": 106,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "copy",
+      "image": "shell",
+      "size": 100,
+      "run": 0,
+      "baseline": false,
+      "seconds": 0.618880911999895,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 106,
+        "expected": 106,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "archive",
+      "image": "shell",
+      "size": 1000,
+      "run": 0,
+      "baseline": false,
+      "seconds": 0.36496697099983066,
+      "status": 200,
+      "complete": true,
+      "detail": {
+        "members": 1025,
+        "expected": 1025,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      },
+      "archive_bytes": 49279,
+      "skipped_header": "0"
+    },
+    {
+      "path": "repo",
+      "image": "shell",
+      "size": 1000,
+      "run": 0,
+      "baseline": false,
+      "seconds": 1.1815041429999837,
+      "status": 201,
+      "checkpoint_seconds": 0.0350164470000891,
+      "complete": true,
+      "detail": {
+        "members": 1025,
+        "expected": 1025,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "copy",
+      "image": "shell",
+      "size": 1000,
+      "run": 0,
+      "baseline": false,
+      "seconds": 0.9355592340002659,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 1025,
+        "expected": 1025,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "archive",
+      "image": "agent",
+      "size": 1000,
+      "run": 0,
+      "baseline": false,
+      "seconds": 5.233534630000122,
+      "status": 200,
+      "complete": true,
+      "detail": {
+        "members": 1025,
+        "expected": 1025,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      },
+      "archive_bytes": 56461,
+      "skipped_header": "0"
+    },
+    {
+      "path": "repo",
+      "image": "agent",
+      "size": 1000,
+      "run": 0,
+      "baseline": false,
+      "seconds": 6.02109991999987,
+      "status": 201,
+      "checkpoint_seconds": 0.04372874099999535,
+      "complete": true,
+      "detail": {
+        "members": 1025,
+        "expected": 1025,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "copy",
+      "image": "agent",
+      "size": 1000,
+      "run": 0,
+      "baseline": false,
+      "seconds": 7.658557325999936,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 1025,
+        "expected": 1025,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "archive",
+      "image": "agent",
+      "size": 5000,
+      "run": 0,
+      "baseline": false,
+      "seconds": 15.335735841999849,
+      "status": 200,
+      "complete": true,
+      "detail": {
+        "members": 5113,
+        "expected": 5113,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      },
+      "archive_bytes": 286496,
+      "skipped_header": "0"
+    },
+    {
+      "path": "repo",
+      "image": "agent",
+      "size": 5000,
+      "run": 0,
+      "baseline": false,
+      "seconds": 28.360829490000015,
+      "status": 201,
+      "checkpoint_seconds": 0.06769837199999529,
+      "complete": true,
+      "detail": {
+        "members": 5113,
+        "expected": 5113,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "copy",
+      "image": "agent",
+      "size": 5000,
+      "run": 0,
+      "baseline": false,
+      "seconds": 51.36277737199998,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 5113,
+        "expected": 5113,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "archive",
+      "image": "shell",
+      "size": 5000,
+      "run": 0,
+      "baseline": false,
+      "seconds": 0.917814756000098,
+      "status": 200,
+      "complete": true,
+      "detail": {
+        "members": 5113,
+        "expected": 5113,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      },
+      "archive_bytes": 245809,
+      "skipped_header": "0"
+    },
+    {
+      "path": "repo",
+      "image": "shell",
+      "size": 5000,
+      "run": 0,
+      "baseline": false,
+      "seconds": 3.641383878000397,
+      "status": 201,
+      "checkpoint_seconds": 0.10085579700034941,
+      "complete": true,
+      "detail": {
+        "members": 5113,
+        "expected": 5113,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "copy",
+      "image": "shell",
+      "size": 5000,
+      "run": 0,
+      "baseline": false,
+      "seconds": 1.891722105000099,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 5113,
+        "expected": 5113,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "repo",
+      "image": "shell",
+      "size": 1,
+      "run": 1,
+      "baseline": true,
+      "seconds": 0.6872645650000777,
+      "status": 201,
+      "complete": true
+    },
+    {
+      "path": "copy",
+      "image": "shell",
+      "size": 1,
+      "run": 1,
+      "baseline": true,
+      "seconds": 0.6105831300001228,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 6,
+        "expected": 6,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "repo",
+      "image": "agent",
+      "size": 1,
+      "run": 1,
+      "baseline": true,
+      "seconds": 0.6634762029998456,
+      "status": 201,
+      "complete": true
+    },
+    {
+      "path": "copy",
+      "image": "agent",
+      "size": 1,
+      "run": 1,
+      "baseline": true,
+      "seconds": 0.6896878760003347,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 6,
+        "expected": 6,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "archive",
+      "image": "agent",
+      "size": 100,
+      "run": 1,
+      "baseline": false,
+      "seconds": 0.29122750299984546,
+      "status": 200,
+      "complete": true,
+      "detail": {
+        "members": 106,
+        "expected": 106,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      },
+      "archive_bytes": 5935,
+      "skipped_header": "0"
+    },
+    {
+      "path": "repo",
+      "image": "agent",
+      "size": 100,
+      "run": 1,
+      "baseline": false,
+      "seconds": 0.7409762520001095,
+      "status": 201,
+      "checkpoint_seconds": 0.011322884999572125,
+      "complete": true,
+      "detail": {
+        "members": 106,
+        "expected": 106,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "copy",
+      "image": "agent",
+      "size": 100,
+      "run": 1,
+      "baseline": false,
+      "seconds": 0.5108786199998576,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 106,
+        "expected": 106,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "archive",
+      "image": "shell",
+      "size": 100,
+      "run": 1,
+      "baseline": false,
+      "seconds": 0.10776609999993525,
+      "status": 200,
+      "complete": true,
+      "detail": {
+        "members": 106,
+        "expected": 106,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      },
+      "archive_bytes": 5174,
+      "skipped_header": "0"
+    },
+    {
+      "path": "repo",
+      "image": "shell",
+      "size": 100,
+      "run": 1,
+      "baseline": false,
+      "seconds": 0.19174333799992382,
+      "status": 201,
+      "checkpoint_seconds": 0.012467785999888292,
+      "complete": true,
+      "detail": {
+        "members": 106,
+        "expected": 106,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "copy",
+      "image": "shell",
+      "size": 100,
+      "run": 1,
+      "baseline": false,
+      "seconds": 0.41101572599973224,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 106,
+        "expected": 106,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "archive",
+      "image": "shell",
+      "size": 1000,
+      "run": 1,
+      "baseline": false,
+      "seconds": 3.313567687000159,
+      "status": 200,
+      "complete": true,
+      "detail": {
+        "members": 1025,
+        "expected": 1025,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      },
+      "archive_bytes": 49321,
+      "skipped_header": "0"
+    },
+    {
+      "path": "repo",
+      "image": "shell",
+      "size": 1000,
+      "run": 1,
+      "baseline": false,
+      "seconds": 8.245670427999812,
+      "status": 201,
+      "checkpoint_seconds": 0.7018220939999082,
+      "complete": true,
+      "detail": {
+        "members": 1025,
+        "expected": 1025,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "copy",
+      "image": "shell",
+      "size": 1000,
+      "run": 1,
+      "baseline": false,
+      "seconds": 11.891668639000272,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 1025,
+        "expected": 1025,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "archive",
+      "image": "agent",
+      "size": 1000,
+      "run": 1,
+      "baseline": false,
+      "seconds": 11.080260444000032,
+      "status": 200,
+      "complete": true,
+      "detail": {
+        "members": 1025,
+        "expected": 1025,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      },
+      "archive_bytes": 56753,
+      "skipped_header": "0"
+    },
+    {
+      "path": "repo",
+      "image": "agent",
+      "size": 1000,
+      "run": 1,
+      "baseline": false,
+      "seconds": 19.404827872999704,
+      "status": 201,
+      "checkpoint_seconds": 0.025383022999903915,
+      "complete": true,
+      "detail": {
+        "members": 1025,
+        "expected": 1025,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "copy",
+      "image": "agent",
+      "size": 1000,
+      "run": 1,
+      "baseline": false,
+      "seconds": 6.811722765000013,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 1025,
+        "expected": 1025,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "archive",
+      "image": "agent",
+      "size": 5000,
+      "run": 1,
+      "baseline": false,
+      "seconds": 25.750078365999798,
+      "status": 200,
+      "complete": true,
+      "detail": {
+        "members": 5113,
+        "expected": 5113,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      },
+      "archive_bytes": 284782,
+      "skipped_header": "0"
+    },
+    {
+      "path": "repo",
+      "image": "agent",
+      "size": 5000,
+      "run": 1,
+      "baseline": false,
+      "seconds": 31.575839579999865,
+      "status": 201,
+      "checkpoint_seconds": 1.1568413529998907,
+      "complete": true,
+      "detail": {
+        "members": 5113,
+        "expected": 5113,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "copy",
+      "image": "agent",
+      "size": 5000,
+      "run": 1,
+      "baseline": false,
+      "seconds": 37.32332428299969,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 5113,
+        "expected": 5113,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "archive",
+      "image": "shell",
+      "size": 5000,
+      "run": 1,
+      "baseline": false,
+      "seconds": 2.76626323399978,
+      "status": 200,
+      "complete": true,
+      "detail": {
+        "members": 5113,
+        "expected": 5113,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      },
+      "archive_bytes": 245806,
+      "skipped_header": "0"
+    },
+    {
+      "path": "repo",
+      "image": "shell",
+      "size": 5000,
+      "run": 1,
+      "baseline": false,
+      "seconds": 17.804233142999692,
+      "status": 201,
+      "checkpoint_seconds": 0.8838574950000293,
+      "complete": true,
+      "detail": {
+        "members": 5113,
+        "expected": 5113,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "copy",
+      "image": "shell",
+      "size": 5000,
+      "run": 1,
+      "baseline": false,
+      "seconds": 5.7150978829999985,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 5113,
+        "expected": 5113,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "repo",
+      "image": "agent",
+      "size": 1,
+      "run": 2,
+      "baseline": true,
+      "seconds": 0.5011839310000141,
+      "status": 201,
+      "complete": true
+    },
+    {
+      "path": "copy",
+      "image": "agent",
+      "size": 1,
+      "run": 2,
+      "baseline": true,
+      "seconds": 0.20954941199988752,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 6,
+        "expected": 6,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "repo",
+      "image": "shell",
+      "size": 1,
+      "run": 2,
+      "baseline": true,
+      "seconds": 0.2963860029999523,
+      "status": 201,
+      "complete": true
+    },
+    {
+      "path": "copy",
+      "image": "shell",
+      "size": 1,
+      "run": 2,
+      "baseline": true,
+      "seconds": 0.5152399250000599,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 6,
+        "expected": 6,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "archive",
+      "image": "agent",
+      "size": 100,
+      "run": 2,
+      "baseline": false,
+      "seconds": 0.4684066869999697,
+      "status": 200,
+      "complete": true,
+      "detail": {
+        "members": 106,
+        "expected": 106,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      },
+      "archive_bytes": 5876,
+      "skipped_header": "0"
+    },
+    {
+      "path": "repo",
+      "image": "agent",
+      "size": 100,
+      "run": 2,
+      "baseline": false,
+      "seconds": 0.7011023410000234,
+      "status": 201,
+      "checkpoint_seconds": 0.016738393000196083,
+      "complete": true,
+      "detail": {
+        "members": 106,
+        "expected": 106,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "copy",
+      "image": "agent",
+      "size": 100,
+      "run": 2,
+      "baseline": false,
+      "seconds": 0.8244183020001401,
+      "status": "ready",
+      "error": "sandbox from the template answered 503: {'code': 503, 'message': 'guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (0 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 ",
+      "complete": false
+    },
+    {
+      "path": "archive",
+      "image": "shell",
+      "size": 100,
+      "run": 2,
+      "baseline": false,
+      "seconds": 0.9934541480001826,
+      "status": 200,
+      "complete": true,
+      "detail": {
+        "members": 106,
+        "expected": 106,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      },
+      "archive_bytes": 5179,
+      "skipped_header": "0"
+    },
+    {
+      "path": "repo",
+      "image": "shell",
+      "size": 100,
+      "run": 2,
+      "baseline": false,
+      "seconds": 1.8598871770000187,
+      "status": 201,
+      "checkpoint_seconds": 0.32877420799968604,
+      "complete": true,
+      "detail": {
+        "members": 106,
+        "expected": 106,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "copy",
+      "image": "shell",
+      "size": 100,
+      "run": 2,
+      "baseline": false,
+      "seconds": 1.561423859000115,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 106,
+        "expected": 106,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "archive",
+      "image": "shell",
+      "size": 1000,
+      "run": 2,
+      "baseline": false,
+      "seconds": 0.36014404500019737,
+      "status": 200,
+      "complete": true,
+      "detail": {
+        "members": 1025,
+        "expected": 1025,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      },
+      "archive_bytes": 49289,
+      "skipped_header": "0"
+    },
+    {
+      "path": "repo",
+      "image": "shell",
+      "size": 1000,
+      "run": 2,
+      "baseline": false,
+      "seconds": 0.8256159600000501,
+      "status": 201,
+      "checkpoint_seconds": 0.061635398999897006,
+      "complete": true,
+      "detail": {
+        "members": 1025,
+        "expected": 1025,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "copy",
+      "image": "shell",
+      "size": 1000,
+      "run": 2,
+      "baseline": false,
+      "seconds": 1.124698434000038,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 1025,
+        "expected": 1025,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "archive",
+      "image": "agent",
+      "size": 1000,
+      "run": 2,
+      "baseline": false,
+      "seconds": 4.507771609999963,
+      "status": 200,
+      "complete": true,
+      "detail": {
+        "members": 1025,
+        "expected": 1025,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      },
+      "archive_bytes": 56545,
+      "skipped_header": "0"
+    },
+    {
+      "path": "repo",
+      "image": "agent",
+      "size": 1000,
+      "run": 2,
+      "baseline": false,
+      "seconds": 4.4177816330002315,
+      "status": 201,
+      "checkpoint_seconds": 0.04060468999978184,
+      "complete": true,
+      "detail": {
+        "members": 1025,
+        "expected": 1025,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "copy",
+      "image": "agent",
+      "size": 1000,
+      "run": 2,
+      "baseline": false,
+      "seconds": 6.226921353999842,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 1025,
+        "expected": 1025,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "archive",
+      "image": "agent",
+      "size": 5000,
+      "run": 2,
+      "baseline": false,
+      "seconds": 10.307223729999805,
+      "status": 200,
+      "complete": true,
+      "detail": {
+        "members": 5113,
+        "expected": 5113,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      },
+      "archive_bytes": 285379,
+      "skipped_header": "0"
+    },
+    {
+      "path": "repo",
+      "image": "agent",
+      "size": 5000,
+      "run": 2,
+      "baseline": false,
+      "seconds": 20.202605309999853,
+      "status": 201,
+      "checkpoint_seconds": 0.42603585799997745,
+      "complete": true,
+      "detail": {
+        "members": 5113,
+        "expected": 5113,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "copy",
+      "image": "agent",
+      "size": 5000,
+      "run": 2,
+      "baseline": false,
+      "seconds": 30.20522116400025,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 5113,
+        "expected": 5113,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "archive",
+      "image": "shell",
+      "size": 5000,
+      "run": 2,
+      "baseline": false,
+      "seconds": 0.8381380509999872,
+      "status": 200,
+      "complete": true,
+      "detail": {
+        "members": 5113,
+        "expected": 5113,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      },
+      "archive_bytes": 245699,
+      "skipped_header": "0"
+    },
+    {
+      "path": "repo",
+      "image": "shell",
+      "size": 5000,
+      "run": 2,
+      "baseline": false,
+      "seconds": 3.033624868000061,
+      "status": 201,
+      "checkpoint_seconds": 0.1079493279999042,
+      "complete": true,
+      "detail": {
+        "members": 5113,
+        "expected": 5113,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    },
+    {
+      "path": "copy",
+      "image": "shell",
+      "size": 5000,
+      "run": 2,
+      "baseline": false,
+      "seconds": 4.5004500400000325,
+      "status": "ready",
+      "complete": true,
+      "detail": {
+        "members": 5113,
+        "expected": 5113,
+        "missing": [],
+        "missing_n": 0,
+        "extra": [],
+        "extra_n": 0,
+        "wrong": [],
+        "wrong_n": 0
+      }
+    }
+  ],
+  "host_clone_seconds": {
+    "100": {
+      "median": 0.13651056999970024,
+      "min": 0.12041837600008876,
+      "max": 0.1429961789999652,
+      "n": 3
+    },
+    "1000": {
+      "median": 0.22460820199967202,
+      "min": 0.20832281699995292,
+      "max": 0.3507151270000577,
+      "n": 3
+    },
+    "5000": {
+      "median": 0.4813027160003003,
+      "min": 0.4807686270000886,
+      "max": 0.837932711999656,
+      "n": 3
+    }
+  },
+  "log_lines": {
+    "agent": {
+      "using agent op": 64,
+      "falling back to shell": 0,
+      "Steps unchanged (cache hit)": 0,
+      "Kvm": 57,
+      "Tcg": 0
+    },
+    "shell": {
+      "using agent op": 0,
+      "falling back to shell": 66,
+      "Steps unchanged (cache hit)": 0,
+      "Kvm": 58,
+      "Tcg": 0
+    }
+  },
+  "summary": {
+    "repo/100": {
+      "agent": {
+        "runs": 3,
+        "ok": 3,
+        "errors": [],
+        "seconds": {
+          "median": 0.7409762520001095,
+          "min": 0.7011023410000234,
+          "max": 1.628326781999931,
+          "n": 3
+        },
+        "baseline": {
+          "median": 0.6634762029998456,
+          "min": 0.5011839310000141,
+          "max": 2.0786109339996983,
+          "n": 3
+        },
+        "net_median": 0.07750004900026397,
+        "ops_estimate": 209
+      },
+      "shell": {
+        "runs": 3,
+        "ok": 3,
+        "errors": [],
+        "seconds": {
+          "median": 0.3700146470000618,
+          "min": 0.19174333799992382,
+          "max": 1.8598871770000187,
+          "n": 3
+        },
+        "baseline": {
+          "median": 0.6872645650000777,
+          "min": 0.2963860029999523,
+          "max": 1.1287436349998643,
+          "n": 3
+        },
+        "net_median": -0.3172499180000159,
+        "ops_estimate": 209
+      }
+    },
+    "repo/1000": {
+      "agent": {
+        "runs": 3,
+        "ok": 3,
+        "errors": [],
+        "seconds": {
+          "median": 6.02109991999987,
+          "min": 4.4177816330002315,
+          "max": 19.404827872999704,
+          "n": 3
+        },
+        "baseline": {
+          "median": 0.6634762029998456,
+          "min": 0.5011839310000141,
+          "max": 2.0786109339996983,
+          "n": 3
+        },
+        "net_median": 5.357623717000024,
+        "ops_estimate": 2047
+      },
+      "shell": {
+        "runs": 3,
+        "ok": 3,
+        "errors": [],
+        "seconds": {
+          "median": 1.1815041429999837,
+          "min": 0.8256159600000501,
+          "max": 8.245670427999812,
+          "n": 3
+        },
+        "baseline": {
+          "median": 0.6872645650000777,
+          "min": 0.2963860029999523,
+          "max": 1.1287436349998643,
+          "n": 3
+        },
+        "net_median": 0.49423957799990603,
+        "ops_estimate": 2047
+      }
+    },
+    "repo/5000": {
+      "agent": {
+        "runs": 3,
+        "ok": 3,
+        "errors": [],
+        "seconds": {
+          "median": 28.360829490000015,
+          "min": 20.202605309999853,
+          "max": 31.575839579999865,
+          "n": 3
+        },
+        "baseline": {
+          "median": 0.6634762029998456,
+          "min": 0.5011839310000141,
+          "max": 2.0786109339996983,
+          "n": 3
+        },
+        "net_median": 27.69735328700017,
+        "ops_estimate": 10223
+      },
+      "shell": {
+        "runs": 3,
+        "ok": 3,
+        "errors": [],
+        "seconds": {
+          "median": 3.641383878000397,
+          "min": 3.033624868000061,
+          "max": 17.804233142999692,
+          "n": 3
+        },
+        "baseline": {
+          "median": 0.6872645650000777,
+          "min": 0.2963860029999523,
+          "max": 1.1287436349998643,
+          "n": 3
+        },
+        "net_median": 2.9541193130003194,
+        "ops_estimate": 10223
+      }
+    },
+    "archive/100": {
+      "agent": {
+        "runs": 3,
+        "ok": 3,
+        "errors": [],
+        "seconds": {
+          "median": 0.4684066869999697,
+          "min": 0.29122750299984546,
+          "max": 0.5422269480000068,
+          "n": 3
+        },
+        "ops_estimate": 107
+      },
+      "shell": {
+        "runs": 3,
+        "ok": 3,
+        "errors": [],
+        "seconds": {
+          "median": 0.22511655200014502,
+          "min": 0.10776609999993525,
+          "max": 0.9934541480001826,
+          "n": 3
+        },
+        "ops_estimate": 107
+      }
+    },
+    "archive/1000": {
+      "agent": {
+        "runs": 3,
+        "ok": 3,
+        "errors": [],
+        "seconds": {
+          "median": 5.233534630000122,
+          "min": 4.507771609999963,
+          "max": 11.080260444000032,
+          "n": 3
+        },
+        "ops_estimate": 1026
+      },
+      "shell": {
+        "runs": 3,
+        "ok": 3,
+        "errors": [],
+        "seconds": {
+          "median": 0.36496697099983066,
+          "min": 0.36014404500019737,
+          "max": 3.313567687000159,
+          "n": 3
+        },
+        "ops_estimate": 1026
+      }
+    },
+    "archive/5000": {
+      "agent": {
+        "runs": 3,
+        "ok": 3,
+        "errors": [],
+        "seconds": {
+          "median": 15.335735841999849,
+          "min": 10.307223729999805,
+          "max": 25.750078365999798,
+          "n": 3
+        },
+        "ops_estimate": 5114
+      },
+      "shell": {
+        "runs": 3,
+        "ok": 3,
+        "errors": [],
+        "seconds": {
+          "median": 0.917814756000098,
+          "min": 0.8381380509999872,
+          "max": 2.76626323399978,
+          "n": 3
+        },
+        "ops_estimate": 5114
+      }
+    },
+    "copy/100": {
+      "agent": {
+        "runs": 3,
+        "ok": 2,
+        "errors": [
+          "sandbox from the template answered 503: {'code': 503, 'message': 'guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (0 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 "
+        ],
+        "seconds": {
+          "median": 0.830664306000017,
+          "min": 0.5108786199998576,
+          "max": 1.1504499920001763,
+          "n": 2
+        },
+        "baseline": {
+          "median": 0.6896878760003347,
+          "min": 0.20954941199988752,
+          "max": 1.0432680959997924,
+          "n": 3
+        },
+        "net_median": 0.1409764299996823,
+        "ops_estimate": 315
+      },
+      "shell": {
+        "runs": 3,
+        "ok": 3,
+        "errors": [],
+        "seconds": {
+          "median": 0.618880911999895,
+          "min": 0.41101572599973224,
+          "max": 1.561423859000115,
+          "n": 3
+        },
+        "baseline": {
+          "median": 0.5152399250000599,
+          "min": 0.5114218439998695,
+          "max": 0.6105831300001228,
+          "n": 3
+        },
+        "net_median": 0.10364098699983515,
+        "ops_estimate": 315
+      }
+    },
+    "copy/1000": {
+      "agent": {
+        "runs": 3,
+        "ok": 3,
+        "errors": [],
+        "seconds": {
+          "median": 6.811722765000013,
+          "min": 6.226921353999842,
+          "max": 7.658557325999936,
+          "n": 3
+        },
+        "baseline": {
+          "median": 0.6896878760003347,
+          "min": 0.20954941199988752,
+          "max": 1.0432680959997924,
+          "n": 3
+        },
+        "net_median": 6.1220348889996785,
+        "ops_estimate": 3053
+      },
+      "shell": {
+        "runs": 3,
+        "ok": 3,
+        "errors": [],
+        "seconds": {
+          "median": 1.124698434000038,
+          "min": 0.9355592340002659,
+          "max": 11.891668639000272,
+          "n": 3
+        },
+        "baseline": {
+          "median": 0.5152399250000599,
+          "min": 0.5114218439998695,
+          "max": 0.6105831300001228,
+          "n": 3
+        },
+        "net_median": 0.6094585089999782,
+        "ops_estimate": 3053
+      }
+    },
+    "copy/5000": {
+      "agent": {
+        "runs": 3,
+        "ok": 3,
+        "errors": [],
+        "seconds": {
+          "median": 37.32332428299969,
+          "min": 30.20522116400025,
+          "max": 51.36277737199998,
+          "n": 3
+        },
+        "baseline": {
+          "median": 0.6896878760003347,
+          "min": 0.20954941199988752,
+          "max": 1.0432680959997924,
+          "n": 3
+        },
+        "net_median": 36.63363640699936,
+        "ops_estimate": 15229
+      },
+      "shell": {
+        "runs": 3,
+        "ok": 3,
+        "errors": [],
+        "seconds": {
+          "median": 4.5004500400000325,
+          "min": 1.891722105000099,
+          "max": 5.7150978829999985,
+          "n": 3
+        },
+        "baseline": {
+          "median": 0.5152399250000599,
+          "min": 0.5114218439998695,
+          "max": 0.6105831300001228,
+          "n": 3
+        },
+        "net_median": 3.9852101149999726,
+        "ops_estimate": 15229
+      }
+    }
+  }
+}
