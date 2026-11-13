@@ -811,7 +811,9 @@ fn too_big(what: impl std::fmt::Display) -> Refused {
 /// contents) and symlinks (target verbatim). **Not held, and counted in
 /// `skipped`:** devices, sockets and FIFOs (nothing to read), a symlink whose
 /// target is not UTF-8 (the agent will not report it lossily), and hard
-/// links, which appear as the separate files they are. A path that vanishes
+/// links, which appear as the separate files they are; and a file the guest
+/// lists but cannot read (`/proc/*/clear_refs`, an I/O error), which `tar`
+/// in `ARCHIVE` also went on past. A path that vanishes
 /// during the walk is left out without comment, as `ARCHIVE` does.
 ///
 /// Refused with 413 over [`MAX_ARCHIVE`] compressed, [`MAX_ARCHIVE_INPUT`] of
@@ -920,6 +922,14 @@ async fn build_archive<G: GuestTree>(guest: &G, root: &str) -> Result<Option<Arc
                 let data = match read {
                     Ok(data) => data,
                     Err(e) if is_missing(&e.to_string()) => continue,
+                    // The guest could not read it (`/proc/*/clear_refs`, an
+                    // I/O error): left out and counted, as `tar` in
+                    // `ARCHIVE` went on past it. A failure to reach the
+                    // agent is still the archive's failure.
+                    Err(AgentError::Script(_)) => {
+                        skipped += 1;
+                        continue;
+                    }
                     Err(e) => return Err(agent_refusal(shown, &e)),
                 };
                 input += data.len() as u64;
@@ -1178,6 +1188,8 @@ mod tests {
         single_reads: std::sync::atomic::AtomicUsize,
         /// Paths that vanish between the listing and the read.
         vanished: Vec<String>,
+        /// Paths the guest lists but cannot read (EINVAL, EIO).
+        unreadable: Vec<String>,
     }
 
     impl Fake {
@@ -1220,6 +1232,11 @@ mod tests {
                     "reading {path}: No such file or directory (os error 2)"
                 )));
             }
+            if self.unreadable.iter().any(|p| p == path) {
+                return Err(AgentError::Script(format!(
+                    "reading {path}: Invalid argument (os error 22)"
+                )));
+            }
             let (entry, content) = &self.nodes[path];
             assert!(entry.size <= limit);
             Ok(content.clone().into_bytes())
@@ -1241,6 +1258,10 @@ mod tests {
                                 message: format!(
                                     "reading {path}: No such file or directory (os error 2)"
                                 ),
+                            }
+                        } else if self.unreadable.contains(&path) {
+                            OpResult::Failed {
+                                message: format!("reading {path}: Invalid argument (os error 22)"),
                             }
                         } else {
                             let (entry, content) = &self.nodes[&path];
@@ -1456,6 +1477,26 @@ mod tests {
         assert!(!names.contains(&"d2/zlink".to_string()));
         assert!(names.contains(&"d1/zlink".to_string()));
         assert_eq!(got.skipped, 2, "the device and the odd link");
+    }
+
+    #[tokio::test]
+    async fn a_file_the_guest_cannot_read_is_counted_not_fatal() {
+        for batching in [false, true] {
+            let mut g = wide_tree();
+            g.batching = batching;
+            g.unreadable.push("/w/d1/f007".into());
+            let got = build_archive(&g, "/w").await.unwrap().unwrap();
+            let names: Vec<String> = unpacked(&got.bytes).into_iter().map(|e| e.0).collect();
+            assert!(
+                !names.contains(&"d1/f007".to_string()),
+                "batching {batching}"
+            );
+            assert!(
+                names.contains(&"d1/f008".to_string()),
+                "batching {batching}"
+            );
+            assert_eq!(got.skipped, 2, "the device and the unreadable file");
+        }
     }
 
     #[tokio::test]

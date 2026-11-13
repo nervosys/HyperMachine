@@ -1,0 +1,300 @@
+{
+  "success": true,
+  "label": "shell-free",
+  "agent_ops": "new",
+  "shell": false,
+  "purpose": "functional verification of ownership by a non-root template user (environment repository unpack, COPY), on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "8aee91d7a98230a59471565a8bc1f8ae232623a0d73162516b24a54981987e07",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "f0e5ac68e1ae5e88ed2c3a14f281a7fbf87168a29e86834d07d19ce44695adbc",
+    "driver": "02040c212febbb204b7a2a8155b99284ffed78156d5751ef87b2ff6339404ad2"
+  },
+  "cases": [
+    {
+      "name": "a. template build: COPY passwd+group, USER alice, COPY owned by alice, WORKDIR as alice",
+      "success": true,
+      "detail": {
+        "status": "ready",
+        "steps": 7
+      }
+    },
+    {
+      "name": "b. environment repository: whole tree owned by the template user, modes as in the repository",
+      "success": true,
+      "detail": {
+        "entries": 88,
+        "kinds": {
+          "file": 48,
+          "directory": 37,
+          "symlink": 3
+        },
+        "owners": {
+          "1000:1000": 88
+        },
+        "root_dir": {
+          "gid": 1000,
+          "mode": "755",
+          "name": "app",
+          "size": null,
+          "type": "directory",
+          "uid": 1000
+        },
+        "root_dir_owner": "1000:1000",
+        "tracked": {
+          ".hidden": [
+            "644",
+            1000,
+            1000
+          ],
+          "README.md": [
+            "644",
+            1000,
+            1000
+          ],
+          "big.bin": [
+            "644",
+            1000,
+            1000
+          ],
+          "bin/run.sh": [
+            "755",
+            1000,
+            1000
+          ],
+          "empty.txt": [
+            "644",
+            1000,
+            1000
+          ],
+          "link-to-readme": [
+            "symlink",
+            1000,
+            1000
+          ],
+          "link-to-src": [
+            "symlink",
+            1000,
+            1000
+          ],
+          "src/app.py": [
+            "644",
+            1000,
+            1000
+          ],
+          "src/deep/er/leaf.txt": [
+            "644",
+            1000,
+            1000
+          ],
+          "src/link-up": [
+            "symlink",
+            1000,
+            1000
+          ]
+        },
+        "dirs": {
+          ".git": [
+            "755",
+            1000,
+            1000
+          ],
+          "bin": [
+            "755",
+            1000,
+            1000
+          ],
+          "src": [
+            "755",
+            1000,
+            1000
+          ],
+          "src/deep": [
+            "755",
+            1000,
+            1000
+          ],
+          "src/deep/er": [
+            "755",
+            1000,
+            1000
+          ]
+        },
+        "dir_modes_outside_git": [
+          "755"
+        ],
+        "git_dir_modes": {
+          "directory:755": 33,
+          "file:644": 27,
+          "file:755": 14
+        },
+        "symlinks": {
+          "link-to-readme": {
+            "gid": 1000,
+            "mode": "777",
+            "name": "link-to-readme",
+            "size": 9,
+            "type": "symlink",
+            "uid": 1000
+          },
+          "link-to-src": {
+            "gid": 1000,
+            "mode": "777",
+            "name": "link-to-src",
+            "size": 3,
+            "type": "symlink",
+            "uid": 1000
+          },
+          "src/link-up": {
+            "gid": 1000,
+            "mode": "777",
+            "name": "link-up",
+            "size": 12,
+            "type": "symlink",
+            "uid": 1000
+          }
+        },
+        "tmp": []
+      }
+    },
+    {
+      "name": "b2. environment file and the directory made for it",
+      "success": true,
+      "detail": {
+        "/etc/app": {
+          "gid": 1000,
+          "mode": "755",
+          "name": "app",
+          "size": null,
+          "type": "directory",
+          "uid": 1000
+        },
+        "config.toml": {
+          "gid": 1000,
+          "mode": "644",
+          "name": "config.toml",
+          "size": 12,
+          "type": "file",
+          "uid": 1000
+        }
+      }
+    },
+    {
+      "name": "c. COPY owned by the template user: every entry of the tree, links included, is 1000:1000",
+      "success": true,
+      "detail": {
+        "/opt/tree": {
+          "link": [
+            "symlink",
+            "777",
+            1000,
+            1000
+          ],
+          "linkdir": [
+            "symlink",
+            "777",
+            1000,
+            1000
+          ],
+          "sub": [
+            "directory",
+            "750",
+            1000,
+            1000
+          ],
+          "sub/data.txt": [
+            "file",
+            "640",
+            1000,
+            1000
+          ],
+          "sub/run.sh": [
+            "file",
+            "755",
+            1000,
+            1000
+          ]
+        },
+        "/opt/tree dir itself": [
+          "755",
+          1000,
+          1000
+        ],
+        "owned.txt": {
+          "gid": 1000,
+          "mode": "644",
+          "name": "owned.txt",
+          "size": 6,
+          "type": "file",
+          "uid": 1000
+        },
+        "plain.txt": {
+          "gid": 1000,
+          "mode": "644",
+          "name": "plain.txt",
+          "size": 6,
+          "type": "file",
+          "uid": 1000
+        },
+        "/srv/work": {
+          "gid": 0,
+          "mode": "755",
+          "name": "work",
+          "size": null,
+          "type": "directory",
+          "uid": 0
+        },
+        "sub": {
+          "gid": 1000,
+          "mode": "755",
+          "name": "sub",
+          "size": null,
+          "type": "directory",
+          "uid": 1000
+        }
+      }
+    },
+    {
+      "name": "e. which user an exec runs as (recorded)",
+      "success": true,
+      "detail": {
+        "recorded": "no shell; not asked"
+      }
+    }
+  ],
+  "platform_lines": {
+    "Kvm": 60,
+    "Tcg": 0
+  },
+  "code_path_lines": {
+    "unpacking a repository: using agent op": 1,
+    "unpacking a repository: falling back to shell": 0,
+    "no batch operation": 0,
+    "COPY step using agent op": 5,
+    "COPY step falling back to shell": 0
+  },
+  "builds": {
+    "tuser": {
+      "status": "ready",
+      "reason": null,
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-889d6a2a",
+        "[1/7] COPY passwd /etc/passwd",
+        "1 paths, 2 KiB",
+        "[2/7] COPY group /etc/group",
+        "1 paths, 2 KiB",
+        "[3/7] USER alice",
+        "[4/7] COPY tree /opt/tree",
+        "6 paths, 5 KiB",
+        "[5/7] COPY owned.txt /srv/work/owned.txt",
+        "1 paths, 2 KiB",
+        "[6/7] COPY plain.txt /srv/work/plain.txt",
+        "1 paths, 2 KiB",
+        "[7/7] WORKDIR /srv/work/sub",
+        "Steps kept as build-cache-8a047f5a3d2a246d in 6.552414ms",
+        "Template tuser ready: snapshot of 6 MiB in 7.568545ms"
+      ]
+    }
+  }
+}

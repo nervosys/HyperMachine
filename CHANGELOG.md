@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **A template COPY holding hard links failed on images with a shell.**
+  The COPY's repack moved each file under its destination but left a hard
+  link naming its upload path, so the guest's `tar -x -C /` could not find
+  it. Links now move with the file they name; a hard link to a file the
+  COPY leaves out is an error.
+- **A checkpoint archive answered 502 when the guest could not read one
+  file** (`/proc/*/clear_refs`, an I/O error). Such a file is now left out
+  and counted in `x-hv2-archive-skipped`, as the shell `tar` went on past
+  it. Both found by, and verified with, the new
+  `tools/check-template-user-owner-kvm.py` and
+  `tools/check-agent-batch-failures-kvm.py`, which also show a repository
+  and COPY land owned by a non-root template user (uid/gid 1000) on
+  shell-free, new-agent and old-agent images. See
+  `docs/benchmarks/2026-11-13/template-user-owner-kvm`.
 - **Large trees through the guest agent were up to 17x slower than the
   shell.** Each file operation opened its own connection (2-3 ms). A new
   additive `batch` operation runs up to 512 filesystem operations on one

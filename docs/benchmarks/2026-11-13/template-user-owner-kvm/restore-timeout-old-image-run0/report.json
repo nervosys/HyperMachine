@@ -1,0 +1,59 @@
+{
+  "success": false,
+  "label": "old-image",
+  "agent_ops": "old",
+  "shell": true,
+  "purpose": "functional verification of ownership by a non-root template user (environment repository unpack, COPY), on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "8aee91d7a98230a59471565a8bc1f8ae232623a0d73162516b24a54981987e07",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "2952bbbe585a1b2e780aa3f3c02ffa722c203065f0341717653bb20dec33cca0",
+    "driver": "02040c212febbb204b7a2a8155b99284ffed78156d5751ef87b2ff6339404ad2"
+  },
+  "cases": [
+    {
+      "name": "a. template build: COPY passwd+group, USER alice, COPY owned by alice, WORKDIR as alice",
+      "success": true,
+      "detail": {
+        "status": "ready",
+        "steps": 7
+      }
+    }
+  ],
+  "platform_lines": {
+    "Kvm": 3,
+    "Tcg": 0
+  },
+  "code_path_lines": {
+    "unpacking a repository: using agent op": 0,
+    "unpacking a repository: falling back to shell": 0,
+    "no batch operation": 6,
+    "COPY step using agent op": 0,
+    "COPY step falling back to shell": 5
+  },
+  "builds": {
+    "tuser": {
+      "status": "ready",
+      "reason": null,
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-9606e6e1",
+        "[1/7] COPY passwd /etc/passwd",
+        "1 paths, 2 KiB",
+        "[2/7] COPY group /etc/group",
+        "1 paths, 2 KiB",
+        "[3/7] USER alice",
+        "[4/7] COPY tree /opt/tree",
+        "6 paths, 5 KiB",
+        "[5/7] COPY owned.txt /srv/work/owned.txt",
+        "1 paths, 2 KiB",
+        "[6/7] COPY plain.txt /srv/work/plain.txt",
+        "1 paths, 2 KiB",
+        "[7/7] WORKDIR /srv/work/sub",
+        "Steps kept as build-cache-8a047f5a3d2a246d in 40.286626ms",
+        "Template tuser ready: snapshot of 8 MiB in 35.85502ms"
+      ]
+    }
+  },
+  "code_path_error": "AssertionError({'unpacking a repository: using agent op': 0, 'unpacking a repository: falling back to shell': 0, 'no batch operation': 6, 'COPY step using agent op': 0, 'COPY step falling back to shell': 5})"
+}

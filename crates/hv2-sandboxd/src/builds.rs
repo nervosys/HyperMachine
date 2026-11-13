@@ -1805,32 +1805,17 @@ fn repack(
     let dest = dest.trim_end_matches('/');
     let dest = if dest.is_empty() { "" } else { dest };
 
-    let mut out = tar::Builder::new(Vec::new());
-    let mut paths = Vec::new();
-    let mut archive = tar::Archive::new(reader);
-    for entry in archive.entries().map_err(|e| e.to_string())? {
-        let mut entry = entry.map_err(|e| e.to_string())?;
-        let path = entry
-            .path()
-            .map_err(|e| e.to_string())?
-            .to_string_lossy()
-            .into_owned();
-        let path = path
-            .trim_start_matches("./")
-            .trim_end_matches('/')
-            .to_string();
+    // Where an upload path lands, relative to `/`; `None` if the COPY leaves
+    // it out.
+    let place = |path: &str, is_dir: bool| -> Option<String> {
         if path.split('/').any(|p| p == "..") {
-            continue;
+            return None;
         }
-        let is_dir = entry.header().entry_type().is_dir();
         let target = if glob {
             let below = if fixed.is_empty() {
-                path.as_str()
+                path
             } else {
-                match path.strip_prefix(&format!("{fixed}/")) {
-                    Some(below) => below,
-                    None => continue,
-                }
+                path.strip_prefix(&format!("{fixed}/"))?
             };
             format!("{dest}/{below}")
         } else if path == src {
@@ -1838,7 +1823,7 @@ fn repack(
                 // The directory itself is dest; its contents come after.
                 dest.to_string()
             } else if into_dir {
-                let file = path.rsplit('/').next().unwrap_or(&path);
+                let file = path.rsplit('/').next().unwrap_or(path);
                 format!("{dest}/{file}")
             } else {
                 dest.to_string()
@@ -1848,24 +1833,47 @@ fn repack(
         } else if src == "." || src.is_empty() {
             format!("{dest}/{path}")
         } else {
-            continue;
+            return None;
         };
         let target = target.trim_start_matches('/').to_string();
-        if target.is_empty() {
+        (!target.is_empty()).then_some(target)
+    };
+    let normal = |path: &str| {
+        path.trim_start_matches("./")
+            .trim_end_matches('/')
+            .to_string()
+    };
+
+    let mut out = tar::Builder::new(Vec::new());
+    let mut paths = Vec::new();
+    let mut archive = tar::Archive::new(reader);
+    for entry in archive.entries().map_err(|e| e.to_string())? {
+        let mut entry = entry.map_err(|e| e.to_string())?;
+        let path = normal(&entry.path().map_err(|e| e.to_string())?.to_string_lossy());
+        let is_dir = entry.header().entry_type().is_dir();
+        let Some(target) = place(&path, is_dir) else {
             continue;
-        }
+        };
         let mut header = entry.header().clone();
         header.set_uid(0);
         header.set_gid(0);
         let mut data = Vec::new();
         entry.read_to_end(&mut data).map_err(|e| e.to_string())?;
         match entry.header().entry_type() {
-            tar::EntryType::Symlink | tar::EntryType::Link => {
-                let link = entry
+            kind @ (tar::EntryType::Symlink | tar::EntryType::Link) => {
+                let mut link = entry
                     .link_name()
                     .map_err(|e| e.to_string())?
                     .map(|l| l.to_string_lossy().into_owned())
                     .unwrap_or_default();
+                // A hard link names another member by its path in the
+                // archive, which moved with it: `tar -x -C /` resolves it
+                // against `/`. (A symlink's target is the guest's business.)
+                if kind == tar::EntryType::Link {
+                    link = place(&normal(&link), false).ok_or_else(|| {
+                        format!("{path:?} is a hard link to {link:?}, which this COPY leaves out")
+                    })?;
+                }
                 out.append_link(&mut header, &target, &link)
                     .map_err(|e| e.to_string())?;
             }
@@ -2013,6 +2021,68 @@ mod tests {
         let dir = tempdir::Dir::new();
         std::fs::write(dir.path.join("u.tar"), builder.into_inner().unwrap()).unwrap();
         dir
+    }
+
+    #[test]
+    fn a_hard_link_moves_with_the_file_it_names() {
+        let mut builder = tar::Builder::new(Vec::new());
+        let mut header = tar::Header::new_gnu();
+        header.set_entry_type(tar::EntryType::Regular);
+        header.set_size(2);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, "hl/a.txt", &b"hi"[..])
+            .unwrap();
+        let mut header = tar::Header::new_gnu();
+        header.set_entry_type(tar::EntryType::Link);
+        header.set_size(0);
+        builder
+            .append_link(&mut header, "hl/b.txt", "hl/a.txt")
+            .unwrap();
+        let mut header = tar::Header::new_gnu();
+        header.set_entry_type(tar::EntryType::Link);
+        header.set_size(0);
+        builder
+            .append_link(&mut header, "hl/c.txt", "other/x")
+            .unwrap();
+        let dir = tempdir::Dir::new();
+        let at = dir.path.join("u.tar");
+        std::fs::write(&at, builder.into_inner().unwrap()).unwrap();
+
+        // c.txt names a file the COPY leaves out: an error, not a dangling link.
+        let err = repack(&at, "hl", "/opt/hl").unwrap_err();
+        assert!(err.contains("leaves out"), "{err}");
+
+        let mut builder = tar::Builder::new(Vec::new());
+        let first = std::fs::read(&at).unwrap();
+        let mut archive = tar::Archive::new(&first[..]);
+        for entry in archive.entries().unwrap() {
+            let mut entry = entry.unwrap();
+            if entry.path().unwrap().ends_with("c.txt") {
+                continue;
+            }
+            let mut header = entry.header().clone();
+            let path = entry.path().unwrap().into_owned();
+            let mut data = Vec::new();
+            entry.read_to_end(&mut data).unwrap();
+            builder.append_data(&mut header, path, &data[..]).unwrap();
+        }
+        std::fs::write(&at, builder.into_inner().unwrap()).unwrap();
+        let (tar, paths) = repack(&at, "hl", "/opt/hl").unwrap();
+        assert_eq!(paths, ["/opt/hl/a.txt", "/opt/hl/b.txt"]);
+        let mut archive = tar::Archive::new(&tar[..]);
+        let link = archive
+            .entries()
+            .unwrap()
+            .map(|e| e.unwrap())
+            .find(|e| e.header().entry_type() == tar::EntryType::Link)
+            .unwrap();
+        assert_eq!(link.path().unwrap().to_str(), Some("opt/hl/b.txt"));
+        assert_eq!(
+            link.link_name().unwrap().unwrap().to_str(),
+            Some("opt/hl/a.txt")
+        );
     }
 
     fn laid_out(src: &str, dest: &str, files: &[(&str, Option<&[u8]>)]) -> Vec<String> {

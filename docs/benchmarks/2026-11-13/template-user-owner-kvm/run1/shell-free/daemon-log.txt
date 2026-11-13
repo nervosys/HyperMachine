@@ -1,0 +1,881 @@
+[2m2026-11-13T22:05:23.070582Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:23.078095Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:23.079150Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:23.116819Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'template' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:23.141852Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-11-13T22:05:23.143567Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template': loaded linux boot image (21277342 bytes), entry 0x100000
+[2m2026-11-13T22:05:23.147949Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'template' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:23.149913Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'template' with 1 vCPUs
+[2m2026-11-13T22:05:23.150750Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:23.151907Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:23.737581Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' paused
+[2m2026-11-13T22:05:24.087626Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' snapshotted to /tmp/hv2-sandboxd-808-base/template.snap
+[2m2026-11-13T22:05:24.091651Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' resumed
+[2m2026-11-13T22:05:24.103572Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=437)
+[2m2026-11-13T22:05:24.106456Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'template'
+[2m2026-11-13T22:05:24.112533Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' stopped
+[2m2026-11-13T22:05:24.122589Z[0m [32m INFO[0m [2mhv2_sandboxd[0m[2m:[0m template ready in 1.05204556s at /tmp/hv2-sandboxd-808-base/template.snap; working set 0 pages in 0 ranges
+[2m2026-11-13T22:05:24.155184Z[0m [32m INFO[0m [2mhv2_api::sandbox_proxy[0m[2m:[0m sandbox proxy listening on 0.0.0.0:34673
+hv2-sandboxd: listening on 0.0.0.0:48883, capacity 6
+  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)
+  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)
+  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls
+  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener
+  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules
+  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back, and with autoResume so does a request through the proxy
+  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies
+  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log
+  POST   /networks                 -- NOT E2B's; create a network joining sandboxes on this node
+  GET    /networks                 -- NOT E2B's; list this node's networks
+  GET    /networks/{name}         -- NOT E2B's; a network's members and addresses
+  DELETE /networks/{name}         -- NOT E2B's; remove a network
+  POST   /networks/{name}/connect    -- NOT E2B's; join a sandbox under an alias
+  POST   /networks/{name}/disconnect -- NOT E2B's; leave a network
+sandboxes get no network interface (--network to change that)
+sandboxes are restored from template snapshots: base
+
+sandbox proxy on 0.0.0.0:34673 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>
+  grpcurl -plaintext -authority 49983-$SBX.local -H "X-Access-Token: $TOKEN" -import-path crates/hv2-api/proto -proto process.proto \
+      -d '{"process":{"cmd":"/bin/sh","args":["-c","echo hi"]}}' \
+      localhost:34673 process.Process/Start
+[2m2026-11-13T22:05:24.300660Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:24.302221Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-db92841a': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:24.302944Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:24.305346Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'build-db92841a' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:24.306636Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-db92841a' restored from /tmp/hv2-sandboxd-808-base/template.snap
+[2m2026-11-13T22:05:24.307150Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'build-db92841a' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:24.307930Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'build-db92841a' with 1 vCPUs
+[2m2026-11-13T22:05:24.308753Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:24.338392Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:24.868743Z[0m [34mDEBUG[0m [2mhv2_sandboxd::builds[0m[2m:[0m reading the base environment: falling back to /proc/self/environ
+[2m2026-11-13T22:05:24.908996Z[0m [34mDEBUG[0m [2mhv2_sandboxd::builds[0m[2m:[0m COPY step 1: using agent op
+[2m2026-11-13T22:05:24.940002Z[0m [34mDEBUG[0m [2mhv2_sandboxd::builds[0m[2m:[0m COPY step 2: using agent op
+[2m2026-11-13T22:05:24.953074Z[0m [34mDEBUG[0m [2mhv2_sandboxd::builds[0m[2m:[0m USER alice: using agent op (found in /etc/passwd, nothing to run)
+[2m2026-11-13T22:05:25.123688Z[0m [34mDEBUG[0m [2mhv2_sandboxd::builds[0m[2m:[0m COPY step 4: using agent op
+[2m2026-11-13T22:05:25.170186Z[0m [34mDEBUG[0m [2mhv2_sandboxd::builds[0m[2m:[0m COPY step 5: using agent op
+[2m2026-11-13T22:05:25.267975Z[0m [34mDEBUG[0m [2mhv2_sandboxd::builds[0m[2m:[0m COPY step 6: using agent op
+[2m2026-11-13T22:05:25.286251Z[0m [34mDEBUG[0m [2mhv2_sandboxd::builds[0m[2m:[0m WORKDIR /srv/work/sub: using agent op
+[2m2026-11-13T22:05:25.301553Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-db92841a' paused
+[2m2026-11-13T22:05:25.361781Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-db92841a' snapshotted to /tmp/hv2-sandboxd-808-suspended/snapshots/build-cache-8a047f5a3d2a246d-1bd683468ec54f5fb28feac84465e032.snap
+[2m2026-11-13T22:05:25.388329Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-db92841a' resumed
+[2m2026-11-13T22:05:25.413393Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-db92841a' paused
+[2m2026-11-13T22:05:25.437259Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-db92841a' snapshotted to /tmp/hv2-sandboxd-808-suspended/snapshots/tuser-c1094ea2ae65490283b1c65b9ce2b5fb.snap
+[2m2026-11-13T22:05:25.442641Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-db92841a' resumed
+[2m2026-11-13T22:05:25.444542Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=344)
+[2m2026-11-13T22:05:25.445783Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'build-db92841a'
+[2m2026-11-13T22:05:25.448485Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-db92841a' stopped
+[2m2026-11-13T22:05:25.449981Z[0m [32m INFO[0m [2mhv2_sandboxd::builds[0m[2m:[0m template tuser built by steps in 1.149410495s
+[2m2026-11-13T22:05:25.920475Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:25.922944Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:25.924545Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:25.929532Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:25.955480Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5' restored from /tmp/hv2-sandboxd-808-suspended/snapshots/tuser-c1094ea2ae65490283b1c65b9ce2b5fb.snap
+[2m2026-11-13T22:05:25.959541Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:25.961931Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5' with 1 vCPUs
+[2m2026-11-13T22:05:25.962635Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:25.963892Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:26.080019Z[0m [34mDEBUG[0m [2mhv2_sandboxd::env_vars[0m[2m:[0m unpacking a repository into /srv/app: using agent op
+[2m2026-11-13T22:05:26.085184Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5' paused
+[2m2026-11-13T22:05:26.103652Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5' snapshotted to /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:26.105090Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5' resumed
+[2m2026-11-13T22:05:26.108241Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:26.109960Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:26.119636Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:26.123785Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:26.153068Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:26.155304Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:26.159158Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:26.168911Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:26.170495Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:26.283571Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:26.296371Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:26.305926Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=399)
+[2m2026-11-13T22:05:26.310606Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:26.323309Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:26.351927Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:26.357415Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:26.361573Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:26.389389Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:26.425007Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:26.430262Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:26.434075Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:26.435613Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:26.439086Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:26.558118Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:26.560695Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:26.562290Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=453)
+[2m2026-11-13T22:05:26.562937Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:26.565611Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:26.612561Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:26.637081Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:26.643175Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:26.653502Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:26.714394Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:26.725332Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:26.741947Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:26.758795Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:26.762468Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:26.978847Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:26.994572Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:26.997584Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=411)
+[2m2026-11-13T22:05:27.006925Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:27.010252Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:27.040196Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:27.042035Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:27.043540Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:27.046640Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:27.100957Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:27.103975Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:27.109523Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:27.113838Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:27.115585Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:27.244727Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:27.247361Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:27.257146Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=470)
+[2m2026-11-13T22:05:27.259732Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:27.262663Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:27.296538Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:27.301703Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:27.306602Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:27.310803Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:27.380439Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:27.384683Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:27.388169Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:27.390479Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:27.391745Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:27.514827Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:27.525820Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:27.538779Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=403)
+[2m2026-11-13T22:05:27.541026Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:27.543877Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:27.575900Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:27.586440Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:27.591157Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:27.603148Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:27.629357Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:27.633980Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:27.638597Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:27.642144Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:27.644231Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:27.770445Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:27.773118Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:27.776802Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=426)
+[2m2026-11-13T22:05:27.779044Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:27.779779Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:27.804665Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:27.806528Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:27.807519Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:27.809635Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:27.835111Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:27.836214Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:27.844857Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:27.845825Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:27.846871Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:27.956179Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:27.965319Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:27.969448Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=448)
+[2m2026-11-13T22:05:27.971821Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:27.972771Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:28.023669Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:28.028459Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:28.031375Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:28.033996Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:28.056067Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:28.057418Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:28.061750Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:28.062555Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:28.067261Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:28.232223Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:28.240525Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:28.248585Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=424)
+[2m2026-11-13T22:05:28.252267Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:28.253434Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:28.280304Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:28.286971Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:28.287947Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:28.293065Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:28.311293Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:28.314074Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:28.322094Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:28.332901Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:28.340432Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:28.547393Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:28.556365Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:28.566026Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=443)
+[2m2026-11-13T22:05:28.570076Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:28.571657Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:28.599926Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:28.601915Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:28.602726Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:28.606220Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:28.622813Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:28.627307Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:28.629685Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:28.630932Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:28.644721Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:28.927108Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:28.932214Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:28.949637Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=446)
+[2m2026-11-13T22:05:28.954372Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:28.955567Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:28.991954Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:29.009416Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:29.015937Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:29.021799Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:29.038917Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:29.045835Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:29.053504Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:29.064515Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:29.078537Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:29.274420Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:29.281178Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:29.286504Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=437)
+[2m2026-11-13T22:05:29.295534Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:29.300287Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:29.344254Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:29.348146Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:29.351976Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:29.357163Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:29.392900Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:29.400011Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:29.405724Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:29.407067Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:29.409506Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:29.708857Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:29.711410Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:29.714016Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=442)
+[2m2026-11-13T22:05:29.717724Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:29.718621Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:29.743989Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:29.749056Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:29.750045Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:29.754092Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:29.772843Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:29.781727Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:29.787571Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:29.790428Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:29.804844Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:29.969906Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:29.972253Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:29.974497Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=414)
+[2m2026-11-13T22:05:29.975416Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:29.976819Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:30.015854Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:30.020742Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:30.023057Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:30.039649Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:30.056389Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:30.058626Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:30.060032Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:30.060886Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:30.061933Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:30.213558Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:30.221582Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:30.229567Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=495)
+[2m2026-11-13T22:05:30.230801Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:30.234629Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:30.268742Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:30.274531Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:30.279515Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:30.282270Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:30.309153Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:30.310800Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:30.315320Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:30.324247Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:30.326203Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:30.444111Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:30.455800Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:30.460245Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=444)
+[2m2026-11-13T22:05:30.463374Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:30.465216Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:30.504162Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:30.507452Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:30.508275Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:30.518779Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:30.550619Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:30.559971Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:30.569973Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:30.575255Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:30.577615Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:30.689039Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:30.704572Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:30.715024Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=421)
+[2m2026-11-13T22:05:30.717568Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:30.722379Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:30.775954Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:30.779357Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:30.781503Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:30.784270Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:30.811502Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:30.813812Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:30.814976Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:30.817826Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:30.821883Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:31.013868Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:31.017809Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:31.022561Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=458)
+[2m2026-11-13T22:05:31.025339Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:31.026636Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:31.060062Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:31.064486Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:31.065313Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:31.067693Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:31.095652Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:31.105705Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:31.107692Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:31.114709Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:31.116614Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:31.287309Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:31.290916Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:31.292580Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=471)
+[2m2026-11-13T22:05:31.294939Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:31.295749Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:31.340343Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:31.343114Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:31.345042Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:31.347228Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:31.366976Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:31.376211Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:31.383472Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:31.384964Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:31.387407Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:31.535924Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:31.563897Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:31.584782Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=413)
+[2m2026-11-13T22:05:31.592885Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:31.594905Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:31.627758Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:31.637488Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:31.638650Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:31.645934Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:31.660360Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:31.670608Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:31.674041Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:31.676093Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:31.677424Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:31.823457Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:31.837986Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:31.844132Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=443)
+[2m2026-11-13T22:05:31.845797Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:31.847238Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:31.903872Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:31.905944Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:31.911143Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:31.913504Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:31.956332Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:31.958731Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:31.961880Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:31.962901Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:31.964301Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:32.336097Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:32.347349Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:32.352015Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=474)
+[2m2026-11-13T22:05:32.357283Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:32.358605Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:32.392236Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:32.393989Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:32.394794Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:32.397039Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:32.429000Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:32.430329Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:32.435830Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:32.437505Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:32.439190Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:32.619963Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:32.624735Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:32.627148Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=424)
+[2m2026-11-13T22:05:32.628231Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:32.629095Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:32.659864Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:32.662329Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:32.663359Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:32.668075Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:32.696245Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:32.699281Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:32.705695Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:32.720873Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:32.729836Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:32.844551Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:32.857573Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:32.861310Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=433)
+[2m2026-11-13T22:05:32.869782Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:32.871394Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:32.895718Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:32.904002Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:32.911015Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:32.917113Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:32.955065Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:32.960947Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:32.968412Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:32.973520Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:32.979181Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:33.105315Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:33.114570Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:33.119204Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=447)
+[2m2026-11-13T22:05:33.126935Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:33.131142Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:33.184055Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:33.187787Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:33.190023Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:33.192434Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:33.228444Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:33.235542Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:33.237693Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:33.243466Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:33.253388Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:33.385586Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:33.430998Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:33.457562Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=431)
+[2m2026-11-13T22:05:33.502748Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:33.520585Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:33.575702Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:33.592005Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:33.627745Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:33.641877Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:33.692467Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:33.700370Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:33.712396Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:33.721024Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:33.743788Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:33.906179Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:33.913235Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:33.917131Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=425)
+[2m2026-11-13T22:05:33.921371Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:33.923284Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:33.957246Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:33.974092Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:33.986889Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:34.007838Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:34.037155Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:34.092411Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:34.123230Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:34.159858Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:34.216821Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:34.398249Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:34.425038Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:34.451291Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=443)
+[2m2026-11-13T22:05:34.464853Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:34.468248Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:34.504866Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:34.514554Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:34.521672Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:34.532037Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:34.564993Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:34.580174Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:34.596075Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:34.605356Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:34.607725Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:34.877842Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:34.918270Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:34.931774Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=471)
+[2m2026-11-13T22:05:34.934498Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:34.936769Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:34.964919Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:34.968267Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:34.975042Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:34.983024Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:35.022483Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:35.044551Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:35.062504Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:35.064824Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:35.066454Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:35.324506Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:35.327034Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:35.338979Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=447)
+[2m2026-11-13T22:05:35.341398Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:35.342728Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:35.395873Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:35.397243Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:35.397958Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:35.399937Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:35.422611Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:35.423994Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:35.426259Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:35.427041Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:35.431859Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:35.607523Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:35.623722Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:35.646453Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=461)
+[2m2026-11-13T22:05:35.652277Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:35.665269Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:35.708222Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:35.719789Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:35.723619Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:35.727224Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:35.754161Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:35.759891Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:35.761648Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:35.764459Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:35.765743Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:35.936162Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:35.940524Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:35.944684Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=458)
+[2m2026-11-13T22:05:35.959716Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:35.990606Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:36.040265Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:36.078565Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:36.091967Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:36.098125Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:36.139037Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:36.141138Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:36.142240Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:36.147028Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:36.149056Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:36.342176Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:36.370773Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:36.442528Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=426)
+[2m2026-11-13T22:05:36.494671Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:36.537975Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:36.625044Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:36.659348Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:36.680190Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:36.695812Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:36.746983Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:36.762061Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:36.772428Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:36.776044Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:36.777234Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:36.977268Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:36.987114Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:37.015757Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=462)
+[2m2026-11-13T22:05:37.024913Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:37.029897Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:37.072323Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:37.074580Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:37.083990Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:37.089612Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:37.115098Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:37.116510Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:37.132477Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:37.138238Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:37.148017Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:37.389680Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:37.429751Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:37.459092Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=461)
+[2m2026-11-13T22:05:37.473148Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:37.484008Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:37.532336Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:37.543584Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:37.563227Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:37.566569Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:37.590167Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:37.593234Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:37.594911Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:37.595561Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:37.597086Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:37.784414Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:37.791549Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:37.795391Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=408)
+[2m2026-11-13T22:05:37.796671Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:37.798732Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:37.824058Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:37.858019Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:37.876934Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:37.911439Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:37.957184Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:37.971817Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:37.979011Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:37.995443Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:38.006050Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:38.208097Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:38.238788Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:38.263877Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=439)
+[2m2026-11-13T22:05:38.284765Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:38.331201Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:38.411696Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:38.441023Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:38.466508Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:38.534281Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:38.658431Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:38.721543Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:38.745602Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:38.783758Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:38.805788Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:38.990474Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:39.001268Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:39.018056Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=444)
+[2m2026-11-13T22:05:39.024659Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:39.030345Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:39.073255Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:39.079082Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:39.080501Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:39.084932Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:39.124694Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:39.132591Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:39.141427Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:39.142457Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:39.143524Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:39.310473Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:39.325686Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:39.328489Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=420)
+[2m2026-11-13T22:05:39.329928Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:39.333584Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:39.384469Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:39.387851Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:39.389202Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:39.392571Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:39.408874Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:39.410164Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:39.411310Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:39.412570Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:39.413737Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:39.543915Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:39.557215Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:39.578029Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=471)
+[2m2026-11-13T22:05:39.590566Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:39.594554Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:39.632391Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:39.649367Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:39.664685Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:39.674303Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:39.695897Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:39.702820Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:39.704809Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:39.706636Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:39.708312Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:39.911826Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:39.953879Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:39.980642Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=462)
+[2m2026-11-13T22:05:39.982211Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:39.985044Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:40.024683Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:40.027226Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:40.028702Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:40.030879Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:40.054591Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:40.056079Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:40.057940Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:40.059640Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:40.060968Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:40.232596Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:40.243124Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:40.263844Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=476)
+[2m2026-11-13T22:05:40.265907Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:40.267117Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:40.296549Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:40.299225Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:40.300164Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:40.302613Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:40.326322Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:40.333536Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:40.340349Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:40.365118Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:40.389751Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:40.584815Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:40.591691Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:40.615833Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=471)
+[2m2026-11-13T22:05:40.631711Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:40.658658Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:40.724790Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:40.733118Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:40.734443Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:40.738144Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:40.765900Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:40.777060Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:40.780345Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:40.782202Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:40.783356Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:40.999797Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:41.021206Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:41.063657Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=441)
+[2m2026-11-13T22:05:41.067850Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:41.072659Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:41.114076Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:41.115686Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:41.116517Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:41.118331Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:41.141097Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:41.148328Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:41.151717Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:41.152829Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:41.154101Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:41.308259Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:41.311264Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:41.328509Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=478)
+[2m2026-11-13T22:05:41.330031Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:41.331130Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:41.360404Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:41.367600Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:41.370371Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:41.374013Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:41.391752Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:41.394279Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:41.397799Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:41.402130Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:41.404334Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:41.552365Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:41.559971Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:41.574199Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=438)
+[2m2026-11-13T22:05:41.575818Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:41.576835Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:41.612887Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:41.614358Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:41.615304Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:41.616784Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:41.631170Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:41.632112Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:41.633244Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:41.634036Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:41.635254Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:41.753449Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:41.757305Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:41.777960Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=445)
+[2m2026-11-13T22:05:41.779343Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:41.780247Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:41.812094Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:41.814073Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:41.815123Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:41.817487Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:41.832015Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:41.833421Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:41.834864Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:41.835766Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:41.836966Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:41.966585Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:41.968909Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:41.970834Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=454)
+[2m2026-11-13T22:05:41.972032Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:41.973011Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:42.008390Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:42.010904Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:42.012012Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:42.014253Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:42.031824Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:42.033205Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:42.034574Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:42.035371Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:42.036543Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:42.183914Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:42.258573Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:42.296125Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=430)
+[2m2026-11-13T22:05:42.326433Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:42.356027Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:42.412196Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:42.440649Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:42.449282Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:42.473875Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:42.495417Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:42.515298Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:42.528747Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:42.542154Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:42.568060Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:42.890776Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:42.922294Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:42.940181Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=460)
+[2m2026-11-13T22:05:42.976844Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:42.983889Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:43.041943Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:43.083163Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:43.101801Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:43.131772Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:43.173982Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:43.206451Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:43.208761Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:43.227536Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:43.228792Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:43.381736Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:43.383651Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:43.406194Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=476)
+[2m2026-11-13T22:05:43.407632Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:43.411274Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:43.452436Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:43.459954Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:43.463163Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:43.465298Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:43.489183Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:43.490296Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:43.491805Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:43.492374Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:43.493399Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:43.608638Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:43.638236Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:43.653635Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=430)
+[2m2026-11-13T22:05:43.666430Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:43.670479Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:43.728432Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:43.741378Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:43.750821Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:43.754653Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:43.777104Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:43.779250Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:43.788896Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:43.795368Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:43.800346Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:44.055736Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:44.098669Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:44.151138Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=435)
+[2m2026-11-13T22:05:44.159549Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:44.160283Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:44.196442Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:44.219744Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:44.226529Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:44.230462Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:44.264752Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:44.299373Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:44.308891Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:44.333895Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:44.341870Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:44.481765Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:44.495970Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:44.508197Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=434)
+[2m2026-11-13T22:05:44.525758Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:44.528456Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:44.568684Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:44.577157Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:44.578993Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:44.581288Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:44.607915Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:44.615250Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:44.617337Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:44.618279Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:44.619255Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:44.797229Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:44.802201Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:44.807888Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=464)
+[2m2026-11-13T22:05:44.809187Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:44.809978Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:44.832703Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:44.834422Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:44.835975Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:44.840501Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:44.861083Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:44.862389Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:44.864199Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:44.865811Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:44.867623Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:45.018301Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:45.035687Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:45.039974Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=436)
+[2m2026-11-13T22:05:45.047438Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:45.054954Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:45.084413Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:45.087561Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:45.088786Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:45.092133Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:45.179389Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:45.199812Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:45.207055Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:45.209225Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:45.210668Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:45.348626Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:45.366524Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:45.406049Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=443)
+[2m2026-11-13T22:05:45.424436Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:45.425518Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:45.456896Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T22:05:45.493131Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T22:05:45.494209Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T22:05:45.496306Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T22:05:45.524744Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' restored from /tmp/hv2-sandboxd-808-suspended/checkpoints/sbx-1eb9cae05679432588b5/one.snap
+[2m2026-11-13T22:05:45.526023Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T22:05:45.527231Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-1eb9cae05679432588b5-checkpoint-reader' with 1 vCPUs
+[2m2026-11-13T22:05:45.528902Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T22:05:45.530843Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T22:05:45.648666Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (freeze)
+[2m2026-11-13T22:05:45.674076Z[0m [34mDEBUG[0m [2mhv2_sandboxd::checkpoint_files[0m[2m:[0m checkpoint reader: using agent op (stat)
+[2m2026-11-13T22:05:45.697909Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=418)
+[2m2026-11-13T22:05:45.699128Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5-checkpoint-reader'
+[2m2026-11-13T22:05:45.699947Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5-checkpoint-reader' stopped
+[2m2026-11-13T22:05:45.740480Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=117)
+[2m2026-11-13T22:05:45.746373Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-1eb9cae05679432588b5'
+[2m2026-11-13T22:05:45.747341Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-1eb9cae05679432588b5' stopped

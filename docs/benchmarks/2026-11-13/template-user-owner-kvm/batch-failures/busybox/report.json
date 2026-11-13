@@ -1,0 +1,224 @@
+{
+  "success": true,
+  "label": "busybox",
+  "shell": true,
+  "purpose": "failure paths through a real guest-agent batch (archive skips, COPY refusals), on KVM",
+  "input_sha256": {
+    "daemon": "c2fd5511376587940793062432effe8f68283ed18af59239600f496038d60485",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "85d929acc80d0f0eadfae26e7187f92bcac31c3acf2802a6d46f99dffd3ab485",
+    "driver": "bc8f627a6ef13cf2e8022190f70b9e87e7c72dffd241ed4ec8287364b791ce08"
+  },
+  "cases": [
+    {
+      "name": "a. archive of a tree with a FIFO, device, socket, non-UTF-8 link, mode-000 file",
+      "success": true,
+      "detail": {
+        "header_skipped": 3,
+        "expected_skipped": 3,
+        "special_files_in_guest": [
+          "/data/fifo",
+          "/data/zero"
+        ],
+        "members": 307,
+        "bad_link_listing": "lrwxrwxrwx",
+        "log": {
+          "archive agent path": 1,
+          "shell": 0,
+          "no batch": 0
+        },
+        "proc_probe": {
+          "/proc/1": {
+            "status": 200,
+            "skipped_header": "24",
+            "members": 281
+          },
+          "/proc/1/task": {
+            "status": 200,
+            "skipped_header": "12",
+            "members": 136
+          },
+          "/sys/kernel": {
+            "status": 200,
+            "skipped_header": "0",
+            "members": 4754
+          }
+        }
+      }
+    },
+    {
+      "name": "b. COPY with a member written through an earlier symlink is refused; a repo cannot hold one",
+      "success": true,
+      "detail": {
+        "esc-abs": {
+          "status": "error",
+          "message": "the COPY's files holds \"opt/tree/esc/passwd\" through a symlink it made earlier"
+        },
+        "esc-rel": {
+          "status": "error",
+          "message": "the COPY's files holds \"opt/tree/esc/file.txt\" through a symlink it made earlier"
+        },
+        "esc-control": {
+          "status": "ready",
+          "entries": [
+            "esc",
+            "ok.txt"
+          ]
+        },
+        "git": {
+          "add_under_symlink": {
+            "argv": [
+              "add",
+              "esc/passwd"
+            ],
+            "code": 128,
+            "out": "fatal: pathspec 'esc/passwd' is beyond a symbolic link"
+          },
+          "cacheinfo_plain": {
+            "argv": [
+              "update-index",
+              "--add",
+              "--cacheinfo",
+              "100644,587be6b4c3f93f93c489c0111bba5596147a26cb,esc/passwd"
+            ],
+            "code": 128,
+            "out": "error: 'esc/passwd' appears as both a file and as a directory\nerror: esc/passwd: cannot add to the index - missing --add option?\nfatal: git update-index: --cacheinfo cannot add esc/passwd"
+          },
+          "cacheinfo_replace": {
+            "argv": [
+              "update-index",
+              "--add",
+              "--replace",
+              "--cacheinfo",
+              "100644,587be6b4c3f93f93c489c0111bba5596147a26cb,esc/passwd"
+            ],
+            "code": 0,
+            "out": ""
+          },
+          "index_after": "100644 587be6b4c3f93f93c489c0111bba5596147a26cb 0\tesc/passwd"
+        }
+      }
+    },
+    {
+      "name": "c. COPY with a hard link: the shell's path with a shell, a clear error without",
+      "success": true,
+      "detail": {
+        "status": "ready",
+        "stat_inode_links_name": [
+          "289 2 /opt/hl/a.txt",
+          "289 2 /opt/hl/b.txt",
+          ""
+        ],
+        "log": "hv2_sandboxd::builds: COPY step 1: falling back to shell (\"opt/hl/b.txt\" is not a file, directory or symlink (a hard link or special file))"
+      }
+    }
+  ],
+  "platform_lines": {
+    "Kvm": 16,
+    "Tcg": 0
+  },
+  "builds": {
+    "esc-abs": {
+      "status": "error",
+      "reason": {
+        "logEntries": [
+          {
+            "level": "warn",
+            "message": "this node gives sandboxes no network: steps run offline",
+            "step": "base",
+            "timestamp": "2026-11-13T22:58:12.288Z"
+          },
+          {
+            "level": "info",
+            "message": "Building in build-adba3453",
+            "step": "base",
+            "timestamp": "2026-11-13T22:58:12.400Z"
+          },
+          {
+            "level": "info",
+            "message": "[1/1] COPY tree /opt/tree",
+            "step": "1",
+            "timestamp": "2026-11-13T22:58:12.476Z"
+          },
+          {
+            "level": "info",
+            "message": "3 paths, 3 KiB",
+            "step": "1",
+            "timestamp": "2026-11-13T22:58:12.477Z"
+          }
+        ],
+        "message": "the COPY's files holds \"opt/tree/esc/passwd\" through a symlink it made earlier",
+        "step": "1"
+      },
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-adba3453",
+        "[1/1] COPY tree /opt/tree",
+        "3 paths, 3 KiB"
+      ]
+    },
+    "esc-rel": {
+      "status": "error",
+      "reason": {
+        "logEntries": [
+          {
+            "level": "warn",
+            "message": "this node gives sandboxes no network: steps run offline",
+            "step": "base",
+            "timestamp": "2026-11-13T22:58:12.860Z"
+          },
+          {
+            "level": "info",
+            "message": "Building in build-565b3334",
+            "step": "base",
+            "timestamp": "2026-11-13T22:58:12.935Z"
+          },
+          {
+            "level": "info",
+            "message": "[1/1] COPY tree /opt/tree",
+            "step": "1",
+            "timestamp": "2026-11-13T22:58:12.994Z"
+          },
+          {
+            "level": "info",
+            "message": "4 paths, 3 KiB",
+            "step": "1",
+            "timestamp": "2026-11-13T22:58:12.995Z"
+          }
+        ],
+        "message": "the COPY's files holds \"opt/tree/esc/file.txt\" through a symlink it made earlier",
+        "step": "1"
+      },
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-565b3334",
+        "[1/1] COPY tree /opt/tree",
+        "4 paths, 3 KiB"
+      ]
+    },
+    "esc-control": {
+      "status": "ready",
+      "reason": null,
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-3d64b1a2",
+        "[1/1] COPY tree /opt/tree",
+        "3 paths, 3 KiB",
+        "Steps kept as build-cache-d46c19d3bd0dfadb in 36.524566ms",
+        "Template esc-control ready: snapshot of 1 MiB in 57.040502ms"
+      ]
+    },
+    "hl-build": {
+      "status": "ready",
+      "reason": null,
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-848f75ee",
+        "[1/1] COPY hl /opt/hl",
+        "3 paths, 3 KiB",
+        "Steps kept as build-cache-4b6bfa11dd91a730 in 21.930944ms",
+        "Template hl-build ready: snapshot of 2 MiB in 17.212729ms"
+      ]
+    }
+  }
+}

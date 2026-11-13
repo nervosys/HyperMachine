@@ -1,0 +1,247 @@
+{
+  "success": false,
+  "label": "busybox",
+  "shell": true,
+  "purpose": "failure paths through a real guest-agent batch (archive skips, COPY refusals), on KVM",
+  "input_sha256": {
+    "daemon": "8aee91d7a98230a59471565a8bc1f8ae232623a0d73162516b24a54981987e07",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "85d929acc80d0f0eadfae26e7187f92bcac31c3acf2802a6d46f99dffd3ab485",
+    "driver": "5b6d28b2de7720ac172ae0b05318184956c156a8494004e3641fc60d78eb6dd8"
+  },
+  "cases": [
+    {
+      "name": "a. archive of a tree with a FIFO, device, socket, non-UTF-8 link, mode-000 file",
+      "success": true,
+      "detail": {
+        "header_skipped": 3,
+        "expected_skipped": 3,
+        "special_files_in_guest": [
+          "/data/fifo",
+          "/data/zero"
+        ],
+        "members": 307,
+        "bad_link_listing": "lrwxrwxrwx",
+        "log": {
+          "archive agent path": 1,
+          "shell": 0,
+          "no batch": 0
+        },
+        "probe_not_asserted": {
+          "/proc/1": {
+            "status": 502,
+            "body": "{\"code\":502,\"message\":\"reading \\\"/proc/1/clear_refs\\\": Script error: reading /proc/1/clear_refs: Invalid argument (os error 22)\"}"
+          },
+          "/proc/1/task": {
+            "status": 502,
+            "body": "{\"code\":502,\"message\":\"reading \\\"/proc/1/task/1/clear_refs\\\": Script error: reading /proc/1/task/1/clear_refs: Invalid argument (os error 22)\"}"
+          },
+          "/sys/kernel": {
+            "status": 200,
+            "skipped_header": "0",
+            "members": 4754
+          }
+        }
+      }
+    },
+    {
+      "name": "b. COPY with a member written through an earlier symlink is refused; a repo cannot hold one",
+      "success": true,
+      "detail": {
+        "esc-abs": {
+          "status": "error",
+          "message": "the COPY's files holds \"opt/tree/esc/passwd\" through a symlink it made earlier"
+        },
+        "esc-rel": {
+          "status": "error",
+          "message": "the COPY's files holds \"opt/tree/esc/file.txt\" through a symlink it made earlier"
+        },
+        "esc-control": {
+          "status": "ready",
+          "entries": [
+            "esc",
+            "ok.txt"
+          ]
+        },
+        "git": {
+          "add_under_symlink": {
+            "argv": [
+              "add",
+              "esc/passwd"
+            ],
+            "code": 128,
+            "out": "fatal: pathspec 'esc/passwd' is beyond a symbolic link"
+          },
+          "cacheinfo_plain": {
+            "argv": [
+              "update-index",
+              "--add",
+              "--cacheinfo",
+              "100644,587be6b4c3f93f93c489c0111bba5596147a26cb,esc/passwd"
+            ],
+            "code": 128,
+            "out": "error: 'esc/passwd' appears as both a file and as a directory\nerror: esc/passwd: cannot add to the index - missing --add option?\nfatal: git update-index: --cacheinfo cannot add esc/passwd"
+          },
+          "cacheinfo_replace": {
+            "argv": [
+              "update-index",
+              "--add",
+              "--replace",
+              "--cacheinfo",
+              "100644,587be6b4c3f93f93c489c0111bba5596147a26cb,esc/passwd"
+            ],
+            "code": 0,
+            "out": ""
+          },
+          "index_after": "100644 587be6b4c3f93f93c489c0111bba5596147a26cb 0\tesc/passwd"
+        }
+      }
+    },
+    {
+      "name": "c. COPY with a hard link: the shell's path with a shell, a clear error without",
+      "success": false
+    }
+  ],
+  "builds": {
+    "esc-abs": {
+      "status": "error",
+      "reason": {
+        "logEntries": [
+          {
+            "level": "warn",
+            "message": "this node gives sandboxes no network: steps run offline",
+            "step": "base",
+            "timestamp": "2026-11-13T22:09:29.070Z"
+          },
+          {
+            "level": "info",
+            "message": "Building in build-0b3084d3",
+            "step": "base",
+            "timestamp": "2026-11-13T22:09:29.446Z"
+          },
+          {
+            "level": "info",
+            "message": "[1/1] COPY tree /opt/tree",
+            "step": "1",
+            "timestamp": "2026-11-13T22:09:29.472Z"
+          },
+          {
+            "level": "info",
+            "message": "3 paths, 3 KiB",
+            "step": "1",
+            "timestamp": "2026-11-13T22:09:29.472Z"
+          }
+        ],
+        "message": "the COPY's files holds \"opt/tree/esc/passwd\" through a symlink it made earlier",
+        "step": "1"
+      },
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-0b3084d3",
+        "[1/1] COPY tree /opt/tree",
+        "3 paths, 3 KiB"
+      ]
+    },
+    "esc-rel": {
+      "status": "error",
+      "reason": {
+        "logEntries": [
+          {
+            "level": "warn",
+            "message": "this node gives sandboxes no network: steps run offline",
+            "step": "base",
+            "timestamp": "2026-11-13T22:09:29.576Z"
+          },
+          {
+            "level": "info",
+            "message": "Building in build-dd7f5596",
+            "step": "base",
+            "timestamp": "2026-11-13T22:09:29.815Z"
+          },
+          {
+            "level": "info",
+            "message": "[1/1] COPY tree /opt/tree",
+            "step": "1",
+            "timestamp": "2026-11-13T22:09:29.870Z"
+          },
+          {
+            "level": "info",
+            "message": "4 paths, 3 KiB",
+            "step": "1",
+            "timestamp": "2026-11-13T22:09:29.873Z"
+          }
+        ],
+        "message": "the COPY's files holds \"opt/tree/esc/file.txt\" through a symlink it made earlier",
+        "step": "1"
+      },
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-dd7f5596",
+        "[1/1] COPY tree /opt/tree",
+        "4 paths, 3 KiB"
+      ]
+    },
+    "esc-control": {
+      "status": "ready",
+      "reason": null,
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-b514cc3c",
+        "[1/1] COPY tree /opt/tree",
+        "3 paths, 3 KiB",
+        "Steps kept as build-cache-d46c19d3bd0dfadb in 9.050034ms",
+        "Template esc-control ready: snapshot of 1 MiB in 27.78513ms"
+      ]
+    },
+    "hl-build": {
+      "status": "error",
+      "reason": {
+        "logEntries": [
+          {
+            "level": "warn",
+            "message": "this node gives sandboxes no network: steps run offline",
+            "step": "base",
+            "timestamp": "2026-11-13T22:09:31.683Z"
+          },
+          {
+            "level": "info",
+            "message": "Building in build-49a44a3f",
+            "step": "base",
+            "timestamp": "2026-11-13T22:09:31.911Z"
+          },
+          {
+            "level": "info",
+            "message": "[1/1] COPY hl /opt/hl",
+            "step": "1",
+            "timestamp": "2026-11-13T22:09:31.933Z"
+          },
+          {
+            "level": "info",
+            "message": "3 paths, 3 KiB",
+            "step": "1",
+            "timestamp": "2026-11-13T22:09:31.933Z"
+          },
+          {
+            "level": "info",
+            "message": "tar: can't create hardlink 'opt/hl/b.txt' to 'hl/a.txt'",
+            "step": "1",
+            "timestamp": "2026-11-13T22:09:32.161Z"
+          }
+        ],
+        "message": "\"/bin/busybox tar -xf '/tmp/.hv2-copy-83fe96cc22f04039908aa1b51bc1571f.tar' -C / ; status=$?; rm -f '/tmp/.hv2-copy-83fe96cc22f04039908aa1b51bc1571f.tar' '/tmp/.hv2-copy-83fe96cc22f04039908aa1b51bc1571f.tar.list'; exit $status\" exited 1",
+        "step": "1"
+      },
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-49a44a3f",
+        "[1/1] COPY hl /opt/hl",
+        "3 paths, 3 KiB",
+        "tar: can't create hardlink 'opt/hl/b.txt' to 'hl/a.txt'"
+      ]
+    }
+  },
+  "platform_lines": {
+    "Kvm": 13,
+    "Tcg": 0
+  }
+}
