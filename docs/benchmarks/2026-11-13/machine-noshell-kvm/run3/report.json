@@ -1,0 +1,61 @@
+{
+  "success": true,
+  "purpose": "functional verification of machines on an image with no shell, on KVM",
+  "input_sha256": {
+    "daemon": "26951a7e8337af6ac980e435e383e957454ed4c57010e47056c68752504579f6",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "e1e285cfdbddb5a0f318ebdbf3ef4540da51ead79a2bc327fe9042afd6860ec7",
+    "driver": "a86892c187c8b491e071be608480851c9ba4e739e7f7e168b277770b5823883a"
+  },
+  "cases": [
+    {
+      "name": "a no-shell machine with a network boots (configure_network did not fail)",
+      "success": true,
+      "detail": {
+        "state": "running"
+      }
+    },
+    {
+      "name": "the guest's CA bundle holds the egress CA exactly once",
+      "success": true,
+      "detail": {
+        "certificates_in_bundle": 1,
+        "bundle_bytes": 619
+      }
+    },
+    {
+      "name": "exec answers 400 naming the missing /bin/sh",
+      "success": true,
+      "detail": {
+        "status": 400,
+        "message": "this guest's image has no /bin/sh, and this route runs its command through one (Script error: the guest agent could not run /bin/sh: could not start /bin/sh: No such file or directory (os error 2))"
+      }
+    },
+    {
+      "name": "runs answers 400 naming the missing /bin/sh",
+      "success": true,
+      "detail": {
+        "status": 400,
+        "message": "this guest's image has no /bin/sh, and this route runs its command through one (Script error: the guest agent could not start /bin/sh: could not start /bin/sh: No such file or directory (os error 2))"
+      }
+    },
+    {
+      "name": "a direct argv exec runs /bin/hv2-urltrace",
+      "success": null,
+      "supported": false,
+      "detail": "not supported: POST /machines/{name}/exec takes only cmd (run through /bin/sh -c) and /runs likewise; the argv form exists only on /sandboxes/{id}/exec, covered by check-urltrace-kvm.py"
+    },
+    {
+      "name": "after stop/start and restart it boots and the CA is still there once",
+      "success": true,
+      "detail": {
+        "certificates_after_start": 1,
+        "certificates_after_restart": 1
+      }
+    }
+  ],
+  "platform_lines": {
+    "Kvm": 3,
+    "Tcg": 0
+  }
+}

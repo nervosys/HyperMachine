@@ -18,7 +18,7 @@ through the API:
 
 Writes report.json and the daemon's log into --output.
 """
-import argparse, hashlib, json, os, shutil, signal, socket, subprocess, tempfile, time
+import argparse, base64, hashlib, json, os, shutil, signal, socket, subprocess, tempfile, time
 import urllib.error, urllib.request
 from pathlib import Path
 
@@ -131,7 +131,19 @@ def main():
         return [f'{d["verdict"]} {d["destination"]} ({d["reason"]})' for d in value["decisions"]]
 
     fetch = f"busybox wget -q -T 8 -O - {service}"
-    bundle = "grep -c 'BEGIN CERTIFICATE' /etc/ssl/certs/ca-certificates.crt"
+    def bundle_count(name):
+        # How many times the bundle's last certificate (the one the node appends)
+        # is held. Not the bundle's size: an image may ship a bundle of its own.
+        status, value = request("GET", f"/machines/{name}/files?path=/etc/ssl/certs/ca-certificates.crt")
+        assert status == 200, (status, value)
+        assert isinstance(value, str), type(value)
+        text = value
+        last = "-----BEGIN CERTIFICATE-----" + text.rsplit("-----BEGIN CERTIFICATE-----", 1)[1]
+        # And it must be the node's CA, not the image's own last entry: had the
+        # node appended nothing, that one would also be held exactly once.
+        body = "".join(last.split("-----")[2].split())
+        assert b"HyperMachine sandbox egress CA" in base64.b64decode(body), "the bundle's last certificate is not the node's egress CA"
+        return text.count(last.strip())
 
     def eventually(action, seconds=120):
         deadline = time.monotonic() + seconds
@@ -191,12 +203,12 @@ def main():
              refused_what_it_may_not)
 
         def network_returns():
-            first = int(run("net-01", bundle))
+            first = int(bundle_count("net-01"))
             assert first == 1, first
             assert request("POST", "/machines/net-01/stop")[0] == 200
             assert request("POST", "/machines/net-01/start")[0] == 200
             assert run("net-01", fetch) == "SERVICE-REACHED"
-            after_restart = int(run("net-01", bundle))
+            after_restart = int(bundle_count("net-01"))
             run("net-01", "touch /tmp/before-reboot")
             request("POST", "/machines/net-01/exec", {"cmd": "busybox reboot -f", "timeout_secs": 5})
 
@@ -205,7 +217,7 @@ def main():
                 assert code == 0
             eventually(fresh)
             assert eventually(lambda: run("net-01", fetch)) == "SERVICE-REACHED"
-            after_reboot = int(run("net-01", bundle))
+            after_reboot = int(bundle_count("net-01"))
             assert after_restart == 1 and after_reboot == 1, (after_restart, after_reboot)
             assert run("net-01", "readlink /etc/resolv.conf") == "/proc/net/pnp"
             return {"ca_certificates_in_bundle_after_three_boots": after_reboot}

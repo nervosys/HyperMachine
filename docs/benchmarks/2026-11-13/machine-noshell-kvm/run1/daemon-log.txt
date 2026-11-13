@@ -1,0 +1,68 @@
+[2m2026-11-13T04:57:52.133803Z[0m [32m INFO[0m [2mhv2_api::sandbox_proxy[0m[2m:[0m sandbox proxy listening on 0.0.0.0:43099
+hv2-sandboxd: listening on 0.0.0.0:58769, capacity 4
+  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)
+  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)
+  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls
+  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener
+  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules
+  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back, and with autoResume so does a request through the proxy
+  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies
+  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log
+  POST   /networks                 -- NOT E2B's; create a network joining sandboxes on this node
+  GET    /networks                 -- NOT E2B's; list this node's networks
+  GET    /networks/{name}         -- NOT E2B's; a network's members and addresses
+  DELETE /networks/{name}         -- NOT E2B's; remove a network
+  POST   /networks/{name}/connect    -- NOT E2B's; join a sandbox under an alias
+  POST   /networks/{name}/disconnect -- NOT E2B's; leave a network
+sandboxes get a network, egress default Deny for a sandbox that configures none
+sandboxes boot from the kernel (no template snapshot)
+
+sandbox proxy on 0.0.0.0:43099 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>
+  grpcurl -plaintext -authority 49983-$SBX.local -H "X-Access-Token: $TOKEN" -import-path crates/hv2-api/proto -proto process.proto \
+      -d '{"process":{"cmd":"/bin/sh","args":["-c","echo hi"]}}' \
+      localhost:43099 process.Process/Start
+[2m2026-11-13T04:57:52.347470Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T04:57:52.349576Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'vm-d69c1233959dc471': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T04:57:52.351090Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'vm-d69c1233959dc471': network device attached at 0xd0020000 (MAC 52:54:00:00:00:02, IRQ 6) -- no backend
+[2m2026-11-13T04:57:52.351764Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'vm-d69c1233959dc471': block device attached at 0xd0030000 (IRQ 7, 1073741824 bytes)
+[2m2026-11-13T04:57:52.352477Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T04:57:52.364743Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'vm-d69c1233959dc471' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T04:57:52.374228Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-11-13T04:57:52.375370Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'vm-d69c1233959dc471': loaded linux boot image (14251008 bytes), entry 0x100000
+[2m2026-11-13T04:57:52.377458Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'vm-d69c1233959dc471' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T04:57:52.378641Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'vm-d69c1233959dc471' with 1 vCPUs
+[2m2026-11-13T04:57:52.379392Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T04:57:52.380626Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T04:57:52.704731Z[0m [32m INFO[0m [2mhv2_sandboxd::machines[0m[2m:[0m machine bare-01 is running
+[2m2026-11-13T04:57:52.732951Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=901)
+[2m2026-11-13T04:57:52.734085Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'vm-d69c1233959dc471'
+[2m2026-11-13T04:57:52.734987Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'vm-d69c1233959dc471' stopped
+[2m2026-11-13T04:57:52.793805Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T04:57:52.795143Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'vm-d69c1233959dc471': vsock device attached at 0xd0000000 (guest CID 101, IRQ 5)
+[2m2026-11-13T04:57:52.796372Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'vm-d69c1233959dc471': network device attached at 0xd0020000 (MAC 52:54:00:00:00:02, IRQ 6) -- no backend
+[2m2026-11-13T04:57:52.797237Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'vm-d69c1233959dc471': block device attached at 0xd0030000 (IRQ 7, 1073741824 bytes)
+[2m2026-11-13T04:57:52.798040Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T04:57:52.810071Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'vm-d69c1233959dc471' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T04:57:52.816390Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-11-13T04:57:52.817490Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'vm-d69c1233959dc471': loaded linux boot image (14251008 bytes), entry 0x100000
+[2m2026-11-13T04:57:52.818823Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'vm-d69c1233959dc471' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T04:57:52.820015Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'vm-d69c1233959dc471' with 1 vCPUs
+[2m2026-11-13T04:57:52.820815Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T04:57:52.821949Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T04:57:53.201640Z[0m [32m INFO[0m [2mhv2_sandboxd::machines[0m[2m:[0m machine bare-01 is running
+[2m2026-11-13T04:57:53.253273Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=877)
+[2m2026-11-13T04:57:53.264643Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'vm-d69c1233959dc471'
+[2m2026-11-13T04:57:53.270568Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'vm-d69c1233959dc471' stopped
+[2m2026-11-13T04:57:53.501319Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T04:57:53.510583Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'vm-d69c1233959dc471': vsock device attached at 0xd0000000 (guest CID 102, IRQ 5)
+[2m2026-11-13T04:57:53.517750Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'vm-d69c1233959dc471': network device attached at 0xd0020000 (MAC 52:54:00:00:00:02, IRQ 6) -- no backend
+[2m2026-11-13T04:57:53.526204Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'vm-d69c1233959dc471': block device attached at 0xd0030000 (IRQ 7, 1073741824 bytes)
+[2m2026-11-13T04:57:53.533596Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T04:57:53.688344Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'vm-d69c1233959dc471' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T04:57:53.720250Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-11-13T04:57:53.735717Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'vm-d69c1233959dc471': loaded linux boot image (14251008 bytes), entry 0x100000
+[2m2026-11-13T04:57:53.749032Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'vm-d69c1233959dc471' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T04:57:53.757545Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'vm-d69c1233959dc471' with 1 vCPUs
+[2m2026-11-13T04:57:53.764166Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T04:57:53.774460Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T04:57:54.689677Z[0m [32m INFO[0m [2mhv2_sandboxd::machines[0m[2m:[0m machine bare-01 is running
