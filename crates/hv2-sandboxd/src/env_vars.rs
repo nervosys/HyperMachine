@@ -63,6 +63,24 @@ pub(crate) fn kept_files(sandbox_id: &str) -> Vec<GuestFile> {
 pub(crate) async fn write_files(vm: &AgentVM, files: &[GuestFile]) -> Result<(), String> {
     for file in files {
         let bytes = file.bytes()?;
+        // A cloned repository goes in through the agent's file operations,
+        // with no archive written to the guest and no `tar`, `chown` or shell
+        // in it. Only an agent that predates them, or an archive the agent
+        // cannot reproduce (it has no symlink operation), uses the shell.
+        if let Some(into) = &file.unpack_into {
+            match unpack_by_agent(vm, &bytes, into).await {
+                Ok(()) => {
+                    tracing::debug!("unpacking a repository into {into}: using agent op");
+                    continue;
+                }
+                Err(Unpack::Shell(why)) => {
+                    tracing::debug!(
+                        "unpacking a repository into {into}: falling back to shell ({why})"
+                    );
+                }
+                Err(Unpack::Failed(e)) => return Err(e),
+            }
+        }
         vm.write_file_in_guest_as(
             &file.path,
             bytes,
@@ -77,7 +95,16 @@ pub(crate) async fn write_files(vm: &AgentVM, files: &[GuestFile]) -> Result<(),
             let done = vm
                 .exec_in_guest("/bin/sh", &["-c".to_string(), line], AGENT_TIMEOUT * 6)
                 .await
-                .map_err(|e| format!("unpacking the repository into {into}: {e}"))?;
+                .map_err(|e| {
+                    if crate::guest_setup::guest_has_no_shell(&e.to_string()) {
+                        format!(
+                            "unpacking the repository into {into}: {}",
+                            crate::guest_setup::no_shell_message(false, &e.to_string())
+                        )
+                    } else {
+                        format!("unpacking the repository into {into}: {e}")
+                    }
+                })?;
             if done.exit_code != Some(0) {
                 return Err(format!(
                     "unpacking the repository into {into}: {}",
@@ -86,6 +113,145 @@ pub(crate) async fn write_files(vm: &AgentVM, files: &[GuestFile]) -> Result<(),
             }
         }
     }
+    Ok(())
+}
+
+/// One entry of a repository's tar, with its path relative to the tree's
+/// root (empty for the root itself).
+#[derive(Debug, PartialEq, Eq)]
+enum Member {
+    Dir {
+        rel: String,
+        mode: u32,
+    },
+    File {
+        rel: String,
+        mode: u32,
+        data: Vec<u8>,
+    },
+}
+
+/// What stopped the agent from unpacking a tar.
+#[derive(Debug)]
+enum Unpack {
+    /// Not through the agent: the shell may do it. Says why.
+    Shell(String),
+    Failed(String),
+}
+
+/// A tar's members, or why the agent's file operations cannot reproduce it:
+/// they have no symlink, hard link or device. Nothing is skipped silently.
+fn members(tar_bytes: &[u8]) -> Result<Vec<Member>, Unpack> {
+    let bad = |e: std::io::Error| Unpack::Failed(format!("reading the repository's archive: {e}"));
+    let mut archive = tar::Archive::new(tar_bytes);
+    let mut out = Vec::new();
+    for entry in archive.entries().map_err(bad)? {
+        let mut entry = entry.map_err(bad)?;
+        let kind = entry.header().entry_type();
+        let mode = entry.header().mode().map_err(bad)? & 0o7777;
+        let raw = entry.path_bytes().into_owned();
+        let path = String::from_utf8(raw).map_err(|_| {
+            Unpack::Failed("the repository's archive holds a name that is not UTF-8".into())
+        })?;
+        let mut parts = Vec::new();
+        for part in path.split('/') {
+            match part {
+                "" | "." => {}
+                ".." => {
+                    return Err(Unpack::Failed(format!(
+                        "the repository's archive holds {path:?}, which leaves its tree"
+                    )))
+                }
+                p => parts.push(p),
+            }
+        }
+        let rel = parts.join("/");
+        if kind.is_dir() {
+            out.push(Member::Dir { rel, mode });
+        } else if kind.is_file() {
+            // Whatever `chown` would have left: it clears set-user-ID and
+            // set-group-ID on a file.
+            let mut data = Vec::with_capacity(entry.size() as usize);
+            std::io::Read::read_to_end(&mut entry, &mut data).map_err(bad)?;
+            out.push(Member::File {
+                rel,
+                mode: mode & 0o1777,
+                data,
+            });
+        } else if kind.is_pax_global_extensions() || kind.is_pax_local_extensions() {
+            // Metadata for the entry after it, which the reader applied.
+        } else {
+            return Err(Unpack::Shell(format!(
+                "{path:?} is not a file or directory (a link or special file)"
+            )));
+        }
+    }
+    Ok(out)
+}
+
+/// `into` and `rel` joined, as a guest path.
+fn join_guest(into: &str, rel: &str) -> String {
+    let base = into.trim_end_matches('/');
+    if rel.is_empty() {
+        if base.is_empty() {
+            "/".into()
+        } else {
+            base.to_string()
+        }
+    } else {
+        format!("{base}/{rel}")
+    }
+}
+
+/// Unpack a repository's tar into `into` through the agent, every file and
+/// directory owned by the template's user, as `unpack_command` leaves them:
+/// modes from the archive, modification times not kept.
+async fn unpack_by_agent(vm: &AgentVM, tar_bytes: &[u8], into: &str) -> Result<(), Unpack> {
+    let owner = Some(hv2_guest_agent::TEMPLATE_USER);
+    let wait = AGENT_TIMEOUT * 6;
+    let fail = |what: &str, e: hv2_agent::AgentError| {
+        Unpack::Failed(format!("unpacking the repository into {into}: {what}: {e}"))
+    };
+    // Read the whole archive first, so one the agent cannot reproduce is
+    // found before anything is written.
+    let members = members(tar_bytes)?;
+    match vm.make_dir_in_guest(into, true, owner, None, wait).await {
+        Ok(()) => {}
+        Err(e) if hv2_agent::is_unsupported_op(&e) => {
+            return Err(Unpack::Shell(
+                "the guest's agent predates file operations".into(),
+            ))
+        }
+        Err(e) => return Err(fail("making it", e)),
+    }
+    for member in &members {
+        match member {
+            Member::Dir { rel, mode } => {
+                let path = join_guest(into, rel);
+                vm.make_dir_in_guest(&path, true, owner, Some(*mode), wait)
+                    .await
+                    .map_err(|e| fail(&path, e))?;
+                // One that was there already keeps its mode from
+                // `make_dir`, which `tar` would have changed.
+                vm.set_attr_in_guest(&path, None, Some(*mode), false, wait)
+                    .await
+                    .map_err(|e| fail(&path, e))?;
+            }
+            Member::File { rel, mode, data } => {
+                let path = join_guest(into, rel);
+                vm.write_file_in_guest_as(&path, data.clone(), owner, wait)
+                    .await
+                    .map_err(|e| fail(&path, e))?;
+                vm.set_attr_in_guest(&path, None, Some(*mode), false, wait)
+                    .await
+                    .map_err(|e| fail(&path, e))?;
+            }
+        }
+    }
+    // `chown -R` over the whole of `into`, what was in it before included.
+    vm.set_attr_in_guest(into, owner, None, true, wait)
+        .await
+        .map_err(|e| fail("giving it to the template's user", e))?;
     Ok(())
 }
 
@@ -202,6 +368,104 @@ mod tests {
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect()
+    }
+
+    fn tar_of(build: impl FnOnce(&mut tar::Builder<Vec<u8>>)) -> Vec<u8> {
+        let mut builder = tar::Builder::new(Vec::new());
+        build(&mut builder);
+        builder.into_inner().unwrap()
+    }
+
+    fn header(kind: tar::EntryType, mode: u32, size: u64) -> tar::Header {
+        let mut header = tar::Header::new_gnu();
+        header.set_entry_type(kind);
+        header.set_mode(mode);
+        header.set_size(size);
+        header.set_cksum();
+        header
+    }
+
+    #[test]
+    fn a_repositorys_tar_is_read_as_directories_and_files() {
+        let bytes = tar_of(|b| {
+            b.append_data(
+                &mut header(tar::EntryType::Directory, 0o755, 0),
+                "./",
+                &[][..],
+            )
+            .unwrap();
+            b.append_data(
+                &mut header(tar::EntryType::Directory, 0o700, 0),
+                "./.lit",
+                &[][..],
+            )
+            .unwrap();
+            b.append_data(
+                &mut header(tar::EntryType::Regular, 0o4755, 5),
+                "./.lit/HEAD",
+                &b"hello"[..],
+            )
+            .unwrap();
+        });
+        let got = members(&bytes).unwrap();
+        assert_eq!(
+            got,
+            vec![
+                Member::Dir {
+                    rel: String::new(),
+                    mode: 0o755
+                },
+                Member::Dir {
+                    rel: ".lit".into(),
+                    mode: 0o700
+                },
+                // Set-user-ID is dropped, as `chown` drops it.
+                Member::File {
+                    rel: ".lit/HEAD".into(),
+                    mode: 0o755,
+                    data: b"hello".to_vec()
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn a_symlink_in_the_tar_is_left_to_the_shell_and_never_dropped() {
+        let bytes = tar_of(|b| {
+            let mut h = header(tar::EntryType::Symlink, 0o777, 0);
+            b.append_link(&mut h, "./link", "target").unwrap();
+        });
+        assert!(matches!(members(&bytes), Err(Unpack::Shell(_))));
+    }
+
+    #[test]
+    fn a_name_that_leaves_the_tree_is_refused() {
+        let mut bytes = tar_of(|b| {
+            b.append_data(
+                &mut header(tar::EntryType::Regular, 0o644, 1),
+                "x",
+                &b"y"[..],
+            )
+            .unwrap();
+        });
+        // `append_data` refuses `..`, so write it into the header's name field.
+        bytes[..2].copy_from_slice(b"..");
+        bytes[2] = b'/';
+        bytes[3] = b'x';
+        bytes[4] = 0;
+        let mut header = tar::Header::new_gnu();
+        header.as_mut_bytes().copy_from_slice(&bytes[..512]);
+        header.set_cksum();
+        bytes[..512].copy_from_slice(header.as_bytes());
+        assert!(matches!(members(&bytes), Err(Unpack::Failed(_))));
+    }
+
+    #[test]
+    fn guest_paths_join_without_doubled_slashes() {
+        assert_eq!(join_guest("/srv/app", ""), "/srv/app");
+        assert_eq!(join_guest("/srv/app/", "a/b"), "/srv/app/a/b");
+        assert_eq!(join_guest("/", "a"), "/a");
+        assert_eq!(join_guest("/", ""), "/");
     }
 
     #[test]

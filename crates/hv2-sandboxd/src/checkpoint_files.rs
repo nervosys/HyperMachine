@@ -28,10 +28,12 @@ use axum::extract::{Path, Query, State};
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use hv2_agent::AgentVM;
+use hv2_agent::{is_unsupported_op, AgentError, AgentVM};
+use hv2_guest_agent::{DirEntry, DirEntryKind};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use super::guest_setup::{guest_has_no_shell, no_shell_message};
 use super::{api_error, new_vm, AppState, TEMPLATE_CID, TEMPLATE_MAC};
 
 /// The largest file read out of a checkpoint, as for a machine's snapshot.
@@ -148,12 +150,83 @@ impl Reader {
             .exec_in_guest("/bin/sh", &args, READ_TIMEOUT)
             .await
             .map_err(|e| {
-                refused(
-                    StatusCode::BAD_GATEWAY,
-                    format!("reading the checkpoint: {e}"),
-                )
+                // An image with no shell is a supported one: say so, not 502.
+                if guest_has_no_shell(&e.to_string()) {
+                    refused(
+                        StatusCode::BAD_REQUEST,
+                        no_shell_message(false, &e.to_string()),
+                    )
+                } else {
+                    refused(
+                        StatusCode::BAD_GATEWAY,
+                        format!("reading the checkpoint: {e}"),
+                    )
+                }
             })?;
         Ok((ran.exit_code, ran.stdout))
+    }
+
+    /// What the agent's `stat` says about `path` (not following a symlink):
+    /// `None` if the agent predates the operation, so the caller may use a
+    /// shell; a refusal if there is no such path.
+    async fn stat(&self, path: &str) -> Result<Option<DirEntry>, Refused> {
+        match self.vm.stat_in_guest(path, false, READ_TIMEOUT).await {
+            Ok(entry) => {
+                tracing::debug!("checkpoint reader: using agent op (stat)");
+                Ok(Some(entry))
+            }
+            Err(e) if is_unsupported_op(&e) => {
+                tracing::debug!("checkpoint reader: falling back to shell (stat)");
+                Ok(None)
+            }
+            Err(e) => Err(agent_refusal(path, &e)),
+        }
+    }
+
+    /// `path`'s entries, as the listing answers: through the agent's own
+    /// operations, or for an agent that predates them, `LIST` in a shell.
+    async fn list_entries(&self, path: &str) -> Result<Vec<Value>, Refused> {
+        match self.stat(path).await? {
+            Some(entry) => {
+                // As `LIST`: a symlink to a directory is not one.
+                if entry.kind != DirEntryKind::Dir {
+                    return Err(refused(
+                        StatusCode::BAD_REQUEST,
+                        format!("{path:?} is not a directory"),
+                    ));
+                }
+                let (listed, _) = self
+                    .vm
+                    .list_dir_in_guest(path, MAX_ENTRIES as u32, READ_TIMEOUT)
+                    .await
+                    .map_err(|e| agent_refusal(path, &e))?;
+                Ok(agent_entries(listed))
+            }
+            None => match self.sh(LIST, path).await? {
+                (Some(0), out) => Ok(entries(&out)),
+                (code, _) => Err(refusal(code, path, "a directory")),
+            },
+        }
+    }
+
+    /// `path`'s size, if it is a regular file (not through a symlink).
+    async fn file_size(&self, path: &str) -> Result<u64, Refused> {
+        match self.stat(path).await? {
+            Some(entry) if entry.kind == DirEntryKind::File => Ok(entry.size),
+            Some(_) => Err(refused(
+                StatusCode::BAD_REQUEST,
+                format!("{path:?} is not a regular file"),
+            )),
+            None => match self.sh(SIZE, path).await? {
+                (Some(0), out) => out.trim().parse::<u64>().map_err(|e| {
+                    refused(
+                        StatusCode::BAD_GATEWAY,
+                        format!("the size of {path:?}: {e}"),
+                    )
+                }),
+                (code, _) => Err(refusal(code, path, "a regular file")),
+            },
+        }
     }
 
     async fn close(self) {
@@ -235,13 +308,22 @@ async fn open(state: &AppState, sandbox_id: &str, name: &str) -> Result<Reader, 
             .after_restore(state.opts.ready_timeout)
             .await
             .map_err(|e| format!("its agent: {e}"))?;
-        let frozen = reader
+        // The agent can signal only what it started, so stopping the
+        // checkpoint's programs takes a shell. A guest with none is read
+        // unfrozen: its programs are whatever its agent started.
+        match reader
             .vm
             .exec_in_guest("/bin/sh", &["-c".into(), FREEZE.into()], READ_TIMEOUT)
             .await
-            .map_err(|e| format!("stopping its programs: {e}"))?;
-        if frozen.exit_code != Some(0) {
-            return Err(format!("stopping its programs: {}", frozen.stderr.trim()));
+        {
+            Ok(frozen) if frozen.exit_code != Some(0) => {
+                return Err(format!("stopping its programs: {}", frozen.stderr.trim()));
+            }
+            Ok(_) => {}
+            Err(e) if guest_has_no_shell(&e.to_string()) => {
+                tracing::debug!("checkpoint reader: no shell, reading unfrozen");
+            }
+            Err(e) => return Err(format!("stopping its programs: {e}")),
         }
         Ok(())
     }
@@ -263,6 +345,62 @@ fn kind(described: &str) -> &'static str {
         "symbolic link" => "symlink",
         d if d.starts_with("regular") => "file",
         _ => "other",
+    }
+}
+
+/// A checkpoint's entry kind as a listing names it, as `kind` does for
+/// `stat -c %F`.
+fn agent_kind(kind: DirEntryKind) -> &'static str {
+    match kind {
+        DirEntryKind::Dir => "directory",
+        DirEntryKind::Symlink => "symlink",
+        DirEntryKind::File => "file",
+        DirEntryKind::Other => "other",
+    }
+}
+
+/// The agent's directory listing as `LIST`'s entries are: the shell lists
+/// `*` and then the dot files, each sorted, and gives the mode as `stat -c %a`
+/// does (octal, no leading zeros).
+fn agent_entries(listed: Vec<DirEntry>) -> Vec<Value> {
+    let (dotted, plain): (Vec<DirEntry>, Vec<DirEntry>) = listed
+        .into_iter()
+        .partition(|entry| entry.name.starts_with('.'));
+    plain
+        .into_iter()
+        .chain(dotted)
+        .take(MAX_ENTRIES)
+        .map(|entry| {
+            let kind = agent_kind(entry.kind);
+            json!({
+                "name": entry.name,
+                "type": kind,
+                "mode": format!("{:o}", entry.mode),
+                "uid": entry.uid,
+                "gid": entry.gid,
+                "size": if kind == "directory" { None } else { Some(entry.size) },
+            })
+        })
+        .collect()
+}
+
+/// Whether the guest's error says the path (or a parent of it) is not there.
+fn is_missing(message: &str) -> bool {
+    message.contains("No such file") || message.contains("Not a directory")
+}
+
+/// An agent operation's failure on `path` as a refusal.
+fn agent_refusal(path: &str, error: &AgentError) -> Refused {
+    if is_missing(&error.to_string()) {
+        refused(
+            StatusCode::NOT_FOUND,
+            format!("no {path:?} in the checkpoint"),
+        )
+    } else {
+        refused(
+            StatusCode::BAD_GATEWAY,
+            format!("reading {path:?}: {error}"),
+        )
     }
 }
 
@@ -324,19 +462,15 @@ pub(crate) async fn list(
         Ok(reader) => reader,
         Err((status, why)) => return api_error(status, why),
     };
-    let listed = reader.sh(LIST, &at.path).await;
+    let listed = reader.list_entries(&at.path).await;
     reader.close().await;
     match listed {
-        Ok((Some(0), out)) => Json(json!({
+        Ok(entries) => Json(json!({
             "path": at.path,
             "checkpoint": name,
-            "entries": entries(&out),
+            "entries": entries,
         }))
         .into_response(),
-        Ok((code, _)) => {
-            let (status, why) = refusal(code, &at.path, "a directory");
-            api_error(status, why)
-        }
         Err((status, why)) => api_error(status, why),
     }
 }
@@ -355,15 +489,7 @@ pub(crate) async fn file(
         Err((status, why)) => return api_error(status, why),
     };
     let read = async {
-        let size = match reader.sh(SIZE, &at.path).await? {
-            (Some(0), out) => out.trim().parse::<u64>().map_err(|e| {
-                refused(
-                    StatusCode::BAD_GATEWAY,
-                    format!("the size of {:?}: {e}", at.path),
-                )
-            })?,
-            (code, _) => return Err(refusal(code, &at.path, "a regular file")),
-        };
+        let size = reader.file_size(&at.path).await?;
         if size > MAX_FILE {
             return Err(refused(
                 StatusCode::PAYLOAD_TOO_LARGE,
@@ -485,6 +611,51 @@ mod tests {
         assert_eq!(listed[1]["uid"], 1000);
         assert_eq!(listed[2]["type"], "symlink");
         assert_eq!(listed[3]["type"], "other");
+    }
+
+    fn dir_entry(name: &str, kind: DirEntryKind, mode: u32) -> DirEntry {
+        DirEntry {
+            name: name.into(),
+            kind,
+            size: 12,
+            mode,
+            uid: 1000,
+            gid: 100,
+            mtime_secs: 0,
+        }
+    }
+
+    #[test]
+    fn agent_entries_read_as_the_shell_listing_does() {
+        let listed = agent_entries(vec![
+            dir_entry(".bashrc", DirEntryKind::File, 0o644),
+            dir_entry("bin", DirEntryKind::Dir, 0o755),
+            dir_entry("link", DirEntryKind::Symlink, 0o777),
+            dir_entry("su", DirEntryKind::File, 0o4755),
+            dir_entry("tty", DirEntryKind::Other, 0o666),
+        ]);
+        let names: Vec<_> = listed.iter().map(|e| e["name"].as_str().unwrap()).collect();
+        // The dot files come after the rest, as `* .*` lists them.
+        assert_eq!(names, vec!["bin", "link", "su", "tty", ".bashrc"]);
+        assert_eq!(listed[0]["type"], "directory");
+        assert!(listed[0]["size"].is_null());
+        assert_eq!(listed[0]["mode"], "755");
+        assert_eq!(listed[1]["type"], "symlink");
+        assert_eq!(listed[2]["mode"], "4755");
+        assert_eq!(listed[2]["size"], 12);
+        assert_eq!(listed[2]["uid"], 1000);
+        assert_eq!(listed[3]["type"], "other");
+        assert_eq!(listed[4]["type"], "file");
+    }
+
+    #[test]
+    fn a_missing_path_is_a_404_and_other_failures_are_not() {
+        let missing = AgentError::Script("stat /x: No such file or directory (os error 2)".into());
+        assert_eq!(agent_refusal("/x", &missing).0, StatusCode::NOT_FOUND);
+        let under_file = AgentError::Script("stat /f/x: Not a directory (os error 20)".into());
+        assert_eq!(agent_refusal("/f/x", &under_file).0, StatusCode::NOT_FOUND);
+        let other = AgentError::Script("stat /y: Permission denied".into());
+        assert_eq!(agent_refusal("/y", &other).0, StatusCode::BAD_GATEWAY);
     }
 
     #[test]

@@ -191,9 +191,17 @@ pub(crate) async fn screenshot(
         .read_file_in_guest(&path, MAX_SCREENSHOT, ACT_TIMEOUT)
         .await;
     // Not left behind, whether it was read or not.
-    let _ = vm
-        .exec_in_guest("/bin/rm", &["-f".to_string(), path], ACT_TIMEOUT)
-        .await;
+    // Through the agent; only an agent that predates its file operations
+    // needs `rm`.
+    match vm.remove_in_guest(&path, false, true, ACT_TIMEOUT).await {
+        Err(e) if hv2_agent::is_unsupported_op(&e) => {
+            tracing::debug!("removing the screenshot: falling back to shell");
+            let _ = vm
+                .exec_in_guest("/bin/rm", &["-f".to_string(), path], ACT_TIMEOUT)
+                .await;
+        }
+        _ => {}
+    }
     match read {
         Ok(png) => ([(header::CONTENT_TYPE, "image/png")], png).into_response(),
         Err(e) => api_error(

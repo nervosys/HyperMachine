@@ -2,10 +2,11 @@
 //! and `GET /sandboxes/{id}/processes`, as `ps` would list them inside.
 //!
 //! Every process the guest's kernel has, not only those started through the
-//! API, read from its `/proc` by one shell through the guest agent. Only
-//! `/proc` and a POSIX shell are used, so a guest of busybox lists as an
-//! Ubuntu one does. Kernel threads are left out unless `?all=true`, and so
-//! is the shell doing the listing, with what it runs.
+//! API, read from its `/proc` through the guest agent's directory and file
+//! operations, so a guest with no shell lists as an Ubuntu one does. An agent
+//! that predates those operations lists through one POSIX shell instead
+//! (`is_unsupported_op`), and then so is the shell left out of the listing,
+//! with what it runs. Kernel threads are left out unless `?all=true`.
 //!
 //! Each process: `pid`, `ppid`, `uid`, `state` (`R`, `S`, `D`, `Z`, `T` and
 //! the rest, as `ps` shows them), `command` (its name, as the kernel keeps
@@ -109,8 +110,86 @@ fn parse(out: &str, all: bool) -> Result<Vec<Value>, String> {
     Ok(listed)
 }
 
-/// The guest's processes, through its agent.
+/// The real UID in a `/proc/<pid>/status`, as the `sed` of [`LIST`] finds it.
+fn status_uid(status: &str) -> String {
+    status
+        .lines()
+        .find_map(|line| line.strip_prefix("Uid:"))
+        .and_then(|rest| rest.split_whitespace().next())
+        .filter(|uid| uid.bytes().all(|b| b.is_ascii_digit()))
+        .unwrap_or("")
+        .to_string()
+}
+
+/// A guest file as text, lossily; `None` if it could not be read (a process
+/// that ended while it was read).
+async fn read_text(vm: &AgentVM, path: &str) -> Option<String> {
+    let bytes = vm
+        .read_file_in_guest(path, 1024 * 1024, LIST_TIMEOUT)
+        .await
+        .ok()?;
+    Some(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// The listing through the agent's filesystem operations: no shell, `cat`,
+/// `tr` or `sed` in the guest. `Err(None)` is an agent that predates them
+/// (the caller may use a shell); `Err(Some(_))` a failure.
+async fn list_by_agent(vm: &AgentVM, all: bool) -> Result<Vec<Value>, Option<String>> {
+    let (entries, _) = match vm.list_dir_in_guest("/proc", 0, LIST_TIMEOUT).await {
+        Ok(listed) => listed,
+        Err(e) if hv2_agent::is_unsupported_op(&e) => return Err(None),
+        Err(e) => return Err(Some(format!("listing the guest's processes: {e}"))),
+    };
+    let uptime = read_text(vm, "/proc/uptime")
+        .await
+        .and_then(|up| {
+            up.split_whitespace()
+                .next()
+                .and_then(|n| n.parse::<f64>().ok())
+        })
+        .ok_or_else(|| Some("the guest's uptime could not be read".to_string()))?;
+    let mut listed = Vec::new();
+    for entry in entries {
+        if entry.name.is_empty() || !entry.name.bytes().all(|b| b.is_ascii_digit()) {
+            continue;
+        }
+        let dir = format!("/proc/{}", entry.name);
+        let (stat_at, cmdline_at, status_at) = (
+            format!("{dir}/stat"),
+            format!("{dir}/cmdline"),
+            format!("{dir}/status"),
+        );
+        let (stat, cmdline, status) = tokio::join!(
+            read_text(vm, &stat_at),
+            read_text(vm, &cmdline_at),
+            read_text(vm, &status_at),
+        );
+        // A process without a `stat` ended while it was read.
+        let Some(stat) = stat else { continue };
+        let cmdline = cmdline.unwrap_or_default().replace('\0', "\u{1}");
+        let uid = status.map(|s| status_uid(&s)).unwrap_or_default();
+        if let Some(p) = process(&entry.name, stat.trim_end(), &cmdline, &uid, uptime) {
+            if all || !kernel_thread(&p) {
+                listed.push(p);
+            }
+        }
+    }
+    listed.sort_by_key(|p| p["pid"].as_u64());
+    listed.truncate(MAX_PROCESSES);
+    Ok(listed)
+}
+
+/// The guest's processes, through its agent: its filesystem operations, or,
+/// for an agent that predates them, one shell.
 pub(crate) async fn list(vm: &AgentVM, query: &Listing) -> Result<Value, String> {
+    match list_by_agent(vm, query.all).await {
+        Ok(processes) => {
+            tracing::debug!("listing processes: using agent op");
+            return Ok(json!({ "processes": processes }));
+        }
+        Err(Some(e)) => return Err(e),
+        Err(None) => tracing::debug!("listing processes: falling back to shell"),
+    }
     let ran = vm
         .exec_in_guest(
             "/bin/sh",
@@ -176,6 +255,24 @@ mod tests {
         assert_eq!(p["rssKiB"], 1024);
         assert_eq!(p["cpuSeconds"], 2.0);
         assert_eq!(p["startedSecondsAgo"], 50.0);
+    }
+
+    #[test]
+    fn the_uid_is_the_real_one_from_status() {
+        assert_eq!(
+            status_uid("Name:\tx\nUid:\t1000\t0\t0\t0\nGid:\t5\n"),
+            "1000"
+        );
+        assert_eq!(status_uid("Name:\tx\n"), "");
+        assert_eq!(status_uid("Uid:\tabc\n"), "");
+    }
+
+    #[test]
+    fn a_nul_separated_cmdline_reads_as_the_shell_listing_gave_it() {
+        let stat = stat(7, "sleep", "S", 1);
+        let cmdline = "sleep\u{0}300\u{0}".replace('\0', "\u{1}");
+        let p = process("7", &stat, &cmdline, "0", 5.0).unwrap();
+        assert_eq!(p["args"], "sleep 300");
     }
 
     #[test]

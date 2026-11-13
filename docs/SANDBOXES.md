@@ -688,10 +688,22 @@ by a shell, not the program name and not any argument. `argv` has at most 64 ele
 8192 bytes each, none containing a NUL byte, and `args` is refused beside it. `timeout_secs`, `user`
 and the output caps apply as for `cmd`. A program that is not in the image fails as an exec error.
 A node can now create sandboxes from an image with no shell and run programs in them by `argv`
-(three runs on KVM, `docs/benchmarks/2026-11-11/urltrace-noshell-kvm/`); the node features that
-still need a shell in the guest are process listing, environment variables, checkpoint files,
-builds, disks and the machines path, and with such an image they do not work (only the process
-listing's failure was exercised).
+(three runs on KVM, `docs/benchmarks/2026-11-11/urltrace-noshell-kvm/`).
+
+Several node-initiated guest commands go through the guest agent's filesystem operations
+(`docs/GUEST_AGENT.md`, "Filesystem operations") first, so they work on such an image: the
+process listing (`GET /sandboxes/{id}/processes`, `GET /machines/{name}/processes`), the
+environment's Git/Lit repository unpack, the checkpoint file listing (`.../files`) and file read
+(`.../file`), and the desktop screenshot cleanup. Only an agent from before those operations
+(`hv2_agent::is_unsupported_op`) falls back to the old shell command, so images with a shell
+behave as before. What still needs a shell in the guest, and on such an image does not work:
+checkpoint `.../archive` (it answers 400 naming the missing `/bin/sh`; the agent has no
+readlink, so a tar built on the host would lose symlinks), builds, disks and `set_guest_clock`.
+A repository whose tar holds a symlink, hard link or special file also needs the shell (the
+agent cannot create one), and a modification time is not kept on files unpacked through the
+agent. Opening a checkpoint on a guest with no shell reads it without first stopping its
+programs (stopping needs `kill` on pids the agent did not start); the guest's own programs
+there are whatever its agent started.
 
 ## What this does not replace
 

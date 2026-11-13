@@ -1,0 +1,159 @@
+{
+  "success": true,
+  "label": "old-image",
+  "agent_ops": "old",
+  "shell": true,
+  "purpose": "functional verification of node-initiated guest commands through the agent's file operations, on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "24082e1b9d6b2a8fec1a0eb9048a16663aa7d32298634ad0fae4b1a6ff138e4c",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "2952bbbe585a1b2e780aa3f3c02ffa722c203065f0341717653bb20dec33cca0",
+    "driver": "27cd0c9794b26456092084172571ec882e88d95308eaa9ec25f036a431aec29d"
+  },
+  "cases": [
+    {
+      "name": "a sandbox's processes: PID 1, the agent's command line, kernel threads only with all",
+      "success": true,
+      "detail": {
+        "count": 2,
+        "with_kernel_threads": 42,
+        "init": {
+          "args": "sh",
+          "command": "sh",
+          "cpuSeconds": 0.06,
+          "pid": 1,
+          "ppid": 0,
+          "rssKiB": 1408,
+          "startedSecondsAgo": 0.27,
+          "state": "S",
+          "threads": 1,
+          "uid": 0
+        },
+        "agent": {
+          "args": "/bin/hv2-guest-agentd",
+          "command": "hv2-guest-agent",
+          "cpuSeconds": 0.04,
+          "pid": 54,
+          "ppid": 1,
+          "rssKiB": 1792,
+          "startedSecondsAgo": 0.15,
+          "state": "S",
+          "threads": 3,
+          "uid": 0
+        },
+        "sleeper": {
+          "args": "sleep 4321",
+          "command": "sleep",
+          "cpuSeconds": 0.0,
+          "pid": 342,
+          "ppid": 1,
+          "rssKiB": 1280,
+          "startedSecondsAgo": 0.53,
+          "state": "S",
+          "threads": 1,
+          "uid": 0
+        }
+      }
+    },
+    {
+      "name": "a machine's processes, the same way",
+      "success": true,
+      "detail": {
+        "count": 2,
+        "init": {
+          "args": "sh",
+          "command": "sh",
+          "cpuSeconds": 0.07,
+          "pid": 1,
+          "ppid": 0,
+          "rssKiB": 1408,
+          "startedSecondsAgo": 0.25,
+          "state": "S",
+          "threads": 1,
+          "uid": 0
+        },
+        "agent": {
+          "args": "/bin/hv2-guest-agentd",
+          "command": "hv2-guest-agent",
+          "cpuSeconds": 0.03,
+          "pid": 59,
+          "ppid": 1,
+          "rssKiB": 1536,
+          "startedSecondsAgo": 0.1,
+          "state": "S",
+          "threads": 3,
+          "uid": 0
+        }
+      }
+    },
+    {
+      "name": "an environment's file is listed and read through the checkpoint",
+      "success": true,
+      "detail": {
+        "entry": {
+          "gid": 0,
+          "mode": "644",
+          "name": "config.toml",
+          "size": 12,
+          "type": "file",
+          "uid": 0
+        },
+        "root": [
+          "bin",
+          "dev",
+          "etc",
+          "init",
+          "proc",
+          "root",
+          "sbin",
+          "srv",
+          "sys",
+          "tmp"
+        ],
+        "refused": {
+          "no such path": "no \"/etc/nothing\" in the checkpoint",
+          "no such file": "no \"/etc/nothing\" in the checkpoint",
+          "a file listed": "\"/etc/app/config.toml\" is not a directory",
+          "a directory read": "\"/etc/app\" is not a regular file",
+          "a relative path": "path must be absolute"
+        }
+      }
+    },
+    {
+      "name": "an environment's Git repository is unpacked, one owner, modes kept, no archive left",
+      "success": true,
+      "detail": {
+        "tree_owner": [
+          [
+            0,
+            0
+          ]
+        ],
+        "git_entries": 11,
+        "tracked": [
+          "README.md",
+          "src/app.py"
+        ]
+      }
+    },
+    {
+      "name": "the archive route: 200 with a shell, 400 naming the missing /bin/sh without one",
+      "success": true,
+      "detail": {
+        "status": 200,
+        "entries": [
+          ".",
+          "config.toml"
+        ]
+      }
+    }
+  ],
+  "platform_lines": {
+    "Kvm": 19,
+    "Tcg": 0
+  },
+  "code_path_lines": {
+    "using agent op": 0,
+    "falling back to shell": 20
+  }
+}

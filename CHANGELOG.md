@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Node-initiated guest commands now use the guest agent's filesystem
+  operations first.** Process listing (`GET /sandboxes/{id}/processes`,
+  `GET /machines/{name}/processes`), the unpack of an environment's
+  Git/Lit repository, the checkpoint file listing and file read, and the
+  desktop screenshot cleanup no longer need `/bin/sh`, `cat`, `tar` or
+  `chown` in the guest, so they work on a no-shell image. An agent from
+  before the operations (`is_unsupported_op`) still gets the old shell
+  command, so responses on images with a shell are unchanged. Checkpoint
+  `.../archive` stays on the shell and answers 400 on a no-shell guest;
+  opening a checkpoint on one skips the freeze of its programs. See
+  `docs/benchmarks/2026-11-13/agent-ops-kvm`.
 - **Every CI job failed on rustc 1.100.** Its new unreachable-code lint
   rejected `e.to_string()` on `ThreadRng`'s `Infallible` error in
   `hv2-core` `crypto::fips` (now an irrefutable `let Ok(())`), and its
