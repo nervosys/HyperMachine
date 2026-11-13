@@ -1,0 +1,8 @@
+ok: disk created
+ok: a sandbox without a disk still restores from the template
+ok: sandbox A mounts the disk and writes to it
+ok: an attached disk is exclusive
+ok: operations that would restore memory against a moved disk are refused
+ok: ended, A gives the disk back and B reads what A wrote
+ok: a killed daemon's claim does not outlive it
+ok: a free disk deletes, image and all

@@ -1112,6 +1112,39 @@ impl GuestAgent {
         }
     }
 
+    /// Mount a block device in the guest; see [`Operation::MountBlock`].
+    /// `Ok(true)` once mounted, `Ok(false)` if `expect_sectors` was set and
+    /// the device never reported that size.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::list_dir`]; a refused device or target, or the kernel's
+    /// reason for failing the mount, is the guest's refusal.
+    pub fn mount_block(
+        &mut self,
+        device: &str,
+        target: &str,
+        expect_sectors: Option<u64>,
+        drop_caches: bool,
+        timeout: Duration,
+    ) -> Result<bool> {
+        let op = Operation::MountBlock {
+            device: device.to_string(),
+            target: target.to_string(),
+            fstype: hv2_guest_agent::MountFsType::Ext4,
+            expect_sectors,
+            drop_caches,
+        };
+        match self.request_fs_op("mount_block", op, timeout)? {
+            OpResult::Acknowledged => Ok(true),
+            OpResult::DeviceSizeNotSeen => Ok(false),
+            OpResult::Failed { message } => Err(AgentError::Script(message)),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a block mount with {other:?}"
+            ))),
+        }
+    }
+
     fn acknowledged(
         &mut self,
         name: &'static str,
@@ -1358,6 +1391,9 @@ mod tests {
             new()
                 .signal_process(5, hv2_guest_agent::SignalName::Stop, t)
                 .unwrap_err(),
+            new()
+                .mount_block("/dev/vda", "/data", None, false, t)
+                .unwrap_err(),
         ];
         for error in &errors {
             assert!(is_unsupported_op(error), "{error}");
@@ -1463,6 +1499,41 @@ mod tests {
         assert!(!agent.signal_process(9, SignalName::Cont, t).unwrap());
         let refused = agent.signal_process(1, SignalName::Stop, t).unwrap_err();
         assert!(refused.to_string().contains("refusing"));
+        assert!(!is_unsupported_op(&refused));
+    }
+
+    #[test]
+    fn mount_block_answers_come_through() {
+        let mut agent = GuestAgent::new(FakeGuest::new(|request| {
+            let result = match request.op {
+                Operation::MountBlock {
+                    expect_sectors: Some(9),
+                    ..
+                } => OpResult::DeviceSizeNotSeen,
+                Operation::MountBlock { ref device, .. } if device == "/dev/vdb" => {
+                    OpResult::Failed {
+                        message: "mounting /dev/vdb: Invalid argument".into(),
+                    }
+                }
+                _ => OpResult::Acknowledged,
+            };
+            Some(Response {
+                id: request.id,
+                version: PROTOCOL_VERSION,
+                result,
+            })
+        }));
+        let t = Duration::from_secs(1);
+        assert!(agent
+            .mount_block("/dev/vda", "/d", Some(8), true, t)
+            .unwrap());
+        assert!(!agent
+            .mount_block("/dev/vda", "/d", Some(9), true, t)
+            .unwrap());
+        let refused = agent
+            .mount_block("/dev/vdb", "/d", None, false, t)
+            .unwrap_err();
+        assert!(refused.to_string().contains("Invalid argument"));
         assert!(!is_unsupported_op(&refused));
     }
 

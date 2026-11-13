@@ -1,0 +1,48 @@
+{
+  "success": true,
+  "label": "busybox",
+  "agent_ops": "new",
+  "shell": true,
+  "purpose": "functional verification of mounting a disk through the agent's mount_block, on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "2722f1bcf0b3ac099076249521e87d77bad6ebb1626524a0a3f123d0ae83ea56",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "12577fb386d9649fbea4961478c4279812ab594e27fbad028e37c5342b837bd9",
+    "driver": "1a2379fdda0091473309e6b1470e14acecfb4cec3596caa68bdcbbcdbc1a739c"
+  },
+  "cases": [
+    {
+      "name": "a. cold boot with a disk: mounted ext4, written file read back by a second sandbox (disks::mount)",
+      "success": true,
+      "detail": {
+        "mount": "/dev/vda /data ext4 rw,relatime 0 0",
+        "disk_sectors": 131072,
+        "sha256": "b1b9664e07884a77215d9cb4c19cc4dc0b242ef34876c8d4ceef6a3363911a81",
+        "kernel_resize_lines": 0,
+        "second_sandbox_sha256": "b1b9664e07884a77215d9cb4c19cc4dc0b242ef34876c8d4ceef6a3363911a81"
+      }
+    },
+    {
+      "name": "b. restored from the template and given the disk: mounted ext4 at the real size, written file read back by a second sandbox (disks::mount_swapped)",
+      "success": true,
+      "detail": {
+        "mount": "/dev/vda /data ext4 rw,relatime 0 0",
+        "disk_sectors": 131072,
+        "sha256": "2215e73ad6500d2a26f2c11c1235b7599d80dfd955de69258583fa0e7ef58dc6",
+        "kernel_resize_lines": 1,
+        "second_sandbox_sha256": "2215e73ad6500d2a26f2c11c1235b7599d80dfd955de69258583fa0e7ef58dc6"
+      }
+    }
+  ],
+  "log_counts": {
+    "mount_agent": 2,
+    "mount_shell": 0,
+    "mount_swapped_agent": 2,
+    "mount_swapped_shell": 0
+  },
+  "platform_lines": {
+    "Kvm": 6,
+    "Tcg": 0
+  },
+  "code_path_as_expected": true
+}

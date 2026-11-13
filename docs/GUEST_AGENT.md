@@ -137,6 +137,17 @@ older raw-number `signal`). They are used by the checkpoint reader (freeze with
 from `stat`/`list_dir`/`read_file`/`read_link`) and by repository unpacking
 (symlinks via `make_symlink`).
 
+One more, for disks (still version 3):
+
+| Operation | Answered with | Notes |
+|---|---|---|
+| `mount_block {device, target, fstype, expect_sectors, drop_caches}` | `acknowledged`, or `device_size_not_seen` | `mount(2)` with no shell. `device` must be `/dev/vd<letters>[<digits>]`, `fstype` is `ext4` (the only name accepted), `target` is absolute, not `/`, with no `..` or NUL; anything else is `failed` and nothing is touched. `target` is created with parents. If `expect_sectors` is set the agent first polls `/sys/class/block/<dev>/size` every 10 ms for about 2 s and answers `device_size_not_seen` if it never matches (the host method returns `Ok(false)`); if `drop_caches` it then `sync`s and writes `1` to `/proc/sys/vm/drop_caches`, so blocks cached from a placeholder disk are not served for the real one. A failed mount is `failed` with the kernel's error text |
+
+The host methods are `GuestAgent::mount_block` and `AgentVM::mount_block_in_guest`;
+the sandbox daemon's disk attach uses them (`expect_sectors` and `drop_caches`
+for a disk swapped in behind a template's placeholder) and keeps the old
+busybox script only for an agent that answers `is_unsupported_op`.
+
 `owner` is a user by name or number, or `@template` for the template's user,
 as for `write_file`. Optional fields are omitted from the frame when unset.
 

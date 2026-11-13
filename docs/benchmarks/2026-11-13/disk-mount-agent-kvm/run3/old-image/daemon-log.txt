@@ -1,0 +1,143 @@
+===== no-slot daemon log =====
+[2m2026-11-13T17:06:18.574317Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T17:06:18.575255Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T17:06:18.575307Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T17:06:18.628515Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'template' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T17:06:18.642935Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-11-13T17:06:18.643003Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template': loaded linux boot image (16112310 bytes), entry 0x100000
+[2m2026-11-13T17:06:18.652091Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'template' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T17:06:18.652563Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'template' with 1 vCPUs
+[2m2026-11-13T17:06:18.652595Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T17:06:18.653467Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T17:06:19.439271Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' paused
+[2m2026-11-13T17:06:19.993825Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' snapshotted to /tmp/hv2-sandboxd-1331-base/template.snap
+[2m2026-11-13T17:06:19.993935Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' resumed
+[2m2026-11-13T17:06:19.994020Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=389)
+[2m2026-11-13T17:06:19.994509Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'template'
+[2m2026-11-13T17:06:19.994598Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' stopped
+[2m2026-11-13T17:06:19.994628Z[0m [32m INFO[0m [2mhv2_sandboxd[0m[2m:[0m template ready in 1.420436002s at /tmp/hv2-sandboxd-1331-base/template.snap; working set 0 pages in 0 ranges
+hv2-sandboxd: listening on 0.0.0.0:41209, capacity 8
+  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)
+  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)
+  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls
+  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener
+  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules
+  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back, and with autoResume so does a request through the proxy
+[2m2026-11-13T17:06:20.038505Z[0m [32m INFO[0m [2mhv2_api::sandbox_proxy[0m[2m:[0m sandbox proxy listening on 0.0.0.0:52531
+  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies
+  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log
+  POST   /networks                 -- NOT E2B's; create a network joining sandboxes on this node
+  GET    /networks                 -- NOT E2B's; list this node's networks
+  GET    /networks/{name}         -- NOT E2B's; a network's members and addresses
+  DELETE /networks/{name}         -- NOT E2B's; remove a network
+  POST   /networks/{name}/connect    -- NOT E2B's; join a sandbox under an alias
+  POST   /networks/{name}/disconnect -- NOT E2B's; leave a network
+sandboxes get no network interface (--network to change that)
+sandboxes are restored from template snapshots: base
+
+sandbox proxy on 0.0.0.0:52531 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>
+  grpcurl -plaintext -authority 49983-$SBX.local -H "X-Access-Token: $TOKEN" -import-path crates/hv2-api/proto -proto process.proto \
+      -d '{"process":{"cmd":"/bin/sh","args":["-c","echo hi"]}}' \
+      localhost:52531 process.Process/Start
+[2m2026-11-13T17:06:20.477385Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T17:06:20.478360Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-d36a927ec98c4244b1dc': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T17:06:20.478456Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-d36a927ec98c4244b1dc': block device attached at 0xd0030000 (IRQ 7, 67108864 bytes)
+[2m2026-11-13T17:06:20.478462Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T17:06:20.540781Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-d36a927ec98c4244b1dc' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T17:06:20.575849Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-11-13T17:06:20.576082Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-d36a927ec98c4244b1dc': loaded linux boot image (16112310 bytes), entry 0x100000
+[2m2026-11-13T17:06:20.576134Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-d36a927ec98c4244b1dc' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T17:06:20.576977Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-d36a927ec98c4244b1dc' with 1 vCPUs
+[2m2026-11-13T17:06:20.577076Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T17:06:20.577943Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T17:06:21.502539Z[0m [34mDEBUG[0m [2mhv2_sandboxd::disks[0m[2m:[0m mounting the disk at /data: falling back to shell
+[2m2026-11-13T17:06:21.686102Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=1390)
+[2m2026-11-13T17:06:21.686242Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-d36a927ec98c4244b1dc'
+[2m2026-11-13T17:06:21.686259Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-d36a927ec98c4244b1dc' stopped
+[2m2026-11-13T17:06:21.768498Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T17:06:21.769677Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-7ff042acec2846768ed0': vsock device attached at 0xd0000000 (guest CID 101, IRQ 5)
+[2m2026-11-13T17:06:21.769896Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-7ff042acec2846768ed0': block device attached at 0xd0030000 (IRQ 7, 67108864 bytes)
+[2m2026-11-13T17:06:21.769913Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T17:06:21.817464Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-7ff042acec2846768ed0' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T17:06:21.830026Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-11-13T17:06:21.830180Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-7ff042acec2846768ed0': loaded linux boot image (16112310 bytes), entry 0x100000
+[2m2026-11-13T17:06:21.830203Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-7ff042acec2846768ed0' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T17:06:21.830747Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-7ff042acec2846768ed0' with 1 vCPUs
+[2m2026-11-13T17:06:21.830771Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T17:06:21.831193Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T17:06:22.682871Z[0m [34mDEBUG[0m [2mhv2_sandboxd::disks[0m[2m:[0m mounting the disk at /data: falling back to shell
+[2m2026-11-13T17:06:22.833148Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=1683)
+[2m2026-11-13T17:06:22.833410Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-7ff042acec2846768ed0'
+[2m2026-11-13T17:06:22.833436Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-7ff042acec2846768ed0' stopped
+===== with-slot daemon log =====
+[2m2026-11-13T17:06:18.570797Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T17:06:18.571625Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T17:06:18.571727Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template': block device attached at 0xd0030000 (IRQ 7, 1048576 bytes)
+[2m2026-11-13T17:06:18.571739Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T17:06:18.618380Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'template' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T17:06:18.633401Z[0m [32m INFO[0m [2mhv2_core::backends::kvm[0m[2m:[0m KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+[2m2026-11-13T17:06:18.633481Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template': loaded linux boot image (16112310 bytes), entry 0x100000
+[2m2026-11-13T17:06:18.636894Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'template' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T17:06:18.637400Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'template' with 1 vCPUs
+[2m2026-11-13T17:06:18.637443Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T17:06:18.638063Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T17:06:19.505902Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' paused
+[2m2026-11-13T17:06:19.897375Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' snapshotted to /tmp/hv2-sandboxd-1332-base/template.snap
+[2m2026-11-13T17:06:19.897475Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' resumed
+[2m2026-11-13T17:06:19.897549Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=420)
+[2m2026-11-13T17:06:19.897862Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'template'
+[2m2026-11-13T17:06:19.897941Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'template' stopped
+[2m2026-11-13T17:06:19.897962Z[0m [32m INFO[0m [2mhv2_sandboxd[0m[2m:[0m template ready in 1.327290965s at /tmp/hv2-sandboxd-1332-base/template.snap; working set 0 pages in 0 ranges
+[2m2026-11-13T17:06:19.939974Z[0m [32m INFO[0m [2mhv2_api::sandbox_proxy[0m[2m:[0m sandbox proxy listening on 0.0.0.0:54515
+hv2-sandboxd: listening on 0.0.0.0:45401, capacity 8
+  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)
+  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)
+  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls
+  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener
+  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules
+  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back, and with autoResume so does a request through the proxy
+  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies
+  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log
+  POST   /networks                 -- NOT E2B's; create a network joining sandboxes on this node
+  GET    /networks                 -- NOT E2B's; list this node's networks
+  GET    /networks/{name}         -- NOT E2B's; a network's members and addresses
+  DELETE /networks/{name}         -- NOT E2B's; remove a network
+  POST   /networks/{name}/connect    -- NOT E2B's; join a sandbox under an alias
+  POST   /networks/{name}/disconnect -- NOT E2B's; leave a network
+sandboxes get no network interface (--network to change that)
+sandboxes are restored from template snapshots: base
+
+sandbox proxy on 0.0.0.0:54515 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>
+  grpcurl -plaintext -authority 49983-$SBX.local -H "X-Access-Token: $TOKEN" -import-path crates/hv2-api/proto -proto process.proto \
+      -d '{"process":{"cmd":"/bin/sh","args":["-c","echo hi"]}}' \
+      localhost:54515 process.Process/Start
+[2m2026-11-13T17:06:22.908640Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T17:06:22.909364Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-d5d5fe8fd86041279e25': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T17:06:22.909468Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-d5d5fe8fd86041279e25': block device attached at 0xd0030000 (IRQ 7, 1048576 bytes)
+[2m2026-11-13T17:06:22.909477Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T17:06:22.928188Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-d5d5fe8fd86041279e25' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T17:06:22.928941Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-d5d5fe8fd86041279e25' restored from /tmp/hv2-sandboxd-1332-base/template.snap
+[2m2026-11-13T17:06:22.928969Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-d5d5fe8fd86041279e25' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T17:06:22.929232Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-d5d5fe8fd86041279e25' with 1 vCPUs
+[2m2026-11-13T17:06:22.929248Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T17:06:22.929552Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T17:06:22.996061Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-d5d5fe8fd86041279e25': block device now backed by /var/tmp/hm-disk-mount-check-l2r4tao4/disks-with-slot/disk-3b734962ab586d3a/disk.img (67108864 bytes)
+[2m2026-11-13T17:06:23.029016Z[0m [34mDEBUG[0m [2mhv2_sandboxd::disks[0m[2m:[0m mounting the swapped disk at /data: falling back to shell
+[2m2026-11-13T17:06:23.691222Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=971)
+[2m2026-11-13T17:06:23.691366Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-d5d5fe8fd86041279e25'
+[2m2026-11-13T17:06:23.691389Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-d5d5fe8fd86041279e25' stopped
+[2m2026-11-13T17:06:23.760094Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-13T17:06:23.761104Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-aa25ca82691c48989595': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-13T17:06:23.761385Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-aa25ca82691c48989595': block device attached at 0xd0030000 (IRQ 7, 1048576 bytes)
+[2m2026-11-13T17:06:23.761400Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-13T17:06:23.783768Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-aa25ca82691c48989595' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-13T17:06:23.785396Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-aa25ca82691c48989595' restored from /tmp/hv2-sandboxd-1332-base/template.snap
+[2m2026-11-13T17:06:23.785429Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-aa25ca82691c48989595' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-13T17:06:23.791680Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-aa25ca82691c48989595' with 1 vCPUs
+[2m2026-11-13T17:06:23.791747Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-13T17:06:23.792397Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-13T17:06:23.933612Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-aa25ca82691c48989595': block device now backed by /var/tmp/hm-disk-mount-check-l2r4tao4/disks-with-slot/disk-3b734962ab586d3a/disk.img (67108864 bytes)
+[2m2026-11-13T17:06:23.973330Z[0m [34mDEBUG[0m [2mhv2_sandboxd::disks[0m[2m:[0m mounting the swapped disk at /data: falling back to shell
+[2m2026-11-13T17:06:24.491405Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=1342)
+[2m2026-11-13T17:06:24.491483Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-aa25ca82691c48989595'
+[2m2026-11-13T17:06:24.491504Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-aa25ca82691c48989595' stopped

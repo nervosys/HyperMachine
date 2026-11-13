@@ -1090,6 +1090,13 @@ mod linux {
                 owner,
             } => make_symlink(&target, &path, owner.as_deref()),
             Operation::SignalProcess { pid, signal } => signal_process(pid, signal),
+            Operation::MountBlock {
+                device,
+                target,
+                fstype,
+                expect_sectors,
+                drop_caches,
+            } => mount_block(&device, &target, fstype, expect_sectors, drop_caches),
             // Served in `serve`, which owns the connection it takes.
             Operation::Forward { .. }
             | Operation::Listen { .. }
@@ -1563,6 +1570,77 @@ mod linux {
         } else {
             OpResult::Failed {
                 message: format!("signalling pid {pid}: {error}"),
+            }
+        }
+    }
+
+    /// See [`Operation::MountBlock`].
+    fn mount_block(
+        device: &str,
+        target: &str,
+        fstype: hv2_guest_agent::MountFsType,
+        expect_sectors: Option<u64>,
+        drop_caches: bool,
+    ) -> OpResult {
+        let name = match hv2_guest_agent::validate_mount_block(device, target) {
+            Ok(name) => name,
+            Err(message) => return OpResult::Failed { message },
+        };
+        if let Some(sectors) = expect_sectors {
+            let size_file = format!("/sys/class/block/{name}/size");
+            let mut seen = false;
+            // 200 x 10 ms: how long the shell script this replaces waited.
+            for _ in 0..=200 {
+                let size = std::fs::read_to_string(&size_file)
+                    .ok()
+                    .and_then(|text| text.trim().parse::<u64>().ok());
+                if size == Some(sectors) {
+                    seen = true;
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            if !seen {
+                return OpResult::DeviceSizeNotSeen;
+            }
+        }
+        if drop_caches {
+            // SAFETY: `sync` takes no arguments and touches no memory of ours.
+            unsafe { libc::sync() };
+            if let Err(e) = std::fs::write("/proc/sys/vm/drop_caches", b"1") {
+                return fs_failed("dropping caches before mounting", device, &e);
+            }
+        }
+        if let Err(e) = std::fs::create_dir_all(target) {
+            return fs_failed("creating the mount point", target, &e);
+        }
+        let (Ok(source), Ok(mount_point), Ok(fs)) = (
+            std::ffi::CString::new(device),
+            std::ffi::CString::new(target),
+            std::ffi::CString::new(fstype.as_str()),
+        ) else {
+            return fs_failed("mounting", device, &"a NUL in an argument");
+        };
+        // SAFETY: three valid NUL-terminated strings that outlive the call; no
+        // flags and no filesystem-specific data.
+        let rc = unsafe {
+            libc::mount(
+                source.as_ptr(),
+                mount_point.as_ptr(),
+                fs.as_ptr(),
+                0,
+                std::ptr::null(),
+            )
+        };
+        if rc == 0 {
+            OpResult::Acknowledged
+        } else {
+            let error = std::io::Error::last_os_error();
+            OpResult::Failed {
+                message: format!(
+                    "mounting {device} at {target} as {}: {error}",
+                    fstype.as_str()
+                ),
             }
         }
     }
@@ -2556,6 +2634,47 @@ mod linux {
                 failure(set_attr(s(&root), Some("no-such-user-xyz"), None, false))
                     .contains("no user")
             );
+        }
+
+        #[test]
+        fn mount_block_refuses_what_it_must_before_touching_anything() {
+            use hv2_guest_agent::MountFsType::Ext4;
+            let root = scratch("mountblock");
+            let target = format!("{}/mnt", s(&root));
+            for (device, target) in [
+                ("/dev/sda", target.as_str()),
+                ("/dev/vda/../sda", target.as_str()),
+                ("/dev/vda", "relative"),
+                ("/dev/vda", "/a/../b"),
+                ("/dev/vda", "/"),
+            ] {
+                let message = failure(mount_block(device, target, Ext4, None, false));
+                assert!(message.contains("refusing"), "{message}");
+            }
+            assert!(
+                !root.join("mnt").exists(),
+                "a refusal must not create the target"
+            );
+        }
+
+        #[test]
+        fn mount_block_gives_up_when_the_device_never_has_the_size() {
+            use hv2_guest_agent::MountFsType::Ext4;
+            // No disk of this many sectors exists on any machine running this.
+            let result = mount_block("/dev/vdz", "/mnt/never", Ext4, Some(u64::MAX), true);
+            assert_eq!(result, OpResult::DeviceSizeNotSeen);
+            assert!(!Path::new("/mnt/never").exists());
+        }
+
+        #[test]
+        fn mount_block_reports_the_os_error_when_there_is_no_such_device() {
+            use hv2_guest_agent::MountFsType::Ext4;
+            // Needs root to get past mkdir/mount permission; without it the
+            // failure is a permission error, which is also reported, not hidden.
+            let root = scratch("mountblock-nodev");
+            let target = format!("{}/mnt", s(&root));
+            let message = failure(mount_block("/dev/vdz9", &target, Ext4, None, false));
+            assert!(message.contains("mounting /dev/vdz9"), "{message}");
         }
 
         #[test]

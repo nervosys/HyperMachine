@@ -934,6 +934,29 @@ impl AgentVM {
         .await
     }
 
+    /// Mount a block device in the guest with no shell; see
+    /// [`hv2_guest_agent::Operation::MountBlock`]. `Ok(false)` means
+    /// `expect_sectors` was set and the device never reported that size.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::list_dir_in_guest`]; a refused device or target, or the
+    /// kernel's reason for failing the mount, is the guest's refusal.
+    pub async fn mount_block_in_guest(
+        &self,
+        device: &str,
+        target: &str,
+        expect_sectors: Option<u64>,
+        drop_caches: bool,
+        timeout: Duration,
+    ) -> Result<bool> {
+        let (device, target) = (device.to_string(), target.to_string());
+        self.fs_op("block mount", timeout, move |a| {
+            a.mount_block(&device, &target, expect_sectors, drop_caches, timeout)
+        })
+        .await
+    }
+
     /// The guest channel, for moving files: gated as running a command is,
     /// since writing any file is as much power over the guest.
     fn file_channel(

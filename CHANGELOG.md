@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Mounting a sandbox's disk no longer needs a shell in the guest.** A
+  new additive guest-agent operation, `mount_block` (only `/dev/vd*`
+  devices, only ext4, an absolute target other than `/`), waits for the
+  swapped disk's size, drops caches and mounts it; old agents keep the
+  `busybox sh` script. `tools/check-block-disk-kvm.py` no longer expects a
+  disk sandbox's checkpoint to be refused (it has been supported since
+  `check-disk-checkpoint-kvm.py`). See
+  `docs/benchmarks/2026-11-13/disk-mount-agent-kvm`.
+- **`quinn-udp` 0.5.16** for RUSTSEC-2026-0538 (receive loop can spin after
+  a truncated datagram), which failed the Security workflow's audit.
 - **Checkpoint archive and freeze no longer need a shell in the guest.**
   Three new additive guest-agent operations (`read_link`, `make_symlink`,
   `signal_process` with named signals only, never pid 1 or the agent;

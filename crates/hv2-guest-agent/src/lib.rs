@@ -383,6 +383,80 @@ pub enum Operation {
     /// when the pid is gone (it exited between listing `/proc` and here, which
     /// a caller sweeping `/proc` should expect and ignore).
     SignalProcess { pid: u32, signal: SignalName },
+
+    /// Mount a block device at `target` (`mount(2)`), with no shell.
+    ///
+    /// Hard-restricted: `device` must be `/dev/vd` plus letters and optional
+    /// trailing digits (see [`validate_mount_block`]), `fstype` is one of
+    /// [`MountFsType`], `target` is absolute with no `..`, not `/`, no NUL. The
+    /// target is created (with parents) first.
+    ///
+    /// With `expect_sectors`, the agent first waits (10 ms steps, about 2 s)
+    /// for the device's size in `/sys/class/block/<dev>/size` to equal it --
+    /// a disk swapped in behind the device is learnt by the guest from an
+    /// interrupt -- and answers [`OpResult::DeviceSizeNotSeen`] if it never
+    /// does. With `drop_caches`, it then `sync`s and writes `1` to
+    /// `/proc/sys/vm/drop_caches`, so blocks read from the previous contents
+    /// are not served for the new ones.
+    ///
+    /// Answered with [`OpResult::Acknowledged`]. An agent from before this
+    /// operation existed drops the connection instead of answering.
+    MountBlock {
+        device: String,
+        target: String,
+        fstype: MountFsType,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expect_sectors: Option<u64>,
+        #[serde(default)]
+        drop_caches: bool,
+    },
+}
+
+/// The filesystems [`Operation::MountBlock`] may mount, on the wire as
+/// lowercase names.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MountFsType {
+    Ext4,
+}
+
+impl MountFsType {
+    /// The name `mount(2)` takes.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ext4 => "ext4",
+        }
+    }
+}
+
+/// Check the device and target of an [`Operation::MountBlock`], returning the
+/// device's name under `/dev` (for `/sys/class/block/<name>`).
+///
+/// # Errors
+///
+/// Says why the device or the target is refused.
+pub fn validate_mount_block<'a>(device: &'a str, target: &str) -> Result<&'a str, String> {
+    let name = device
+        .strip_prefix("/dev/vd")
+        .ok_or_else(|| format!("refusing to mount {device:?}: not a /dev/vd* device"))?;
+    let letters = name.chars().take_while(char::is_ascii_lowercase).count();
+    let digits = &name[letters..];
+    if letters == 0 || !digits.chars().all(|c| c.is_ascii_digit()) {
+        return Err(format!(
+            "refusing to mount {device:?}: not /dev/vd<letters>[<digits>]"
+        ));
+    }
+    if !target.starts_with('/')
+        || target == "/"
+        || target.contains(' ')
+        || target.split('/').any(|part| part == "..")
+    {
+        return Err(format!(
+            "refusing to mount at {target:?}: need an absolute path, not /, with no .. or NUL"
+        ));
+    }
+    Ok(&device["/dev/".len()..])
 }
 
 /// The signals [`Operation::SignalProcess`] may send, on the wire as
@@ -595,6 +669,9 @@ pub enum OpResult {
     /// Answer to [`Operation::SignalProcess`] when no such process exists
     /// (`ESRCH`): distinct from [`OpResult::Failed`] because it is routine.
     NoSuchProcess,
+    /// Answer to [`Operation::MountBlock`] when `expect_sectors` was set and
+    /// the device never reported that size.
+    DeviceSizeNotSeen,
     /// The request could not be carried out at all.
     Failed { message: String },
 }
@@ -1177,6 +1254,87 @@ mod filesystem_op_tests {
             r#"{"kind":"signal_process","pid":7,"signal":"kill"}"#
         )
         .is_err());
+    }
+
+    #[test]
+    fn mount_block_survives_a_round_trip_and_has_a_stable_shape() {
+        let op = Operation::MountBlock {
+            device: "/dev/vda".into(),
+            target: "/data".into(),
+            fstype: MountFsType::Ext4,
+            expect_sectors: Some(32768),
+            drop_caches: true,
+        };
+        let request = Request {
+            id: 4,
+            version: PROTOCOL_VERSION,
+            op: op.clone(),
+        };
+        let bytes = encode(&request).expect("encode");
+        let (back, _) = decode::<Request>(&bytes).expect("decode").expect("a frame");
+        assert_eq!(back.op, op);
+        assert_eq!(
+            serde_json::to_string(&op).unwrap(),
+            r#"{"kind":"mount_block","device":"/dev/vda","target":"/data","fstype":"ext4","expect_sectors":32768,"drop_caches":true}"#
+        );
+        // Optional fields may be left off the wire.
+        let op: Operation = serde_json::from_str(
+            r#"{"kind":"mount_block","device":"/dev/vdb","target":"/m","fstype":"ext4"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            op,
+            Operation::MountBlock {
+                device: "/dev/vdb".into(),
+                target: "/m".into(),
+                fstype: MountFsType::Ext4,
+                expect_sectors: None,
+                drop_caches: false,
+            }
+        );
+        // Not an allowlisted filesystem.
+        assert!(serde_json::from_str::<Operation>(
+            r#"{"kind":"mount_block","device":"/dev/vda","target":"/m","fstype":"vfat"}"#
+        )
+        .is_err());
+        let response = Response {
+            id: 4,
+            version: PROTOCOL_VERSION,
+            result: OpResult::DeviceSizeNotSeen,
+        };
+        let bytes = encode(&response).expect("encode");
+        let (back, _) = decode::<Response>(&bytes)
+            .expect("decode")
+            .expect("a frame");
+        assert_eq!(back.result, OpResult::DeviceSizeNotSeen);
+    }
+
+    #[test]
+    fn mount_block_refuses_other_devices_and_unsafe_targets() {
+        assert_eq!(validate_mount_block("/dev/vda", "/data"), Ok("vda"));
+        assert_eq!(validate_mount_block("/dev/vdb1", "/mnt/x"), Ok("vdb1"));
+        assert_eq!(validate_mount_block("/dev/vdaa", "/a"), Ok("vdaa"));
+        for device in [
+            "/dev/sda",
+            "/dev/vd",
+            "/dev/vd1",
+            "/dev/vda/../sda",
+            "/dev/vda1a",
+            "/dev/vdA",
+            "vda",
+            "/dev/loop0",
+            "/dev/vda ",
+            "/dev/vda ",
+            "",
+        ] {
+            assert!(validate_mount_block(device, "/data").is_err(), "{device:?}");
+        }
+        for target in ["data", "", "/", "/a/../b", "/..", "/a b"] {
+            assert!(
+                validate_mount_block("/dev/vda", target).is_err(),
+                "{target:?}"
+            );
+        }
     }
 
     #[test]

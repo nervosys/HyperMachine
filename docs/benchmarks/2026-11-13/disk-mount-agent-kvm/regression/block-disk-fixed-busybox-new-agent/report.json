@@ -1,0 +1,57 @@
+{
+  "daemon": "/var/tmp/hm-wsl-release/release/hv2-sandboxd",
+  "kernel": "/var/tmp/hm-docker/bzImage",
+  "initrd": "/var/tmp/hm-diskmount/busybox.cpio.gz",
+  "checks": [
+    {
+      "name": "disk created",
+      "disk": {
+        "attachedTo": null,
+        "diskID": "disk-a06517cbd91c5991",
+        "name": "movable",
+        "sizeMiB": 64
+      },
+      "allocated_bytes": 356352
+    },
+    {
+      "name": "a sandbox without a disk still restores from the template",
+      "create_seconds": 0.113
+    },
+    {
+      "name": "sandbox A mounts the disk and writes to it",
+      "sandbox": "sbx-cdb0836297b849889ca4",
+      "mount": "/dev/vda /data ext4 rw,relatime 0 0",
+      "create_seconds": 0.676,
+      "sha256": "b3e0b14fa509831058fef008efc4a7efba2a14f060e5025e6099737afe15e6d4"
+    },
+    {
+      "name": "an attached disk is exclusive",
+      "second_attach": "disk movable is attached to sandbox sbx-cdb0836297b849889ca4",
+      "delete": "disk movable is attached to sandbox sbx-cdb0836297b849889ca4"
+    },
+    {
+      "name": "operations that would restore memory against a moved disk are refused",
+      "refusals": {
+        "snapshot": {
+          "status": 409,
+          "message": "sandbox sbx-cdb0836297b849889ca4 holds a disk, and a sandbox with a disk cannot be snapshotted"
+        }
+      }
+    },
+    {
+      "name": "ended, A gives the disk back and B reads what A wrote",
+      "sandbox": "sbx-70836a5427f84123b06c",
+      "create_seconds": 0.59,
+      "sha256": "b3e0b14fa509831058fef008efc4a7efba2a14f060e5025e6099737afe15e6d4"
+    },
+    {
+      "name": "a killed daemon's claim does not outlive it",
+      "sandbox": "sbx-5953269ea7c84e3fba53",
+      "sha256": "b3e0b14fa509831058fef008efc4a7efba2a14f060e5025e6099737afe15e6d4"
+    },
+    {
+      "name": "a free disk deletes, image and all"
+    }
+  ],
+  "result": "pass"
+}

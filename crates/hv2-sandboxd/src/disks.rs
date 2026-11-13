@@ -765,6 +765,20 @@ pub(crate) fn cold_booted(state: &AppState, sandbox_id: &str) -> bool {
 /// the disk's superblock is. Only then is it mounted.
 pub(crate) async fn mount_swapped(vm: &Arc<AgentVM>, path: &str, bytes: u64) -> Result<(), String> {
     let sectors = bytes / 512;
+    match vm
+        .mount_block_in_guest("/dev/vda", path, Some(sectors), true, MOUNT_TIMEOUT)
+        .await
+    {
+        Ok(true) => {
+            tracing::debug!("mounting the swapped disk at {path}: using agent op");
+            return Ok(());
+        }
+        Ok(false) => return Err("the guest never saw its disk change size".to_string()),
+        Err(e) if hv2_agent::is_unsupported_op(&e) => {
+            tracing::debug!("mounting the swapped disk at {path}: falling back to shell");
+        }
+        Err(e) => return Err(format!("mounting the disk at {path} failed: {e}")),
+    }
     let script = format!(
         "i=0; while [ \"$(/bin/busybox cat /sys/block/vda/size 2>/dev/null)\" != \"{sectors}\" ]; do \
          i=$((i+1)); [ $i -gt 200 ] && exit 9; /bin/busybox sleep 0.01; done; \
@@ -791,6 +805,19 @@ pub(crate) async fn mount_swapped(vm: &Arc<AgentVM>, path: &str, bytes: u64) -> 
 
 /// Mount the attached disk in the guest at `path`.
 pub(crate) async fn mount(vm: &Arc<AgentVM>, path: &str) -> Result<(), String> {
+    match vm
+        .mount_block_in_guest("/dev/vda", path, None, false, MOUNT_TIMEOUT)
+        .await
+    {
+        Ok(_) => {
+            tracing::debug!("mounting the disk at {path}: using agent op");
+            return Ok(());
+        }
+        Err(e) if hv2_agent::is_unsupported_op(&e) => {
+            tracing::debug!("mounting the disk at {path}: falling back to shell");
+        }
+        Err(e) => return Err(format!("mounting the disk at {path} failed: {e}")),
+    }
     let script =
         format!("/bin/busybox mkdir -p {path} && /bin/busybox mount -t ext4 /dev/vda {path}");
     let out = vm
