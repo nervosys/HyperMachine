@@ -757,6 +757,17 @@ pub struct VM {
     /// How long the last wake took, in nanoseconds: from finding the guest in
     /// standby to its vCPUs being told to run.
     standby_last_wake_ns: AtomicU64,
+    /// Set while the VM is paused and host-side device backends (the vsock and
+    /// network delivery threads) must not touch guest memory, a virtqueue or
+    /// the interrupt line: a snapshot reads guest memory, then device state,
+    /// then the interrupt controller, and a packet published in between makes
+    /// the three describe different moments. Held packets stay in the device's
+    /// host-side queue and are delivered by [`Self::resume`].
+    devices_held: AtomicBool,
+    /// Taken by every host-to-guest delivery for its whole publish-and-signal.
+    /// [`Self::pause`] takes it once after setting `devices_held`, which waits
+    /// out a delivery that began before the vCPUs parked.
+    delivery_gate: tokio::sync::Mutex<()>,
     /// The raw image guest RAM is a private mapping of, when a restore mapped
     /// one. What [`Self::snapshot_layered`] records only the difference from.
     memory_base: parking_lot::Mutex<Option<std::path::PathBuf>>,
@@ -975,6 +986,8 @@ impl VM {
             standby: AtomicBool::new(false),
             standby_wakes: AtomicU64::new(0),
             standby_last_wake_ns: AtomicU64::new(0),
+            devices_held: AtomicBool::new(false),
+            delivery_gate: tokio::sync::Mutex::new(()),
             memory_base: parking_lot::Mutex::new(None),
         })
     }
@@ -2778,10 +2791,23 @@ impl VM {
     }
 
     pub async fn pause(&self) -> Result<()> {
+        self.pause_inner(true).await
+    }
+
+    /// [`Self::pause`]; `hold` says whether host-side device backends are
+    /// stopped too (a pause to snapshot) or left delivering (standby, which
+    /// traffic ends).
+    async fn pause_inner(&self, hold: bool) -> Result<()> {
         // Already stopped, in standby: it becomes an ordinary pause, which
         // traffic does not end. A caller pausing to snapshot must not have the
         // guest start running under it because a packet arrived.
-        if self.standby.swap(false, Ordering::SeqCst) && *self.state.read() == VMState::Paused {
+        let was_standby = self.standby.swap(false, Ordering::SeqCst);
+        if was_standby && *self.state.read() == VMState::Paused {
+            if hold {
+                self.hold_devices().await;
+            } else {
+                self.standby.store(true, Ordering::SeqCst);
+            }
             return Ok(());
         }
         {
@@ -2814,8 +2840,44 @@ impl VM {
         wait_for_pause(replies, VCPU_REAP_TIMEOUT).await?;
         *self.state.write() = VMState::Paused;
         rollback.0.clear();
+        if hold {
+            self.hold_devices().await;
+        }
         tracing::info!("VM '{}' paused", self.config.name);
         Ok(())
+    }
+
+    /// Stop host-side device backends from touching the guest, and wait for
+    /// one that already is. The vCPUs being parked is not enough: the vsock and
+    /// network delivery threads run on their own and write rings and raise the
+    /// interrupt line whenever a host-side packet is queued, which during a
+    /// snapshot tears memory, device state and interrupt state apart.
+    async fn hold_devices(&self) {
+        self.devices_held.store(true, Ordering::SeqCst);
+        drop(self.delivery_gate.lock().await);
+    }
+
+    /// Take the delivery gate, or `None` while devices are held.
+    async fn delivery_gate(&self) -> Option<tokio::sync::MutexGuard<'_, ()>> {
+        let gate = self.delivery_gate.lock().await;
+        if self.devices_held.load(Ordering::SeqCst) {
+            None
+        } else {
+            Some(gate)
+        }
+    }
+
+    /// Deliver what was held back while devices were held.
+    async fn flush_held_deliveries(&self) {
+        if let Err(e) = self.notify_vsock().await {
+            tracing::debug!("a held vsock packet could not be delivered: {e}");
+        }
+        if let Err(e) = self.notify_net().await {
+            tracing::debug!("a held network frame could not be delivered: {e}");
+        }
+        if let Err(e) = self.notify_net_pci().await {
+            tracing::debug!("a held network frame could not be delivered: {e}");
+        }
     }
 
     /// Continue a guest suspended by [`Self::pause`].
@@ -2828,6 +2890,18 @@ impl VM {
     ///
     /// Returns an error if the VM is not paused.
     pub async fn resume(&self) -> Result<()> {
+        self.resume_vcpus().await?;
+        // Packets that arrived while the devices were held are still queued on
+        // the host side, and the thread that was told about each has already
+        // gone back to sleep: nothing else would deliver them.
+        self.flush_held_deliveries().await;
+        Ok(())
+    }
+
+    /// [`Self::resume`] without delivering held packets, so that the delivery
+    /// paths, which call [`Self::wake`], can resume a guest without
+    /// recursing into themselves.
+    async fn resume_vcpus(&self) -> Result<()> {
         {
             let state = self.state.read();
             if *state != VMState::Paused {
@@ -2847,6 +2921,7 @@ impl VM {
 
         self.standby.store(false, Ordering::SeqCst);
         *self.state.write() = VMState::Running;
+        self.devices_held.store(false, Ordering::SeqCst);
         tracing::info!("VM '{}' resumed", self.config.name);
         Ok(())
     }
@@ -2867,7 +2942,8 @@ impl VM {
     ///
     /// As [`Self::pause`].
     pub async fn standby(&self) -> Result<()> {
-        self.pause().await?;
+        // Traffic is what ends standby, so devices are not held for it.
+        self.pause_inner(false).await?;
         self.standby.store(true, Ordering::SeqCst);
         tracing::info!("VM '{}' is in standby", self.config.name);
         Ok(())
@@ -2895,7 +2971,7 @@ impl VM {
             return Ok(false);
         }
         let started = std::time::Instant::now();
-        self.resume().await?;
+        self.resume_vcpus().await?;
         let took = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
         self.standby_last_wake_ns.store(took, Ordering::Relaxed);
         self.standby_wakes.fetch_add(1, Ordering::Relaxed);
@@ -3685,6 +3761,9 @@ impl VM {
     /// Propagates a queue error, or a failure to raise the interrupt.
     pub async fn notify_net(&self) -> Result<bool> {
         self.wake().await?;
+        let Some(_gate) = self.delivery_gate().await else {
+            return Ok(false);
+        };
         let attached = {
             let guard = self.net.read();
             match guard.as_ref() {
@@ -4021,6 +4100,9 @@ impl VM {
     /// Propagates a queue error, or a failure to raise the interrupt.
     pub async fn notify_net_pci(&self) -> Result<bool> {
         self.wake().await?;
+        let Some(_gate) = self.delivery_gate().await else {
+            return Ok(false);
+        };
         let attached = {
             let guard = self.net_pci.read();
             match guard.as_ref() {
@@ -4410,6 +4492,11 @@ impl VM {
         // A guest in standby is resumed by being sent something. Before the
         // packet is published, so the interrupt that follows finds a vCPU.
         self.wake().await?;
+        // Held while paused for a snapshot: the packet stays queued in the
+        // device and `resume` delivers it.
+        let Some(_gate) = self.delivery_gate().await else {
+            return Ok(false);
+        };
         let attached = {
             let guard = self.vsock.read();
             match guard.as_ref() {
@@ -6315,6 +6402,79 @@ mod tests {
         let device = vm.attach_vsock(3).await.expect("attach");
         assert_eq!(device.lock().guest_cid(), 3);
         assert!(vm.vsock().is_some());
+    }
+
+    /// While a VM is paused for a snapshot, the vsock delivery thread must not
+    /// write the receive ring, advance the device's queue position or raise
+    /// the interrupt: a snapshot reads memory, then device state, and a packet
+    /// published in between makes them describe different moments, which
+    /// restores into a guest and a device that disagree. The packet is kept,
+    /// and `resume` delivers it.
+    #[tokio::test]
+    async fn a_paused_vm_holds_host_packets_and_resume_delivers_them() {
+        use crate::devices::virtio_queue::desc_flags;
+        const DESC: u64 = 0x10000;
+        const AVAIL: u64 = 0x11000;
+        const USED: u64 = 0x12000;
+        const BUF: u64 = 0x13000;
+
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        let device = vm.attach_vsock(3).await.expect("attach");
+        let memory = vm.memory();
+
+        // A receive buffer the driver offered: one descriptor, one avail entry.
+        let mut desc = [0u8; 16];
+        desc[0..8].copy_from_slice(&BUF.to_le_bytes());
+        desc[8..12].copy_from_slice(&0x800u32.to_le_bytes());
+        desc[12..14].copy_from_slice(&desc_flags::WRITE.to_le_bytes());
+        memory.write_bytes(DESC, &desc).expect("descriptor");
+        memory.write_bytes(AVAIL + 4, &0u16.to_le_bytes()).unwrap();
+        memory.write_bytes(AVAIL + 2, &1u16.to_le_bytes()).unwrap();
+        {
+            let mut guard = device.lock();
+            let rx = &mut crate::devices::VirtioMmioDevice::queues(&mut *guard)[0];
+            rx.set_size(8);
+            rx.set_desc_addr(DESC);
+            rx.set_avail_addr(AVAIL);
+            rx.set_used_addr(USED);
+            rx.set_ready(true);
+        }
+        let used_idx = || {
+            u16::from_le_bytes(
+                memory
+                    .read_bytes(USED + 2, 2)
+                    .expect("used idx")
+                    .try_into()
+                    .unwrap(),
+            )
+        };
+
+        // Paused for a snapshot, as `pause` leaves it.
+        *vm.state.write() = VMState::Paused;
+        vm.hold_devices().await;
+
+        // Queuing a packet wakes the delivery thread, which finds the VM held.
+        device.lock().connect(1024, 5555).expect("connect");
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        assert_eq!(used_idx(), 0, "a held device wrote the used ring");
+        assert_eq!(
+            crate::devices::VirtioMmioDevice::queues(&mut *device.lock())[0].progress(),
+            (0, 0),
+            "a held device moved its queue position"
+        );
+        assert!(device.lock().has_pending(), "the held packet was lost");
+        assert!(!vm.notify_vsock().await.expect("notify"), "a direct call");
+
+        // Resuming delivers it without anything else prompting.
+        vm.resume().await.expect("resume");
+        assert_eq!(used_idx(), 1, "the held packet was not delivered");
+        assert!(!device.lock().has_pending());
+        assert_eq!(
+            crate::devices::VirtioMmioDevice::queues(&mut *device.lock())[0].progress(),
+            (1, 1)
+        );
     }
 
     /// Attaching over PCI is only worth anything if a guest walking the bus

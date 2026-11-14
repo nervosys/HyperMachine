@@ -1,0 +1,1031 @@
+=== cycle 9 ===
+[2m2026-11-14T04:26:07.009132Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=62 src_port=1024 dst_port=49195
+[2m2026-11-14T04:26:07.020014Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49195 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=62                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:07.020124Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49195 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=62                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:07.020134Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49196 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:07.021209Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49195
+[2m2026-11-14T04:26:07.021223Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49195
+[2m2026-11-14T04:26:07.021226Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49196
+[2m2026-11-14T04:26:07.021265Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=55 src=2:49196 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=99 into 4140 writable bytes
+[2m2026-11-14T04:26:07.021567Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49196
+[2m2026-11-14T04:26:07.021719Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=169 src_port=1024 dst_port=49196
+[2m2026-11-14T04:26:07.021757Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49196 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=169                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:07.034887Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49196 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=169                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:07.035295Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49196
+[2m2026-11-14T04:26:07.035490Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49196
+[2m2026-11-14T04:26:07.041058Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49197 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:07.041884Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49197
+[2m2026-11-14T04:26:07.047817Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=397 src=2:49197 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=441 into 4140 writable bytes
+[2m2026-11-14T04:26:07.048490Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49197
+[2m2026-11-14T04:26:07.048499Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49197
+[2m2026-11-14T04:26:07.053044Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49197 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:07.053193Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49197 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:07.053265Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-5b81d0e4' paused
+[2m2026-11-14T04:26:07.115354Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-5b81d0e4' snapshotted to /tmp/hv2-sandboxd-1285-suspended/snapshots/build-cache-6166dee2f56f372e-ef85ec7c06c242b886da3a66b9d87350.snap
+[2m2026-11-14T04:26:07.115535Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-5b81d0e4' resumed
+[2m2026-11-14T04:26:07.117053Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:07.118253Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49197
+[2m2026-11-14T04:26:07.118268Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49197
+[2m2026-11-14T04:26:07.118271Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:26:07.128678Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=172 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=216 into 4140 writable bytes
+[2m2026-11-14T04:26:07.137066Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:26:07.137671Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49198
+[2m2026-11-14T04:26:07.137927Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:07.137955Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:07.138575Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:26:07.138851Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:26:07.146223Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:07.148135Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:26:07.148246Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=107 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=151 into 4140 writable bytes
+[2m2026-11-14T04:26:07.148899Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:26:07.148923Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=131 src_port=1024 dst_port=49199
+[2m2026-11-14T04:26:07.149022Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=131                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:07.150841Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=131                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:07.151549Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:26:07.151561Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:26:07.162061Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49200 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:07.162670Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49200
+[2m2026-11-14T04:26:07.162834Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=129 src=2:49200 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=173 into 4140 writable bytes
+[2m2026-11-14T04:26:07.163350Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49200
+[2m2026-11-14T04:26:07.163360Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49200
+[2m2026-11-14T04:26:07.163464Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49200 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:07.179000Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49200 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:07.179336Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-5b81d0e4' paused
+[2m2026-11-14T04:26:07.187892Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-5b81d0e4' snapshotted to /tmp/hv2-sandboxd-1285-suspended/snapshots/tuser-89cc648e22ef4ac3aafd5efd0a1212aa.snap
+[2m2026-11-14T04:26:07.188005Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-5b81d0e4' resumed
+[2m2026-11-14T04:26:07.189436Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3784)
+[2m2026-11-14T04:26:07.194108Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'build-5b81d0e4'
+[2m2026-11-14T04:26:07.194148Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-5b81d0e4' stopped
+[2m2026-11-14T04:26:07.194178Z[0m [32m INFO[0m [2mhv2_sandboxd::builds[0m[2m:[0m template tuser built by steps in 1.482386759s
+[2m2026-11-14T04:26:08.802650Z[0m [34mDEBUG[0m [2mhv2_sandboxd[0m[2m:[0m slot granted after 2.124µs
+[2m2026-11-14T04:26:08.802725Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-14T04:26:08.803294Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-66d1b97100d549198dce': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-14T04:26:08.803309Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-14T04:26:08.909194Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-66d1b97100d549198dce' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-14T04:26:08.917665Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-66d1b97100d549198dce' restored from /tmp/hv2-sandboxd-1285-suspended/snapshots/tuser-89cc648e22ef4ac3aafd5efd0a1212aa.snap
+[2m2026-11-14T04:26:08.917778Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-66d1b97100d549198dce' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-14T04:26:08.918197Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-66d1b97100d549198dce' with 1 vCPUs
+[2m2026-11-14T04:26:08.918206Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-14T04:26:08.921328Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-14T04:26:08.923010Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49201 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:08.953447Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49200
+[2m2026-11-14T04:26:08.953585Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49200
+[2m2026-11-14T04:26:08.953591Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49201
+[2m2026-11-14T04:26:08.970974Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=322 src=2:49201 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=366 into 4140 writable bytes
+[2m2026-11-14T04:26:08.976389Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49201
+[2m2026-11-14T04:26:08.977863Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49201
+[2m2026-11-14T04:26:08.991624Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49201 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:08.991645Z[0m [34mDEBUG[0m [2mhv2_agent::agent_vm[0m[2m:[0m restored guest readiness stages [3mvm[0m[2m=[0msbx-66d1b97100d549198dce [3mblocking_queue_ms[0m[2m=[0m0.045995999999999995 [3mconnect_ms[0m[2m=[0m38.734276 [3mrestored_ms[0m[2m=[0m34.794611 [3msucceeded[0m[2m=[0mtrue [3mphase[0m[2m=[0m"restored"
+[2m2026-11-14T04:26:09.002820Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49201 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:09.003244Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:09.012751Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49201
+[2m2026-11-14T04:26:09.039508Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:26:09.039517Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49201
+[2m2026-11-14T04:26:09.082442Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=142 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=186 into 4140 writable bytes
+[2m2026-11-14T04:26:09.090172Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:26:09.090210Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49202
+[2m2026-11-14T04:26:09.098837Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:09.099134Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:09.099222Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:09.104205Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:26:09.104245Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:26:09.104249Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:09.119221Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.119347Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.119367Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.119386Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.119403Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.119420Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.119440Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.119507Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.119525Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.119536Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.119546Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.119556Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=3258 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=3302 into 4140 writable bytes
+[2m2026-11-14T04:26:09.137380Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:09.137423Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:09.137427Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:09.137429Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:09.137432Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:09.137434Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:09.137437Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:09.137439Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:09.137441Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:09.137444Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:09.137446Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:09.137448Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:09.184703Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=4 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:09.184784Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=3 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:09.186026Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:09.186084Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:09.199177Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:09.829816Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830028Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830064Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830082Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830097Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830106Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830157Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830173Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830183Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830191Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830200Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830208Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830302Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830319Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830328Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830342Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830362Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830409Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830425Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830433Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830441Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830449Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830457Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:09.830507Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=1499 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=1543 into 4140 writable bytes
+[2m2026-11-14T04:26:09.832422Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49207
+[2m2026-11-14T04:26:09.832446Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49207
+[2m2026-11-14T04:26:09.832449Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49207
+[2m2026-11-14T04:26:09.832451Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49207
+[2m2026-11-14T04:26:09.832453Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49207
+[2m2026-11-14T04:26:09.832456Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49207
+[2m2026-11-14T04:26:09.832458Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49207
+[2m2026-11-14T04:26:09.832460Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49207
+[2m2026-11-14T04:26:09.832463Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49207
+[2m2026-11-14T04:26:09.832466Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49207
+[2m2026-11-14T04:26:09.832469Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49207
+[2m2026-11-14T04:26:10.193358Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49207
+[2m2026-11-14T04:26:10.196325Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49207
+[2m2026-11-14T04:26:10.354390Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:10.354458Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:10.354465Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49208 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:10.356001Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49207
+[2m2026-11-14T04:26:10.382958Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:26:10.382967Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49207
+[2m2026-11-14T04:26:10.383314Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=322 src=2:49208 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=366 into 4140 writable bytes
+[2m2026-11-14T04:26:10.387022Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:26:10.764251Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=139 src_port=1024 dst_port=49208
+[2m2026-11-14T04:26:10.770570Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49208 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:10.770733Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49208 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:10.845569Z[0m [34mDEBUG[0m [2mhv2_sandboxd[0m[2m:[0m sbx-66d1b97100d549198dce up in 2.042860574s: build 622.653µs, launch 114.706516ms, agent answering 85.071457ms, network and envd 1.8424608s
+[2m2026-11-14T04:26:10.849462Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:26:10.849546Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:26:10.849866Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:10.853691Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:26:10.862208Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=134 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=178 into 4140 writable bytes
+[2m2026-11-14T04:26:10.867059Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:26:10.867383Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=143 src_port=1024 dst_port=49209
+[2m2026-11-14T04:26:10.878207Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=143                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:10.878270Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=143                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:10.882462Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=905)
+[2m2026-11-14T04:26:10.882497Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-66d1b97100d549198dce'
+[2m2026-11-14T04:26:10.882504Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-66d1b97100d549198dce' stopped
+[2m2026-11-14T04:26:11.252390Z[0m [34mDEBUG[0m [2mhv2_sandboxd[0m[2m:[0m slot granted after 4.118µs
+[2m2026-11-14T04:26:11.252700Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-14T04:26:11.253291Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-e042a58646cc422e8195': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-14T04:26:11.253313Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-14T04:26:11.338525Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-e042a58646cc422e8195' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-14T04:26:11.345807Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-e042a58646cc422e8195' restored from /tmp/hv2-sandboxd-1285-suspended/snapshots/tuser-89cc648e22ef4ac3aafd5efd0a1212aa.snap
+[2m2026-11-14T04:26:11.345853Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-e042a58646cc422e8195' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-14T04:26:11.346030Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-e042a58646cc422e8195' with 1 vCPUs
+[2m2026-11-14T04:26:11.346035Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-14T04:26:11.346118Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49201 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:11.346318Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-14T04:26:11.354695Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49200
+[2m2026-11-14T04:26:11.354739Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49200
+[2m2026-11-14T04:26:11.354743Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49201
+[2m2026-11-14T04:26:11.354883Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=315 src=2:49201 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=359 into 4140 writable bytes
+[2m2026-11-14T04:26:11.362518Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49201
+[2m2026-11-14T04:26:11.364590Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49201
+[2m2026-11-14T04:26:11.364696Z[0m [34mDEBUG[0m [2mhv2_agent::agent_vm[0m[2m:[0m restored guest readiness stages [3mvm[0m[2m=[0msbx-e042a58646cc422e8195 [3mblocking_queue_ms[0m[2m=[0m0.04995 [3mconnect_ms[0m[2m=[0m8.779726 [3mrestored_ms[0m[2m=[0m9.863774000000001 [3msucceeded[0m[2m=[0mtrue [3mphase[0m[2m=[0m"restored"
+[2m2026-11-14T04:26:11.364850Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49201 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:11.364944Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49201 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:11.366173Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:11.377238Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49201
+[2m2026-11-14T04:26:11.377276Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49201
+[2m2026-11-14T04:26:11.377497Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:26:11.377779Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=142 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=186 into 4140 writable bytes
+[2m2026-11-14T04:26:11.379193Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:26:11.379479Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49202
+[2m2026-11-14T04:26:11.379607Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:11.379631Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:11.380067Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:26:11.380302Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:26:11.380877Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:11.381563Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:11.687873Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:11.688109Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:11.688144Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:11.688172Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:11.688202Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:11.688239Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:11.688265Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:11.688312Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:11.688322Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:11.688330Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:11.688340Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:26:11.688349Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=3258 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=3302 into 4140 writable bytes
+[2m2026-11-14T04:26:11.714865Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:11.714930Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:11.714934Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:11.714937Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:11.714939Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:11.714941Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:11.714943Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:11.774352Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:11.775258Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=4 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:11.775322Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=3 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:11.782585Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:11.782666Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:26:11.790252Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:26:11.790293Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49204
+
+=== cycle 17 ===
+[2m2026-11-14T04:28:06.975069Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=171 src_port=1024 dst_port=49197
+[2m2026-11-14T04:28:06.975279Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49197 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=171                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:06.975299Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49197 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=171                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:06.977792Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49197
+[2m2026-11-14T04:28:06.977808Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49197
+[2m2026-11-14T04:28:07.176850Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:07.179479Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:28:07.179620Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=55 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=99 into 4140 writable bytes
+[2m2026-11-14T04:28:07.181093Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:28:07.181107Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=169 src_port=1024 dst_port=49198
+[2m2026-11-14T04:28:07.181323Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=169                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:07.181364Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=169                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:07.181403Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:07.189927Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:28:07.189962Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:28:07.189965Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:28:07.190028Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=397 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=441 into 4140 writable bytes
+[2m2026-11-14T04:28:07.190935Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:28:07.191586Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49199
+[2m2026-11-14T04:28:07.191766Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:07.191795Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:07.191947Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-6d72efd3' paused
+[2m2026-11-14T04:28:07.224751Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-6d72efd3' snapshotted to /tmp/hv2-sandboxd-1906-suspended/snapshots/build-cache-6166dee2f56f372e-b940b595817f44dd8790714edd1bdec0.snap
+[2m2026-11-14T04:28:07.224848Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-6d72efd3' resumed
+[2m2026-11-14T04:28:07.226224Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:28:07.226257Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:28:07.226290Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49200 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:07.226689Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49200
+[2m2026-11-14T04:28:07.227007Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=172 src=2:49200 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=216 into 4140 writable bytes
+[2m2026-11-14T04:28:07.227510Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49200
+[2m2026-11-14T04:28:07.227516Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49200
+[2m2026-11-14T04:28:07.237717Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49200 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:07.237844Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49200 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:07.237901Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49201 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:07.239491Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49200
+[2m2026-11-14T04:28:07.239508Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49200
+[2m2026-11-14T04:28:07.239512Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49201
+[2m2026-11-14T04:28:07.239660Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=107 src=2:49201 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=151 into 4140 writable bytes
+[2m2026-11-14T04:28:07.240402Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49201
+[2m2026-11-14T04:28:07.240616Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=131 src_port=1024 dst_port=49201
+[2m2026-11-14T04:28:07.240741Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49201 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=131                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:07.240761Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49201 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=131                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:07.241801Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49201
+[2m2026-11-14T04:28:07.241833Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49201
+[2m2026-11-14T04:28:07.241975Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:07.242522Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:28:07.242617Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=129 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=173 into 4140 writable bytes
+[2m2026-11-14T04:28:07.243051Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:28:07.243055Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49202
+[2m2026-11-14T04:28:07.243263Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:07.243304Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:07.249027Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-6d72efd3' paused
+[2m2026-11-14T04:28:07.609840Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-6d72efd3' snapshotted to /tmp/hv2-sandboxd-1906-suspended/snapshots/tuser-6d7a535d0e3f42a48a85f4bfee097cdc.snap
+[2m2026-11-14T04:28:07.609996Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-6d72efd3' resumed
+[2m2026-11-14T04:28:07.617049Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3756)
+[2m2026-11-14T04:28:07.621118Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'build-6d72efd3'
+[2m2026-11-14T04:28:07.621191Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-6d72efd3' stopped
+[2m2026-11-14T04:28:07.629032Z[0m [32m INFO[0m [2mhv2_sandboxd::builds[0m[2m:[0m template tuser built by steps in 2.33514658s
+[2m2026-11-14T04:28:08.794691Z[0m [34mDEBUG[0m [2mhv2_sandboxd[0m[2m:[0m slot granted after 1.994µs
+[2m2026-11-14T04:28:08.794781Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-14T04:28:08.795290Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-096cfeb64fec42118533': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-14T04:28:08.795301Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-14T04:28:09.067212Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-096cfeb64fec42118533' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-14T04:28:09.416960Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-096cfeb64fec42118533' restored from /tmp/hv2-sandboxd-1906-suspended/snapshots/tuser-6d7a535d0e3f42a48a85f4bfee097cdc.snap
+[2m2026-11-14T04:28:09.425068Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-096cfeb64fec42118533' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-14T04:28:09.425531Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-096cfeb64fec42118533' with 1 vCPUs
+[2m2026-11-14T04:28:09.425545Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-14T04:28:09.427755Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-14T04:28:09.437705Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:09.523403Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:28:09.523498Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:28:09.524468Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:28:09.539073Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=327 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=371 into 4140 writable bytes
+[2m2026-11-14T04:28:09.555298Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:28:09.557897Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49203
+[2m2026-11-14T04:28:09.558082Z[0m [34mDEBUG[0m [2mhv2_agent::agent_vm[0m[2m:[0m restored guest readiness stages [3mvm[0m[2m=[0msbx-096cfeb64fec42118533 [3mblocking_queue_ms[0m[2m=[0m7.583603 [3mconnect_ms[0m[2m=[0m105.99206099999999 [3mrestored_ms[0m[2m=[0m19.041322 [3msucceeded[0m[2m=[0mtrue [3mphase[0m[2m=[0m"restored"
+[2m2026-11-14T04:28:09.571146Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:09.571227Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:09.571238Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:09.572683Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:28:09.572699Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:28:09.572702Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:28:09.572853Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=142 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=186 into 4140 writable bytes
+[2m2026-11-14T04:28:09.586598Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:28:09.587995Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49204
+[2m2026-11-14T04:28:09.588131Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:09.588172Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:09.588712Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:09.589680Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:28:09.589712Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:09.590315Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:28:09.590818Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.590930Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.590958Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.590978Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.590998Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.591017Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.591187Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.591208Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.591217Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.591228Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.591241Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.591251Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=3258 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=3302 into 4140 writable bytes
+[2m2026-11-14T04:28:09.603137Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:09.603164Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:09.603167Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:09.603170Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:09.603202Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:09.603205Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:09.603207Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:09.603778Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:09.635079Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=4 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:09.635213Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=3 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:09.636340Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:09.636372Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49206 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:09.637190Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:09.637230Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49206
+[2m2026-11-14T04:28:09.637386Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=45 src=2:49206 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=89 into 4140 writable bytes
+[2m2026-11-14T04:28:09.638064Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49206
+[2m2026-11-14T04:28:09.638087Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=73 src_port=1024 dst_port=49206
+[2m2026-11-14T04:28:09.700844Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.700874Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.700900Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.700911Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.700920Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.701027Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.701179Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.701195Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.701203Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.701212Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.701221Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.701295Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.701308Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.701317Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.701327Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.701336Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.701413Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.701429Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.701444Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.701470Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.701481Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:09.701564Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=1499 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=1543 into 4140 writable bytes
+[2m2026-11-14T04:28:09.714860Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:28:09.714914Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:28:09.714920Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:28:09.714923Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:28:09.714926Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:28:09.714929Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:28:09.714931Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:28:09.714934Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:28:09.714937Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:28:09.714939Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:28:09.714941Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:28:09.714944Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:28:09.714946Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:28:09.715790Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:28:09.717827Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49209
+[2m2026-11-14T04:28:09.730080Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:09.833430Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:09.835026Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:28:09.835786Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:28:09.837105Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:09.838301Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49210
+[2m2026-11-14T04:28:09.838521Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=322 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=366 into 4140 writable bytes
+[2m2026-11-14T04:28:09.840107Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49210
+[2m2026-11-14T04:28:10.642805Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=139 src_port=1024 dst_port=49210
+[2m2026-11-14T04:28:10.643217Z[0m [34mDEBUG[0m [2mhv2_sandboxd[0m[2m:[0m sbx-096cfeb64fec42118533 up in 1.848462234s: build 560.116µs, launch 630.102951ms, agent answering 132.840988ms, network and envd 1.084958489s
+[2m2026-11-14T04:28:10.644197Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:10.644330Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:10.656634Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:10.706482Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49210
+[2m2026-11-14T04:28:10.706573Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49210
+[2m2026-11-14T04:28:10.707044Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49211
+[2m2026-11-14T04:28:10.707637Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=134 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=178 into 4140 writable bytes
+[2m2026-11-14T04:28:10.737112Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49211
+[2m2026-11-14T04:28:10.740823Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=143 src_port=1024 dst_port=49211
+[2m2026-11-14T04:28:10.741305Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=143                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:10.741451Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=143                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:10.768826Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=940)
+[2m2026-11-14T04:28:10.768899Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-096cfeb64fec42118533'
+[2m2026-11-14T04:28:10.768906Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-096cfeb64fec42118533' stopped
+[2m2026-11-14T04:28:12.001298Z[0m [34mDEBUG[0m [2mhv2_sandboxd[0m[2m:[0m slot granted after 2.765µs
+[2m2026-11-14T04:28:12.001410Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-14T04:28:12.002131Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-88cc0c2b5f38494dad18': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-14T04:28:12.002174Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-14T04:28:12.096741Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-88cc0c2b5f38494dad18' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-14T04:28:12.111363Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-88cc0c2b5f38494dad18' restored from /tmp/hv2-sandboxd-1906-suspended/snapshots/tuser-6d7a535d0e3f42a48a85f4bfee097cdc.snap
+[2m2026-11-14T04:28:12.111455Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-88cc0c2b5f38494dad18' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-14T04:28:12.111747Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-88cc0c2b5f38494dad18' with 1 vCPUs
+[2m2026-11-14T04:28:12.111758Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-14T04:28:12.120566Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-14T04:28:12.120836Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:12.183857Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:28:12.183945Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:28:12.183950Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:28:12.184313Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=332 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=376 into 4140 writable bytes
+[2m2026-11-14T04:28:12.218367Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:28:12.218469Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49203
+[2m2026-11-14T04:28:12.229514Z[0m [34mDEBUG[0m [2mhv2_agent::agent_vm[0m[2m:[0m restored guest readiness stages [3mvm[0m[2m=[0msbx-88cc0c2b5f38494dad18 [3mblocking_queue_ms[0m[2m=[0m6.1424970000000005 [3mconnect_ms[0m[2m=[0m66.179367 [3mrestored_ms[0m[2m=[0m45.495188 [3msucceeded[0m[2m=[0mtrue [3mphase[0m[2m=[0m"restored"
+[2m2026-11-14T04:28:12.232331Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:12.232433Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:12.233175Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:12.249560Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:28:12.249654Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:28:12.249660Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:28:12.249817Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=142 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=186 into 4140 writable bytes
+[2m2026-11-14T04:28:12.265965Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:28:12.266693Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49204
+[2m2026-11-14T04:28:12.266816Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:12.280129Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:12.280333Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:28:12.296173Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:28:12.296205Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:28:12.296207Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:12.296497Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:12.296559Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:12.296586Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:12.296613Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:12.296637Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:12.296662Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:12.296689Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:12.296703Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:12.296711Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:12.296719Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:12.296727Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:28:12.296747Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=3258 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=3302 into 4140 writable bytes
+[2m2026-11-14T04:28:12.315065Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:12.315118Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:12.315122Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:12.315124Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:12.315126Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:12.315129Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:12.315131Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:12.315133Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:12.315135Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:12.315137Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:12.315139Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:12.315141Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:12.361396Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=4 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:28:12.361480Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=3 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+
+=== cycle 56 ===
+[2m2026-11-14T04:36:48.554027Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49191 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=62                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:48.554045Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49192 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:48.554995Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49191
+[2m2026-11-14T04:36:48.555006Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49191
+[2m2026-11-14T04:36:48.555009Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49192
+[2m2026-11-14T04:36:48.555041Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=55 src=2:49192 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=99 into 4140 writable bytes
+[2m2026-11-14T04:36:48.555439Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49192
+[2m2026-11-14T04:36:48.555444Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=169 src_port=1024 dst_port=49192
+[2m2026-11-14T04:36:48.557000Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49192 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=169                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:48.557030Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49192 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=169                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:48.557037Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49193 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:48.558010Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49192
+[2m2026-11-14T04:36:48.558018Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49192
+[2m2026-11-14T04:36:48.558021Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49193
+[2m2026-11-14T04:36:48.558062Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=397 src=2:49193 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=441 into 4140 writable bytes
+[2m2026-11-14T04:36:48.558504Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49193
+[2m2026-11-14T04:36:48.558512Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49193
+[2m2026-11-14T04:36:48.558645Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49193 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:48.558661Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49193 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:48.558682Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-adb549e3' paused
+[2m2026-11-14T04:36:48.629488Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-adb549e3' snapshotted to /tmp/hv2-sandboxd-4915-suspended/snapshots/build-cache-6166dee2f56f372e-ae6e1d825a7f4515b742789c0fd9f92e.snap
+[2m2026-11-14T04:36:48.630583Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49193
+[2m2026-11-14T04:36:48.630863Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49193
+[2m2026-11-14T04:36:48.630937Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-adb549e3' resumed
+[2m2026-11-14T04:36:48.631003Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49194 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:48.631480Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49194
+[2m2026-11-14T04:36:48.631583Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=172 src=2:49194 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=216 into 4140 writable bytes
+[2m2026-11-14T04:36:48.632233Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49194
+[2m2026-11-14T04:36:48.632241Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49194
+[2m2026-11-14T04:36:48.632396Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49194 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:48.632466Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49194 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:48.632481Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49195 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:48.633517Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49194
+[2m2026-11-14T04:36:48.633524Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49194
+[2m2026-11-14T04:36:48.633527Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49195
+[2m2026-11-14T04:36:48.633628Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=107 src=2:49195 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=151 into 4140 writable bytes
+[2m2026-11-14T04:36:48.634213Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49195
+[2m2026-11-14T04:36:48.634221Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=131 src_port=1024 dst_port=49195
+[2m2026-11-14T04:36:48.634365Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49195 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=131                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:48.634377Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49195 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=131                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:48.634436Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49196 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:48.635271Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49195
+[2m2026-11-14T04:36:48.635279Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49196
+[2m2026-11-14T04:36:48.635282Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49195
+[2m2026-11-14T04:36:48.635380Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=129 src=2:49196 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=173 into 4140 writable bytes
+[2m2026-11-14T04:36:48.635718Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49196
+[2m2026-11-14T04:36:48.635723Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49196
+[2m2026-11-14T04:36:48.635904Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49196 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:48.635921Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49196 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:48.635958Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-adb549e3' paused
+[2m2026-11-14T04:36:48.697193Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-adb549e3' snapshotted to /tmp/hv2-sandboxd-4915-suspended/snapshots/tuser-b1b6cb6d97314e6084c7f8abd03c8a0f.snap
+[2m2026-11-14T04:36:48.698038Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49196
+[2m2026-11-14T04:36:48.698342Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49196
+[2m2026-11-14T04:36:48.698413Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-adb549e3' resumed
+[2m2026-11-14T04:36:48.698485Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3687)
+[2m2026-11-14T04:36:48.698681Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'build-adb549e3'
+[2m2026-11-14T04:36:48.698692Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-adb549e3' stopped
+[2m2026-11-14T04:36:48.698702Z[0m [32m INFO[0m [2mhv2_sandboxd::builds[0m[2m:[0m template tuser built by steps in 1.539553687s
+[2m2026-11-14T04:36:49.119940Z[0m [34mDEBUG[0m [2mhv2_sandboxd[0m[2m:[0m slot granted after 1.482µs
+[2m2026-11-14T04:36:49.120004Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-14T04:36:49.120359Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-11038ae1244f4f6e9627': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-14T04:36:49.120367Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-14T04:36:49.265840Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-11038ae1244f4f6e9627' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-14T04:36:49.378528Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-11038ae1244f4f6e9627' restored from /tmp/hv2-sandboxd-4915-suspended/snapshots/tuser-b1b6cb6d97314e6084c7f8abd03c8a0f.snap
+[2m2026-11-14T04:36:49.378583Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-11038ae1244f4f6e9627' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-14T04:36:49.378745Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-11038ae1244f4f6e9627' with 1 vCPUs
+[2m2026-11-14T04:36:49.378753Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-14T04:36:49.379877Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-14T04:36:49.385578Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49197 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:49.433341Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49196
+[2m2026-11-14T04:36:49.434231Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49196
+[2m2026-11-14T04:36:49.434704Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49197
+[2m2026-11-14T04:36:49.447186Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=322 src=2:49197 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=366 into 4140 writable bytes
+[2m2026-11-14T04:36:49.449655Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49197
+[2m2026-11-14T04:36:49.450139Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49197
+[2m2026-11-14T04:36:49.458816Z[0m [34mDEBUG[0m [2mhv2_agent::agent_vm[0m[2m:[0m restored guest readiness stages [3mvm[0m[2m=[0msbx-11038ae1244f4f6e9627 [3mblocking_queue_ms[0m[2m=[0m6.829254 [3mconnect_ms[0m[2m=[0m51.488623 [3mrestored_ms[0m[2m=[0m21.762686 [3msucceeded[0m[2m=[0mtrue [3mphase[0m[2m=[0m"restored"
+[2m2026-11-14T04:36:49.462544Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49197 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:49.462626Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49197 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:49.462633Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:49.465521Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49197
+[2m2026-11-14T04:36:49.465556Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49197
+[2m2026-11-14T04:36:49.465559Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:36:49.465654Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=142 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=186 into 4140 writable bytes
+[2m2026-11-14T04:36:49.466615Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:36:49.467357Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49198
+[2m2026-11-14T04:36:49.478626Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:49.478708Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:49.478717Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:49.482925Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:36:49.482944Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:36:49.482947Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:36:49.483316Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.483378Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.483395Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.483412Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.483428Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.483456Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.483466Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.483481Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.483489Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.483497Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.483506Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.483514Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=3254 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=3298 into 4140 writable bytes
+[2m2026-11-14T04:36:49.495392Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:36:49.495425Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:36:49.495428Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:36:49.495430Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:36:49.495432Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:36:49.495434Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:36:49.497231Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:36:49.516231Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=4 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:36:49.516291Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=3 len=0 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:49.518584Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:49.518628Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49200 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:49.531722Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:36:49.531753Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49200
+[2m2026-11-14T04:36:49.531816Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=45 src=2:49200 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=89 into 4140 writable bytes
+[2m2026-11-14T04:36:49.546198Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49200
+[2m2026-11-14T04:36:49.546230Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=73 src_port=1024 dst_port=49200
+[2m2026-11-14T04:36:49.546346Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49200 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=73                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:49.641638Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=73 src_port=1024 dst_port=49202
+[2m2026-11-14T04:36:49.648132Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=73                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:49.648185Z[0m [34mDEBUG[0m [2mhv2_sandboxd::env_vars[0m[2m:[0m unpacking a repository into /srv/app: falling back to shell (the guest's agent predates file operations)
+[2m2026-11-14T04:36:49.648199Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=73                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:49.657538Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:36:49.657580Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:49.657989Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:49.658269Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:36:49.665145Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665349Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665385Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665397Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665473Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665488Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665497Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665513Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665573Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665587Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665597Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665606Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665625Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665684Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665697Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665706Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665714Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665726Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665778Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665794Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665803Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665811Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665819Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:49.665827Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=1499 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=1543 into 4140 writable bytes
+[2m2026-11-14T04:36:49.673829Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:49.673866Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:49.673869Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:49.679128Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:49.819553Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:49.819874Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:49.819919Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:49.819926Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:49.857438Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:49.857475Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:49.857900Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:36:49.858287Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=322 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=366 into 4140 writable bytes
+[2m2026-11-14T04:36:49.889753Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:36:51.747679Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=139 src_port=1024 dst_port=49204
+[2m2026-11-14T04:36:51.748067Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:51.748159Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:51.749269Z[0m [34mDEBUG[0m [2mhv2_sandboxd[0m[2m:[0m sbx-11038ae1244f4f6e9627 up in 2.629281113s: build 388.613µs, launch 258.312661ms, agent answering 80.28083ms, network and envd 2.29029949s
+[2m2026-11-14T04:36:51.762172Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:36:51.762199Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:36:51.762308Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:51.769186Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:36:51.769355Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=134 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=178 into 4140 writable bytes
+[2m2026-11-14T04:36:51.770574Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:36:51.772158Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=143 src_port=1024 dst_port=49205
+[2m2026-11-14T04:36:51.772459Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=143                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:51.772482Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=143                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:51.784373Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=918)
+[2m2026-11-14T04:36:51.784459Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-11038ae1244f4f6e9627'
+[2m2026-11-14T04:36:51.784481Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-11038ae1244f4f6e9627' stopped
+[2m2026-11-14T04:36:53.353519Z[0m [34mDEBUG[0m [2mhv2_sandboxd[0m[2m:[0m slot granted after 1.583µs
+[2m2026-11-14T04:36:53.353605Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-14T04:36:53.353989Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-234a1cbf803e48e7a22b': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-14T04:36:53.354001Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-14T04:36:53.529526Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-234a1cbf803e48e7a22b' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-14T04:36:54.402935Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-234a1cbf803e48e7a22b' restored from /tmp/hv2-sandboxd-4915-suspended/snapshots/tuser-b1b6cb6d97314e6084c7f8abd03c8a0f.snap
+[2m2026-11-14T04:36:54.402985Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-234a1cbf803e48e7a22b' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-14T04:36:54.403158Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-234a1cbf803e48e7a22b' with 1 vCPUs
+[2m2026-11-14T04:36:54.403165Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-14T04:36:54.405645Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-14T04:36:54.411725Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49197 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:54.425401Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49196
+[2m2026-11-14T04:36:54.425445Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49196
+[2m2026-11-14T04:36:54.425449Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49197
+[2m2026-11-14T04:36:54.425516Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=320 src=2:49197 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=364 into 4140 writable bytes
+[2m2026-11-14T04:36:54.455037Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49197
+[2m2026-11-14T04:36:54.456295Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49197
+[2m2026-11-14T04:36:54.456353Z[0m [34mDEBUG[0m [2mhv2_agent::agent_vm[0m[2m:[0m restored guest readiness stages [3mvm[0m[2m=[0msbx-234a1cbf803e48e7a22b [3mblocking_queue_ms[0m[2m=[0m2.374887 [3mconnect_ms[0m[2m=[0m19.979494 [3mrestored_ms[0m[2m=[0m30.870162999999998 [3msucceeded[0m[2m=[0mtrue [3mphase[0m[2m=[0m"restored"
+[2m2026-11-14T04:36:54.456404Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49197 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:54.456438Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49197 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:54.456842Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49197
+[2m2026-11-14T04:36:54.457064Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49197
+[2m2026-11-14T04:36:54.471164Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:54.471677Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:36:54.471775Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=142 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=186 into 4140 writable bytes
+[2m2026-11-14T04:36:54.501246Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:36:54.502718Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49198
+[2m2026-11-14T04:36:54.502785Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:54.502806Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:54.503105Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:54.513074Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:36:54.513087Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:36:54.513090Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:36:54.786157Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:54.786248Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:54.786274Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:54.786354Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:54.786380Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:54.786402Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:54.786414Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:54.786431Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:54.786449Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:54.786457Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:54.786512Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:54.786526Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=3254 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=3298 into 4140 writable bytes
+[2m2026-11-14T04:36:54.796556Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:36:54.796582Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:36:54.796585Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:36:54.816327Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:36:54.816681Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=4 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:36:54.816699Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=3 len=0 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:54.817893Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:54.817922Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49200 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:54.818670Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:36:54.818679Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49200
+[2m2026-11-14T04:36:54.818718Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=45 src=2:49200 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=89 into 4140 writable bytes
+[2m2026-11-14T04:36:54.819011Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49200
+[2m2026-11-14T04:36:54.819017Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=73 src_port=1024 dst_port=49200
+[2m2026-11-14T04:36:54.819082Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49200 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=73                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:54.819108Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49200 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=73                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:54.819443Z[0m [34mDEBUG[0m [2mhv2_sandboxd::env_vars[0m[2m:[0m unpacking a repository into /srv/app: the guest's agent has no batch operation, using one op per connection
+[2m2026-11-14T04:36:54.819535Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49201 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:55.163821Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:55.163833Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:55.163841Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:55.163848Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:55.163856Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:55.163875Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:55.163999Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:55.164012Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:55.164020Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:55.164028Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:55.164036Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:36:55.164043Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=1499 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=1543 into 4140 writable bytes
+[2m2026-11-14T04:36:55.173078Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173103Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173106Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173109Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173111Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173114Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173116Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173118Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173121Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173123Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173125Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173128Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173130Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173132Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173148Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173150Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173153Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173155Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173157Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173160Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173162Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173164Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173167Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.173169Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.175102Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.181073Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:55.181112Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:55.186480Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:55.187079Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.187106Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:36:55.187113Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:36:55.187147Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=322 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=366 into 4140 writable bytes
+[2m2026-11-14T04:36:55.194037Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:36:55.314804Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=139 src_port=1024 dst_port=49204
+[2m2026-11-14T04:36:55.315172Z[0m [34mDEBUG[0m [2mhv2_sandboxd[0m[2m:[0m sbx-234a1cbf803e48e7a22b up in 1.961607123s: build 443.887µs, launch 1.049103831s, agent answering 67.990275ms, network and envd 844.06954ms
+[2m2026-11-14T04:36:55.315541Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:55.315632Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:55.316284Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:36:55.316289Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:36:55.320803Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:55.346109Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:36:55.346377Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=134 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=178 into 4140 writable bytes
+[2m2026-11-14T04:36:55.362188Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:36:55.362929Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=143 src_port=1024 dst_port=49205
+[2m2026-11-14T04:36:55.363323Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=143                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:55.363350Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=143                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:36:55.364122Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=920)
+[2m2026-11-14T04:36:55.364234Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-234a1cbf803e48e7a22b'
+[2m2026-11-14T04:36:55.364240Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-234a1cbf803e48e7a22b' stopped
+
+=== cycle 59 ===
+[2m2026-11-14T04:37:29.805427Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49196 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=62                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:29.805434Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49197 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:29.833665Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49196
+[2m2026-11-14T04:37:29.833703Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49196
+[2m2026-11-14T04:37:29.834206Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49197
+[2m2026-11-14T04:37:29.834332Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=55 src=2:49197 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=99 into 4140 writable bytes
+[2m2026-11-14T04:37:29.834651Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49197
+[2m2026-11-14T04:37:29.834660Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=169 src_port=1024 dst_port=49197
+[2m2026-11-14T04:37:29.834764Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49197 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=169                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:29.834781Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49197 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=169                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:29.834788Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:29.835649Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49197
+[2m2026-11-14T04:37:29.835657Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49197
+[2m2026-11-14T04:37:29.835660Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:37:29.835696Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=397 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=441 into 4140 writable bytes
+[2m2026-11-14T04:37:29.836358Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:37:29.836366Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49198
+[2m2026-11-14T04:37:29.836490Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:29.836506Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49198 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:29.837547Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-5b14edef' paused
+[2m2026-11-14T04:37:29.852017Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-5b14edef' snapshotted to /tmp/hv2-sandboxd-5150-suspended/snapshots/build-cache-6166dee2f56f372e-b51ccc0aaddc4b2aaafeab88a1c87bcf.snap
+[2m2026-11-14T04:37:29.852090Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-5b14edef' resumed
+[2m2026-11-14T04:37:29.852920Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:37:29.852933Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49198
+[2m2026-11-14T04:37:29.852949Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:29.865014Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:37:29.865377Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=172 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=216 into 4140 writable bytes
+[2m2026-11-14T04:37:29.866157Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:37:29.866331Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49199
+[2m2026-11-14T04:37:29.866442Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:29.866488Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49199 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:29.866926Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:37:29.867166Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49199
+[2m2026-11-14T04:37:29.867241Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49200 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:29.867484Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49200
+[2m2026-11-14T04:37:29.867671Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=107 src=2:49200 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=151 into 4140 writable bytes
+[2m2026-11-14T04:37:29.868365Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49200
+[2m2026-11-14T04:37:29.868374Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=131 src_port=1024 dst_port=49200
+[2m2026-11-14T04:37:29.868485Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49200 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=131                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:29.868516Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49200 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=131                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:29.880468Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49201 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:29.880997Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49200
+[2m2026-11-14T04:37:29.881038Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49200
+[2m2026-11-14T04:37:29.881357Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49201
+[2m2026-11-14T04:37:29.881572Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=129 src=2:49201 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=173 into 4140 writable bytes
+[2m2026-11-14T04:37:29.882003Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49201
+[2m2026-11-14T04:37:29.882082Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49201
+[2m2026-11-14T04:37:29.882233Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49201 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:29.882252Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49201 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:29.882705Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49201
+[2m2026-11-14T04:37:29.882870Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49201
+[2m2026-11-14T04:37:29.883879Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-5b14edef' paused
+[2m2026-11-14T04:37:29.895645Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-5b14edef' snapshotted to /tmp/hv2-sandboxd-5150-suspended/snapshots/tuser-fc723fa53ba84b828b6748d8237766e5.snap
+[2m2026-11-14T04:37:29.895723Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-5b14edef' resumed
+[2m2026-11-14T04:37:29.896187Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=3762)
+[2m2026-11-14T04:37:29.901088Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'build-5b14edef'
+[2m2026-11-14T04:37:29.901110Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'build-5b14edef' stopped
+[2m2026-11-14T04:37:29.901122Z[0m [32m INFO[0m [2mhv2_sandboxd::builds[0m[2m:[0m template tuser built by steps in 3.579745965s
+[2m2026-11-14T04:37:31.117238Z[0m [34mDEBUG[0m [2mhv2_sandboxd[0m[2m:[0m slot granted after 1.513µs
+[2m2026-11-14T04:37:31.117293Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-14T04:37:31.117671Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-c6809a449d8d4d3fa915': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-14T04:37:31.117682Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-14T04:37:31.185289Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-c6809a449d8d4d3fa915' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-14T04:37:31.657921Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-c6809a449d8d4d3fa915' restored from /tmp/hv2-sandboxd-5150-suspended/snapshots/tuser-fc723fa53ba84b828b6748d8237766e5.snap
+[2m2026-11-14T04:37:31.657966Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-c6809a449d8d4d3fa915' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-14T04:37:31.658232Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-c6809a449d8d4d3fa915' with 1 vCPUs
+[2m2026-11-14T04:37:31.658243Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-14T04:37:31.659762Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-14T04:37:31.667325Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:31.668802Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:37:31.673036Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=327 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=371 into 4140 writable bytes
+[2m2026-11-14T04:37:31.685085Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:37:31.685337Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49202
+[2m2026-11-14T04:37:31.685762Z[0m [34mDEBUG[0m [2mhv2_agent::agent_vm[0m[2m:[0m restored guest readiness stages [3mvm[0m[2m=[0msbx-c6809a449d8d4d3fa915 [3mblocking_queue_ms[0m[2m=[0m0.034737000000000004 [3mconnect_ms[0m[2m=[0m11.635627000000001 [3mrestored_ms[0m[2m=[0m15.887972 [3msucceeded[0m[2m=[0mtrue [3mphase[0m[2m=[0m"restored"
+[2m2026-11-14T04:37:31.685807Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:31.685829Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:31.685887Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:31.686421Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:37:31.686430Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:37:31.686482Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=142 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=186 into 4140 writable bytes
+[2m2026-11-14T04:37:31.687366Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:37:31.715197Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:37:31.716842Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49203
+[2m2026-11-14T04:37:31.717632Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:31.717666Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:31.718248Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:37:31.718257Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:37:31.720661Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:31.731491Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:37:31.733884Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:31.733934Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:31.733951Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:31.733966Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:31.733982Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:31.733997Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:31.734016Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:31.734031Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:31.734040Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:31.734048Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:31.734056Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:31.734064Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=3258 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=3302 into 4140 writable bytes
+[2m2026-11-14T04:37:31.765262Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:37:31.798047Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=4 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:37:31.798099Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=3 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:31.801058Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:31.801108Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:31.827045Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:37:31.827344Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:37:31.829528Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=45 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=89 into 4140 writable bytes
+[2m2026-11-14T04:37:31.829866Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:37:31.829873Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=73 src_port=1024 dst_port=49205
+[2m2026-11-14T04:37:31.829939Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=73                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:31.829961Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=73                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:31.831582Z[0m [34mDEBUG[0m [2mhv2_sandboxd::env_vars[0m[2m:[0m unpacking a repository into /srv/app: the guest's agent has no batch operation, using one op per connection
+[2m2026-11-14T04:37:31.831619Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49206 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:31.858542Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:37:31.858726Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:37:31.858897Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49206
+[2m2026-11-14T04:37:31.861847Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=102 src=2:49206 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=146 into 4140 writable bytes
+[2m2026-11-14T04:37:31.877368Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49206
+[2m2026-11-14T04:37:32.036956Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49208 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:32.036964Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49208 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:32.036973Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49208 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:32.036981Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49208 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:32.037014Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49208 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:32.037022Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49208 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:32.037030Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49208 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:32.037038Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49208 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:32.037047Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49208 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:32.037059Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=1499 src=2:49208 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=1543 into 4140 writable bytes
+[2m2026-11-14T04:37:32.050960Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.050987Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.050990Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.050992Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051007Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051009Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051011Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051013Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051015Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051017Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051019Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051021Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051023Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051025Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051027Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051029Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051031Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051033Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051035Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051038Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051040Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051042Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051044Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051046Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.051815Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.052145Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49208 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:32.052171Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49208 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:32.053074Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:32.286242Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.286298Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49208
+[2m2026-11-14T04:37:32.286620Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:37:32.286751Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=322 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=366 into 4140 writable bytes
+[2m2026-11-14T04:37:32.492029Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:37:33.719703Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=139 src_port=1024 dst_port=49209
+[2m2026-11-14T04:37:33.720007Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:33.720034Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:33.724097Z[0m [34mDEBUG[0m [2mhv2_sandboxd[0m[2m:[0m sbx-c6809a449d8d4d3fa915 up in 2.606818752s: build 421.464µs, launch 540.492846ms, agent answering 27.664567ms, network and envd 2.038240606s
+[2m2026-11-14T04:37:33.734528Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:37:33.734552Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49209
+[2m2026-11-14T04:37:33.734565Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:33.750099Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49210
+[2m2026-11-14T04:37:33.750195Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=134 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=178 into 4140 writable bytes
+[2m2026-11-14T04:37:33.767065Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49210
+[2m2026-11-14T04:37:33.767102Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=143 src_port=1024 dst_port=49210
+[2m2026-11-14T04:37:33.767192Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=143                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:33.767210Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=143                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:33.782264Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49210
+[2m2026-11-14T04:37:33.782297Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49210
+[2m2026-11-14T04:37:33.797474Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task exited (exits=913)
+[2m2026-11-14T04:37:33.797703Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM parallel execution completed for 'sbx-c6809a449d8d4d3fa915'
+[2m2026-11-14T04:37:33.797715Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-c6809a449d8d4d3fa915' stopped
+[2m2026-11-14T04:37:34.487530Z[0m [34mDEBUG[0m [2mhv2_sandboxd[0m[2m:[0m slot granted after 1.232µs
+[2m2026-11-14T04:37:34.487622Z[0m [32m INFO[0m [2mhv2_core::hypervisor[0m[2m:[0m Detected hypervisor platform: Kvm
+[2m2026-11-14T04:37:34.487961Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-0c7450cc1f934fa69350': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+[2m2026-11-14T04:37:34.487968Z[0m [32m INFO[0m [2mhv2_core::devices::serial[0m[2m:[0m Initializing serial device 'COM1' at 0x3F8
+[2m2026-11-14T04:37:34.617214Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Provisioned VM 'sbx-0c7450cc1f934fa69350' on the Kvm backend (1 vCPUs, 512 MiB)
+[2m2026-11-14T04:37:34.621287Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m VM 'sbx-0c7450cc1f934fa69350' restored from /tmp/hv2-sandboxd-5150-suspended/snapshots/tuser-fc723fa53ba84b828b6748d8237766e5.snap
+[2m2026-11-14T04:37:34.621327Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM 'sbx-0c7450cc1f934fa69350' with 1 vCPUs and 0 GB memory (parallel=true)
+[2m2026-11-14T04:37:34.621490Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting VM execution for 'sbx-0c7450cc1f934fa69350' with 1 vCPUs
+[2m2026-11-14T04:37:34.621500Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m Starting parallel execution with 1 vCPU tasks
+[2m2026-11-14T04:37:34.625079Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:34.629262Z[0m [32m INFO[0m [2mhv2_core::vm[0m[2m:[0m vCPU 0 task started
+[2m2026-11-14T04:37:34.634778Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:37:34.641026Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=325 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=369 into 4140 writable bytes
+[2m2026-11-14T04:37:34.666406Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:37:34.667632Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49202
+[2m2026-11-14T04:37:34.670804Z[0m [34mDEBUG[0m [2mhv2_agent::agent_vm[0m[2m:[0m restored guest readiness stages [3mvm[0m[2m=[0msbx-0c7450cc1f934fa69350 [3mblocking_queue_ms[0m[2m=[0m2.024455 [3mconnect_ms[0m[2m=[0m15.735936999999998 [3mrestored_ms[0m[2m=[0m31.594026999999997 [3msucceeded[0m[2m=[0mtrue [3mphase[0m[2m=[0m"restored"
+[2m2026-11-14T04:37:34.670820Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:34.686575Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49202 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:34.686682Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:34.696617Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:37:34.696654Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:37:34.697706Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49202
+[2m2026-11-14T04:37:34.705023Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=142 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=186 into 4140 writable bytes
+[2m2026-11-14T04:37:34.713353Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:37:34.713806Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=57 src_port=1024 dst_port=49203
+[2m2026-11-14T04:37:34.718516Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=6 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:34.734615Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:34.734675Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:34.744505Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:37:34.744540Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:37:34.744900Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+[2m2026-11-14T04:37:34.750312Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:34.750391Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:34.750413Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:34.750434Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:34.750455Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:34.750475Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:34.750524Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:34.750553Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:34.750568Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:34.750575Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:34.750601Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=4096 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+[2m2026-11-14T04:37:34.750608Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=3258 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=3302 into 4140 writable bytes
+[2m2026-11-14T04:37:34.760123Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:37:34.760153Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:37:34.760156Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:37:34.760159Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:37:34.760161Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:37:34.760163Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:37:34.789121Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:37:34.820862Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=4 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:37:34.820954Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=3 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:34.823449Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=4 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:34.823517Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=1 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+[2m2026-11-14T04:37:34.824375Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=3 len=0 src_port=1024 dst_port=49204
+[2m2026-11-14T04:37:34.824388Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=2 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:37:34.824454Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: to guest op=5 len=45 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=89 into 4140 writable bytes
+[2m2026-11-14T04:37:34.824726Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+[2m2026-11-14T04:37:34.824732Z[0m [34mDEBUG[0m [2mhv2_core::devices::virtio_vsock[0m[2m:[0m vsock: from guest op=5 len=73 src_port=1024 dst_port=49205

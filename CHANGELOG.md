@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **A snapshot could tear while network or vsock traffic arrived.** Pausing a
+  VM parked only its vCPUs; the vsock and network delivery threads kept
+  writing receive rings and raising the interrupt line, so a snapshot read
+  guest memory, device state and the interrupt controller at different
+  moments, and a sandbox restored from it could miss the guest agent's
+  traffic. A pause now holds host-to-guest delivery (packets stay queued on
+  the host side) and `resume` delivers what was held; standby does not
+  hold. Under CPU stress failed creates from a template fell from 3 of 240
+  to 0 of 720, on the old-agent and batch-agent images; unstressed, 0 of
+  240. See `docs/benchmarks/2026-11-13/restore-loop-kvm`.
 - **A sandbox restored from a snapshot could be deaf for good** ("guest
   agent did not answer request 1 in time"). KVM's in-kernel I/O APIC
   latches a raise of a masked edge pin and then swallows every later raise
@@ -16,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every restore of it was deaf. `KvmVm::irq_line` now releases a line
   before asserting it. Under CPU stress failed creates fell from 9 of 224
   (and 8 failed template builds) to 3 of 240 (0); unstressed, 0 of 450.
-  The remaining 3 are a different, still open, failure. Snapshots taken
+  The remaining 3 are fixed by the entry above. Snapshots taken
   before this fix that already hold the bit are not repaired. See
   `docs/benchmarks/2026-11-13/restore-loop-kvm`.
 - **A template COPY holding hard links failed on images with a shell.**

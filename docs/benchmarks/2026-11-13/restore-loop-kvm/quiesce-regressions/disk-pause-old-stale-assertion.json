@@ -1,0 +1,49 @@
+{
+  "success": false,
+  "purpose": "functional verification of pausing a sandbox with a disk on KVM",
+  "input_sha256": {
+    "daemon": "672801943ae283ce6c25b582333264526b41006efbf92c42e8246e7af6677e70",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "2952bbbe585a1b2e780aa3f3c02ffa722c203065f0341717653bb20dec33cca0",
+    "driver": "1343c59b805b93d735cb60fd229e7fd04127238fb94db762079093dee366fb8e"
+  },
+  "cases": [
+    {
+      "name": "a sandbox holding a disk pauses, and the disk stays claimed",
+      "success": true,
+      "detail": {
+        "attached_to_while_paused": "sbx-1f363b1740c04f65a902",
+        "second_attach": "disk data is attached to sandbox sbx-1f363b1740c04f65a902"
+      }
+    },
+    {
+      "name": "resumed, it is the same guest with the disk still mounted",
+      "success": true,
+      "detail": {
+        "counter_before": 10,
+        "counter_after": 11,
+        "a_second_later": 21,
+        "mount": "/dev/vda /data ext4 rw,relatime 0 0"
+      }
+    },
+    {
+      "name": "a write made just before the pause, with no sync, is whole afterwards",
+      "success": true,
+      "detail": {
+        "sha256": "434b5cd1a85b9d849b6a89672764530aa7a344bfc7420a057572e0f7ef25fa5e",
+        "guest_dirty_before_pause": "Dirty: 8176 kB Writeback: 0 kB"
+      }
+    },
+    {
+      "name": "it pauses and resumes again",
+      "success": true,
+      "detail": {
+        "pauses": 3
+      }
+    },
+    {
+      "name": "snapshotting or checkpointing a sandbox with a disk is still refused",
+      "success": false
+    }
+  ]
+}

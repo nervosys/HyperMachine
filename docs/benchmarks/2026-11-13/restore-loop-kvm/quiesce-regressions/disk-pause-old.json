@@ -1,0 +1,67 @@
+{
+  "success": true,
+  "purpose": "functional verification of pausing a sandbox with a disk on KVM",
+  "input_sha256": {
+    "daemon": "672801943ae283ce6c25b582333264526b41006efbf92c42e8246e7af6677e70",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "2952bbbe585a1b2e780aa3f3c02ffa722c203065f0341717653bb20dec33cca0",
+    "driver": "f71dd424a5e91c2d7c75dfeefc5d3a3ec1b3ad78acb35682b4c56fd6ea068b1f"
+  },
+  "cases": [
+    {
+      "name": "a sandbox holding a disk pauses, and the disk stays claimed",
+      "success": true,
+      "detail": {
+        "attached_to_while_paused": "sbx-7d7557d36d1f422283c3",
+        "second_attach": "disk data is attached to sandbox sbx-7d7557d36d1f422283c3"
+      }
+    },
+    {
+      "name": "resumed, it is the same guest with the disk still mounted",
+      "success": true,
+      "detail": {
+        "counter_before": 10,
+        "counter_after": 12,
+        "a_second_later": 22,
+        "mount": "/dev/vda /data ext4 rw,relatime 0 0"
+      }
+    },
+    {
+      "name": "a write made just before the pause, with no sync, is whole afterwards",
+      "success": true,
+      "detail": {
+        "sha256": "8e5f070ad1c703d95249ae81fccfc45e176dc18fa7ac0e615a8796497616c7dc",
+        "guest_dirty_before_pause": "Dirty: 8196 kB Writeback: 0 kB"
+      }
+    },
+    {
+      "name": "it pauses and resumes again",
+      "success": true,
+      "detail": {
+        "pauses": 3
+      }
+    },
+    {
+      "name": "snapshotting a sandbox with a disk is still refused",
+      "success": true,
+      "detail": {
+        "snapshots": "sandbox sbx-7d7557d36d1f422283c3 holds a disk, and a sandbox with a disk cannot be snapshotted"
+      }
+    },
+    {
+      "name": "the data reached the disk: a new sandbox attaching it reads the same bytes",
+      "success": true,
+      "detail": {
+        "read_by": "sbx-1c451ec2e6bd4cdfa522"
+      }
+    },
+    {
+      "name": "autoPause with a disk is accepted, and ending a paused sandbox frees its disk",
+      "success": true,
+      "detail": {
+        "autoPause_with_a_disk": 201,
+        "disk_free_after_delete": true
+      }
+    }
+  ]
+}

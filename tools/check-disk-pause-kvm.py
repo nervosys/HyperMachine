@@ -174,15 +174,14 @@ def main():
             return {"pauses": 3}
         case("it pauses and resumes again", again)
 
-        def snapshot_and_checkpoint_are_still_refused():
-            refusals = {}
-            for name in ("snapshots", "checkpoints"):
-                status, value = request("POST", f"/sandboxes/{sandbox}/{name}", {})
-                assert status == 409, (name, status, value)
-                refusals[name] = value["message"]
-            return refusals
-        case("snapshotting or checkpointing a sandbox with a disk is still refused",
-             snapshot_and_checkpoint_are_still_refused)
+        # A checkpoint of a sandbox with a disk is supported (it copies the
+        # disk; see check-disk-checkpoint-kvm.py). A template snapshot is not.
+        def snapshot_is_still_refused():
+            status, value = request("POST", f"/sandboxes/{sandbox}/snapshots", {})
+            assert status == 409, ("snapshots", status, value)
+            return {"snapshots": value["message"]}
+        case("snapshotting a sandbox with a disk is still refused",
+             snapshot_is_still_refused)
 
         def reached_the_disk():
             execute(sandbox, "sync")

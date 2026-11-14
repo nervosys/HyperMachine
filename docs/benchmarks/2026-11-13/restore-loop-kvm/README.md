@@ -111,18 +111,50 @@ entry (0x20, edge), raises again, and asserts the vector reached the local APIC'
 
 Results of the product-change checks are in the section "Checks of the product change" below.
 
-## Family 2: residual, not explained (NOT VERIFIED)
+## Family 2: device delivery while paused tore the snapshot
 
-The fixed daemon under the same stress still failed 3 creates of 240 (cycles 2, 61, 91). Their snapshots have
+The family-1 fix under the same stress still failed 3 creates of 240 (cycles 2, 61, 91). Their snapshots have
 `ioapic_irr: 0x0` (so not family 1), the guest shows "0 exits ... 7-9 in all", and the log of cycle 61 shows
 vsock packets still being delivered to the guest **between** "VM paused" and "snapshotted", then, on the restore,
 `vsock: packet addressed to CID 0` warnings, and no answer.
 
-Hypothesis (not confirmed): `Vm::pause()` parks only the vCPUs; the vsock delivery thread and the irq thread keep
-running, so a packet or interrupt can be consumed after the device state was saved, or the device state saved
-before a packet that the guest then sees, leaving the snapshot's virtqueue and connection counters out of step with
-guest memory. I read `pause`, `notify_vsock` and the snapshot path and did not find a gate on delivery while paused,
-but I did not reproduce it in isolation, did not write a quiesce, and did not test one. Treat it as an open lead.
+Cause, from the code (`crates/hv2-core/src/vm.rs`): `VM::pause` parked only the vCPUs. The vsock delivery thread
+(started by `attach_vsock`/`attach_vsock_pci`) calls `notify_vsock` whenever the device queues a host-side packet,
+with no check of the VM's state: it pops the receive ring, writes the packet into guest memory, `add_used`, sets
+`interrupt_status` and raises the line. `notify_net`/`notify_net_pci` are the same. `snapshot_inner` captures the
+vCPUs, then a memory pass, then device state, then the irqchip, then writes the pages, so a packet delivered in
+between leaves memory, queue indices and interrupt state describing different moments. The torn snapshot itself
+was not reproduced in isolation; the link to the 3 failures is by mechanism and by the result below.
+
+Fix: `pause` now holds host-side device delivery (`devices_held`, plus a `delivery_gate` that every
+`notify_vsock`/`notify_net`/`notify_net_pci` holds for its whole publish-and-signal, so `pause` waits out one in
+flight). Held packets stay in the device's host-side queue; `resume` delivers them (`flush_held_deliveries`).
+`standby` does not hold, since traffic is what ends it.
+
+Test: `vm::tests::a_paused_vm_holds_host_packets_and_resume_delivers_them` (real delivery thread, rx ring in guest
+RAM): while held, the used ring is untouched, the queue position stays (0,0) and the packet stays pending; after
+`resume` it is delivered (used idx 1, position (1,1)). With the hold disabled (the gate always granted) it fails at
+the first assertion; with it, it passes.
+
+Results with both fixes (daemon `672801943ae283ce6c25b582333264526b41006efbf92c42e8246e7af6677e70`), 120 cycles x 2
+creates, `--template user`:
+
+| Run (dir) | Image | Stress | Failed creates | Setup failures |
+| --- | --- | --- | --- | --- |
+| `old-image-user-cycles-stress48-quiesce` | old agent | 48 busy loops | **0 / 240** | 0 |
+| `old-image-user-cycles-stress48-quiesce-r2` | old agent | 48 busy loops | **0 / 240** | 0 |
+| `batch-image-user-cycles-stress48-quiesce` | busybox + batch | 48 busy loops | **0 / 240** | 0 |
+| `batch-image-user-cycles-quiesce` | busybox + batch | none | **0 / 240** | 0 |
+
+0 of 720 stressed creates failed, where the family-1 fix alone failed 3 of 240 (about 9 expected in 720; the
+chance of 0 at that rate is about 1 in 8,000). One stressed run's daemon log is kept (`daemon-log.txt`); the others
+kept none (`--keep-log failures`, and nothing failed).
+
+Regressions with the same daemon, both images (`quiesce-regressions/`): `check-checkpoint-files-kvm.py`,
+`check-disk-checkpoint-kvm.py`, `check-disk-fork-kvm.py`, `check-disk-pause-kvm.py` all pass. `check-disk-pause`
+first failed on both images on a stale assertion (it expected a checkpoint of a sandbox with a disk to be refused;
+that is supported now, as in `check-block-disk-kvm.py`), kept as `disk-pause-old-stale-assertion.json`; every pause
+case in it had passed. The check now asserts only the snapshot refusal, and passes.
 
 ## Not reproduced
 
@@ -133,7 +165,12 @@ but I did not reproduce it in isolation, did not write a quiesce, and did not te
 
 ## NOT VERIFIED
 
-- That the fix is complete: family 2 still failed 3 of 240 creates under stress, and its cause is a hypothesis.
+- That restores can no longer fail at all: 0 of 720 stressed and 240 unstressed creates bounds the rate on this
+  host, it does not prove zero. That the 3 family-2 failures were the torn snapshot is shown by mechanism and by
+  their disappearing, not by catching one.
+- The device hold on KVM with network devices attached (`notify_net`/`notify_net_pci`): the runs here use vsock
+  only. Standby on KVM after the change (its logic was reviewed, and standby does not hold).
+- Snapshots taken before either fix: a template already holding a latched bit or a torn queue is not repaired.
 - Cycle 73 of `old-image-user-cycles` (a cycle with no creates and no recorded reason).
 - Anything on hardware other than this AMD WSL2 host, on a real (non-nested) Linux host, or with more than 1 vCPU.
 - The original failure's family (see above).
@@ -151,3 +188,7 @@ but I did not reproduce it in isolation, did not write a quiesce, and did not te
 - The new KVM test run as root: 3 of 3 passed after the fix (request bits `0x20` latched by the first raise,
   `0x0` and the vector pending after the second); before the fix 3 of 3 failed.
 - Not run: the other crates' tests (only `kvm.rs` in hv2-core changed).
+- Family-2 change (`vm.rs`): Windows (1.98.1) `cargo fmt --check -p hv2-core` clean, clippy `-p hv2-core
+  --all-targets -D warnings` clean, `cargo test -p hv2-core --lib` 2453 passed; WSL (`cargo +1.100.0`,
+  `-D warnings`) clippy clean, `cargo test -p hv2-core --lib` 2397 passed, 3 ignored; the family-1 KVM test still
+  passes as root.
