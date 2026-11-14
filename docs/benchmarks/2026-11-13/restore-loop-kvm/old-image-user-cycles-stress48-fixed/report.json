@@ -1,0 +1,3768 @@
+{
+  "success": false,
+  "label": "old-image-stress48-fixed",
+  "count": 2,
+  "parallel": 1,
+  "template": "user",
+  "env": "repo",
+  "input_sha256": {
+    "daemon": "7f50153c7d075011027dabe2ff9458efebf957d4b73679cc0ede2fd8f9eb2e78",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "2952bbbe585a1b2e780aa3f3c02ffa722c203065f0341717653bb20dec33cca0",
+    "driver": "15c7d12d72f2f6535e839608923cfc5f71f6e9580fff34a3df18238f2817dae7"
+  },
+  "loadavg_before": "11.93",
+  "build": {
+    "status": "ready",
+    "reason": null
+  },
+  "template_id": "tuser",
+  "elapsed_s": 2.0,
+  "snapshots": [
+    {
+      "file": "template.snap",
+      "vm_name": "template",
+      "ioapic_irr": "0x0",
+      "ioapic_gsi5": "0x100000000000820",
+      "pic_master_irr_imr": [
+        "0x32",
+        "0x0"
+      ],
+      "lapic_irr_vectors": [
+        32,
+        33
+      ],
+      "lapic_isr_vectors": [],
+      "lapic_lvt_timer": "0x400ec",
+      "tsc": 5909761815,
+      "tsc_deadline": 5864644880,
+      "run_state": "Runnable",
+      "devices": [
+        {
+          "name": "virtio-vsock",
+          "interrupt_status": 1,
+          "status": 15
+        }
+      ]
+    },
+    {
+      "file": "build-cache-6166dee2f56f372e-d4fc8e956179475fa922c47cf48e1ffb.snap",
+      "vm_name": "build-c116cb99",
+      "ioapic_irr": "0x0",
+      "ioapic_gsi5": "0x100000000000820",
+      "pic_master_irr_imr": [
+        "0x32",
+        "0x0"
+      ],
+      "lapic_irr_vectors": [],
+      "lapic_isr_vectors": [],
+      "lapic_lvt_timer": "0x400ec",
+      "tsc": 9352090240,
+      "tsc_deadline": 9724931851,
+      "run_state": "Halted",
+      "devices": [
+        {
+          "name": "virtio-vsock",
+          "interrupt_status": 1,
+          "status": 15
+        }
+      ]
+    },
+    {
+      "file": "tuser-7aee0532c1db49078fdfdde6ec6f4caa.snap",
+      "vm_name": "build-c116cb99",
+      "ioapic_irr": "0x0",
+      "ioapic_gsi5": "0x100000000000820",
+      "pic_master_irr_imr": [
+        "0x32",
+        "0x0"
+      ],
+      "lapic_irr_vectors": [],
+      "lapic_isr_vectors": [],
+      "lapic_lvt_timer": "0x400ec",
+      "tsc": 9772326765,
+      "tsc_deadline": 9773240477,
+      "run_state": "Halted",
+      "devices": [
+        {
+          "name": "virtio-vsock",
+          "interrupt_status": 0,
+          "status": 15
+        }
+      ]
+    }
+  ],
+  "loadavg_after": "14.90",
+  "platform_lines": {
+    "Kvm": 480,
+    "Tcg": 0
+  },
+  "slow_creates": [
+    {
+      "i": 0,
+      "sandbox": "sbx-c22484a1492341708f27",
+      "create_ms": 2539.8,
+      "cycle": 5
+    }
+  ],
+  "runs": 240,
+  "failures": 3,
+  "failure_rows": [
+    {
+      "i": 1,
+      "ok": false,
+      "create_ms": 16127.2,
+      "create_status": 503,
+      "error": "{\"code\": 503, \"message\": \"guest never became ready: Script error: the guest's clock is set, but its RNG was not reseeded (Timeout: no answer from a guest agent on vsock port 1024 within 15s (0 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd); it shares random state with every guest restored from the same snapshot; the guest wrote nothing to its console; VM Running; vCPU 0: 8 exits (0 I/O) in 0.5 s, 26 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x0 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x0 INIT=0 AUTO_EOI=0 ELCR=0x0; IOAPIC BASE=0xfec00000 SELECT=0x18 ID=0x0 IRR=0x0 GSI0 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI1 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI2 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI3 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI4 RAW=0x100000000000821 VECTOR=0x21 MASKED=0 LEVEL=0 REMOTE_IRR=0 DEST=0x1, GSI5 RAW=0x100000000000820 VECTOR=0x20 MASKED=0 LEVEL=0 REMOTE_IRR=0 DEST=0x1, GSI6 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI7 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI8 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI9 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI10 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI11 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI12 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI13 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI14 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI15 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI16 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI17 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI18 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI19 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI20 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI21 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI22 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI23 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=6247330489744, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=6247330489834; vCPU 0 owner sample: RIP=0xffffffff8206d3df RFLAGS=0x206 CR3=0x5176000 run_state=Halted RSP=0xffffffff82c03e88 APIC_BASE=0xfee00900 CR8=0x1 TSC=0x11ae451867 TSC_DEADLINE=0x11d234ab37; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=13 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "wall_start": 1794621482.1177995,
+      "total_ms": 16127.3,
+      "cycle": 2
+    },
+    {
+      "i": 0,
+      "ok": false,
+      "create_ms": 31136.4,
+      "create_status": 503,
+      "error": "{\"code\": 503, \"message\": \"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (0 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 9 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x0 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x0 INIT=0 AUTO_EOI=0 ELCR=0x0; IOAPIC BASE=0xfec00000 SELECT=0x18 ID=0x0 IRR=0x0 GSI0 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI1 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI2 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI3 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI4 RAW=0x100000000000821 VECTOR=0x21 MASKED=0 LEVEL=0 REMOTE_IRR=0 DEST=0x1, GSI5 RAW=0x100000000000820 VECTOR=0x20 MASKED=0 LEVEL=0 REMOTE_IRR=0 DEST=0x1, GSI6 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI7 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI8 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI9 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI10 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI11 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI12 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI13 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI14 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI15 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI16 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI17 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI18 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI19 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI20 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI21 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI22 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI23 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=6987557946277, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=6987557946367; vCPU 0 owner sample: RIP=0xffffffff8206d3df RFLAGS=0x212 CR3=0x5194000 run_state=Halted RSP=0xffffffff82c03e88 APIC_BASE=0xfee00900 CR8=0x1 TSC=0x23be94483c TSC_DEADLINE=0x23fad300b0; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=13 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "wall_start": 1794622222.190069,
+      "total_ms": 31136.4,
+      "cycle": 61
+    },
+    {
+      "i": 1,
+      "ok": false,
+      "create_ms": 31066.4,
+      "create_status": 503,
+      "error": "{\"code\": 503, \"message\": \"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (0 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 7 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x0 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x0 INIT=0 AUTO_EOI=0 ELCR=0x0; IOAPIC BASE=0xfec00000 SELECT=0x18 ID=0x0 IRR=0x0 GSI0 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI1 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI2 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI3 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI4 RAW=0x100000000000821 VECTOR=0x21 MASKED=0 LEVEL=0 REMOTE_IRR=0 DEST=0x1, GSI5 RAW=0x100000000000820 VECTOR=0x20 MASKED=0 LEVEL=0 REMOTE_IRR=0 DEST=0x1, GSI6 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI7 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI8 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI9 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI10 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI11 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI12 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI13 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI14 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI15 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI16 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI17 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI18 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI19 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI20 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI21 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI22 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI23 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=7313432717349, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=7313432717439; vCPU 0 owner sample: RIP=0xffffffff8206d3df RFLAGS=0x216 CR3=0x5192000 run_state=Halted RSP=0xffffffff82c03e88 APIC_BASE=0xfee00900 CR8=0x1 TSC=0x20e092b114 TSC_DEADLINE=0x210aa8865c; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=13 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "wall_start": 1794622548.084539,
+      "total_ms": 31066.5,
+      "cycle": 91
+    }
+  ],
+  "create_ms": {
+    "n": 237,
+    "min": 291.5,
+    "p50": 778.9,
+    "p90": 1097.7,
+    "p95": 1264.5,
+    "p99": 1568.1,
+    "max": 2539.8,
+    "mean": 801.7
+  },
+  "loadavg_samples": {
+    "n": 0,
+    "max": null,
+    "mean": null
+  },
+  "iterations": [
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 808.1,
+      "create_status": 201,
+      "sandbox": "sbx-925651354f0a491dab69",
+      "exec_ms": 15.7,
+      "exec_status": 200,
+      "wall_start": 1794621461.5782063,
+      "total_ms": 991.6,
+      "cycle": 0
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 790.3,
+      "create_status": 201,
+      "sandbox": "sbx-7b31139fda924f4a94f4",
+      "exec_ms": 14.9,
+      "exec_status": 200,
+      "wall_start": 1794621462.5697994,
+      "total_ms": 969.3,
+      "cycle": 0
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1192.3,
+      "create_status": 201,
+      "sandbox": "sbx-61e788a8b2fc41928f6f",
+      "exec_ms": 47.1,
+      "exec_status": 200,
+      "wall_start": 1794621472.878026,
+      "total_ms": 1460.8,
+      "cycle": 1
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 632.5,
+      "create_status": 201,
+      "sandbox": "sbx-73c5a019127648518905",
+      "exec_ms": 15.8,
+      "exec_status": 200,
+      "wall_start": 1794621474.3388882,
+      "total_ms": 807.7,
+      "cycle": 1
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1039.8,
+      "create_status": 201,
+      "sandbox": "sbx-7d3cda9b7bf04862b94c",
+      "exec_ms": 42.9,
+      "exec_status": 200,
+      "wall_start": 1794621480.8265843,
+      "total_ms": 1291.2,
+      "cycle": 2
+    },
+    {
+      "i": 1,
+      "ok": false,
+      "create_ms": 16127.2,
+      "create_status": 503,
+      "error": "{\"code\": 503, \"message\": \"guest never became ready: Script error: the guest's clock is set, but its RNG was not reseeded (Timeout: no answer from a guest agent on vsock port 1024 within 15s (0 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd); it shares random state with every guest restored from the same snapshot; the guest wrote nothing to its console; VM Running; vCPU 0: 8 exits (0 I/O) in 0.5 s, 26 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x0 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x0 INIT=0 AUTO_EOI=0 ELCR=0x0; IOAPIC BASE=0xfec00000 SELECT=0x18 ID=0x0 IRR=0x0 GSI0 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI1 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI2 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI3 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI4 RAW=0x100000000000821 VECTOR=0x21 MASKED=0 LEVEL=0 REMOTE_IRR=0 DEST=0x1, GSI5 RAW=0x100000000000820 VECTOR=0x20 MASKED=0 LEVEL=0 REMOTE_IRR=0 DEST=0x1, GSI6 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI7 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI8 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI9 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI10 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI11 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI12 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI13 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI14 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI15 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI16 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI17 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI18 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI19 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI20 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI21 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI22 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI23 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=6247330489744, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=6247330489834; vCPU 0 owner sample: RIP=0xffffffff8206d3df RFLAGS=0x206 CR3=0x5176000 run_state=Halted RSP=0xffffffff82c03e88 APIC_BASE=0xfee00900 CR8=0x1 TSC=0x11ae451867 TSC_DEADLINE=0x11d234ab37; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=13 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "wall_start": 1794621482.1177995,
+      "total_ms": 16127.3,
+      "cycle": 2
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 701.0,
+      "create_status": 201,
+      "sandbox": "sbx-c3c3d153925d4981b19b",
+      "exec_ms": 18.0,
+      "exec_status": 200,
+      "wall_start": 1794621503.4820843,
+      "total_ms": 862.3,
+      "cycle": 3
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 580.9,
+      "create_status": 201,
+      "sandbox": "sbx-a39e53e97d9e4dbc9565",
+      "exec_ms": 21.3,
+      "exec_status": 200,
+      "wall_start": 1794621504.3443644,
+      "total_ms": 734.3,
+      "cycle": 3
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 738.7,
+      "create_status": 201,
+      "sandbox": "sbx-5195a735fae64e8fa037",
+      "exec_ms": 80.3,
+      "exec_status": 200,
+      "wall_start": 1794621516.0862467,
+      "total_ms": 978.7,
+      "cycle": 4
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 719.3,
+      "create_status": 201,
+      "sandbox": "sbx-4b8fc53b110b4de3943e",
+      "exec_ms": 14.3,
+      "exec_status": 200,
+      "wall_start": 1794621517.0649972,
+      "total_ms": 934.1,
+      "cycle": 4
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 2539.8,
+      "create_status": 201,
+      "sandbox": "sbx-c22484a1492341708f27",
+      "exec_ms": 17.5,
+      "exec_status": 200,
+      "wall_start": 1794621532.3741322,
+      "total_ms": 2761.5,
+      "cycle": 5
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1239.6,
+      "create_status": 201,
+      "sandbox": "sbx-eb39a93363b540518e90",
+      "exec_ms": 28.8,
+      "exec_status": 200,
+      "wall_start": 1794621535.1356826,
+      "total_ms": 1451.9,
+      "cycle": 5
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1391.6,
+      "create_status": 201,
+      "sandbox": "sbx-1d14baf63f264a9abf3e",
+      "exec_ms": 31.5,
+      "exec_status": 200,
+      "wall_start": 1794621548.0140955,
+      "total_ms": 1598.0,
+      "cycle": 6
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1097.7,
+      "create_status": 201,
+      "sandbox": "sbx-7ae32384b31349fc972b",
+      "exec_ms": 79.1,
+      "exec_status": 200,
+      "wall_start": 1794621549.6121478,
+      "total_ms": 1351.2,
+      "cycle": 6
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1081.0,
+      "create_status": 201,
+      "sandbox": "sbx-082a86bd01cc4a5d9526",
+      "exec_ms": 19.1,
+      "exec_status": 200,
+      "wall_start": 1794621562.774205,
+      "total_ms": 1112.5,
+      "cycle": 7
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 741.4,
+      "create_status": 201,
+      "sandbox": "sbx-bbac3869470a4e63916f",
+      "exec_ms": 96.1,
+      "exec_status": 200,
+      "wall_start": 1794621563.8867404,
+      "total_ms": 948.8,
+      "cycle": 7
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 917.7,
+      "create_status": 201,
+      "sandbox": "sbx-3e151e71306d4b659b02",
+      "exec_ms": 27.8,
+      "exec_status": 200,
+      "wall_start": 1794621573.4769483,
+      "total_ms": 1119.1,
+      "cycle": 8
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 652.0,
+      "create_status": 201,
+      "sandbox": "sbx-0f23df5c54a14be4a68a",
+      "exec_ms": 33.3,
+      "exec_status": 200,
+      "wall_start": 1794621574.5961146,
+      "total_ms": 862.6,
+      "cycle": 8
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 751.6,
+      "create_status": 201,
+      "sandbox": "sbx-b9513fe6e4ca494bb5ee",
+      "exec_ms": 33.4,
+      "exec_status": 200,
+      "wall_start": 1794621583.2249084,
+      "total_ms": 935.6,
+      "cycle": 9
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 612.4,
+      "create_status": 201,
+      "sandbox": "sbx-296d4314fe9f485a878c",
+      "exec_ms": 9.5,
+      "exec_status": 200,
+      "wall_start": 1794621584.1605077,
+      "total_ms": 803.5,
+      "cycle": 9
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1205.3,
+      "create_status": 201,
+      "sandbox": "sbx-c779ba596d73427c8803",
+      "exec_ms": 99.4,
+      "exec_status": 200,
+      "wall_start": 1794621592.212377,
+      "total_ms": 1495.1,
+      "cycle": 10
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 902.5,
+      "create_status": 201,
+      "sandbox": "sbx-3c0cbb5736f94a658d85",
+      "exec_ms": 50.9,
+      "exec_status": 200,
+      "wall_start": 1794621593.7075098,
+      "total_ms": 1127.4,
+      "cycle": 10
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 894.2,
+      "create_status": 201,
+      "sandbox": "sbx-1c1f21f157e640cda49a",
+      "exec_ms": 33.8,
+      "exec_status": 200,
+      "wall_start": 1794621603.8088794,
+      "total_ms": 1129.7,
+      "cycle": 11
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1153.7,
+      "create_status": 201,
+      "sandbox": "sbx-2bdc8fcd88a54b53b6b1",
+      "exec_ms": 26.0,
+      "exec_status": 200,
+      "wall_start": 1794621604.9386387,
+      "total_ms": 1380.9,
+      "cycle": 11
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 899.1,
+      "create_status": 201,
+      "sandbox": "sbx-7e1360327c8f42dd99ab",
+      "exec_ms": 38.3,
+      "exec_status": 200,
+      "wall_start": 1794621618.2380066,
+      "total_ms": 1164.5,
+      "cycle": 12
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1066.4,
+      "create_status": 201,
+      "sandbox": "sbx-fdb43feaf00a4263b27a",
+      "exec_ms": 17.0,
+      "exec_status": 200,
+      "wall_start": 1794621619.4025507,
+      "total_ms": 1205.9,
+      "cycle": 12
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 588.3,
+      "create_status": 201,
+      "sandbox": "sbx-78dd99dc627341be82bd",
+      "exec_ms": 23.9,
+      "exec_status": 200,
+      "wall_start": 1794621628.0780504,
+      "total_ms": 728.7,
+      "cycle": 13
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 670.4,
+      "create_status": 201,
+      "sandbox": "sbx-9b722c602785411ab684",
+      "exec_ms": 10.1,
+      "exec_status": 200,
+      "wall_start": 1794621628.8068037,
+      "total_ms": 812.0,
+      "cycle": 13
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 693.1,
+      "create_status": 201,
+      "sandbox": "sbx-ffa3f47f05ad41038a32",
+      "exec_ms": 35.7,
+      "exec_status": 200,
+      "wall_start": 1794621637.0180602,
+      "total_ms": 872.9,
+      "cycle": 14
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 579.3,
+      "create_status": 201,
+      "sandbox": "sbx-93973e7eb309441da87d",
+      "exec_ms": 12.1,
+      "exec_status": 200,
+      "wall_start": 1794621637.891066,
+      "total_ms": 743.5,
+      "cycle": 14
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 805.5,
+      "create_status": 201,
+      "sandbox": "sbx-3810fdee1a6d4bb891df",
+      "exec_ms": 60.7,
+      "exec_status": 200,
+      "wall_start": 1794621648.3187609,
+      "total_ms": 1009.7,
+      "cycle": 15
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 957.1,
+      "create_status": 201,
+      "sandbox": "sbx-c01cec069263410b991d",
+      "exec_ms": 63.7,
+      "exec_status": 200,
+      "wall_start": 1794621649.3284779,
+      "total_ms": 1178.7,
+      "cycle": 15
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 392.5,
+      "create_status": 201,
+      "sandbox": "sbx-e1b86668f2b3429abf85",
+      "exec_ms": 16.6,
+      "exec_status": 200,
+      "wall_start": 1794621665.734099,
+      "total_ms": 537.1,
+      "cycle": 16
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 389.9,
+      "create_status": 201,
+      "sandbox": "sbx-39f557fc4d8f4d569125",
+      "exec_ms": 15.6,
+      "exec_status": 200,
+      "wall_start": 1794621666.2712584,
+      "total_ms": 563.5,
+      "cycle": 16
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 760.8,
+      "create_status": 201,
+      "sandbox": "sbx-80b0de1086a24efe8273",
+      "exec_ms": 17.5,
+      "exec_status": 200,
+      "wall_start": 1794621679.9519038,
+      "total_ms": 950.7,
+      "cycle": 17
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 430.9,
+      "create_status": 201,
+      "sandbox": "sbx-803eda609d3a401e9566",
+      "exec_ms": 13.1,
+      "exec_status": 200,
+      "wall_start": 1794621680.9026783,
+      "total_ms": 595.4,
+      "cycle": 17
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1264.5,
+      "create_status": 201,
+      "sandbox": "sbx-02e522024dd14e6097fd",
+      "exec_ms": 20.7,
+      "exec_status": 200,
+      "wall_start": 1794621692.6490505,
+      "total_ms": 1449.6,
+      "cycle": 18
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 291.5,
+      "create_status": 201,
+      "sandbox": "sbx-9f2ab642e2814ccdaf0c",
+      "exec_ms": 8.9,
+      "exec_status": 200,
+      "wall_start": 1794621694.0986836,
+      "total_ms": 420.9,
+      "cycle": 18
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 728.0,
+      "create_status": 201,
+      "sandbox": "sbx-bd6461a608674da4883a",
+      "exec_ms": 24.2,
+      "exec_status": 200,
+      "wall_start": 1794621699.86607,
+      "total_ms": 1172.6,
+      "cycle": 19
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 992.1,
+      "create_status": 201,
+      "sandbox": "sbx-eea2f733fd254e7bbb7c",
+      "exec_ms": 7.5,
+      "exec_status": 200,
+      "wall_start": 1794621701.038653,
+      "total_ms": 1152.0,
+      "cycle": 19
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 703.8,
+      "create_status": 201,
+      "sandbox": "sbx-3ceb118f77fc44b08f8b",
+      "exec_ms": 31.1,
+      "exec_status": 200,
+      "wall_start": 1794621712.2026472,
+      "total_ms": 855.9,
+      "cycle": 20
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 744.0,
+      "create_status": 201,
+      "sandbox": "sbx-06cdaadf53cb42018de4",
+      "exec_ms": 30.0,
+      "exec_status": 200,
+      "wall_start": 1794621713.058611,
+      "total_ms": 900.1,
+      "cycle": 20
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1122.9,
+      "create_status": 201,
+      "sandbox": "sbx-db221328c3d140b8a402",
+      "exec_ms": 31.8,
+      "exec_status": 200,
+      "wall_start": 1794621726.6571121,
+      "total_ms": 1313.8,
+      "cycle": 21
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 833.7,
+      "create_status": 201,
+      "sandbox": "sbx-1c58f1c26ab2448ea215",
+      "exec_ms": 3.3,
+      "exec_status": 200,
+      "wall_start": 1794621727.9709578,
+      "total_ms": 1013.9,
+      "cycle": 21
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 590.8,
+      "create_status": 201,
+      "sandbox": "sbx-b40dca4c6de840b4b74e",
+      "exec_ms": 25.7,
+      "exec_status": 200,
+      "wall_start": 1794621738.6243563,
+      "total_ms": 778.3,
+      "cycle": 22
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 630.4,
+      "create_status": 201,
+      "sandbox": "sbx-24bc6c2c901a4c2aa67c",
+      "exec_ms": 47.6,
+      "exec_status": 200,
+      "wall_start": 1794621739.4027243,
+      "total_ms": 836.4,
+      "cycle": 22
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 588.9,
+      "create_status": 201,
+      "sandbox": "sbx-c4641244f256472c87dc",
+      "exec_ms": 2.6,
+      "exec_status": 200,
+      "wall_start": 1794621751.6340396,
+      "total_ms": 840.6,
+      "cycle": 23
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 670.9,
+      "create_status": 201,
+      "sandbox": "sbx-e810c93a0f904a64be41",
+      "exec_ms": 9.1,
+      "exec_status": 200,
+      "wall_start": 1794621752.4746444,
+      "total_ms": 844.0,
+      "cycle": 23
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 561.4,
+      "create_status": 201,
+      "sandbox": "sbx-20bc85d98fbc44b28a83",
+      "exec_ms": 18.0,
+      "exec_status": 200,
+      "wall_start": 1794621767.818042,
+      "total_ms": 712.8,
+      "cycle": 24
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 782.3,
+      "create_status": 201,
+      "sandbox": "sbx-a7e70004e7c24fbd8325",
+      "exec_ms": 31.2,
+      "exec_status": 200,
+      "wall_start": 1794621768.530922,
+      "total_ms": 960.1,
+      "cycle": 24
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1501.9,
+      "create_status": 201,
+      "sandbox": "sbx-20962a0ae72449c8bd6a",
+      "exec_ms": 11.5,
+      "exec_status": 200,
+      "wall_start": 1794621787.3153987,
+      "total_ms": 1647.2,
+      "cycle": 25
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 976.5,
+      "create_status": 201,
+      "sandbox": "sbx-fc46fb3fe3234d558032",
+      "exec_ms": 35.0,
+      "exec_status": 200,
+      "wall_start": 1794621788.9625993,
+      "total_ms": 1168.5,
+      "cycle": 25
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 914.9,
+      "create_status": 201,
+      "sandbox": "sbx-ce953e1d42fb4776b9eb",
+      "exec_ms": 15.2,
+      "exec_status": 200,
+      "wall_start": 1794621798.6623535,
+      "total_ms": 1088.8,
+      "cycle": 26
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 743.6,
+      "create_status": 201,
+      "sandbox": "sbx-0e372d5bf5ae4140abe9",
+      "exec_ms": 23.7,
+      "exec_status": 200,
+      "wall_start": 1794621799.7511897,
+      "total_ms": 955.0,
+      "cycle": 26
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 631.9,
+      "create_status": 201,
+      "sandbox": "sbx-964bf8315b5746aeae3b",
+      "exec_ms": 44.6,
+      "exec_status": 200,
+      "wall_start": 1794621812.4943287,
+      "total_ms": 800.3,
+      "cycle": 27
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 386.4,
+      "create_status": 201,
+      "sandbox": "sbx-9cc5e47e7dbd417388fe",
+      "exec_ms": 30.2,
+      "exec_status": 200,
+      "wall_start": 1794621813.294657,
+      "total_ms": 632.9,
+      "cycle": 27
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 969.9,
+      "create_status": 201,
+      "sandbox": "sbx-cb8b81b56d194c36b12d",
+      "exec_ms": 33.3,
+      "exec_status": 200,
+      "wall_start": 1794621826.7013724,
+      "total_ms": 1249.4,
+      "cycle": 28
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1410.0,
+      "create_status": 201,
+      "sandbox": "sbx-9b4d849a15954496ad9a",
+      "exec_ms": 13.5,
+      "exec_status": 200,
+      "wall_start": 1794621827.9508119,
+      "total_ms": 1721.0,
+      "cycle": 28
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 785.0,
+      "create_status": 201,
+      "sandbox": "sbx-1e7edf0b424146e3aa7b",
+      "exec_ms": 73.9,
+      "exec_status": 200,
+      "wall_start": 1794621845.0565715,
+      "total_ms": 1038.1,
+      "cycle": 29
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 888.4,
+      "create_status": 201,
+      "sandbox": "sbx-0cd3d99a69d94be4bee6",
+      "exec_ms": 31.2,
+      "exec_status": 200,
+      "wall_start": 1794621846.0947356,
+      "total_ms": 1158.7,
+      "cycle": 29
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 802.3,
+      "create_status": 201,
+      "sandbox": "sbx-061adf6f80a04909a2c7",
+      "exec_ms": 18.5,
+      "exec_status": 200,
+      "wall_start": 1794621856.9301553,
+      "total_ms": 1008.5,
+      "cycle": 30
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 696.9,
+      "create_status": 201,
+      "sandbox": "sbx-759b1d47db854752b88e",
+      "exec_ms": 31.3,
+      "exec_status": 200,
+      "wall_start": 1794621857.9386911,
+      "total_ms": 940.0,
+      "cycle": 30
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 758.2,
+      "create_status": 201,
+      "sandbox": "sbx-ab207ea11f704fa08f74",
+      "exec_ms": 16.8,
+      "exec_status": 200,
+      "wall_start": 1794621867.5579338,
+      "total_ms": 913.5,
+      "cycle": 31
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 343.4,
+      "create_status": 201,
+      "sandbox": "sbx-2dd0915071064978a007",
+      "exec_ms": 36.8,
+      "exec_status": 200,
+      "wall_start": 1794621868.4714682,
+      "total_ms": 523.2,
+      "cycle": 31
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 949.0,
+      "create_status": 201,
+      "sandbox": "sbx-98fddeaced524e3f922a",
+      "exec_ms": 31.6,
+      "exec_status": 200,
+      "wall_start": 1794621882.1940494,
+      "total_ms": 1211.8,
+      "cycle": 32
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1025.7,
+      "create_status": 201,
+      "sandbox": "sbx-820f74b8372f4439ba1e",
+      "exec_ms": 28.7,
+      "exec_status": 200,
+      "wall_start": 1794621883.4058397,
+      "total_ms": 1184.4,
+      "cycle": 32
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 380.9,
+      "create_status": 201,
+      "sandbox": "sbx-f42ad99983f043e895d9",
+      "exec_ms": 16.3,
+      "exec_status": 200,
+      "wall_start": 1794621893.7557611,
+      "total_ms": 563.0,
+      "cycle": 33
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 325.7,
+      "create_status": 201,
+      "sandbox": "sbx-69dd1b1a862b4872840a",
+      "exec_ms": 7.5,
+      "exec_status": 200,
+      "wall_start": 1794621894.3188257,
+      "total_ms": 463.9,
+      "cycle": 33
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 795.7,
+      "create_status": 201,
+      "sandbox": "sbx-64b45627a1644da8a5aa",
+      "exec_ms": 11.8,
+      "exec_status": 200,
+      "wall_start": 1794621904.4785304,
+      "total_ms": 924.2,
+      "cycle": 34
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 831.5,
+      "create_status": 201,
+      "sandbox": "sbx-6f40cb6f53394b8fbd37",
+      "exec_ms": 60.5,
+      "exec_status": 200,
+      "wall_start": 1794621905.402761,
+      "total_ms": 1132.1,
+      "cycle": 34
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 608.2,
+      "create_status": 201,
+      "sandbox": "sbx-eb0d6dfe9058408f92f6",
+      "exec_ms": 13.2,
+      "exec_status": 200,
+      "wall_start": 1794621912.9941032,
+      "total_ms": 772.8,
+      "cycle": 35
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 671.7,
+      "create_status": 201,
+      "sandbox": "sbx-1b5eb01db7a34e6bb6a5",
+      "exec_ms": 20.2,
+      "exec_status": 200,
+      "wall_start": 1794621913.7669501,
+      "total_ms": 846.7,
+      "cycle": 35
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 893.0,
+      "create_status": 201,
+      "sandbox": "sbx-b0f748bcd2b24a48864e",
+      "exec_ms": 18.4,
+      "exec_status": 200,
+      "wall_start": 1794621926.134067,
+      "total_ms": 926.2,
+      "cycle": 36
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 407.1,
+      "create_status": 201,
+      "sandbox": "sbx-e33ad5668c1743908ad7",
+      "exec_ms": 6.9,
+      "exec_status": 200,
+      "wall_start": 1794621927.0602596,
+      "total_ms": 766.4,
+      "cycle": 36
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1314.4,
+      "create_status": 201,
+      "sandbox": "sbx-23a383d7ed0a4adf90c7",
+      "exec_ms": 63.1,
+      "exec_status": 200,
+      "wall_start": 1794621939.3301265,
+      "total_ms": 1567.4,
+      "cycle": 37
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 774.8,
+      "create_status": 201,
+      "sandbox": "sbx-4e05f0229c8649d3af9a",
+      "exec_ms": 15.6,
+      "exec_status": 200,
+      "wall_start": 1794621940.8975892,
+      "total_ms": 953.0,
+      "cycle": 37
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 625.0,
+      "create_status": 201,
+      "sandbox": "sbx-1ee5b6f4f65848af8440",
+      "exec_ms": 11.7,
+      "exec_status": 200,
+      "wall_start": 1794621954.1572502,
+      "total_ms": 821.5,
+      "cycle": 38
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 507.2,
+      "create_status": 201,
+      "sandbox": "sbx-a30a17c7b19545f0b035",
+      "exec_ms": 8.1,
+      "exec_status": 200,
+      "wall_start": 1794621954.9787781,
+      "total_ms": 656.4,
+      "cycle": 38
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 796.9,
+      "create_status": 201,
+      "sandbox": "sbx-cf02f89e7f834a1b88dd",
+      "exec_ms": 24.6,
+      "exec_status": 200,
+      "wall_start": 1794621966.44307,
+      "total_ms": 1120.2,
+      "cycle": 39
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1008.9,
+      "create_status": 201,
+      "sandbox": "sbx-06498b23df264155b949",
+      "exec_ms": 39.6,
+      "exec_status": 200,
+      "wall_start": 1794621967.5633235,
+      "total_ms": 1245.0,
+      "cycle": 39
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 966.5,
+      "create_status": 201,
+      "sandbox": "sbx-fb82171d1ad04859b0fc",
+      "exec_ms": 79.0,
+      "exec_status": 200,
+      "wall_start": 1794621982.608942,
+      "total_ms": 1235.2,
+      "cycle": 40
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 825.7,
+      "create_status": 201,
+      "sandbox": "sbx-176f316db7054f03ae2e",
+      "exec_ms": 47.7,
+      "exec_status": 200,
+      "wall_start": 1794621983.844173,
+      "total_ms": 1095.6,
+      "cycle": 40
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 842.0,
+      "create_status": 201,
+      "sandbox": "sbx-9d24af4f39b74604a241",
+      "exec_ms": 39.7,
+      "exec_status": 200,
+      "wall_start": 1794621997.458509,
+      "total_ms": 1174.9,
+      "cycle": 41
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 589.4,
+      "create_status": 201,
+      "sandbox": "sbx-deb8825a783e4850ad98",
+      "exec_ms": 19.4,
+      "exec_status": 200,
+      "wall_start": 1794621998.633484,
+      "total_ms": 610.3,
+      "cycle": 41
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 850.2,
+      "create_status": 201,
+      "sandbox": "sbx-105b9e8f4a5c4cc28e9d",
+      "exec_ms": 59.9,
+      "exec_status": 200,
+      "wall_start": 1794622008.8900504,
+      "total_ms": 1082.3,
+      "cycle": 42
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 528.2,
+      "create_status": 201,
+      "sandbox": "sbx-9c88b4834d5b4045b432",
+      "exec_ms": 31.8,
+      "exec_status": 200,
+      "wall_start": 1794622009.9723582,
+      "total_ms": 687.0,
+      "cycle": 42
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 939.6,
+      "create_status": 201,
+      "sandbox": "sbx-c6d3ce1fe9734f3bad03",
+      "exec_ms": 33.2,
+      "exec_status": 200,
+      "wall_start": 1794622019.0597277,
+      "total_ms": 1208.5,
+      "cycle": 43
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 936.5,
+      "create_status": 201,
+      "sandbox": "sbx-e8c810badb2f4ca785ec",
+      "exec_ms": 32.6,
+      "exec_status": 200,
+      "wall_start": 1794622020.2683005,
+      "total_ms": 1176.0,
+      "cycle": 43
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1443.1,
+      "create_status": 201,
+      "sandbox": "sbx-48efb94678064014b291",
+      "exec_ms": 47.7,
+      "exec_status": 200,
+      "wall_start": 1794622030.5925224,
+      "total_ms": 1708.4,
+      "cycle": 44
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1137.6,
+      "create_status": 201,
+      "sandbox": "sbx-78c1501d967047758fca",
+      "exec_ms": 142.3,
+      "exec_status": 200,
+      "wall_start": 1794622032.3009942,
+      "total_ms": 1492.4,
+      "cycle": 44
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 866.2,
+      "create_status": 201,
+      "sandbox": "sbx-b0a7a81962644fe583da",
+      "exec_ms": 78.2,
+      "exec_status": 200,
+      "wall_start": 1794622042.146513,
+      "total_ms": 1079.5,
+      "cycle": 45
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 624.9,
+      "create_status": 201,
+      "sandbox": "sbx-9cb7fc2d765e4d0f8374",
+      "exec_ms": 40.2,
+      "exec_status": 200,
+      "wall_start": 1794622043.22601,
+      "total_ms": 886.8,
+      "cycle": 45
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1173.0,
+      "create_status": 201,
+      "sandbox": "sbx-f048d4be6e4745cd833f",
+      "exec_ms": 6.9,
+      "exec_status": 200,
+      "wall_start": 1794622052.7257981,
+      "total_ms": 1321.7,
+      "cycle": 46
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 880.7,
+      "create_status": 201,
+      "sandbox": "sbx-f124e327cc4b4e688085",
+      "exec_ms": 31.4,
+      "exec_status": 200,
+      "wall_start": 1794622054.0475004,
+      "total_ms": 1069.9,
+      "cycle": 46
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 840.0,
+      "create_status": 201,
+      "sandbox": "sbx-0c1421d484b04253bd5d",
+      "exec_ms": 17.6,
+      "exec_status": 200,
+      "wall_start": 1794622062.2628555,
+      "total_ms": 1104.3,
+      "cycle": 47
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 742.4,
+      "create_status": 201,
+      "sandbox": "sbx-fcdd86dde72f4c68a3bc",
+      "exec_ms": 32.2,
+      "exec_status": 200,
+      "wall_start": 1794622063.367195,
+      "total_ms": 932.3,
+      "cycle": 47
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1139.6,
+      "create_status": 201,
+      "sandbox": "sbx-15545d6a0ded46cd946e",
+      "exec_ms": 13.6,
+      "exec_status": 200,
+      "wall_start": 1794622073.5416112,
+      "total_ms": 1310.9,
+      "cycle": 48
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 927.8,
+      "create_status": 201,
+      "sandbox": "sbx-db311d94d54742feba49",
+      "exec_ms": 38.9,
+      "exec_status": 200,
+      "wall_start": 1794622074.852518,
+      "total_ms": 1125.2,
+      "cycle": 48
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 906.8,
+      "create_status": 201,
+      "sandbox": "sbx-8081ac9d6c2c45f38b82",
+      "exec_ms": 17.7,
+      "exec_status": 200,
+      "wall_start": 1794622086.6476421,
+      "total_ms": 1622.0,
+      "cycle": 49
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1028.9,
+      "create_status": 201,
+      "sandbox": "sbx-2f02d2a367d34b15a159",
+      "exec_ms": 37.1,
+      "exec_status": 200,
+      "wall_start": 1794622088.2696404,
+      "total_ms": 1214.0,
+      "cycle": 49
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 883.0,
+      "create_status": 201,
+      "sandbox": "sbx-d19a282ad55a4fafa801",
+      "exec_ms": 11.7,
+      "exec_status": 200,
+      "wall_start": 1794622104.0564647,
+      "total_ms": 1062.0,
+      "cycle": 50
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 811.3,
+      "create_status": 201,
+      "sandbox": "sbx-4de2d599bee644a698b7",
+      "exec_ms": 36.7,
+      "exec_status": 200,
+      "wall_start": 1794622105.118446,
+      "total_ms": 972.6,
+      "cycle": 50
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 458.2,
+      "create_status": 201,
+      "sandbox": "sbx-080c553c616c41179967",
+      "exec_ms": 47.5,
+      "exec_status": 200,
+      "wall_start": 1794622114.5540729,
+      "total_ms": 664.7,
+      "cycle": 51
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 682.1,
+      "create_status": 201,
+      "sandbox": "sbx-d0d114909b8344b68260",
+      "exec_ms": 62.9,
+      "exec_status": 200,
+      "wall_start": 1794622115.218799,
+      "total_ms": 911.2,
+      "cycle": 51
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 899.1,
+      "create_status": 201,
+      "sandbox": "sbx-67d06dfdd9f44a999923",
+      "exec_ms": 15.5,
+      "exec_status": 200,
+      "wall_start": 1794622123.7701924,
+      "total_ms": 1062.0,
+      "cycle": 52
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 846.2,
+      "create_status": 201,
+      "sandbox": "sbx-065563305f634529acaf",
+      "exec_ms": 14.2,
+      "exec_status": 200,
+      "wall_start": 1794622124.8322713,
+      "total_ms": 1011.2,
+      "cycle": 52
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 592.4,
+      "create_status": 201,
+      "sandbox": "sbx-b85316d90d57441599f7",
+      "exec_ms": 25.6,
+      "exec_status": 200,
+      "wall_start": 1794622131.466065,
+      "total_ms": 769.4,
+      "cycle": 53
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 662.3,
+      "create_status": 201,
+      "sandbox": "sbx-077e59c7c5604f15b939",
+      "exec_ms": 36.4,
+      "exec_status": 200,
+      "wall_start": 1794622132.235458,
+      "total_ms": 836.2,
+      "cycle": 53
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 618.1,
+      "create_status": 201,
+      "sandbox": "sbx-a97208503e8546c4a1c8",
+      "exec_ms": 15.8,
+      "exec_status": 200,
+      "wall_start": 1794622141.2459147,
+      "total_ms": 792.2,
+      "cycle": 54
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1196.6,
+      "create_status": 201,
+      "sandbox": "sbx-ddaccd683b114ab1be27",
+      "exec_ms": 91.5,
+      "exec_status": 200,
+      "wall_start": 1794622142.038122,
+      "total_ms": 1462.1,
+      "cycle": 54
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1290.3,
+      "create_status": 201,
+      "sandbox": "sbx-2d447c84587e4bbdbf8c",
+      "exec_ms": 15.9,
+      "exec_status": 200,
+      "wall_start": 1794622152.0959806,
+      "total_ms": 1502.9,
+      "cycle": 55
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1482.4,
+      "create_status": 201,
+      "sandbox": "sbx-500368c9a3e3411ab195",
+      "exec_ms": 175.4,
+      "exec_status": 200,
+      "wall_start": 1794622153.5988715,
+      "total_ms": 1909.4,
+      "cycle": 55
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 888.6,
+      "create_status": 201,
+      "sandbox": "sbx-93521d2fa6cf402285f2",
+      "exec_ms": 32.2,
+      "exec_status": 200,
+      "wall_start": 1794622166.906103,
+      "total_ms": 1199.1,
+      "cycle": 56
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 733.3,
+      "create_status": 201,
+      "sandbox": "sbx-1f24108fa6e2442d8a78",
+      "exec_ms": 44.9,
+      "exec_status": 200,
+      "wall_start": 1794622168.1052437,
+      "total_ms": 949.8,
+      "cycle": 56
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 609.7,
+      "create_status": 201,
+      "sandbox": "sbx-660036b3e4b149bab4ea",
+      "exec_ms": 32.6,
+      "exec_status": 200,
+      "wall_start": 1794622176.9566548,
+      "total_ms": 816.9,
+      "cycle": 57
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 720.7,
+      "create_status": 201,
+      "sandbox": "sbx-09db4747c04240c99e21",
+      "exec_ms": 30.9,
+      "exec_status": 200,
+      "wall_start": 1794622177.773577,
+      "total_ms": 1023.1,
+      "cycle": 57
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1354.9,
+      "create_status": 201,
+      "sandbox": "sbx-e4550b85ee5744eeae26",
+      "exec_ms": 39.6,
+      "exec_status": 200,
+      "wall_start": 1794622186.9479501,
+      "total_ms": 1607.3,
+      "cycle": 58
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 859.3,
+      "create_status": 201,
+      "sandbox": "sbx-1aae2876aad34b5bb7d9",
+      "exec_ms": 31.6,
+      "exec_status": 200,
+      "wall_start": 1794622188.555322,
+      "total_ms": 1110.7,
+      "cycle": 58
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1154.8,
+      "create_status": 201,
+      "sandbox": "sbx-86942d4ea2eb4a22b7e9",
+      "exec_ms": 16.9,
+      "exec_status": 200,
+      "wall_start": 1794622195.973389,
+      "total_ms": 1424.9,
+      "cycle": 59
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 725.0,
+      "create_status": 201,
+      "sandbox": "sbx-dbb051d14de94736b774",
+      "exec_ms": 31.7,
+      "exec_status": 200,
+      "wall_start": 1794622197.3983617,
+      "total_ms": 951.3,
+      "cycle": 59
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 687.6,
+      "create_status": 201,
+      "sandbox": "sbx-34110fef2f0148128d34",
+      "exec_ms": 2.9,
+      "exec_status": 200,
+      "wall_start": 1794622206.5509527,
+      "total_ms": 918.3,
+      "cycle": 60
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 940.2,
+      "create_status": 201,
+      "sandbox": "sbx-b257309fbebd43df801f",
+      "exec_ms": 3.4,
+      "exec_status": 200,
+      "wall_start": 1794622207.469287,
+      "total_ms": 1202.8,
+      "cycle": 60
+    },
+    {
+      "i": 0,
+      "ok": false,
+      "create_ms": 31136.4,
+      "create_status": 503,
+      "error": "{\"code\": 503, \"message\": \"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (0 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 9 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x0 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x0 INIT=0 AUTO_EOI=0 ELCR=0x0; IOAPIC BASE=0xfec00000 SELECT=0x18 ID=0x0 IRR=0x0 GSI0 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI1 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI2 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI3 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI4 RAW=0x100000000000821 VECTOR=0x21 MASKED=0 LEVEL=0 REMOTE_IRR=0 DEST=0x1, GSI5 RAW=0x100000000000820 VECTOR=0x20 MASKED=0 LEVEL=0 REMOTE_IRR=0 DEST=0x1, GSI6 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI7 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI8 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI9 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI10 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI11 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI12 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI13 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI14 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI15 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI16 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI17 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI18 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI19 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI20 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI21 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI22 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI23 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=6987557946277, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=6987557946367; vCPU 0 owner sample: RIP=0xffffffff8206d3df RFLAGS=0x212 CR3=0x5194000 run_state=Halted RSP=0xffffffff82c03e88 APIC_BASE=0xfee00900 CR8=0x1 TSC=0x23be94483c TSC_DEADLINE=0x23fad300b0; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=13 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "wall_start": 1794622222.190069,
+      "total_ms": 31136.4,
+      "cycle": 61
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 951.7,
+      "create_status": 201,
+      "sandbox": "sbx-a1a321f75afe407385c1",
+      "exec_ms": 16.8,
+      "exec_status": 200,
+      "wall_start": 1794622253.3265712,
+      "total_ms": 1100.2,
+      "cycle": 61
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 523.7,
+      "create_status": 201,
+      "sandbox": "sbx-f6e868432d8441f4bbfe",
+      "exec_ms": 39.9,
+      "exec_status": 200,
+      "wall_start": 1794622264.4339345,
+      "total_ms": 664.6,
+      "cycle": 62
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 585.4,
+      "create_status": 201,
+      "sandbox": "sbx-444344eed3784392bb16",
+      "exec_ms": 39.3,
+      "exec_status": 200,
+      "wall_start": 1794622265.0985484,
+      "total_ms": 791.4,
+      "cycle": 62
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 871.9,
+      "create_status": 201,
+      "sandbox": "sbx-9269060eb4ab40c7adef",
+      "exec_ms": 47.2,
+      "exec_status": 200,
+      "wall_start": 1794622274.2585092,
+      "total_ms": 1052.6,
+      "cycle": 63
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 719.7,
+      "create_status": 201,
+      "sandbox": "sbx-240c1c7d78494bef9cca",
+      "exec_ms": 18.1,
+      "exec_status": 200,
+      "wall_start": 1794622275.311134,
+      "total_ms": 923.5,
+      "cycle": 63
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 506.0,
+      "create_status": 201,
+      "sandbox": "sbx-92498b76052a4f898b0a",
+      "exec_ms": 5.1,
+      "exec_status": 200,
+      "wall_start": 1794622287.2510562,
+      "total_ms": 704.6,
+      "cycle": 64
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 724.0,
+      "create_status": 201,
+      "sandbox": "sbx-0bbdcd07d132467f9dc9",
+      "exec_ms": 20.5,
+      "exec_status": 200,
+      "wall_start": 1794622287.9557238,
+      "total_ms": 966.9,
+      "cycle": 64
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 334.5,
+      "create_status": 201,
+      "sandbox": "sbx-0166529078424c12ac96",
+      "exec_ms": 14.8,
+      "exec_status": 200,
+      "wall_start": 1794622293.9001722,
+      "total_ms": 641.0,
+      "cycle": 65
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1568.1,
+      "create_status": 201,
+      "sandbox": "sbx-d7e40b22980641278469",
+      "exec_ms": 18.0,
+      "exec_status": 200,
+      "wall_start": 1794622294.5412002,
+      "total_ms": 1745.5,
+      "cycle": 65
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 869.7,
+      "create_status": 201,
+      "sandbox": "sbx-a2bc91b299b845ad8f75",
+      "exec_ms": 44.3,
+      "exec_status": 200,
+      "wall_start": 1794622303.1685991,
+      "total_ms": 1062.2,
+      "cycle": 66
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 567.6,
+      "create_status": 201,
+      "sandbox": "sbx-6d2bb14803fa49698467",
+      "exec_ms": 7.8,
+      "exec_status": 200,
+      "wall_start": 1794622304.2308152,
+      "total_ms": 795.8,
+      "cycle": 66
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 913.2,
+      "create_status": 201,
+      "sandbox": "sbx-a45e5680a38b46e7ad5f",
+      "exec_ms": 15.8,
+      "exec_status": 200,
+      "wall_start": 1794622312.9019213,
+      "total_ms": 1088.5,
+      "cycle": 67
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 484.4,
+      "create_status": 201,
+      "sandbox": "sbx-415c0c8337e04c8294b0",
+      "exec_ms": 7.9,
+      "exec_status": 200,
+      "wall_start": 1794622313.9904034,
+      "total_ms": 493.7,
+      "cycle": 67
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 401.4,
+      "create_status": 201,
+      "sandbox": "sbx-394115f696814d9ab10b",
+      "exec_ms": 12.0,
+      "exec_status": 200,
+      "wall_start": 1794622320.52608,
+      "total_ms": 609.1,
+      "cycle": 68
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1112.2,
+      "create_status": 201,
+      "sandbox": "sbx-18c3ccae556c4f39a117",
+      "exec_ms": 37.0,
+      "exec_status": 200,
+      "wall_start": 1794622321.135191,
+      "total_ms": 1316.2,
+      "cycle": 68
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 705.4,
+      "create_status": 201,
+      "sandbox": "sbx-c2a1af16560d48088432",
+      "exec_ms": 40.5,
+      "exec_status": 200,
+      "wall_start": 1794622332.4526143,
+      "total_ms": 1021.4,
+      "cycle": 69
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 663.1,
+      "create_status": 201,
+      "sandbox": "sbx-1ac5061183554011a5b4",
+      "exec_ms": 32.0,
+      "exec_status": 200,
+      "wall_start": 1794622333.4739952,
+      "total_ms": 828.9,
+      "cycle": 69
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 973.2,
+      "create_status": 201,
+      "sandbox": "sbx-46caf2c53f894144baa7",
+      "exec_ms": 20.5,
+      "exec_status": 200,
+      "wall_start": 1794622343.0300364,
+      "total_ms": 1231.9,
+      "cycle": 70
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 965.9,
+      "create_status": 201,
+      "sandbox": "sbx-c747fa06e4b44656a75f",
+      "exec_ms": 105.7,
+      "exec_status": 200,
+      "wall_start": 1794622344.261999,
+      "total_ms": 1346.7,
+      "cycle": 70
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 733.6,
+      "create_status": 201,
+      "sandbox": "sbx-c3f3657678964bdf9d59",
+      "exec_ms": 8.9,
+      "exec_status": 200,
+      "wall_start": 1794622356.5572426,
+      "total_ms": 743.7,
+      "cycle": 71
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 870.6,
+      "create_status": 201,
+      "sandbox": "sbx-8348984291544606bb07",
+      "exec_ms": 68.8,
+      "exec_status": 200,
+      "wall_start": 1794622357.3009243,
+      "total_ms": 1198.2,
+      "cycle": 71
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 983.9,
+      "create_status": 201,
+      "sandbox": "sbx-a35bf13cd0f3469cb458",
+      "exec_ms": 47.8,
+      "exec_status": 200,
+      "wall_start": 1794622365.2134566,
+      "total_ms": 1283.1,
+      "cycle": 72
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 761.5,
+      "create_status": 201,
+      "sandbox": "sbx-d4fb4c03f89a4de79d69",
+      "exec_ms": 18.5,
+      "exec_status": 200,
+      "wall_start": 1794622366.496717,
+      "total_ms": 787.5,
+      "cycle": 72
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1092.0,
+      "create_status": 201,
+      "sandbox": "sbx-b5b1570ac7314376afb9",
+      "exec_ms": 79.2,
+      "exec_status": 200,
+      "wall_start": 1794622377.3660676,
+      "total_ms": 1393.2,
+      "cycle": 73
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 787.7,
+      "create_status": 201,
+      "sandbox": "sbx-9faa5b6af77740729453",
+      "exec_ms": 60.6,
+      "exec_status": 200,
+      "wall_start": 1794622378.7593474,
+      "total_ms": 853.1,
+      "cycle": 73
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1014.1,
+      "create_status": 201,
+      "sandbox": "sbx-648a7b87c31544748a48",
+      "exec_ms": 42.9,
+      "exec_status": 200,
+      "wall_start": 1794622387.1013083,
+      "total_ms": 1261.6,
+      "cycle": 74
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1003.0,
+      "create_status": 201,
+      "sandbox": "sbx-95ad58e650994589a596",
+      "exec_ms": 44.9,
+      "exec_status": 200,
+      "wall_start": 1794622388.3629582,
+      "total_ms": 1265.7,
+      "cycle": 74
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1046.5,
+      "create_status": 201,
+      "sandbox": "sbx-c950049757b440539796",
+      "exec_ms": 47.5,
+      "exec_status": 200,
+      "wall_start": 1794622396.3691382,
+      "total_ms": 1283.5,
+      "cycle": 75
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 805.6,
+      "create_status": 201,
+      "sandbox": "sbx-5f188f589b924423b609",
+      "exec_ms": 31.4,
+      "exec_status": 200,
+      "wall_start": 1794622397.652614,
+      "total_ms": 994.7,
+      "cycle": 75
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 679.6,
+      "create_status": 201,
+      "sandbox": "sbx-30ca2d6b42af464097e0",
+      "exec_ms": 33.0,
+      "exec_status": 200,
+      "wall_start": 1794622406.4372866,
+      "total_ms": 869.4,
+      "cycle": 76
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 711.6,
+      "create_status": 201,
+      "sandbox": "sbx-7279ab3260184760a902",
+      "exec_ms": 30.3,
+      "exec_status": 200,
+      "wall_start": 1794622407.3067527,
+      "total_ms": 859.9,
+      "cycle": 76
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 812.8,
+      "create_status": 201,
+      "sandbox": "sbx-f3e5881e14574542a3cf",
+      "exec_ms": 46.3,
+      "exec_status": 200,
+      "wall_start": 1794622420.1661632,
+      "total_ms": 1022.9,
+      "cycle": 77
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 837.2,
+      "create_status": 201,
+      "sandbox": "sbx-be0112564df544da8881",
+      "exec_ms": 11.9,
+      "exec_status": 200,
+      "wall_start": 1794622421.189116,
+      "total_ms": 1006.1,
+      "cycle": 77
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 441.9,
+      "create_status": 201,
+      "sandbox": "sbx-95b75f61199f40e995ab",
+      "exec_ms": 32.2,
+      "exec_status": 200,
+      "wall_start": 1794622431.562703,
+      "total_ms": 656.2,
+      "cycle": 78
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1015.1,
+      "create_status": 201,
+      "sandbox": "sbx-dc47552b0cd74b1498d3",
+      "exec_ms": 5.3,
+      "exec_status": 200,
+      "wall_start": 1794622432.218954,
+      "total_ms": 1222.7,
+      "cycle": 78
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 671.6,
+      "create_status": 201,
+      "sandbox": "sbx-eb4db58770f9434ea75f",
+      "exec_ms": 30.6,
+      "exec_status": 200,
+      "wall_start": 1794622443.2631626,
+      "total_ms": 703.6,
+      "cycle": 79
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1087.9,
+      "create_status": 201,
+      "sandbox": "sbx-a26a224ef82f4fb2bcbc",
+      "exec_ms": 15.4,
+      "exec_status": 200,
+      "wall_start": 1794622443.9667826,
+      "total_ms": 1247.7,
+      "cycle": 79
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 784.6,
+      "create_status": 201,
+      "sandbox": "sbx-b5fa4a6f2b594285ac0b",
+      "exec_ms": 30.4,
+      "exec_status": 200,
+      "wall_start": 1794622453.7594645,
+      "total_ms": 959.7,
+      "cycle": 80
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1695.3,
+      "create_status": 201,
+      "sandbox": "sbx-4b63ce0fbd8942cdaaa9",
+      "exec_ms": 28.6,
+      "exec_status": 200,
+      "wall_start": 1794622454.7192361,
+      "total_ms": 1962.9,
+      "cycle": 80
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 986.6,
+      "create_status": 201,
+      "sandbox": "sbx-94405fc0ecf64eaa8f21",
+      "exec_ms": 47.9,
+      "exec_status": 200,
+      "wall_start": 1794622462.936143,
+      "total_ms": 1182.8,
+      "cycle": 81
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1073.2,
+      "create_status": 201,
+      "sandbox": "sbx-0c4fee0f6ded442f82b9",
+      "exec_ms": 19.2,
+      "exec_status": 200,
+      "wall_start": 1794622464.1189713,
+      "total_ms": 1284.3,
+      "cycle": 81
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 660.5,
+      "create_status": 201,
+      "sandbox": "sbx-3f552926be3e4ff8903b",
+      "exec_ms": 31.7,
+      "exec_status": 200,
+      "wall_start": 1794622472.8310585,
+      "total_ms": 853.6,
+      "cycle": 82
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 869.5,
+      "create_status": 201,
+      "sandbox": "sbx-6a7d2f27264f44bea5c0",
+      "exec_ms": 21.6,
+      "exec_status": 200,
+      "wall_start": 1794622473.684733,
+      "total_ms": 1138.3,
+      "cycle": 82
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 951.9,
+      "create_status": 201,
+      "sandbox": "sbx-b2f70b5e0d1d45b9a832",
+      "exec_ms": 58.9,
+      "exec_status": 200,
+      "wall_start": 1794622485.4581816,
+      "total_ms": 1230.7,
+      "cycle": 83
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 967.2,
+      "create_status": 201,
+      "sandbox": "sbx-95f1e8ae35d3489fa378",
+      "exec_ms": 52.5,
+      "exec_status": 200,
+      "wall_start": 1794622486.6889348,
+      "total_ms": 1082.1,
+      "cycle": 83
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 660.4,
+      "create_status": 201,
+      "sandbox": "sbx-eb6ad50b4947409d8ece",
+      "exec_ms": 7.8,
+      "exec_status": 200,
+      "wall_start": 1794622497.7281723,
+      "total_ms": 669.1,
+      "cycle": 84
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 877.0,
+      "create_status": 201,
+      "sandbox": "sbx-c8abdb214cff4e219a3e",
+      "exec_ms": 23.8,
+      "exec_status": 200,
+      "wall_start": 1794622498.397315,
+      "total_ms": 1116.4,
+      "cycle": 84
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 778.9,
+      "create_status": 201,
+      "sandbox": "sbx-2950854ee9b843bcbe6a",
+      "exec_ms": 38.2,
+      "exec_status": 200,
+      "wall_start": 1794622505.2114613,
+      "total_ms": 979.3,
+      "cycle": 85
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 520.3,
+      "create_status": 201,
+      "sandbox": "sbx-28ba2df8761c428babd8",
+      "exec_ms": 23.1,
+      "exec_status": 200,
+      "wall_start": 1794622506.1907659,
+      "total_ms": 716.0,
+      "cycle": 85
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 491.8,
+      "create_status": 201,
+      "sandbox": "sbx-2b6e5c78d9fb4d2c8316",
+      "exec_ms": 10.3,
+      "exec_status": 200,
+      "wall_start": 1794622513.0860991,
+      "total_ms": 652.6,
+      "cycle": 86
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 535.6,
+      "create_status": 201,
+      "sandbox": "sbx-601c451da73249819bbe",
+      "exec_ms": 29.9,
+      "exec_status": 200,
+      "wall_start": 1794622513.7387166,
+      "total_ms": 726.4,
+      "cycle": 86
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 838.6,
+      "create_status": 201,
+      "sandbox": "sbx-7b6ef47fde0342fc97bd",
+      "exec_ms": 45.1,
+      "exec_status": 200,
+      "wall_start": 1794622519.04209,
+      "total_ms": 1076.2,
+      "cycle": 87
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 582.2,
+      "create_status": 201,
+      "sandbox": "sbx-a2e1fb956ac045868062",
+      "exec_ms": 47.6,
+      "exec_status": 200,
+      "wall_start": 1794622520.1183167,
+      "total_ms": 772.4,
+      "cycle": 87
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 768.1,
+      "create_status": 201,
+      "sandbox": "sbx-f3fd84b3afbd403db5c7",
+      "exec_ms": 33.9,
+      "exec_status": 200,
+      "wall_start": 1794622525.7063093,
+      "total_ms": 953.0,
+      "cycle": 88
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 719.0,
+      "create_status": 201,
+      "sandbox": "sbx-11a9d1b97a014ce09b52",
+      "exec_ms": 10.7,
+      "exec_status": 200,
+      "wall_start": 1794622526.6593742,
+      "total_ms": 877.4,
+      "cycle": 88
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 605.9,
+      "create_status": 201,
+      "sandbox": "sbx-78f91fb3a88142238dc5",
+      "exec_ms": 6.0,
+      "exec_status": 200,
+      "wall_start": 1794622534.420341,
+      "total_ms": 808.0,
+      "cycle": 89
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 668.7,
+      "create_status": 201,
+      "sandbox": "sbx-f6d55d7aac2e49b3a886",
+      "exec_ms": 12.9,
+      "exec_status": 200,
+      "wall_start": 1794622535.2284226,
+      "total_ms": 791.3,
+      "cycle": 89
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 571.2,
+      "create_status": 201,
+      "sandbox": "sbx-81562abd6c0d4e4a991c",
+      "exec_ms": 12.5,
+      "exec_status": 200,
+      "wall_start": 1794622540.623716,
+      "total_ms": 731.1,
+      "cycle": 90
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 871.9,
+      "create_status": 201,
+      "sandbox": "sbx-28a1acad406548e69f93",
+      "exec_ms": 16.3,
+      "exec_status": 200,
+      "wall_start": 1794622541.354885,
+      "total_ms": 1031.8,
+      "cycle": 90
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 702.3,
+      "create_status": 201,
+      "sandbox": "sbx-25233483116b426089b0",
+      "exec_ms": 46.7,
+      "exec_status": 200,
+      "wall_start": 1794622547.146013,
+      "total_ms": 938.5,
+      "cycle": 91
+    },
+    {
+      "i": 1,
+      "ok": false,
+      "create_ms": 31066.4,
+      "create_status": 503,
+      "error": "{\"code\": 503, \"message\": \"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (0 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 7 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x32 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x0 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x0 INIT=0 AUTO_EOI=0 ELCR=0x0; IOAPIC BASE=0xfec00000 SELECT=0x18 ID=0x0 IRR=0x0 GSI0 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI1 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI2 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI3 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI4 RAW=0x100000000000821 VECTOR=0x21 MASKED=0 LEVEL=0 REMOTE_IRR=0 DEST=0x1, GSI5 RAW=0x100000000000820 VECTOR=0x20 MASKED=0 LEVEL=0 REMOTE_IRR=0 DEST=0x1, GSI6 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI7 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI8 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI9 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI10 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI11 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI12 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI13 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI14 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI15 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI16 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI17 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI18 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI19 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI20 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI21 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI22 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI23 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=7313432717349, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=7313432717439; vCPU 0 owner sample: RIP=0xffffffff8206d3df RFLAGS=0x216 CR3=0x5192000 run_state=Halted RSP=0xffffffff82c03e88 APIC_BASE=0xfee00900 CR8=0x1 TSC=0x20e092b114 TSC_DEADLINE=0x210aa8865c; LAPIC TPR=0x10 PPR=0x10 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xec SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=13 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "wall_start": 1794622548.084539,
+      "total_ms": 31066.5,
+      "cycle": 91
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 520.6,
+      "create_status": 201,
+      "sandbox": "sbx-27bee2d106654a01a542",
+      "exec_ms": 14.0,
+      "exec_status": 200,
+      "wall_start": 1794622587.0380945,
+      "total_ms": 661.6,
+      "cycle": 92
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 663.0,
+      "create_status": 201,
+      "sandbox": "sbx-ab11015ca9ca454682ed",
+      "exec_ms": 17.2,
+      "exec_status": 200,
+      "wall_start": 1794622587.69967,
+      "total_ms": 899.6,
+      "cycle": 92
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 497.5,
+      "create_status": 201,
+      "sandbox": "sbx-8819233c08c94f8c8336",
+      "exec_ms": 10.7,
+      "exec_status": 200,
+      "wall_start": 1794622592.824553,
+      "total_ms": 619.1,
+      "cycle": 93
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 590.5,
+      "create_status": 201,
+      "sandbox": "sbx-107f93f154d94c2da5dd",
+      "exec_ms": 36.8,
+      "exec_status": 200,
+      "wall_start": 1794622593.4437072,
+      "total_ms": 783.4,
+      "cycle": 93
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 776.4,
+      "create_status": 201,
+      "sandbox": "sbx-b024506955d74d0ea03c",
+      "exec_ms": 35.4,
+      "exec_status": 200,
+      "wall_start": 1794622599.1935241,
+      "total_ms": 949.8,
+      "cycle": 94
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 470.9,
+      "create_status": 201,
+      "sandbox": "sbx-8320b1cf1b8f455ea8df",
+      "exec_ms": 31.8,
+      "exec_status": 200,
+      "wall_start": 1794622600.143346,
+      "total_ms": 743.3,
+      "cycle": 94
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 727.9,
+      "create_status": 201,
+      "sandbox": "sbx-c420e378c9974fd59d8f",
+      "exec_ms": 51.9,
+      "exec_status": 200,
+      "wall_start": 1794622607.5588508,
+      "total_ms": 906.3,
+      "cycle": 95
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 819.6,
+      "create_status": 201,
+      "sandbox": "sbx-c653db92c6a34e94ac8e",
+      "exec_ms": 44.1,
+      "exec_status": 200,
+      "wall_start": 1794622608.465233,
+      "total_ms": 1030.4,
+      "cycle": 95
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 880.4,
+      "create_status": 201,
+      "sandbox": "sbx-65361bb940a24a5e8317",
+      "exec_ms": 2.8,
+      "exec_status": 200,
+      "wall_start": 1794622615.88228,
+      "total_ms": 1060.3,
+      "cycle": 96
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 472.9,
+      "create_status": 201,
+      "sandbox": "sbx-5fb3ab0502f84b9496b9",
+      "exec_ms": 16.8,
+      "exec_status": 200,
+      "wall_start": 1794622616.9426332,
+      "total_ms": 628.1,
+      "cycle": 96
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 687.1,
+      "create_status": 201,
+      "sandbox": "sbx-d482e5d7c9164d3fbf30",
+      "exec_ms": 31.1,
+      "exec_status": 200,
+      "wall_start": 1794622627.9181445,
+      "total_ms": 860.9,
+      "cycle": 97
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 928.3,
+      "create_status": 201,
+      "sandbox": "sbx-d7a1837c837542d78c64",
+      "exec_ms": 31.7,
+      "exec_status": 200,
+      "wall_start": 1794622628.779041,
+      "total_ms": 1152.2,
+      "cycle": 97
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 526.1,
+      "create_status": 201,
+      "sandbox": "sbx-a45bb36fe14d455f9edf",
+      "exec_ms": 30.0,
+      "exec_status": 200,
+      "wall_start": 1794622642.0380976,
+      "total_ms": 700.5,
+      "cycle": 98
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 724.5,
+      "create_status": 201,
+      "sandbox": "sbx-6382532bdc2b480796aa",
+      "exec_ms": 52.5,
+      "exec_status": 200,
+      "wall_start": 1794622642.7386053,
+      "total_ms": 903.4,
+      "cycle": 98
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 578.1,
+      "create_status": 201,
+      "sandbox": "sbx-96e07ce4df764ee9b556",
+      "exec_ms": 7.7,
+      "exec_status": 200,
+      "wall_start": 1794622648.8820114,
+      "total_ms": 736.8,
+      "cycle": 99
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 499.1,
+      "create_status": 201,
+      "sandbox": "sbx-e3acabdaa09a41119995",
+      "exec_ms": 20.8,
+      "exec_status": 200,
+      "wall_start": 1794622649.618885,
+      "total_ms": 715.5,
+      "cycle": 99
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 552.7,
+      "create_status": 201,
+      "sandbox": "sbx-37c36aa62444430093cd",
+      "exec_ms": 35.3,
+      "exec_status": 200,
+      "wall_start": 1794622655.8943222,
+      "total_ms": 734.5,
+      "cycle": 100
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 912.5,
+      "create_status": 201,
+      "sandbox": "sbx-e6025a97655a40bb8ed5",
+      "exec_ms": 20.7,
+      "exec_status": 200,
+      "wall_start": 1794622656.6292243,
+      "total_ms": 1120.6,
+      "cycle": 100
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 698.9,
+      "create_status": 201,
+      "sandbox": "sbx-13f72d7e91224336a755",
+      "exec_ms": 32.0,
+      "exec_status": 200,
+      "wall_start": 1794622665.9309561,
+      "total_ms": 877.7,
+      "cycle": 101
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 838.7,
+      "create_status": 201,
+      "sandbox": "sbx-22cb98875f864d7ea21a",
+      "exec_ms": 64.0,
+      "exec_status": 200,
+      "wall_start": 1794622666.8086538,
+      "total_ms": 1086.0,
+      "cycle": 101
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 765.8,
+      "create_status": 201,
+      "sandbox": "sbx-5d4e8cd942d24a929044",
+      "exec_ms": 16.7,
+      "exec_status": 200,
+      "wall_start": 1794622675.911859,
+      "total_ms": 1200.6,
+      "cycle": 102
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 900.4,
+      "create_status": 201,
+      "sandbox": "sbx-47a81ff39b2e4de9924d",
+      "exec_ms": 63.5,
+      "exec_status": 200,
+      "wall_start": 1794622677.1124485,
+      "total_ms": 1121.8,
+      "cycle": 102
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1090.4,
+      "create_status": 201,
+      "sandbox": "sbx-11d44b4417354fd09844",
+      "exec_ms": 7.0,
+      "exec_status": 200,
+      "wall_start": 1794622685.3060308,
+      "total_ms": 1314.1,
+      "cycle": 103
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 733.9,
+      "create_status": 201,
+      "sandbox": "sbx-60083c123e5b4de19690",
+      "exec_ms": 32.2,
+      "exec_status": 200,
+      "wall_start": 1794622686.6201603,
+      "total_ms": 951.9,
+      "cycle": 103
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 661.2,
+      "create_status": 201,
+      "sandbox": "sbx-6ec3fe2946d04ff7a1ba",
+      "exec_ms": 22.4,
+      "exec_status": 200,
+      "wall_start": 1794622693.1790364,
+      "total_ms": 847.3,
+      "cycle": 104
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 646.0,
+      "create_status": 201,
+      "sandbox": "sbx-5535bfeb05df4676a97e",
+      "exec_ms": 15.8,
+      "exec_status": 200,
+      "wall_start": 1794622694.0263999,
+      "total_ms": 836.3,
+      "cycle": 104
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 558.4,
+      "create_status": 201,
+      "sandbox": "sbx-e8cb44c5ff7a4408ac15",
+      "exec_ms": 47.5,
+      "exec_status": 200,
+      "wall_start": 1794622701.5924616,
+      "total_ms": 766.2,
+      "cycle": 105
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 505.3,
+      "create_status": 201,
+      "sandbox": "sbx-d1f4ee56da444489b9f5",
+      "exec_ms": 40.7,
+      "exec_status": 200,
+      "wall_start": 1794622702.3587298,
+      "total_ms": 708.2,
+      "cycle": 105
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 1296.9,
+      "create_status": 201,
+      "sandbox": "sbx-10129928ea1242219e87",
+      "exec_ms": 49.2,
+      "exec_status": 200,
+      "wall_start": 1794622712.4580355,
+      "total_ms": 1572.8,
+      "cycle": 106
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1055.2,
+      "create_status": 201,
+      "sandbox": "sbx-a10c0ba4990740efb6d8",
+      "exec_ms": 96.0,
+      "exec_status": 200,
+      "wall_start": 1794622714.0309422,
+      "total_ms": 1291.8,
+      "cycle": 106
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 605.6,
+      "create_status": 201,
+      "sandbox": "sbx-e4b4d468b95d4d9fbae0",
+      "exec_ms": 13.9,
+      "exec_status": 200,
+      "wall_start": 1794622723.051898,
+      "total_ms": 791.9,
+      "cycle": 107
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 793.2,
+      "create_status": 201,
+      "sandbox": "sbx-89c1acd11a5448b98f89",
+      "exec_ms": 42.4,
+      "exec_status": 200,
+      "wall_start": 1794622723.8438997,
+      "total_ms": 945.1,
+      "cycle": 107
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 594.7,
+      "create_status": 201,
+      "sandbox": "sbx-9d5ec190480f44c6bf14",
+      "exec_ms": 39.9,
+      "exec_status": 200,
+      "wall_start": 1794622730.9942455,
+      "total_ms": 800.7,
+      "cycle": 108
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 913.3,
+      "create_status": 201,
+      "sandbox": "sbx-f1bf4f7ccbe4419e8f80",
+      "exec_ms": 45.4,
+      "exec_status": 200,
+      "wall_start": 1794622731.7949855,
+      "total_ms": 1156.7,
+      "cycle": 108
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 917.9,
+      "create_status": 201,
+      "sandbox": "sbx-4fa3de838fa74ce9ac43",
+      "exec_ms": 19.3,
+      "exec_status": 200,
+      "wall_start": 1794622744.437261,
+      "total_ms": 1124.9,
+      "cycle": 109
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 471.8,
+      "create_status": 201,
+      "sandbox": "sbx-a50689d4927242299b46",
+      "exec_ms": 21.6,
+      "exec_status": 200,
+      "wall_start": 1794622745.5622017,
+      "total_ms": 615.4,
+      "cycle": 109
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 834.9,
+      "create_status": 201,
+      "sandbox": "sbx-423acdb0e7264348bf03",
+      "exec_ms": 32.2,
+      "exec_status": 200,
+      "wall_start": 1794622752.1140282,
+      "total_ms": 1056.5,
+      "cycle": 110
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 840.1,
+      "create_status": 201,
+      "sandbox": "sbx-597dd93b14e14fc1bb4d",
+      "exec_ms": 15.6,
+      "exec_status": 200,
+      "wall_start": 1794622753.1705825,
+      "total_ms": 1016.3,
+      "cycle": 110
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 532.5,
+      "create_status": 201,
+      "sandbox": "sbx-42a6cea4b31b46518a35",
+      "exec_ms": 11.7,
+      "exec_status": 200,
+      "wall_start": 1794622759.4940841,
+      "total_ms": 672.7,
+      "cycle": 111
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 563.0,
+      "create_status": 201,
+      "sandbox": "sbx-4da84f0bc8804bb49753",
+      "exec_ms": 29.9,
+      "exec_status": 200,
+      "wall_start": 1794622760.166854,
+      "total_ms": 702.6,
+      "cycle": 111
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 796.3,
+      "create_status": 201,
+      "sandbox": "sbx-121a2663ec594aab8ba3",
+      "exec_ms": 31.2,
+      "exec_status": 200,
+      "wall_start": 1794622767.408098,
+      "total_ms": 1030.2,
+      "cycle": 112
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 807.8,
+      "create_status": 201,
+      "sandbox": "sbx-33a57f962c814d809503",
+      "exec_ms": 20.0,
+      "exec_status": 200,
+      "wall_start": 1794622768.438373,
+      "total_ms": 1044.2,
+      "cycle": 112
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 482.7,
+      "create_status": 201,
+      "sandbox": "sbx-16188e0dbab34238aa0a",
+      "exec_ms": 14.3,
+      "exec_status": 200,
+      "wall_start": 1794622779.8379161,
+      "total_ms": 644.9,
+      "cycle": 113
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 599.5,
+      "create_status": 201,
+      "sandbox": "sbx-fa9ecde0b3f9406a8554",
+      "exec_ms": 11.8,
+      "exec_status": 200,
+      "wall_start": 1794622780.4828272,
+      "total_ms": 771.6,
+      "cycle": 113
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 660.7,
+      "create_status": 201,
+      "sandbox": "sbx-594ecf83d80648078c99",
+      "exec_ms": 16.6,
+      "exec_status": 200,
+      "wall_start": 1794622787.634113,
+      "total_ms": 882.2,
+      "cycle": 114
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 798.3,
+      "create_status": 201,
+      "sandbox": "sbx-e9b63056ee494ac5a61e",
+      "exec_ms": 44.5,
+      "exec_status": 200,
+      "wall_start": 1794622788.516305,
+      "total_ms": 1094.8,
+      "cycle": 114
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 820.5,
+      "create_status": 201,
+      "sandbox": "sbx-77df0cdc2af448c1a353",
+      "exec_ms": 30.3,
+      "exec_status": 200,
+      "wall_start": 1794622794.0020964,
+      "total_ms": 1042.0,
+      "cycle": 115
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 1082.9,
+      "create_status": 201,
+      "sandbox": "sbx-b718f373af9248c3be7c",
+      "exec_ms": 5.7,
+      "exec_status": 200,
+      "wall_start": 1794622795.044117,
+      "total_ms": 1327.7,
+      "cycle": 115
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 687.4,
+      "create_status": 201,
+      "sandbox": "sbx-094326686a474b9ca4e1",
+      "exec_ms": 14.2,
+      "exec_status": 200,
+      "wall_start": 1794622804.9648523,
+      "total_ms": 847.3,
+      "cycle": 116
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 683.8,
+      "create_status": 201,
+      "sandbox": "sbx-3afb853c94e6406f8439",
+      "exec_ms": 42.7,
+      "exec_status": 200,
+      "wall_start": 1794622805.8122013,
+      "total_ms": 930.4,
+      "cycle": 116
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 947.9,
+      "create_status": 201,
+      "sandbox": "sbx-e5823a6b6daa4539a006",
+      "exec_ms": 3.0,
+      "exec_status": 200,
+      "wall_start": 1794622817.2820663,
+      "total_ms": 1084.5,
+      "cycle": 117
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 462.3,
+      "create_status": 201,
+      "sandbox": "sbx-beda98e6e5154f9191cd",
+      "exec_ms": 15.0,
+      "exec_status": 200,
+      "wall_start": 1794622818.3666365,
+      "total_ms": 612.9,
+      "cycle": 117
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 484.9,
+      "create_status": 201,
+      "sandbox": "sbx-2a438d2e946346f98e45",
+      "exec_ms": 19.8,
+      "exec_status": 200,
+      "wall_start": 1794622826.3820772,
+      "total_ms": 692.6,
+      "cycle": 118
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 821.3,
+      "create_status": 201,
+      "sandbox": "sbx-261302bfa3cb456da207",
+      "exec_ms": 34.5,
+      "exec_status": 200,
+      "wall_start": 1794622827.074688,
+      "total_ms": 1020.5,
+      "cycle": 118
+    },
+    {
+      "i": 0,
+      "ok": true,
+      "create_ms": 576.3,
+      "create_status": 201,
+      "sandbox": "sbx-8981bcddf028481abae4",
+      "exec_ms": 31.5,
+      "exec_status": 200,
+      "wall_start": 1794622833.5606425,
+      "total_ms": 754.0,
+      "cycle": 119
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "create_ms": 544.4,
+      "create_status": 201,
+      "sandbox": "sbx-79909fb41e43407d847f",
+      "exec_ms": 4.8,
+      "exec_status": 200,
+      "wall_start": 1794622834.3146338,
+      "total_ms": 714.2,
+      "cycle": 119
+    }
+  ],
+  "daemon_log_lines": {
+    "total": 765,
+    "kept": 0
+  },
+  "cycles": 120,
+  "per_cycle": [
+    {
+      "cycle": 0,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 808.1
+    },
+    {
+      "cycle": 1,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 1192.3
+    },
+    {
+      "cycle": 2,
+      "failures": 1,
+      "runs": 2,
+      "first_create_ms": 1039.8
+    },
+    {
+      "cycle": 3,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 701.0
+    },
+    {
+      "cycle": 4,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 738.7
+    },
+    {
+      "cycle": 5,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 2539.8
+    },
+    {
+      "cycle": 6,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 1391.6
+    },
+    {
+      "cycle": 7,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 1081.0
+    },
+    {
+      "cycle": 8,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 917.7
+    },
+    {
+      "cycle": 9,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 751.6
+    },
+    {
+      "cycle": 10,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 1205.3
+    },
+    {
+      "cycle": 11,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 894.2
+    },
+    {
+      "cycle": 12,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 899.1
+    },
+    {
+      "cycle": 13,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 588.3
+    },
+    {
+      "cycle": 14,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 693.1
+    },
+    {
+      "cycle": 15,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 805.5
+    },
+    {
+      "cycle": 16,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 392.5
+    },
+    {
+      "cycle": 17,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 760.8
+    },
+    {
+      "cycle": 18,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 1264.5
+    },
+    {
+      "cycle": 19,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 728.0
+    },
+    {
+      "cycle": 20,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 703.8
+    },
+    {
+      "cycle": 21,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 1122.9
+    },
+    {
+      "cycle": 22,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 590.8
+    },
+    {
+      "cycle": 23,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 588.9
+    },
+    {
+      "cycle": 24,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 561.4
+    },
+    {
+      "cycle": 25,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 1501.9
+    },
+    {
+      "cycle": 26,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 914.9
+    },
+    {
+      "cycle": 27,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 631.9
+    },
+    {
+      "cycle": 28,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 969.9
+    },
+    {
+      "cycle": 29,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 785.0
+    },
+    {
+      "cycle": 30,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 802.3
+    },
+    {
+      "cycle": 31,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 758.2
+    },
+    {
+      "cycle": 32,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 949.0
+    },
+    {
+      "cycle": 33,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 380.9
+    },
+    {
+      "cycle": 34,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 795.7
+    },
+    {
+      "cycle": 35,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 608.2
+    },
+    {
+      "cycle": 36,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 893.0
+    },
+    {
+      "cycle": 37,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 1314.4
+    },
+    {
+      "cycle": 38,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 625.0
+    },
+    {
+      "cycle": 39,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 796.9
+    },
+    {
+      "cycle": 40,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 966.5
+    },
+    {
+      "cycle": 41,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 842.0
+    },
+    {
+      "cycle": 42,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 850.2
+    },
+    {
+      "cycle": 43,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 939.6
+    },
+    {
+      "cycle": 44,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 1443.1
+    },
+    {
+      "cycle": 45,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 866.2
+    },
+    {
+      "cycle": 46,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 1173.0
+    },
+    {
+      "cycle": 47,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 840.0
+    },
+    {
+      "cycle": 48,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 1139.6
+    },
+    {
+      "cycle": 49,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 906.8
+    },
+    {
+      "cycle": 50,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 883.0
+    },
+    {
+      "cycle": 51,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 458.2
+    },
+    {
+      "cycle": 52,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 899.1
+    },
+    {
+      "cycle": 53,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 592.4
+    },
+    {
+      "cycle": 54,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 618.1
+    },
+    {
+      "cycle": 55,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 1290.3
+    },
+    {
+      "cycle": 56,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 888.6
+    },
+    {
+      "cycle": 57,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 609.7
+    },
+    {
+      "cycle": 58,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 1354.9
+    },
+    {
+      "cycle": 59,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 1154.8
+    },
+    {
+      "cycle": 60,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 687.6
+    },
+    {
+      "cycle": 61,
+      "failures": 1,
+      "runs": 2,
+      "first_create_ms": 31136.4
+    },
+    {
+      "cycle": 62,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 523.7
+    },
+    {
+      "cycle": 63,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 871.9
+    },
+    {
+      "cycle": 64,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 506.0
+    },
+    {
+      "cycle": 65,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 334.5
+    },
+    {
+      "cycle": 66,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 869.7
+    },
+    {
+      "cycle": 67,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 913.2
+    },
+    {
+      "cycle": 68,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 401.4
+    },
+    {
+      "cycle": 69,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 705.4
+    },
+    {
+      "cycle": 70,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 973.2
+    },
+    {
+      "cycle": 71,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 733.6
+    },
+    {
+      "cycle": 72,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 983.9
+    },
+    {
+      "cycle": 73,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 1092.0
+    },
+    {
+      "cycle": 74,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 1014.1
+    },
+    {
+      "cycle": 75,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 1046.5
+    },
+    {
+      "cycle": 76,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 679.6
+    },
+    {
+      "cycle": 77,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 812.8
+    },
+    {
+      "cycle": 78,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 441.9
+    },
+    {
+      "cycle": 79,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 671.6
+    },
+    {
+      "cycle": 80,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 784.6
+    },
+    {
+      "cycle": 81,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 986.6
+    },
+    {
+      "cycle": 82,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 660.5
+    },
+    {
+      "cycle": 83,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 951.9
+    },
+    {
+      "cycle": 84,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 660.4
+    },
+    {
+      "cycle": 85,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 778.9
+    },
+    {
+      "cycle": 86,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 491.8
+    },
+    {
+      "cycle": 87,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 838.6
+    },
+    {
+      "cycle": 88,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 768.1
+    },
+    {
+      "cycle": 89,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 605.9
+    },
+    {
+      "cycle": 90,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 571.2
+    },
+    {
+      "cycle": 91,
+      "failures": 1,
+      "runs": 2,
+      "first_create_ms": 702.3
+    },
+    {
+      "cycle": 92,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 520.6
+    },
+    {
+      "cycle": 93,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 497.5
+    },
+    {
+      "cycle": 94,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 776.4
+    },
+    {
+      "cycle": 95,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 727.9
+    },
+    {
+      "cycle": 96,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 880.4
+    },
+    {
+      "cycle": 97,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 687.1
+    },
+    {
+      "cycle": 98,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 526.1
+    },
+    {
+      "cycle": 99,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 578.1
+    },
+    {
+      "cycle": 100,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 552.7
+    },
+    {
+      "cycle": 101,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 698.9
+    },
+    {
+      "cycle": 102,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 765.8
+    },
+    {
+      "cycle": 103,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 1090.4
+    },
+    {
+      "cycle": 104,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 661.2
+    },
+    {
+      "cycle": 105,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 558.4
+    },
+    {
+      "cycle": 106,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 1296.9
+    },
+    {
+      "cycle": 107,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 605.6
+    },
+    {
+      "cycle": 108,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 594.7
+    },
+    {
+      "cycle": 109,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 917.9
+    },
+    {
+      "cycle": 110,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 834.9
+    },
+    {
+      "cycle": 111,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 532.5
+    },
+    {
+      "cycle": 112,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 796.3
+    },
+    {
+      "cycle": 113,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 482.7
+    },
+    {
+      "cycle": 114,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 660.7
+    },
+    {
+      "cycle": 115,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 820.5
+    },
+    {
+      "cycle": 116,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 687.4
+    },
+    {
+      "cycle": 117,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 947.9
+    },
+    {
+      "cycle": 118,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 484.9
+    },
+    {
+      "cycle": 119,
+      "failures": 0,
+      "runs": 2,
+      "first_create_ms": 576.3
+    }
+  ],
+  "loadavg_max": 52.07,
+  "setup_errors": [],
+  "first_create_after_start_ms": {
+    "n": 119,
+    "p50": 784.6,
+    "max": 2539.8
+  },
+  "setup_failures": 0
+}

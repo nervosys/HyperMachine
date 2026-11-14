@@ -1,0 +1,804 @@
+2026-11-13T23:52:19.783916Z  INFO hv2_core::vm: vCPU 0 task exited (exits=936)
+2026-11-13T23:52:19.848019Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-ac113021a0c84a5aa43e'
+2026-11-13T23:52:19.867956Z  INFO hv2_core::vm: VM 'sbx-ac113021a0c84a5aa43e' stopped
+2026-11-13T23:52:19.987945Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:52:20.021603Z  INFO hv2_core::vm: VM 'sbx-cb8c62d7818b4900a5b2': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:52:20.076683Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:52:20.102737Z  INFO hv2_core::vm: Provisioned VM 'sbx-cb8c62d7818b4900a5b2' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:52:20.129478Z  INFO hv2_core::vm: VM 'sbx-cb8c62d7818b4900a5b2' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:52:20.143308Z  INFO hv2_core::vm: Starting VM 'sbx-cb8c62d7818b4900a5b2' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:52:20.175662Z  INFO hv2_core::vm: Starting VM execution for 'sbx-cb8c62d7818b4900a5b2' with 1 vCPUs
+2026-11-13T23:52:20.184610Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:52:20.204106Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:52:20.335249Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:52:22.599642Z  INFO hv2_core::vm: vCPU 0 task exited (exits=935)
+2026-11-13T23:52:22.655320Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-cb8c62d7818b4900a5b2'
+2026-11-13T23:52:22.663719Z  INFO hv2_core::vm: VM 'sbx-cb8c62d7818b4900a5b2' stopped
+2026-11-13T23:52:22.838901Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:52:22.865645Z  INFO hv2_core::vm: VM 'sbx-5441a270be0944c0be97': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:52:22.918567Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:52:22.937689Z  INFO hv2_core::vm: Provisioned VM 'sbx-5441a270be0944c0be97' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:52:22.965647Z  INFO hv2_core::vm: VM 'sbx-5441a270be0944c0be97' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:52:22.969367Z  INFO hv2_core::vm: Starting VM 'sbx-5441a270be0944c0be97' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:52:22.970684Z  INFO hv2_core::vm: Starting VM execution for 'sbx-5441a270be0944c0be97' with 1 vCPUs
+2026-11-13T23:52:22.976092Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:52:22.977262Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:52:22.985960Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:52:32.756962Z  INFO hv2_core::vm: vCPU 0 task exited (exits=936)
+2026-11-13T23:52:32.757735Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-d174168d54f442ea8ad5'
+2026-11-13T23:52:32.758440Z  INFO hv2_core::vm: VM 'sbx-d174168d54f442ea8ad5' stopped
+2026-11-13T23:52:32.990855Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:52:33.055447Z  INFO hv2_core::vm: VM 'sbx-0a3821a1298249f1a2d0': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:52:33.139694Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:52:33.186553Z  INFO hv2_core::vm: Provisioned VM 'sbx-0a3821a1298249f1a2d0' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:52:33.236803Z  INFO hv2_core::vm: VM 'sbx-0a3821a1298249f1a2d0' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:52:33.264940Z  INFO hv2_core::vm: Starting VM 'sbx-0a3821a1298249f1a2d0' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:52:33.307195Z  INFO hv2_core::vm: Starting VM execution for 'sbx-0a3821a1298249f1a2d0' with 1 vCPUs
+2026-11-13T23:52:33.330300Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:52:33.360487Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:52:33.411455Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:52:37.058688Z  INFO hv2_core::vm: vCPU 0 task exited (exits=932)
+2026-11-13T23:52:37.120588Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-0a3821a1298249f1a2d0'
+2026-11-13T23:52:37.156627Z  INFO hv2_core::vm: VM 'sbx-0a3821a1298249f1a2d0' stopped
+2026-11-13T23:52:37.292861Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:52:37.300050Z  INFO hv2_core::vm: VM 'sbx-cc8f27dece9d422bbcf4': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:52:37.304015Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:52:37.311693Z  INFO hv2_core::vm: Provisioned VM 'sbx-cc8f27dece9d422bbcf4' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:52:37.320420Z  INFO hv2_core::vm: VM 'sbx-cc8f27dece9d422bbcf4' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:52:37.321648Z  INFO hv2_core::vm: Starting VM 'sbx-cc8f27dece9d422bbcf4' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:52:37.328194Z  INFO hv2_core::vm: Starting VM execution for 'sbx-cc8f27dece9d422bbcf4' with 1 vCPUs
+2026-11-13T23:52:37.329315Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:52:37.330594Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:52:37.349467Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:53:49.094120Z  INFO hv2_core::vm: vCPU 0 task exited (exits=936)
+2026-11-13T23:53:49.094799Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-166304586a784adb97dd'
+2026-11-13T23:53:49.095335Z  INFO hv2_core::vm: VM 'sbx-166304586a784adb97dd' stopped
+2026-11-13T23:53:49.220272Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:53:49.272945Z  INFO hv2_core::vm: VM 'sbx-0465c25bed1d46779cbe': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:53:49.287197Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:53:49.330545Z  INFO hv2_core::vm: Provisioned VM 'sbx-0465c25bed1d46779cbe' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:53:49.360368Z  INFO hv2_core::vm: VM 'sbx-0465c25bed1d46779cbe' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:53:49.391687Z  INFO hv2_core::vm: Starting VM 'sbx-0465c25bed1d46779cbe' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:53:49.416951Z  INFO hv2_core::vm: Starting VM execution for 'sbx-0465c25bed1d46779cbe' with 1 vCPUs
+2026-11-13T23:53:49.494723Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:53:49.549576Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:53:49.612056Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:53:51.965055Z  INFO hv2_core::vm: vCPU 0 task exited (exits=935)
+2026-11-13T23:53:52.020624Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-0465c25bed1d46779cbe'
+2026-11-13T23:53:52.063431Z  INFO hv2_core::vm: VM 'sbx-0465c25bed1d46779cbe' stopped
+2026-11-13T23:53:52.201864Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:53:52.218068Z  INFO hv2_core::vm: VM 'sbx-4e7d32a0d83f42869bed': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:53:52.251640Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:53:52.288782Z  INFO hv2_core::vm: Provisioned VM 'sbx-4e7d32a0d83f42869bed' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:53:52.322705Z  INFO hv2_core::vm: VM 'sbx-4e7d32a0d83f42869bed' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:53:52.336438Z  INFO hv2_core::vm: Starting VM 'sbx-4e7d32a0d83f42869bed' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:53:52.377389Z  INFO hv2_core::vm: Starting VM execution for 'sbx-4e7d32a0d83f42869bed' with 1 vCPUs
+2026-11-13T23:53:52.394070Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:53:52.424245Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:53:52.499670Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:53:55.681691Z  INFO hv2_core::vm: vCPU 0 task exited (exits=942)
+2026-11-13T23:53:55.726988Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-4e7d32a0d83f42869bed'
+2026-11-13T23:53:55.744555Z  INFO hv2_core::vm: VM 'sbx-4e7d32a0d83f42869bed' stopped
+2026-11-13T23:53:55.849540Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:53:55.879694Z  INFO hv2_core::vm: VM 'sbx-a01ecb4538ee45b1b436': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:53:55.895472Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:53:55.923671Z  INFO hv2_core::vm: Provisioned VM 'sbx-a01ecb4538ee45b1b436' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:53:55.931919Z  INFO hv2_core::vm: VM 'sbx-a01ecb4538ee45b1b436' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:53:55.933100Z  INFO hv2_core::vm: Starting VM 'sbx-a01ecb4538ee45b1b436' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:53:55.937434Z  INFO hv2_core::vm: Starting VM execution for 'sbx-a01ecb4538ee45b1b436' with 1 vCPUs
+2026-11-13T23:53:55.939134Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:53:55.943838Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:53:55.957339Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:53:56.417637Z  INFO hv2_core::vm: vCPU 0 task exited (exits=935)
+2026-11-13T23:53:56.421649Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-a01ecb4538ee45b1b436'
+2026-11-13T23:53:56.430186Z  INFO hv2_core::vm: VM 'sbx-a01ecb4538ee45b1b436' stopped
+2026-11-13T23:53:56.523693Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:53:56.526132Z  INFO hv2_core::vm: VM 'sbx-74d3176982a246a18b4e': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:53:56.529566Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:53:56.533328Z  INFO hv2_core::vm: Provisioned VM 'sbx-74d3176982a246a18b4e' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:53:56.543459Z  INFO hv2_core::vm: VM 'sbx-74d3176982a246a18b4e' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:53:56.545555Z  INFO hv2_core::vm: Starting VM 'sbx-74d3176982a246a18b4e' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:53:56.550235Z  INFO hv2_core::vm: Starting VM execution for 'sbx-74d3176982a246a18b4e' with 1 vCPUs
+2026-11-13T23:53:56.551985Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:53:56.556281Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:53:56.568999Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:54:00.130588Z  INFO hv2_core::vm: vCPU 0 task exited (exits=933)
+2026-11-13T23:54:00.203151Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-74d3176982a246a18b4e'
+2026-11-13T23:54:00.285263Z  INFO hv2_core::vm: VM 'sbx-74d3176982a246a18b4e' stopped
+2026-11-13T23:54:00.448221Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:54:00.475413Z  INFO hv2_core::vm: VM 'sbx-8bfaa5e68d5a4cd7b39a': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:54:00.528703Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:54:00.554777Z  INFO hv2_core::vm: Provisioned VM 'sbx-8bfaa5e68d5a4cd7b39a' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:54:00.596574Z  INFO hv2_core::vm: VM 'sbx-8bfaa5e68d5a4cd7b39a' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:54:00.617109Z  INFO hv2_core::vm: Starting VM 'sbx-8bfaa5e68d5a4cd7b39a' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:54:00.648310Z  INFO hv2_core::vm: Starting VM execution for 'sbx-8bfaa5e68d5a4cd7b39a' with 1 vCPUs
+2026-11-13T23:54:00.663774Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:54:00.698159Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:54:00.760037Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:54:04.228783Z  INFO hv2_core::vm: vCPU 0 task exited (exits=941)
+2026-11-13T23:54:04.231926Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-8bfaa5e68d5a4cd7b39a'
+2026-11-13T23:54:04.234179Z  INFO hv2_core::vm: VM 'sbx-8bfaa5e68d5a4cd7b39a' stopped
+2026-11-13T23:54:04.344528Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:54:04.347816Z  INFO hv2_core::vm: VM 'sbx-7f9782a4321b43ee800c': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:54:04.348791Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:54:04.355931Z  INFO hv2_core::vm: Provisioned VM 'sbx-7f9782a4321b43ee800c' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:54:04.365488Z  INFO hv2_core::vm: VM 'sbx-7f9782a4321b43ee800c' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:54:04.369200Z  INFO hv2_core::vm: Starting VM 'sbx-7f9782a4321b43ee800c' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:54:04.372737Z  INFO hv2_core::vm: Starting VM execution for 'sbx-7f9782a4321b43ee800c' with 1 vCPUs
+2026-11-13T23:54:04.374428Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:54:04.377016Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:54:04.390066Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:54:05.197495Z  INFO hv2_core::vm: vCPU 0 task exited (exits=931)
+2026-11-13T23:54:05.271576Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-7f9782a4321b43ee800c'
+2026-11-13T23:54:05.315482Z  INFO hv2_core::vm: VM 'sbx-7f9782a4321b43ee800c' stopped
+2026-11-13T23:54:05.491821Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:54:05.561242Z  INFO hv2_core::vm: VM 'sbx-3c7958c21b8c445c9c0b': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:54:05.639766Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:54:05.678074Z  INFO hv2_core::vm: Provisioned VM 'sbx-3c7958c21b8c445c9c0b' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:54:05.775101Z  INFO hv2_core::vm: VM 'sbx-3c7958c21b8c445c9c0b' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:54:05.828481Z  INFO hv2_core::vm: Starting VM 'sbx-3c7958c21b8c445c9c0b' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:54:05.916524Z  INFO hv2_core::vm: Starting VM execution for 'sbx-3c7958c21b8c445c9c0b' with 1 vCPUs
+2026-11-13T23:54:05.952240Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:54:06.058690Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:54:06.211797Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:54:08.590751Z  INFO hv2_core::vm: vCPU 0 task exited (exits=935)
+2026-11-13T23:54:08.666638Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-3c7958c21b8c445c9c0b'
+2026-11-13T23:54:08.695975Z  INFO hv2_core::vm: VM 'sbx-3c7958c21b8c445c9c0b' stopped
+2026-11-13T23:54:08.856089Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:54:08.917910Z  INFO hv2_core::vm: VM 'sbx-60c8caf2829e45668009': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:54:08.942355Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:54:08.985266Z  INFO hv2_core::vm: Provisioned VM 'sbx-60c8caf2829e45668009' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:54:09.021721Z  INFO hv2_core::vm: VM 'sbx-60c8caf2829e45668009' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:54:09.064485Z  INFO hv2_core::vm: Starting VM 'sbx-60c8caf2829e45668009' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:54:09.080741Z  INFO hv2_core::vm: Starting VM execution for 'sbx-60c8caf2829e45668009' with 1 vCPUs
+2026-11-13T23:54:09.124508Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:54:09.197201Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:54:09.246511Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:54:14.243477Z  INFO hv2_core::vm: vCPU 0 task exited (exits=927)
+2026-11-13T23:54:14.244218Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-60c8caf2829e45668009'
+2026-11-13T23:54:14.244824Z  INFO hv2_core::vm: VM 'sbx-60c8caf2829e45668009' stopped
+2026-11-13T23:54:14.364098Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:54:14.436491Z  INFO hv2_core::vm: VM 'sbx-938c794cd5064682831e': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:54:14.464342Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:54:14.536863Z  INFO hv2_core::vm: Provisioned VM 'sbx-938c794cd5064682831e' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:54:14.567319Z  INFO hv2_core::vm: VM 'sbx-938c794cd5064682831e' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:54:14.626270Z  INFO hv2_core::vm: Starting VM 'sbx-938c794cd5064682831e' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:54:14.657539Z  INFO hv2_core::vm: Starting VM execution for 'sbx-938c794cd5064682831e' with 1 vCPUs
+2026-11-13T23:54:14.752512Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:54:14.793944Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:54:14.917065Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:54:17.111803Z  INFO hv2_core::vm: vCPU 0 task exited (exits=930)
+2026-11-13T23:54:17.153773Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-938c794cd5064682831e'
+2026-11-13T23:54:17.173478Z  INFO hv2_core::vm: VM 'sbx-938c794cd5064682831e' stopped
+2026-11-13T23:54:17.324928Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:54:17.371145Z  INFO hv2_core::vm: VM 'sbx-72f92853014f463ba3be': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:54:17.387828Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:54:17.453495Z  INFO hv2_core::vm: Provisioned VM 'sbx-72f92853014f463ba3be' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:54:17.474354Z  INFO hv2_core::vm: VM 'sbx-72f92853014f463ba3be' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:54:17.516599Z  INFO hv2_core::vm: Starting VM 'sbx-72f92853014f463ba3be' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:54:17.546989Z  INFO hv2_core::vm: Starting VM execution for 'sbx-72f92853014f463ba3be' with 1 vCPUs
+2026-11-13T23:54:17.599962Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:54:17.630216Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:54:17.663069Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:54:19.109784Z  INFO hv2_core::vm: vCPU 0 task exited (exits=942)
+2026-11-13T23:54:19.111670Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-4d1d0a5979114b5d8caf'
+2026-11-13T23:54:19.114083Z  INFO hv2_core::vm: VM 'sbx-4d1d0a5979114b5d8caf' stopped
+2026-11-13T23:54:19.237707Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:54:19.280545Z  INFO hv2_core::vm: VM 'sbx-88b56b1e1914425cae0e': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:54:19.308508Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:54:19.381902Z  INFO hv2_core::vm: Provisioned VM 'sbx-88b56b1e1914425cae0e' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:54:19.421566Z  INFO hv2_core::vm: VM 'sbx-88b56b1e1914425cae0e' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:54:19.495392Z  INFO hv2_core::vm: Starting VM 'sbx-88b56b1e1914425cae0e' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:54:19.522922Z  INFO hv2_core::vm: Starting VM execution for 'sbx-88b56b1e1914425cae0e' with 1 vCPUs
+2026-11-13T23:54:19.570599Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:54:19.648562Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:54:19.703253Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:54:22.528430Z  INFO hv2_core::vm: vCPU 0 task exited (exits=931)
+2026-11-13T23:54:22.597187Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-88b56b1e1914425cae0e'
+2026-11-13T23:54:22.642541Z  INFO hv2_core::vm: VM 'sbx-88b56b1e1914425cae0e' stopped
+2026-11-13T23:54:22.779290Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:54:22.799039Z  INFO hv2_core::vm: VM 'sbx-765a4de31f2a4fa2b5e0': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:54:22.851362Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:54:22.880351Z  INFO hv2_core::vm: Provisioned VM 'sbx-765a4de31f2a4fa2b5e0' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:54:22.941752Z  INFO hv2_core::vm: VM 'sbx-765a4de31f2a4fa2b5e0' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:54:22.958767Z  INFO hv2_core::vm: Starting VM 'sbx-765a4de31f2a4fa2b5e0' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:54:22.991563Z  INFO hv2_core::vm: Starting VM execution for 'sbx-765a4de31f2a4fa2b5e0' with 1 vCPUs
+2026-11-13T23:54:23.007334Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:54:23.033434Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:54:23.088521Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:54:25.719660Z  INFO hv2_core::vm: vCPU 0 task exited (exits=937)
+2026-11-13T23:54:25.720504Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-765a4de31f2a4fa2b5e0'
+2026-11-13T23:54:25.721127Z  INFO hv2_core::vm: VM 'sbx-765a4de31f2a4fa2b5e0' stopped
+2026-11-13T23:54:25.831992Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:54:25.835300Z  INFO hv2_core::vm: VM 'sbx-fe3040a9790944ef85f5': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:54:25.836624Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:54:25.849125Z  INFO hv2_core::vm: Provisioned VM 'sbx-fe3040a9790944ef85f5' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:54:25.859356Z  INFO hv2_core::vm: VM 'sbx-fe3040a9790944ef85f5' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:54:25.860765Z  INFO hv2_core::vm: Starting VM 'sbx-fe3040a9790944ef85f5' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:54:25.862055Z  INFO hv2_core::vm: Starting VM execution for 'sbx-fe3040a9790944ef85f5' with 1 vCPUs
+2026-11-13T23:54:25.862866Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:54:25.864847Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:54:25.876058Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:54:34.774275Z  INFO hv2_core::vm: vCPU 0 task exited (exits=928)
+2026-11-13T23:54:34.798284Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-0baf2bb78264411488da'
+2026-11-13T23:54:34.877219Z  INFO hv2_core::vm: VM 'sbx-0baf2bb78264411488da' stopped
+2026-11-13T23:54:35.014761Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:54:35.039496Z  INFO hv2_core::vm: VM 'sbx-def8fbc923d84114b3be': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:54:35.041945Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:54:35.047565Z  INFO hv2_core::vm: Provisioned VM 'sbx-def8fbc923d84114b3be' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:54:35.057037Z  INFO hv2_core::vm: VM 'sbx-def8fbc923d84114b3be' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:54:35.058420Z  INFO hv2_core::vm: Starting VM 'sbx-def8fbc923d84114b3be' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:54:35.060823Z  INFO hv2_core::vm: Starting VM execution for 'sbx-def8fbc923d84114b3be' with 1 vCPUs
+2026-11-13T23:54:35.063352Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:54:35.065164Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:54:35.084664Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:54:38.339539Z  INFO hv2_core::vm: vCPU 0 task exited (exits=927)
+2026-11-13T23:54:38.397669Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-def8fbc923d84114b3be'
+2026-11-13T23:54:38.438315Z  INFO hv2_core::vm: VM 'sbx-def8fbc923d84114b3be' stopped
+2026-11-13T23:54:38.584626Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:54:38.597512Z  INFO hv2_core::vm: VM 'sbx-6550bf941a824c4eaf8e': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:54:38.620405Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:54:38.640415Z  INFO hv2_core::vm: Provisioned VM 'sbx-6550bf941a824c4eaf8e' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:54:38.667555Z  INFO hv2_core::vm: VM 'sbx-6550bf941a824c4eaf8e' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:54:38.678950Z  INFO hv2_core::vm: Starting VM 'sbx-6550bf941a824c4eaf8e' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:54:38.717025Z  INFO hv2_core::vm: Starting VM execution for 'sbx-6550bf941a824c4eaf8e' with 1 vCPUs
+2026-11-13T23:54:38.728040Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:54:38.757984Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:54:38.809071Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:54:39.997276Z  INFO hv2_core::vm: vCPU 0 task exited (exits=932)
+2026-11-13T23:54:39.997932Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-47bbc82b361e44e2b2d4'
+2026-11-13T23:54:39.998704Z  INFO hv2_core::vm: VM 'sbx-47bbc82b361e44e2b2d4' stopped
+2026-11-13T23:54:40.111122Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:54:40.131706Z  INFO hv2_core::vm: VM 'sbx-6850bb26968e40faa861': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:54:40.197759Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:54:40.218588Z  INFO hv2_core::vm: Provisioned VM 'sbx-6850bb26968e40faa861' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:54:40.265704Z  INFO hv2_core::vm: VM 'sbx-6850bb26968e40faa861' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:54:40.296544Z  INFO hv2_core::vm: Starting VM 'sbx-6850bb26968e40faa861' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:54:40.327210Z  INFO hv2_core::vm: Starting VM execution for 'sbx-6850bb26968e40faa861' with 1 vCPUs
+2026-11-13T23:54:40.343789Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:54:40.381729Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:54:40.435369Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:54:44.018310Z  INFO hv2_core::vm: vCPU 0 task exited (exits=933)
+2026-11-13T23:54:44.020511Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-6850bb26968e40faa861'
+2026-11-13T23:54:44.021483Z  INFO hv2_core::vm: VM 'sbx-6850bb26968e40faa861' stopped
+2026-11-13T23:54:44.149292Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:54:44.174526Z  INFO hv2_core::vm: VM 'sbx-cd5ac6e16319406ab455': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:54:44.277511Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:54:44.368153Z  INFO hv2_core::vm: Provisioned VM 'sbx-cd5ac6e16319406ab455' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:54:44.394023Z  INFO hv2_core::vm: VM 'sbx-cd5ac6e16319406ab455' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:54:44.408165Z  INFO hv2_core::vm: Starting VM 'sbx-cd5ac6e16319406ab455' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:54:44.410905Z  INFO hv2_core::vm: Starting VM execution for 'sbx-cd5ac6e16319406ab455' with 1 vCPUs
+2026-11-13T23:54:44.412858Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:54:44.417534Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:54:44.434691Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:55:12.407739Z  INFO hv2_core::vm: vCPU 0 task exited (exits=947)
+2026-11-13T23:55:12.413263Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-f81e9579a32e48899920'
+2026-11-13T23:55:12.422682Z  INFO hv2_core::vm: VM 'sbx-f81e9579a32e48899920' stopped
+2026-11-13T23:55:12.555353Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:55:12.565214Z  INFO hv2_core::vm: VM 'sbx-da147a269b3c49bbbc4b': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:55:12.588427Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:55:12.605363Z  INFO hv2_core::vm: Provisioned VM 'sbx-da147a269b3c49bbbc4b' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:55:12.691462Z  INFO hv2_core::vm: VM 'sbx-da147a269b3c49bbbc4b' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:55:12.711738Z  INFO hv2_core::vm: Starting VM 'sbx-da147a269b3c49bbbc4b' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:55:12.735247Z  INFO hv2_core::vm: Starting VM execution for 'sbx-da147a269b3c49bbbc4b' with 1 vCPUs
+2026-11-13T23:55:12.755274Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:55:12.793046Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:55:12.869126Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:55:15.383176Z  INFO hv2_core::vm: vCPU 0 task exited (exits=929)
+2026-11-13T23:55:15.427264Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-da147a269b3c49bbbc4b'
+2026-11-13T23:55:15.466120Z  INFO hv2_core::vm: VM 'sbx-da147a269b3c49bbbc4b' stopped
+2026-11-13T23:55:15.608948Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:55:15.625778Z  INFO hv2_core::vm: VM 'sbx-4e40440ce6cb4a5d8e87': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:55:15.638937Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:55:15.649032Z  INFO hv2_core::vm: Provisioned VM 'sbx-4e40440ce6cb4a5d8e87' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:55:15.665457Z  INFO hv2_core::vm: VM 'sbx-4e40440ce6cb4a5d8e87' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:55:15.679273Z  INFO hv2_core::vm: Starting VM 'sbx-4e40440ce6cb4a5d8e87' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:55:15.682340Z  INFO hv2_core::vm: Starting VM execution for 'sbx-4e40440ce6cb4a5d8e87' with 1 vCPUs
+2026-11-13T23:55:15.683049Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:55:15.684147Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:55:15.692810Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:55:41.228576Z  INFO hv2_core::vm: vCPU 0 task exited (exits=935)
+2026-11-13T23:55:41.231750Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-197c32bc99d24de6b76d'
+2026-11-13T23:55:41.235847Z  INFO hv2_core::vm: VM 'sbx-197c32bc99d24de6b76d' stopped
+2026-11-13T23:55:41.371162Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:55:41.425487Z  INFO hv2_core::vm: VM 'sbx-76965ae2150c4b08a3cf': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:55:41.445914Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:55:41.484911Z  INFO hv2_core::vm: Provisioned VM 'sbx-76965ae2150c4b08a3cf' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:55:41.513088Z  INFO hv2_core::vm: VM 'sbx-76965ae2150c4b08a3cf' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:55:41.546332Z  INFO hv2_core::vm: Starting VM 'sbx-76965ae2150c4b08a3cf' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:55:41.576900Z  INFO hv2_core::vm: Starting VM execution for 'sbx-76965ae2150c4b08a3cf' with 1 vCPUs
+2026-11-13T23:55:41.605240Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:55:41.659421Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:55:41.685577Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:55:45.012446Z  INFO hv2_core::vm: vCPU 0 task exited (exits=932)
+2026-11-13T23:55:45.014821Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-76965ae2150c4b08a3cf'
+2026-11-13T23:55:45.015712Z  INFO hv2_core::vm: VM 'sbx-76965ae2150c4b08a3cf' stopped
+2026-11-13T23:55:45.133993Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:55:45.163962Z  INFO hv2_core::vm: VM 'sbx-651be9a09a644daf8dda': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:55:45.198636Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:55:45.218980Z  INFO hv2_core::vm: Provisioned VM 'sbx-651be9a09a644daf8dda' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:55:45.280274Z  INFO hv2_core::vm: VM 'sbx-651be9a09a644daf8dda' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:55:45.321924Z  INFO hv2_core::vm: Starting VM 'sbx-651be9a09a644daf8dda' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:55:45.378635Z  INFO hv2_core::vm: Starting VM execution for 'sbx-651be9a09a644daf8dda' with 1 vCPUs
+2026-11-13T23:55:45.417818Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:55:45.450448Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:55:45.528921Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:56:11.368432Z  INFO hv2_core::vm: vCPU 0 task exited (exits=942)
+2026-11-13T23:56:11.371631Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-30b2a7ce7dbf4735876d'
+2026-11-13T23:56:11.372941Z  INFO hv2_core::vm: VM 'sbx-30b2a7ce7dbf4735876d' stopped
+2026-11-13T23:56:11.445906Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:56:11.496203Z  INFO hv2_core::vm: VM 'sbx-d0598d0806934a22bd76': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:56:11.608498Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:56:11.700213Z  INFO hv2_core::vm: Provisioned VM 'sbx-d0598d0806934a22bd76' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:56:11.820294Z  INFO hv2_core::vm: VM 'sbx-d0598d0806934a22bd76' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:56:11.904826Z  INFO hv2_core::vm: Starting VM 'sbx-d0598d0806934a22bd76' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:56:11.954500Z  INFO hv2_core::vm: Starting VM execution for 'sbx-d0598d0806934a22bd76' with 1 vCPUs
+2026-11-13T23:56:11.980388Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:56:12.085904Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:56:12.286967Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:56:15.174044Z  INFO hv2_core::vm: vCPU 0 task exited (exits=926)
+2026-11-13T23:56:15.179290Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-d0598d0806934a22bd76'
+2026-11-13T23:56:15.180910Z  INFO hv2_core::vm: VM 'sbx-d0598d0806934a22bd76' stopped
+2026-11-13T23:56:15.272742Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:56:15.325028Z  INFO hv2_core::vm: VM 'sbx-6a60ce2b31134ffd9fe1': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:56:15.352965Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:56:15.390058Z  INFO hv2_core::vm: Provisioned VM 'sbx-6a60ce2b31134ffd9fe1' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:56:15.419290Z  INFO hv2_core::vm: VM 'sbx-6a60ce2b31134ffd9fe1' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:56:15.457325Z  INFO hv2_core::vm: Starting VM 'sbx-6a60ce2b31134ffd9fe1' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:56:15.478490Z  INFO hv2_core::vm: Starting VM execution for 'sbx-6a60ce2b31134ffd9fe1' with 1 vCPUs
+2026-11-13T23:56:15.517324Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:56:15.576575Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:56:15.604719Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:56:17.906875Z  INFO hv2_core::vm: vCPU 0 task exited (exits=932)
+2026-11-13T23:56:17.913525Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-2ba80948df4844488c4b'
+2026-11-13T23:56:17.915905Z  INFO hv2_core::vm: VM 'sbx-2ba80948df4844488c4b' stopped
+2026-11-13T23:56:18.015662Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:56:18.041665Z  INFO hv2_core::vm: VM 'sbx-a94f8664a2eb45eb9d41': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:56:18.071737Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:56:18.092942Z  INFO hv2_core::vm: Provisioned VM 'sbx-a94f8664a2eb45eb9d41' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:56:18.126984Z  INFO hv2_core::vm: VM 'sbx-a94f8664a2eb45eb9d41' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:56:18.142734Z  INFO hv2_core::vm: Starting VM 'sbx-a94f8664a2eb45eb9d41' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:56:18.169536Z  INFO hv2_core::vm: Starting VM execution for 'sbx-a94f8664a2eb45eb9d41' with 1 vCPUs
+2026-11-13T23:56:18.184792Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:56:18.217833Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:56:18.298632Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:56:22.442478Z  INFO hv2_core::vm: vCPU 0 task exited (exits=929)
+2026-11-13T23:56:22.467495Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-a94f8664a2eb45eb9d41'
+2026-11-13T23:56:22.468699Z  INFO hv2_core::vm: VM 'sbx-a94f8664a2eb45eb9d41' stopped
+2026-11-13T23:56:22.564773Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:56:22.583462Z  INFO hv2_core::vm: VM 'sbx-b29cfd666e3e47bf91bf': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:56:22.597026Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:56:22.617253Z  INFO hv2_core::vm: Provisioned VM 'sbx-b29cfd666e3e47bf91bf' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:56:22.633421Z  INFO hv2_core::vm: VM 'sbx-b29cfd666e3e47bf91bf' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:56:22.662844Z  INFO hv2_core::vm: Starting VM 'sbx-b29cfd666e3e47bf91bf' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:56:22.681159Z  INFO hv2_core::vm: Starting VM execution for 'sbx-b29cfd666e3e47bf91bf' with 1 vCPUs
+2026-11-13T23:56:22.724524Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:56:22.752786Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:56:22.827954Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:56:35.557962Z  INFO hv2_core::vm: vCPU 0 task exited (exits=940)
+2026-11-13T23:56:35.630609Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-e7e982ab6994456f8082'
+2026-11-13T23:56:35.647572Z  INFO hv2_core::vm: VM 'sbx-e7e982ab6994456f8082' stopped
+2026-11-13T23:56:35.814498Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:56:35.842234Z  INFO hv2_core::vm: VM 'sbx-72768a5473854782b1bc': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:56:35.861325Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:56:35.875564Z  INFO hv2_core::vm: Provisioned VM 'sbx-72768a5473854782b1bc' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:56:35.881468Z  INFO hv2_core::vm: VM 'sbx-72768a5473854782b1bc' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:56:35.882817Z  INFO hv2_core::vm: Starting VM 'sbx-72768a5473854782b1bc' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:56:35.885420Z  INFO hv2_core::vm: Starting VM execution for 'sbx-72768a5473854782b1bc' with 1 vCPUs
+2026-11-13T23:56:35.886817Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:56:35.889212Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:56:35.902726Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+2026-11-13T23:56:38.819212Z  INFO hv2_core::vm: vCPU 0 task exited (exits=936)
+2026-11-13T23:56:38.820063Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-72768a5473854782b1bc'
+2026-11-13T23:56:38.820733Z  INFO hv2_core::vm: VM 'sbx-72768a5473854782b1bc' stopped
+2026-11-13T23:56:38.979836Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-13T23:56:39.008885Z  INFO hv2_core::vm: VM 'sbx-7894a96889274573abe4': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-13T23:56:39.073045Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-13T23:56:39.117319Z  INFO hv2_core::vm: Provisioned VM 'sbx-7894a96889274573abe4' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-13T23:56:39.184746Z  INFO hv2_core::vm: VM 'sbx-7894a96889274573abe4' restored from /tmp/hv2-sandboxd-8578-suspended/snapshots/tuser-487b4da3c4b14bf3ad87163dc859cd18.snap
+2026-11-13T23:56:39.204298Z  INFO hv2_core::vm: Starting VM 'sbx-7894a96889274573abe4' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-13T23:56:39.242147Z  INFO hv2_core::vm: Starting VM execution for 'sbx-7894a96889274573abe4' with 1 vCPUs
+2026-11-13T23:56:39.267227Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-13T23:56:39.351899Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-13T23:56:39.448377Z  WARN hv2_core::devices::virtio_vsock: vsock: packet addressed to CID 0, which is not the host
+--- first 400 DEBUG lines of the run follow ---
+2026-11-13T23:52:19.140869Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49208 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=73                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:19.143562Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49208 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=73                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:19.143672Z DEBUG hv2_sandboxd::env_vars: unpacking a repository into /srv/app: falling back to shell (the guest's agent predates file operations)
+2026-11-13T23:52:19.145180Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49208
+2026-11-13T23:52:19.146525Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:19.147822Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49208
+2026-11-13T23:52:19.149440Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:19.150650Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.154939Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.155890Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.156602Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.159716Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.161392Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.162654Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.165021Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.166804Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.167475Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.168834Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.174171Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.175754Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.181601Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.185529Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.186466Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.188461Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.190371Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.193257Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.198020Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.204044Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.210554Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.215317Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:19.216931Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=1499 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=1543 into 4140 writable bytes
+2026-11-13T23:52:19.223172Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:19.227008Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:19.230688Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=57 src_port=1024 dst_port=49209
+2026-11-13T23:52:19.232013Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:19.233313Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:19.236098Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:19.240342Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:19.242673Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:19.244465Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49210
+2026-11-13T23:52:19.245183Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=322 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=366 into 4140 writable bytes
+2026-11-13T23:52:19.246992Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49210
+2026-11-13T23:52:19.345133Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=139 src_port=1024 dst_port=49210
+2026-11-13T23:52:19.386135Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:19.437753Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:19.438313Z DEBUG hv2_sandboxd: sbx-ac113021a0c84a5aa43e up in 691.636313ms: build 39.564384ms, launch 54.285278ms, agent answering 99.441978ms, network and envd 498.345224ms
+2026-11-13T23:52:19.458819Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49210
+2026-11-13T23:52:19.547905Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49210
+2026-11-13T23:52:19.602433Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:19.631486Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49211
+2026-11-13T23:52:19.680613Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=134 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=178 into 4140 writable bytes
+2026-11-13T23:52:19.708512Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49211
+2026-11-13T23:52:19.726849Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=143 src_port=1024 dst_port=49211
+2026-11-13T23:52:19.741325Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=143                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:19.782102Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=143                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:19.951740Z DEBUG hv2_sandboxd: slot granted after 2.124µs
+2026-11-13T23:52:20.175818Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:20.391675Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49203
+2026-11-13T23:52:20.420304Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=328 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=372 into 4140 writable bytes
+2026-11-13T23:52:20.485750Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+2026-11-13T23:52:20.521326Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=57 src_port=1024 dst_port=49203
+2026-11-13T23:52:20.563606Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:20.563658Z DEBUG hv2_agent::agent_vm: restored guest readiness stages vm=sbx-cb8c62d7818b4900a5b2 blocking_queue_ms=0.129358 connect_ms=244.385788 restored_ms=143.56232 succeeded=true phase="restored"
+2026-11-13T23:52:20.746632Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:20.797804Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:20.838486Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+2026-11-13T23:52:20.904584Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+2026-11-13T23:52:20.933965Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49204
+2026-11-13T23:52:21.000122Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=142 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=186 into 4140 writable bytes
+2026-11-13T23:52:21.005687Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49204
+2026-11-13T23:52:21.012157Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=57 src_port=1024 dst_port=49204
+2026-11-13T23:52:21.059173Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:21.126801Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:21.156132Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:21.242824Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49204
+2026-11-13T23:52:21.291647Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49204
+2026-11-13T23:52:21.361997Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:21.393313Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:21.500826Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:21.537748Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:21.576928Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:21.615725Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:21.658671Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:21.686712Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:21.714905Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:21.751838Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:21.786851Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:21.823361Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:21.845265Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=3258 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=3302 into 4140 writable bytes
+2026-11-13T23:52:21.855582Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:21.871851Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:21.913793Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:21.932573Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=4 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:21.951741Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=3 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:21.995255Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:22.003402Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49206 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:22.066131Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:22.074547Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49206
+2026-11-13T23:52:22.119359Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=45 src=2:49206 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=89 into 4140 writable bytes
+2026-11-13T23:52:22.130111Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49206
+2026-11-13T23:52:22.170338Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=73 src_port=1024 dst_port=49206
+2026-11-13T23:52:22.201148Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49206 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=73                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:22.214807Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49206 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=73                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:22.223912Z DEBUG hv2_sandboxd::env_vars: unpacking a repository into /srv/app: the guest's agent has no batch operation, using one op per connection
+2026-11-13T23:52:22.248648Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49206
+2026-11-13T23:52:22.260665Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49207 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:22.263027Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49206
+2026-11-13T23:52:22.301178Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.301946Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.302787Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.303812Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.304581Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.305208Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.306354Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.307041Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.307910Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.309135Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.309987Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.310718Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.311305Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.312660Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.313456Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.315900Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.317662Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.318792Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.319639Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.320389Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.321161Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:22.322167Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=1499 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=1543 into 4140 writable bytes
+2026-11-13T23:52:22.325228Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:22.326130Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:22.327797Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:22.328778Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:22.329558Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:22.330570Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:22.331175Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:22.331884Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:22.332792Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:22.333463Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:22.334409Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:22.335501Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:22.336090Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:22.339536Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:22.340217Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=57 src_port=1024 dst_port=49209
+2026-11-13T23:52:22.341028Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:22.341807Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:22.342911Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:22.343939Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:22.344444Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:22.346278Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49210
+2026-11-13T23:52:22.347020Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=322 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=366 into 4140 writable bytes
+2026-11-13T23:52:22.351322Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49210
+2026-11-13T23:52:22.401323Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=139 src_port=1024 dst_port=49210
+2026-11-13T23:52:22.436014Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:22.466918Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:22.467179Z DEBUG hv2_sandboxd: sbx-cb8c62d7818b4900a5b2 up in 2.479309026s: build 96.836553ms, launch 90.787758ms, agent answering 571.305775ms, network and envd 1.720379501s
+2026-11-13T23:52:22.482000Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49210
+2026-11-13T23:52:22.498818Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49210
+2026-11-13T23:52:22.500365Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:22.505034Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49211
+2026-11-13T23:52:22.518439Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=134 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=178 into 4140 writable bytes
+2026-11-13T23:52:22.527846Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49211
+2026-11-13T23:52:22.561614Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=143 src_port=1024 dst_port=49211
+2026-11-13T23:52:22.575850Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=143                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:22.597871Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=143                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:22.773865Z DEBUG hv2_sandboxd: slot granted after 2.485µs
+2026-11-13T23:52:22.970858Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:22.987033Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49203
+2026-11-13T23:52:22.988001Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=320 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=364 into 4140 writable bytes
+2026-11-13T23:52:22.990111Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+2026-11-13T23:52:22.999143Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=57 src_port=1024 dst_port=49203
+2026-11-13T23:52:23.000179Z DEBUG hv2_agent::agent_vm: restored guest readiness stages vm=sbx-5441a270be0944c0be97 blocking_queue_ms=0.118689 connect_ms=17.150866 restored_ms=12.293137000000002 succeeded=true phase="restored"
+2026-11-13T23:52:23.000197Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:23.002092Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:23.003005Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:23.003825Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+2026-11-13T23:52:23.006773Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+2026-11-13T23:52:23.007543Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49204
+2026-11-13T23:52:23.008252Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=142 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=186 into 4140 writable bytes
+2026-11-13T23:52:23.010805Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49204
+2026-11-13T23:52:23.014483Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=57 src_port=1024 dst_port=49204
+2026-11-13T23:52:23.015185Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:23.016220Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:23.016996Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:23.018250Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49204
+2026-11-13T23:52:23.018878Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49204
+2026-11-13T23:52:23.019411Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:23.020487Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:23.021505Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:23.022321Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:23.023302Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:23.023918Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:23.024399Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:23.024927Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:23.025984Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:23.026528Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:23.027089Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:23.027849Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:23.028593Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=3258 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=3302 into 4140 writable bytes
+2026-11-13T23:52:23.030925Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:23.032983Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:23.033569Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:23.034283Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:23.034885Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:23.035859Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:23.036516Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:23.046771Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:23.047925Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=4 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:23.048866Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=3 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:23.049850Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:23.051245Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49206 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:23.058067Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:23.058921Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49206
+2026-11-13T23:52:23.059962Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=45 src=2:49206 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=89 into 4140 writable bytes
+2026-11-13T23:52:32.516939Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.518347Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.519233Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.520103Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.520860Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.521573Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.522217Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.523061Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.523853Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.524814Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.525632Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.526375Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.527026Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.527625Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.528314Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.528793Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.529368Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.530351Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.531028Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.531572Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.532142Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.532770Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.533409Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:32.533972Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=1499 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=1543 into 4140 writable bytes
+2026-11-13T23:52:32.536194Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:32.536791Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:32.537514Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:32.538279Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:32.541005Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:32.541964Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:32.542535Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:32.543146Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:32.547950Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:32.548544Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=57 src_port=1024 dst_port=49209
+2026-11-13T23:52:32.549201Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:32.550151Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:32.550926Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:32.551861Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:32.552927Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:32.554433Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49210
+2026-11-13T23:52:32.555126Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=322 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=366 into 4140 writable bytes
+2026-11-13T23:52:32.557146Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49210
+2026-11-13T23:52:32.613818Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=139 src_port=1024 dst_port=49210
+2026-11-13T23:52:32.659546Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:32.681745Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:32.682090Z DEBUG hv2_sandboxd: sbx-d174168d54f442ea8ad5 up in 838.087164ms: build 134.442954ms, launch 99.31404ms, agent answering 290.137136ms, network and envd 314.194216ms
+2026-11-13T23:52:32.706805Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49210
+2026-11-13T23:52:32.720565Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49210
+2026-11-13T23:52:32.731877Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:32.736860Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49211
+2026-11-13T23:52:32.742507Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=134 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=178 into 4140 writable bytes
+2026-11-13T23:52:32.748616Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49211
+2026-11-13T23:52:32.753071Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=143 src_port=1024 dst_port=49211
+2026-11-13T23:52:32.754174Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=143                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:32.755152Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=143                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:32.842434Z DEBUG hv2_sandboxd: slot granted after 2.235µs
+2026-11-13T23:52:33.307383Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:33.429288Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49203
+2026-11-13T23:52:33.457994Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=336 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=380 into 4140 writable bytes
+2026-11-13T23:52:33.484924Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+2026-11-13T23:52:33.556553Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=57 src_port=1024 dst_port=49203
+2026-11-13T23:52:33.598441Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:33.598455Z DEBUG hv2_agent::agent_vm: restored guest readiness stages vm=sbx-0a3821a1298249f1a2d0 blocking_queue_ms=0.16604 connect_ms=150.614635 restored_ms=140.57909099999998 succeeded=true phase="restored"
+2026-11-13T23:52:33.666209Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:33.697689Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:33.713807Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+2026-11-13T23:52:33.736655Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+2026-11-13T23:52:33.767011Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49204
+2026-11-13T23:52:33.812912Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=142 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=186 into 4140 writable bytes
+2026-11-13T23:52:33.830865Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49204
+2026-11-13T23:52:33.844289Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=57 src_port=1024 dst_port=49204
+2026-11-13T23:52:33.855543Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:33.870234Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:33.877676Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:33.892158Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49204
+2026-11-13T23:52:33.906738Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49204
+2026-11-13T23:52:33.924670Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:33.941467Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:33.972079Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:33.983401Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:34.000122Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:34.014735Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:34.032983Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:34.050817Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:34.067288Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:34.086284Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:34.104698Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:34.123345Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:34.137525Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=3258 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=3302 into 4140 writable bytes
+2026-11-13T23:52:34.155145Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:34.166947Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:34.180270Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:34.195486Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:34.216560Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:34.229610Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:34.246504Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:34.267238Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:34.325948Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=4 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:34.345886Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=3 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:34.394347Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:34.405433Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49206 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:34.437510Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49205
+2026-11-13T23:52:34.457025Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49206
+2026-11-13T23:52:34.506289Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=45 src=2:49206 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=89 into 4140 writable bytes
+2026-11-13T23:52:34.556496Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49206
+2026-11-13T23:52:34.618796Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=73 src_port=1024 dst_port=49206
+2026-11-13T23:52:34.651415Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49206 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=73                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:35.834850Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49208 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=73                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:35.835147Z DEBUG hv2_sandboxd::env_vars: unpacking a repository into /srv/app: falling back to shell (the guest's agent predates file operations)
+2026-11-13T23:52:35.893167Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49208
+2026-11-13T23:52:36.084438Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49208
+2026-11-13T23:52:36.140797Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:36.161920Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:36.169942Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.177977Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.179943Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.187474Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.189845Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.192706Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.195790Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.202108Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.205740Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.211149Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.215381Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.225481Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.230015Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.237974Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.238872Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.240529Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.241827Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.243023Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.243813Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.244504Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.245102Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.245802Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.246494Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=4140 into 4140 writable bytes
+2026-11-13T23:52:36.247739Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=1499 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=1543 into 4140 writable bytes
+2026-11-13T23:52:36.250846Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:36.251826Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:36.252502Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:36.253283Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:36.253932Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:36.259436Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:36.260269Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=57 src_port=1024 dst_port=49209
+2026-11-13T23:52:36.261230Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:36.262068Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49209 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:36.262787Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:36.267828Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:36.268842Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49209
+2026-11-13T23:52:36.269530Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49210
+2026-11-13T23:52:36.270557Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=322 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=366 into 4140 writable bytes
+2026-11-13T23:52:36.272936Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49210
+2026-11-13T23:52:36.349363Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=139 src_port=1024 dst_port=49210
+2026-11-13T23:52:36.453309Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:36.504417Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49210 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:36.504675Z DEBUG hv2_sandboxd: sbx-0a3821a1298249f1a2d0 up in 3.513906244s: build 193.07755ms, launch 123.185665ms, agent answering 359.329086ms, network and envd 2.838314885s
+2026-11-13T23:52:36.564398Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49210
+2026-11-13T23:52:36.717215Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49210
+2026-11-13T23:52:36.763465Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:36.829690Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49211
+2026-11-13T23:52:36.863230Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=134 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=178 into 4140 writable bytes
+2026-11-13T23:52:36.934061Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49211
+2026-11-13T23:52:36.966600Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=143 src_port=1024 dst_port=49211
+2026-11-13T23:52:37.025837Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=143                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:37.056374Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49211 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=143                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:37.279986Z DEBUG hv2_sandboxd: slot granted after 2.344µs
+2026-11-13T23:52:37.328342Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:37.351032Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49203
+2026-11-13T23:52:37.351953Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=326 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=370 into 4140 writable bytes
+2026-11-13T23:52:37.356354Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49203
+2026-11-13T23:52:37.365277Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=57 src_port=1024 dst_port=49203
+2026-11-13T23:52:37.366831Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:37.366881Z DEBUG hv2_agent::agent_vm: restored guest readiness stages vm=sbx-cc8f27dece9d422bbcf4 blocking_queue_ms=0.105152 connect_ms=23.638937 restored_ms=14.996841 succeeded=true phase="restored"
+2026-11-13T23:52:37.368709Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49203 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:37.369555Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:37.371323Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+2026-11-13T23:52:37.372057Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49203
+2026-11-13T23:52:37.373943Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49204
+2026-11-13T23:52:37.374821Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=142 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=186 into 4140 writable bytes
+2026-11-13T23:52:37.381624Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49204
+2026-11-13T23:52:37.384696Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=57 src_port=1024 dst_port=49204
+2026-11-13T23:52:37.385702Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:37.386435Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49204 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:37.387363Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49205 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-11-13T23:52:37.388839Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49204
+2026-11-13T23:52:37.389409Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49204

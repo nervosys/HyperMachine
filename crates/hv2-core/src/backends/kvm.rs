@@ -1783,7 +1783,25 @@ impl KvmVm {
     /// Set the level of an IRQ line
     ///
     /// `irq` is the IRQ number, `level` is 0 (deassert) or 1 (assert).
+    ///
+    /// An assert is preceded by a release. KVM's in-kernel I/O APIC latches a raise of a pin
+    /// whose entry is masked in the pin's request bit, does not replay it when the guest
+    /// unmasks an edge-triggered entry, and then coalesces every later raise of that pin while
+    /// the bit is set -- only a release clears it. A virtio device holds its line high until the
+    /// driver acknowledges, and the driver is only interrupted by a raise, so one raise that
+    /// lands while Linux has the line masked (it masks an edge line when a second edge arrives
+    /// during the handler) left the device deaf for good: the guest never heard the next
+    /// packet. Starting from a released line makes every assert an edge. The release is
+    /// invisible to a guest that programmed the pin level-triggered (the request bit is set
+    /// again at once).
     pub fn irq_line(&self, irq: u32, level: u32) -> Result<()> {
+        if level != 0 {
+            self.irq_line_raw(irq, 0)?;
+        }
+        self.irq_line_raw(irq, level)
+    }
+
+    fn irq_line_raw(&self, irq: u32, level: u32) -> Result<()> {
         let irq_level = kvm_irq_level { irq, level };
         // SAFETY: `self.vm_fd` is a valid VM fd.
         unsafe {
@@ -3883,6 +3901,130 @@ mod tests {
                 .reset_guest_memory_to_zero()
                 .expect("no VM is not an error"),
             "with no VM there is no memory to have zeroed"
+        );
+    }
+
+    /// KVM latches a raise of a *masked* edge-triggered pin in the I/O APIC's request bit and
+    /// does not replay it when the guest unmasks the entry. While the bit is set, every later
+    /// raise of the pin is coalesced: nothing reaches the local APIC. The virtio line is held
+    /// high until the driver acknowledges, and the driver is never interrupted to acknowledge,
+    /// so the device is deaf for good -- found as `guest never became ready` on a restore, with
+    /// the I/O APIC request bit for the vsock line set, the local APIC's empty, the guest halted,
+    /// and the template snapshot it was restored from already holding the same state.
+    /// `irq_line(irq, 1)` must therefore start from a released line, so a raise is an edge.
+    ///
+    /// Reproduces that with a protected-mode guest that unmasks the entry itself (an MMIO write
+    /// the in-kernel I/O APIC handles), as Linux does.
+    #[tokio::test]
+    #[ignore = "requires /dev/kvm; run explicitly with --ignored --nocapture"]
+    async fn raising_an_edge_pin_after_a_masked_raise_still_delivers() {
+        const PIN: usize = 5;
+        const VECTOR: u32 = 0x20;
+        let backend = KvmBackend::new().expect("KVM is required for this explicit test");
+        backend.create_vm(1, 2 * 1024 * 1024).await.unwrap();
+        let vcpu = VCpu::new(0);
+        let owned = backend.kvm_vcpu(&vcpu).unwrap();
+        let vm = backend.vm.read().unwrap().clone().unwrap();
+
+        // Flat 32-bit protected mode with no paging, set directly in the descriptor caches.
+        let mut sregs = owned.get_sregs().unwrap();
+        let flat = |type_: u8, selector: u16| kvm_segment {
+            base: 0,
+            limit: 0xffff_ffff,
+            selector,
+            type_,
+            present: 1,
+            dpl: 0,
+            db: 1,
+            s: 1,
+            l: 0,
+            g: 1,
+            avl: 0,
+            unusable: 0,
+            padding: 0,
+        };
+        sregs.cs = flat(11, 8);
+        for data in [
+            &mut sregs.ds,
+            &mut sregs.es,
+            &mut sregs.fs,
+            &mut sregs.gs,
+            &mut sregs.ss,
+        ] {
+            *data = flat(3, 16);
+        }
+        sregs.cr0 = 0x11;
+        sregs.cr4 = 0;
+        sregs.efer = 0;
+        owned.set_sregs(&sregs).unwrap();
+        let mut regs = owned.get_regs().unwrap();
+        regs.rip = 0x1000;
+        regs.rsp = 0x8000;
+        // Interrupts off: a delivered vector stays visible in the IRR.
+        regs.rflags = 0x2;
+        owned.set_regs(&regs).unwrap();
+        // mov dword [0xfec00000], 0x1a   ; IOREGSEL: entry 5, low half
+        // mov dword [0xfec00010], 0x20   ; IOWIN: vector 0x20, edge, unmasked
+        // mov al, 0x11 ; out 0xe9, al ; hlt
+        let code: [u8; 25] = [
+            0xc7, 0x05, 0x00, 0x00, 0xc0, 0xfe, 0x1a, 0x00, 0x00, 0x00, 0xc7, 0x05, 0x10, 0x00,
+            0xc0, 0xfe, 0x20, 0x00, 0x00, 0x00, 0xb0, 0x11, 0xe6, 0xe9, 0xf4,
+        ];
+        vm.write_guest_memory(0x1000, &code).unwrap();
+
+        let mut lapic = kvm_lapic_state::default();
+        // SAFETY: an owned idle vCPU descriptor and an initialized ABI structure.
+        unsafe {
+            kvm_get_lapic(owned.fd(), &mut lapic).unwrap();
+            lapic.regs[0xf0..0xf4].copy_from_slice(&0x1ffu32.to_le_bytes());
+            kvm_set_lapic(owned.fd(), &lapic).unwrap();
+        }
+        let request_bits = || {
+            let chip = vm.get_irqchip(KVM_IRQCHIP_IOAPIC).unwrap();
+            u32::from_le_bytes(chip.chip[16..20].try_into().unwrap())
+        };
+        let pending = |owned: &KvmVcpu| {
+            let mut lapic = kvm_lapic_state::default();
+            // SAFETY: as above.
+            unsafe { kvm_get_lapic(owned.fd(), &mut lapic).unwrap() };
+            // IRR: one 32-bit word per 16 bytes from 0x200; vectors 32..63 are the second word.
+            u32::from_le_bytes(lapic.regs[0x210..0x214].try_into().unwrap()) >> (VECTOR - 32) & 1
+        };
+
+        // The raise that arrives while the guest has the pin masked (every entry starts masked).
+        vm.irq_line(PIN as u32, 1).unwrap();
+        let latched = request_bits();
+        println!("KVM_LATCH_EVIDENCE request bits after a raise of a masked pin: {latched:#x}");
+
+        // The guest unmasks the entry.
+        let runner = owned.clone();
+        let (send, receive) = std::sync::mpsc::channel();
+        let thread = std::thread::spawn(move || send.send(runner.run()).unwrap());
+        let exit = receive.recv_timeout(std::time::Duration::from_secs(5));
+        if exit.is_err() {
+            owned.kick();
+        }
+        thread.join().unwrap();
+        match exit.expect("the guest must reach its port write").unwrap() {
+            VmExit::Io { port: 0xe9, .. } => {}
+            other => panic!("expected the guest's port write, got {other:?}"),
+        }
+        let after_unmask = (request_bits(), pending(&owned));
+        println!(
+            "KVM_LATCH_EVIDENCE after the guest unmasked it: request bits {:#x}, vector {VECTOR:#x} pending {}",
+            after_unmask.0, after_unmask.1
+        );
+
+        vm.irq_line(PIN as u32, 1).unwrap();
+        let after_raise = (request_bits(), pending(&owned));
+        println!(
+            "KVM_LATCH_EVIDENCE after the next raise: request bits {:#x}, vector {VECTOR:#x} pending {}",
+            after_raise.0, after_raise.1
+        );
+        assert_eq!(
+            after_raise.1, 1,
+            "a raise of the pin must reach the local APIC (latched before: {latched:#x}, \
+             after the guest unmasked it: {after_unmask:?})"
         );
     }
 }
