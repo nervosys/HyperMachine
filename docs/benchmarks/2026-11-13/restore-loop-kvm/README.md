@@ -169,7 +169,8 @@ case in it had passed. The check now asserts only the snapshot refusal, and pass
   host, it does not prove zero. That the 3 family-2 failures were the torn snapshot is shown by mechanism and by
   their disappearing, not by catching one.
 - The device hold on KVM with network devices attached (`notify_net`/`notify_net_pci`): the runs here use vsock
-  only. Standby on KVM after the change (its logic was reviewed, and standby does not hold).
+  only. Standby on KVM after the change (its logic was reviewed, and standby does not hold). Both since run, and
+  passing, in `../../2026-11-14/net-pause-standby-kvm`, with the limits listed there.
 - Snapshots taken before either fix: a template already holding a latched bit or a torn queue is not repaired.
 - Cycle 73 of `old-image-user-cycles` (a cycle with no creates and no recorded reason).
 - Anything on hardware other than this AMD WSL2 host, on a real (non-nested) Linux host, or with more than 1 vCPU.
