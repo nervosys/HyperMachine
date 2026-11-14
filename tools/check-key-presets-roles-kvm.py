@@ -1,0 +1,339 @@
+#!/usr/bin/env python3
+"""API key scopes ("presets") and key roles, against the real control plane on KVM.
+
+HyperMachine has no object called a "preset". What a key can do is set by its
+`scopes` (admin, inventory, sandboxes, templates, volumes, events, machines,
+telemetry) and its `role` (operator, the default, or observer). This driver
+treats each scope, and the admin scope, as a preset: it runs an owned Redis,
+one hv2-sandboxd node and hv2-control-plane over verified TLS and node mTLS,
+issues one key per scope and per role, and then, through the control plane's
+public API only, checks for each key one operation it must be allowed and
+operations it must be refused (403), plus 401 for an unknown and an expired key.
+
+The one sandbox is created with the `sandboxes` key and really boots on KVM; a
+command runs in it. Refused operations need no VM.
+
+Writes report.json (every request and response status of every case) and each
+service's log into --output. Success only if every case passes.
+"""
+import argparse, hashlib, http.client, json, os, socket, ssl, subprocess, tempfile, time, uuid
+from pathlib import Path
+
+SCOPES = ["admin", "inventory", "sandboxes", "templates", "volumes", "events", "machines", "telemetry"]
+TEAM_SCOPES = ["sandboxes", "inventory", "volumes", "templates", "events", "machines", "telemetry"]
+
+
+def digest(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def port():
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def stop(process):
+    if process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    for name in ["daemon", "control", "kernel", "initrd", "output"]:
+        parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--redis", type=Path, default=Path("redis-server"), help="redis-server binary")
+    parser.add_argument("--redis-libs", type=Path, default=None, help="extra LD_LIBRARY_PATH for --redis")
+    args = parser.parse_args()
+    args.output.mkdir(parents=True, exist_ok=False)
+    inputs = {name: getattr(args, name) for name in ["daemon", "control", "kernel", "initrd"]}
+    inputs["driver"] = Path(__file__)
+    if args.redis.is_file():
+        inputs["redis"] = args.redis
+    report = {"success": False,
+              "purpose": "functional verification of API key scopes and roles on a real KVM node; no performance comparison",
+              "input_sha256": {k: digest(v) for k, v in inputs.items()}, "cases": []}
+    keys = {"legacy_admin": uuid.uuid4().hex, "token": uuid.uuid4().hex, "unknown": uuid.uuid4().hex,
+            "expired": uuid.uuid4().hex, "operator": uuid.uuid4().hex, "observer": uuid.uuid4().hex,
+            "observer_admin": uuid.uuid4().hex, "other_team": uuid.uuid4().hex}
+    for scope in SCOPES:
+        keys["scope_" + scope] = uuid.uuid4().hex
+    env = {"PATH": "/usr/local/bin:/usr/bin:/bin", "RUST_LOG": "info"}
+    processes, handles = [], []
+    state = {}
+
+    def call(label, method, path, body=None):
+        """One request; returns (status, parsed body or text)."""
+        conn = http.client.HTTPSConnection("127.0.0.1", state["api_port"], context=state["context"], timeout=120)
+        try:
+            conn.request(method, path, body=None if body is None else json.dumps(body),
+                         headers={"x-api-key": keys[label], "content-type": "application/json"})
+            response = conn.getresponse()
+            data = response.read(1 << 20)
+        finally:
+            conn.close()
+        try:
+            return response.status, (json.loads(data) if data else None)
+        except ValueError:
+            return response.status, data[:200].decode("utf-8", "replace")
+
+    def case(name, steps):
+        """steps: list of (label, method, path, body, expected statuses, note)."""
+        row = {"name": name, "success": True, "requests": []}
+        report["cases"].append(row)
+        for label, method, path, body, expected, check in steps:
+            status, data = call(label, method, path, body)
+            ok = status in expected
+            detail = None
+            if ok and check is not None:
+                try:
+                    detail = check(data)
+                except AssertionError as error:
+                    ok, detail = False, "check failed: " + str(error)
+            shown = json.dumps(data)[:240]
+            row["requests"].append({"key": label, "request": f"{method} {path}", "expected": sorted(expected),
+                                    "status": status, "ok": ok, "response": shown, **({"detail": detail} if detail else {})})
+            if not ok:
+                row["success"] = False
+        print(("ok: " if row["success"] else "FAILED: ") + name, flush=True)
+
+    def eventually(action, seconds=60):
+        deadline = time.monotonic() + seconds
+        while True:
+            try:
+                return action()
+            except (OSError, AssertionError):
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.2)
+
+    with tempfile.TemporaryDirectory(prefix="hm-keyroles-kvm-", dir="/var/tmp") as temporary:
+        directory = Path(temporary)
+
+        def start(name, argv, environment):
+            handle = (args.output / (name + ".log")).open("wb")
+            handles.append(handle)
+            child = subprocess.Popen(argv, env=environment, stdin=subprocess.DEVNULL, stdout=handle, stderr=subprocess.STDOUT)
+            processes.append(child)
+            return child
+
+        def openssl(argv):
+            subprocess.run(["openssl"] + argv, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=20)
+
+        try:
+            openssl(["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2", "-subj", "/CN=owned-keyroles-ca",
+                     "-addext", "basicConstraints=critical,CA:TRUE", "-addext", "keyUsage=critical,keyCertSign,cRLSign",
+                     "-keyout", str(directory / "ca.key"), "-out", str(directory / "ca.pem")])
+            for name, usage, san in [("node", "serverAuth", "DNS:tcp-node.test,IP:127.0.0.1"),
+                                     ("control", "clientAuth", "DNS:tcp-control.test"),
+                                     ("api", "serverAuth", "IP:127.0.0.1,DNS:localhost")]:
+                openssl(["req", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=" + name,
+                         "-keyout", str(directory / (name + ".key")), "-out", str(directory / (name + ".csr"))])
+                ext = directory / (name + ".ext")
+                ext.write_text(f"basicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\n"
+                               f"extendedKeyUsage={usage}\nsubjectAltName={san}\n")
+                openssl(["x509", "-req", "-in", str(directory / (name + ".csr")), "-CA", str(directory / "ca.pem"),
+                         "-CAkey", str(directory / "ca.key"), "-CAcreateserial", "-days", "2", "-extfile", str(ext),
+                         "-out", str(directory / (name + ".pem"))])
+            state["context"] = ssl.create_default_context(cafile=str(directory / "ca.pem"))
+            ports = set()
+            while len(ports) < 5:
+                ports.add(port())
+            redis_port, node_port, node_proxy, api_port, proxy_port = list(ports)
+            state["api_port"] = api_port
+            store = f"redis://127.0.0.1:{redis_port}"
+            namespace = "keyroles-" + uuid.uuid4().hex
+            redis_env = dict(env)
+            if args.redis_libs:
+                redis_env["LD_LIBRARY_PATH"] = str(args.redis_libs)
+            start("redis", [str(args.redis), "--bind", "127.0.0.1", "--port", str(redis_port), "--save", "",
+                            "--appendonly", "no", "--dir", str(directory)], redis_env)
+
+            def redis_ready():
+                with socket.create_connection(("127.0.0.1", redis_port), timeout=0.2):
+                    pass
+            eventually(redis_ready, 10)
+
+            expiry = int(time.time()) + 1800
+            sha = lambda label: hashlib.sha256(keys[label].encode()).hexdigest()
+            policy = []
+            for scope in SCOPES:
+                row = {"sha256": sha("scope_" + scope), "expires_at": expiry, "scopes": [scope]}
+                if scope != "admin":  # a team key needs a team and a principal; admin stays global
+                    row.update(principal_id="k-" + scope, team_id="red")
+                policy.append(row)
+            policy += [
+                {"sha256": sha("operator"), "expires_at": expiry, "scopes": ["sandboxes", "inventory"],
+                 "principal_id": "role-operator", "team_id": "red"},
+                {"sha256": sha("observer"), "expires_at": expiry, "scopes": ["inventory"], "role": "observer",
+                 "principal_id": "role-observer", "team_id": "red"},
+                {"sha256": sha("observer_admin"), "expires_at": expiry, "scopes": ["admin", "sandboxes", "inventory"],
+                 "role": "observer", "principal_id": "role-observer-admin", "team_id": "red"},
+                {"sha256": sha("other_team"), "expires_at": expiry, "scopes": ["sandboxes", "inventory"],
+                 "principal_id": "blue-a", "team_id": "blue"},
+                {"sha256": sha("expired"), "expires_at": 1, "scopes": ["sandboxes"],
+                 "principal_id": "expired", "team_id": "red"},
+            ]
+            policies = directory / "keys.json"
+            policies.write_text(json.dumps(policy))
+            report["policy"] = [{k: v for k, v in row.items() if k != "sha256"} for row in policy]
+            start("node", [str(args.daemon), "--port", str(node_port), "--proxy-port", str(node_proxy),
+                           "--memory-mb", "512", "--cpu-cores", "1", "--capacity", "8",
+                           "--volume-dir", str(directory / "volumes"), "--snapshot-store", str(directory / "snapshots"),
+                           "--cluster-store", store, "--cluster-namespace", namespace, "--node-id", "keyroles-kvm-node",
+                           "--advertise-api", f"https://127.0.0.1:{node_port}", "--advertise-proxy", f"127.0.0.1:{node_proxy}",
+                           "--mtls-ca", str(directory / "ca.pem"), "--mtls-cert", str(directory / "node.pem"),
+                           "--mtls-key", str(directory / "node.key")],
+                  {**env, "HV2_KERNEL": str(args.kernel), "HV2_INITRD": str(args.initrd), "HV2_CLUSTER_TOKEN": keys["token"]})
+            start("control", [str(args.control), "--store", store, "--namespace", namespace, "--port", str(api_port),
+                              "--proxy-port", str(proxy_port), "--api-keys-file", str(policies),
+                              "--api-tls-cert", str(directory / "api.pem"), "--api-tls-key", str(directory / "api.key"),
+                              "--tls-cert", str(directory / "api.pem"), "--tls-key", str(directory / "api.key"),
+                              "--mtls-ca", str(directory / "ca.pem"), "--mtls-cert", str(directory / "control.pem"),
+                              "--mtls-key", str(directory / "control.key"), "--mtls-node-name", "tcp-node.test"],
+                  {**env, "HV2_API_KEY": keys["legacy_admin"], "HV2_CLUSTER_TOKEN": keys["token"]})
+
+            def prepared():
+                assert all(child.poll() is None for child in processes), "an owned service exited"
+                status, templates = call("legacy_admin", "GET", "/templates")
+                assert status == 200 and any(r.get("templateID") == "base" and r.get("snapshot") for r in templates), "template not ready"
+            eventually(prepared, 300)
+
+            # --- the one real sandbox, made by the `sandboxes` preset key ---
+            status, created = call("scope_sandboxes", "POST", "/v2/sandboxes", {"templateID": "base", "timeout": 900})
+            assert status == 201, f"sandbox create: {status} {created}"
+            vm = created["sandboxID"]
+            state["vm"] = vm
+
+            def exec_ok(data):
+                assert data.get("exit_code") == 0 and data["stdout"].strip() == "keyroles", data
+                return "guest ran the command"
+            def has_vm(data):
+                assert vm in [r["sandboxID"] for r in data], "own sandbox not listed"
+            def lacks_vm(data):
+                assert vm not in [r["sandboxID"] for r in data], "another team's sandbox listed"
+            ALL = {200, 201, 204}
+            F = {403}
+
+            # Presets: each scope allowed one thing, refused others.
+            case("preset admin: reaches everything, including operator-only routes", [
+                ("scope_admin", "GET", "/cluster/nodes", None, {200}, None),
+                ("scope_admin", "GET", "/sandboxes", None, {200}, has_vm),
+                ("scope_admin", "GET", f"/sandboxes/{vm}", None, {200}, None),
+                ("scope_admin", "GET", "/volumes", None, {200}, None),
+                ("scope_admin", "GET", "/machines", None, {200}, None),
+            ])
+            case("preset inventory: lists, cannot read detail, create or reach other families", [
+                ("scope_inventory", "GET", "/sandboxes", None, {200}, has_vm),
+                ("scope_inventory", "GET", f"/sandboxes/{vm}", None, F, None),
+                ("scope_inventory", "POST", "/v2/sandboxes", {"templateID": "base"}, F, None),
+                ("scope_inventory", "GET", "/volumes", None, F, None),
+            ])
+            case("preset sandboxes: runs commands in its sandbox, refused other families", [
+                ("scope_sandboxes", "GET", f"/sandboxes/{vm}", None, {200}, None),
+                ("scope_sandboxes", "POST", f"/sandboxes/{vm}/exec", {"cmd": "echo keyroles", "timeout_secs": 30}, {200}, exec_ok),
+                ("scope_sandboxes", "GET", "/volumes", None, F, None),
+                ("scope_sandboxes", "GET", "/templates", None, F, None),
+                ("scope_sandboxes", "GET", "/events/sandboxes", None, F, None),
+                ("scope_sandboxes", "GET", "/machines", None, F, None),
+            ])
+            case("preset templates: lists templates, refused sandboxes and volumes", [
+                ("scope_templates", "GET", "/templates", None, {200}, None),
+                ("scope_templates", "POST", "/v2/sandboxes", {"templateID": "base"}, F, None),
+                ("scope_templates", "GET", f"/sandboxes/{vm}", None, F, None),
+                ("scope_templates", "GET", "/volumes", None, F, None),
+            ])
+            case("preset volumes: creates and lists volumes, refused sandboxes", [
+                ("scope_volumes", "POST", "/volumes", {"name": "preset-vol"}, {201}, None),
+                ("scope_volumes", "GET", "/volumes", None, {200}, lambda d: [r for r in d if r.get("name") == "preset-vol"] or (_ for _ in ()).throw(AssertionError("volume not listed"))),
+                ("scope_volumes", "GET", f"/sandboxes/{vm}", None, F, None),
+                ("scope_volumes", "GET", "/sandboxes", None, F, None),
+            ])
+            case("preset events: reads events, refused sandboxes and volumes", [
+                ("scope_events", "GET", "/events/sandboxes?limit=100", None, {200}, None),
+                ("scope_events", "GET", f"/events/sandboxes/{vm}", None, {200}, None),
+                ("scope_events", "GET", "/sandboxes", None, F, None),
+                ("scope_events", "GET", "/volumes", None, F, None),
+            ])
+            case("preset machines: reaches /machines only", [
+                ("scope_machines", "GET", "/machines", None, {200}, None),
+                ("scope_machines", "GET", "/sandboxes", None, F, None),
+                ("scope_machines", "GET", "/volumes", None, F, None),
+            ])
+            case("preset telemetry: reaches /telemetry only", [
+                ("scope_telemetry", "GET", "/telemetry", None, {404},
+                 lambda d: "no telemetry destination" in d["message"] or (_ for _ in ()).throw(AssertionError("not the team's own answer"))),
+                ("scope_telemetry", "GET", "/sandboxes", None, F, None),
+                ("scope_telemetry", "GET", "/volumes", None, F, None),
+            ])
+            case("unknown and expired keys are 401", [
+                ("unknown", "GET", "/sandboxes", None, {401}, None),
+                ("expired", "GET", "/sandboxes", None, {401}, None),
+                ("expired", "POST", "/v2/sandboxes", {"templateID": "base"}, {401}, None),
+            ])
+
+            # Roles: operator (default) and observer are the only two there are.
+            case("role operator: lists, reads, runs commands in the team's sandbox", [
+                ("operator", "GET", "/sandboxes", None, {200}, has_vm),
+                ("operator", "GET", f"/sandboxes/{vm}", None, {200}, None),
+                ("operator", "POST", f"/sandboxes/{vm}/exec", {"cmd": "echo keyroles", "timeout_secs": 30}, {200}, exec_ok),
+                ("operator", "POST", f"/sandboxes/{vm}/owner", {"principalId": "x"}, F, None),
+                ("operator", "GET", "/cluster/nodes", None, {200}, None),  # its inventory scope reads it
+                ("operator", "GET", "/volumes", None, F, None),
+            ])
+            case("role observer: lists the inventory, refused detail, exec, create, pause and delete", [
+                ("observer", "GET", "/sandboxes", None, {200}, has_vm),
+                ("observer", "GET", "/sandboxes/metrics", None, {200}, None),
+                ("observer", "GET", f"/sandboxes/{vm}", None, F, None),
+                ("observer", "POST", f"/sandboxes/{vm}/exec", {"cmd": "echo keyroles"}, F, None),
+                ("observer", "POST", "/v2/sandboxes", {"templateID": "base"}, F, None),
+                ("observer", "POST", f"/sandboxes/{vm}/pause", None, F, None),
+                ("observer", "DELETE", f"/sandboxes/{vm}", None, F, None),
+                ("observer", "GET", "/volumes", None, F, None),
+            ])
+            case("role observer caps even the admin scope (admin scope + observer role)", [
+                ("observer_admin", "GET", "/sandboxes", None, {200}, has_vm),
+                ("observer_admin", "GET", f"/sandboxes/{vm}", None, F, None),
+                ("observer_admin", "POST", "/v2/sandboxes", {"templateID": "base"}, F, None),
+                ("observer_admin", "DELETE", f"/sandboxes/{vm}", None, F, None),
+            ])
+            case("another team's operator key neither lists nor reaches the sandbox", [
+                ("other_team", "GET", "/sandboxes", None, {200}, lacks_vm),
+                ("other_team", "GET", f"/sandboxes/{vm}", None, F, None),
+                ("other_team", "DELETE", f"/sandboxes/{vm}", None, F, None),
+            ])
+            case("role administrator (operator + admin scope): global, lists all teams and deletes", [
+                ("scope_admin", "GET", "/cluster/nodes", None, {200}, None),
+                ("scope_admin", "GET", "/sandboxes", None, {200}, has_vm),
+                ("scope_admin", "DELETE", f"/sandboxes/{vm}", None, {204}, None),
+            ])
+            case("deleted sandbox is gone for the team", [
+                ("operator", "GET", "/sandboxes", None, {200}, lacks_vm),
+            ])
+            report["_all_ran"] = True
+        finally:
+            for child in reversed(processes):
+                stop(child)
+            for handle in handles:
+                handle.close()
+            log = args.output / "node.log"
+            text = log.read_text(errors="replace") if log.exists() else ""
+            report["platform_lines"] = {"Kvm": text.count("Detected hypervisor platform: Kvm"),
+                                        "Tcg": text.count("Detected hypervisor platform: Tcg")}
+            report["cases"].insert(0, {"name": "a sandbox booted and ran a command on KVM (no Tcg)",
+                                       "success": report["platform_lines"]["Kvm"] >= 1 and report["platform_lines"]["Tcg"] == 0
+                                       and any(r["ok"] and r["request"].endswith("/exec")
+                                               for c in report["cases"] for r in c["requests"]),
+                                       "platform_lines": report["platform_lines"], "requests": []})
+            report["success"] = bool(report.pop("_all_ran", False)) and all(c["success"] for c in report["cases"])
+            (args.output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+    raise SystemExit(0 if report["success"] else 1)
+
+
+if __name__ == "__main__":
+    main()
