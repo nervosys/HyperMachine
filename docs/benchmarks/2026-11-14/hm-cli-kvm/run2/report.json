@@ -1,0 +1,1042 @@
+{
+  "success": true,
+  "purpose": "hm sandbox vm, end to end against hv2-sandboxd on KVM; functional",
+  "input_sha256": {
+    "daemon": "672801943ae283ce6c25b582333264526b41006efbf92c42e8246e7af6677e70",
+    "hm": "f98c086c9c58ed9026eaade027ff7e3acd6ff9c9317d106ef96fbfe5e33ddd4e",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "85d929acc80d0f0eadfae26e7187f92bcac31c3acf2802a6d46f99dffd3ab485",
+    "driver": "45ae8dc15e7b2809fcd4fa783890e6c9c85aec904e434719a448ca24779351d4"
+  },
+  "cases": [
+    {
+      "name": "disk create / list / inspect print JSON naming the disk",
+      "success": true,
+      "detail": {
+        "created": {
+          "attachedTo": null,
+          "diskID": "disk-1f862cb7ad53c32a",
+          "name": "clidata",
+          "sizeMiB": 64
+        },
+        "inspected": {
+          "attachedTo": null,
+          "diskID": "disk-1f862cb7ad53c32a",
+          "name": "clidata",
+          "sizeMiB": 64
+        }
+      },
+      "seconds": 0.1
+    },
+    {
+      "name": "create --name --cpus --memory-mb; list and inspect show it; the guest has what was asked",
+      "success": true,
+      "detail": {
+        "sandboxID": "sbx-138cf06185d54308bd4c",
+        "state": "running",
+        "guest_cpus": 1,
+        "guest_memtotal_kb": 474760,
+        "create_keys": [
+          "clientID",
+          "envdAccessToken",
+          "envdHost",
+          "envdVersion",
+          "processPort",
+          "proxyPort",
+          "sandboxID",
+          "templateID"
+        ]
+      },
+      "seconds": 0.1
+    },
+    {
+      "name": "exec: stdout, stderr, the guest's exit code, argv quoting, --timeout gives 124",
+      "success": true,
+      "detail": {
+        "timeout_exit": 124,
+        "timeout_seconds": 1.6
+      },
+      "seconds": 1.7
+    },
+    {
+      "name": "ps and history print JSON, and history holds the earlier exec",
+      "success": true,
+      "detail": {
+        "ps_type": "dict",
+        "history_entries": 7
+      },
+      "seconds": 0.4
+    },
+    {
+      "name": "files upload / download move a 256 KiB binary intact (SHA-256) and refuse to overwrite",
+      "success": true,
+      "detail": {
+        "upload": [
+          {
+            "name": "cli-file.bin",
+            "path": "/root/cli-file.bin",
+            "type": "file"
+          }
+        ],
+        "download": {
+          "bytes": 262144,
+          "destination": "/var/tmp/hm-cli-check-sirg2esr/dst.bin",
+          "path": "/root/cli-file.bin"
+        },
+        "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+      },
+      "seconds": 0.1
+    },
+    {
+      "name": "checkpoint save / list / ls / cat / restore / delete: the guest goes back to the saved state",
+      "success": true,
+      "detail": {
+        "saved": {
+          "createdAt": 1794690754778,
+          "name": "before"
+        },
+        "restored": {
+          "checkpoint": "before",
+          "sandboxID": "sbx-138cf06185d54308bd4c"
+        }
+      },
+      "seconds": 0.6
+    },
+    {
+      "name": "pause, inspect says paused, resume; the guest's RAM state is kept",
+      "success": true,
+      "detail": {
+        "resume_keys": [
+          "clientID",
+          "envdAccessToken",
+          "envdHost",
+          "envdVersion",
+          "processPort",
+          "proxyPort",
+          "sandboxID",
+          "templateID"
+        ]
+      },
+      "seconds": 0.3
+    },
+    {
+      "name": "fork --count 1: the child has the parent's state and diverges from it",
+      "success": true,
+      "detail": {
+        "child": "sbx-b692e79efc4a43c086b1"
+      },
+      "seconds": 0.2
+    },
+    {
+      "name": "create --name is in list metadata; alias bind on a standalone daemon (no control plane) exits 1 with the API's 404",
+      "success": true,
+      "detail": {
+        "create_name_in_metadata": true,
+        "alias_bind_on_standalone_daemon_stderr": "Error: sandbox API returned 404 Not Found"
+      },
+      "seconds": 0.0
+    },
+    {
+      "name": "network create / list / connect / inspect / disconnect / delete",
+      "success": true,
+      "detail": {
+        "members": {
+          "members": [
+            {
+              "address": "10.200.0.2",
+              "alias": "alpha",
+              "sandboxID": "sbx-138cf06185d54308bd4c"
+            },
+            {
+              "address": "10.200.0.3",
+              "alias": "beta",
+              "sandboxID": "sbx-b692e79efc4a43c086b1"
+            }
+          ],
+          "name": "clinet"
+        }
+      },
+      "seconds": 0.1
+    },
+    {
+      "name": "standby stops the vCPUs and prints its status; the next exec wakes it with state intact",
+      "success": true,
+      "detail": {
+        "standby_reply": {
+          "lastWakeMicros": 0.0,
+          "standby": true,
+          "vcpuExits": 80,
+          "wakes": 0
+        }
+      },
+      "seconds": 0.0
+    },
+    {
+      "name": "delete removes the fork and the original",
+      "success": true,
+      "seconds": 0.1
+    },
+    {
+      "name": "create --disk: data survives the sandbox, disk delete is refused while held and works when free",
+      "success": true,
+      "seconds": 1.2
+    },
+    {
+      "name": "errors: exec/inspect/pause/delete on a deleted sandbox exit 1 with the API's message; a bad flag exits 2",
+      "success": true,
+      "detail": {
+        "exec_on_deleted_stderr": "Error: sandbox API returned 404 Not Found: {\"error\":\"no sandbox sbx-a7bf132afd1444ceab85\"}",
+        "inspect_on_deleted_stderr": "Error: sandbox API returned 404 Not Found: {\"code\":404,\"message\":\"no sandbox sbx-a7bf132afd1444ceab85\"}",
+        "bad_cpus_stderr": "error: invalid value '0' for '--cpus <CPUS>': 0 is not in 1..=4294967295\n\nFor more information, try '--help'.",
+        "delete_twice_stderr": "Error: sandbox API returned 404 Not Found: {\"code\":404,\"message\":\"no sandbox sbx-a7bf132afd1444ceab85\"}"
+      },
+      "seconds": 0.1
+    },
+    {
+      "name": "no sandbox is left behind",
+      "success": true,
+      "seconds": 0.0
+    },
+    {
+      "name": "ran on KVM: the daemon log has platform: Kvm and no platform: Tcg",
+      "success": true,
+      "detail": {
+        "platform_Kvm": 10,
+        "platform_Tcg": 0
+      }
+    }
+  ],
+  "hm_invocations": 74,
+  "transcript": [
+    {
+      "argv": [
+        "disk",
+        "create",
+        "clidata",
+        "--size-mib",
+        "64"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"attachedTo\": null,\n  \"diskID\": \"disk-1f862cb7ad53c32a\",\n  \"name\": \"clidata\",\n  \"sizeMiB\": 64\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "disk",
+        "list"
+      ],
+      "exit": 0,
+      "stdout": "[\n  {\n    \"attachedTo\": null,\n    \"diskID\": \"disk-1f862cb7ad53c32a\",\n    \"name\": \"clidata\",\n    \"sizeMiB\": 64\n  }\n]\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "disk",
+        "inspect",
+        "disk-1f862cb7ad53c32a"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"attachedTo\": null,\n  \"diskID\": \"disk-1f862cb7ad53c32a\",\n  \"name\": \"clidata\",\n  \"sizeMiB\": 64\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "create",
+        "--lifetime",
+        "900",
+        "--name",
+        "cli-a",
+        "--cpus",
+        "1",
+        "--memory-mb",
+        "512"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"clientID\": \"sbx-138cf06185d54308bd4c\",\n  \"envdAccessToken\": \"d43e1ee2bdc342bf96231a17aa4af877d98963a373964eec88c397ca138d39a7\",\n  \"envdHost\": \"49983-sbx-138cf06185d54308bd4c\",\n  \"envdVersion\": \"0.6.3\",\n  \"processPort\": 36821,\n  \"proxyPort\": 50497,\n  \"sandboxID\": \"sbx-138cf06185d54308bd4c\",\n  \"templateID\": \"base\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "list"
+      ],
+      "exit": 0,
+      "stdout": "[\n  {\n    \"clientID\": \"sbx-138cf06185d54308bd4c\",\n    \"cpuCount\": 1,\n    \"diskSizeMB\": 0,\n    \"endAt\": \"2026-11-14T21:27:32.445Z\",\n    \"envdVersion\": \"0.6.3\",\n    \"memoryMB\": 512,\n    \"metadata\": {\n      \"hm.name\": \"cli-a\"\n    },\n    \"nodeID\": \"local\",\n    \"sandboxID\": \"sbx-138cf06185d54308bd4c\",\n    \"startedAt\": \"2026-11-14T21:12:32.445Z\",\n    \"state\": \"running\",\n    \"templateID\": \"base\"\n  }\n]\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "inspect",
+        "sbx-138cf06185d54308bd4c"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"clientID\": \"sbx-138cf06185d54308bd4c\",\n  \"cpuCount\": 1,\n  \"diskSizeMB\": 0,\n  \"endAt\": \"2026-11-14T21:27:32.445Z\",\n  \"envdAccessToken\": \"d43e1ee2bdc342bf96231a17aa4af877d98963a373964eec88c397ca138d39a7\",\n  \"envdVersion\": \"0.6.3\",\n  \"memoryMB\": 512,\n  \"metadata\": {\n    \"hm.name\": \"cli-a\"\n  },\n  \"nodeID\": \"local\",\n  \"sandboxID\": \"sbx-138cf06185d54308bd4c\",\n  \"startedAt\": \"2026-11-14T21:12:32.445",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-138cf06185d54308bd4c",
+        "--",
+        "/bin/sh",
+        "-c",
+        "grep -c ^processor /proc/cpuinfo"
+      ],
+      "exit": 0,
+      "stdout": "1\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-138cf06185d54308bd4c",
+        "--",
+        "/bin/sh",
+        "-c",
+        "awk '/MemTotal/{print $2}' /proc/meminfo"
+      ],
+      "exit": 0,
+      "stdout": "474760\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-138cf06185d54308bd4c",
+        "--",
+        "echo",
+        "hello"
+      ],
+      "exit": 0,
+      "stdout": "hello\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-138cf06185d54308bd4c",
+        "--",
+        "/bin/sh",
+        "-c",
+        "echo out; echo err >&2; exit 7"
+      ],
+      "exit": 7,
+      "stdout": "out\n",
+      "stderr": "err\n"
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-138cf06185d54308bd4c",
+        "--",
+        "/bin/busybox",
+        "printf",
+        "%s",
+        "a'b; $(touch /root/cli-injection); `echo substituted`"
+      ],
+      "exit": 0,
+      "stdout": "a'b; $(touch /root/cli-injection); `echo substituted`",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-138cf06185d54308bd4c",
+        "--",
+        "/bin/sh",
+        "-c",
+        "test ! -e /root/cli-injection && echo clean"
+      ],
+      "exit": 0,
+      "stdout": "clean\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-138cf06185d54308bd4c",
+        "--timeout",
+        "2",
+        "--",
+        "sleep",
+        "30"
+      ],
+      "exit": 124,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "ps",
+        "sbx-138cf06185d54308bd4c"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"processes\": [\n    {\n      \"args\": \"sh\",\n      \"command\": \"sh\",\n      \"cpuSeconds\": 0.36,\n      \"pid\": 1,\n      \"ppid\": 0,\n      \"rssKiB\": 1408,\n      \"startedSecondsAgo\": 2.03,\n      \"state\": \"S\",\n      \"threads\": 1,\n      \"uid\": 0\n    },\n    {\n      \"args\": \"/bin/hv2-guest-agentd\",\n      \"command\": \"hv2-guest-agent\",\n      \"cpuSeconds\": 0.25,\n      \"pid\": 54,\n      \"ppid\": 1,\n      \"rssKiB\":",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "history",
+        "sbx-138cf06185d54308bd4c"
+      ],
+      "exit": 0,
+      "stdout": "[\n  {\n    \"cmd\": \"exec '/bin/sh' '-c' 'grep -c ^processor /proc/cpuinfo'\",\n    \"cwd\": null,\n    \"endedAt\": 1794690752553,\n    \"error\": null,\n    \"exitCode\": 0,\n    \"n\": 1,\n    \"pid\": null,\n    \"pty\": false,\n    \"signal\": null,\n    \"source\": \"exec\",\n    \"startedAt\": 1794690752531,\n    \"state\": \"exited\",\n    \"stderrBytes\": 0,\n    \"stdoutBytes\": 2,\n    \"tag\": null,\n    \"user\": null\n  },\n  {\n    \"cmd\"",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "files",
+        "sbx-138cf06185d54308bd4c",
+        "--envd-endpoint",
+        "http://127.0.0.1:36821",
+        "upload",
+        "/var/tmp/hm-cli-check-sirg2esr/src.bin",
+        "/root/cli-file.bin"
+      ],
+      "exit": 0,
+      "stdout": "[\n  {\n    \"name\": \"cli-file.bin\",\n    \"path\": \"/root/cli-file.bin\",\n    \"type\": \"file\"\n  }\n]\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-138cf06185d54308bd4c",
+        "--",
+        "/bin/sh",
+        "-c",
+        "sha256sum /root/cli-file.bin"
+      ],
+      "exit": 0,
+      "stdout": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9  /root/cli-file.bin\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "files",
+        "sbx-138cf06185d54308bd4c",
+        "--envd-endpoint",
+        "http://127.0.0.1:36821",
+        "download",
+        "/root/cli-file.bin",
+        "/var/tmp/hm-cli-check-sirg2esr/dst.bin"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"bytes\": 262144,\n  \"destination\": \"/var/tmp/hm-cli-check-sirg2esr/dst.bin\",\n  \"path\": \"/root/cli-file.bin\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "files",
+        "sbx-138cf06185d54308bd4c",
+        "--envd-endpoint",
+        "http://127.0.0.1:36821",
+        "download",
+        "/root/cli-file.bin",
+        "/var/tmp/hm-cli-check-sirg2esr/dst.bin"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: download destination already exists: /var/tmp/hm-cli-check-sirg2esr/dst.bin\n"
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-138cf06185d54308bd4c",
+        "--",
+        "/bin/sh",
+        "-c",
+        "printf before > /root/cli-state"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "checkpoint",
+        "save",
+        "sbx-138cf06185d54308bd4c",
+        "before"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"createdAt\": 1794690754778,\n  \"name\": \"before\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "checkpoint",
+        "list",
+        "sbx-138cf06185d54308bd4c"
+      ],
+      "exit": 0,
+      "stdout": "[\n  {\n    \"createdAt\": 1794690754778,\n    \"name\": \"before\"\n  }\n]\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-138cf06185d54308bd4c",
+        "--",
+        "/bin/sh",
+        "-c",
+        "printf after > /root/cli-state"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "checkpoint",
+        "ls",
+        "sbx-138cf06185d54308bd4c",
+        "before",
+        "/root"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"checkpoint\": \"before\",\n  \"entries\": [\n    {\n      \"gid\": 0,\n      \"mode\": \"644\",\n      \"name\": \"cli-file.bin\",\n      \"size\": 262144,\n      \"type\": \"file\",\n      \"uid\": 0\n    },\n    {\n      \"gid\": 0,\n      \"mode\": \"644\",\n      \"name\": \"cli-state\",\n      \"size\": 6,\n      \"type\": \"file\",\n      \"uid\": 0\n    }\n  ],\n  \"path\": \"/root\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "checkpoint",
+        "cat",
+        "sbx-138cf06185d54308bd4c",
+        "before",
+        "/root/cli-state"
+      ],
+      "exit": 0,
+      "stdout": "before",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-138cf06185d54308bd4c",
+        "--",
+        "/bin/sh",
+        "-c",
+        "cat /root/cli-state"
+      ],
+      "exit": 0,
+      "stdout": "after",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "checkpoint",
+        "restore",
+        "sbx-138cf06185d54308bd4c",
+        "before"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"checkpoint\": \"before\",\n  \"sandboxID\": \"sbx-138cf06185d54308bd4c\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-138cf06185d54308bd4c",
+        "--",
+        "/bin/sh",
+        "-c",
+        "cat /root/cli-state"
+      ],
+      "exit": 0,
+      "stdout": "before",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "checkpoint",
+        "delete",
+        "sbx-138cf06185d54308bd4c",
+        "before"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "checkpoint",
+        "list",
+        "sbx-138cf06185d54308bd4c"
+      ],
+      "exit": 0,
+      "stdout": "[]\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-138cf06185d54308bd4c",
+        "--",
+        "/bin/sh",
+        "-c",
+        "echo kept > /tmp/ram; (while true; do sleep 1; done) >/dev/null 2>&1 &"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "pause",
+        "sbx-138cf06185d54308bd4c"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "inspect",
+        "sbx-138cf06185d54308bd4c"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"clientID\": \"sbx-138cf06185d54308bd4c\",\n  \"cpuCount\": 1,\n  \"diskSizeMB\": 0,\n  \"endAt\": \"2026-11-14T21:27:32.445Z\",\n  \"envdAccessToken\": \"d43e1ee2bdc342bf96231a17aa4af877d98963a373964eec88c397ca138d39a7\",\n  \"envdVersion\": \"0.6.3\",\n  \"memoryMB\": 512,\n  \"metadata\": {\n    \"hm.name\": \"cli-a\"\n  },\n  \"nodeID\": \"local\",\n  \"sandboxID\": \"sbx-138cf06185d54308bd4c\",\n  \"startedAt\": \"2026-11-14T21:12:32.445",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "resume",
+        "sbx-138cf06185d54308bd4c",
+        "--lifetime",
+        "900"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"clientID\": \"sbx-138cf06185d54308bd4c\",\n  \"envdAccessToken\": \"d43e1ee2bdc342bf96231a17aa4af877d98963a373964eec88c397ca138d39a7\",\n  \"envdHost\": \"49983-sbx-138cf06185d54308bd4c\",\n  \"envdVersion\": \"0.6.3\",\n  \"processPort\": 37973,\n  \"proxyPort\": 50497,\n  \"sandboxID\": \"sbx-138cf06185d54308bd4c\",\n  \"templateID\": \"base\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "inspect",
+        "sbx-138cf06185d54308bd4c"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"clientID\": \"sbx-138cf06185d54308bd4c\",\n  \"cpuCount\": 1,\n  \"diskSizeMB\": 0,\n  \"endAt\": \"2026-11-14T21:27:35.547Z\",\n  \"envdAccessToken\": \"d43e1ee2bdc342bf96231a17aa4af877d98963a373964eec88c397ca138d39a7\",\n  \"envdVersion\": \"0.6.3\",\n  \"memoryMB\": 512,\n  \"metadata\": {\n    \"hm.name\": \"cli-a\"\n  },\n  \"nodeID\": \"local\",\n  \"sandboxID\": \"sbx-138cf06185d54308bd4c\",\n  \"startedAt\": \"2026-11-14T21:12:32.445",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-138cf06185d54308bd4c",
+        "--",
+        "/bin/sh",
+        "-c",
+        "cat /tmp/ram"
+      ],
+      "exit": 0,
+      "stdout": "kept\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-138cf06185d54308bd4c",
+        "--",
+        "/bin/sh",
+        "-c",
+        "printf forkme > /root/fork-state"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "fork",
+        "sbx-138cf06185d54308bd4c",
+        "--count",
+        "1",
+        "--lifetime",
+        "900"
+      ],
+      "exit": 0,
+      "stdout": "[\n  {\n    \"sandbox\": {\n      \"clientID\": \"sbx-b692e79efc4a43c086b1\",\n      \"envdAccessToken\": \"c934780792ef4046b8ba5c5eed0cfd47f62de793c45f481fbdc51f50c1b92874\",\n      \"envdHost\": \"49983-sbx-b692e79efc4a43c086b1\",\n      \"envdVersion\": \"0.6.3\",\n      \"processPort\": 43179,\n      \"proxyPort\": 50497,\n      \"sandboxID\": \"sbx-b692e79efc4a43c086b1\",\n      \"templateID\": \"base\"\n    }\n  }\n]\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-b692e79efc4a43c086b1",
+        "--",
+        "/bin/sh",
+        "-c",
+        "cat /root/fork-state"
+      ],
+      "exit": 0,
+      "stdout": "forkme",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-b692e79efc4a43c086b1",
+        "--",
+        "/bin/sh",
+        "-c",
+        "printf child-only > /root/fork-state"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-138cf06185d54308bd4c",
+        "--",
+        "/bin/sh",
+        "-c",
+        "cat /root/fork-state"
+      ],
+      "exit": 0,
+      "stdout": "forkme",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "list"
+      ],
+      "exit": 0,
+      "stdout": "[\n  {\n    \"clientID\": \"sbx-138cf06185d54308bd4c\",\n    \"cpuCount\": 1,\n    \"diskSizeMB\": 0,\n    \"endAt\": \"2026-11-14T21:27:35.547Z\",\n    \"envdVersion\": \"0.6.3\",\n    \"memoryMB\": 512,\n    \"metadata\": {\n      \"hm.name\": \"cli-a\"\n    },\n    \"nodeID\": \"local\",\n    \"sandboxID\": \"sbx-138cf06185d54308bd4c\",\n    \"startedAt\": \"2026-11-14T21:12:32.445Z\",\n    \"state\": \"running\",\n    \"templateID\": \"base\"\n  },\n  {",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "alias",
+        "bind",
+        "sbx-138cf06185d54308bd4c",
+        "cli-alias"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: sandbox API returned 404 Not Found\n"
+    },
+    {
+      "argv": [
+        "network",
+        "create",
+        "clinet"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"members\": [],\n  \"name\": \"clinet\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "network",
+        "list"
+      ],
+      "exit": 0,
+      "stdout": "[\n  {\n    \"members\": [],\n    \"name\": \"clinet\"\n  }\n]\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "network",
+        "connect",
+        "clinet",
+        "--sandbox-id",
+        "sbx-138cf06185d54308bd4c",
+        "--alias",
+        "alpha"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"address\": \"10.200.0.2\",\n  \"alias\": \"alpha\",\n  \"network\": \"clinet\",\n  \"sandboxID\": \"sbx-138cf06185d54308bd4c\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "network",
+        "connect",
+        "clinet",
+        "--sandbox-id",
+        "sbx-b692e79efc4a43c086b1",
+        "--alias",
+        "beta"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"address\": \"10.200.0.3\",\n  \"alias\": \"beta\",\n  \"network\": \"clinet\",\n  \"sandboxID\": \"sbx-b692e79efc4a43c086b1\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "network",
+        "inspect",
+        "clinet"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"members\": [\n    {\n      \"address\": \"10.200.0.2\",\n      \"alias\": \"alpha\",\n      \"sandboxID\": \"sbx-138cf06185d54308bd4c\"\n    },\n    {\n      \"address\": \"10.200.0.3\",\n      \"alias\": \"beta\",\n      \"sandboxID\": \"sbx-b692e79efc4a43c086b1\"\n    }\n  ],\n  \"name\": \"clinet\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "network",
+        "disconnect",
+        "clinet",
+        "--sandbox-id",
+        "sbx-b692e79efc4a43c086b1"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "network",
+        "inspect",
+        "clinet"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"members\": [\n    {\n      \"address\": \"10.200.0.2\",\n      \"alias\": \"alpha\",\n      \"sandboxID\": \"sbx-138cf06185d54308bd4c\"\n    }\n  ],\n  \"name\": \"clinet\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "network",
+        "disconnect",
+        "clinet",
+        "--sandbox-id",
+        "sbx-138cf06185d54308bd4c"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "network",
+        "delete",
+        "clinet"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "network",
+        "list"
+      ],
+      "exit": 0,
+      "stdout": "[]\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "standby",
+        "sbx-138cf06185d54308bd4c"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"lastWakeMicros\": 0.0,\n  \"standby\": true,\n  \"vcpuExits\": 80,\n  \"wakes\": 0\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-138cf06185d54308bd4c",
+        "--",
+        "/bin/sh",
+        "-c",
+        "cat /tmp/ram"
+      ],
+      "exit": 0,
+      "stdout": "kept\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "delete",
+        "sbx-b692e79efc4a43c086b1"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "delete",
+        "sbx-138cf06185d54308bd4c"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "create",
+        "--lifetime",
+        "900",
+        "--disk",
+        "clidata:/data"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"clientID\": \"sbx-90fe0cec7e5f409f97a0\",\n  \"envdAccessToken\": \"87feced4e4f240c7bc7dd098eafbaa4bc2d3fe745d0b47a1b2929e4388ac91cc\",\n  \"envdHost\": \"49983-sbx-90fe0cec7e5f409f97a0\",\n  \"envdVersion\": \"0.6.3\",\n  \"processPort\": 41279,\n  \"proxyPort\": 50497,\n  \"sandboxID\": \"sbx-90fe0cec7e5f409f97a0\",\n  \"templateID\": \"base\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-90fe0cec7e5f409f97a0",
+        "--",
+        "/bin/sh",
+        "-c",
+        "echo on-the-disk > /data/first && sync"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "disk",
+        "delete",
+        "disk-1f862cb7ad53c32a"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: sandbox API returned 409 Conflict\n"
+    },
+    {
+      "argv": [
+        "delete",
+        "sbx-90fe0cec7e5f409f97a0"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "disk",
+        "inspect",
+        "disk-1f862cb7ad53c32a"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"attachedTo\": null,\n  \"diskID\": \"disk-1f862cb7ad53c32a\",\n  \"name\": \"clidata\",\n  \"sizeMiB\": 64\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "create",
+        "--lifetime",
+        "900",
+        "--disk",
+        "clidata:/data"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"clientID\": \"sbx-43de059a7d264d45a78f\",\n  \"envdAccessToken\": \"c8e3574d85094f74aaca8b1dda5f5c7992be76c10be94c3aa0008e1e25f5ac69\",\n  \"envdHost\": \"49983-sbx-43de059a7d264d45a78f\",\n  \"envdVersion\": \"0.6.3\",\n  \"processPort\": 34223,\n  \"proxyPort\": 50497,\n  \"sandboxID\": \"sbx-43de059a7d264d45a78f\",\n  \"templateID\": \"base\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-43de059a7d264d45a78f",
+        "--",
+        "/bin/sh",
+        "-c",
+        "cat /data/first"
+      ],
+      "exit": 0,
+      "stdout": "on-the-disk\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "delete",
+        "sbx-43de059a7d264d45a78f"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "disk",
+        "delete",
+        "disk-1f862cb7ad53c32a"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "disk",
+        "list"
+      ],
+      "exit": 0,
+      "stdout": "[]\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "create",
+        "--lifetime",
+        "900"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"clientID\": \"sbx-a7bf132afd1444ceab85\",\n  \"envdAccessToken\": \"17ae3c34fe3a4bc9a93311ab0a5e89f4890dd6daa4bb45e88d915dce5fa78418\",\n  \"envdHost\": \"49983-sbx-a7bf132afd1444ceab85\",\n  \"envdVersion\": \"0.6.3\",\n  \"processPort\": 36651,\n  \"proxyPort\": 50497,\n  \"sandboxID\": \"sbx-a7bf132afd1444ceab85\",\n  \"templateID\": \"base\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "delete",
+        "sbx-a7bf132afd1444ceab85"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "exec",
+        "sbx-a7bf132afd1444ceab85",
+        "--",
+        "true"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: sandbox API returned 404 Not Found: {\"error\":\"no sandbox sbx-a7bf132afd1444ceab85\"}\n"
+    },
+    {
+      "argv": [
+        "inspect",
+        "sbx-a7bf132afd1444ceab85"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: sandbox API returned 404 Not Found: {\"code\":404,\"message\":\"no sandbox sbx-a7bf132afd1444ceab85\"}\n"
+    },
+    {
+      "argv": [
+        "pause",
+        "sbx-a7bf132afd1444ceab85"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: sandbox API returned 404 Not Found: {\"code\":404,\"message\":\"no sandbox sbx-a7bf132afd1444ceab85\"}\n"
+    },
+    {
+      "argv": [
+        "create",
+        "--cpus",
+        "0"
+      ],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "error: invalid value '0' for '--cpus <CPUS>': 0 is not in 1..=4294967295\n\nFor more information, try '--help'.\n"
+    },
+    {
+      "argv": [
+        "delete",
+        "sbx-a7bf132afd1444ceab85"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: sandbox API returned 404 Not Found: {\"code\":404,\"message\":\"no sandbox sbx-a7bf132afd1444ceab85\"}\n"
+    }
+  ]
+}
