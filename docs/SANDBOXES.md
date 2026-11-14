@@ -648,6 +648,38 @@ Checked by hand on this repo's hosts:
   - without a delegated cgroup, the report marks the memory and process limits NOT ENFORCED
     and says what to change.
 
+## From the command line: `hm sandbox vm`
+
+`hm sandbox vm` drives a node's sandbox API (`--endpoint`, `HV2_SANDBOX_URL`,
+`HV2_API_KEY`). Every successful command prints one JSON document on stdout, with
+two exceptions that are raw bytes by design: `exec` (the guest command's stdout
+and stderr, and its exit code) and `checkpoint cat` (the file's bytes). Errors go
+to stderr as text with a non-zero exit code (1 for an API or guest failure, 2 for
+a bad argument).
+
+A command whose API reply has a body prints that body. A command whose reply is
+empty prints a small confirmation, one convention for all of them:
+
+| Command | Output |
+|---|---|
+| `delete ID` | `{"deleted": "<id>", "kind": "sandbox"}` |
+| `disk delete`, `network delete`, `volume delete`, `machine delete` | `{"deleted": "<id or name>", "kind": "disk" \| "network" \| "volume" \| "machine"}` |
+| `checkpoint delete ID NAME` | `{"deleted": "<name>", "kind": "checkpoint", "sandboxID": "<id>"}` |
+| `pause ID` | `{"sandboxID": "<id>", "status": "paused"}` |
+| `network disconnect NET --sandbox-id ID` | `{"network": "<net>", "sandboxID": "<id>", "status": "disconnected"}` |
+| any other command with nothing to say | `{"status": "ok"}` |
+
+`disk inspect` and `disk delete` take a disk's ID or the name given to `disk
+create`; a name that matches no disk, or more than one, is an error that names it
+(a known ID always wins). `delete` is not idempotent: deleting a sandbox that is
+already gone exits 1 with the API's message.
+
+An API error with a message prints it: `sandbox API returned 409 Conflict: <message>`.
+One with an empty body names the request instead, `sandbox API returned 404 Not Found
+for PUT /sandboxes/ID/names/NAME with no message`, and for a 404 adds that the
+daemon may not serve the route: reserved aliases, domains, usage and cluster routes
+need a control plane, and a standalone `hv2-sandboxd` has none.
+
 ## Reaching it as an agent
 
 Two tools, dispatched against a `SandboxHost` the way `vm.*` dispatches against

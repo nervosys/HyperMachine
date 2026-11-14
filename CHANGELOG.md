@@ -161,6 +161,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sync override exists for it); any effect in CI (no kernel fixture there).
 
 ### Changed
+- **`hm sandbox vm` prints JSON on every success.** `pause`, `delete`,
+  `checkpoint delete`, `network disconnect`, `network delete`, `disk delete`
+  (and `volume delete`, `machine delete`) printed nothing; each now prints one
+  small object (`{"deleted": ID, "kind": ...}`, `{"sandboxID": ID, "status":
+  "paused"}`, and so on; `{"status": "ok"}` for any other empty reply), and a
+  reply with a body is printed as before. `exec` and `checkpoint cat` still
+  print raw bytes. `disk inspect` and `disk delete` take a disk's name as well
+  as its ID. An API error with an empty body names the method and path, and a
+  404 says the route may need a control plane. Scripts that relied on empty
+  stdout from these commands see a JSON line now.
 
 - **`enable_gpu` on a VM is refused instead of ignored.** The flag was accepted by
   the REST API, gRPC, the MCP `vm.create` tool (`gpu_enabled`) and

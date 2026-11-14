@@ -895,3 +895,178 @@ async fn alias_commands_authenticate_assign_inspect_and_refuse_invalid_names() {
     }
     server.abort();
 }
+
+async fn hm_vm(endpoint: &str, arguments: &[&str]) -> std::process::Output {
+    tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+        .args(["sandbox", "vm", "--endpoint", endpoint])
+        .args(arguments)
+        .env_remove("HV2_API_KEY")
+        .output()
+        .await
+        .unwrap()
+}
+
+fn stdout_json(output: &std::process::Output) -> Value {
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice(&output.stdout).expect("stdout is one JSON document")
+}
+
+#[tokio::test]
+async fn commands_with_an_empty_reply_print_a_json_confirmation() {
+    use axum::http::StatusCode;
+    let app = Router::new()
+        .route(
+            "/sandboxes/{id}/pause",
+            post(|| async { StatusCode::NO_CONTENT }),
+        )
+        .route(
+            "/sandboxes/{id}",
+            delete(|| async { StatusCode::NO_CONTENT }),
+        )
+        .route(
+            "/sandboxes/{id}/checkpoints/{name}",
+            delete(|| async { StatusCode::NO_CONTENT }),
+        )
+        .route(
+            "/networks/{name}/disconnect",
+            post(|| async { StatusCode::NO_CONTENT }),
+        )
+        .route(
+            "/networks/{name}",
+            delete(|| async { StatusCode::NO_CONTENT }),
+        );
+    let (endpoint, task) = server(app).await;
+    let cases: [(&[&str], Value); 5] = [
+        (
+            &["pause", "sbx-1"],
+            json!({"sandboxID":"sbx-1","status":"paused"}),
+        ),
+        (
+            &["delete", "sbx-1"],
+            json!({"deleted":"sbx-1","kind":"sandbox"}),
+        ),
+        (
+            &["checkpoint", "delete", "sbx-1", "before"],
+            json!({"deleted":"before","kind":"checkpoint","sandboxID":"sbx-1"}),
+        ),
+        (
+            &["network", "disconnect", "net", "--sandbox-id", "sbx-1"],
+            json!({"network":"net","sandboxID":"sbx-1","status":"disconnected"}),
+        ),
+        (
+            &["network", "delete", "net"],
+            json!({"deleted":"net","kind":"network"}),
+        ),
+    ];
+    for (arguments, expected) in cases {
+        let output = hm_vm(&endpoint, arguments).await;
+        assert_eq!(stdout_json(&output), expected, "{arguments:?}");
+    }
+    task.abort();
+}
+
+#[tokio::test]
+async fn a_reply_with_a_body_is_printed_unchanged() {
+    let app = Router::new().route(
+        "/sandboxes/{id}/pause",
+        post(|| async { Json(json!({"sandboxID":"sbx-1","state":"paused","extra":1})) }),
+    );
+    let (endpoint, task) = server(app).await;
+    let output = hm_vm(&endpoint, &["pause", "sbx-1"]).await;
+    assert_eq!(
+        stdout_json(&output),
+        json!({"sandboxID":"sbx-1","state":"paused","extra":1})
+    );
+    task.abort();
+}
+
+#[tokio::test]
+async fn disk_inspect_and_delete_accept_an_id_or_a_unique_name() {
+    use axum::extract::Path;
+    use axum::http::StatusCode;
+    let deletes = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let seen = deletes.clone();
+    let app = Router::new()
+        .route(
+            "/disks",
+            axum::routing::get(|| async {
+                Json(json!([
+                    {"diskID":"disk-1","name":"data"},
+                    {"diskID":"disk-2","name":"twin"},
+                    {"diskID":"disk-3","name":"twin"}
+                ]))
+            }),
+        )
+        .route(
+            "/disks/{id}",
+            axum::routing::get(|Path(id): Path<String>| async move {
+                Json(json!({"diskID":id,"name":"data"}))
+            })
+            .delete(move |Path(id): Path<String>| async move {
+                seen.lock().unwrap().push(id);
+                StatusCode::NO_CONTENT
+            }),
+        );
+    let (endpoint, task) = server(app).await;
+    for given in ["data", "disk-1"] {
+        let output = hm_vm(&endpoint, &["disk", "inspect", given]).await;
+        assert_eq!(stdout_json(&output)["diskID"], "disk-1", "{given}");
+    }
+    let output = hm_vm(&endpoint, &["disk", "delete", "data"]).await;
+    assert_eq!(
+        stdout_json(&output),
+        json!({"deleted":"disk-1","kind":"disk"})
+    );
+    assert_eq!(*deletes.lock().unwrap(), vec!["disk-1".to_string()]);
+    for (given, wanted) in [
+        ("nope", "no disk with ID or name \"nope\""),
+        ("twin", "ambiguous"),
+    ] {
+        for verb in ["inspect", "delete"] {
+            let output = hm_vm(&endpoint, &["disk", verb, given]).await;
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stdout.is_empty());
+            let error = String::from_utf8_lossy(&output.stderr);
+            assert!(error.contains(wanted) && error.contains(given), "{error}");
+        }
+    }
+    assert_eq!(deletes.lock().unwrap().len(), 1, "no delete on a bad name");
+    task.abort();
+}
+
+#[tokio::test]
+async fn an_empty_error_body_names_the_method_and_path() {
+    use axum::http::StatusCode;
+    let app = Router::new().route(
+        "/sandboxes/{id}/pause",
+        post(|| async { (StatusCode::NOT_FOUND, "no sandbox sbx-9") }),
+    );
+    let (endpoint, task) = server(app).await;
+    // A route the daemon does not serve: empty 404 body, bounded request path.
+    let output = hm_vm(&endpoint, &["alias", "bind", "sbx-1", "my-alias"]).await;
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        error.contains("PUT /sandboxes/sbx-1/names/my-alias") && error.contains("control plane"),
+        "{error}"
+    );
+    // The same through the unbounded request path.
+    let output = hm_vm(&endpoint, &["inspect", "sbx-1"]).await;
+    assert_eq!(output.status.code(), Some(1));
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("GET /sandboxes/sbx-1"), "{error}");
+    // A body, when there is one, is still shown.
+    let output = hm_vm(&endpoint, &["pause", "sbx-9"]).await;
+    assert_eq!(output.status.code(), Some(1));
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        error.contains("404") && error.contains("no sandbox sbx-9"),
+        "{error}"
+    );
+    task.abort();
+}

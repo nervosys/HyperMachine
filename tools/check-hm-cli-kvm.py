@@ -3,7 +3,10 @@
 
 Starts an owned hv2-sandboxd (one template, a --disk-dir) and drives it only
 through the real `hm` binary, as a subprocess, parsing the JSON the CLI prints.
-Cases, one per subcommand area:
+Every command that succeeds must print one parseable JSON document (pause, delete,
+checkpoint delete, network disconnect/delete and disk delete print a small
+confirmation), except exec and checkpoint cat, which print the guest's raw bytes.
+A disk is addressed by ID or by name. Cases, one per subcommand area:
 
  1. disk create / list / inspect
  2. create (--name, --cpus, --memory-mb), list, inspect, and the guest's CPU
@@ -96,7 +99,8 @@ def main():
         return made
 
     def delete(sandbox):
-        hm("delete", sandbox)
+        printed = hmj("delete", sandbox)
+        assert printed == {"deleted": sandbox, "kind": "sandbox"}, printed
         owned.discard(sandbox)
 
     def case(name, action):
@@ -133,11 +137,15 @@ def main():
             listed = hmj("disk", "list")
             state["disk"] = made["diskID"]
             inspected = hmj("disk", "inspect", state["disk"])
+            by_name = hmj("disk", "inspect", "clidata")
+            assert by_name["diskID"] == state["disk"] and by_name == inspected, by_name
+            _, err = hm("disk", "inspect", "no-such-disk", expect=1)
+            assert "no-such-disk" in err, err
             assert made.get("name") == "clidata" or made.get("diskID"), made
             names = json.dumps(listed)
             assert "clidata" in names, listed
             assert "clidata" in json.dumps(inspected), inspected
-            return {"created": made, "inspected": inspected}
+            return {"created": made, "inspected": inspected, "missing_name_stderr": err.strip()}
         case("disk create / list / inspect print JSON naming the disk", disks)
 
         def creating():
@@ -210,14 +218,16 @@ def main():
             assert sh(a, "cat /root/cli-state") == "after"
             restored = hmj("checkpoint", "restore", a, "before")
             assert sh(a, "cat /root/cli-state") == "before"
-            hm("checkpoint", "delete", a, "before")
+            gone = hmj("checkpoint", "delete", a, "before")
+            assert gone == {"deleted": "before", "kind": "checkpoint", "sandboxID": a}, gone
             assert "before" not in json.dumps(hmj("checkpoint", "list", a))
             return {"saved": saved, "restored": restored}
         case("checkpoint save / list / ls / cat / restore / delete: the guest goes back to the saved state", checkpoints)
 
         def pause_resume():
             sh(a, "echo kept > /tmp/ram; (while true; do sleep 1; done) >/dev/null 2>&1 &")
-            hm("pause", a)
+            paused = hmj("pause", a)
+            assert paused == {"sandboxID": a, "status": "paused"}, paused
             assert hmj("inspect", a)["state"] == "paused"
             resumed = hmj("resume", a, "--lifetime", "900")
             assert hmj("inspect", a)["state"] == "running"
@@ -245,6 +255,7 @@ def main():
             # Reserved aliases live in the control plane; a standalone daemon has no such route.
             _, err = hm("alias", "bind", a, "cli-alias", expect=1)
             assert "404" in err, err
+            assert f"PUT /sandboxes/{a}/names/cli-alias" in err and "control plane" in err, err
             return {"create_name_in_metadata": True, "alias_bind_on_standalone_daemon_stderr": err.strip()}
         case("create --name is in list metadata; alias bind on a standalone daemon (no control plane) exits 1 with the API's 404", aliases)
 
@@ -257,10 +268,12 @@ def main():
             info = hmj("network", "inspect", "clinet")
             text = json.dumps(info)
             assert "alpha" in text and "beta" in text, info
-            hm("network", "disconnect", "clinet", "--sandbox-id", child)
+            gone = hmj("network", "disconnect", "clinet", "--sandbox-id", child)
+            assert gone == {"network": "clinet", "sandboxID": child, "status": "disconnected"}, gone
             assert "beta" not in json.dumps(hmj("network", "inspect", "clinet"))
-            hm("network", "disconnect", "clinet", "--sandbox-id", a)
-            hm("network", "delete", "clinet")
+            hmj("network", "disconnect", "clinet", "--sandbox-id", a)
+            removed = hmj("network", "delete", "clinet")
+            assert removed == {"deleted": "clinet", "kind": "network"}, removed
             assert "clinet" not in json.dumps(hmj("network", "list"))
             return {"members": info}
         case("network create / list / connect / inspect / disconnect / delete", networks)
@@ -283,15 +296,21 @@ def main():
             d = create("--disk", "clidata:/data")["sandboxID"]
             sh(d, "echo on-the-disk > /data/first && sync")
             hm("disk", "delete", state["disk"], expect=1)
+            hm("disk", "delete", "clidata", expect=1)
             delete(d)
             held = hmj("disk", "inspect", state["disk"])
             assert not held.get("attachedTo"), held
             e = create("--disk", "clidata:/data")["sandboxID"]
             assert sh(e, "cat /data/first") == "on-the-disk"
             delete(e)
-            hm("disk", "delete", state["disk"])
+            removed = hmj("disk", "delete", "clidata")
+            assert removed == {"deleted": state["disk"], "kind": "disk"}, removed
             assert "clidata" not in json.dumps(hmj("disk", "list"))
-            return {}
+            # By ID too: a second disk, deleted by its diskID.
+            other = hmj("disk", "create", "clidata2", "--size-mib", "16")["diskID"]
+            removed = hmj("disk", "delete", other)
+            assert removed == {"deleted": other, "kind": "disk"}, removed
+            return {"delete_by_name": removed}
         case("create --disk: data survives the sandbox, disk delete is refused while held and works when free",
              disk_sandbox)
 

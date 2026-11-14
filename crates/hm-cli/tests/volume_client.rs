@@ -207,10 +207,9 @@ async fn volume_commands_authenticate_encode_requests_and_propagate_errors() {
             String::from_utf8_lossy(&result.stderr)
         );
         assert!(!String::from_utf8_lossy(&result.stderr).contains("owned-content-token"));
+        let printed: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
         if arguments[0] == "delete" {
-            assert!(result.stdout.is_empty());
-        } else {
-            let _: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+            assert_eq!(printed, json!({"deleted":"vol-owned","kind":"volume"}));
         }
     }
     {

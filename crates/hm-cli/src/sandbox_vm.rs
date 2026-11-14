@@ -1623,13 +1623,17 @@ impl Api {
         limit: usize,
         query: &[(&str, &str)],
     ) -> Result<Value> {
-        let mut request = self.client.request(method, self.url(path)?).query(query);
+        let mut request = self
+            .client
+            .request(method.clone(), self.url(path)?)
+            .query(query);
         if let Some(body) = body {
             request = request.json(&body);
         }
         let mut response = request.send().await.context("sandbox API request failed")?;
         if !response.status().is_success() {
-            bail!("sandbox API returned {}", response.status());
+            // The body is deliberately not read or echoed here (it is untrusted).
+            return Err(api_error(&method, path, response.status(), ""));
         }
         if response
             .content_length()
@@ -1657,7 +1661,7 @@ impl Api {
         path: &[&str],
         body: Option<Value>,
     ) -> Result<Value> {
-        let mut request = self.client.request(method, self.url(path)?);
+        let mut request = self.client.request(method.clone(), self.url(path)?);
         if let Some(body) = body {
             request = request.json(&body);
         }
@@ -1665,13 +1669,80 @@ impl Api {
         let status = response.status();
         let body = response.text().await?;
         if !status.is_success() {
-            bail!("sandbox API returned {status}: {body}");
+            return Err(api_error(&method, path, status, &body));
         }
         if body.trim().is_empty() {
             Ok(Value::Null)
         } else {
             serde_json::from_str(&body).context("sandbox API returned invalid JSON")
         }
+    }
+}
+
+/// The error for a non-success API reply. A reply with a body keeps the
+/// long-standing `returned <status>: <body>` text; one with an empty body would
+/// otherwise say only the status, so it names the method and path, and a 404
+/// says the route may simply not exist on this daemon.
+fn api_error(
+    method: &Method,
+    path: &[&str],
+    status: reqwest::StatusCode,
+    body: &str,
+) -> anyhow::Error {
+    if !body.trim().is_empty() {
+        return anyhow::anyhow!("sandbox API returned {status}: {body}");
+    }
+    let route = format!("{method} /{}", path.join("/"));
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::anyhow!(
+            "sandbox API returned {status} for {route} with no message: the resource may not exist, or this daemon does not serve that route (reserved aliases, domains, usage and cluster routes need a control plane)"
+        )
+    } else {
+        anyhow::anyhow!("sandbox API returned {status} for {route} with no message")
+    }
+}
+
+/// What a command that returns no body prints instead: the API's own reply
+/// when it has one, else a small confirmation object, so every success is JSON.
+fn confirm(reply: Value, confirmation: Value) -> Value {
+    if reply.is_null() {
+        confirmation
+    } else {
+        reply
+    }
+}
+
+/// `{"deleted": <id>, "kind": <kind>}`, the confirmation of every delete.
+fn deleted(id: &str, kind: &str) -> Value {
+    json!({"deleted": id, "kind": kind})
+}
+
+/// Resolve a disk argument that is a diskID or a name given to `disk create`.
+/// A known ID wins; otherwise exactly one disk must carry that name.
+async fn resolve_disk(api: &Api, given: &str) -> Result<String> {
+    let listed = api
+        .request_bounded(Method::GET, &["disks"], None, 1024 * 1024)
+        .await?;
+    pick_disk(&listed, given)
+}
+
+fn pick_disk(listed: &Value, given: &str) -> Result<String> {
+    let rows = listed.as_array().map(Vec::as_slice).unwrap_or_default();
+    if rows.iter().any(|row| row["diskID"].as_str() == Some(given)) {
+        return Ok(given.to_owned());
+    }
+    let ids: Vec<&str> = rows
+        .iter()
+        .filter(|row| row["name"].as_str() == Some(given))
+        .filter_map(|row| row["diskID"].as_str())
+        .collect();
+    match ids.as_slice() {
+        [] => bail!("no disk with ID or name {given:?}"),
+        [id] => Ok((*id).to_owned()),
+        _ => bail!(
+            "disk name {given:?} is ambiguous ({}); use a disk ID",
+            ids.join(", ")
+        ),
     }
 }
 
@@ -1819,10 +1890,11 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 api.request_bounded(Method::GET, &["volumes", &id], None, 65536)
                     .await?
             }
-            VolumeCommand::Delete { id } => {
+            VolumeCommand::Delete { id } => confirm(
                 api.request_bounded(Method::DELETE, &["volumes", &id], None, 65536)
-                    .await?
-            }
+                    .await?,
+                deleted(&id, "volume"),
+            ),
         },
         VmCommand::Machine { command } => match command {
             MachineCommand::Create {
@@ -1949,10 +2021,11 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 api.request(Method::PATCH, &["machines", &name], Some(body))
                     .await?
             }
-            MachineCommand::Delete { name } => {
+            MachineCommand::Delete { name } => confirm(
                 api.request_bounded(Method::DELETE, &["machines", &name], None, 65536)
-                    .await?
-            }
+                    .await?,
+                deleted(&name, "machine"),
+            ),
             MachineCommand::Decisions { name } => {
                 api.request_bounded(
                     Method::GET,
@@ -2270,14 +2343,15 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                     )
                     .await?
                 }
-                MachineConversationCommand::Delete { name, conversation } => {
+                MachineConversationCommand::Delete { name, conversation } => confirm(
                     api.request(
                         Method::DELETE,
                         &["machines", &name, "conversations", &conversation],
                         None,
                     )
-                    .await?
-                }
+                    .await?,
+                    deleted(&conversation, "conversation"),
+                ),
             },
             MachineCommand::Snapshot { command } => match command {
                 MachineSnapshotCommand::Take { name, label } => {
@@ -2305,10 +2379,11 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                     )
                     .await?
                 }
-                MachineSnapshotCommand::Delete { name, id } => {
+                MachineSnapshotCommand::Delete { name, id } => confirm(
                     api.request(Method::DELETE, &["machines", &name, "snapshots", &id], None)
-                        .await?
-                }
+                        .await?,
+                    deleted(&id, "snapshot"),
+                ),
                 MachineSnapshotCommand::Ls {
                     name,
                     id,
@@ -2501,12 +2576,17 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                     .await?
             }
             DiskCommand::Inspect { id } => {
+                let id = resolve_disk(&api, &id).await?;
                 api.request_bounded(Method::GET, &["disks", &id], None, 65536)
                     .await?
             }
             DiskCommand::Delete { id } => {
-                api.request_bounded(Method::DELETE, &["disks", &id], None, 65536)
-                    .await?
+                let id = resolve_disk(&api, &id).await?;
+                confirm(
+                    api.request_bounded(Method::DELETE, &["disks", &id], None, 65536)
+                        .await?,
+                    deleted(&id, "disk"),
+                )
             }
         },
         VmCommand::Network { command } => match command {
@@ -2527,10 +2607,11 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 api.request_bounded(Method::GET, &["networks", &name], None, 65536)
                     .await?
             }
-            NetworkCommand::Delete { name } => {
+            NetworkCommand::Delete { name } => confirm(
                 api.request_bounded(Method::DELETE, &["networks", &name], None, 65536)
-                    .await?
-            }
+                    .await?,
+                deleted(&name, "network"),
+            ),
             NetworkCommand::Connect {
                 network,
                 sandbox_id,
@@ -2547,15 +2628,16 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             NetworkCommand::Disconnect {
                 network,
                 sandbox_id,
-            } => {
+            } => confirm(
                 api.request_bounded(
                     Method::POST,
                     &["networks", &network, "disconnect"],
                     Some(json!({"sandboxID": sandbox_id})),
                     65536,
                 )
-                .await?
-            }
+                .await?,
+                json!({"network": network, "sandboxID": sandbox_id, "status": "disconnected"}),
+            ),
         },
         VmCommand::TcpStdio { id, name, port } => {
             let id = match id {
@@ -2686,10 +2768,11 @@ pub async fn run(args: VmArgs) -> Result<i32> {
         }
         VmCommand::Logout => login::logout(&endpoint)?,
         VmCommand::Inspect { id } => api.request(Method::GET, &["sandboxes", &id], None).await?,
-        VmCommand::Delete { id } => {
+        VmCommand::Delete { id } => confirm(
             api.request(Method::DELETE, &["sandboxes", &id], None)
-                .await?
-        }
+                .await?,
+            deleted(&id, "sandbox"),
+        ),
         VmCommand::Files {
             id,
             envd_endpoint,
@@ -2706,10 +2789,11 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             )
             .await?
         }
-        VmCommand::Pause { id } => {
+        VmCommand::Pause { id } => confirm(
             api.request(Method::POST, &["sandboxes", &id, "pause"], None)
-                .await?
-        }
+                .await?,
+            json!({"sandboxID": id, "status": "paused"}),
+        ),
         VmCommand::Standby { id } => {
             api.request(Method::POST, &["sandboxes", &id, "standby"], None)
                 .await?
@@ -2968,14 +3052,15 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 )
                 .await?
             }
-            CheckpointCommand::Delete { id, name } => {
+            CheckpointCommand::Delete { id, name } => confirm(
                 api.request(
                     Method::DELETE,
                     &["sandboxes", &id, "checkpoints", &name],
                     None,
                 )
-                .await?
-            }
+                .await?,
+                json!({"deleted": name, "kind": "checkpoint", "sandboxID": id}),
+            ),
             CheckpointCommand::Ls { id, name, path } => {
                 api.request_bounded_query(
                     Method::GET,
@@ -3006,9 +3091,10 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             }
         },
     };
-    if !value.is_null() {
-        println!("{}", serde_json::to_string_pretty(&value)?);
-    }
+    // Every success is one JSON document; a command with nothing else to say
+    // prints `{"status":"ok"}` rather than nothing.
+    let value = confirm(value, json!({"status": "ok"}));
+    println!("{}", serde_json::to_string_pretty(&value)?);
     Ok(0)
 }
 
