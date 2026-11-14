@@ -1,0 +1,158 @@
+{
+  "success": true,
+  "purpose": "functional verification of four BOAT_PARITY claims on KVM; one 503 latency, no throughput claim",
+  "input_sha256": {
+    "daemon": "672801943ae283ce6c25b582333264526b41006efbf92c42e8246e7af6677e70",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "a22419caa282550c4bcd2b907a8aa9201c75fc8bb9859a1709ce023f6873174e",
+    "driver": "251dc47fd6a92fdf30d70bba7c5a5c417e9fa2a778a3ad1fe75588834e48bc45"
+  },
+  "cases": [
+    {
+      "name": "1 --capacity 1: the second create is answered 503 at once",
+      "success": true,
+      "detail": {
+        "status": 503,
+        "seconds_to_503": 0.0025,
+        "message": {
+          "code": 503,
+          "message": "this node is full: 1 running and 0 starting, of 1"
+        }
+      },
+      "seconds": 3.39
+    },
+    {
+      "name": "2 envVars: an exec sees them, the API does not return them, another sandbox lacks them",
+      "success": true,
+      "detail": {
+        "with_vars": "a=s3cret-value-42 b=two",
+        "env": [
+          "BOAT_OTHER=two",
+          "BOAT_SECRET=s3cret-value-42"
+        ],
+        "without": "a=[] b=[]",
+        "values_in_api_replies": false
+      },
+      "seconds": 5.166
+    },
+    {
+      "name": "3 PUT /sandboxes/{id}/network changes a list on a running VM, with both verdicts logged",
+      "success": true,
+      "detail": {
+        "1_allowed_at_creation": "GOT TARGET-TOKEN",
+        "2_after_PUT_with_no_allow_list": "ERR ConnectionRefusedError(111, 'Connection refused')",
+        "3_after_PUT_allowing_it": "GOT TARGET-TOKEN",
+        "4_after_PUT_listing_it_in_allowOut_and_denyOut": "GOT TARGET-TOKEN",
+        "same_boot_id": true,
+        "decisions_for_the_target": [
+          "allow 172.28.97.192:42895 (allowOut address)",
+          "deny 172.28.97.192:42895 (reserved address)",
+          "allow 172.28.97.192:42895 (allowOut address)",
+          "allow 172.28.97.192:42895 (allowOut address)"
+        ],
+        "connections_the_target_accepted": 3
+      },
+      "seconds": 5.854
+    },
+    {
+      "name": "4 process.Process over Connect: a pty is a terminal, input is echoed and run, stdin reads to EOF",
+      "success": true,
+      "detail": {
+        "pty_output": "# tty; echo pty-$((6*7)); stty size\r\n/dev/pts/0\r\npty-42\r\n30 100\r\n# ",
+        "pty_events_are_pty_not_stdout": true,
+        "pty_end": {
+          "exitCode": 7,
+          "exited": true,
+          "status": "exited"
+        },
+        "stdin_output": "line one\nline two\ncat-done\n",
+        "stdin_end": {
+          "exited": true,
+          "status": "exited"
+        }
+      },
+      "seconds": 3.315
+    },
+    {
+      "name": "ran on KVM: every daemon logged platform Kvm and none Tcg",
+      "success": true,
+      "detail": {
+        "Kvm": 10,
+        "Tcg": 0,
+        "daemons": 4,
+        "Kvm_lines_per_daemon": {
+          "capacity-1": 3,
+          "envvars": 3,
+          "network": 2,
+          "terminal": 2
+        }
+      }
+    }
+  ],
+  "platform_lines": {
+    "Kvm": 10,
+    "Tcg": 0,
+    "daemons": 4,
+    "Kvm_lines_per_daemon": {
+      "capacity-1": 3,
+      "envvars": 3,
+      "network": 2,
+      "terminal": 2
+    }
+  },
+  "daemon_flags": {
+    "capacity-1": [
+      "--port",
+      "34163",
+      "--proxy-port",
+      "40195",
+      "--memory-mb",
+      "1024",
+      "--cpu-cores",
+      "1",
+      "--capacity",
+      "1"
+    ],
+    "envvars": [
+      "--port",
+      "55811",
+      "--proxy-port",
+      "35905",
+      "--memory-mb",
+      "1024",
+      "--cpu-cores",
+      "1",
+      "--capacity",
+      "4"
+    ],
+    "network": [
+      "--port",
+      "50435",
+      "--proxy-port",
+      "45367",
+      "--memory-mb",
+      "1024",
+      "--cpu-cores",
+      "1",
+      "--capacity",
+      "2",
+      "--network",
+      "--egress-default",
+      "deny",
+      "--tenant-reserved-cidr",
+      "172.28.97.192/32"
+    ],
+    "terminal": [
+      "--port",
+      "38629",
+      "--proxy-port",
+      "49183",
+      "--memory-mb",
+      "1024",
+      "--cpu-cores",
+      "1",
+      "--capacity",
+      "2"
+    ]
+  }
+}
