@@ -36,11 +36,15 @@ and 0 panic lines.
 
 ## NOT VERIFIED
 
-- That held network frames are delivered rather than dropped: TCP retries a lost SYN, so a dropped frame would also
-  pass. The check shows traffic recovers and nothing is corrupted. The vsock unit test
-  (`a_paused_vm_holds_host_packets_and_resume_delivers_them`) is the direct evidence of delivery, for vsock only.
+- On KVM, that held network frames are delivered rather than dropped: TCP retries a lost SYN, so a dropped frame
+  would also pass this check. The direct evidence is at unit level instead: `vm::tests::
+  a_paused_vm_holds_host_frames_and_resume_delivers_them` (virtio-net over MMIO) and
+  `a_paused_vm_holds_host_frames_on_pci_and_resume_delivers_them` (PCI) queue a frame through the real delivery
+  thread while held and assert no used-ring write, the queue position unchanged and the frame pending, then after
+  `resume` the frame's bytes in the guest buffer after the virtio-net header. With the gate disabled both fail
+  ("a held device wrote the used ring"); with it, both pass. Run on Windows; CI runs them on all three platforms.
 - Network reachability of a fork child (only its exec is checked).
-- PCI virtio-net (`notify_net_pci`) specifically: which transport the tools image's guest used is not recorded.
+- Which virtio-net transport (MMIO or PCI) the tools image's guest used in the KVM run is not recorded.
 - `check-secret-substitution-kvm.py` (pauses and forks a networked sandbox over HTTPS): its client image
   `/var/tmp/hm-secret-https-guest.cpio.gz` no longer exists, and it was not rebuilt.
 - Any host other than this AMD WSL2 one.

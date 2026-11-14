@@ -6477,6 +6477,106 @@ mod tests {
         );
     }
 
+    /// Shared body of the held-delivery tests for the network device, which is
+    /// the same device behind either transport; only the notify call differs.
+    async fn assert_net_frames_held_while_paused(
+        vm: Arc<VM>,
+        device: Arc<parking_lot::Mutex<crate::devices::virtio_net_mmio::VirtioNetMmio>>,
+        pci: bool,
+    ) {
+        use crate::devices::virtio_queue::desc_flags;
+        const DESC: u64 = 0x10000;
+        const AVAIL: u64 = 0x11000;
+        const USED: u64 = 0x12000;
+        const BUF: u64 = 0x13000;
+        const FRAME: [u8; 8] = [0xde, 0xad, 0xbe, 0xef, 1, 2, 3, 4];
+        let hdr = crate::devices::virtio_net_mmio::NET_HDR_LEN as u64;
+
+        let memory = vm.memory();
+        let mut desc = [0u8; 16];
+        desc[0..8].copy_from_slice(&BUF.to_le_bytes());
+        desc[8..12].copy_from_slice(&0x800u32.to_le_bytes());
+        desc[12..14].copy_from_slice(&desc_flags::WRITE.to_le_bytes());
+        memory.write_bytes(DESC, &desc).expect("descriptor");
+        memory.write_bytes(AVAIL + 4, &0u16.to_le_bytes()).unwrap();
+        memory.write_bytes(AVAIL + 2, &1u16.to_le_bytes()).unwrap();
+        {
+            let mut guard = device.lock();
+            // Queue 0 is the receive queue.
+            let rx = &mut crate::devices::VirtioMmioDevice::queues(&mut *guard)[0];
+            rx.set_size(8);
+            rx.set_desc_addr(DESC);
+            rx.set_avail_addr(AVAIL);
+            rx.set_used_addr(USED);
+            rx.set_ready(true);
+        }
+        let used_idx = || {
+            u16::from_le_bytes(
+                memory
+                    .read_bytes(USED + 2, 2)
+                    .expect("used idx")
+                    .try_into()
+                    .unwrap(),
+            )
+        };
+        let notify = || async {
+            if pci {
+                vm.notify_net_pci().await
+            } else {
+                vm.notify_net().await
+            }
+        };
+
+        *vm.state.write() = VMState::Paused;
+        vm.hold_devices().await;
+
+        // Queuing a frame wakes the delivery thread, which finds the VM held.
+        assert!(device.lock().queue_received(FRAME.to_vec()));
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        assert_eq!(used_idx(), 0, "a held device wrote the used ring");
+        assert_eq!(
+            crate::devices::VirtioMmioDevice::queues(&mut *device.lock())[0].progress(),
+            (0, 0),
+            "a held device moved its queue position"
+        );
+        assert!(device.lock().has_pending(), "the held frame was lost");
+        assert!(!notify().await.expect("notify"), "a direct call");
+        assert!(device.lock().has_pending(), "a direct call took the frame");
+
+        vm.resume().await.expect("resume");
+        assert_eq!(used_idx(), 1, "the held frame was not delivered");
+        assert!(!device.lock().has_pending());
+        assert_eq!(
+            crate::devices::VirtioMmioDevice::queues(&mut *device.lock())[0].progress(),
+            (1, 1)
+        );
+        assert_eq!(
+            memory.read_bytes(BUF + hdr, FRAME.len()).expect("payload"),
+            FRAME,
+            "the frame is not in the guest's buffer after the header"
+        );
+    }
+
+    /// The vsock test's counterpart for virtio-net over MMIO.
+    #[tokio::test]
+    async fn a_paused_vm_holds_host_frames_and_resume_delivers_them() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        let device = vm.attach_net(TEST_MAC).await.expect("attach");
+        assert_net_frames_held_while_paused(vm, device, false).await;
+    }
+
+    /// And over PCI, through `notify_net_pci`.
+    #[tokio::test]
+    async fn a_paused_vm_holds_host_frames_on_pci_and_resume_delivers_them() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        let device = vm.attach_net_pci(TEST_MAC).await.expect("attach");
+        assert_net_frames_held_while_paused(vm, device, true).await;
+    }
+
     /// Attaching over PCI is only worth anything if a guest walking the bus
     /// finds the device. This does exactly what a guest does -- write
     /// CONFIG_ADDRESS, read CONFIG_DATA, through the same port the kernel
