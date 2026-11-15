@@ -1,0 +1,56 @@
+{
+  "success": true,
+  "purpose": "functional verification of automatic checkpoints on KVM; no timings and no comparison with another product",
+  "interval_seconds": 60,
+  "input_sha256": {
+    "daemon": "672801943ae283ce6c25b582333264526b41006efbf92c42e8246e7af6677e70",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "85d929acc80d0f0eadfae26e7187f92bcac31c3acf2802a6d46f99dffd3ab485",
+    "driver": "02aededf3ce00d6eaa5afb7959935f689078cee47661629af9de674e191483e8"
+  },
+  "cases": [
+    {
+      "name": "a sandbox with an interval is checkpointed an interval after it starts, unasked",
+      "success": true,
+      "detail": {
+        "seconds_after_start": 61.2
+      }
+    },
+    {
+      "name": "rolling back to it restores the file and the running process with its memory",
+      "success": true,
+      "detail": {
+        "count_before_restore": 630,
+        "count_after_restore": 599,
+        "count_two_seconds_on": 618
+      }
+    },
+    {
+      "name": "after use it is replaced by a newer one, and there is still one",
+      "success": true,
+      "detail": {
+        "first_ms": 1794716313530,
+        "second_ms": 1794716373614
+      }
+    },
+    {
+      "name": "left alone with nothing running, it is not checkpointed again",
+      "success": true,
+      "detail": {
+        "seconds_left_alone": 130,
+        "checkpoint_ms": 1794716433698
+      }
+    },
+    {
+      "name": "a sandbox without an interval is never checkpointed",
+      "success": true,
+      "detail": {
+        "seconds_running": 311.5
+      }
+    },
+    {
+      "name": "too short an interval and a caller's `auto` are refused; a named one still saves",
+      "success": true
+    }
+  ]
+}

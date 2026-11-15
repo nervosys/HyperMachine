@@ -139,12 +139,13 @@ def main():
             assert cpus == 2 and 900 * 1024 < mem_kb <= 1024 * 1024, (cpus, mem_kb)
             assert record(fork) == (2, 1024), record(fork)
             request("DELETE", f"/sandboxes/{fork}")
-            # Booted, so not made a template or checkpointed: said, not done.
+            # Since 2026-10-21 a sized sandbox can be snapshotted and checkpointed
+            # (check-sized-checkpoint-kvm.py checks what comes of them); it used to be a 409.
             status, value = request("POST", f"/sandboxes/{sandbox}/snapshots", {"name": "sized-snap"})
-            assert status == 409 and "size of its own" in value["message"], (status, value)
+            assert status in (200, 201), (status, value)
             status, value = request("POST", f"/sandboxes/{sandbox}/checkpoints", {"name": "c1"})
-            assert status == 409 and "size of its own" in value["message"], (status, value)
-            return {"after_resume": seen(sandbox), "fork": [cpus, mem_kb], "snapshot_refused": value["message"]}
+            assert status in (200, 201), (status, value)
+            return {"after_resume": seen(sandbox), "fork": [cpus, mem_kb], "snapshot_and_checkpoint": "accepted"}
         case("paused and resumed it keeps its size, and a fork of it has it too", kept)
 
         def usage():

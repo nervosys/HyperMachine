@@ -1,0 +1,88 @@
+{
+  "success": true,
+  "purpose": "functional verification of forking a sandbox with its disk on KVM",
+  "input_sha256": {
+    "daemon": "672801943ae283ce6c25b582333264526b41006efbf92c42e8246e7af6677e70",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "85d929acc80d0f0eadfae26e7187f92bcac31c3acf2802a6d46f99dffd3ab485",
+    "driver": "d5846ba0ba1e628336b77cd5ae8bf96928ff0a155577ea9bbf0906553215d2de"
+  },
+  "cases": [
+    {
+      "name": "a sandbox holding a disk forks, and each fork holds a disk of its own",
+      "success": true,
+      "detail": {
+        "forks": [
+          "sbx-d728895cbbb4428d9ad8",
+          "sbx-54cfe6adb56141adada8"
+        ],
+        "disks": {
+          "data": "sbx-a61fcf8f8e474398b10e",
+          "data-fork-54cfe6adb5": "sbx-54cfe6adb56141adada8",
+          "data-fork-d728895cbb": "sbx-d728895cbbb4428d9ad8"
+        },
+        "source_dirty_before_fork": "Dirty: 4088 kB",
+        "fork_request_seconds": 0.284
+      }
+    },
+    {
+      "name": "each fork is the source as it was, unsynced writes included",
+      "success": true,
+      "detail": {
+        "synced_sha256": "a3c9911d95047d8c3d2cf7dc3fa40fad845a1f1897bd0f1816048eacbd2ff3d5",
+        "unsynced_sha256": "e92e53e4aa84050a176acfe8dcb689147a9257a73f09f0514dc46a5590d0f826",
+        "forks": {
+          "sbx-d728895cbbb4428d9ad8": {
+            "counter": 11
+          },
+          "sbx-54cfe6adb56141adada8": {
+            "counter": 16
+          }
+        }
+      }
+    },
+    {
+      "name": "the source ran on",
+      "success": true,
+      "detail": {
+        "counter_before_fork": 11,
+        "counter_after": 23
+      }
+    },
+    {
+      "name": "source and forks are independent afterwards",
+      "success": true,
+      "detail": {
+        "who": {
+          "source": "source",
+          "first": "first",
+          "second": "second"
+        }
+      }
+    },
+    {
+      "name": "a fork pauses and resumes like any sandbox with a disk",
+      "success": true,
+      "detail": {
+        "pause": 204,
+        "resume": 201
+      }
+    },
+    {
+      "name": "a fork's disk outlives it and attaches to a new sandbox by name",
+      "success": true,
+      "detail": {
+        "disk": "data-fork-d728895cbb",
+        "read_by": "sbx-33fcecd277b84bf5bef3"
+      }
+    },
+    {
+      "name": "more forks than the limit is refused, and nothing is left behind",
+      "success": true,
+      "detail": {
+        "status": 400,
+        "message": "a sandbox with a disk forks into at most 8 at a time"
+      }
+    }
+  ]
+}

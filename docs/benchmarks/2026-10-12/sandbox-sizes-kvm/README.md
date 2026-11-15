@@ -20,7 +20,8 @@ processors in `/proc/cpuinfo` and `MemTotal`.
    1 GiB, and a record that says 2 and 1024.
 3. **Kept.** Paused and resumed: still two processors and the same memory.
    Forked: the fork is two and 1024 too. A named snapshot and a checkpoint of
-   it are refused with 409, saying why.
+   it are refused with 409, saying why. (Since 2026-10-21 both are accepted;
+   the driver now expects that. See `../../2026-11-14/repeats-kvm`.)
 4. **Usage** counts its vCPU-seconds as twice its running time and its
    GiB-seconds as its running time.
 5. **The template's own size, asked for,** is no change: restored, one and 256.
