@@ -1,0 +1,123 @@
+{
+  "success": true,
+  "purpose": "functional verification of a template's setup (RUN) steps on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "672801943ae283ce6c25b582333264526b41006efbf92c42e8246e7af6677e70",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "85d929acc80d0f0eadfae26e7187f92bcac31c3acf2802a6d46f99dffd3ab485",
+    "driver": "42400b976a4f69b16a0179829c6c997f51b8449271cd4d48947f4db24f1e7980"
+  },
+  "cases": [
+    {
+      "name": "a. a RUN step ran at build: its marker holds the build time, not the sandbox's",
+      "success": true,
+      "detail": {
+        "marker": 1794770295,
+        "build_window": [
+          1794770295,
+          1794770296
+        ],
+        "created_at": 1794770300,
+        "guest_now": 1794770299,
+        "build_boot_id_equals_sandbox_boot_id": true
+      }
+    },
+    {
+      "name": "b. a second sandbox from the template does not run the steps again",
+      "success": true,
+      "detail": {
+        "runs_file_first": "run",
+        "runs_file_second": "run",
+        "marker_same": true
+      }
+    },
+    {
+      "name": "c. steps run in order, after the COPY, ENV and WORKDIR before them",
+      "success": true,
+      "detail": {
+        "order": [
+          "seeded",
+          "env=hello-env",
+          "cwd=/srv/setup",
+          "step-one",
+          "step-two"
+        ]
+      }
+    },
+    {
+      "name": "d. a failing setup step fails the build, clearly, and leaves no usable template",
+      "success": true,
+      "detail": {
+        "step": "2",
+        "message": "\"echo before-fail > /b; exit 7\" exited 7",
+        "create_status": 404,
+        "create_response": {
+          "code": 404,
+          "message": "template \"ss-fail\" not found; this node has base"
+        },
+        "listed_in_templates": false
+      }
+    }
+  ],
+  "log_counts": {
+    "kvm_lines": 5,
+    "tcg_lines": 0
+  },
+  "builds": {
+    "ss-ok": {
+      "status": "ready",
+      "reason": null,
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-c110ab0b",
+        "[1/5] COPY seed.txt /opt/seed.txt",
+        "1 paths, 2 KiB",
+        "[2/5] ENV GREET hello-env",
+        "[3/5] WORKDIR /srv/setup",
+        "[4/5] RUN date +%s > /built-at; echo run >> /runs; cat /proc/sys/kernel/random/boot_id > /build-boot; cat /opt/seed.txt > /order; echo \"env=$GREET\" >> /order; echo \"cwd=$(pwd)\" >> /order; echo step-one >> /order",
+        "[5/5] RUN echo step-two >> /order",
+        "Steps kept as build-cache-fc926e8e1d0c5eea in 32.308206ms",
+        "Template ss-ok ready: snapshot of 2 MiB in 2.791314ms"
+      ]
+    },
+    "ss-fail": {
+      "status": "error",
+      "reason": {
+        "logEntries": [
+          {
+            "level": "warn",
+            "message": "this node gives sandboxes no network: steps run offline",
+            "step": "base",
+            "timestamp": "2026-11-15T19:18:21.705Z"
+          },
+          {
+            "level": "info",
+            "message": "Building in build-adfdcc18",
+            "step": "base",
+            "timestamp": "2026-11-15T19:18:21.754Z"
+          },
+          {
+            "level": "info",
+            "message": "[1/3] RUN echo a > /a",
+            "step": "1",
+            "timestamp": "2026-11-15T19:18:21.775Z"
+          },
+          {
+            "level": "info",
+            "message": "[2/3] RUN echo before-fail > /b; exit 7",
+            "step": "2",
+            "timestamp": "2026-11-15T19:18:21.786Z"
+          }
+        ],
+        "message": "\"echo before-fail > /b; exit 7\" exited 7",
+        "step": "2"
+      },
+      "logs": [
+        "this node gives sandboxes no network: steps run offline",
+        "Building in build-adfdcc18",
+        "[1/3] RUN echo a > /a",
+        "[2/3] RUN echo before-fail > /b; exit 7"
+      ]
+    }
+  }
+}

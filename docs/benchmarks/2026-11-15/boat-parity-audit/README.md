@@ -91,3 +91,20 @@ Broken links fixed: 0 (none found).
 - The sized API limits (256 MiB to 64 GiB, 32 vCPUs) were already qualified in the row ("only one size ...
   was checked on KVM"), so they needed no marker.
 With these, every claim in the matrix is either linked to evidence or marked in its own row.
+
+## Follow-up 2 (same day)
+
+- Template setup steps: the row "A named set of variables, files and repositories" now links
+  `../setup-steps-kvm/README.md` (new driver `tools/check-setup-steps-kvm.py`, 3 runs of 4 cases on KVM) in place
+  of "no kept report". The same row also links `2026-11-13/build-noshell-kvm`, `template-user-owner-kvm`,
+  `agent-ops-timing-kvm` and `agent-ops-batch-kvm`.
+- Creating one: `2026-11-13/restore-loop-kvm`.
+- What stopping keeps: `2026-11-14/net-pause-standby-kvm` and `2026-11-13/disk-mount-agent-kvm`.
+- Reading a snapshot from outside: `2026-11-13/agent-ops-archive-kvm`.
+- Commands and files from outside: `2026-11-13/machine-noshell-kvm`.
+- The guest's processes, listed from outside: `2026-11-13/agent-ops-kvm`.
+- What a sandbox may reach on the network: `2026-11-11/urltrace-decision-log-kvm`.
+- Fit no row, not linked: `2026-11-11/urltrace-kvm`, `2026-11-11/urltrace-noshell-kvm`,
+  `2026-11-12/urltrace-noshell-kvm` (URL tracing, `docs/URL_TRACING.md`, has no matrix row);
+  `2026-11-13/machine-network-kvm` and `2026-11-13/machine-runs-kvm` (reports and logs only, no README; cited by
+  `machine-noshell-kvm` as regression runs); `2026-11-11/{host-direct-trace,nested-*}` were already linked.
