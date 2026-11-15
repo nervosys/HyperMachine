@@ -1,0 +1,1684 @@
+{
+  "success": true,
+  "purpose": "functional verification of API key scopes and roles on a real KVM node; no performance comparison",
+  "input_sha256": {
+    "daemon": "672801943ae283ce6c25b582333264526b41006efbf92c42e8246e7af6677e70",
+    "control": "c343ed7c01c7b358218fc814d51f13482ff70e981be77d1d112a970d790f3412",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "85d929acc80d0f0eadfae26e7187f92bcac31c3acf2802a6d46f99dffd3ab485",
+    "driver": "e42b9362caaa560424f833669cfd8180fc21840743dad7c2a7515cca7789b3c1",
+    "redis": "b747f74364ce61350ce4d2cd0e38ca2eacbfa7fe6f3a2560483ab6403a2e8573"
+  },
+  "cases": [
+    {
+      "name": "a sandbox booted and ran a command on KVM (no Tcg)",
+      "success": true,
+      "platform_lines": {
+        "Kvm": 3,
+        "Tcg": 0
+      },
+      "requests": []
+    },
+    {
+      "name": "preset admin: reaches everything, including operator-only routes",
+      "success": true,
+      "requests": [
+        {
+          "key": "scope_admin",
+          "request": "GET /cluster/nodes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"id\": \"keyroles-kvm-node\", \"api\": \"https://127.0.0.1:42917\", \"proxy\": \"127.0.0.1:50469\", \"capacity\": 8, \"running\": 2, \"heartbeat_ms\": 1794764822388, \"version\": \"1.2.0\", \"templates\": [\"base\"], \"template_metadata\": {\"base\": {\"snapshot\": tru"
+        },
+        {
+          "key": "scope_admin",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyroles-kvm-node\", \"sandboxID\": \"sbx-e8e89e671bb0405881b7\","
+        },
+        {
+          "key": "scope_admin",
+          "request": "GET /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdAccessToken\": \"31fe0db428b1447c8da4b0eba7ce9265e9d21ae2a70e4ca2abd1a1bfd26d5a9a\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \""
+        },
+        {
+          "key": "scope_admin",
+          "request": "GET /volumes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[]"
+        },
+        {
+          "key": "scope_admin",
+          "request": "GET /machines",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[]"
+        }
+      ]
+    },
+    {
+      "name": "preset inventory: lists, cannot read detail, create or reach other families",
+      "success": true,
+      "requests": [
+        {
+          "key": "scope_inventory",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyroles-kvm-node\", \"sandboxID\": \"sbx-e8e89e671bb0405881b7\","
+        },
+        {
+          "key": "scope_inventory",
+          "request": "GET /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "scope_inventory",
+          "request": "POST /v2/sandboxes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "scope_inventory",
+          "request": "GET /volumes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        }
+      ]
+    },
+    {
+      "name": "preset sandboxes: runs commands in its sandbox, refused other families",
+      "success": true,
+      "requests": [
+        {
+          "key": "scope_sandboxes",
+          "request": "GET /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdAccessToken\": \"31fe0db428b1447c8da4b0eba7ce9265e9d21ae2a70e4ca2abd1a1bfd26d5a9a\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \""
+        },
+        {
+          "key": "scope_sandboxes",
+          "request": "POST /sandboxes/sbx-e8e89e671bb0405881b7/exec",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"exit_code\": 0, \"stdout\": \"keyroles\\n\", \"stderr\": \"\", \"timed_out\": false}",
+          "detail": "guest ran the command"
+        },
+        {
+          "key": "scope_sandboxes",
+          "request": "GET /volumes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "scope_sandboxes",
+          "request": "GET /templates",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "scope_sandboxes",
+          "request": "GET /events/sandboxes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "scope_sandboxes",
+          "request": "GET /machines",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        }
+      ]
+    },
+    {
+      "name": "preset templates: lists templates, refused sandboxes and volumes",
+      "success": true,
+      "requests": [
+        {
+          "key": "scope_templates",
+          "request": "GET /templates",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"aliases\": [\"base\"], \"buildID\": \"base\", \"buildStatus\": \"ready\", \"cpuCount\": 1, \"memoryMB\": 1024, \"nodeIDs\": [\"keyroles-kvm-node\"], \"nodes\": [{\"cpuCount\": 1, \"memoryMB\": 1024, \"nodeID\": \"keyroles-kvm-node\", \"snapshot\": true}], \"public\": fa"
+        },
+        {
+          "key": "scope_templates",
+          "request": "POST /v2/sandboxes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "scope_templates",
+          "request": "GET /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "scope_templates",
+          "request": "GET /volumes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        }
+      ]
+    },
+    {
+      "name": "preset volumes: creates and lists volumes, refused sandboxes",
+      "success": true,
+      "requests": [
+        {
+          "key": "scope_volumes",
+          "request": "POST /volumes",
+          "expected": [
+            201
+          ],
+          "status": 201,
+          "ok": true,
+          "response": "{\"name\": \"preset-vol\", \"token\": \"aee7b5af239c4c28819de674e443064d2508eafcaf2f4299997a553db74a63d8\", \"volumeID\": \"vol-2b67dbd4bbf31fcf\"}"
+        },
+        {
+          "key": "scope_volumes",
+          "request": "GET /volumes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"name\": \"preset-vol\", \"teamID\": \"red\", \"volumeID\": \"vol-2b67dbd4bbf31fcf\"}]",
+          "detail": [
+            {
+              "name": "preset-vol",
+              "teamID": "red",
+              "volumeID": "vol-2b67dbd4bbf31fcf"
+            }
+          ]
+        },
+        {
+          "key": "scope_volumes",
+          "request": "GET /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "scope_volumes",
+          "request": "GET /sandboxes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        }
+      ]
+    },
+    {
+      "name": "preset events: reads events, refused sandboxes and volumes",
+      "success": true,
+      "requests": [
+        {
+          "key": "scope_events",
+          "request": "GET /events/sandboxes?limit=100",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"eventCategory\": \"lifecycle\", \"eventData\": {\"node_id\": \"keyroles-kvm-node\", \"sandbox_metadata\": {}}, \"eventLabel\": \"create\", \"id\": \"bf024cdd-512e-466d-8964-d17a597e7f53\", \"sandboxBuildId\": \"base\", \"sandboxExecutionId\": \"sbx-e8e89e671bb040"
+        },
+        {
+          "key": "scope_events",
+          "request": "GET /events/sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"eventCategory\": \"lifecycle\", \"eventData\": {\"node_id\": \"keyroles-kvm-node\", \"sandbox_metadata\": {}}, \"eventLabel\": \"create\", \"id\": \"bf024cdd-512e-466d-8964-d17a597e7f53\", \"sandboxBuildId\": \"base\", \"sandboxExecutionId\": \"sbx-e8e89e671bb040"
+        },
+        {
+          "key": "scope_events",
+          "request": "GET /sandboxes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "scope_events",
+          "request": "GET /volumes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        }
+      ]
+    },
+    {
+      "name": "preset machines: reaches /machines only",
+      "success": true,
+      "requests": [
+        {
+          "key": "scope_machines",
+          "request": "GET /machines",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[]"
+        },
+        {
+          "key": "scope_machines",
+          "request": "GET /sandboxes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "scope_machines",
+          "request": "GET /volumes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        }
+      ]
+    },
+    {
+      "name": "preset telemetry: reaches /telemetry only",
+      "success": true,
+      "requests": [
+        {
+          "key": "scope_telemetry",
+          "request": "GET /telemetry",
+          "expected": [
+            404
+          ],
+          "status": 404,
+          "ok": true,
+          "response": "{\"code\": 404, \"message\": \"this team has no telemetry destination\"}",
+          "detail": true
+        },
+        {
+          "key": "scope_telemetry",
+          "request": "GET /sandboxes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "scope_telemetry",
+          "request": "GET /volumes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        }
+      ]
+    },
+    {
+      "name": "unknown and expired keys are 401",
+      "success": true,
+      "requests": [
+        {
+          "key": "unknown",
+          "request": "GET /sandboxes",
+          "expected": [
+            401
+          ],
+          "status": 401,
+          "ok": true,
+          "response": "{\"code\": 401, \"message\": \"missing, expired or wrong X-API-Key\"}"
+        },
+        {
+          "key": "expired",
+          "request": "GET /sandboxes",
+          "expected": [
+            401
+          ],
+          "status": 401,
+          "ok": true,
+          "response": "{\"code\": 401, \"message\": \"missing, expired or wrong X-API-Key\"}"
+        },
+        {
+          "key": "expired",
+          "request": "POST /v2/sandboxes",
+          "expected": [
+            401
+          ],
+          "status": 401,
+          "ok": true,
+          "response": "{\"code\": 401, \"message\": \"missing, expired or wrong X-API-Key\"}"
+        }
+      ]
+    },
+    {
+      "name": "named preset read-only: lists, refused detail, exec, create and other families",
+      "success": true,
+      "requests": [
+        {
+          "key": "preset_read_only",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyroles-kvm-node\", \"sandboxID\": \"sbx-e8e89e671bb0405881b7\","
+        },
+        {
+          "key": "preset_read_only",
+          "request": "GET /cluster/nodes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"id\": \"keyroles-kvm-node\", \"api\": \"https://127.0.0.1:42917\", \"proxy\": \"127.0.0.1:50469\", \"capacity\": 8, \"running\": 2, \"heartbeat_ms\": 1794764822388, \"version\": \"1.2.0\", \"templates\": [\"base\"], \"template_metadata\": {\"base\": {\"snapshot\": tru"
+        },
+        {
+          "key": "preset_read_only",
+          "request": "GET /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "preset_read_only",
+          "request": "POST /sandboxes/sbx-e8e89e671bb0405881b7/exec",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "preset_read_only",
+          "request": "POST /v2/sandboxes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "preset_read_only",
+          "request": "DELETE /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "preset_read_only",
+          "request": "GET /volumes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "preset_read_only",
+          "request": "GET /machines",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        }
+      ]
+    },
+    {
+      "name": "named preset developer: runs commands, volumes and templates; refused machines and owner",
+      "success": true,
+      "requests": [
+        {
+          "key": "preset_developer",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyroles-kvm-node\", \"sandboxID\": \"sbx-e8e89e671bb0405881b7\","
+        },
+        {
+          "key": "preset_developer",
+          "request": "GET /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdAccessToken\": \"31fe0db428b1447c8da4b0eba7ce9265e9d21ae2a70e4ca2abd1a1bfd26d5a9a\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \""
+        },
+        {
+          "key": "preset_developer",
+          "request": "POST /sandboxes/sbx-e8e89e671bb0405881b7/exec",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"exit_code\": 0, \"stdout\": \"keyroles\\n\", \"stderr\": \"\", \"timed_out\": false}",
+          "detail": "guest ran the command"
+        },
+        {
+          "key": "preset_developer",
+          "request": "GET /templates",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"aliases\": [\"base\"], \"buildID\": \"base\", \"buildStatus\": \"ready\", \"cpuCount\": 1, \"memoryMB\": 1024, \"nodeIDs\": [\"keyroles-kvm-node\"], \"nodes\": [{\"cpuCount\": 1, \"memoryMB\": 1024, \"nodeID\": \"keyroles-kvm-node\", \"snapshot\": true}], \"public\": fa"
+        },
+        {
+          "key": "preset_developer",
+          "request": "POST /volumes",
+          "expected": [
+            201
+          ],
+          "status": 201,
+          "ok": true,
+          "response": "{\"name\": \"developer-vol\", \"token\": \"f395a30f767c4bfd8c72dac3ffe5e1c7081b0e28298641aab98da2ccb002e136\", \"volumeID\": \"vol-f8bb28a73b47d4da\"}"
+        },
+        {
+          "key": "preset_developer",
+          "request": "GET /events/sandboxes?limit=100",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"eventCategory\": \"lifecycle\", \"eventData\": {\"node_id\": \"keyroles-kvm-node\", \"sandbox_metadata\": {}}, \"eventLabel\": \"create\", \"id\": \"bf024cdd-512e-466d-8964-d17a597e7f53\", \"sandboxBuildId\": \"base\", \"sandboxExecutionId\": \"sbx-e8e89e671bb040"
+        },
+        {
+          "key": "preset_developer",
+          "request": "GET /machines",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "preset_developer",
+          "request": "POST /sandboxes/sbx-e8e89e671bb0405881b7/owner",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        }
+      ]
+    },
+    {
+      "name": "named preset machines: machines, inventory and events; refused sandboxes and volumes",
+      "success": true,
+      "requests": [
+        {
+          "key": "preset_machines",
+          "request": "GET /machines",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[]"
+        },
+        {
+          "key": "preset_machines",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyroles-kvm-node\", \"sandboxID\": \"sbx-e8e89e671bb0405881b7\","
+        },
+        {
+          "key": "preset_machines",
+          "request": "GET /events/sandboxes?limit=100",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"eventCategory\": \"lifecycle\", \"eventData\": {\"node_id\": \"keyroles-kvm-node\", \"sandbox_metadata\": {}}, \"eventLabel\": \"create\", \"id\": \"bf024cdd-512e-466d-8964-d17a597e7f53\", \"sandboxBuildId\": \"base\", \"sandboxExecutionId\": \"sbx-e8e89e671bb040"
+        },
+        {
+          "key": "preset_machines",
+          "request": "GET /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "preset_machines",
+          "request": "POST /v2/sandboxes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "preset_machines",
+          "request": "GET /volumes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        }
+      ]
+    },
+    {
+      "name": "named preset admin: global, reaches every family",
+      "success": true,
+      "requests": [
+        {
+          "key": "preset_admin",
+          "request": "GET /cluster/nodes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"id\": \"keyroles-kvm-node\", \"api\": \"https://127.0.0.1:42917\", \"proxy\": \"127.0.0.1:50469\", \"capacity\": 8, \"running\": 2, \"heartbeat_ms\": 1794764822388, \"version\": \"1.2.0\", \"templates\": [\"base\"], \"template_metadata\": {\"base\": {\"snapshot\": tru"
+        },
+        {
+          "key": "preset_admin",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyroles-kvm-node\", \"sandboxID\": \"sbx-e8e89e671bb0405881b7\","
+        },
+        {
+          "key": "preset_admin",
+          "request": "GET /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdAccessToken\": \"31fe0db428b1447c8da4b0eba7ce9265e9d21ae2a70e4ca2abd1a1bfd26d5a9a\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \""
+        },
+        {
+          "key": "preset_admin",
+          "request": "GET /volumes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"name\": \"preset-vol\", \"teamID\": \"red\", \"volumeID\": \"vol-2b67dbd4bbf31fcf\"}, {\"name\": \"developer-vol\", \"teamID\": \"red\", \"volumeID\": \"vol-f8bb28a73b47d4da\"}]"
+        },
+        {
+          "key": "preset_admin",
+          "request": "GET /machines",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[]"
+        }
+      ]
+    },
+    {
+      "name": "named preset admin with role observer is lowered: lists only",
+      "success": true,
+      "requests": [
+        {
+          "key": "preset_admin_observer",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyroles-kvm-node\", \"sandboxID\": \"sbx-e8e89e671bb0405881b7\","
+        },
+        {
+          "key": "preset_admin_observer",
+          "request": "GET /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "preset_admin_observer",
+          "request": "POST /v2/sandboxes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "preset_admin_observer",
+          "request": "GET /volumes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        }
+      ]
+    },
+    {
+      "name": "role operator: lists, reads, runs commands in the team's sandbox",
+      "success": true,
+      "requests": [
+        {
+          "key": "operator",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyroles-kvm-node\", \"sandboxID\": \"sbx-e8e89e671bb0405881b7\","
+        },
+        {
+          "key": "operator",
+          "request": "GET /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdAccessToken\": \"31fe0db428b1447c8da4b0eba7ce9265e9d21ae2a70e4ca2abd1a1bfd26d5a9a\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \""
+        },
+        {
+          "key": "operator",
+          "request": "POST /sandboxes/sbx-e8e89e671bb0405881b7/exec",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"exit_code\": 0, \"stdout\": \"keyroles\\n\", \"stderr\": \"\", \"timed_out\": false}",
+          "detail": "guest ran the command"
+        },
+        {
+          "key": "operator",
+          "request": "POST /sandboxes/sbx-e8e89e671bb0405881b7/owner",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "operator",
+          "request": "GET /cluster/nodes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"id\": \"keyroles-kvm-node\", \"api\": \"https://127.0.0.1:42917\", \"proxy\": \"127.0.0.1:50469\", \"capacity\": 8, \"running\": 2, \"heartbeat_ms\": 1794764822388, \"version\": \"1.2.0\", \"templates\": [\"base\"], \"template_metadata\": {\"base\": {\"snapshot\": tru"
+        },
+        {
+          "key": "operator",
+          "request": "GET /volumes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        }
+      ]
+    },
+    {
+      "name": "role observer: lists the inventory, refused detail, exec, create, pause and delete",
+      "success": true,
+      "requests": [
+        {
+          "key": "observer",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyroles-kvm-node\", \"sandboxID\": \"sbx-e8e89e671bb0405881b7\","
+        },
+        {
+          "key": "observer",
+          "request": "GET /sandboxes/metrics",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"sandboxes\": {}}"
+        },
+        {
+          "key": "observer",
+          "request": "GET /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "observer",
+          "request": "POST /sandboxes/sbx-e8e89e671bb0405881b7/exec",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "observer",
+          "request": "POST /v2/sandboxes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "observer",
+          "request": "POST /sandboxes/sbx-e8e89e671bb0405881b7/pause",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "observer",
+          "request": "DELETE /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "observer",
+          "request": "GET /volumes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        }
+      ]
+    },
+    {
+      "name": "role observer caps even the admin scope (admin scope + observer role)",
+      "success": true,
+      "requests": [
+        {
+          "key": "observer_admin",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyroles-kvm-node\", \"sandboxID\": \"sbx-e8e89e671bb0405881b7\","
+        },
+        {
+          "key": "observer_admin",
+          "request": "GET /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "observer_admin",
+          "request": "POST /v2/sandboxes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "observer_admin",
+          "request": "DELETE /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        }
+      ]
+    },
+    {
+      "name": "another team's operator key neither lists nor reaches the sandbox",
+      "success": true,
+      "requests": [
+        {
+          "key": "other_team",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-68cb86bd18df4a6d8490\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.365Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyroles-kvm-node\", \"sandboxID\": \"sbx-68cb86bd18df4a6d8490\","
+        },
+        {
+          "key": "other_team",
+          "request": "GET /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"sandbox owner required\"}"
+        },
+        {
+          "key": "other_team",
+          "request": "DELETE /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"sandbox owner required\"}"
+        }
+      ]
+    },
+    {
+      "name": "role viewer is the observer role: lists, refused detail, exec and delete",
+      "success": true,
+      "requests": [
+        {
+          "key": "viewer",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyroles-kvm-node\", \"sandboxID\": \"sbx-e8e89e671bb0405881b7\","
+        },
+        {
+          "key": "viewer",
+          "request": "GET /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "viewer",
+          "request": "POST /sandboxes/sbx-e8e89e671bb0405881b7/exec",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "viewer",
+          "request": "DELETE /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "viewer",
+          "request": "POST /sandboxes/sbx-e8e89e671bb0405881b7/owner",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        }
+      ]
+    },
+    {
+      "name": "role member is the operator role: reads and runs commands, no owner adoption",
+      "success": true,
+      "requests": [
+        {
+          "key": "member",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyroles-kvm-node\", \"sandboxID\": \"sbx-e8e89e671bb0405881b7\","
+        },
+        {
+          "key": "member",
+          "request": "GET /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdAccessToken\": \"31fe0db428b1447c8da4b0eba7ce9265e9d21ae2a70e4ca2abd1a1bfd26d5a9a\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \""
+        },
+        {
+          "key": "member",
+          "request": "POST /sandboxes/sbx-e8e89e671bb0405881b7/exec",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"exit_code\": 0, \"stdout\": \"keyroles\\n\", \"stderr\": \"\", \"timed_out\": false}",
+          "detail": "guest ran the command"
+        },
+        {
+          "key": "member",
+          "request": "POST /sandboxes/sbx-e8e89e671bb0405881b7/owner",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "member",
+          "request": "GET /sandboxes/sbx-68cb86bd18df4a6d8490",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"sandbox owner required\"}"
+        }
+      ]
+    },
+    {
+      "name": "role team-admin: an operator in its team, plus owner adoption on its team's sandboxes",
+      "success": true,
+      "requests": [
+        {
+          "key": "team_admin",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyroles-kvm-node\", \"sandboxID\": \"sbx-e8e89e671bb0405881b7\",",
+          "detail": [
+            null,
+            null
+          ]
+        },
+        {
+          "key": "team_admin",
+          "request": "GET /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdAccessToken\": \"31fe0db428b1447c8da4b0eba7ce9265e9d21ae2a70e4ca2abd1a1bfd26d5a9a\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \""
+        },
+        {
+          "key": "team_admin",
+          "request": "POST /sandboxes/sbx-e8e89e671bb0405881b7/exec",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"exit_code\": 0, \"stdout\": \"keyroles\\n\", \"stderr\": \"\", \"timed_out\": false}",
+          "detail": "guest ran the command"
+        },
+        {
+          "key": "team_admin",
+          "request": "POST /sandboxes/sbx-e8e89e671bb0405881b7/owner",
+          "expected": [
+            204
+          ],
+          "status": 204,
+          "ok": true,
+          "response": "null"
+        },
+        {
+          "key": "team_admin",
+          "request": "POST /sandboxes/sbx-e8e89e671bb0405881b7/owner",
+          "expected": [
+            409
+          ],
+          "status": 409,
+          "ok": true,
+          "response": "{\"code\": 409, \"message\": \"existing owner cannot be transferred\"}"
+        },
+        {
+          "key": "team_admin",
+          "request": "GET /volumes",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        }
+      ]
+    },
+    {
+      "name": "role team-admin never reaches another team's sandbox",
+      "success": true,
+      "requests": [
+        {
+          "key": "team_admin",
+          "request": "GET /sandboxes/sbx-68cb86bd18df4a6d8490",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"sandbox owner required\"}"
+        },
+        {
+          "key": "team_admin",
+          "request": "POST /sandboxes/sbx-68cb86bd18df4a6d8490/owner",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"sandbox owner required\"}"
+        },
+        {
+          "key": "team_admin",
+          "request": "POST /sandboxes/sbx-68cb86bd18df4a6d8490/exec",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"sandbox owner required\"}"
+        },
+        {
+          "key": "team_admin",
+          "request": "DELETE /sandboxes/sbx-68cb86bd18df4a6d8490",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"sandbox owner required\"}"
+        },
+        {
+          "key": "team_admin_blue",
+          "request": "POST /sandboxes/sbx-e8e89e671bb0405881b7/owner",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"sandbox owner required\"}"
+        },
+        {
+          "key": "team_admin_blue",
+          "request": "GET /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"sandbox owner required\"}"
+        }
+      ]
+    },
+    {
+      "name": "role team-admin stays out of administrator-only routes",
+      "success": true,
+      "requests": [
+        {
+          "key": "team_admin",
+          "request": "GET /cluster/events",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "team_admin",
+          "request": "GET /cluster/nodes/keyroles-kvm-node/registrations/pending",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "team_admin",
+          "request": "POST /cluster/nodes/keyroles-kvm-node/sandboxes/sbx-e8e89e671bb0405881b7/registration/reconcile",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "team_admin",
+          "request": "POST /templates",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "team_admin",
+          "request": "GET /machines",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        }
+      ]
+    },
+    {
+      "name": "role administrator (operator + admin scope): global, lists all teams and deletes",
+      "success": true,
+      "requests": [
+        {
+          "key": "scope_admin",
+          "request": "GET /cluster/nodes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"id\": \"keyroles-kvm-node\", \"api\": \"https://127.0.0.1:42917\", \"proxy\": \"127.0.0.1:50469\", \"capacity\": 8, \"running\": 2, \"heartbeat_ms\": 1794764822388, \"version\": \"1.2.0\", \"templates\": [\"base\"], \"template_metadata\": {\"base\": {\"snapshot\": tru"
+        },
+        {
+          "key": "scope_admin",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-e8e89e671bb0405881b7\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-15T18:02:02.327Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyroles-kvm-node\", \"sandboxID\": \"sbx-e8e89e671bb0405881b7\","
+        },
+        {
+          "key": "scope_admin",
+          "request": "DELETE /sandboxes/sbx-e8e89e671bb0405881b7",
+          "expected": [
+            204
+          ],
+          "status": 204,
+          "ok": true,
+          "response": "null"
+        },
+        {
+          "key": "scope_admin",
+          "request": "DELETE /sandboxes/sbx-68cb86bd18df4a6d8490",
+          "expected": [
+            204
+          ],
+          "status": 204,
+          "ok": true,
+          "response": "null"
+        }
+      ]
+    },
+    {
+      "name": "deleted sandbox is gone for the team",
+      "success": true,
+      "requests": [
+        {
+          "key": "operator",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[]"
+        }
+      ]
+    },
+    {
+      "name": "a policy file with an unknown preset: the control plane refuses to start",
+      "success": true,
+      "requests": [],
+      "detail": {
+        "exit_code": 1,
+        "output": "hv2-control-plane: invalid API key policy JSON at line 1, column 127; check required fields and scopes\n"
+      }
+    },
+    {
+      "name": "a policy file with a team-admin without a team_id: the control plane refuses to start",
+      "success": true,
+      "requests": [],
+      "detail": {
+        "exit_code": 1,
+        "output": "hv2-control-plane: API key role team-admin needs a team_id\n"
+      }
+    },
+    {
+      "name": "a policy file with a team-admin with the admin scope: the control plane refuses to start",
+      "success": true,
+      "requests": [],
+      "detail": {
+        "exit_code": 1,
+        "output": "hv2-control-plane: API key role team-admin cannot hold the admin scope, which is cluster-wide\n"
+      }
+    },
+    {
+      "name": "a policy file with a team-admin on the read-only preset: the control plane refuses to start",
+      "success": true,
+      "requests": [],
+      "detail": {
+        "exit_code": 1,
+        "output": "hv2-control-plane: API key preset read-only is an observer; role team-admin cannot raise it\n"
+      }
+    },
+    {
+      "name": "reload with an unknown preset is rejected; the old keys still work",
+      "success": true,
+      "requests": [
+        {
+          "key": "preset_developer",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[]"
+        },
+        {
+          "key": "preset_read_only",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[]"
+        },
+        {
+          "key": "preset_machines",
+          "request": "GET /machines",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[]"
+        },
+        {
+          "key": "unknown",
+          "request": "GET /sandboxes",
+          "expected": [
+            401
+          ],
+          "status": 401,
+          "ok": true,
+          "response": "{\"code\": 401, \"message\": \"missing, expired or wrong X-API-Key\"}"
+        }
+      ]
+    },
+    {
+      "name": "reload with read-only given role operator is rejected; the old keys still work",
+      "success": true,
+      "requests": [
+        {
+          "key": "preset_developer",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[]"
+        }
+      ]
+    },
+    {
+      "name": "a good reload afterwards applies",
+      "success": true,
+      "requests": [
+        {
+          "key": "preset_developer",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[]"
+        }
+      ]
+    }
+  ],
+  "policy": [
+    {
+      "expires_at": 1794766621,
+      "scopes": [
+        "admin"
+      ]
+    },
+    {
+      "expires_at": 1794766621,
+      "scopes": [
+        "inventory"
+      ],
+      "principal_id": "k-inventory",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794766621,
+      "scopes": [
+        "sandboxes"
+      ],
+      "principal_id": "k-sandboxes",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794766621,
+      "scopes": [
+        "templates"
+      ],
+      "principal_id": "k-templates",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794766621,
+      "scopes": [
+        "volumes"
+      ],
+      "principal_id": "k-volumes",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794766621,
+      "scopes": [
+        "events"
+      ],
+      "principal_id": "k-events",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794766621,
+      "scopes": [
+        "machines"
+      ],
+      "principal_id": "k-machines",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794766621,
+      "scopes": [
+        "telemetry"
+      ],
+      "principal_id": "k-telemetry",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794766621,
+      "scopes": [
+        "sandboxes",
+        "inventory"
+      ],
+      "principal_id": "role-operator",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794766621,
+      "scopes": [
+        "inventory"
+      ],
+      "role": "observer",
+      "principal_id": "role-observer",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794766621,
+      "scopes": [
+        "admin",
+        "sandboxes",
+        "inventory"
+      ],
+      "role": "observer",
+      "principal_id": "role-observer-admin",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794766621,
+      "scopes": [
+        "sandboxes",
+        "inventory"
+      ],
+      "principal_id": "blue-a",
+      "team_id": "blue"
+    },
+    {
+      "expires_at": 1794766621,
+      "scopes": [
+        "sandboxes",
+        "inventory"
+      ],
+      "role": "viewer",
+      "principal_id": "team-viewer",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794766621,
+      "scopes": [
+        "sandboxes",
+        "inventory"
+      ],
+      "role": "member",
+      "principal_id": "team-member",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794766621,
+      "scopes": [
+        "sandboxes",
+        "inventory"
+      ],
+      "role": "team-admin",
+      "principal_id": "red-lead",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794766621,
+      "preset": "developer",
+      "role": "team-admin",
+      "principal_id": "blue-lead",
+      "team_id": "blue"
+    },
+    {
+      "expires_at": 1,
+      "scopes": [
+        "sandboxes"
+      ],
+      "principal_id": "expired",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794766621,
+      "preset": "read-only",
+      "principal_id": "preset-read-only",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794766621,
+      "preset": "developer",
+      "principal_id": "preset-developer",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794766621,
+      "preset": "machines",
+      "principal_id": "preset-machines",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794766621,
+      "preset": "admin"
+    },
+    {
+      "expires_at": 1794766621,
+      "preset": "admin",
+      "role": "observer",
+      "principal_id": "preset-admin-observer",
+      "team_id": "red"
+    }
+  ],
+  "platform_lines": {
+    "Kvm": 3,
+    "Tcg": 0
+  }
+}

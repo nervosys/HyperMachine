@@ -34,6 +34,50 @@ on each key:
 - Reload with `SIGHUP`, as for any key change. A sandbox keeps the team it was
   created in; reloading keys never moves one.
 
+## Roles
+
+A key's `role` (or a signed-in member's) sets what it may do inside its team.
+Roles never widen what a team key reaches: every role below sees only its own
+team's resources.
+
+| Role | What it can do | What it cannot |
+|---|---|---|
+| `viewer` (same as `observer`) | `GET`/`HEAD` the inventory routes (`/sandboxes`, `/v2/sandboxes`, `/templates`, `/sandboxes/metrics`, `/cluster/nodes`) its scopes allow | Sandbox detail, exec, create, pause, delete, volumes, events, owner adoption: 403, even with more scopes |
+| `member` (same as `operator`, and the default) | Everything its scopes allow on its team's sandboxes, volumes, machines, webhooks, snapshots, whoever created them | Owner adoption, node routes, `/cluster/events`, building templates (403); another team's resources (403 or 404) |
+| `team-admin` | Everything a `member` with the same scopes can, plus `POST /sandboxes/{id}/owner` on a sandbox of its own team (it needs the `sandboxes` scope) | Another team's sandbox (403, and 404 when it does not exist); node management, `/cluster/events`, template builds, cluster-wide usage (403); changing a sandbox's team; any use of the `admin` scope |
+| administrator (operator with the `admin` scope) | Everything, in every team | Nothing |
+
+`viewer` and `member` are the team names for the existing `observer` and
+`operator` roles: the policy file reads them as the same roles, so a key written
+either way behaves identically. `team-admin` is the one new role. It needs a
+`team_id` (an entry without one rejects the whole file), cannot hold the `admin`
+scope, and cannot be combined with the `read-only` preset. It is never an
+administrator and it is not global. See the
+[policy field](API_KEY_ROTATION.md#team-names-for-roles-and-team-admin).
+
+**What `team-admin` actually adds is small, because the code allows little.**
+Every member already acts on every sandbox in its team, whoever created it, so
+acting on a teammate's sandbox is not new. Owner adoption is the one
+team-management action that today needs the cluster `admin` scope and can be
+scoped to a team without changing its meaning: it assigns an owner to a sandbox
+that has none, accepts the same owner again, and never transfers an existing
+one (409 `existing owner cannot be transferred`), and it never touches the
+sandbox's team. A team-admin therefore cannot move a resource into another team,
+and in practice adopts owners only for team sandboxes that lost or never had one.
+
+Left administrator-only, because the code has no team-scoped form of them:
+
+- Node routes (`/cluster/nodes/{node}/registrations/pending`,
+  `.../registration/reconcile`): they act on a node, which no team owns.
+- `/cluster/events`, and building templates (see "Not yet partitioned" below).
+- Usage and billing: there is no per-owner or per-team usage route to scope.
+- Adding, removing or changing members: keys come from the policy file, and
+  there is no member API.
+- Reassigning an owner who exists. The node refuses it for everyone, an
+  administrator included.
+
+Evidence: [`team-admin`, `viewer` and `member` on a real KVM node](benchmarks/2026-11-15/team-roles-kvm/README.md).
+
 ## What a team key can do
 
 | | Same team | Other team, or no team |

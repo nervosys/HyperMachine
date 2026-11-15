@@ -4041,6 +4041,175 @@ async fn legacy_owner_adoption_requires_administrator_before_node_dispatch() {
 }
 
 #[tokio::test]
+async fn a_team_admin_adopts_owners_in_its_own_team_only() {
+    use sha2::{Digest, Sha256};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    struct Owned(tokio::task::JoinHandle<()>);
+    impl Drop for Owned {
+        fn drop(&mut self) {
+            self.0.abort();
+        }
+    }
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let calls = Arc::new(AtomicUsize::new(0));
+    let node_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let node_api = format!("http://{}", node_listener.local_addr().unwrap());
+    let node_store = store.clone();
+    let node_calls = calls.clone();
+    let node_router = Router::new().route(
+        "/sandboxes/{id}/owner",
+        post(move |Path(id): Path<String>, Json(body): Json<Value>| {
+            let store = node_store.clone();
+            let calls = node_calls.clone();
+            async move {
+                calls.fetch_add(1, Ordering::SeqCst);
+                let owner =
+                    hv2_cluster::ownership::OwnerId::parse(body["principalId"].as_str().unwrap())
+                        .unwrap();
+                match store.adopt_sandbox_owner(&id, &owner).await.unwrap() {
+                    hv2_cluster::ownership::OwnerAdoption::Adopted
+                    | hv2_cluster::ownership::OwnerAdoption::AlreadyOwned => StatusCode::NO_CONTENT,
+                    _ => StatusCode::CONFLICT,
+                }
+            }
+        }),
+    );
+    let _node = Owned(tokio::spawn(async move {
+        axum::serve(node_listener, node_router).await.unwrap();
+    }));
+    let node: hv2_cluster::model::NodeInfo = serde_json::from_value(json!({"id":"adoption-node","api":node_api,"proxy":"127.0.0.1:3000","capacity":4,"running":1,"heartbeat_ms":1,"version":"fixture"})).unwrap();
+    store
+        .put_node(&node, Duration::from_secs(60))
+        .await
+        .unwrap();
+    for (id, owner, team) in [
+        ("red-alice", Some("alice"), Some("red")),
+        ("red-unowned", None, Some("red")),
+        ("blue-carol", Some("carol"), Some("blue")),
+        ("blue-unowned", None, Some("blue")),
+    ] {
+        let record: SandboxRecord = serde_json::from_value(json!({"sandbox_id":id,"node_id":"adoption-node","template_id":"base",
+            "started_at_ms":1,"end_at_ms":600000,"cpu_count":1,"memory_mb":1024,"envd_version":"fixture","descriptor":{},
+            "owner_id":owner,"team_id":team})).unwrap();
+        store.put_sandbox(&record).await.unwrap();
+    }
+    let policy = |key: &str, role: &str, principal: &str, team: &str| {
+        json!({"sha256":Sha256::digest(key.as_bytes()).iter().map(|v|format!("{v:02x}")).collect::<String>(),
+        "expires_at":chrono::Utc::now().timestamp()+60,"scopes":["sandboxes","inventory"],"role":role,
+        "principal_id":principal,"team_id":team})
+    };
+    let policies = json!([
+        policy("red-lead", "team-admin", "lead", "red"),
+        policy("red-member", "member", "alice", "red"),
+        policy("red-viewer", "viewer", "dash", "red"),
+        policy("blue-lead", "team-admin", "boss", "blue"),
+    ]);
+    let control = ControlPlane::new(
+        store.clone(),
+        ControlConfig {
+            api_key: Some(KEY.into()),
+            api_keys: hv2_cluster::keys::ApiKeyPolicy::from_json(&policies.to_string()).unwrap(),
+            access_audit: None,
+            cluster_token: Some(TOKEN.into()),
+            proxy_port: 3000,
+            create_timeout: Duration::from_secs(5),
+            identity_issuer: None,
+        },
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let router = control::router(control);
+    let _server = Owned(tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    }));
+    let adopt = |key: &'static str, sandbox: &'static str, principal: &'static str| {
+        let url = format!("{base}/sandboxes/{sandbox}/owner");
+        async move {
+            client()
+                .post(url)
+                .header("x-api-key", key)
+                .json(&json!({"principalId":principal}))
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16()
+        }
+    };
+    let owner_of = |id: &'static str| {
+        let store = store.clone();
+        async move {
+            store
+                .sandbox(id)
+                .await
+                .unwrap()
+                .unwrap()
+                .owner_id
+                .map(|o| o.as_str().to_string())
+        }
+    };
+    // Other teams' sandboxes, members, viewers and unknown ids never reach a node.
+    assert_eq!(adopt("red-lead", "blue-unowned", "lead").await, 403);
+    assert_eq!(adopt("red-lead", "blue-carol", "lead").await, 403);
+    assert_eq!(adopt("blue-lead", "red-unowned", "boss").await, 403);
+    assert_eq!(adopt("red-member", "red-unowned", "alice").await, 403);
+    assert_eq!(adopt("red-viewer", "red-unowned", "dash").await, 403);
+    assert_eq!(adopt("red-lead", "no-such-sandbox", "lead").await, 404);
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert_eq!(owner_of("blue-unowned").await, None);
+    assert_eq!(owner_of("red-unowned").await, None);
+    // Its own team: an unowned sandbox gets the owner; an owned one is not
+    // transferred (the node's rule), but the same owner is accepted.
+    assert_eq!(adopt("red-lead", "red-unowned", "alice").await, 204);
+    assert_eq!(owner_of("red-unowned").await.as_deref(), Some("alice"));
+    assert_eq!(adopt("red-lead", "red-alice", "lead").await, 409);
+    assert_eq!(adopt("red-lead", "red-alice", "alice").await, 204);
+    assert_eq!(owner_of("red-alice").await.as_deref(), Some("alice"));
+    assert_eq!(calls.load(Ordering::SeqCst), 3);
+    // The adoption never changed a team.
+    let moved = store.sandbox("red-unowned").await.unwrap().unwrap();
+    assert_eq!(moved.team_id.as_ref().unwrap().as_str(), "red");
+    // Administrator-only routes stay out of reach.
+    for (method, path) in [
+        (reqwest::Method::GET, "/cluster/events"),
+        (
+            reqwest::Method::GET,
+            "/cluster/nodes/adoption-node/registrations/pending",
+        ),
+        (
+            reqwest::Method::POST,
+            "/cluster/nodes/adoption-node/sandboxes/red-alice/registration/reconcile",
+        ),
+        (reqwest::Method::POST, "/templates"),
+    ] {
+        let status = client()
+            .request(method.clone(), format!("{base}{path}"))
+            .header("x-api-key", "red-lead")
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16();
+        assert_eq!(status, 403, "{method} {path}");
+    }
+    // Listing is still its own team's.
+    let listed: Value = client()
+        .get(format!("{base}/sandboxes"))
+        .header("x-api-key", "red-lead")
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let text = listed.to_string();
+    assert!(
+        text.contains("red-alice") && !text.contains("blue-carol"),
+        "{text}"
+    );
+}
+
+#[tokio::test]
 async fn team_keys_reach_their_whole_team_and_nothing_else() {
     use sha2::{Digest, Sha256};
     let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());

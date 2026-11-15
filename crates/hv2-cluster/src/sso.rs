@@ -513,6 +513,14 @@ impl Members {
                         .into(),
                 );
             }
+            if member.role == crate::keys::ApiRole::TeamAdmin
+                && (member.team_id.is_none()
+                    || member.scopes.contains(&crate::keys::ApiScope::Admin))
+            {
+                return Err(
+                    "a team-admin member needs a team_id and cannot hold the admin scope".into(),
+                );
+            }
             member.email = member.email.to_ascii_lowercase();
             if !member.email.contains('@') || member.email.len() > 254 {
                 return Err("every member needs an email address".into());

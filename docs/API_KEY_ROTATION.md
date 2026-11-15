@@ -8,7 +8,7 @@ This replaces only scoped policies. The legacy `HV2_API_KEY` admin credential re
 
 On other platforms, signal reload is unavailable; restart the binary with the replacement file. Embedded users can call `ControlPlane::replace_api_key_policies` to apply the same validated atomic replacement. Unix signal handling is installed only when `--api-keys-file` is configured; do not send SIGHUP to an instance without that option.
 
-A real HTTP integration test checks old-key revocation, replacement-key access, unchanged admin access, scope enforcement and rejected updates preserving active policies. [Process-level SIGHUP verification](benchmarks/2026-10-01/api-key-reload.md) passed 16 real HTTP checks using an owned Unix control-plane process. The feature provides operator rotation within the existing single team; it does not add tenant roles, central policy distribution or interruption of already-authorized work.
+A real HTTP integration test checks old-key revocation, replacement-key access, unchanged admin access, scope enforcement and rejected updates preserving active policies. [Process-level SIGHUP verification](benchmarks/2026-10-01/api-key-reload.md) passed 16 real HTTP checks using an owned Unix control-plane process. Rotation itself does not change roles (see [team names for roles, and team-admin](#team-names-for-roles-and-team-admin)), and it does not provide central policy distribution or interruption of already-authorized work.
 
 [Bounded-reader process verification](benchmarks/2026-10-01/api-key-bounds.md) passed 20 HTTP checks, including oversized and invalid UTF-8 reloads preserving active policies and subsequent valid recovery. Startup rejection uses the same reader and has library coverage; these process checks cover reload.
 
@@ -26,6 +26,22 @@ denied, including sandbox detail/name lookup, volume credentials, upload URLs,
 execution and GET TCP upgrades. Sandbox listings omit the guest access token.
 Operators retain the existing scope behavior. For an inventory observer, add
 `"role":"observer"` to a policy with `"scopes":["inventory"]`.
+
+### Team names for roles, and `team-admin`
+
+`role` also accepts the team names for the two roles above and one new role:
+
+| `role` | Same as | Notes |
+|---|---|---|
+| `viewer` | `observer` | an alias: parsed to the same role, same behaviour |
+| `member` | `operator` | an alias: parsed to the same role, same behaviour |
+| `team-admin` | an operator, plus owner adoption | needs `team_id`; see [Teams](TEAMS.md#roles) |
+
+A `team-admin` entry that has no `team_id` rejects the whole file (startup fails; a reload is refused and the
+active keys stay). So does one that holds the `admin` scope (cluster-wide, which a team role is not), and
+`"preset":"read-only"` with `"role":"team-admin"` (read-only stays read-only). Any other preset may carry
+`"role":"team-admin"`. A team-admin is never an administrator. Existing entries, which use `operator`,
+`observer` or no role, behave exactly as before.
 
 Roles reload with the rest of a policy. They govern subsequent authorization
 decisions; they do not revoke previously issued bearer tokens or open streams.

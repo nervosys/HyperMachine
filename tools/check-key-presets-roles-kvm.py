@@ -62,7 +62,9 @@ def main():
               "input_sha256": {k: digest(v) for k, v in inputs.items()}, "cases": []}
     keys = {"legacy_admin": uuid.uuid4().hex, "token": uuid.uuid4().hex, "unknown": uuid.uuid4().hex,
             "expired": uuid.uuid4().hex, "operator": uuid.uuid4().hex, "observer": uuid.uuid4().hex,
-            "observer_admin": uuid.uuid4().hex, "other_team": uuid.uuid4().hex}
+            "observer_admin": uuid.uuid4().hex, "other_team": uuid.uuid4().hex,
+            "viewer": uuid.uuid4().hex, "member": uuid.uuid4().hex, "team_admin": uuid.uuid4().hex,
+            "team_admin_blue": uuid.uuid4().hex}
     PRESET_KEYS = ["read_only", "developer", "machines", "admin", "admin_observer"]
     for name in PRESET_KEYS:
         keys["preset_" + name] = uuid.uuid4().hex
@@ -181,6 +183,14 @@ def main():
                  "role": "observer", "principal_id": "role-observer-admin", "team_id": "red"},
                 {"sha256": sha("other_team"), "expires_at": expiry, "scopes": ["sandboxes", "inventory"],
                  "principal_id": "blue-a", "team_id": "blue"},
+                {"sha256": sha("viewer"), "expires_at": expiry, "scopes": ["sandboxes", "inventory"], "role": "viewer",
+                 "principal_id": "team-viewer", "team_id": "red"},
+                {"sha256": sha("member"), "expires_at": expiry, "scopes": ["sandboxes", "inventory"], "role": "member",
+                 "principal_id": "team-member", "team_id": "red"},
+                {"sha256": sha("team_admin"), "expires_at": expiry, "scopes": ["sandboxes", "inventory"],
+                 "role": "team-admin", "principal_id": "red-lead", "team_id": "red"},
+                {"sha256": sha("team_admin_blue"), "expires_at": expiry, "preset": "developer",
+                 "role": "team-admin", "principal_id": "blue-lead", "team_id": "blue"},
                 {"sha256": sha("expired"), "expires_at": 1, "scopes": ["sandboxes"],
                  "principal_id": "expired", "team_id": "red"},
                 {"sha256": sha("preset_read_only"), "expires_at": expiry, "preset": "read-only",
@@ -197,7 +207,7 @@ def main():
             policies.write_text(json.dumps(policy))
             report["policy"] = [{k: v for k, v in row.items() if k != "sha256"} for row in policy]
             start("node", [str(args.daemon), "--port", str(node_port), "--proxy-port", str(node_proxy),
-                           "--memory-mb", "512", "--cpu-cores", "1", "--capacity", "8",
+                           "--memory-mb", "1024", "--cpu-cores", "1", "--capacity", "8",
                            "--volume-dir", str(directory / "volumes"), "--snapshot-store", str(directory / "snapshots"),
                            "--cluster-store", store, "--cluster-namespace", namespace, "--node-id", "keyroles-kvm-node",
                            "--advertise-api", f"https://127.0.0.1:{node_port}", "--advertise-proxy", f"127.0.0.1:{node_proxy}",
@@ -223,12 +233,18 @@ def main():
             assert status == 201, f"sandbox create: {status} {created}"
             vm = created["sandboxID"]
             state["vm"] = vm
+            # A second team's sandbox, for the cross-team refusals.
+            status, created_blue = call("other_team", "POST", "/v2/sandboxes", {"templateID": "base", "timeout": 900})
+            assert status == 201, f"blue sandbox create: {status} {created_blue}"
+            blue_vm = created_blue["sandboxID"]
 
             def exec_ok(data):
                 assert data.get("exit_code") == 0 and data["stdout"].strip() == "keyroles", data
                 return "guest ran the command"
             def has_vm(data):
                 assert vm in [r["sandboxID"] for r in data], "own sandbox not listed"
+            def lacks_blue(data):
+                assert blue_vm not in [r["sandboxID"] for r in data], "another team's sandbox listed"
             def lacks_vm(data):
                 assert vm not in [r["sandboxID"] for r in data], "another team's sandbox listed"
             ALL = {200, 201, 204}
@@ -364,10 +380,50 @@ def main():
                 ("other_team", "GET", f"/sandboxes/{vm}", None, F, None),
                 ("other_team", "DELETE", f"/sandboxes/{vm}", None, F, None),
             ])
+            # Team names for the existing roles, and the team-admin role.
+            case("role viewer is the observer role: lists, refused detail, exec and delete", [
+                ("viewer", "GET", "/sandboxes", None, {200}, has_vm),
+                ("viewer", "GET", f"/sandboxes/{vm}", None, F, None),
+                ("viewer", "POST", f"/sandboxes/{vm}/exec", {"cmd": "echo keyroles"}, F, None),
+                ("viewer", "DELETE", f"/sandboxes/{vm}", None, F, None),
+                ("viewer", "POST", f"/sandboxes/{vm}/owner", {"principalId": "x"}, F, None),
+            ])
+            case("role member is the operator role: reads and runs commands, no owner adoption", [
+                ("member", "GET", "/sandboxes", None, {200}, has_vm),
+                ("member", "GET", f"/sandboxes/{vm}", None, {200}, None),
+                ("member", "POST", f"/sandboxes/{vm}/exec", {"cmd": "echo keyroles", "timeout_secs": 30}, {200}, exec_ok),
+                ("member", "POST", f"/sandboxes/{vm}/owner", {"principalId": "x"}, F, None),
+                ("member", "GET", f"/sandboxes/{blue_vm}", None, F, None),
+            ])
+            case("role team-admin: an operator in its team, plus owner adoption on its team's sandboxes", [
+                ("team_admin", "GET", "/sandboxes", None, {200}, lambda d: (has_vm(d), lacks_blue(d))),
+                ("team_admin", "GET", f"/sandboxes/{vm}", None, {200}, None),
+                ("team_admin", "POST", f"/sandboxes/{vm}/exec", {"cmd": "echo keyroles", "timeout_secs": 30}, {200}, exec_ok),
+                # the owner is k-sandboxes: the same owner is accepted, a different one is not transferred
+                ("team_admin", "POST", f"/sandboxes/{vm}/owner", {"principalId": "k-sandboxes"}, {204}, None),
+                ("team_admin", "POST", f"/sandboxes/{vm}/owner", {"principalId": "someone-else"}, {409}, None),
+                ("team_admin", "GET", "/volumes", None, F, None),
+            ])
+            case("role team-admin never reaches another team's sandbox", [
+                ("team_admin", "GET", f"/sandboxes/{blue_vm}", None, F, None),
+                ("team_admin", "POST", f"/sandboxes/{blue_vm}/owner", {"principalId": "red-lead"}, F, None),
+                ("team_admin", "POST", f"/sandboxes/{blue_vm}/exec", {"cmd": "echo keyroles"}, F, None),
+                ("team_admin", "DELETE", f"/sandboxes/{blue_vm}", None, F, None),
+                ("team_admin_blue", "POST", f"/sandboxes/{vm}/owner", {"principalId": "blue-lead"}, F, None),
+                ("team_admin_blue", "GET", f"/sandboxes/{vm}", None, F, None),
+            ])
+            case("role team-admin stays out of administrator-only routes", [
+                ("team_admin", "GET", "/cluster/events", None, F, None),
+                ("team_admin", "GET", "/cluster/nodes/keyroles-kvm-node/registrations/pending", None, F, None),
+                ("team_admin", "POST", f"/cluster/nodes/keyroles-kvm-node/sandboxes/{vm}/registration/reconcile", None, F, None),
+                ("team_admin", "POST", "/templates", {"name": "x"}, F, None),
+                ("team_admin", "GET", "/machines", None, F, None),
+            ])
             case("role administrator (operator + admin scope): global, lists all teams and deletes", [
                 ("scope_admin", "GET", "/cluster/nodes", None, {200}, None),
                 ("scope_admin", "GET", "/sandboxes", None, {200}, has_vm),
                 ("scope_admin", "DELETE", f"/sandboxes/{vm}", None, {204}, None),
+                ("scope_admin", "DELETE", f"/sandboxes/{blue_vm}", None, {204}, None),
             ])
             case("deleted sandbox is gone for the team", [
                 ("operator", "GET", "/sandboxes", None, {200}, lacks_vm),
@@ -400,6 +456,29 @@ def main():
                       {"exit_code": refused.returncode, "output": out[-300:]})
             except subprocess.TimeoutExpired:
                 extra("a policy file with an unknown preset: the control plane refuses to start", False, "still running after 60 s")
+
+            # A team-admin without a team, with the admin scope, or on read-only: refused at start.
+            for label, row, needle in [
+                ("team-admin without a team_id", {"sha256": sha("unknown"), "expires_at": expiry, "scopes": ["sandboxes"],
+                                                  "role": "team-admin", "principal_id": "lead"}, "needs a team_id"),
+                ("team-admin with the admin scope", {"sha256": sha("unknown"), "expires_at": expiry, "scopes": ["admin"],
+                                                    "role": "team-admin", "principal_id": "lead", "team_id": "red"}, "admin scope"),
+                ("team-admin on the read-only preset", {"sha256": sha("unknown"), "expires_at": expiry, "preset": "read-only",
+                                                       "role": "team-admin", "principal_id": "lead", "team_id": "red"}, "cannot raise"),
+            ]:
+                bad_file.write_text(json.dumps([row]))
+                try:
+                    refused = subprocess.run(
+                        [str(args.control), "--store", store, "--namespace", namespace + "-bad", "--port", str(port()),
+                         "--proxy-port", str(port()), "--api-keys-file", str(bad_file)],
+                        env={**env, "HV2_CLUSTER_TOKEN": keys["token"]}, stdin=subprocess.DEVNULL,
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60)
+                    out = refused.stdout.decode("utf-8", "replace")
+                    extra(f"a policy file with a {label}: the control plane refuses to start",
+                          refused.returncode != 0 and needle in out,
+                          {"exit_code": refused.returncode, "output": out[-300:]})
+                except subprocess.TimeoutExpired:
+                    extra(f"a policy file with a {label}: the control plane refuses to start", False, "still running after 60 s")
 
             # And a SIGHUP reload of such a file is rejected, leaving the old keys in force.
             good_policy = list(policy)

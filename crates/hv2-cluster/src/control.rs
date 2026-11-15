@@ -1200,6 +1200,10 @@ fn shared_across_teams(route: &str, method: &axum::http::Method) -> bool {
 }
 #[derive(Clone, Copy)]
 struct AdministratorContext(bool);
+/// The caller is a team administrator: owner adoption on its own team's
+/// sandboxes, and nothing else an administrator does.
+#[derive(Clone, Copy)]
+struct TeamAdminContext(bool);
 
 fn audit_event(mut event: Value) -> Value {
     if event["sandbox_ref"].is_null() {
@@ -1241,7 +1245,7 @@ async fn require_api_key(
         let (token, from_cookie) = crate::sso_login::session_token(request.headers())?;
         Some((sso.member_for(token), from_cookie))
     });
-    let (kind, key_id, mut rejection, principal, team, administrator) = if let Some((
+    let (kind, key_id, mut rejection, principal, team, administrator, team_admin) = if let Some((
         member,
         from_cookie,
     )) = session
@@ -1273,6 +1277,7 @@ async fn require_api_key(
                         .collect::<String>()
                 };
                 let administrator = rejection.is_none() && policy.is_administrator();
+                let team_admin = rejection.is_none() && policy.is_team_admin();
                 (
                     "session",
                     key_id,
@@ -1280,6 +1285,7 @@ async fn require_api_key(
                     policy.principal_id().cloned(),
                     policy.team_id().cloned(),
                     administrator,
+                    team_admin,
                 )
             }
             None => (
@@ -1291,6 +1297,7 @@ async fn require_api_key(
                 )),
                 None,
                 None,
+                false,
                 false,
             ),
         }
@@ -1318,6 +1325,7 @@ async fn require_api_key(
         let team = matched.as_ref().and_then(|p| p.team_id()).cloned();
         let administrator = rejection.is_none()
             && (kind == "legacy_admin" || matched.as_ref().is_some_and(|p| p.is_administrator()));
+        let team_admin = rejection.is_none() && matched.as_ref().is_some_and(|p| p.is_team_admin());
         // With sign-on configured nobody is anonymous, keys or no keys.
         let rejection = if sso.is_some() && kind == "anonymous" && rejection.is_none() {
             Some(api_error(
@@ -1327,7 +1335,15 @@ async fn require_api_key(
         } else {
             rejection
         };
-        (kind, key_id, rejection, principal, team, administrator)
+        (
+            kind,
+            key_id,
+            rejection,
+            principal,
+            team,
+            administrator,
+            team_admin,
+        )
     };
     // Authentication supplies this context. A client cannot choose its owner
     // or its team.
@@ -1406,6 +1422,9 @@ async fn require_api_key(
     request
         .extensions_mut()
         .insert(AdministratorContext(administrator));
+    request
+        .extensions_mut()
+        .insert(TeamAdminContext(team_admin));
     let allowed = rejection.is_none();
     let sandbox_ref = if let Some(audit) = &control.config.access_audit {
         if audit.resource_attribution_enabled()
@@ -2194,13 +2213,17 @@ struct AdoptOwnerRequest {
 async fn adopt_owner(
     State(control): State<Arc<ControlPlane>>,
     Extension(admin): Extension<AdministratorContext>,
+    Extension(team_admin): Extension<TeamAdminContext>,
+    Extension(access): Extension<SandboxAccess>,
     Path(parameters): Path<BTreeMap<String, String>>,
     method: Method,
     uri: axum::http::Uri,
     mut headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    if !admin.0 {
+    // An administrator adopts any sandbox's owner; a team administrator only
+    // one in its own team (checked again below, after the middleware's).
+    if !admin.0 && !(team_admin.0 && matches!(access, SandboxAccess::Team(_))) {
         return api_error(StatusCode::FORBIDDEN, "administrator credential required");
     }
     if control
@@ -2229,10 +2252,18 @@ async fn adopt_owner(
     if crate::ports::validate_request(id, 1, parsed.principal_id.as_str()).is_err() {
         return api_error(StatusCode::BAD_REQUEST, "invalid sandbox ID");
     }
+    if !admin.0 {
+        match control.store.sandbox(id).await {
+            Ok(Some(record)) if access.allows(&record) => {}
+            Ok(Some(_)) => return api_error(StatusCode::FORBIDDEN, "sandbox owner required"),
+            Ok(None) => return api_error(StatusCode::NOT_FOUND, "sandbox does not exist"),
+            Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        }
+    }
     headers.insert("content-type", HeaderValue::from_static("application/json"));
     forward(
         State(control),
-        Extension(SandboxAccess::All),
+        Extension(access),
         Path(parameters),
         method,
         uri,

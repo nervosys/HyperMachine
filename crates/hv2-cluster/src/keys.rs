@@ -52,9 +52,19 @@ pub enum ApiScope {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ApiRole {
+    /// Also written `member`, the team name for the same role.
     #[default]
+    #[serde(alias = "member")]
     Operator,
+    /// Also written `viewer`, the team name for the same role.
+    #[serde(alias = "viewer")]
     Observer,
+    /// An operator that also manages its own team: it may adopt an owner for
+    /// a sandbox of its team (`POST /sandboxes/{id}/owner`). It needs a
+    /// `team_id`, may not hold the `admin` scope, and is never an
+    /// administrator.
+    #[serde(rename = "team-admin")]
+    TeamAdmin,
 }
 
 /// A named bundle of scopes (and a role) that a policy entry may use instead
@@ -63,7 +73,7 @@ pub enum ApiRole {
 /// Explicit `scopes` on the same entry are added to the preset's, except
 /// with [`ApiPreset::ReadOnly`], which accepts none beyond its own: read-only
 /// stays read-only. An explicit `role` may lower a preset's role to
-/// `observer` but never raise `read-only` to `operator`.
+/// `observer` but never raise `read-only` to `operator` or `team-admin`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ApiPreset {
@@ -163,6 +173,11 @@ impl RawPolicy {
         let Some(preset) = self.preset else {
             return Ok((self.scopes.clone(), self.role.unwrap_or_default()));
         };
+        if preset == ApiPreset::ReadOnly && self.role == Some(ApiRole::TeamAdmin) {
+            return Err(
+                "API key preset read-only is an observer; role team-admin cannot raise it".into(),
+            );
+        }
         let base = preset.scopes();
         if preset == ApiPreset::ReadOnly {
             if self.role == Some(ApiRole::Operator) {
@@ -176,6 +191,7 @@ impl RawPolicy {
         }
         let role = match (preset.role(), self.role) {
             (_, Some(ApiRole::Observer)) => ApiRole::Observer,
+            (_, Some(ApiRole::TeamAdmin)) => ApiRole::TeamAdmin,
             (role, _) => role,
         };
         Ok((base.union(&self.scopes).copied().collect(), role))
@@ -217,6 +233,17 @@ impl ApiKeyPolicy {
                     return Err("empty or duplicate API key credential".into());
                 }
                 let (scopes, role) = raw.expand()?;
+                if role == ApiRole::TeamAdmin {
+                    if raw.team_id.is_none() {
+                        return Err("API key role team-admin needs a team_id".into());
+                    }
+                    if scopes.contains(&ApiScope::Admin) {
+                        return Err(
+                            "API key role team-admin cannot hold the admin scope, which is cluster-wide"
+                                .into(),
+                        );
+                    }
+                }
                 if raw.expires_at <= 0 || scopes.is_empty() {
                     return Err("API key expiry must be positive and scopes nonempty".into());
                 }
@@ -280,6 +307,12 @@ impl ApiKeyPolicy {
         self.role == ApiRole::Operator && self.scopes.contains(&ApiScope::Admin)
     }
 
+    /// A team administrator: operator rights plus owner adoption, on its own
+    /// team's sandboxes only (the caller checks the team).
+    pub(crate) fn is_team_admin(&self) -> bool {
+        self.role == ApiRole::TeamAdmin && self.team_id.is_some()
+    }
+
     pub fn principal_id(&self) -> Option<&crate::ownership::OwnerId> {
         self.principal_id.as_ref()
     }
@@ -321,7 +354,11 @@ impl ApiKeyPolicy {
         }
         let parts: Vec<_> = path.trim_start_matches('/').split('/').collect();
         if matches!(parts.as_slice(), ["sandboxes", _, "owner"]) {
-            return false;
+            // Only a team administrator, and only for POST; the handler
+            // checks that the sandbox is in its team.
+            return self.is_team_admin()
+                && *method == Method::POST
+                && self.scopes.contains(&ApiScope::Sandboxes);
         }
         let family = match parts.as_slice() {
             ["v2", "sandboxes", ..] | ["sandboxes" | "sandbox-names", ..] => ApiScope::Sandboxes,
@@ -737,5 +774,129 @@ mod tests {
         assert!(ApiKeyPolicy::from_json(&excessive)
             .unwrap_err()
             .contains("1-256"));
+    }
+
+    #[test]
+    fn team_names_are_aliases_of_the_existing_roles() {
+        for (name, role) in [
+            ("viewer", ApiRole::Observer),
+            ("observer", ApiRole::Observer),
+            ("member", ApiRole::Operator),
+            ("operator", ApiRole::Operator),
+        ] {
+            let policy =
+                preset_policy(&format!(r#""scopes":["inventory"],"role":"{name}""#)).unwrap();
+            assert_eq!(policy.role, role, "{name}");
+        }
+        let viewer = preset_policy(r#""scopes":["sandboxes"],"role":"viewer""#).unwrap();
+        assert!(!viewer.permits(&Method::POST, "/sandboxes/box/exec"));
+        let member = preset_policy(r#""scopes":["sandboxes"],"role":"member""#).unwrap();
+        assert!(member.permits(&Method::POST, "/sandboxes/box/exec"));
+        assert!(!member.permits(&Method::POST, "/sandboxes/box/owner"));
+        assert!(!member.is_team_admin());
+    }
+
+    #[test]
+    fn a_team_admin_needs_a_team_and_never_holds_admin() {
+        let team = r#""team_id":"red","principal_id":"lead""#;
+        let ok = preset_policy(&format!(
+            r#""scopes":["sandboxes"],"role":"team-admin",{team}"#
+        ))
+        .unwrap();
+        assert_eq!(ok.role, ApiRole::TeamAdmin);
+        assert!(ok.is_team_admin());
+        assert!(!ok.is_administrator());
+        assert_eq!(ok.team_id().unwrap().as_str(), "red");
+        // A preset may carry it too.
+        let dev = preset_policy(&format!(
+            r#""preset":"developer","role":"team-admin",{team}"#
+        ))
+        .unwrap();
+        assert!(dev.is_team_admin() && dev.permits(&Method::POST, "/v2/sandboxes"));
+        // No team, no team-admin: the whole file is refused.
+        for bad in [
+            r#""scopes":["sandboxes"],"role":"team-admin""#.to_string(),
+            r#""scopes":["sandboxes"],"role":"team-admin","principal_id":"lead""#.to_string(),
+            r#""preset":"developer","role":"team-admin""#.to_string(),
+        ] {
+            assert!(
+                preset_policy(&bad).unwrap_err().contains("needs a team_id"),
+                "{bad}"
+            );
+        }
+        // The admin scope is cluster-wide, which a team-scoped role is not.
+        for bad in [
+            format!(r#""scopes":["admin"],"role":"team-admin",{team}"#),
+            format!(r#""preset":"admin","role":"team-admin",{team}"#),
+            format!(r#""preset":"developer","scopes":["admin"],"role":"team-admin",{team}"#),
+        ] {
+            assert!(
+                preset_policy(&bad).unwrap_err().contains("admin scope"),
+                "{bad}"
+            );
+        }
+        // Read-only stays read-only.
+        assert!(preset_policy(&format!(
+            r#""preset":"read-only","role":"team-admin",{team}"#
+        ))
+        .unwrap_err()
+        .contains("cannot raise"));
+        // The same entry in a file with other teams.
+        let file = format!(
+            r#"[{{"sha256":"{}","expires_at":100,"scopes":["sandboxes"],"role":"team-admin",{team}}},
+               {{"sha256":"{}","expires_at":100,"scopes":["sandboxes"]}}]"#,
+            digest("a"),
+            digest("b")
+        );
+        assert!(ApiKeyPolicy::from_json(&file)
+            .unwrap_err()
+            .contains("team_id and principal_id"));
+    }
+
+    #[test]
+    fn a_team_admin_gains_owner_adoption_and_no_cluster_route() {
+        let team = r#""team_id":"red","principal_id":"lead""#;
+        let lead = preset_policy(&format!(
+            r#""scopes":["sandboxes","inventory"],"role":"team-admin",{team}"#
+        ))
+        .unwrap();
+        let operator =
+            preset_policy(&format!(r#""scopes":["sandboxes","inventory"],{team}"#)).unwrap();
+        // Everything an operator with the same scopes does...
+        for (method, path) in [
+            (Method::GET, "/sandboxes"),
+            (Method::GET, "/cluster/nodes"),
+            (Method::POST, "/v2/sandboxes"),
+            (Method::DELETE, "/sandboxes/box"),
+            (Method::POST, "/sandboxes/box/exec"),
+            (Method::GET, "/volumes"),
+            (Method::POST, "/machines/m/exec"),
+            (Method::POST, "/templates"),
+            (Method::GET, "/cluster/events"),
+            (
+                Method::POST,
+                "/cluster/nodes/n/sandboxes/box/registration/reconcile",
+            ),
+            (Method::GET, "/cluster/nodes/n/registrations/pending"),
+        ] {
+            assert_eq!(
+                lead.permits(&method, path),
+                operator.permits(&method, path),
+                "{method} {path}"
+            );
+        }
+        // ...plus owner adoption (POST only), which the operator is refused.
+        assert!(lead.permits(&Method::POST, "/sandboxes/box/owner"));
+        assert!(!lead.permits(&Method::GET, "/sandboxes/box/owner"));
+        assert!(!lead.permits(&Method::DELETE, "/sandboxes/box/owner"));
+        assert!(!operator.permits(&Method::POST, "/sandboxes/box/owner"));
+        // The scope still gates it, and node routes stay out of reach.
+        let inventory = preset_policy(&format!(
+            r#""scopes":["inventory"],"role":"team-admin",{team}"#
+        ))
+        .unwrap();
+        assert!(!inventory.permits(&Method::POST, "/sandboxes/box/owner"));
+        assert!(!lead.permits(&Method::GET, "/cluster/nodes/n/registrations/pending"));
+        assert!(!lead.is_administrator());
     }
 }
