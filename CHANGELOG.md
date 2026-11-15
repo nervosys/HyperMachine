@@ -201,13 +201,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - UEFI `reset_system` called `std::process::abort()` on the host process; it returns
     `UNSUPPORTED`.
   - `CpuVendor::detect` always answered Intel on x86_64; it reads CPUID leaf 0.
-- CI: seven steps that could not fail were found to be hiding real results (Miri fails
+- CI: six steps that could not fail were found to be hiding real results (Miri fails
   on a KVM test, the security-lint clippy does not compile `hv2-sandbox`, `hv1-boot`
-  does not build, Gitleaks has no licence and scans nothing, the fuzz crate does not
+  does not build, the fuzz crate does not
   build, cargo-geiger runs against a virtual manifest, and the SBOM is 134 bytes). They
-  are still non-fatal, and their names and comments now say so and say why.
+  are still non-fatal, and their names and comments now say so and say why. (The
+  seventh, Gitleaks, is now a real gate; see Security.)
 
 ### Added
+- **Team roles in the key policy file.** `role` accepts `viewer` (an alias of `observer`)
+  and `member` (an alias of `operator`), and a new `team-admin`: an operator that can also
+  adopt an owner (`POST /sandboxes/{id}/owner`) on a sandbox of its own team. It needs a
+  `team_id`, cannot hold the `admin` scope or the `read-only` preset (each rejects the whole
+  file), and is never an administrator: another team's sandbox, node routes,
+  `/cluster/events` and template builds stay 403. Owner adoption still never transfers an
+  existing owner or changes a team. Existing keys behave as before. Checked on KVM, 33 cases
+  in three runs; see `docs/TEAMS.md` and `docs/benchmarks/2026-11-15/team-roles-kvm`.
 - **API key presets.** A control-plane key policy entry may name a `preset` -- `read-only`
   (inventory; observer), `developer` (sandboxes, templates, volumes, events,
   inventory; operator), `machines` (machines, inventory, events; operator) or `admin` (admin;
@@ -249,6 +258,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   through the agent's file operations when the guest has no `/bin/sh`.
 - **Standalone-node VM-to-VM networking for sandboxes.** `hm sandbox vm network create|list|inspect|rm|connect|disconnect` joins sandboxes on one node to each other by a DNS alias, with no cluster or mTLS needed -- the gap the existing cluster-only private networking left for a single node. A sandbox's gateway checks its current membership live on every DNS question and connection, so a disconnect or reconnect after boot takes effect at once, with nothing to restart. Dialing a peer goes over its vsock port-forward channel, the same primitive a published machine port already uses, not its virtio-net device. 9 new unit tests on the registry; `hv2-sandboxd`'s existing 117 pass unchanged. NOT VERIFIED against a live guest: this repo has no Linux KVM host to run it on.
 - **`hm-tui`, a new terminal dashboard** for Type 2 VMs and sandbox VMs over the same APIs `hm-gui` and `hm sandbox vm` already use; and a Sandboxes tab for `hm-gui`, which previously showed only Type 2 VMs.
+
+### Security
+- **The secrets scan is now a real CI gate.** `gitleaks/gitleaks-action` exited at "missing gitleaks
+  license" on every run, so nothing had ever been scanned. The Security workflow now installs the
+  gitleaks CLI at a pinned version, checks the tarball against a hard-coded sha256, and runs
+  `gitleaks git --redact --exit-code 1` over the full history with the new `.gitleaks.toml`; a
+  finding fails the job, and the SARIF report is uploaded as an artifact. The default rules gave 2,543
+  findings over history and none was a real credential (benchmark content hashes, redaction and RFC 7515
+  test vectors, doc placeholders); the config allowlists those by exact path, rule and value, and
+  history now scans to 0. A planted GitHub token and private key, including one in `docs/benchmarks/`,
+  are still caught. See `docs/security/SECRET_SCANNING.md`.
 
 ## [1.2.0] - 2026-11-09
 

@@ -260,14 +260,43 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Currently fails immediately: "missing gitleaks license" (the repo is
-      # under an organization and has no GITLEAKS_LICENSE secret), so nothing
-      # is scanned; non-fatal until the license exists.
-      - name: Run Gitleaks (advisory - cannot fail the build)
-        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+      # The gitleaks CLI is MIT-licensed and needs no key; only the
+      # gitleaks-action wrapper demands a licence for organization repos, so
+      # the CLI is installed directly. The release is pinned by version AND by
+      # the sha256 of the tarball (from the release's gitleaks_8.30.1_checksums.txt),
+      # so a swapped or tampered download fails the job. To upgrade, change
+      # both values together.
+      - name: Install gitleaks 8.30.1 (pinned, checksum-verified)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          set -euo pipefail
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL --retry 3 -o "${RUNNER_TEMP}/${tarball}" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${tarball}"
+          echo "${GITLEAKS_SHA256}  ${RUNNER_TEMP}/${tarball}" | sha256sum --check --strict -
+          mkdir -p "${RUNNER_TEMP}/gitleaks-bin"
+          tar -xzf "${RUNNER_TEMP}/${tarball}" -C "${RUNNER_TEMP}/gitleaks-bin" gitleaks
+          echo "${RUNNER_TEMP}/gitleaks-bin" >> "${GITHUB_PATH}"
+
+      # Scans every commit reachable from the checkout (fetch-depth: 0) with
+      # .gitleaks.toml (default rules plus narrow, commented allowlists).
+      # A finding exits 1 and fails the job; there is no continue-on-error.
+      # --redact keeps the secret out of the log and the report.
+      - name: Gitleaks (fails on a finding)
+        run: |
+          gitleaks git --config .gitleaks.toml --redact --exit-code 1 \
+            --report-format sarif --report-path gitleaks.sarif .
+
+      - name: Upload gitleaks report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gitleaks-report
+          path: gitleaks.sarif
+          if-no-files-found: ignore
+          retention-days: 14
 
   # ============================================================================
   # CodeQL Analysis

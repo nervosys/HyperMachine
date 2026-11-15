@@ -1,0 +1,147 @@
+# Gitleaks configuration for HyperMachine (see docs/security/SECRET_SCANNING.md).
+#
+# The Security workflow runs `gitleaks git` over the full history with this
+# file and fails on any finding. Keep every allowlist entry NARROW and
+# commented: say what it is and why it is not a secret. Never allowlist a
+# whole crate, all of docs/, or a rule ID globally. A real leaked secret is
+# rotated, not allowlisted.
+#
+# Each entry below uses condition = "AND": a finding is ignored only when its
+# file path, the rule that fired and the flagged value ALL match. Anything
+# else, including a different rule firing in the same file, still fails.
+
+title = "HyperMachine gitleaks config"
+
+[extend]
+useDefault = true
+
+# --- Benchmark evidence -----------------------------------------------------
+
+# docs/benchmarks/<date>/... JSON manifests record sha256/sha1 digests of
+# source trees, binaries and images. The generic rules read a long hex string
+# next to a key named like "secret" or "token" in the neighbouring metadata as
+# an API key. They are digests of public artefacts, not credentials. Applies
+# only to the two entropy-based rules, only to dated benchmark data files, and
+# only when the flagged value is itself pure hex of digest length (32-128
+# characters); GitHub tokens, private keys and every other rule still fire
+# there, as does any non-hex value.
+[[allowlists]]
+description = "hex content digests in dated benchmark evidence files"
+condition = "AND"
+targetRules = ["generic-api-key", "sentry-access-token"]
+paths = ['''^docs/benchmarks/\d{4}-\d{2}-\d{2}/.+\.(json|md)$''']
+regexes = ['''^[0-9a-fA-F]{32,128}$''']
+
+# Benchmark report.json files record the id of the throwaway sandbox the run
+# created ("sbx-" + 20 hex characters). It is a resource identifier that stops
+# existing when the run ends, not a credential.
+[[allowlists]]
+description = "throwaway sandbox ids (sbx-<20 hex>) in benchmark report.json"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^docs/benchmarks/\d{4}-\d{2}-\d{2}/.+/report\.json$''']
+regexes = ['''^sbx-[0-9a-f]{20}$''']
+
+# The object-backup README.md has the table cell "key, modified/truncated";
+# the generic rule read the prose after the word "key" as a key. Prose.
+[[allowlists]]
+description = "prose 'modified/truncated' in the object-backup benchmark README"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^docs/benchmarks/2026-10-02/object-backup/README\.md$''']
+regexes = ['''^modified/truncated$''']
+
+# --- Documentation placeholders ---------------------------------------------
+
+# README, docs/src, docs/book and AGENTIC_INTERFACE show
+# `curl -H "Authorization: Bearer your-api-key"` (or your-secret-key). The
+# value is a literal placeholder telling the reader to substitute their own.
+[[allowlists]]
+description = "'your-api-key' / 'your-secret-key' placeholders in curl examples"
+condition = "AND"
+targetRules = ["curl-auth-header"]
+paths = [
+  '''^README\.md$''',
+  '''^docs/AGENTIC_INTERFACE\.md$''',
+  '''^docs/src/(api/rest|getting-started/quick-start)\.md$''',
+  '''^docs/book/(api/rest|getting-started/quick-start|print)\.html$''',
+]
+regexes = ['''^your-(api|secret)-key$''']
+
+# --- Test fixtures ----------------------------------------------------------
+
+# crates/hv2-sandboxd/src/history/output.rs unit tests feed the output
+# redactor deliberately secret-shaped strings to prove it masks them: a
+# 'sk_live_abcdefghijklmnop1234' Stripe-style key, the JWT
+# 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0...' (payload {"sub":"1234"}) and a
+# four-line PEM block whose body is 'MIIE' / 'abcd'. None is a real credential.
+[[allowlists]]
+description = "redaction-test fixtures in hv2-sandboxd history/output.rs"
+condition = "AND"
+targetRules = ["stripe-access-token", "jwt", "private-key"]
+paths = ['''^crates/hv2-sandboxd/src/history/output\.rs$''']
+regexes = [
+  '''^sk_live_abcdefghijklmnop1234$''',
+  '''^eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiIxMjM0In0\.''',
+  '''BEGIN RSA PRIVATE KEY-----\\nMIIE\\nabcd\\n-----END RSA PRIVATE KEY''',
+]
+
+# crates/hv2-cluster/src/sso.rs verifies the JWS examples published in
+# RFC 7515 appendix A.2 (RS256) and A.3 (ES256). Both carry the RFC's public
+# payload {"iss":"joe","exp":1300819380,...} and are signed with the RFC's
+# published example keys, which are in the RFC for everyone to read.
+[[allowlists]]
+description = "RFC 7515 A.2/A.3 example JWS test vectors in hv2-cluster sso.rs"
+condition = "AND"
+targetRules = ["jwt"]
+paths = ['''^crates/hv2-cluster/src/sso\.rs$''']
+regexes = ['''^eyJhbGciOi(JSUzI1NiJ9|JFUzI1NiJ9)\.eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAs''']
+
+# Webhook-signature test secret '0123456789abcdef' (an obvious counting
+# sequence) used by cluster event tests and the teams KVM check script.
+[[allowlists]]
+description = "dummy webhook secret '0123456789abcdef' in tests"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = [
+  '''^crates/hv2-cluster/src/events\.rs$''',
+  '''^crates/hv2-cluster/tests/control_plane\.rs$''',
+  '''^tools/check-teams-kvm\.py$''',
+]
+regexes = ['''^0123456789abcdef$''']
+
+# check-machine-webhooks-kvm.py sends a deliberately wrong signature secret
+# ('bad-secret-0123456789') to prove the endpoint rejects it.
+[[allowlists]]
+description = "deliberately wrong webhook secret in check-machine-webhooks-kvm.py"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^tools/check-machine-webhooks-kvm\.py$''']
+regexes = ['''^bad-secret-0123456789$''']
+
+# KVM check scripts that stand up a throwaway registry / git server / model
+# stand-in inside a disposable VM and need a fixed credential for it. The
+# values are made up for the check and protect nothing outside it.
+[[allowlists]]
+description = "throwaway credentials for in-VM test servers in KVM check scripts"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = [
+  '''^tools/check-hm-registry-auth-kvm\.py$''',
+  '''^tools/check-git-private-kvm\.py$''',
+  '''^tools/check-machine-prompts-kvm\.py$''',
+]
+regexes = [
+  '''^p4ss-w0rd-Zq81$''',
+  '''^tok-3f9a1c7e5b2d4a60$''',
+  '''^sk-stand-in-0123456789abcdef$''',
+]
+
+# crates/hv2-sandboxd/src/main.rs usage text "--team-git-credential takes
+# TEAM=PREFIX=ENVIRONMENT_VARIABLE": a format description, not a value.
+[[allowlists]]
+description = "CLI usage string in hv2-sandboxd main.rs"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^crates/hv2-sandboxd/src/main\.rs$''']
+regexes = ['''^PREFIX=ENVIRONMENT_VARIABLE$''']
