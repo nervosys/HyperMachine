@@ -239,7 +239,10 @@ Several results are one run. Each needs three runs in a row, kept.
 - [x] `docs/BOAT_PARITY.md`: re-read against the 2026-10-21 to 2026-10-28 evidence
       (2026-10-28). Four stale statements fixed: "no Docker" in the tools image
       (twice) and "cannot be checkpointed at such a size". Rows outside that date
-      range were not re-read: NOT VERIFIED.
+      range were not re-read: NOT VERIFIED. Every row and prose claim was then re-read
+      against `docs/benchmarks/` on 2026-11-15
+      ([audit](benchmarks/2026-11-15/boat-parity-audit/README.md)): the rest of the rows
+      are confirmed, corrected or marked.
 
 ## 5. Platform backends
 
@@ -375,8 +378,10 @@ Every box above is closed the same way:
 - [x] Section 2 is resolved one way or the other, with measurements. Resolved
       2026-11-11 as a recorded limit (section 2, "Decide from the evidence").
 - [ ] The owner items in section 6 are done, or are explicitly declined.
-- [ ] A final read of `BOAT_PARITY.md` against `docs/benchmarks/` finds no
-      statement without evidence.
+- [x] A final read of `BOAT_PARITY.md` against `docs/benchmarks/` finds no
+      statement without evidence (2026-11-15,
+      [audit](benchmarks/2026-11-15/boat-parity-audit/README.md); claims about code
+      only are marked as such there or in the row).
 
 ## 9. Suggested order
 
