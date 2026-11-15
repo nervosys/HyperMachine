@@ -208,6 +208,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are still non-fatal, and their names and comments now say so and say why.
 
 ### Added
+- **API key presets.** A control-plane key policy entry may name a `preset` -- `read-only`
+  (inventory; observer), `developer` (sandboxes, templates, volumes, events,
+  inventory; operator), `machines` (machines, inventory, events; operator) or `admin` (admin;
+  operator) -- that expands to those scopes and that role when the policy file is loaded or
+  reloaded. Explicit `scopes` are added to a preset's, except that `read-only` rejects any extra
+  scope or `role: operator`; an unknown preset rejects the whole file at start and at reload,
+  which keeps the old keys. Entries without a preset are unchanged. Presets live only in the
+  policy file: there is still no key-creation API. Checked on KVM in three runs of 25 cases
+  (`docs/benchmarks/2026-11-14/key-presets-kvm`).
 - **Guest-agent filesystem operations, for guests with no shell.** `list_dir`, `stat`,
   `make_dir`, `remove` and `set_attr` (protocol version unchanged, additive) let the host list,
   inspect, create, delete and chown/chmod guest files without running `/bin/sh`, `mkdir`, `rm`,

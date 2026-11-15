@@ -44,6 +44,47 @@ blocked capabilities, upgrades restored access, and unknown/null role updates
 preserved the active observer policy after acknowledged rejection. Each check
 sequence kept the process running and stopped it afterward.
 
+## Presets
+
+A policy entry may name a `preset` instead of (or as well as) listing `scopes`. A preset expands, when the
+file is loaded or reloaded, to a fixed set of scopes and a role:
+
+| `preset` | Scopes | Role |
+|---|---|---|
+| `read-only` | `inventory` | `observer` |
+| `developer` | `sandboxes`, `templates`, `volumes`, `events`, `inventory` | `operator` |
+| `machines` | `machines`, `inventory`, `events` | `operator` |
+| `admin` | `admin` | `operator` |
+
+```json
+[
+  {"sha256": "<hex digest>", "expires_at": 1893456000, "preset": "developer",
+   "team_id": "red", "principal_id": "alice"},
+  {"sha256": "<hex digest>", "expires_at": 1893456000, "preset": "read-only",
+   "team_id": "red", "principal_id": "dashboard"},
+  {"sha256": "<hex digest>", "expires_at": 1893456000, "preset": "machines",
+   "scopes": ["volumes"], "team_id": "red", "principal_id": "fleet-bot"}
+]
+```
+
+- Explicit `scopes` on the same entry are added to the preset's (a union). `scopes` may be omitted when a
+  preset is given; with neither, the entry is rejected as before.
+- An explicit `role` of `observer` lowers any preset's role. `role: operator` is the default for every
+  preset except `read-only`.
+- `read-only` stays read-only: scopes beyond its own, or `role: operator`, reject the whole file. Because
+  its role is `observer`, it can only GET/HEAD the five inventory routes listed above, which is why it
+  carries `inventory` alone: an observer is refused events and telemetry whatever its scopes.
+- Preset names are lower case and exact. An unknown name, an empty or `null` `preset`, or a wrong case
+  rejects the whole file: startup fails, and a reload (`SIGHUP` or `replace_api_key_policies`) is refused
+  with the active keys left unchanged, as for every other policy error.
+- An entry with no `preset` behaves exactly as before. A preset changes nothing else: `team_id`,
+  `principal_id`, expiry and the multi-tenant rules apply as they do to any key. An `admin` preset key with
+  no team is an administrator and stays global.
+
+Presets exist only in this file. There is still no API or CLI that creates a key. [Three real KVM runs of 25
+cases](benchmarks/2026-11-14/key-presets-kvm/README.md) check each preset's allowed and refused requests,
+a start with an unknown preset, and reloads with bad files.
+
 ## Durable access history
 
 Protected control-plane requests can also write synced, tamper-evident admission

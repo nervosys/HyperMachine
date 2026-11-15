@@ -57,6 +57,69 @@ pub enum ApiRole {
     Observer,
 }
 
+/// A named bundle of scopes (and a role) that a policy entry may use instead
+/// of listing scopes by hand. Written as `"preset": "<name>"` on the entry.
+///
+/// Explicit `scopes` on the same entry are added to the preset's, except
+/// with [`ApiPreset::ReadOnly`], which accepts none beyond its own: read-only
+/// stays read-only. An explicit `role` may lower a preset's role to
+/// `observer` but never raise `read-only` to `operator`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ApiPreset {
+    /// Scopes `inventory`, `events`, `telemetry`; role `observer`.
+    ReadOnly,
+    /// Scopes `sandboxes`, `templates`, `volumes`, `events`, `inventory`; role `operator`.
+    Developer,
+    /// Scopes `machines`, `inventory`, `events`; role `operator`.
+    Machines,
+    /// Scope `admin`; role `operator`.
+    Admin,
+}
+
+impl ApiPreset {
+    /// The scopes this preset stands for.
+    #[must_use]
+    pub fn scopes(self) -> BTreeSet<ApiScope> {
+        use ApiScope as S;
+        let list: &[ApiScope] = match self {
+            // Only inventory: the observer role refuses every route but the
+            // inventory GETs, so any other scope here would promise reads it
+            // cannot make.
+            Self::ReadOnly => &[S::Inventory],
+            Self::Developer => &[
+                S::Sandboxes,
+                S::Templates,
+                S::Volumes,
+                S::Events,
+                S::Inventory,
+            ],
+            Self::Machines => &[S::Machines, S::Inventory, S::Events],
+            Self::Admin => &[S::Admin],
+        };
+        list.iter().copied().collect()
+    }
+
+    /// The role this preset stands for.
+    #[must_use]
+    pub fn role(self) -> ApiRole {
+        match self {
+            Self::ReadOnly => ApiRole::Observer,
+            Self::Developer | Self::Machines | Self::Admin => ApiRole::Operator,
+        }
+    }
+}
+
+/// Deserialize a present field as a value, so an explicit `null` is an error
+/// rather than "absent"; absence is `None` through `#[serde(default)]`.
+fn present<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
+}
+
 #[derive(Clone)]
 pub struct ApiKeyPolicy {
     digest: [u8; 32],
@@ -82,13 +145,41 @@ impl std::fmt::Debug for ApiKeyPolicy {
 struct RawPolicy {
     sha256: String,
     expires_at: i64,
-    scopes: BTreeSet<ApiScope>,
     #[serde(default)]
-    role: ApiRole,
+    scopes: BTreeSet<ApiScope>,
+    #[serde(default, deserialize_with = "present")]
+    role: Option<ApiRole>,
+    #[serde(default, deserialize_with = "present")]
+    preset: Option<ApiPreset>,
     #[serde(default)]
     principal_id: Option<crate::ownership::OwnerId>,
     #[serde(default)]
     team_id: Option<crate::ownership::TeamId>,
+}
+
+impl RawPolicy {
+    /// The effective scopes and role once any preset is expanded.
+    fn expand(&self) -> Result<(BTreeSet<ApiScope>, ApiRole), String> {
+        let Some(preset) = self.preset else {
+            return Ok((self.scopes.clone(), self.role.unwrap_or_default()));
+        };
+        let base = preset.scopes();
+        if preset == ApiPreset::ReadOnly {
+            if self.role == Some(ApiRole::Operator) {
+                return Err(
+                    "API key preset read-only is an observer; role operator cannot raise it".into(),
+                );
+            }
+            if !self.scopes.is_subset(&base) {
+                return Err("API key preset read-only accepts no scopes beyond its own".into());
+            }
+        }
+        let role = match (preset.role(), self.role) {
+            (_, Some(ApiRole::Observer)) => ApiRole::Observer,
+            (role, _) => role,
+        };
+        Ok((base.union(&self.scopes).copied().collect(), role))
+    }
 }
 
 impl ApiKeyPolicy {
@@ -96,7 +187,8 @@ impl ApiKeyPolicy {
     ///
     /// # Errors
     /// Reject malformed JSON, unknown scopes/fields, invalid hashes, duplicate
-    /// credentials, empty scopes, nonpositive expiry or more than 256 policies.
+    /// credentials, empty scopes (after any `preset` expands), unknown presets,
+    /// read-only presets given extra scopes or an operator role, nonpositive expiry or more than 256 policies.
     pub fn from_json(json: &str) -> Result<Vec<Self>, String> {
         if json.len() > MAX_POLICY_BYTES {
             return Err("API key policy document exceeds 1 MiB".into());
@@ -124,14 +216,15 @@ impl ApiKeyPolicy {
                 if digest == <[u8; 32]>::from(Sha256::digest(b"")) || !seen.insert(digest) {
                     return Err("empty or duplicate API key credential".into());
                 }
-                if raw.expires_at <= 0 || raw.scopes.is_empty() {
+                let (scopes, role) = raw.expand()?;
+                if raw.expires_at <= 0 || scopes.is_empty() {
                     return Err("API key expiry must be positive and scopes nonempty".into());
                 }
                 Ok(Self {
                     digest,
                     expires_at: raw.expires_at,
-                    scopes: raw.scopes,
-                    role: raw.role,
+                    scopes,
+                    role,
                     principal_id: raw.principal_id,
                     team_id: raw.team_id,
                 })
@@ -418,6 +511,126 @@ mod tests {
         observer.scopes = BTreeSet::from([ApiScope::Sandboxes]);
         assert!(observer.permits(&Method::GET, "/sandboxes"));
         assert!(!observer.permits(&Method::GET, "/templates"));
+    }
+
+    fn preset_policy(extra: &str) -> Result<ApiKeyPolicy, String> {
+        ApiKeyPolicy::from_json(&format!(
+            r#"[{{"sha256":"{}","expires_at":100,{extra}}}]"#,
+            digest("preset-key")
+        ))
+        .map(|mut policies| policies.remove(0))
+    }
+
+    #[test]
+    fn each_preset_expands_to_its_scopes_and_role() {
+        use ApiScope as S;
+        for (name, scopes, role) in [
+            ("read-only", vec![S::Inventory], ApiRole::Observer),
+            (
+                "developer",
+                vec![
+                    S::Sandboxes,
+                    S::Templates,
+                    S::Volumes,
+                    S::Events,
+                    S::Inventory,
+                ],
+                ApiRole::Operator,
+            ),
+            (
+                "machines",
+                vec![S::Machines, S::Inventory, S::Events],
+                ApiRole::Operator,
+            ),
+            ("admin", vec![S::Admin], ApiRole::Operator),
+        ] {
+            let policy = preset_policy(&format!(r#""preset":"{name}""#)).unwrap();
+            assert_eq!(policy.scopes, scopes.into_iter().collect(), "{name}");
+            assert_eq!(policy.role, role, "{name}");
+        }
+        assert!(preset_policy(r#""preset":"admin""#)
+            .unwrap()
+            .is_administrator());
+    }
+
+    #[test]
+    fn presets_gate_requests_by_what_they_name() {
+        let ro = preset_policy(r#""preset":"read-only""#).unwrap();
+        assert!(ro.permits(&Method::GET, "/sandboxes"));
+        assert!(ro.permits(&Method::GET, "/cluster/nodes"));
+        assert!(!ro.permits(&Method::POST, "/v2/sandboxes"));
+        assert!(!ro.permits(&Method::POST, "/sandboxes/box/exec"));
+        assert!(!ro.permits(&Method::GET, "/volumes"));
+        let dev = preset_policy(r#""preset":"developer""#).unwrap();
+        assert!(dev.permits(&Method::POST, "/v2/sandboxes"));
+        assert!(dev.permits(&Method::POST, "/volumes"));
+        assert!(!dev.permits(&Method::GET, "/machines"));
+        let machines = preset_policy(r#""preset":"machines""#).unwrap();
+        assert!(machines.permits(&Method::POST, "/machines/web-01/exec"));
+        assert!(!machines.permits(&Method::POST, "/v2/sandboxes"));
+        assert!(preset_policy(r#""preset":"admin""#)
+            .unwrap()
+            .permits(&Method::DELETE, "/volumes/id"));
+    }
+
+    #[test]
+    fn explicit_scopes_are_added_to_a_preset_except_for_read_only() {
+        let policy = preset_policy(r#""preset":"machines","scopes":["volumes","events"]"#).unwrap();
+        assert_eq!(
+            policy.scopes,
+            BTreeSet::from([
+                ApiScope::Machines,
+                ApiScope::Inventory,
+                ApiScope::Events,
+                ApiScope::Volumes
+            ])
+        );
+        // An explicit observer role lowers a preset's role; it never raises one.
+        let lowered = preset_policy(r#""preset":"developer","role":"observer""#).unwrap();
+        assert_eq!(lowered.role, ApiRole::Observer);
+        assert_eq!(
+            preset_policy(r#""preset":"developer","role":"operator""#)
+                .unwrap()
+                .role,
+            ApiRole::Operator
+        );
+        // Read-only may restate its own scopes or role, and nothing more.
+        let same =
+            preset_policy(r#""preset":"read-only","scopes":["inventory"],"role":"observer""#)
+                .unwrap();
+        assert_eq!(same.scopes, ApiPreset::ReadOnly.scopes());
+        assert!(
+            preset_policy(r#""preset":"read-only","scopes":["sandboxes"]"#)
+                .unwrap_err()
+                .contains("beyond its own")
+        );
+        assert!(preset_policy(r#""preset":"read-only","scopes":["admin","events"]"#).is_err());
+        assert!(preset_policy(r#""preset":"read-only","scopes":["events"]"#).is_err());
+        assert!(preset_policy(r#""preset":"read-only","role":"operator""#)
+            .unwrap_err()
+            .contains("cannot raise"));
+    }
+
+    #[test]
+    fn unknown_or_null_presets_are_rejected_and_absent_ones_change_nothing() {
+        for bad in [
+            r#""preset":"superuser""#,
+            r#""preset":"Read-Only""#,
+            r#""preset":"read_only""#,
+            r#""preset":null"#,
+            r#""preset":"""#,
+        ] {
+            let error = preset_policy(&format!(r#"{bad},"scopes":["events"]"#)).unwrap_err();
+            assert!(
+                error.contains("invalid API key policy JSON"),
+                "{bad}: {error}"
+            );
+        }
+        assert!(preset_policy(r#""scopes":[]"#).is_err());
+        assert!(preset_policy(r#""role":"observer""#).is_err());
+        let plain = preset_policy(r#""scopes":["sandboxes"]"#).unwrap();
+        assert_eq!(plain.scopes, BTreeSet::from([ApiScope::Sandboxes]));
+        assert_eq!(plain.role, ApiRole::Operator);
     }
 
     #[test]

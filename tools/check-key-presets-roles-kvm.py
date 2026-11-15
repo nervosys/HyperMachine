@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""API key scopes ("presets") and key roles, against the real control plane on KVM.
+"""API key scopes, presets and key roles, against the real control plane on KVM.
 
-HyperMachine has no object called a "preset". What a key can do is set by its
-`scopes` (admin, inventory, sandboxes, templates, volumes, events, machines,
-telemetry) and its `role` (operator, the default, or observer). This driver
-treats each scope, and the admin scope, as a preset: it runs an owned Redis,
+What a key can do is set by its `scopes` (admin, inventory, sandboxes, templates,
+volumes, events, machines, telemetry) and its `role` (operator, the default, or
+observer), or by a named `preset` that expands to both (read-only, developer,
+machines, admin). The first cases treat each scope as the nearest thing to a
+preset; the "named preset" cases then use the real presets, and a policy file
+with an unknown preset (at start and at SIGHUP reload). It runs an owned Redis,
 one hv2-sandboxd node and hv2-control-plane over verified TLS and node mTLS,
 issues one key per scope and per role, and then, through the control plane's
 public API only, checks for each key one operation it must be allowed and
@@ -61,6 +63,9 @@ def main():
     keys = {"legacy_admin": uuid.uuid4().hex, "token": uuid.uuid4().hex, "unknown": uuid.uuid4().hex,
             "expired": uuid.uuid4().hex, "operator": uuid.uuid4().hex, "observer": uuid.uuid4().hex,
             "observer_admin": uuid.uuid4().hex, "other_team": uuid.uuid4().hex}
+    PRESET_KEYS = ["read_only", "developer", "machines", "admin", "admin_observer"]
+    for name in PRESET_KEYS:
+        keys["preset_" + name] = uuid.uuid4().hex
     for scope in SCOPES:
         keys["scope_" + scope] = uuid.uuid4().hex
     env = {"PATH": "/usr/local/bin:/usr/bin:/bin", "RUST_LOG": "info"}
@@ -178,6 +183,15 @@ def main():
                  "principal_id": "blue-a", "team_id": "blue"},
                 {"sha256": sha("expired"), "expires_at": 1, "scopes": ["sandboxes"],
                  "principal_id": "expired", "team_id": "red"},
+                {"sha256": sha("preset_read_only"), "expires_at": expiry, "preset": "read-only",
+                 "principal_id": "preset-read-only", "team_id": "red"},
+                {"sha256": sha("preset_developer"), "expires_at": expiry, "preset": "developer",
+                 "principal_id": "preset-developer", "team_id": "red"},
+                {"sha256": sha("preset_machines"), "expires_at": expiry, "preset": "machines",
+                 "principal_id": "preset-machines", "team_id": "red"},
+                {"sha256": sha("preset_admin"), "expires_at": expiry, "preset": "admin"},
+                {"sha256": sha("preset_admin_observer"), "expires_at": expiry, "preset": "admin",
+                 "role": "observer", "principal_id": "preset-admin-observer", "team_id": "red"},
             ]
             policies = directory / "keys.json"
             policies.write_text(json.dumps(policy))
@@ -190,7 +204,7 @@ def main():
                            "--mtls-ca", str(directory / "ca.pem"), "--mtls-cert", str(directory / "node.pem"),
                            "--mtls-key", str(directory / "node.key")],
                   {**env, "HV2_KERNEL": str(args.kernel), "HV2_INITRD": str(args.initrd), "HV2_CLUSTER_TOKEN": keys["token"]})
-            start("control", [str(args.control), "--store", store, "--namespace", namespace, "--port", str(api_port),
+            control_proc = start("control", [str(args.control), "--store", store, "--namespace", namespace, "--port", str(api_port),
                               "--proxy-port", str(proxy_port), "--api-keys-file", str(policies),
                               "--api-tls-cert", str(directory / "api.pem"), "--api-tls-key", str(directory / "api.key"),
                               "--tls-cert", str(directory / "api.pem"), "--tls-key", str(directory / "api.key"),
@@ -277,6 +291,49 @@ def main():
                 ("expired", "POST", "/v2/sandboxes", {"templateID": "base"}, {401}, None),
             ])
 
+            # Named presets: the `preset` field of a policy entry.
+            case("named preset read-only: lists, refused detail, exec, create and other families", [
+                ("preset_read_only", "GET", "/sandboxes", None, {200}, has_vm),
+                ("preset_read_only", "GET", "/cluster/nodes", None, {200}, None),
+                ("preset_read_only", "GET", f"/sandboxes/{vm}", None, F, None),
+                ("preset_read_only", "POST", f"/sandboxes/{vm}/exec", {"cmd": "echo keyroles"}, F, None),
+                ("preset_read_only", "POST", "/v2/sandboxes", {"templateID": "base"}, F, None),
+                ("preset_read_only", "DELETE", f"/sandboxes/{vm}", None, F, None),
+                ("preset_read_only", "GET", "/volumes", None, F, None),
+                ("preset_read_only", "GET", "/machines", None, F, None),
+            ])
+            case("named preset developer: runs commands, volumes and templates; refused machines and owner", [
+                ("preset_developer", "GET", "/sandboxes", None, {200}, has_vm),
+                ("preset_developer", "GET", f"/sandboxes/{vm}", None, {200}, None),
+                ("preset_developer", "POST", f"/sandboxes/{vm}/exec", {"cmd": "echo keyroles", "timeout_secs": 30}, {200}, exec_ok),
+                ("preset_developer", "GET", "/templates", None, {200}, None),
+                ("preset_developer", "POST", "/volumes", {"name": "developer-vol"}, {201}, None),
+                ("preset_developer", "GET", "/events/sandboxes?limit=100", None, {200}, None),
+                ("preset_developer", "GET", "/machines", None, F, None),
+                ("preset_developer", "POST", f"/sandboxes/{vm}/owner", {"principalId": "x"}, F, None),
+            ])
+            case("named preset machines: machines, inventory and events; refused sandboxes and volumes", [
+                ("preset_machines", "GET", "/machines", None, {200}, None),
+                ("preset_machines", "GET", "/sandboxes", None, {200}, has_vm),
+                ("preset_machines", "GET", "/events/sandboxes?limit=100", None, {200}, None),
+                ("preset_machines", "GET", f"/sandboxes/{vm}", None, F, None),
+                ("preset_machines", "POST", "/v2/sandboxes", {"templateID": "base"}, F, None),
+                ("preset_machines", "GET", "/volumes", None, F, None),
+            ])
+            case("named preset admin: global, reaches every family", [
+                ("preset_admin", "GET", "/cluster/nodes", None, {200}, None),
+                ("preset_admin", "GET", "/sandboxes", None, {200}, has_vm),
+                ("preset_admin", "GET", f"/sandboxes/{vm}", None, {200}, None),
+                ("preset_admin", "GET", "/volumes", None, {200}, None),
+                ("preset_admin", "GET", "/machines", None, {200}, None),
+            ])
+            case("named preset admin with role observer is lowered: lists only", [
+                ("preset_admin_observer", "GET", "/sandboxes", None, {200}, has_vm),
+                ("preset_admin_observer", "GET", f"/sandboxes/{vm}", None, F, None),
+                ("preset_admin_observer", "POST", "/v2/sandboxes", {"templateID": "base"}, F, None),
+                ("preset_admin_observer", "GET", "/volumes", None, F, None),
+            ])
+
             # Roles: operator (default) and observer are the only two there are.
             case("role operator: lists, reads, runs commands in the team's sandbox", [
                 ("operator", "GET", "/sandboxes", None, {200}, has_vm),
@@ -314,6 +371,62 @@ def main():
             ])
             case("deleted sandbox is gone for the team", [
                 ("operator", "GET", "/sandboxes", None, {200}, lacks_vm),
+            ])
+
+            def extra(name, ok, detail):
+                report["cases"].append({"name": name, "success": bool(ok), "requests": [], "detail": detail})
+                print(("ok: " if ok else "FAILED: ") + name, flush=True)
+
+            def log_count(needle):
+                return (args.output / "control.log").read_text(errors="replace").count(needle)
+
+            def put_policy(rows):
+                tmp = directory / "keys.json.new"
+                tmp.write_text(json.dumps(rows))
+                os.replace(tmp, policies)
+
+            # A file with an unknown preset keeps a control plane from starting.
+            bad_file = directory / "bad-keys.json"
+            bad_file.write_text(json.dumps([{"sha256": sha("unknown"), "expires_at": expiry, "preset": "superuser"}]))
+            try:
+                refused = subprocess.run(
+                    [str(args.control), "--store", store, "--namespace", namespace + "-bad", "--port", str(port()),
+                     "--proxy-port", str(port()), "--api-keys-file", str(bad_file)],
+                    env={**env, "HV2_CLUSTER_TOKEN": keys["token"]}, stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60)
+                out = refused.stdout.decode("utf-8", "replace")
+                extra("a policy file with an unknown preset: the control plane refuses to start",
+                      refused.returncode != 0 and "invalid API key policy JSON" in out,
+                      {"exit_code": refused.returncode, "output": out[-300:]})
+            except subprocess.TimeoutExpired:
+                extra("a policy file with an unknown preset: the control plane refuses to start", False, "still running after 60 s")
+
+            # And a SIGHUP reload of such a file is rejected, leaving the old keys in force.
+            good_policy = list(policy)
+            before = log_count("API key reload rejected")
+            put_policy([{"sha256": sha("unknown"), "expires_at": expiry, "preset": "superuser"}])
+            control_proc.send_signal(__import__("signal").SIGHUP)
+            eventually(lambda: log_count("API key reload rejected") > before or (_ for _ in ()).throw(AssertionError("no rejection logged")), 30)
+            case("reload with an unknown preset is rejected; the old keys still work", [
+                ("preset_developer", "GET", "/sandboxes", None, {200}, None),
+                ("preset_read_only", "GET", "/sandboxes", None, {200}, None),
+                ("preset_machines", "GET", "/machines", None, {200}, None),
+                ("unknown", "GET", "/sandboxes", None, {401}, None),
+            ])
+            reloaded = log_count("API key policies reloaded")
+            put_policy([{"sha256": sha("operator"), "expires_at": expiry, "preset": "read-only", "role": "operator",
+                         "principal_id": "role-operator", "team_id": "red"}])
+            before = log_count("API key reload rejected")
+            control_proc.send_signal(__import__("signal").SIGHUP)
+            eventually(lambda: log_count("API key reload rejected") > before or (_ for _ in ()).throw(AssertionError("no rejection logged")), 30)
+            case("reload with read-only given role operator is rejected; the old keys still work", [
+                ("preset_developer", "GET", "/sandboxes", None, {200}, None),
+            ])
+            put_policy(good_policy)
+            control_proc.send_signal(__import__("signal").SIGHUP)
+            eventually(lambda: log_count("API key policies reloaded") > reloaded or (_ for _ in ()).throw(AssertionError("no reload logged")), 30)
+            case("a good reload afterwards applies", [
+                ("preset_developer", "GET", "/sandboxes", None, {200}, None),
             ])
             report["_all_ran"] = True
         finally:

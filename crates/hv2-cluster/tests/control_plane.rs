@@ -2264,6 +2264,65 @@ async fn policy_replacement_revokes_old_keys_and_rejects_invalid_updates() {
 }
 
 #[tokio::test]
+async fn a_reload_with_a_bad_preset_keeps_the_old_keys() {
+    use sha2::{Digest, Sha256};
+    let policies = |key: &str, extra: &str| {
+        format!(
+            r#"[{{"sha256":"{}","expires_at":{},{extra}}}]"#,
+            Sha256::digest(key.as_bytes())
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>(),
+            chrono::Utc::now().timestamp() + 600
+        )
+    };
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let control = ControlPlane::new(
+        store,
+        ControlConfig {
+            api_key: Some(KEY.into()),
+            api_keys: hv2_cluster::keys::ApiKeyPolicy::from_json(&policies(
+                "old-key",
+                r#""preset":"read-only""#,
+            ))
+            .unwrap(),
+            access_audit: None,
+            cluster_token: Some(TOKEN.into()),
+            proxy_port: 5982,
+            create_timeout: Duration::from_secs(10),
+            identity_issuer: None,
+        },
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let app = control::router(control.clone());
+    let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let status = |key: &str| {
+        client()
+            .get(format!("{base}/sandboxes"))
+            .header("x-api-key", key)
+            .send()
+    };
+    assert_eq!(status("old-key").await.unwrap().status(), 200);
+    for bad in [
+        policies("new-key", r#""preset":"superuser""#),
+        policies("new-key", r#""preset":"read-only","scopes":["sandboxes"]"#),
+        policies("new-key", r#""preset":"read-only","role":"operator""#),
+    ] {
+        assert!(control.replace_api_key_policies(&bad).is_err());
+        assert_eq!(status("old-key").await.unwrap().status(), 200);
+        assert_eq!(status("new-key").await.unwrap().status(), 401);
+    }
+    control
+        .replace_api_key_policies(&policies("new-key", r#""preset":"developer""#))
+        .unwrap();
+    assert_eq!(status("old-key").await.unwrap().status(), 401);
+    assert_eq!(status("new-key").await.unwrap().status(), 200);
+    task.abort();
+    let _ = task.await;
+}
+
+#[tokio::test]
 async fn reserved_name_lookup_authenticates_and_never_returns_operation_tokens() {
     use hv2_cluster::names::{NameReservation, SandboxName};
     use sha2::{Digest, Sha256};
