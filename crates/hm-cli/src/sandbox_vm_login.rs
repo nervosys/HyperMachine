@@ -2,7 +2,7 @@
 //!
 //! The control plane's browser sign-in, ending at this machine instead of a
 //! browser session: the CLI listens on `127.0.0.1`, opens
-//! `/auth/login?cliPort=…&cliChallenge=…`, and the control plane, once the
+//! `/auth/login?cliPort=…&cliChallenge=…&cliState=…`, and the control plane, once the
 //! provider has signed the person in, sends the browser on to that listener
 //! with a one-time code. The CLI trades code and PKCE verifier for a session
 //! token at `/auth/cli-token` -- a code read on its way here is useless
@@ -147,11 +147,16 @@ fn open_browser(url: &str) {
     }
 }
 
-/// The `code` a request line carries for `/callback`, if it is one.
-fn callback_code(request_line: &str) -> Option<String> {
+/// The `code` a request line carries for `/callback`, if it is one and its
+/// `state` is the one this sign-in started with.
+fn callback_code(request_line: &str, expected_state: &str) -> Option<String> {
     let target = request_line.strip_prefix("GET ")?.split(' ').next()?;
     let url = Url::parse(&format!("http://127.0.0.1{target}")).ok()?;
     if url.path() != "/callback" {
+        return None;
+    }
+    let state = url.query_pairs().find(|(key, _)| key == "state")?.1;
+    if state != expected_state {
         return None;
     }
     url.query_pairs()
@@ -160,7 +165,11 @@ fn callback_code(request_line: &str) -> Option<String> {
 }
 
 /// Wait for the browser to arrive at the listener with a code.
-async fn wait_for_code(listener: tokio::net::TcpListener, deadline: Instant) -> Result<String> {
+async fn wait_for_code(
+    listener: tokio::net::TcpListener,
+    deadline: Instant,
+    state: &str,
+) -> Result<String> {
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
@@ -176,7 +185,7 @@ async fn wait_for_code(listener: tokio::net::TcpListener, deadline: Instant) -> 
             .unwrap_or(0);
         let request = String::from_utf8_lossy(&buffer[..read]);
         let line = request.lines().next().unwrap_or_default();
-        let (status, body, code) = match callback_code(line) {
+        let (status, body, code) = match callback_code(line, state) {
             Some(code) => (
                 "200 OK",
                 "Signed in. You can close this tab and return to the terminal.",
@@ -208,6 +217,7 @@ pub(crate) async fn login(
     let base = Url::parse(endpoint).context("invalid sandbox endpoint")?;
     let verifier = random_verifier()?;
     let challenge = challenge_for(&verifier)?;
+    let state = random_verifier()?;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .context("listening for the browser on 127.0.0.1")?;
@@ -215,12 +225,13 @@ pub(crate) async fn login(
     let mut url = base.join("/auth/login")?;
     url.query_pairs_mut()
         .append_pair("cliPort", &port.to_string())
-        .append_pair("cliChallenge", &challenge);
+        .append_pair("cliChallenge", &challenge)
+        .append_pair("cliState", &state);
     eprintln!("Sign in at:\n\n  {url}\n");
     if open {
         open_browser(url.as_str());
     }
-    let code = wait_for_code(listener, Instant::now() + wait).await?;
+    let code = wait_for_code(listener, Instant::now() + wait, &state).await?;
 
     let ca_pem = ca
         .map(|path| std::fs::read(path).context("could not read API CA certificate"))
@@ -264,13 +275,27 @@ mod tests {
     #[test]
     fn only_the_callback_path_yields_a_code() {
         assert_eq!(
-            callback_code("GET /callback?code=hmc1.abc.def HTTP/1.1").as_deref(),
+            callback_code("GET /callback?code=hmc1.abc.def&state=st HTTP/1.1", "st").as_deref(),
             Some("hmc1.abc.def")
         );
-        assert_eq!(callback_code("GET /favicon.ico HTTP/1.1"), None);
-        assert_eq!(callback_code("POST /callback?code=x HTTP/1.1"), None);
-        assert_eq!(callback_code("GET /callback HTTP/1.1"), None);
-        assert_eq!(callback_code(""), None);
+        assert_eq!(callback_code("GET /favicon.ico HTTP/1.1", "st"), None);
+        assert_eq!(
+            callback_code("POST /callback?code=x&state=st HTTP/1.1", "st"),
+            None
+        );
+        assert_eq!(callback_code("GET /callback HTTP/1.1", "st"), None);
+        assert_eq!(callback_code("", "st"), None);
+    }
+
+    #[test]
+    fn a_callback_without_the_clis_state_yields_no_code() {
+        for line in [
+            "GET /callback?code=hmc1.abc.def HTTP/1.1",
+            "GET /callback?code=hmc1.abc.def&state=other HTTP/1.1",
+            "GET /callback?code=hmc1.abc.def&state= HTTP/1.1",
+        ] {
+            assert_eq!(callback_code(line, "st"), None, "{line}");
+        }
     }
 
     #[test]
@@ -320,6 +345,7 @@ mod tests {
         let waiting = tokio::spawn(wait_for_code(
             listener,
             Instant::now() + Duration::from_secs(10),
+            "st",
         ));
         let client = reqwest::Client::new();
         let stray = client
@@ -328,8 +354,19 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(stray.status(), 404);
+        // A forged callback with the wrong state is refused and the wait goes on.
+        let forged = client
+            .get(format!(
+                "http://127.0.0.1:{port}/callback?code=evil&state=wrong"
+            ))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(forged.status(), 404);
         let landed = client
-            .get(format!("http://127.0.0.1:{port}/callback?code=hmc1.x.y"))
+            .get(format!(
+                "http://127.0.0.1:{port}/callback?code=hmc1.x.y&state=st"
+            ))
             .send()
             .await
             .unwrap();

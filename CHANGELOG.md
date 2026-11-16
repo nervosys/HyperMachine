@@ -288,6 +288,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`hm-tui`, a new terminal dashboard** for Type 2 VMs and sandbox VMs over the same APIs `hm-gui` and `hm sandbox vm` already use; and a Sandboxes tab for `hm-gui`, which previously showed only Type 2 VMs.
 
 ### Security
+- **A guest could reach its own node's public address.** Under an allow-default egress policy the
+  gateway refused only reserved ranges. It now also refuses the host's interface addresses, read at
+  start.
+- **One caller could replace another's template-build upload.** Uploads are now published with a hard
+  link that refuses an existing name, and are capped at 4 GiB each and 256 files or 64 GiB per node. A
+  refused upload is no longer published anyway. `--verify-upload-hash` additionally checks the content
+  hash (off by default: E2B's SDK names uploads by a file-list hash).
+- **Errors showed clients node URLs and Redis messages.** They are now logged, and clients get a
+  generic message.
+- **The CLI sign-in callback took any code sent to its port.** `hm sandbox vm login` now sends a
+  random `cliState` that the control plane echoes and the CLI requires. A new CLI cannot sign in
+  through an older control plane.
+- **The webhook address filter missed NAT64, 6to4, Teredo and `198.18.0.0/15`**, and webhooks were
+  unlimited. Each team may now have 100.
 - **A guest can no longer abort the node through a virtio device.** `hv2-sandboxd` hosts every VM's
   devices in one process built with `overflow-checks` and `panic = "abort"`, so an arithmetic
   overflow reachable from guest memory took down every VM on the host. Fixed in `hv2-core`:

@@ -264,6 +264,10 @@ struct Options {
     egress_default: Verdict,
     /// Accept an `egressProxy` on a private or internal address.
     allow_private_egress_proxy: bool,
+    /// Refuse a template-build upload whose name is not the SHA-256 of its
+    /// bytes. Off by default: the E2B SDK names one by its own digest of the
+    /// file list, not of the tar.
+    verify_upload_hash: bool,
     /// Reserved ranges a sandbox's `allowOut` may open. Empty: none may, so
     /// no tenant rule reaches this host's network or the cluster's store.
     tenant_reserved: Vec<Cidr>,
@@ -417,6 +421,7 @@ fn parse_options() -> Result<Options, String> {
         egress_upstream_ca: None,
         egress_default: Verdict::Deny,
         allow_private_egress_proxy: false,
+        verify_upload_hash: false,
         tenant_reserved: Vec::new(),
         capacity: 16,
         cluster_store: None,
@@ -626,6 +631,7 @@ fn parse_options() -> Result<Options, String> {
                     Duration::from_secs(value(&mut i)?.parse().map_err(|e| format!("{e}"))?);
             }
             "--allow-private-egress-proxy" => opts.allow_private_egress_proxy = true,
+            "--verify-upload-hash" => opts.verify_upload_hash = true,
             "--tenant-reserved-cidr" => {
                 let text = value(&mut i)?;
                 opts.tenant_reserved

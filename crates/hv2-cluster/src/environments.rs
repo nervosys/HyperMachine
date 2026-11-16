@@ -36,6 +36,7 @@ use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use crate::control::hidden;
 use crate::model::{now_ms, rfc3339};
 use crate::ownership::{RequestTeam, TeamId};
 use crate::store::ClusterStore;
@@ -411,7 +412,7 @@ async fn list(State(store): Store, team: Option<Extension<RequestTeam>>) -> Resp
                 .collect::<Vec<_>>(),
         )
         .into_response(),
-        Err(e) => api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     }
 }
 
@@ -423,7 +424,7 @@ async fn one(
     match find(store.as_ref(), team_of(team).as_ref(), &name).await {
         Ok(Some(env)) => Json(env.describe()).into_response(),
         Ok(None) => api_error(StatusCode::NOT_FOUND, format!("no environment {name}")),
-        Err(e) => api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     }
 }
 
@@ -446,7 +447,7 @@ async fn put(
     let team = team_of(team);
     let all = match store.environments().await {
         Ok(all) => all,
-        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     };
     let before = all
         .iter()
@@ -477,7 +478,7 @@ async fn put(
             };
             (status, Json(env.describe())).into_response()
         }
-        Err(e) => api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     }
 }
 
@@ -493,7 +494,7 @@ async fn delete(
     {
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
         Ok(false) => api_error(StatusCode::NOT_FOUND, format!("no environment {name}")),
-        Err(e) => api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     }
 }
 

@@ -524,6 +524,32 @@ async fn reserved_addresses_are_refused_even_by_a_permissive_policy() {
 }
 
 #[tokio::test]
+async fn the_hosts_own_address_is_refused_even_by_a_permissive_policy() {
+    // A public-looking address that is the host's own: the node's API may
+    // listen there. Routed, so a refusal is the policy's.
+    let echo = echo_server().await;
+    let own = Ipv4Addr::new(203, 0, 113, 7);
+    let dials = [(SocketAddr::new(IpAddr::V4(own), 80), echo)]
+        .into_iter()
+        .collect();
+    let gw = Gateway::builder(NetworkPolicy::new(Verdict::Allow))
+        .dialer(Arc::new(MapDialer(dials)))
+        .host_addresses(vec![own.into()])
+        .build()
+        .unwrap();
+    let mut guest = Guest::new();
+    assert_eq!(guest.exchange(&gw, own, 80, b"x").await, None);
+    // Replacing the policy does not lift it.
+    gw.handle().set_policy(NetworkPolicy::new(Verdict::Allow));
+    assert_eq!(guest.exchange(&gw, own, 80, b"x").await, None);
+    let log = gw.handle().decisions();
+    assert!(!log.is_empty());
+    assert!(log
+        .iter()
+        .all(|d| d.verdict == Verdict::Deny && d.reason == "reserved address"));
+}
+
+#[tokio::test]
 async fn an_upstream_refusal_reaches_the_guest_as_a_reset() {
     // Allowed, but nothing listens: the dialer refuses.
     let gw = gateway(NetworkPolicy::new(Verdict::Allow), &[]);

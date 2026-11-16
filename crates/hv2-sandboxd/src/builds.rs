@@ -45,6 +45,78 @@ const POLL_INTERVAL: Duration = Duration::from_millis(200);
 const LOGS_PER_ANSWER: usize = 100;
 /// The most one `COPY`'s upload may hold.
 const MAX_UPLOAD_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+/// The most uploads one node keeps, and the most bytes they hold together.
+/// The namespace is node-wide (not per team -- a design decision, noted in the
+/// audit's O8), so these bound what any caller can leave on the disk.
+const MAX_STORED_UPLOADS: usize = 256;
+const MAX_STORED_UPLOAD_BYTES: u64 = 64 * 1024 * 1024 * 1024;
+
+/// What an upload may be and what the node will hold: the per-upload cap, the
+/// stored count and bytes, and whether the name must be the content's SHA-256.
+#[derive(Debug, Clone, Copy)]
+struct UploadLimits {
+    one: u64,
+    count: usize,
+    bytes: u64,
+    verify_hash: bool,
+}
+
+/// A refused upload and the status it is refused with.
+#[derive(Debug)]
+struct UploadError(StatusCode, String);
+
+impl UploadError {
+    fn bad(message: impl Into<String>) -> Self {
+        Self(StatusCode::BAD_REQUEST, message.into())
+    }
+}
+
+/// How many uploads `dir` holds, and how many bytes it holds in all (scratch
+/// files of uploads in flight included).
+fn stored_uploads(dir: &std::path::Path) -> (usize, u64) {
+    let mut count = 0;
+    let mut bytes = 0;
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let Ok(meta) = entry.metadata() else { continue };
+            if !meta.is_file() {
+                continue;
+            }
+            bytes += meta.len();
+            if !entry.file_name().to_string_lossy().starts_with('.') {
+                count += 1;
+            }
+        }
+    }
+    (count, bytes)
+}
+
+/// 507 if the node holds as many uploads, or as many bytes, as it may.
+fn check_quota(dir: &std::path::Path, limits: &UploadLimits) -> Result<(), UploadError> {
+    let (count, bytes) = stored_uploads(dir);
+    if count >= limits.count {
+        return Err(UploadError(
+            StatusCode::INSUFFICIENT_STORAGE,
+            format!("this node already holds {count} uploads, the most it keeps"),
+        ));
+    }
+    if bytes >= limits.bytes {
+        return Err(UploadError(
+            StatusCode::INSUFFICIENT_STORAGE,
+            format!("this node's uploads already hold {bytes} bytes, the most it keeps"),
+        ));
+    }
+    Ok(())
+}
+
+fn upload_limits(state: &AppState) -> UploadLimits {
+    UploadLimits {
+        one: MAX_UPLOAD_BYTES,
+        count: MAX_STORED_UPLOADS,
+        bytes: MAX_STORED_UPLOAD_BYTES,
+        verify_hash: state.opts.verify_upload_hash,
+    }
+}
 /// Per agent call, not per step.
 const AGENT_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -196,6 +268,11 @@ pub(crate) async fn file_link(
     if path.exists() {
         return (StatusCode::CREATED, Json(json!({ "present": true }))).into_response();
     }
+    if let Some(dir) = path.parent() {
+        if let Err(UploadError(status, message)) = check_quota(dir, &upload_limits(&state)) {
+            return api_error(status, message);
+        }
+    }
     let token = uuid::Uuid::new_v4().simple().to_string();
     state
         .upload_tokens
@@ -246,53 +323,92 @@ pub(crate) async fn upload(
     let Some(path) = upload_path(&state, &hash) else {
         return api_error(StatusCode::BAD_REQUEST, format!("a files hash {hash:?}"));
     };
-    match receive(body, &path).await {
+    match receive(body, &path, &hash, &upload_limits(&state)).await {
         Ok(()) => {
             state.upload_tokens.lock().remove(&hash);
             StatusCode::OK.into_response()
         }
-        Err(e) => api_error(StatusCode::BAD_REQUEST, e),
+        Err(UploadError(status, message)) => api_error(status, message),
     }
 }
 
 /// Streamed to a scratch file beside `path`, then renamed onto it: a build
-/// never reads half an upload.
-async fn receive(body: Body, path: &std::path::Path) -> Result<(), String> {
+/// never reads half an upload. The bytes must hash (SHA-256, hex) to `hash`,
+/// the name they are stored under, unless the limits say otherwise: another
+/// caller's `COPY` of that name would otherwise run whatever was put there.
+async fn receive(
+    body: Body,
+    path: &std::path::Path,
+    hash: &str,
+    limits: &UploadLimits,
+) -> Result<(), UploadError> {
+    use sha2::Digest;
     use tokio::io::AsyncWriteExt;
     use tokio_stream::StreamExt;
-    let dir = path.parent().ok_or("an upload path with no directory")?;
+    let dir = path
+        .parent()
+        .ok_or_else(|| UploadError::bad("an upload path with no directory"))?;
     tokio::fs::create_dir_all(dir)
         .await
-        .map_err(|e| format!("{}: {e}", dir.display()))?;
+        .map_err(|e| UploadError::bad(format!("{}: {e}", dir.display())))?;
+    check_quota(dir, limits)?;
     let scratch = dir.join(format!(".{}", uuid::Uuid::new_v4().simple()));
     let mut file = tokio::fs::File::create(&scratch)
         .await
-        .map_err(|e| format!("{}: {e}", scratch.display()))?;
+        .map_err(|e| UploadError::bad(format!("{}: {e}", scratch.display())))?;
     let mut stream = body.into_data_stream();
     let mut total = 0u64;
-    let written: Result<(), String> = async {
+    let mut digest = sha2::Sha256::new();
+    let written: Result<(), UploadError> = async {
         while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|e| e.to_string())?;
+            let chunk = chunk.map_err(|e| UploadError::bad(e.to_string()))?;
             total += chunk.len() as u64;
-            if total > MAX_UPLOAD_BYTES {
-                return Err(format!("larger than {MAX_UPLOAD_BYTES} bytes"));
+            if total > limits.one {
+                return Err(UploadError(
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    format!("larger than {} bytes", limits.one),
+                ));
             }
-            file.write_all(&chunk).await.map_err(|e| e.to_string())?;
+            digest.update(&chunk);
+            file.write_all(&chunk)
+                .await
+                .map_err(|e| UploadError::bad(e.to_string()))?;
         }
-        file.flush().await.map_err(|e| e.to_string())
+        file.flush()
+            .await
+            .map_err(|e| UploadError::bad(e.to_string()))?;
+        if limits.verify_hash {
+            let actual: String = digest
+                .finalize()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect();
+            if !actual.eq_ignore_ascii_case(hash) {
+                return Err(UploadError(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    format!("the upload's SHA-256 is {actual}, not the {hash:?} it was sent as"),
+                ));
+            }
+        }
+        Ok(())
     }
     .await;
-    match written.and(
-        tokio::fs::rename(&scratch, path)
-            .await
-            .map_err(|e| e.to_string()),
-    ) {
-        Ok(()) => Ok(()),
-        Err(e) => {
-            let _ = tokio::fs::remove_file(&scratch).await;
-            Err(e)
-        }
-    }
+    // Not `written.and(rename(..).await)`: that runs the rename whether or not
+    // the upload was accepted, and published a refused upload under its name.
+    let published = match written {
+        // First writer wins: a hard link fails if `path` exists, atomically,
+        // where a rename would replace it -- so nobody can swap in other bytes
+        // under a name another caller already uploaded and is building from.
+        // A loser is told 200, as `file_link` would have said "present".
+        Ok(()) => match tokio::fs::hard_link(&scratch, path).await {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+            Err(e) => Err(UploadError::bad(e.to_string())),
+        },
+        Err(e) => Err(e),
+    };
+    let _ = tokio::fs::remove_file(&scratch).await;
+    published
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1944,6 +2060,111 @@ pub(crate) type Builds = parking_lot::Mutex<HashMap<String, Arc<Build>>>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sha(bytes: &[u8]) -> String {
+        use sha2::Digest;
+        sha2::Sha256::digest(bytes)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect()
+    }
+
+    fn limits() -> UploadLimits {
+        UploadLimits {
+            one: 1024,
+            count: 2,
+            bytes: 4096,
+            verify_hash: true,
+        }
+    }
+
+    async fn put(
+        dir: &std::path::Path,
+        name: &str,
+        bytes: &[u8],
+        limits: &UploadLimits,
+    ) -> Result<(), UploadError> {
+        receive(
+            Body::from(bytes.to_vec()),
+            &dir.join(format!("{name}.tar")),
+            name,
+            limits,
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn an_upload_must_hash_to_its_name() {
+        let dir = tempdir::Dir::new();
+        let good = sha(b"payload");
+        put(&dir.path, &good, b"payload", &limits()).await.unwrap();
+        let other = sha(b"other");
+        let err = put(&dir.path, &other, b"payload", &limits())
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::UNPROCESSABLE_ENTITY, "{err:?}");
+        assert!(!dir.path.join(format!("{other}.tar")).exists());
+        // The operator's opt-out takes it.
+        let lax = UploadLimits {
+            verify_hash: false,
+            ..limits()
+        };
+        put(&dir.path, &other, b"payload", &lax).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_second_upload_to_a_name_does_not_replace_the_first() {
+        let dir = tempdir::Dir::new();
+        let lax = UploadLimits {
+            verify_hash: false,
+            ..limits()
+        };
+        put(&dir.path, "name", b"first", &lax).await.unwrap();
+        put(&dir.path, "name", b"second", &lax).await.unwrap();
+        assert_eq!(std::fs::read(dir.path.join("name.tar")).unwrap(), b"first");
+        assert_eq!(stored_uploads(&dir.path), (1, 5), "no scratch left behind");
+    }
+
+    #[tokio::test]
+    async fn an_upload_over_the_cap_is_refused_with_413() {
+        let dir = tempdir::Dir::new();
+        let big = vec![7u8; 2048];
+        let err = put(&dir.path, &sha(&big), &big, &limits())
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(stored_uploads(&dir.path), (0, 0), "no scratch left behind");
+    }
+
+    #[tokio::test]
+    async fn the_node_holds_a_bounded_number_and_volume_of_uploads() {
+        let dir = tempdir::Dir::new();
+        for n in 0..2u8 {
+            let bytes = vec![n; 10];
+            put(&dir.path, &sha(&bytes), &bytes, &limits())
+                .await
+                .unwrap();
+        }
+        let more = vec![9u8; 10];
+        let err = put(&dir.path, &sha(&more), &more, &limits())
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::INSUFFICIENT_STORAGE);
+        assert!(check_quota(&dir.path, &limits()).is_err());
+        // Bytes bind too, with room in the count.
+        let tight = UploadLimits {
+            count: 100,
+            bytes: 15,
+            ..limits()
+        };
+        assert_eq!(
+            put(&dir.path, &sha(&more), &more, &tight)
+                .await
+                .unwrap_err()
+                .0,
+            StatusCode::INSUFFICIENT_STORAGE
+        );
+    }
 
     #[test]
     fn a_copy_clears_non_directories_first_and_gives_owner_and_mode_last() {

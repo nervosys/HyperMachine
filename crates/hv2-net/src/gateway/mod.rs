@@ -288,6 +288,8 @@ const RESOLVED_LIMIT: usize = 8192;
 struct Shared {
     config: GatewayConfig,
     policy: RwLock<NetworkPolicy>,
+    /// The host's own addresses, kept out of reach of every policy set.
+    host_addresses: Vec<std::net::IpAddr>,
     resolver: Arc<dyn Resolver>,
     dialer: Arc<dyn Dialer>,
     private_network: Option<Arc<dyn PrivateNetwork>>,
@@ -381,7 +383,7 @@ impl GatewayHandle {
     /// Replace the policy. Connections already open are left open; every
     /// connection and query after this is decided by the new one.
     pub fn set_policy(&self, policy: NetworkPolicy) {
-        *self.0.policy.write() = policy;
+        *self.0.policy.write() = policy.with_host_addresses(&self.0.host_addresses);
     }
 
     /// Tunnel every allowed connection through `proxy` from now on, or stop
@@ -502,9 +504,18 @@ pub struct GatewayBuilder {
     private_network: Option<Arc<dyn PrivateNetwork>>,
     authority: Option<Arc<mitm::Authority>>,
     extra_roots: Vec<rustls::pki_types::CertificateDer<'static>>,
+    host_addresses: Option<Vec<std::net::IpAddr>>,
 }
 
 impl GatewayBuilder {
+    /// The addresses to treat as the host's own and refuse like a reserved
+    /// range. Default: every interface address, enumerated at `build`.
+    #[must_use]
+    pub fn host_addresses(mut self, addresses: Vec<std::net::IpAddr>) -> Self {
+        self.host_addresses = Some(addresses);
+        self
+    }
+
     #[must_use]
     pub fn config(mut self, config: GatewayConfig) -> Self {
         self.config = config;
@@ -556,9 +567,13 @@ impl GatewayBuilder {
             }),
             None => None,
         };
+        let host_addresses = self
+            .host_addresses
+            .unwrap_or_else(crate::network_policy::host_interface_addresses);
         let shared = Arc::new(Shared {
             config: self.config,
-            policy: RwLock::new(self.policy),
+            policy: RwLock::new(self.policy.with_host_addresses(&host_addresses)),
+            host_addresses,
             resolver: self.resolver,
             dialer: self.dialer,
             private_network: self.private_network,
@@ -612,6 +627,7 @@ impl Gateway {
             private_network: None,
             authority: None,
             extra_roots: Vec::new(),
+            host_addresses: None,
         }
     }
 

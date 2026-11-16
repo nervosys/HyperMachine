@@ -258,6 +258,19 @@ fn api_error(status: StatusCode, message: impl std::fmt::Display) -> Response {
         .into_response()
 }
 
+/// An error whose detail stays on the server: a store's or a node's own
+/// words can carry a Redis address or a node URL, which no client needs. The
+/// detail goes to the log; the client gets the status and a plain message.
+pub(crate) fn hidden(status: StatusCode, detail: impl std::fmt::Display) -> Response {
+    tracing::warn!(%status, error = %detail, "request failed");
+    let message = match status {
+        StatusCode::SERVICE_UNAVAILABLE => "the cluster store is unavailable",
+        StatusCode::BAD_GATEWAY => "a node did not answer",
+        _ => "internal error",
+    };
+    api_error(status, message)
+}
+
 /// A node's URL for `segments`, each one path segment: percent-encoded, so a
 /// value that came from a request can never add a segment, climb out of the
 /// path with `..`, or reach another route. An empty, `.` or `..` segment is
@@ -587,7 +600,7 @@ async fn domain_challenge(
     match control.store.sandbox(&id).await {
         Ok(Some(_)) => {}
         Ok(None) => return api_error(StatusCode::NOT_FOUND, "sandbox does not exist"),
-        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+        Err(e) => return hidden(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
     let policy = control.domain_verification.read().clone();
     let Some(policy) = policy else {
@@ -1022,11 +1035,11 @@ async fn list_domains(
     match control.store.sandbox(&id).await {
         Ok(Some(_)) => {}
         Ok(None) => return api_error(StatusCode::NOT_FOUND, "sandbox does not exist"),
-        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+        Err(e) => return hidden(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
     match control.store.domains(&id).await {
         Ok(bindings) => Json(bindings).into_response(),
-        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+        Err(e) => hidden(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 
@@ -1044,7 +1057,7 @@ async fn bind_domain(
         match control.store.sandbox(&id).await {
             Ok(Some(_)) => {}
             Ok(None) => return api_error(StatusCode::NOT_FOUND, "sandbox does not exist"),
-            Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+            Err(e) => return hidden(StatusCode::INTERNAL_SERVER_ERROR, e),
         }
         let Some(expires) = body.challenge_expires_at else {
             return api_error(
@@ -1061,7 +1074,12 @@ async fn bind_domain(
                     StatusCode::SERVICE_UNAVAILABLE
                 }
             };
-            return api_error(status, e);
+            return match e {
+                crate::domain_verification::VerificationError::Unavailable(_) => hidden(status, e),
+                crate::domain_verification::VerificationError::InvalidProof(_) => {
+                    api_error(status, e)
+                }
+            };
         }
     }
     match control.store.claim_domain(&binding).await {
@@ -1073,7 +1091,7 @@ async fn bind_domain(
         Ok(DomainClaim::SandboxMissing) => {
             api_error(StatusCode::NOT_FOUND, "sandbox does not exist")
         }
-        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+        Err(e) => hidden(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 
@@ -1091,7 +1109,7 @@ async fn unbind_domain(
             StatusCode::NOT_FOUND,
             "domain binding does not exist for this sandbox",
         ),
-        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+        Err(e) => hidden(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
 
@@ -1755,7 +1773,7 @@ fn authorize(
 async fn health(State(control): State<Arc<ControlPlane>>) -> Response {
     match control.store.nodes().await {
         Ok(nodes) => Json(json!({ "status": "ok", "nodes": nodes.len() })).into_response(),
-        Err(e) => api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     }
 }
 
@@ -1844,7 +1862,7 @@ async fn create_inner(
     }
     let nodes = match control.store.nodes().await {
         Ok(nodes) => nodes,
-        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     };
     // Only nodes with the template asked for. The body is the node's to
     // validate; this reads only which template, and a body that does not
@@ -1969,7 +1987,8 @@ async fn create_inner(
                         "named creation outcome requires reconciliation",
                     );
                 }
-                refusals.push(format!("{}: {e}", node.id));
+                tracing::warn!(node = %node.id, error = %e, "node request failed");
+                refusals.push(format!("{}: unreachable", node.id));
                 continue;
             }
         };
@@ -2001,7 +2020,7 @@ async fn create_inner(
         }
         let mut descriptor: Value = match serde_json::from_slice(&bytes) {
             Ok(v) => v,
-            Err(e) => return api_error(StatusCode::BAD_GATEWAY, format!("{}: {e}", node.id)),
+            Err(e) => return hidden(StatusCode::BAD_GATEWAY, format!("{}: {e}", node.id)),
         };
         if let Some(reservation) = &reservation {
             let Some(id) = descriptor.get("sandboxID").and_then(Value::as_str) else {
@@ -2110,7 +2129,7 @@ async fn list_v1(
                 .collect::<Vec<_>>(),
         )
         .into_response(),
-        Err(e) => api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     }
 }
 
@@ -2124,7 +2143,7 @@ async fn list_v2(
 ) -> Response {
     let records = match matching(&control, &query, &access).await {
         Ok(records) => records,
-        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     };
     let start = query
         .next_token
@@ -2153,7 +2172,7 @@ async fn detail(
         Ok(Some(record)) if access.allows(&record) => Json(record.detail()).into_response(),
         Ok(Some(_)) => api_error(StatusCode::FORBIDDEN, "sandbox owner required"),
         Ok(None) => api_error(StatusCode::NOT_FOUND, format!("no sandbox {id}")),
-        Err(e) => api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     }
 }
 
@@ -2244,7 +2263,7 @@ async fn port_tunnel(
             )
         }
         Ok(None) => return api_error(StatusCode::NOT_FOUND, "sandbox does not exist"),
-        Err(error) => return api_error(StatusCode::SERVICE_UNAVAILABLE, error),
+        Err(error) => return hidden(StatusCode::SERVICE_UNAVAILABLE, error),
     };
     let node = match control.store.node(&record.node_id).await {
         Ok(Some(node)) => node,
@@ -2254,7 +2273,7 @@ async fn port_tunnel(
                 "sandbox node is unavailable",
             )
         }
-        Err(error) => return api_error(StatusCode::SERVICE_UNAVAILABLE, error),
+        Err(error) => return hidden(StatusCode::SERVICE_UNAVAILABLE, error),
     };
     if !forwards_verbatim(request.uri().path()) {
         return api_error(StatusCode::BAD_REQUEST, "invalid request path");
@@ -2432,7 +2451,7 @@ async fn adopt_owner(
             Ok(Some(record)) if access.allows(&record) => {}
             Ok(Some(_)) => return api_error(StatusCode::FORBIDDEN, "sandbox owner required"),
             Ok(None) => return api_error(StatusCode::NOT_FOUND, "sandbox does not exist"),
-            Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+            Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
         }
     }
     headers.insert("content-type", HeaderValue::from_static("application/json"));
@@ -2463,7 +2482,7 @@ async fn forward(
     let record = match control.store.sandbox(&id).await {
         Ok(Some(record)) => record,
         Ok(None) => return api_error(StatusCode::NOT_FOUND, format!("no sandbox {id}")),
-        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     };
     if !access.allows(&record) {
         return api_error(StatusCode::FORBIDDEN, "sandbox owner required");
@@ -2485,7 +2504,7 @@ async fn forward(
                 }
                 order
             }
-            Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+            Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
         },
         Ok(None) => {
             // Its node is gone, and its VM with it. The reaper would get to
@@ -2508,7 +2527,7 @@ async fn forward(
                 )
             };
         }
-        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     };
 
     let path_and_query = uri.path_and_query().map_or(uri.path(), |p| p.as_str());
@@ -2537,7 +2556,8 @@ async fn forward(
         let response = match request.send().await {
             Ok(response) => response,
             Err(e) => {
-                refusals.push(format!("{}: {e}", node.id));
+                tracing::warn!(node = %node.id, error = %e, "node request failed");
+                refusals.push(format!("{}: unreachable", node.id));
                 continue;
             }
         };
@@ -2815,7 +2835,7 @@ async fn cluster_nodes(
 ) -> Response {
     let nodes = match control.store.nodes().await {
         Ok(nodes) => nodes,
-        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     };
     if admin.0 || matches!(access, SandboxAccess::All) {
         return Json(nodes).into_response();
@@ -2859,7 +2879,7 @@ async fn cluster_events(
         .min(crate::store::EVENT_TAIL);
     match control.store.events(count).await {
         Ok(events) => Json(events).into_response(),
-        Err(e) => api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     }
 }
 
@@ -2970,7 +2990,7 @@ async fn templates(
 ) -> Response {
     let nodes = match control.store.nodes().await {
         Ok(nodes) => nodes,
-        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     };
     let mut offered: BTreeMap<String, Vec<(&NodeInfo, Option<&crate::model::TemplateInfo>)>> =
         BTreeMap::new();
@@ -3051,7 +3071,7 @@ async fn templates(
 async fn build_templates(State(control): State<Arc<ControlPlane>>, body: Bytes) -> Response {
     let nodes = match control.store.nodes().await {
         Ok(nodes) => nodes,
-        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     };
     let mut answers = Vec::new();
     let mut accepted = false;
@@ -3180,7 +3200,7 @@ async fn snapshot_owner(
         .store
         .nodes()
         .await
-        .map_err(|e| api_error(StatusCode::SERVICE_UNAVAILABLE, e))?;
+        .map_err(|e| hidden(StatusCode::SERVICE_UNAVAILABLE, e))?;
     Ok(nodes.iter().find_map(|node| {
         let info = node.template_metadata.get(name)?;
         Some((info.team.clone()?, info.shared_with.clone()))
@@ -3237,7 +3257,7 @@ async fn share_template(
     }
     let nodes = match control.store.nodes().await {
         Ok(nodes) => nodes,
-        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     };
     let mut worst: Option<(u16, Value)> = None;
     let mut done: Option<(u16, Value)> = None;
@@ -3287,7 +3307,7 @@ async fn delete_template(
     if let Some(mine) = &team.0 {
         let nodes = match control.store.nodes().await {
             Ok(nodes) => nodes,
-            Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+            Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
         };
         let owned = nodes.iter().any(|node| {
             node.template_metadata
@@ -3456,7 +3476,7 @@ async fn relay_with_team(
     }
     let response = match request.send().await {
         Ok(response) => response,
-        Err(e) => return api_error(StatusCode::BAD_GATEWAY, format!("{}: {e}", node.id)),
+        Err(e) => return hidden(StatusCode::BAD_GATEWAY, format!("{}: {e}", node.id)),
     };
     let status =
         StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
@@ -3542,7 +3562,7 @@ async fn sandboxes_metrics(
                     .map(|record| record.sandbox_id)
                     .collect(),
             ),
-            Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+            Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
         },
     };
     let answers = match on_every_node(&control, Method::GET, path).await {
@@ -3821,7 +3841,7 @@ async fn template_alias(
 ) -> Response {
     let nodes = match control.store.nodes().await {
         Ok(nodes) => nodes,
-        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     };
     let name = crate::model::untagged(&alias);
     if nodes.iter().any(|n| n.offers_to(name, &team)) {
@@ -3844,7 +3864,7 @@ async fn jwks(State(control): State<Arc<ControlPlane>>) -> Response {
                 .collect();
             Json(json!({ "keys": keys })).into_response()
         }
-        Err(e) => api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     }
 }
 
@@ -5131,6 +5151,44 @@ mod private_membership_failure_tests {
             self.0.abort();
         }
     }
+    /// A store's own error words (an address, a Redis reply) stay in the log.
+    #[tokio::test]
+    async fn a_store_failure_shows_the_client_no_store_detail() {
+        let store = Arc::new(FaultStore {
+            inner: MemoryStore::new(),
+            mode: AtomicU8::new(3),
+            cancelled: Arc::new(AtomicUsize::new(0)),
+        });
+        let control = ControlPlane::new(
+            store,
+            ControlConfig {
+                api_key: Some("fault-admin".into()),
+                api_keys: Vec::new(),
+                access_audit: None,
+                cluster_token: None,
+                proxy_port: 5981,
+                create_timeout: Duration::from_secs(1),
+                identity_issuer: None,
+            },
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let app = router(control);
+        let _server = Server(tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        }));
+        let response = reqwest::Client::new()
+            .get(format!("http://{address}/sandboxes/any"))
+            .header("x-api-key", "fault-admin")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let body: Value = response.json().await.unwrap();
+        assert_eq!(body["message"], "the cluster store is unavailable");
+        assert!(!body.to_string().contains("private internal detail"));
+    }
+
     #[tokio::test]
     async fn http_store_failures_preserve_uncertainty_and_exact_replay_after_commit() {
         let store = Arc::new(FaultStore {

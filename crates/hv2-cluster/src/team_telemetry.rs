@@ -68,6 +68,7 @@ use axum::{Extension, Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use crate::control::hidden;
 use crate::metrics::Exposition;
 use crate::model::{now_ms, rfc3339, ClusterEvent, SandboxRecord};
 use crate::ownership::{RequestTeam, TeamId};
@@ -567,7 +568,7 @@ async fn one(State(ctx): State<Ctx>, team: Option<Extension<RequestTeam>>) -> Re
             StatusCode::NOT_FOUND,
             "this team has no telemetry destination",
         ),
-        Err(e) => api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     }
 }
 
@@ -583,7 +584,7 @@ async fn put(
     };
     let before = match find(&ctx, team.as_ref()).await {
         Ok(before) => before,
-        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     };
     let now = now_ms();
     let config = TeamTelemetry {
@@ -605,7 +606,7 @@ async fn put(
             };
             (status, Json(config.describe(None))).into_response()
         }
-        Err(e) => api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     }
 }
 
@@ -621,7 +622,7 @@ async fn delete(State(ctx): State<Ctx>, team: Option<Extension<RequestTeam>>) ->
             StatusCode::NOT_FOUND,
             "this team has no telemetry destination",
         ),
-        Err(e) => api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     }
 }
 

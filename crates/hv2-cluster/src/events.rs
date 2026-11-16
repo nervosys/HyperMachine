@@ -24,6 +24,7 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use crate::control::hidden;
 use crate::model::{now_ms, rfc3339, ClusterEvent, Delivery, Webhook};
 use crate::ownership::RequestTeam;
 use crate::store::ClusterStore;
@@ -233,13 +234,13 @@ async fn usage(
     }
     let events = match store.events(crate::store::EVENT_TAIL).await {
         Ok(events) => events,
-        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     };
     let truncated = events.len() >= crate::store::EVENT_TAIL;
     // What ran since the ledger began, kept for good; ending in the window.
     let ledger = match store.usage_ledger(from).await {
         Ok(ledger) => ledger,
-        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     };
     let team = team_of(team);
     Json(crate::usage::report(
@@ -275,7 +276,7 @@ async fn query_events(
 ) -> Response {
     let events = match store.events(SCAN).await {
         Ok(events) => events,
-        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     };
     let types: Option<Vec<&str>> = q.types.as_deref().map(|t| t.split(',').collect());
     let mut out: Vec<Value> = events
@@ -335,6 +336,9 @@ fn detail(hook: &Webhook) -> Value {
     })
 }
 
+/// How many webhooks one team (or the administrators, together) may have.
+const MAX_WEBHOOKS: usize = 100;
+
 /// A URL a webhook may have: HTTP or HTTPS, with a host.
 fn valid_url(url: &str) -> bool {
     reqwest::Url::parse(url)
@@ -383,6 +387,18 @@ async fn create_webhook(
     if let Err(e) = valid_events(&req.events) {
         return api_error(StatusCode::BAD_REQUEST, e);
     }
+    let team_id = team_of(team).0;
+    match store.webhooks().await {
+        Ok(hooks) => {
+            if hooks.iter().filter(|h| h.team_id == team_id).count() >= MAX_WEBHOOKS {
+                return api_error(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    format!("at most {MAX_WEBHOOKS} webhooks per team; delete one first"),
+                );
+            }
+        }
+        Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
+    }
     let hook = Webhook {
         id: uuid::Uuid::new_v4().to_string(),
         name: req.name,
@@ -391,13 +407,13 @@ async fn create_webhook(
         enabled: req.enabled.unwrap_or(true),
         secret: req.signature_secret,
         created_ms: now_ms(),
-        team_id: team_of(team).0,
+        team_id,
         previous_secret: None,
         previous_until_ms: None,
     };
     match store.put_webhook(&hook).await {
         Ok(()) => (StatusCode::CREATED, Json(detail(&hook))).into_response(),
-        Err(e) => api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     }
 }
 
@@ -412,7 +428,7 @@ async fn list_webhooks(State(store): Store, team: Option<Extension<RequestTeam>>
                 .collect::<Vec<_>>(),
         )
         .into_response(),
-        Err(e) => api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     }
 }
 
@@ -426,7 +442,7 @@ async fn find(store: &dyn ClusterStore, team: &RequestTeam, id: &str) -> Result<
             .into_iter()
             .find(|h| h.id == id && team.sees(h.team_id.as_ref()))
             .ok_or_else(|| api_error(StatusCode::NOT_FOUND, format!("no webhook {id}"))),
-        Err(e) => Err(api_error(StatusCode::SERVICE_UNAVAILABLE, e)),
+        Err(e) => Err(hidden(StatusCode::SERVICE_UNAVAILABLE, e)),
     }
 }
 
@@ -514,7 +530,7 @@ async fn update_webhook(
     }
     match store.put_webhook(&hook).await {
         Ok(()) => Json(detail(&hook)).into_response(),
-        Err(e) => api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     }
 }
 
@@ -529,7 +545,7 @@ async fn delete_webhook(
     match store.delete_webhook(&id).await {
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
         Ok(false) => api_error(StatusCode::NOT_FOUND, format!("no webhook {id}")),
-        Err(e) => api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     }
 }
 
@@ -575,7 +591,7 @@ async fn deliveries(
         .await
     {
         Ok(all) => all,
-        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     };
     let mut groups: Vec<(String, Value)> = Vec::new();
     for d in &all {
@@ -610,7 +626,7 @@ async fn stats(
     }
     let all = match store.deliveries(&id, crate::store::DELIVERY_TAIL).await {
         Ok(all) => all,
-        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     };
     let durations = |ds: &[&Delivery]| {
         let values: Vec<f64> = ds.iter().map(|d| d.duration_ms as f64).collect();
@@ -912,13 +928,30 @@ pub fn is_global(ip: IpAddr) -> bool {
                 || a == 0
                 || (a == 100 && (64..128).contains(&b)) // shared, RFC 6598
                 || (a == 192 && b == 0)
+                || (a == 198 && (b & 0xfe) == 18) // benchmarking, 198.18.0.0/15
                 || a >= 240)
         }
         IpAddr::V6(v6) => {
             if let Some(v4) = v6.to_ipv4_mapped() {
                 return is_global(IpAddr::V4(v4));
             }
-            let first = v6.segments()[0];
+            let seg = v6.segments();
+            let first = seg[0];
+            // NAT64 (RFC 6052): the IPv4 destination rides in the last 32
+            // bits, and is what decides. The local-use prefix is never public.
+            if first == 0x0064 && seg[1] == 0xff9b {
+                if seg[2..6] == [0, 0, 0, 0] {
+                    let [a, b] = seg[6].to_be_bytes();
+                    let [c, d] = seg[7].to_be_bytes();
+                    return is_global(IpAddr::V4(std::net::Ipv4Addr::new(a, b, c, d)));
+                }
+                return false; // 64:ff9b:1::/48 and the rest of 64:ff9b::/32
+            }
+            // 6to4 (2002::/16) and Teredo (2001::/32) tunnel to addresses the
+            // name's owner picks, so they reach whatever the relay can.
+            if first == 0x2002 || (first == 0x2001 && seg[1] == 0) {
+                return false;
+            }
             !(v6.is_loopback()
                 || v6.is_unspecified()
                 || v6.is_multicast()
@@ -1265,6 +1298,52 @@ mod tests {
         assert_ne!(hmac_signatures(&hook, 6, 0, "{}"), new);
     }
 
+    #[tokio::test]
+    async fn webhooks_are_capped_per_team() {
+        use crate::ownership::TeamId;
+        use crate::store::MemoryStore;
+        let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+        let hook = |i: usize, team: Option<&str>| Webhook {
+            id: format!("h{i}-{}", team.unwrap_or("admin")),
+            name: "n".into(),
+            url: "https://example.com/hook".into(),
+            events: vec![],
+            enabled: true,
+            secret: "0123456789abcdef".into(),
+            created_ms: 1,
+            team_id: team.map(|t| TeamId::parse(t).unwrap()),
+            previous_secret: None,
+            previous_until_ms: None,
+        };
+        for i in 0..100 - 1 {
+            store.put_webhook(&hook(i, None)).await.unwrap();
+        }
+        // Another team's webhooks do not count against the administrators'.
+        for i in 0..100 {
+            store.put_webhook(&hook(i, Some("red"))).await.unwrap();
+        }
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let app = router::<()>(Arc::clone(&store));
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let client = reqwest::Client::new();
+        let post = || {
+            client
+                .post(format!("http://{address}/events/webhooks"))
+                .json(&json!({
+                    "name": "one more",
+                    "url": "https://example.com/hook",
+                    "signatureSecret": "0123456789abcdef",
+                }))
+                .send()
+        };
+        assert_eq!(post().await.unwrap().status(), StatusCode::CREATED);
+        let refused = post().await.unwrap();
+        assert_eq!(refused.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(store.webhooks().await.unwrap().len(), 2 * 100);
+        server.abort();
+    }
+
     #[test]
     fn only_public_addresses_are_global() {
         for private in [
@@ -1279,10 +1358,26 @@ mod tests {
             "fd00::1",
             "fe80::1",
             "::ffff:127.0.0.1",
+            "198.18.0.1",
+            "198.19.255.254",
+            "64:ff9b::7f00:1",
+            "64:ff9b::a9fe:a9fe",
+            "64:ff9b:1::1",
+            "2002:7f00:1::1",
+            "2002:5db8:d822::1",
+            "2001:0:4136:e378:8000:63bf:3fff:fdd2",
         ] {
             assert!(!is_global(private.parse().unwrap()), "{private}");
         }
-        for public in ["93.184.216.34", "1.1.1.1", "2606:4700::1111"] {
+        for public in [
+            "93.184.216.34",
+            "1.1.1.1",
+            "198.20.0.1",
+            "198.17.255.255",
+            "64:ff9b::5db8:d822",
+            "2606:4700::1111",
+            "2001:4860:4860::8888",
+        ] {
             assert!(is_global(public.parse().unwrap()), "{public}");
         }
     }

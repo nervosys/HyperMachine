@@ -409,6 +409,10 @@ struct Pending {
 struct CliLogin {
     port: u16,
     challenge: String,
+    /// The CLI's own random `state`, echoed on the callback so the CLI can
+    /// tell its own sign-in from one a stranger steered to its port.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    state: Option<String>,
 }
 
 /// The one-time code a CLI login ends in.
@@ -445,11 +449,22 @@ pub(crate) struct LoginQuery {
     cli_port: Option<u16>,
     #[serde(rename = "cliChallenge")]
     cli_challenge: Option<String>,
+    #[serde(rename = "cliState")]
+    cli_state: Option<String>,
 }
 
 /// A CLI login's parameters, if the request is one: an unprivileged port
 /// and a challenge shaped like a base64url SHA-256.
 fn cli_login(query: &LoginQuery) -> Result<Option<CliLogin>, &'static str> {
+    let state_ok = query.cli_state.as_deref().is_none_or(|state| {
+        (16..=128).contains(&state.len())
+            && state
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    });
+    if !state_ok {
+        return Err("cliState is 16 to 128 characters of base64url");
+    }
     match (query.cli_port, &query.cli_challenge) {
         (None, None) => Ok(None),
         (Some(port), Some(challenge))
@@ -462,12 +477,24 @@ fn cli_login(query: &LoginQuery) -> Result<Option<CliLogin>, &'static str> {
             Ok(Some(CliLogin {
                 port,
                 challenge: challenge.clone(),
+                state: query.cli_state.clone(),
             }))
         }
         _ => Err(
             "cliPort and cliChallenge go together: a port from 1024, a 43-character S256 challenge",
         ),
     }
+}
+
+/// Where the browser is sent on to the CLI: its loopback listener, with
+/// the one-time code and, if the CLI gave one, its `state` echoed back.
+fn cli_callback_url(port: u16, state: Option<&str>, code: &str) -> String {
+    let mut url = format!("http://127.0.0.1:{port}/callback?code={code}");
+    if let Some(state) = state {
+        url.push_str("&state=");
+        url.push_str(state);
+    }
+    url
 }
 
 /// `GET /auth/login`.
@@ -631,11 +658,8 @@ pub(crate) async fn callback(
         let headers = response.headers_mut();
         headers.insert(
             header::LOCATION,
-            HeaderValue::from_str(&format!(
-                "http://127.0.0.1:{}/callback?code={sealed}",
-                cli.port
-            ))
-            .expect("a port and base64url"),
+            HeaderValue::from_str(&cli_callback_url(cli.port, cli.state.as_deref(), &sealed))
+                .expect("a port and base64url"),
         );
         headers.insert(header::SET_COOKIE, cookie(LOGIN_COOKIE, "", 0));
         headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
@@ -808,6 +832,7 @@ mod tests {
             return_to: None,
             cli_port: port,
             cli_challenge: challenge.map(str::to_string),
+            cli_state: None,
         };
         let good = URL_SAFE_NO_PAD.encode([1u8; 32]);
         assert!(cli_login(&query(None, None)).unwrap().is_none());
@@ -827,6 +852,36 @@ mod tests {
         ] {
             assert!(cli_login(&bad).is_err());
         }
+    }
+
+    #[test]
+    fn the_cli_state_is_validated_and_echoed_on_the_callback() {
+        let good = URL_SAFE_NO_PAD.encode([1u8; 32]);
+        let state = URL_SAFE_NO_PAD.encode([7u8; 32]);
+        let query = |state: Option<&str>| LoginQuery {
+            return_to: None,
+            cli_port: Some(49152),
+            cli_challenge: Some(good.clone()),
+            cli_state: state.map(str::to_string),
+        };
+        let cli = cli_login(&query(Some(&state))).unwrap().unwrap();
+        assert_eq!(cli.state.as_deref(), Some(state.as_str()));
+        for bad in [
+            "short",
+            "has space and is long enough!",
+            "a&b=cccccccccccccccc",
+        ] {
+            assert!(cli_login(&query(Some(bad))).is_err(), "{bad}");
+        }
+        let url = cli_callback_url(cli.port, cli.state.as_deref(), "hmc1.x.y");
+        assert_eq!(
+            url,
+            format!("http://127.0.0.1:49152/callback?code=hmc1.x.y&state={state}")
+        );
+        assert_eq!(
+            cli_callback_url(49152, None, "c"),
+            "http://127.0.0.1:49152/callback?code=c"
+        );
     }
 
     #[test]

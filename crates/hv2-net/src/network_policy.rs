@@ -168,6 +168,61 @@ pub enum PolicyError {
     BadHeader(String),
 }
 
+/// An IPv4-mapped IPv6 address as the IPv4 address it names.
+fn unmap(address: IpAddr) -> IpAddr {
+    match address {
+        IpAddr::V6(v6) => v6.to_ipv4_mapped().map_or(address, IpAddr::V4),
+        v4 => v4,
+    }
+}
+
+/// Every address on every interface of this host (Linux: `getifaddrs`).
+/// Empty elsewhere, and if the call fails.
+#[must_use]
+pub fn host_interface_addresses() -> Vec<IpAddr> {
+    #[cfg(target_os = "linux")]
+    {
+        let mut out = Vec::new();
+        let mut head: *mut libc::ifaddrs = std::ptr::null_mut();
+        // SAFETY: getifaddrs fills `head` with a list we only read and then
+        // free with freeifaddrs; each `ifa_addr` is null or a sockaddr of the
+        // family it declares.
+        unsafe {
+            if libc::getifaddrs(&mut head) != 0 {
+                return out;
+            }
+            let mut cur = head;
+            while !cur.is_null() {
+                let addr = (*cur).ifa_addr;
+                if !addr.is_null() {
+                    match i32::from((*addr).sa_family) {
+                        libc::AF_INET => {
+                            let sin = &*addr.cast::<libc::sockaddr_in>();
+                            out.push(IpAddr::V4(Ipv4Addr::from(u32::from_be(
+                                sin.sin_addr.s_addr,
+                            ))));
+                        }
+                        libc::AF_INET6 => {
+                            let sin6 = &*addr.cast::<libc::sockaddr_in6>();
+                            out.push(IpAddr::V6(Ipv6Addr::from(sin6.sin6_addr.s6_addr)));
+                        }
+                        _ => {}
+                    }
+                }
+                cur = (*cur).ifa_next;
+            }
+            libc::freeifaddrs(head);
+        }
+        out.sort();
+        out.dedup();
+        out
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Vec::new()
+    }
+}
+
 /// Headers injected into HTTPS requests to a matching name.
 pub type Headers = BTreeMap<String, String>;
 
@@ -183,6 +238,10 @@ pub struct NetworkPolicy {
     /// The reserved ranges an `allowOut` CIDR may open -- the operator's
     /// grant, never the tenant's. Empty unless the operator says otherwise.
     tenant_reserved: Vec<Cidr>,
+    /// The host's own interface addresses, refused like a reserved range:
+    /// the node's API may listen on its public IP, and a guest under an
+    /// allow-default policy would otherwise dial it through the host stack.
+    host_addresses: Vec<IpAddr>,
 }
 
 impl NetworkPolicy {
@@ -197,6 +256,7 @@ impl NetworkPolicy {
             transforms: Vec::new(),
             default,
             tenant_reserved: Vec::new(),
+            host_addresses: Vec::new(),
         }
     }
 
@@ -328,10 +388,24 @@ impl NetworkPolicy {
         self
     }
 
+    /// Refuse the host's own interface addresses too (see
+    /// [`host_interface_addresses`]). Like any reserved address they open only
+    /// to an `allowOut` CIDR the operator let tenants use
+    /// ([`Self::with_tenant_reserved`]). Replaces any earlier list.
+    #[must_use]
+    pub fn with_host_addresses(mut self, addresses: &[IpAddr]) -> Self {
+        self.host_addresses = addresses.iter().copied().map(unmap).collect();
+        self
+    }
+
+    /// Reserved by range, or one of the host's own addresses.
+    fn reserved(&self, address: IpAddr) -> bool {
+        Self::is_reserved(address) || self.host_addresses.contains(&unmap(address))
+    }
+
     fn address_allowed(&self, address: IpAddr) -> bool {
         self.allow_addresses.iter().any(|c| c.contains(address))
-            && (!Self::is_reserved(address)
-                || self.tenant_reserved.iter().any(|c| c.contains(address)))
+            && (!self.reserved(address) || self.tenant_reserved.iter().any(|c| c.contains(address)))
     }
 
     fn address_denied(&self, address: IpAddr) -> bool {
@@ -366,7 +440,7 @@ impl NetworkPolicy {
         if self.address_allowed(address) {
             return AddressVerdict::Allow("allowOut address");
         }
-        if Self::is_reserved(address) {
+        if self.reserved(address) {
             return AddressVerdict::Deny("reserved address");
         }
         let refused = if self.address_denied(address) {
@@ -393,7 +467,7 @@ impl NetworkPolicy {
         if self.address_allowed(address) {
             return (Verdict::Allow, "allowOut address");
         }
-        if Self::is_reserved(address) {
+        if self.reserved(address) {
             return (Verdict::Deny, "reserved address");
         }
         if self.name_allowed(name) {
@@ -447,6 +521,59 @@ mod tests {
             Verdict::Deny,
         )
         .unwrap()
+    }
+
+    /// The host's own (non-reserved-range) addresses are refused under an
+    /// allow-default policy, and open only to an operator-granted CIDR.
+    #[test]
+    fn the_hosts_own_addresses_are_refused_under_allow_default() {
+        let host = ip("203.0.113.7");
+        let bare = NetworkPolicy::new(Verdict::Allow);
+        assert_eq!(
+            bare.decide_address(host),
+            AddressVerdict::Allow("default allow")
+        );
+        let p = bare.with_host_addresses(&[host, ip("2001:db8::7")]);
+        assert_eq!(
+            p.decide_address(host),
+            AddressVerdict::Deny("reserved address")
+        );
+        assert_eq!(
+            p.decide(host, "x.test"),
+            (Verdict::Deny, "reserved address")
+        );
+        assert_eq!(
+            p.decide_address(ip("::ffff:203.0.113.7")),
+            AddressVerdict::Deny("reserved address")
+        );
+        assert_eq!(
+            p.decide_address(ip("2001:db8::7")),
+            AddressVerdict::Deny("reserved address")
+        );
+        assert_eq!(
+            p.decide_address(ip("203.0.113.8")),
+            AddressVerdict::Allow("default allow")
+        );
+        // An allowOut CIDR alone does not open it; the operator's grant does.
+        let allowed =
+            NetworkPolicy::from_e2b(None, &strings(&["203.0.113.7"]), &[], &[], Verdict::Allow)
+                .unwrap()
+                .with_host_addresses(&[host]);
+        assert_eq!(
+            allowed.decide_address(host),
+            AddressVerdict::Deny("reserved address")
+        );
+        let granted = allowed.with_tenant_reserved(&[Cidr::parse("203.0.113.7").unwrap()]);
+        assert_eq!(
+            granted.decide_address(host),
+            AddressVerdict::Allow("allowOut address")
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn host_interface_addresses_include_loopback() {
+        assert!(host_interface_addresses().contains(&ip("127.0.0.1")));
     }
 
     #[test]

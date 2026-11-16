@@ -166,6 +166,35 @@ token attached.**
   first 8 per process are warnings; the rest are logged at debug.
 - **N6.** `etc/hv2-env` keys were written unescaped. Invalid names are now dropped.
 
+## Fixed in a follow-up the same day
+
+Six of the open findings were fixed after the first commit. Each has a test that fails without its fix.
+
+- **O6 (Medium): a guest could reach the host's own addresses.** Under an allow-default policy the
+  gateway refused only the reserved ranges, so the node's public IP was reachable. The gateway now
+  reads the host's interface addresses (`getifaddrs`) at start and treats them as reserved, also
+  after a sandbox's policy is replaced. An interface added after start is not covered.
+- **O8 (Medium): template-build uploads.**
+  - An upload is published with a hard link, which fails if the name exists, so no caller can
+    replace another's upload, and two racing uploads cannot overwrite each other.
+  - Uploads are capped at 4 GiB each (413) and 256 files or 64 GiB per node (507).
+  - A refused upload used to be published under its name anyway; it no longer is.
+  - The content hash is checked only with `--verify-upload-hash`: E2B's SDK names an upload by a
+    hash of its file list, not of the bytes, so a default-on check would refuse every E2B build.
+  - The namespace is still node-wide; per-team scoping remains a design decision.
+- **O9 (Low):** errors from the store and from nodes are logged on the control plane and clients get
+  a generic message.
+- **O10 (Low):** `hm sandbox vm login` sends a random `cliState`, the control plane seals it in the
+  login cookie and echoes it, and the CLI's listener refuses a callback without it. A new CLI cannot
+  sign in through an older control plane.
+- **O11 (Low):** the webhook filter refuses `198.18.0.0/15`, 6to4, Teredo and NAT64 prefixes other
+  than `64:ff9b::/96`, where the embedded IPv4 address decides. Each team may have 100 webhooks.
+- **O13 (Low):** `docs/SANDBOXES.md` explains that `allowOut` alone does not restrict egress when the
+  policy default is allow.
+
+Verified with unit tests only (hv2-cluster, hm-cli, hv2-net and hv2-sandboxd, on Windows and Linux),
+not on KVM.
+
 ## Open: found, not fixed
 
 | Id | Severity | Finding | Why not now |
@@ -175,14 +204,8 @@ token attached.**
 | O3 | Medium | The node's sandbox proxy has no authentication of its own. The control plane relays to it as raw TCP. | Documented. The proxy port must not be exposed beyond the control plane. Fixing it needs the control plane to send credentials. |
 | O4 | Medium | The control plane runs open, everyone an administrator, when no API key source is configured, and managed keys do not change that. | A change to default behaviour, left for the owner. Startup logs a warning. |
 | O5 | Medium | Keys that have a principal but no team see every team's events, webhooks, machines and volumes. | Needs scoping by principal: a design decision. |
-| O6 | Medium (plausible) | The gateway's reserved-address set does not include the host's own public addresses. Under an allow-default policy a guest might reach the node's API on its public IP. | Not traced through `nat.rs`. With N2, a node without a token now listens on loopback only. |
 | O7 | Medium | Volumes have no byte or inode quota, so a guest can fill the host disk. | Known gap (listed in the CubeSandbox roadmap). |
-| O8 | Medium | Template-build uploads: the hash is never checked against the content, the namespace is global, and there is no total or count quota. | Needs per-team scoping. |
-| O9 | Low | Error messages show node URLs and Redis errors to clients. | Low impact. |
-| O10 | Low | The CLI sign-in callback goes to a loopback port chosen by the link, so PKCE does not bind it to the real CLI. | Needs a CLI-side `state`. |
-| O11 | Low | The webhook SSRF filter misses NAT64, 6to4, Teredo and `198.18.0.0/15`. The number of webhooks is not capped. | Low impact (no redirects, DNS pinned). |
 | O12 | Low | A compromised node can still delete or re-add a sealed managed-key record. It cannot forge one. | Revocation can be undone only for a key whose secret the attacker already holds. |
-| O13 | Low | `allowOut` alone does not pin a sandbox when the policy default is allow (E2B semantics). | Documented in URL_TRACING.md. Not prominent in SANDBOXES.md. |
 
 ## Checked and found sound
 

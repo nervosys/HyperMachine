@@ -286,6 +286,26 @@ is put to the same egress policy the microVM gateway asks
   strict run is refused; a best-effort one runs with the host's network, says
   so, and still has the proxy variables set.
 
+### `allowOut` alone does not restrict egress when the default is allow
+
+On a microVM sandbox through the E2B-compatible API, `allowOut` is an
+exception to a deny, not a deny of its own, as in E2B. Whether it restricts
+anything depends on the node's egress default:
+
+- **Node default deny** (`--egress-default deny`): an `allowOut` list sent
+  alone is exclusive. The sandbox reaches the listed hosts and nothing else.
+- **Node default allow** (`--egress-default allow`): `allowOut` alone
+  restricts **nothing**. The sandbox still reaches every host, and the list
+  is only a statement of what is allowed, not of what is refused.
+
+To pin a sandbox so that it holds on either kind of node, send the deny-all
+with the allow list: `allowOut: ["example.com"]` together with
+`denyOut: ["0.0.0.0/0", "::/0"]`. A client that sends only `allowOut` and is
+run against a node whose default is allow has no egress limit at all, and the
+API will not say so. [URL_TRACING.md](URL_TRACING.md) records this, and the
+live runs that showed it (`urltrace-kvm` case 10, `urltrace-noshell-kvm`
+case 10); it is the reason its driver always sends both.
+
 ### Containment on macOS
 
 A macOS workload asked for no network, for confinement to its grants, or for
