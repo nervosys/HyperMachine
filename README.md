@@ -291,6 +291,38 @@ agent script off the network and filesystem is that the Rhai engine registers no
 I/O at all. And `execute_script` evaluates on the host against a read-only view
 of a VM; it does not run anything inside the guest.
 
+## Sandboxes, Machines and the Control Plane
+
+`hv2-sandboxd` runs agent sandboxes as microVMs on KVM. `hv2-control-plane` puts many nodes
+behind one API with a shared Redis store. The scorecard against a hosted agent-VM service,
+[docs/BOAT_PARITY.md](docs/BOAT_PARITY.md), links every claim to kept evidence or marks it
+NOT VERIFIED. The highlights:
+
+- **[Sandboxes](docs/SANDBOXES.md):** create, exec, files, pause and resume, checkpoints,
+  forks, and named networks. Ports can be reached over HTTPS behind a
+  [login](docs/PRIVATE_GUEST_URLS.md). Templates are built from images and Dockerfiles
+  ([RUN_IMAGES.md](docs/RUN_IMAGES.md), [TOOLS_IMAGE.md](docs/TOOLS_IMAGE.md)). The `hm
+  sandbox vm` CLI prints JSON on every successful command.
+- **[Machines](docs/MACHINES.md):** full distribution VMs booted from a stock disk image,
+  with systemd, Docker and coding agents installed at first boot. A machine can have a
+  desktop, served by noVNC; a headless Chromium was
+  [seen drawing it](docs/benchmarks/2026-11-15/desktop-browser-kvm/README.md) on KVM, with
+  keys typed in the browser reaching the guest.
+- **Access:** scoped, expiring API keys with presets
+  ([API_KEY_ROTATION.md](docs/API_KEY_ROTATION.md)). Admins and team-admins can create, list
+  and revoke keys through `POST/GET/DELETE /keys`. Keys are checked on every request, so a
+  revoke holds at once on every control plane. [Teams](docs/TEAMS.md) have viewer, member and
+  team-admin roles and a member listing. SSO sign-in is supported.
+  [Usage](docs/USAGE.md) is counted per sandbox, team, template or key.
+- **[URL tracing](docs/URL_TRACING.md):** a suspicious URL is fetched one hop per throwaway
+  microVM, with egress pinned to that hop's host. The node keeps its own record of what the
+  guest tried on the network.
+
+These are verified on Linux KVM, mostly under WSL2 with nested KVM. What is not yet
+verified includes HVF on macOS, more than one node for most features, a real identity
+provider, and a coding agent answering a prompt (no model key). See the scorecard's own
+NOT VERIFIED notes.
+
 ## Deployment
 
 ### GPU Fabric API
@@ -397,6 +429,8 @@ deploy/
 - **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)** — Production deployment on Kubernetes/Terraform
 - **[GPUs](docs/gpu.md)** — what GPU code exists (host-side VFIO, a software `wgpu` device) and what does not (no VM has a GPU)
 - **[Guest Programming Guide](docs/GUEST_PROGRAMMING_GUIDE.md)** — Writing code for guest VMs
+- **[Sandboxes](docs/SANDBOXES.md)**, **[Machines](docs/MACHINES.md)**, **[Teams](docs/TEAMS.md)**, **[API keys](docs/API_KEY_ROTATION.md)**: the sandbox node and control plane
+- **[Parity scorecard](docs/BOAT_PARITY.md)**: each capability against a hosted agent-VM service, with its evidence
 
 ## Troubleshooting
 
