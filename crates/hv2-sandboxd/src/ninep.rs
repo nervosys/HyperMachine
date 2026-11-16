@@ -12,6 +12,15 @@
 //! through the resolved inode (`/proc/self/fd`), never by a path that could
 //! be swapped for a symlink in between.
 //!
+//! A guest shares the node, and its other guests, with this server, so what it
+//! may hold is bounded: at most [`MAX_FIDS`] handles and [`MAX_OPEN_FILES`] host
+//! files open per mount, and [`MAX_OPEN_FILES_TOTAL`] over all of them (an open
+//! file is a host descriptor, and the node's are everyone's); a directory is
+//! listed a screenful at a time, not read whole. No file or directory made
+//! here keeps a setuid or setgid bit: the guest's own root may set them in
+//! its own filesystem, but a volume is shared with the host and with other
+//! sandboxes, where a setuid file somebody else runs is theirs to fear.
+//!
 //! Ownership is the guest's, not the host's: the server runs as whatever
 //! user the node does, so a file's owner in the guest is kept in an extended
 //! attribute (`user.hv2.owner`) set on create and `chown`. A file without
@@ -36,6 +45,93 @@ const MAX_MSIZE: u32 = 512 * 1024;
 
 /// `NOFID`: a fid slot left empty.
 const NOFID: u32 = u32::MAX;
+
+/// The most fids (handles on names) one mount may hold; a new one past it is
+/// refused with `EMFILE`.
+pub const MAX_FIDS: usize = 4096;
+
+/// The most host files one mount may hold open at once.
+pub const MAX_OPEN_FILES: usize = 2048;
+
+/// The most host files all mounts together may hold open: a share of the
+/// node's descriptors that no guest can spend whole.
+pub const MAX_OPEN_FILES_TOTAL: usize = 16384;
+
+/// The files held open by every mount on this node.
+static OPEN_FILES_TOTAL: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// The mode bits a volume keeps: permissions and the sticky bit, never
+/// setuid or setgid.
+pub const KEPT_MODE_BITS: u32 = 0o1777;
+
+/// `mode` as a volume stores it: [`KEPT_MODE_BITS`] of it.
+pub fn safe_mode(mode: u32) -> u32 {
+    mode & KEPT_MODE_BITS
+}
+
+/// A host file a guest holds open, counted against its mount's share and the
+/// node's until it is closed.
+struct OpenFile {
+    file: File,
+    mount: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl OpenFile {
+    /// Count one more open file for the mount, or `EMFILE` / `ENFILE`: take
+    /// the share before the file is opened, so a refusal makes nothing.
+    fn reserve(
+        mount: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        mount_limit: usize,
+        total_limit: usize,
+    ) -> std::io::Result<Reservation> {
+        use std::sync::atomic::Ordering::SeqCst;
+        if mount.fetch_add(1, SeqCst) >= mount_limit {
+            mount.fetch_sub(1, SeqCst);
+            return Err(Error::from_raw_os_error(libc::EMFILE));
+        }
+        if OPEN_FILES_TOTAL.fetch_add(1, SeqCst) >= total_limit {
+            OPEN_FILES_TOTAL.fetch_sub(1, SeqCst);
+            mount.fetch_sub(1, SeqCst);
+            return Err(Error::from_raw_os_error(libc::ENFILE));
+        }
+        Ok(Reservation(Some(std::sync::Arc::clone(mount))))
+    }
+}
+
+/// A counted share of open files, not yet a file: dropped, it is given back.
+struct Reservation(Option<std::sync::Arc<std::sync::atomic::AtomicUsize>>);
+
+impl Reservation {
+    fn file(mut self, file: File) -> OpenFile {
+        OpenFile {
+            file,
+            mount: self.0.take().expect("a reservation holds its mount"),
+        }
+    }
+}
+
+impl Drop for Reservation {
+    fn drop(&mut self) {
+        if let Some(mount) = self.0.take() {
+            mount.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+            OPEN_FILES_TOTAL.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+}
+
+impl Drop for OpenFile {
+    fn drop(&mut self) {
+        self.mount.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        OPEN_FILES_TOTAL.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+impl std::ops::Deref for OpenFile {
+    type Target = File;
+    fn deref(&self) -> &File {
+        &self.file
+    }
+}
 
 /// A directory, and everything beneath it -- nothing else.
 pub struct Beneath {
@@ -115,7 +211,7 @@ impl Beneath {
         let mut how: libc::open_how = unsafe { std::mem::zeroed() };
         how.flags = (flags | libc::O_NOFOLLOW | libc::O_CLOEXEC) as u64;
         how.mode = if flags & libc::O_CREAT != 0 {
-            u64::from(mode)
+            u64::from(safe_mode(mode))
         } else {
             0
         };
@@ -237,7 +333,7 @@ pub fn set_owner(fd: RawFd, uid: u32, gid: u32) -> std::io::Result<()> {
 
 pub fn chmod(fd: RawFd, mode: u32) -> std::io::Result<()> {
     let path = proc_path(fd);
-    if unsafe { libc::chmod(path.as_ptr(), mode & 0o7777) } < 0 {
+    if unsafe { libc::chmod(path.as_ptr(), safe_mode(mode)) } < 0 {
         return Err(last_error());
     }
     Ok(())
@@ -350,9 +446,24 @@ struct Fid {
     parts: Vec<String>,
     /// The guest user it acts for, from its `Tattach`.
     uid: u32,
-    file: Option<File>,
-    /// A directory's listing, taken when read from the start.
-    listing: Option<Vec<(Qid, u8, String)>>,
+    file: Option<OpenFile>,
+    /// A directory being listed, read as far as the guest has asked.
+    listing: Option<Listing>,
+}
+
+/// One directory entry as `Treaddir` gives it: its qid, its type, its name.
+type DirEntry = (Qid, u8, String);
+
+/// A directory read a screenful at a time. The guest's offsets are the index
+/// after the last entry it was given (`.` is 0, `..` 1, the rest from 2), so a
+/// listing that goes on from where it stopped is one more read; only a guest
+/// that asks for somewhere else costs a second pass over the directory.
+struct Listing {
+    entries: std::fs::ReadDir,
+    /// The index of the next entry to give.
+    next: u64,
+    /// An entry read and not given, because it did not fit.
+    held: Option<DirEntry>,
 }
 
 /// A 9P2000.L server for one mount of one volume.
@@ -360,6 +471,10 @@ pub struct Server {
     fs: Beneath,
     fids: HashMap<u32, Fid>,
     msize: u32,
+    /// How many host files this mount holds open.
+    open_files: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    max_fids: usize,
+    max_open_files: usize,
 }
 
 const RLERROR: u8 = 7;
@@ -370,7 +485,25 @@ impl Server {
             fs,
             fids: HashMap::new(),
             msize: 8192,
+            open_files: std::sync::Arc::default(),
+            max_fids: MAX_FIDS,
+            max_open_files: MAX_OPEN_FILES,
         }
+    }
+
+    /// Make room for fid `id`: a new one past the limit is refused, `EMFILE`;
+    /// naming one already held (to replace it) needs none.
+    fn room_for(&self, id: u32) -> std::io::Result<()> {
+        if self.fids.contains_key(&id) || self.fids.len() < self.max_fids {
+            Ok(())
+        } else {
+            Err(Error::from_raw_os_error(libc::EMFILE))
+        }
+    }
+
+    /// A share of this mount's open files and the node's, before opening one.
+    fn reserve_file(&self) -> std::io::Result<Reservation> {
+        OpenFile::reserve(&self.open_files, self.max_open_files, MAX_OPEN_FILES_TOTAL)
     }
 
     /// Answer one whole message (size prefix included).
@@ -441,6 +574,7 @@ impl Server {
                 let _uname = m.str()?;
                 let _aname = m.str()?;
                 let uid = m.u32().unwrap_or(0);
+                self.room_for(fid)?;
                 let entry = self.fs.entry(&[])?;
                 self.fids.insert(
                     fid,
@@ -462,6 +596,7 @@ impl Server {
                 let fid = m.u32()?;
                 let newfid = m.u32()?;
                 let n = m.u16()?;
+                self.room_for(newfid)?;
                 let (mut parts, uid) = {
                     let f = self.fid(fid)?;
                     (f.parts.clone(), f.uid)
@@ -511,9 +646,10 @@ impl Server {
                 } else {
                     flags & (libc::O_ACCMODE | libc::O_TRUNC | libc::O_APPEND)
                 };
+                let share = self.reserve_file()?;
                 let fd = self.fs.open_at(&parts, open_flags, 0)?;
                 let f = self.fid_mut(fid)?;
-                f.file = Some(File::from(fd));
+                f.file = Some(share.file(File::from(fd)));
                 f.listing = None;
                 let mut out = reply(13);
                 out.qid(qid(&entry.stat)).u32(0);
@@ -530,12 +666,14 @@ impl Server {
                 let flags = (flags
                     & (libc::O_ACCMODE | libc::O_TRUNC | libc::O_APPEND | libc::O_EXCL))
                     | libc::O_CREAT;
-                let fd = self.fs.open_at(&parts, flags, mode & 0o7777)?;
+                // Before the file is made: a refusal leaves nothing behind.
+                let share = self.reserve_file()?;
+                let fd = self.fs.open_at(&parts, flags, safe_mode(mode))?;
                 let _ = set_owner(fd.as_raw_fd(), uid, gid);
                 let st = fstat(fd.as_raw_fd())?;
                 let f = self.fid_mut(fid)?;
                 f.parts = parts;
-                f.file = Some(File::from(fd));
+                f.file = Some(share.file(File::from(fd)));
                 f.listing = None;
                 let mut out = reply(15);
                 out.qid(qid(&st)).u32(0);
@@ -761,7 +899,7 @@ impl Server {
                 let (parts, uid) = self.child(dfid, &name)?;
                 let dir = self.fs.dir(&parts[..parts.len() - 1])?;
                 let n = cstring(&name)?;
-                if unsafe { libc::mkdirat(dir.as_raw_fd(), n.as_ptr(), mode & 0o7777) } < 0 {
+                if unsafe { libc::mkdirat(dir.as_raw_fd(), n.as_ptr(), safe_mode(mode)) } < 0 {
                     return Err(last_error());
                 }
                 let entry = self.fs.entry(&parts)?;
@@ -897,6 +1035,10 @@ impl Server {
         Ok(())
     }
 
+    /// `Treaddir`: the entries from `offset`, as many as fit in `count`. The
+    /// directory is read as far as the reply goes and no further, so a
+    /// directory of millions of entries costs a screenful per call, not the
+    /// node's memory.
     fn readdir(
         &mut self,
         fid: u32,
@@ -905,46 +1047,80 @@ impl Server {
         tag: u16,
     ) -> std::io::Result<Vec<u8>> {
         let parts = self.fid(fid)?.parts.clone();
-        if offset == 0 || self.fid(fid)?.listing.is_none() {
-            let dir = self.fs.dir(&parts)?;
-            let here = fstat(dir.as_raw_fd())?;
-            let mut listing = vec![
-                (qid(&here), 4, ".".to_string()),
-                (qid(&here), 4, "..".to_string()),
-            ];
-            let path = proc_path(dir.as_raw_fd());
-            for entry in std::fs::read_dir(std::ffi::OsStr::new(path.to_str().expect("ascii")))? {
-                let entry = entry?;
-                let name = entry.file_name().to_string_lossy().into_owned();
-                let mut child = parts.clone();
-                child.push(name.clone());
-                let Ok(e) = self.fs.entry(&child) else {
-                    continue;
-                };
-                let dtype = match e.stat.st_mode & libc::S_IFMT {
-                    libc::S_IFDIR => 4,
-                    libc::S_IFLNK => 10,
-                    libc::S_IFREG => 8,
-                    _ => 0,
-                };
-                listing.push((qid(&e.stat), dtype, name));
+        let here_dir = self.fs.dir(&parts)?;
+        let here = fstat(here_dir.as_raw_fd())?;
+        let mut listing = match self.fid_mut(fid)?.listing.take() {
+            Some(listing) if listing.next == offset => listing,
+            // From the start, or from somewhere other than where the last
+            // reply stopped: read the directory again, up to there.
+            _ => {
+                let path = proc_path(here_dir.as_raw_fd());
+                let mut entries =
+                    std::fs::read_dir(std::ffi::OsStr::new(path.to_str().expect("ascii")))?;
+                for _ in 2..offset {
+                    if entries.next().is_none() {
+                        break;
+                    }
+                }
+                Listing {
+                    entries,
+                    next: offset,
+                    held: None,
+                }
             }
-            self.fid_mut(fid)?.listing = Some(listing);
-        }
-        let listing = self.fid(fid)?.listing.as_ref().expect("listed");
+        };
         let limit = count.min(self.msize as usize - 11);
         let mut data = Out(Vec::new());
-        for (index, (q, dtype, name)) in listing.iter().enumerate().skip(offset as usize) {
+        loop {
+            let item = match listing.held.take() {
+                Some(item) => Some(item),
+                None if listing.next == 0 => Some((qid(&here), 4, ".".to_string())),
+                None if listing.next == 1 => Some((qid(&here), 4, "..".to_string())),
+                None => next_entry(&self.fs, &parts, &mut listing.entries),
+            };
+            let Some((q, dtype, name)) = item else {
+                break;
+            };
             let size = 13 + 8 + 1 + 2 + name.len();
             if data.0.len() + size > limit {
+                listing.held = Some((q, dtype, name));
                 break;
             }
-            data.qid(*q).u64(index as u64 + 1).u8(*dtype).str(name);
+            data.qid(q).u64(listing.next + 1).u8(dtype).str(&name);
+            listing.next += 1;
         }
+        self.fid_mut(fid)?.listing = Some(listing);
         let mut out = Out::new(41, tag);
         out.u32(data.0.len() as u32).bytes(&data.0);
         Ok(out.finish())
     }
+}
+
+/// The next entry of a directory the guest may see, with its `stat`: those
+/// that vanished since they were listed, or are not nameable, are passed over.
+fn next_entry(fs: &Beneath, parts: &[String], entries: &mut std::fs::ReadDir) -> Option<DirEntry> {
+    for entry in entries {
+        let Ok(entry) = entry else {
+            continue;
+        };
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !valid_name(&name) {
+            continue;
+        }
+        let mut child = parts.to_vec();
+        child.push(name.clone());
+        let Ok(e) = fs.entry(&child) else {
+            continue;
+        };
+        let dtype = match e.stat.st_mode & libc::S_IFMT {
+            libc::S_IFDIR => 4,
+            libc::S_IFLNK => 10,
+            libc::S_IFREG => 8,
+            _ => 0,
+        };
+        return Some((qid(&e.stat), dtype, name));
+    }
+    None
 }
 
 fn read_at_full(file: &File, buf: &mut [u8], offset: u64) -> std::io::Result<usize> {
@@ -1167,6 +1343,212 @@ mod tests {
         }));
         assert_eq!(kind(&r), 77);
         assert!(!tmp.0.join("e").exists());
+    }
+
+    /// A `Tlopen` / `Tlcreate` style helper: the reply, and (for a create) the
+    /// qid's presence is the kind.
+    fn create(s: &mut Server, dir: u32, name: &str, mode: u32) -> Vec<u8> {
+        s.handle(&msg(14, |o| {
+            o.u32(dir)
+                .str(name)
+                .u32(libc::O_RDWR as u32)
+                .u32(mode)
+                .u32(1000);
+        }))
+    }
+
+    /// A guest that makes fid after fid, none of which it clunks, is refused at
+    /// the cap -- with `EMFILE`, and with the fids it has still good -- rather
+    /// than growing the node's memory without end.
+    #[test]
+    fn the_fid_n_plus_one_is_refused() {
+        let tmp = Tmp::new();
+        let mut s = attached(&tmp.0);
+        // Fid 0 is the attach; clones of it fill the table to the cap.
+        for fid in 1..MAX_FIDS as u32 {
+            assert_eq!(kind(&walk(&mut s, 0, fid, &[])), 111, "fid {fid}");
+        }
+        assert_eq!(s.fids.len(), MAX_FIDS);
+        let refused = walk(&mut s, 0, MAX_FIDS as u32, &[]);
+        assert_eq!(error(&refused), Some(libc::EMFILE));
+        // Attaching afresh is a new fid too.
+        let attach = s.handle(&msg(104, |o| {
+            o.u32(99_999).u32(NOFID).str("").str("").u32(1000);
+        }));
+        assert_eq!(error(&attach), Some(libc::EMFILE));
+        assert_eq!(s.fids.len(), MAX_FIDS, "a refusal makes nothing");
+        // Naming a fid it already holds replaces it, which needs no room...
+        assert_eq!(kind(&walk(&mut s, 0, 7, &[])), 111);
+        // ...and a clunk makes room for one new.
+        assert_eq!(
+            kind(&s.handle(&msg(120, |o| {
+                o.u32(7);
+            }))),
+            121
+        );
+        assert_eq!(kind(&walk(&mut s, 0, MAX_FIDS as u32, &[])), 111);
+    }
+
+    /// Open files are the scarce part: each is a host descriptor. They are
+    /// capped apart from fids, a create past the cap makes no file, and a
+    /// clunk gives the share back.
+    #[test]
+    fn files_open_past_the_cap_are_refused_and_made_nowhere() {
+        let tmp = Tmp::new();
+        let mut s = attached(&tmp.0);
+        s.max_open_files = 2;
+        for (fid, name) in [(1, "a"), (2, "b"), (3, "c")] {
+            assert_eq!(kind(&walk(&mut s, 0, fid, &[])), 111);
+            let r = create(&mut s, fid, name, 0o644);
+            if fid < 3 {
+                assert_eq!(kind(&r), 15, "{name}: {:?}", error(&r));
+            } else {
+                assert_eq!(error(&r), Some(libc::EMFILE));
+                assert!(!tmp.0.join(name).exists(), "a refused create makes no file");
+            }
+        }
+        assert_eq!(s.open_files.load(std::sync::atomic::Ordering::SeqCst), 2);
+        // An open of an existing file counts too.
+        assert_eq!(kind(&walk(&mut s, 0, 4, &["a"])), 111);
+        let r = s.handle(&msg(12, |o| {
+            o.u32(4).u32(0);
+        }));
+        assert_eq!(error(&r), Some(libc::EMFILE));
+        // Clunking one gives its share back.
+        assert_eq!(
+            kind(&s.handle(&msg(120, |o| {
+                o.u32(1);
+            }))),
+            121
+        );
+        let r = s.handle(&msg(12, |o| {
+            o.u32(4).u32(0);
+        }));
+        assert_eq!(kind(&r), 13, "{:?}", error(&r));
+        drop(s);
+    }
+
+    /// A guest's setuid and setgid bits are not kept, however they are set:
+    /// by create, by chmod, by mkdir. The sticky bit and permissions are.
+    #[test]
+    fn setuid_and_setgid_bits_are_not_stored() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = Tmp::new();
+        let mut s = attached(&tmp.0);
+        assert_eq!(kind(&walk(&mut s, 0, 1, &[])), 111);
+        let mode = |name: &str| {
+            std::fs::symlink_metadata(tmp.0.join(name))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o7777
+        };
+        let r = create(&mut s, 1, "suid", 0o4755);
+        assert_eq!(kind(&r), 15, "{:?}", error(&r));
+        assert_eq!(mode("suid"), 0o755);
+        // (A create turns its fid into the new file, so each needs its own.)
+        assert_eq!(kind(&walk(&mut s, 0, 6, &[])), 111);
+        let r = create(&mut s, 6, "both", 0o6700);
+        assert_eq!(kind(&r), 15);
+        assert_eq!(mode("both"), 0o700);
+
+        assert_eq!(kind(&walk(&mut s, 0, 2, &[])), 111);
+        let r = s.handle(&msg(72, |o| {
+            o.u32(2).str("d").u32(0o2755).u32(1000);
+        }));
+        assert_eq!(kind(&r), 73);
+        assert_eq!(mode("d"), 0o755);
+
+        // chmod after the fact, on a file and on a directory.
+        let setattr = |s: &mut Server, fid: u32, mode: u32| {
+            s.handle(&msg(26, |o| {
+                o.u32(fid).u32(0x1).u32(mode).u32(0).u32(0).u64(0);
+                o.u64(0).u64(0).u64(0).u64(0);
+            }))
+        };
+        assert_eq!(kind(&walk(&mut s, 0, 3, &["suid"])), 111);
+        assert_eq!(kind(&setattr(&mut s, 3, 0o6755)), 27);
+        assert_eq!(mode("suid"), 0o755);
+        assert_eq!(kind(&walk(&mut s, 0, 4, &["d"])), 111);
+        assert_eq!(kind(&setattr(&mut s, 4, 0o3777)), 27);
+        assert_eq!(mode("d"), 0o1777, "sticky is kept, setgid is not");
+        // What the guest reads back is what is stored.
+        let r = s.handle(&msg(24, |o| {
+            o.u32(3).u64(0x7ff);
+        }));
+        let st_mode = u32::from_le_bytes(r[7 + 8 + 13..7 + 8 + 13 + 4].try_into().unwrap());
+        assert_eq!(st_mode & 0o7777, 0o755);
+    }
+
+    /// The entries of a `Rreaddir`, and the offset to ask for the next ones.
+    fn dir_entries(reply: &[u8]) -> (Vec<String>, u64) {
+        assert_eq!(kind(reply), 41, "{:?}", error(reply));
+        let len = u32::from_le_bytes(reply[7..11].try_into().unwrap()) as usize;
+        let mut at = 11;
+        let mut names = Vec::new();
+        let mut next = 0;
+        while at < 11 + len {
+            next = u64::from_le_bytes(reply[at + 13..at + 21].try_into().unwrap());
+            let n = u16::from_le_bytes(reply[at + 22..at + 24].try_into().unwrap()) as usize;
+            names.push(String::from_utf8(reply[at + 24..at + 24 + n].to_vec()).unwrap());
+            at += 24 + n;
+        }
+        (names, next)
+    }
+
+    /// A big directory is listed in pieces: each reply reads the directory
+    /// only as far as it needs, every entry appears once, and asking again
+    /// from the start (or from the middle) works.
+    #[test]
+    fn a_directory_is_listed_in_pieces_not_whole() {
+        let tmp = Tmp::new();
+        let total = 400;
+        for i in 0..total {
+            std::fs::write(tmp.0.join(format!("file-{i:04}")), b"").unwrap();
+        }
+        let mut s = attached(&tmp.0);
+        assert_eq!(kind(&walk(&mut s, 0, 1, &[])), 111);
+        let r = s.handle(&msg(12, |o| {
+            o.u32(1).u32(0);
+        }));
+        assert_eq!(kind(&r), 13);
+
+        let ask = |s: &mut Server, offset: u64, count: u32| {
+            s.handle(&msg(40, |o| {
+                o.u32(1).u64(offset).u32(count);
+            }))
+        };
+        let mut seen = Vec::new();
+        let mut offset = 0;
+        let mut replies = 0;
+        loop {
+            let (names, next) = dir_entries(&ask(&mut s, offset, 600));
+            if names.is_empty() {
+                break;
+            }
+            replies += 1;
+            // Only as much of the directory as has been asked for is read.
+            let read = s.fids[&1].listing.as_ref().unwrap().next;
+            assert_eq!(read, next);
+            assert!(read < total as u64 + 3);
+            seen.extend(names);
+            offset = next;
+        }
+        assert!(replies > 10, "listed in many pieces: {replies}");
+        assert_eq!(seen.len(), total + 2);
+        assert_eq!(&seen[..2], [".", ".."]);
+        let mut real: Vec<_> = seen[2..].to_vec();
+        real.sort();
+        real.dedup();
+        assert_eq!(real.len(), total, "each entry once");
+
+        // The first reply held only a handful: the rest was never read.
+        let (first, next) = dir_entries(&ask(&mut s, 0, 300));
+        assert!(first.len() < 12, "{}", first.len());
+        assert_eq!(next as usize, first.len());
+        // Asking again from the middle gives what followed it, as before.
+        let (again, _) = dir_entries(&ask(&mut s, 50, 300));
+        assert_eq!(again[0], seen[50]);
     }
 
     #[test]

@@ -25,6 +25,25 @@ use sha2::Digest;
 /// lives in guest memory, so this is a bound on what a template can cost.
 pub const MAX_IMAGE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
+/// The most a pulled image may unpack to, summed over its layers and counting
+/// tar headers: the assembled filesystem is held in memory, so this bounds
+/// what a registry's content (a gzip or zstd bomb above all) can cost the node.
+/// Real images -- ubuntu, python, node, a CUDA runtime -- are well under it.
+pub const MAX_UNPACKED_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+
+/// The most one file of an image may hold.
+pub const MAX_ENTRY_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+
+/// The most entries (files, directories, links) an image may hold, per layer
+/// and assembled. The largest real images have a few hundred thousand.
+pub const MAX_ENTRIES: usize = 1_000_000;
+
+/// How long one blob may take to arrive, and one manifest or token.
+/// The most a manifest or index may be.
+const MAX_MANIFEST_BYTES: usize = 8 * 1024 * 1024;
+const BLOB_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(600);
+const API_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
 /// One entry of the assembled filesystem.
 #[derive(Debug, Clone)]
 pub enum Entry {
@@ -142,10 +161,19 @@ struct Registry {
 }
 
 impl Registry {
-    async fn get(&mut self, path: &str, accept: &str) -> Result<reqwest::Response, String> {
+    async fn get(
+        &mut self,
+        path: &str,
+        accept: &str,
+        timeout: std::time::Duration,
+    ) -> Result<reqwest::Response, String> {
         let url = format!("{}/v2/{}/{path}", self.base, self.repository);
         for _ in 0..2 {
-            let mut request = self.http.get(&url).header("Accept", accept);
+            let mut request = self
+                .http
+                .get(&url)
+                .header("Accept", accept)
+                .timeout(timeout);
             match (&self.auth, &self.credentials) {
                 (Auth::Bearer(token), _) => request = request.bearer_auth(token),
                 (Auth::Basic, Some(c)) => {
@@ -207,7 +235,7 @@ impl Registry {
             ));
         }
         let realm = realm.ok_or("a bearer challenge without a realm")?;
-        let mut request = self.http.get(&realm).query(&query);
+        let mut request = self.http.get(&realm).query(&query).timeout(API_TIMEOUT);
         if let Some(c) = &self.credentials {
             request = request.basic_auth(&c.username, Some(&c.password));
         }
@@ -227,24 +255,48 @@ impl Registry {
             .ok_or_else(|| format!("{realm} answered without a token"))
     }
 
+    /// A manifest or index, read with a size cap and parsed.
+    async fn json(&mut self, path: &str) -> Result<Value, String> {
+        let mut response = self.get(path, MANIFEST_TYPES, API_TIMEOUT).await?;
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+            if bytes.len() + chunk.len() > MAX_MANIFEST_BYTES {
+                return Err(format!("larger than {MAX_MANIFEST_BYTES} bytes"));
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        serde_json::from_slice(&bytes).map_err(|e| e.to_string())
+    }
+
     /// A blob, verified against its digest.
     async fn blob(&mut self, digest: &str, limit: u64) -> Result<Vec<u8>, String> {
         let hex = digest
             .strip_prefix("sha256:")
             .ok_or_else(|| format!("{digest}: only sha256 digests are verified here"))?
             .to_string();
-        let response = self.get(&format!("blobs/{digest}"), "*/*").await?;
+        let mut response = self
+            .get(&format!("blobs/{digest}"), "*/*", BLOB_TIMEOUT)
+            .await?;
         if response.content_length().is_some_and(|n| n > limit) {
             return Err(format!("{digest} is larger than {limit} bytes"));
         }
-        let bytes = response
-            .bytes()
+        // Streamed, and counted as it arrives: a chunked response states no
+        // length, and must not be buffered before it is measured.
+        let mut hasher = sha2::Sha256::new();
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
             .await
-            .map_err(|e| format!("{digest}: {e}"))?;
-        if bytes.len() as u64 > limit {
-            return Err(format!("{digest} is larger than {limit} bytes"));
+            .map_err(|e| format!("{digest}: {e}"))?
+        {
+            if bytes.len() as u64 + chunk.len() as u64 > limit {
+                return Err(format!("{digest} is larger than {limit} bytes"));
+            }
+            hasher.update(&chunk);
+            bytes.extend_from_slice(&chunk);
         }
-        let got: String = sha2::Sha256::digest(&bytes)
+        let got: String = hasher
+            .finalize()
             .iter()
             .map(|b| format!("{b:02x}"))
             .collect();
@@ -253,7 +305,7 @@ impl Registry {
                 "{digest}: the registry sent content hashing to sha256:{got}"
             ));
         }
-        Ok(bytes.to_vec())
+        Ok(bytes)
     }
 }
 
@@ -273,12 +325,7 @@ pub async fn pull(
     };
 
     let mut manifest: Value = registry
-        .get(
-            &format!("manifests/{}", reference.reference),
-            MANIFEST_TYPES,
-        )
-        .await?
-        .json()
+        .json(&format!("manifests/{}", reference.reference))
         .await
         .map_err(|e| format!("{image}: the manifest did not parse: {e}"))?;
     let mut digest = reference.reference.clone();
@@ -302,9 +349,7 @@ pub async fn pull(
             .ok_or("an index entry without a digest")?
             .to_string();
         manifest = registry
-            .get(&format!("manifests/{digest}"), MANIFEST_TYPES)
-            .await?
-            .json()
+            .json(&format!("manifests/{digest}"))
             .await
             .map_err(|e| format!("{image}: the manifest did not parse: {e}"))?;
     }
@@ -340,11 +385,12 @@ pub async fn pull(
         ..Image::default()
     };
     let mut budget = MAX_IMAGE_BYTES;
+    let mut unpacked = MAX_UNPACKED_BYTES;
     for layer in layers {
         let digest = layer["digest"].as_str().ok_or("a layer without a digest")?;
         let blob = registry.blob(digest, budget).await?;
         budget = budget.saturating_sub(blob.len() as u64);
-        apply_layer(&mut pulled.entries, decompressed(&blob)?)
+        apply_layer(&mut pulled.entries, decompressed(&blob)?, &mut unpacked)
             .map_err(|e| format!("{image}: layer {digest}: {e}"))?;
     }
     Ok(pulled)
@@ -416,13 +462,72 @@ fn clean(path: &str) -> Option<String> {
     (!parts.is_empty()).then(|| parts.join("/"))
 }
 
+/// A reader that fails, rather than ends, once `left` bytes have passed --
+/// a layer cut short by a limit must not look like a layer that is whole --
+/// and is charged for what it reads, so one budget spans an image's layers.
+pub(crate) struct Capped<'a, R> {
+    inner: R,
+    left: &'a mut u64,
+}
+
+impl<'a, R> Capped<'a, R> {
+    pub(crate) fn new(inner: R, left: &'a mut u64) -> Self {
+        Self { inner, left }
+    }
+}
+
+impl<R: Read> Read for Capped<'_, R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        if n as u64 > *self.left {
+            *self.left = 0;
+            return Err(std::io::Error::other(
+                "the archive unpacks to more than the limit allows",
+            ));
+        }
+        *self.left -= n as u64;
+        Ok(n)
+    }
+}
+
+/// Remove every entry whose path is `prefix` followed by more: in the map's
+/// order they are adjacent, so this does not walk the rest.
+fn remove_under(entries: &mut BTreeMap<String, Entry>, prefix: &str) {
+    let keys: Vec<String> = entries
+        .range::<str, _>((
+            std::ops::Bound::Included(prefix),
+            std::ops::Bound::Unbounded,
+        ))
+        .map(|(path, _)| path)
+        .take_while(|path| path.starts_with(prefix))
+        .cloned()
+        .collect();
+    for key in keys {
+        entries.remove(&key);
+    }
+}
+
 /// Apply one layer: its entries replace what is below them, and its
 /// whiteouts delete -- `.wh.NAME` one path, `.wh..wh..opq` everything under
 /// its directory from lower layers.
-fn apply_layer(entries: &mut BTreeMap<String, Entry>, layer: impl Read) -> Result<(), String> {
-    let mut archive = tar::Archive::new(layer);
+///
+/// The layer is untrusted and may be a bomb, so everything about it is
+/// bounded: the bytes it unpacks to (against `unpacked`, shared by the image's
+/// layers), the entries it holds, and the size of each file -- and memory is
+/// only ever used for bytes actually read, never for a size a header claims.
+fn apply_layer(
+    entries: &mut BTreeMap<String, Entry>,
+    layer: impl Read,
+    unpacked: &mut u64,
+) -> Result<(), String> {
+    let mut archive = tar::Archive::new(Capped::new(layer, unpacked));
+    let mut seen = 0usize;
     for entry in archive.entries().map_err(|e| e.to_string())? {
         let mut entry = entry.map_err(|e| e.to_string())?;
+        seen += 1;
+        if seen > MAX_ENTRIES || entries.len() > MAX_ENTRIES {
+            return Err(format!("more than {MAX_ENTRIES} entries"));
+        }
         let raw = entry
             .path()
             .map_err(|e| e.to_string())?
@@ -437,13 +542,13 @@ fn apply_layer(entries: &mut BTreeMap<String, Entry>, layer: impl Read) -> Resul
         };
         if name == ".wh..wh..opq" {
             let prefix = dir.map_or(String::new(), |d| format!("{d}/"));
-            entries.retain(|p, _| !p.starts_with(&prefix));
+            remove_under(entries, &prefix);
             continue;
         }
         if let Some(hidden) = name.strip_prefix(".wh.") {
             let gone = dir.map_or(hidden.to_string(), |d| format!("{d}/{hidden}"));
-            let under = format!("{gone}/");
-            entries.retain(|p, _| p != &gone && !p.starts_with(&under));
+            entries.remove(&gone);
+            remove_under(entries, &format!("{gone}/"));
             continue;
         }
         let mode = entry.header().mode().unwrap_or(0o644) & 0o7777;
@@ -469,8 +574,19 @@ fn apply_layer(entries: &mut BTreeMap<String, Entry>, layer: impl Read) -> Resul
                 }
             }
             tar::EntryType::Regular | tar::EntryType::Continuous => {
-                let mut data = Vec::with_capacity(entry.size() as usize);
-                entry.read_to_end(&mut data).map_err(|e| e.to_string())?;
+                let size = entry.size();
+                if size > MAX_ENTRY_BYTES {
+                    return Err(format!(
+                        "{path}: claims {size} bytes, more than the {MAX_ENTRY_BYTES} a file may hold"
+                    ));
+                }
+                // Not sized from the header: the vector grows with what the
+                // archive actually delivers.
+                let mut data = Vec::new();
+                (&mut entry)
+                    .take(MAX_ENTRY_BYTES)
+                    .read_to_end(&mut data)
+                    .map_err(|e| format!("{path}: {e}"))?;
                 Entry::File { mode, data }
             }
             // Devices and FIFOs: the guest's /dev is devtmpfs.
@@ -479,8 +595,7 @@ fn apply_layer(entries: &mut BTreeMap<String, Entry>, layer: impl Read) -> Resul
         // A path replaced by something that is not a directory takes what
         // was under it with it.
         if !matches!(new, Entry::Dir { .. }) {
-            let under = format!("{path}/");
-            entries.retain(|p, _| !p.starts_with(&under));
+            remove_under(entries, &format!("{path}/"));
         }
         entries.insert(path, new);
     }
@@ -561,6 +676,7 @@ mod tests {
         apply_layer(
             &mut entries,
             &layer(&[("etc/a", b"1"), ("etc/b", b"2"), ("opt/x/y", b"3")])[..],
+            &mut MAX_UNPACKED_BYTES.clone(),
         )
         .unwrap();
         apply_layer(
@@ -571,6 +687,7 @@ mod tests {
                 ("opt/x/.wh..wh..opq", b""),
                 ("opt/x/z", b"4"),
             ])[..],
+            &mut MAX_UNPACKED_BYTES.clone(),
         )
         .unwrap();
         assert!(!entries.contains_key("etc/a"), "a whiteout deletes");
@@ -600,11 +717,114 @@ mod tests {
         );
         for blob in [&tar, &gzip, &zstd] {
             let mut entries = BTreeMap::new();
-            apply_layer(&mut entries, decompressed(blob).unwrap()).unwrap();
+            apply_layer(
+                &mut entries,
+                decompressed(blob).unwrap(),
+                &mut MAX_UNPACKED_BYTES.clone(),
+            )
+            .unwrap();
             assert!(
                 matches!(entries.get("etc/hostname"), Some(Entry::File { data, .. }) if data == b"sandbox\n")
             );
         }
+    }
+
+    /// A header that claims a file of `claimed` bytes, followed by `data`
+    /// (what the archive really holds). The size is base-256 encoded, as tar
+    /// does for what octal cannot say, so it can claim a terabyte.
+    fn lying_layer(claimed: u64, data: &[u8]) -> Vec<u8> {
+        let mut header = tar::Header::new_gnu();
+        header.set_path("big").unwrap();
+        header.set_mode(0o644);
+        header.set_size(0);
+        header.set_cksum();
+        let mut block = header.as_bytes().to_vec();
+        block[124] = 0x80;
+        block[125..136].fill(0);
+        block[128..136].copy_from_slice(&claimed.to_be_bytes());
+        block[148..156].fill(b' ');
+        let sum: u32 = block.iter().map(|b| u32::from(*b)).sum();
+        block[148..156].copy_from_slice(format!("{sum:06o}\0 ").as_bytes());
+        block.extend_from_slice(data);
+        block
+    }
+
+    /// A header claiming 2^40 bytes used to be `Vec::with_capacity(2^40)`,
+    /// which aborts the node. It is now refused before anything is read.
+    #[test]
+    fn a_header_claiming_a_huge_file_is_refused_not_allocated() {
+        for claimed in [1u64 << 40, MAX_ENTRY_BYTES + 1] {
+            let mut entries = BTreeMap::new();
+            let err = apply_layer(
+                &mut entries,
+                &lying_layer(claimed, b"tiny")[..],
+                &mut MAX_UNPACKED_BYTES.clone(),
+            )
+            .unwrap_err();
+            assert!(err.contains("claims"), "{claimed}: {err}");
+            assert!(entries.is_empty());
+        }
+        // A claim within the cap that the archive does not back is an error
+        // too, and costs only what arrived.
+        let mut entries = BTreeMap::new();
+        let err = apply_layer(
+            &mut entries,
+            &lying_layer(MAX_ENTRY_BYTES - 1, b"tiny")[..],
+            &mut MAX_UNPACKED_BYTES.clone(),
+        )
+        .unwrap_err();
+        assert!(!err.is_empty(), "the pull fails, whatever was read");
+    }
+
+    /// A few KiB of gzip that unpack to far more than the image may hold stop
+    /// at the cap, in every compression the layer may use, and are an error
+    /// rather than a silently shortened layer.
+    #[test]
+    fn a_compression_bomb_stops_at_the_unpacked_cap() {
+        let big = vec![0u8; 12 << 20];
+        let tar = layer(&[("zeros", &big)]);
+        let gzip = {
+            let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+            std::io::Write::write_all(&mut gz, &tar).unwrap();
+            gz.finish().unwrap()
+        };
+        let zstd = ruzstd::encoding::compress_to_vec(
+            &tar[..],
+            ruzstd::encoding::CompressionLevel::Fastest,
+        );
+        assert!(gzip.len() < 64 << 10, "the bomb is small: {}", gzip.len());
+        for blob in [&gzip, &zstd] {
+            let mut entries = BTreeMap::new();
+            let mut budget = 1u64 << 20;
+            let err =
+                apply_layer(&mut entries, decompressed(blob).unwrap(), &mut budget).unwrap_err();
+            assert!(err.contains("unpacks to more than"), "{err}");
+            assert!(entries.is_empty(), "nothing of a failed layer is kept");
+            assert_eq!(budget, 0);
+        }
+        // Within the budget the same layer is fine.
+        let mut entries = BTreeMap::new();
+        let mut budget = 16u64 << 20;
+        apply_layer(&mut entries, decompressed(&gzip).unwrap(), &mut budget).unwrap();
+        assert!(matches!(&entries["zeros"], Entry::File { data, .. } if data.len() == 12 << 20));
+        assert!(budget < 16 << 20, "the budget is spent as layers are read");
+    }
+
+    #[test]
+    fn removing_under_a_prefix_takes_only_what_is_below_it() {
+        let file = || Entry::File {
+            mode: 0o644,
+            data: vec![],
+        };
+        let mut entries = BTreeMap::new();
+        for path in ["a", "a/b", "a/b/c", "a-b", "a.x", "ab/c", "b"] {
+            entries.insert(path.to_string(), file());
+        }
+        remove_under(&mut entries, "a/");
+        let left: Vec<&str> = entries.keys().map(String::as_str).collect();
+        assert_eq!(left, ["a", "a-b", "a.x", "ab/c", "b"]);
+        remove_under(&mut entries, "");
+        assert!(entries.is_empty());
     }
 
     #[test]

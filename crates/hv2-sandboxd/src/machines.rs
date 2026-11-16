@@ -348,14 +348,45 @@ enum CpioEntry {
     Symlink(String),
 }
 
+/// The most a template's initramfs may unpack to: the archive is held in
+/// memory, and an image is capped well below this when it is pulled.
+const MAX_CPIO_BYTES: u64 = 5 * 1024 * 1024 * 1024;
+
+/// A cpio entry's name as the path it is kept under: no leading `./` or `/`,
+/// no trailing `/` (so `a` and `a/` are one entry, not two), and each
+/// component a real name. `None` for the archive's root, and for any name
+/// with an empty, `.` or `..` component or a NUL, which no template has.
+fn cpio_path(name: &str) -> Option<String> {
+    if name.contains('\0') {
+        return None;
+    }
+    let mut parts: Vec<&str> = name.split('/').collect();
+    while parts.first().is_some_and(|p| p.is_empty() || *p == ".") {
+        parts.remove(0);
+    }
+    while parts.last().is_some_and(|p| p.is_empty()) {
+        parts.pop();
+    }
+    if parts.is_empty() || parts.iter().any(|p| matches!(*p, "" | "." | "..")) {
+        return None;
+    }
+    Some(parts.join("/"))
+}
+
 /// The entries of a gzipped `newc` cpio, by path. Device nodes and other
 /// special files are skipped: the guest's init mounts devtmpfs over /dev.
 fn read_cpio(gz: &[u8]) -> Result<BTreeMap<String, CpioEntry>, String> {
     use std::io::Read;
     let mut bytes = Vec::new();
     flate2::read::GzDecoder::new(gz)
+        .take(MAX_CPIO_BYTES + 1)
         .read_to_end(&mut bytes)
         .map_err(|e| format!("the template's initramfs is not gzip: {e}"))?;
+    if bytes.len() as u64 > MAX_CPIO_BYTES {
+        return Err(format!(
+            "the template's initramfs unpacks to more than {MAX_CPIO_BYTES} bytes"
+        ));
+    }
     let field = |header: &[u8], index: usize| -> Result<u32, String> {
         let text = std::str::from_utf8(&header[6 + index * 8..14 + index * 8])
             .map_err(|_| "a cpio header is not ASCII".to_string())?;
@@ -388,10 +419,9 @@ fn read_cpio(gz: &[u8]) -> Result<BTreeMap<String, CpioEntry>, String> {
         if name == "TRAILER!!!" {
             break;
         }
-        let path = name.trim_start_matches("./").trim_start_matches('/');
-        if path.is_empty() || path == "." || path.split('/').any(|part| part == "..") {
+        let Some(path) = cpio_path(&name) else {
             continue;
-        }
+        };
         let permissions = mode & 0o7777;
         let entry = match mode & 0o170_000 {
             0o040_000 => CpioEntry::Dir(permissions),
@@ -399,42 +429,202 @@ fn read_cpio(gz: &[u8]) -> Result<BTreeMap<String, CpioEntry>, String> {
             0o120_000 => CpioEntry::Symlink(String::from_utf8_lossy(&data).into_owned()),
             _ => continue,
         };
-        entries.insert(path.to_string(), entry);
+        entries.insert(path, entry);
     }
     Ok(entries)
 }
 
+/// Why a template's tree cannot be written to the host's disk.
+fn unsafe_path(path: &str) -> String {
+    format!(
+        "the template is refused: {path:?} is below a symbolic link (or a file) the template \
+         itself made, which a tree written to this host's disk must never follow"
+    )
+}
+
+/// `openat` for a directory of the tree, never following a symlink: the
+/// component is opened as itself or not at all. Made, mode 0700, when absent
+/// and `create`.
+fn open_tree_dir(
+    parent: &std::os::fd::OwnedFd,
+    name: &str,
+    create: bool,
+    whole: &str,
+) -> Result<std::os::fd::OwnedFd, String> {
+    use std::os::fd::{AsRawFd, FromRawFd};
+    let c_name = std::ffi::CString::new(name).map_err(|_| unsafe_path(whole))?;
+    for _ in 0..2 {
+        // SAFETY: `parent` is an open directory, `c_name` a NUL-terminated
+        // string that outlives the call; the result is checked.
+        let fd = unsafe {
+            libc::openat(
+                parent.as_raw_fd(),
+                c_name.as_ptr(),
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            )
+        };
+        if fd >= 0 {
+            // SAFETY: a new descriptor `openat` returned, owned by nothing else.
+            return Ok(unsafe { std::os::fd::OwnedFd::from_raw_fd(fd) });
+        }
+        let err = std::io::Error::last_os_error();
+        match err.raw_os_error() {
+            Some(libc::ENOENT) if create => {
+                // SAFETY: as above.
+                let made = unsafe { libc::mkdirat(parent.as_raw_fd(), c_name.as_ptr(), 0o700) };
+                if made != 0 {
+                    let err = std::io::Error::last_os_error();
+                    if err.raw_os_error() != Some(libc::EEXIST) {
+                        return Err(format!("{whole}: {err}"));
+                    }
+                }
+            }
+            // A symlink (ELOOP, or ENOTDIR with O_DIRECTORY) or a file.
+            Some(libc::ELOOP | libc::ENOTDIR) => return Err(unsafe_path(whole)),
+            _ => return Err(format!("{whole}: {err}")),
+        }
+    }
+    Err(format!("{whole}: the directory would not stay made"))
+}
+
+/// Walk to the directory that holds `path`'s last component, from `root`,
+/// opening each parent without following a symlink.
+fn open_parent<'a>(
+    root: &std::os::fd::OwnedFd,
+    path: &'a str,
+    create: bool,
+) -> Result<(std::os::fd::OwnedFd, &'a str), String> {
+    use std::os::fd::AsFd;
+    let mut parts: Vec<&str> = path.split('/').collect();
+    if parts.iter().any(|p| matches!(*p, "" | "." | "..")) {
+        return Err(unsafe_path(path));
+    }
+    let last = parts.pop().ok_or_else(|| unsafe_path(path))?;
+    let mut dir = root
+        .as_fd()
+        .try_clone_to_owned()
+        .map_err(|e| e.to_string())?;
+    for part in parts {
+        dir = open_tree_dir(&dir, part, create, path)?;
+    }
+    Ok((dir, last))
+}
+
+/// Write `entries` below `tree`, an empty directory this process made, so that
+/// nothing a template says can reach outside it.
+///
+/// The template is somebody else's image, and its entries are written to
+/// this host's disk before `mkfs.ext4` packs them: a symlink entry followed by
+/// a file below it would, through a path, write wherever the link points --
+/// `/etc/cron.d`, as the node's user. So no path is ever looked up whole. Each
+/// directory is opened from the one above it, `O_NOFOLLOW`, and a symlink
+/// there, or a file where a directory belongs, refuses the whole template;
+/// files are made `O_CREAT | O_EXCL | O_NOFOLLOW`, and every mode is set on
+/// the descriptor, not on a path. The tree is private to the node's user
+/// (0700), as is every directory in it until all is written, because a guest
+/// file may be setuid.
+fn write_tree(tree: &FsPath, entries: &BTreeMap<String, CpioEntry>) -> Result<(), String> {
+    use std::io::Write;
+    use std::os::fd::{AsRawFd, FromRawFd};
+    use std::os::unix::fs::PermissionsExt;
+
+    let c_tree = std::ffi::CString::new(tree.as_os_str().as_encoded_bytes())
+        .map_err(|_| format!("{}: a NUL in the path", tree.display()))?;
+    // SAFETY: a NUL-terminated path that outlives the call; the result is checked.
+    let fd = unsafe {
+        libc::open(
+            c_tree.as_ptr(),
+            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+        )
+    };
+    if fd < 0 {
+        return Err(format!(
+            "{}: {}",
+            tree.display(),
+            std::io::Error::last_os_error()
+        ));
+    }
+    // SAFETY: a new descriptor `open` returned, owned by nothing else.
+    let root = unsafe { std::os::fd::OwnedFd::from_raw_fd(fd) };
+
+    let mut dirs: Vec<(&str, u32)> = Vec::new();
+    for (path, entry) in entries {
+        // The parents come first in a BTreeMap, so a link is always made
+        // before anything below it -- and then refuses what is below it.
+        let (parent, name) = open_parent(&root, path, true)?;
+        let c_name = std::ffi::CString::new(name).map_err(|_| unsafe_path(path))?;
+        match entry {
+            CpioEntry::Dir(mode) => {
+                // Mode 0700 until everything is in: a directory of mode 0 or
+                // 0555 would turn away the files below it.
+                drop(open_tree_dir(&parent, name, true, path)?);
+                dirs.push((path, *mode));
+            }
+            CpioEntry::File(mode, data) => {
+                let private: libc::c_uint = 0o600;
+                // SAFETY: as above; `O_EXCL` makes the open fail on anything
+                // already there, a symlink included, and never follow it.
+                let fd = unsafe {
+                    libc::openat(
+                        parent.as_raw_fd(),
+                        c_name.as_ptr(),
+                        libc::O_WRONLY
+                            | libc::O_CREAT
+                            | libc::O_EXCL
+                            | libc::O_NOFOLLOW
+                            | libc::O_CLOEXEC,
+                        private,
+                    )
+                };
+                if fd < 0 {
+                    return Err(format!("{path}: {}", std::io::Error::last_os_error()));
+                }
+                // SAFETY: a new descriptor, owned by nothing else.
+                let mut file = unsafe { std::fs::File::from_raw_fd(fd) };
+                file.write_all(data).map_err(|e| format!("{path}: {e}"))?;
+                // `fchmod`: the descriptor, not the path.
+                file.set_permissions(std::fs::Permissions::from_mode(*mode))
+                    .map_err(|e| format!("{path}: {e}"))?;
+            }
+            CpioEntry::Symlink(to) => {
+                let c_to = std::ffi::CString::new(to.as_str()).map_err(|_| unsafe_path(path))?;
+                // SAFETY: as above.
+                let made =
+                    unsafe { libc::symlinkat(c_to.as_ptr(), parent.as_raw_fd(), c_name.as_ptr()) };
+                if made != 0 {
+                    return Err(format!("{path}: {}", std::io::Error::last_os_error()));
+                }
+            }
+        }
+    }
+    // The directories' own modes, deepest first so that a parent is still
+    // open to the node's user while its children are set.
+    for (path, mode) in dirs.into_iter().rev() {
+        let (parent, name) = open_parent(&root, path, false)?;
+        let dir = open_tree_dir(&parent, name, false, path)?;
+        // SAFETY: an open descriptor of a directory.
+        if unsafe { libc::fchmod(dir.as_raw_fd(), mode as libc::mode_t) } != 0 {
+            return Err(format!("{path}: {}", std::io::Error::last_os_error()));
+        }
+    }
+    Ok(())
+}
+
 /// Make `image`: `size_gib` sparse, ext4, holding the template's file tree.
 fn build_root(initrd: &FsPath, image: &FsPath, size_gib: u64) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::fs::DirBuilderExt;
     let gz = std::fs::read(initrd).map_err(|e| format!("{}: {e}", initrd.display()))?;
     let entries = read_cpio(&gz)?;
     let tree = image.with_extension("tree");
     let _ = std::fs::remove_dir_all(&tree);
-    std::fs::create_dir_all(&tree).map_err(|e| e.to_string())?;
+    // Private: the tree may briefly hold a setuid file, which another local
+    // user must not be able to reach and run.
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&tree)
+        .map_err(|e| format!("{}: {e}", tree.display()))?;
     let result = (|| {
-        for (path, entry) in &entries {
-            let target = tree.join(path);
-            if let Some(parent) = target.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-            }
-            match entry {
-                CpioEntry::Dir(mode) => {
-                    std::fs::create_dir_all(&target).map_err(|e| e.to_string())?;
-                    std::fs::set_permissions(&target, std::fs::Permissions::from_mode(*mode))
-                        .map_err(|e| e.to_string())?;
-                }
-                CpioEntry::File(mode, data) => {
-                    std::fs::write(&target, data).map_err(|e| e.to_string())?;
-                    std::fs::set_permissions(&target, std::fs::Permissions::from_mode(*mode))
-                        .map_err(|e| e.to_string())?;
-                }
-                CpioEntry::Symlink(to) => {
-                    let _ = std::fs::remove_file(&target);
-                    std::os::unix::fs::symlink(to, &target).map_err(|e| e.to_string())?;
-                }
-            }
-        }
+        write_tree(&tree, &entries)?;
         std::fs::File::create_new(image)
             .and_then(|f| f.set_len(size_gib * 1024 * 1024 * 1024))
             .map_err(|e| format!("{}: {e}", image.display()))?;
@@ -1773,5 +1963,253 @@ mod tests {
             assert!(admit_restart(id));
         }
         assert!(!admit_restart(id));
+    }
+}
+
+/// A template is somebody else's image, and its tree is written to this host's
+/// disk: a symlink it makes must never be followed.
+#[cfg(test)]
+mod tree_tests {
+    use super::*;
+    use std::io::Write;
+
+    /// One `newc` record.
+    fn record(out: &mut Vec<u8>, name: &str, mode: u32, data: &[u8]) {
+        let name_size = name.len() + 1;
+        let header =
+            format!(
+            "070701{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}",
+            1, mode, 0, 0, 1, 0, data.len(), 0, 0, 0, 0, name_size, 0
+        );
+        out.extend_from_slice(header.as_bytes());
+        out.extend_from_slice(name.as_bytes());
+        out.push(0);
+        out.resize(out.len() + (4 - (110 + name_size) % 4) % 4, 0);
+        out.extend_from_slice(data);
+        out.resize(out.len() + (4 - data.len() % 4) % 4, 0);
+    }
+
+    /// A gzipped newc archive of `(name, mode, data)` records, in the order given.
+    fn archive(records: &[(&str, u32, &[u8])]) -> Vec<u8> {
+        let mut raw = Vec::new();
+        for (name, mode, data) in records {
+            record(&mut raw, name, *mode, data);
+        }
+        record(&mut raw, "TRAILER!!!", 0, b"");
+        let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        gz.write_all(&raw).unwrap();
+        gz.finish().unwrap()
+    }
+
+    const DIR: u32 = 0o040_755;
+    const FILE: u32 = 0o100_644;
+    const LINK: u32 = 0o120_777;
+
+    /// A scratch area with a directory outside the tree for an attack to aim
+    /// at, a template, and where the image would go.
+    struct Setup {
+        _dir: tempfile::TempDir,
+        outside: PathBuf,
+        initrd: PathBuf,
+        image: PathBuf,
+    }
+
+    fn setup(records: impl FnOnce(&str) -> Vec<(String, u32, Vec<u8>)>) -> Setup {
+        let dir = tempfile::tempdir().unwrap();
+        let outside = dir.path().join("outside");
+        std::fs::create_dir(&outside).unwrap();
+        std::fs::set_permissions(&outside, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let records = records(outside.to_str().unwrap());
+        let borrowed: Vec<(&str, u32, &[u8])> = records
+            .iter()
+            .map(|(n, m, d)| (n.as_str(), *m, d.as_slice()))
+            .collect();
+        let initrd = dir.path().join("t.cpio.gz");
+        std::fs::write(&initrd, archive(&borrowed)).unwrap();
+        let image = dir.path().join("root.img");
+        Setup {
+            _dir: dir,
+            outside,
+            initrd,
+            image,
+        }
+    }
+
+    use std::os::unix::fs::PermissionsExt;
+
+    fn nothing_escaped(s: &Setup) {
+        let leaked: Vec<_> = std::fs::read_dir(&s.outside)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert!(leaked.is_empty(), "written outside the tree: {leaked:?}");
+        let mode = std::fs::metadata(&s.outside).unwrap().permissions().mode() & 0o7777;
+        assert_eq!(mode, 0o700, "the directory outside was chmod-ed");
+        assert!(
+            !s.image.with_extension("tree").exists(),
+            "the scratch tree is cleaned up"
+        );
+    }
+
+    /// A symlink to a directory outside the tree, then a file below the link:
+    /// written through it, that was a file in the host's `/etc/cron.d`.
+    #[test]
+    fn a_file_below_a_symlink_is_refused_and_nothing_is_written_outside() {
+        let s = setup(|outside| {
+            vec![
+                ("a".into(), LINK, outside.as_bytes().to_vec()),
+                ("a/x".into(), FILE, b"* * * * * root id\n".to_vec()),
+            ]
+        });
+        let err = build_root(&s.initrd, &s.image, 1).unwrap_err();
+        assert!(err.contains("symbolic link"), "{err}");
+        nothing_escaped(&s);
+        assert!(
+            !s.image.exists(),
+            "no image is made from a refused template"
+        );
+    }
+
+    /// The same with the symlink further up, and a directory below it first.
+    #[test]
+    fn a_nested_directory_below_a_symlink_is_refused() {
+        let s = setup(|outside| {
+            vec![
+                ("d".into(), DIR, vec![]),
+                ("d/a".into(), LINK, outside.as_bytes().to_vec()),
+                ("d/a/sub".into(), DIR, vec![]),
+                ("d/a/sub/x".into(), FILE, b"x".to_vec()),
+            ]
+        });
+        let err = build_root(&s.initrd, &s.image, 1).unwrap_err();
+        assert!(err.contains("symbolic link"), "{err}");
+        nothing_escaped(&s);
+    }
+
+    /// `a/` is not a second entry beside `a`, but the same one -- so a
+    /// directory `a/` after a symlink `a` cannot reach the link's target
+    /// to chmod it.
+    #[test]
+    fn a_trailing_slash_does_not_make_a_second_entry() {
+        let s = setup(|outside| {
+            vec![
+                ("a".into(), LINK, outside.as_bytes().to_vec()),
+                ("a/".into(), 0o040_777, vec![]),
+            ]
+        });
+        // One entry now; whichever the archive's last word on `a` is, nothing
+        // outside the tree is touched.
+        let entries = read_cpio(&std::fs::read(&s.initrd).unwrap()).unwrap();
+        assert_eq!(entries.len(), 1);
+        let _ = build_root(&s.initrd, &s.image, 1);
+        nothing_escaped(&s);
+    }
+
+    /// Even if a tree reached the writer with such a pair (the archive reader
+    /// is not the only caller one day), the writer refuses it on its own.
+    #[test]
+    fn the_tree_writer_refuses_a_directory_below_a_symlink_on_its_own() {
+        let s = setup(|_| vec![]);
+        let tree = s._dir.path().join("tree");
+        std::fs::create_dir(&tree).unwrap();
+        let mut entries = BTreeMap::new();
+        entries.insert(
+            "a".to_string(),
+            CpioEntry::Symlink(s.outside.to_str().unwrap().to_string()),
+        );
+        entries.insert("a/".to_string(), CpioEntry::Dir(0o777));
+        let err = write_tree(&tree, &entries).unwrap_err();
+        assert!(err.contains("refused"), "{err}");
+        nothing_escaped(&s);
+
+        // And a file made where the template already put a symlink.
+        let tree = s._dir.path().join("tree2");
+        std::fs::create_dir(&tree).unwrap();
+        std::os::unix::fs::symlink(&s.outside, tree.join("b")).unwrap();
+        let mut entries = BTreeMap::new();
+        entries.insert("b".to_string(), CpioEntry::File(0o644, b"x".to_vec()));
+        assert!(write_tree(&tree, &entries).is_err());
+        let mut entries = BTreeMap::new();
+        entries.insert("b/x".to_string(), CpioEntry::File(0o644, b"x".to_vec()));
+        assert!(write_tree(&tree, &entries).is_err());
+        nothing_escaped(&s);
+    }
+
+    /// An ordinary tree is written as it is: directories, nested files, links
+    /// (including one that points outside, which is only data), and the modes
+    /// mkfs needs, a setuid one among them.
+    #[test]
+    fn an_ordinary_tree_is_written_with_its_modes_and_links() {
+        let s = setup(|_| vec![]);
+        let tree = s._dir.path().join("tree");
+        std::fs::create_dir(&tree).unwrap();
+        let archive = archive(&[
+            ("./", DIR, b""),
+            ("./usr", 0o040_555, b""),
+            ("usr/bin", DIR, b""),
+            ("usr/bin/sudo", 0o104_755, b"sudo"),
+            ("usr/bin/sh", LINK, b"busybox"),
+            ("bin", LINK, b"usr/bin"),
+            ("etc", 0o040_700, b""),
+            ("etc/passwd", 0o100_600, b"root:x:0:0\n"),
+            ("tmp", 0o041_777, b""),
+            ("lib/deep/er", 0o100_755, b"x"),
+            ("abs", LINK, b"/etc/passwd"),
+        ]);
+        let entries = read_cpio(&archive).unwrap();
+        write_tree(&tree, &entries).unwrap();
+        let mode = |p: &str| {
+            std::fs::symlink_metadata(tree.join(p))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o7777
+        };
+        assert_eq!(mode("usr/bin/sudo"), 0o4755);
+        assert_eq!(mode("etc/passwd"), 0o600);
+        assert_eq!(mode("usr"), 0o555);
+        assert_eq!(mode("etc"), 0o700);
+        assert_eq!(mode("tmp"), 0o1777);
+        assert_eq!(mode("lib/deep"), 0o700, "an implied parent is private");
+        assert_eq!(std::fs::read(tree.join("lib/deep/er")).unwrap(), b"x");
+        assert_eq!(
+            std::fs::read_link(tree.join("bin")).unwrap(),
+            PathBuf::from("usr/bin")
+        );
+        assert_eq!(
+            std::fs::read_link(tree.join("abs")).unwrap(),
+            PathBuf::from("/etc/passwd")
+        );
+        std::fs::set_permissions(tree.join("usr"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    /// The scratch tree is private to the node's user while it is written.
+    #[test]
+    fn the_scratch_tree_is_private() {
+        // `build_root` makes it with this builder; check the mode it gives.
+        use std::os::unix::fs::DirBuilderExt;
+        let dir = tempfile::tempdir().unwrap();
+        let tree = dir.path().join("root.tree");
+        std::fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&tree)
+            .unwrap();
+        assert_eq!(
+            std::fs::metadata(&tree).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+    }
+
+    #[test]
+    fn cpio_names_are_normalised() {
+        assert_eq!(cpio_path("a/"), Some("a".into()));
+        assert_eq!(cpio_path("./a/b/"), Some("a/b".into()));
+        assert_eq!(cpio_path("/a"), Some("a".into()));
+        assert_eq!(cpio_path("././a"), Some("a".into()));
+        for bad in [
+            "", ".", "./", "/", "..", "a/..", "../a", "a//b", "a/./b", "a\0b",
+        ] {
+            assert_eq!(cpio_path(bad), None, "{bad:?}");
+        }
     }
 }

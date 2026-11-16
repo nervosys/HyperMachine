@@ -18,6 +18,14 @@
 //!    cookie and sends the guest `X-HyperMachine-User: <verified email>`, as
 //!    an exe.dev guest receives `X-ExeDev-Email`.
 //!
+//! Which hosts are guest URLs is the operator's to say (`--guest-domain`): a
+//! host is one only as `{port}-{sandbox}.{domain}` for a configured domain,
+//! or as a custom domain bound to a sandbox. The sandbox is named by the first
+//! label alone, so without this a handoff would go to, and be believed from,
+//! any domain whose first label looks right -- the attacker's own, say.
+//! Control plane and proxy both check, and a sealed handoff or pass for any
+//! other host is refused.
+//!
 //! Who may view a sandbox: an administrator; a member of its team (or, in a
 //! deployment without teams, its creator); or an email its owner granted
 //! through web sharing.
@@ -109,11 +117,27 @@ fn cookie_header(value: &str, max_age: i64) -> String {
     format!("{GUEST_COOKIE}={value}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age={max_age}")
 }
 
+/// Whether `authority` is a host this control plane serves guest URLs on: one
+/// of the configured guest domains, or a custom domain bound to a sandbox.
+async fn host_permitted(sso: &SsoLogin, store: &dyn ClusterStore, authority: &str) -> bool {
+    if sso.guest_domain_permits(authority) {
+        return true;
+    }
+    let Ok(name) = crate::domains::DomainName::parse(&crate::sso_login::host_of(authority)) else {
+        return false;
+    };
+    matches!(
+        tokio::time::timeout(std::time::Duration::from_secs(5), store.domain(&name)).await,
+        Ok(Ok(Some(_)))
+    )
+}
+
 /// The sandbox and host a guest URL names, if it names one this control
-/// plane routes.
+/// plane routes: under a configured guest domain, or a bound custom domain.
 async fn route_of_url(control: &ControlPlane, url: &str) -> Option<(String, String)> {
+    let sso = control.sso()?;
     let parsed = reqwest::Url::parse(url).ok()?;
-    if parsed.scheme() != "https" || !parsed.username().is_empty() {
+    if parsed.scheme() != "https" || !parsed.username().is_empty() || parsed.password().is_some() {
         return None;
     }
     let host = parsed.host_str()?;
@@ -122,7 +146,10 @@ async fn route_of_url(control: &ControlPlane, url: &str) -> Option<(String, Stri
         None => host.to_string(),
     };
     if let Some((_, sandbox)) = hv2_api::sandbox_proxy::route_of(&authority) {
-        return Some((authority.clone(), sandbox.to_string()));
+        // The first label names the sandbox; the rest must be ours.
+        return sso
+            .guest_domain_permits(&authority)
+            .then(|| (authority.clone(), sandbox.to_string()));
     }
     let name = crate::domains::DomainName::parse(host).ok()?;
     let binding = control.store().domain(&name).await.ok()??;
@@ -224,14 +251,24 @@ fn request_host(headers: &HeaderMap, uri: &axum::http::Uri) -> Option<String> {
 /// The proxy's answer to a guest-URL request it should not forward: the
 /// handoff turned into a cookie, or a browser with no credential sent to
 /// sign in. `None` forwards to admission.
-pub(crate) fn intercept(
+pub(crate) async fn intercept(
     sso: &SsoLogin,
+    store: &dyn ClusterStore,
     uri: &axum::http::Uri,
     headers: &HeaderMap,
     basic_auth_allowed: bool,
 ) -> Option<hv2_api::sandbox_proxy::ProxyAnswer> {
     let host = request_host(headers, uri)?;
     if uri.path() == HANDOFF_PATH {
+        // A handoff is believed only on a host that is a guest URL here. Its
+        // seal already names one host, but who may be named is the operator's.
+        if !host_permitted(sso, store, &host).await {
+            return Some(hv2_api::sandbox_proxy::ProxyAnswer {
+                status: 403,
+                location: None,
+                set_cookie: None,
+            });
+        }
         let query: std::collections::HashMap<String, String> =
             uri.query().map(url_decode_pairs).unwrap_or_default();
         let handoff = query
@@ -322,6 +359,9 @@ pub(crate) async fn admit(
     else {
         return Admission::Refused;
     };
+    if !host_permitted(sso, store, &pass.host).await {
+        return Admission::Refused;
+    }
     let Some(member) = sso.member(&pass.email) else {
         return Admission::Refused;
     };

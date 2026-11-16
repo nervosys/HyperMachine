@@ -302,7 +302,14 @@ hm sandbox vm machine unpublish web-01 20000
   sandbox's ports are, over TLS when the node has `--tls-cert`; and by E2B's
   `e2b-sandbox-id` and `e2b-sandbox-port` headers. The answer gives the
   name's first label as `proxyLabel`. Off unless asked, since the proxy is
-  commonly on a public address. A node's own proxy adds no login.
+  commonly on a public address. **A node's own proxy adds no login, and
+  neither does the cluster token guard it:** whoever can reach the node's
+  proxy listener reaches every `proxy: true` port on it, by a name made of
+  the guest port and the machine's ID, which can be guessed. A standalone
+  node listens on loopback unless started with `--bind`
+  ([where a node listens](SANDBOXES.md#where-a-node-listens)); a node in a
+  cluster listens on every address, and its proxy port must be reachable by
+  the control plane alone.
 - **With a login, through the control plane.** The control plane's proxy
   reaches a machine's proxied port too, at the same name, and puts its
   [operator-provisioned login](PRIVATE_GUEST_URLS.md) in front of it: grant
@@ -650,7 +657,9 @@ curl -sS -X POST $NODE/machines/desk-01/desktop/actions -H 'content-type: applic
 curl -sS -X POST $NODE/machines/desk-01/desktop/actions -H 'content-type: application/json' \
   -d '{"action": "type", "text": "make test"}'
 
-# Watch it in a browser: publish noVNC's port, behind the proxy's login.
+# Watch it in a browser: publish noVNC's port through the proxy. The node's proxy
+# has no login: reach it through a control plane with web access configured, or
+# keep the node's proxy port to yourself.
 curl -sS -X POST $NODE/machines/desk-01/ports -H 'content-type: application/json' \
   -d '{"guestPort": 6080, "proxy": true}'
 
@@ -678,8 +687,11 @@ key that is not a name and an action that is not one are refused with 400.
   first boot. A user made later is not given it.
 - **The display takes any local user.** The node acts on it as root and an
   agent as its own user. Nothing of the desktop listens outside the guest
-  but noVNC, which has no password of its own: reach it through a published
-  port, and with `proxy`, behind the proxy's login.
+  but noVNC, which has no password of its own, and a published port gives it
+  to whoever can reach that port. Through a node's own proxy (`proxy`) there is
+  no login at all: anyone who can reach the node's proxy listener sees and
+  drives the desktop. A login exists only through a control plane, where the
+  [operator-provisioned login](PRIVATE_GUEST_URLS.md) can be put in front.
 - **It is the guest's, not a VM's display device.** Nothing on the node
   draws it, and the machine's console is still its serial port.
 - **What is installed** is Xvfb, openbox, xterm, x11vnc, noVNC, xdotool,

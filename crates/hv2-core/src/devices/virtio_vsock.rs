@@ -88,6 +88,16 @@ const EVENT_QUEUE: usize = 2;
 /// Descriptors per queue.
 const QUEUE_MAX_SIZE: u16 = 256;
 
+/// Most bytes one chain may describe, on any queue. A packet is a header and at
+/// most a 64 KiB payload from Linux's driver, and the credit this device
+/// grants is 256 KiB, so a megabyte is generous. The generic ceiling is 64 MiB,
+/// which a driver could otherwise have this device allocate per chain.
+const MAX_VSOCK_CHAIN_BYTES: usize = 1024 * 1024;
+
+/// Most bytes of packets one transmit kick may drain: a full ring of maximal
+/// chains, so a correct driver is never held up.
+const TX_KICK_BYTES: usize = QUEUE_MAX_SIZE as usize * MAX_VSOCK_CHAIN_BYTES;
+
 /// Stream socket. The only type this device supports.
 pub const VSOCK_TYPE_STREAM: u16 = 1;
 
@@ -371,9 +381,9 @@ impl VsockDevice {
         Ok(Self {
             guest_cid,
             queues: vec![
-                GuestQueue::new(QUEUE_MAX_SIZE),
-                GuestQueue::new(QUEUE_MAX_SIZE),
-                GuestQueue::new(QUEUE_MAX_SIZE),
+                GuestQueue::new(QUEUE_MAX_SIZE).with_max_chain_bytes(MAX_VSOCK_CHAIN_BYTES),
+                GuestQueue::new(QUEUE_MAX_SIZE).with_max_chain_bytes(MAX_VSOCK_CHAIN_BYTES),
+                GuestQueue::new(QUEUE_MAX_SIZE).with_max_chain_bytes(MAX_VSOCK_CHAIN_BYTES),
             ],
             acked_features: 0,
             connections: HashMap::new(),
@@ -710,11 +720,15 @@ impl VsockDevice {
     /// Returns whether anything was published.
     fn flush_rx(&mut self, mem: &GuestMemory) -> Result<bool> {
         let mut published = false;
+        // One receive buffer per ring slot at most, so a driver that keeps
+        // posting while this runs cannot hold the vCPU here.
+        let mut budget = self.queues[RX_QUEUE].kick_budget(usize::MAX);
 
-        while !self.pending.is_empty() {
+        while !self.pending.is_empty() && !budget.exhausted() {
             let Some(chain) = self.queues[RX_QUEUE].pop(mem)? else {
                 break;
             };
+            budget.charge(0);
             let mut packet = self.pending.pop_front().expect("checked non-empty");
 
             // Stream data larger than the buffer is split across buffers, as
@@ -738,7 +752,7 @@ impl VsockDevice {
                 // Returning it unused and dropping the packet is better than
                 // truncating: a partial header is not a packet, and a driver
                 // reading one would desynchronise.
-                tracing::warn!(
+                tracing::debug!(
                     "vsock: rx buffer of {} bytes cannot hold a {}-byte packet",
                     chain.writable_len(),
                     bytes.len()
@@ -775,8 +789,13 @@ impl VsockDevice {
     /// Consume packets the driver placed on the tx queue.
     fn drain_tx(&mut self, mem: &GuestMemory) -> Result<bool> {
         let mut consumed = false;
+        let mut budget = self.queues[TX_QUEUE].kick_budget(TX_KICK_BYTES);
 
-        while let Some(chain) = self.queues[TX_QUEUE].pop(mem)? {
+        while !budget.exhausted() {
+            let Some(chain) = self.queues[TX_QUEUE].pop(mem)? else {
+                break;
+            };
+            budget.charge(chain.readable_len().saturating_add(chain.writable_len()));
             let bytes = chain.read_all(mem)?;
             self.queues[TX_QUEUE].add_used(mem, chain.head, 0)?;
             consumed = true;
@@ -786,7 +805,7 @@ impl VsockDevice {
                     let len = header.len as usize;
                     let available = bytes.len() - VSOCK_HEADER_SIZE;
                     if len > available {
-                        tracing::warn!(
+                        tracing::debug!(
                             "vsock: packet claims {len} payload bytes but carries {available}"
                         );
                         continue;
@@ -794,7 +813,7 @@ impl VsockDevice {
                     let data = bytes[VSOCK_HEADER_SIZE..VSOCK_HEADER_SIZE + len].to_vec();
                     self.handle_packet(header, data);
                 }
-                Err(e) => tracing::warn!("vsock: {e}"),
+                Err(e) => tracing::debug!("vsock: {e}"),
             }
         }
 
@@ -807,7 +826,7 @@ impl VsockDevice {
     /// Act on one packet from the guest.
     fn handle_packet(&mut self, header: VsockHeader, data: Vec<u8>) {
         if header.dst_cid != VSOCK_HOST_CID {
-            tracing::warn!(
+            tracing::debug!(
                 "vsock: packet addressed to CID {}, which is not the host",
                 header.dst_cid
             );
@@ -853,7 +872,7 @@ impl VsockDevice {
                     self.enqueue(id, op::CREDIT_UPDATE, 0, Vec::new());
                 }
             }
-            other => tracing::warn!("vsock: unknown operation {other}"),
+            other => tracing::debug!("vsock: unknown operation {other}"),
         }
         // Payload, credit and peer lifecycle changes wake only this stream.
         // Device-wide progress remains for connect/accept and agent requests.
@@ -906,7 +925,7 @@ impl VsockDevice {
         // overrun and letting the guest choose the host's memory use.
         let room = VSOCK_RX_BUF_SIZE as usize - conn.rx.len().min(VSOCK_RX_BUF_SIZE as usize);
         if data.len() > room {
-            tracing::warn!(
+            tracing::debug!(
                 "vsock: guest sent {} bytes with room for {room}; the excess is dropped",
                 data.len()
             );
@@ -1003,7 +1022,7 @@ impl VirtioMmioDevice for VsockDevice {
             RX_QUEUE => self.flush_rx(mem),
             EVENT_QUEUE => Ok(false),
             other => {
-                tracing::warn!("vsock: notify for queue {other}, which does not exist");
+                tracing::debug!("vsock: notify for queue {other}, which does not exist");
                 Ok(false)
             }
         }

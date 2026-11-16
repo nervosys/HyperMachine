@@ -62,6 +62,10 @@ spec:
         - name: sandboxd
           image: {{ .Values.image.node }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # HV2_CLUSTER_TOKEN (below) makes the node listen on every address, so the
+          # control plane can dial its pod IP. Without a token it would listen on
+          # loopback only. The token guards the API; the proxy port (3981) has no
+          # check of its own, so only the control plane should be able to reach it.
           args:
             - --port
             - "3980"

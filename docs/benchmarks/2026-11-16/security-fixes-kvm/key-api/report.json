@@ -1,0 +1,745 @@
+{
+  "success": true,
+  "purpose": "functional verification of the key-management API on a real KVM node; no performance comparison",
+  "input_sha256": {
+    "daemon": "2056b506899966a3a84b158380014babc74981f5a264885a869befbc72d50a75",
+    "control": "2bd4145550e7710fffad77d165ac313b112d090ebe2d0684f157862a48ef2772",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "85d929acc80d0f0eadfae26e7187f92bcac31c3acf2802a6d46f99dffd3ab485",
+    "driver": "46a488692f937e829045922e31162cbbd59d3f8e4178db1bb824b6e2037ab162",
+    "redis": "b747f74364ce61350ce4d2cd0e38ca2eacbfa7fe6f3a2560483ab6403a2e8573"
+  },
+  "cases": [
+    {
+      "name": "a sandbox booted and ran a command on KVM (no Tcg)",
+      "success": true,
+      "platform_lines": {
+        "Kvm": 2,
+        "Tcg": 0
+      },
+      "requests": []
+    },
+    {
+      "name": "POST /keys as legacy_admin for member: 201",
+      "success": true,
+      "requests": [],
+      "detail": {
+        "status": 201,
+        "id": "mk_aclUrW7ASYHsZuY7",
+        "message": null
+      }
+    },
+    {
+      "name": "the creation response carries the documented fields and a recognisable secret",
+      "success": true,
+      "requests": [],
+      "detail": {
+        "createdAt": 1794861523,
+        "expiresAt": 1794863323,
+        "id": "mk_aclUrW7ASYHsZuY7",
+        "label": "kvm member",
+        "principalId": "managed-member",
+        "role": "operator",
+        "scopes": [
+          "inventory",
+          "sandboxes",
+          "templates",
+          "volumes",
+          "events"
+        ],
+        "teamId": "red"
+      }
+    },
+    {
+      "name": "GET /keys shows metadata only, never a secret or a digest",
+      "success": true,
+      "requests": [
+        {
+          "key": "legacy_admin",
+          "request": "GET /keys",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"keys\": [{\"createdAt\": 1794861523, \"createdBy\": \"legacy-admin\", \"expired\": false, \"expiresAt\": 1794863323, \"id\": \"mk_aclUrW7ASYHsZuY7\", \"label\": \"kvm member\", \"principalId\": \"managed-member\", \"role\": \"operator\", \"scopes\": [\"inventory\", \"sa",
+          "detail": "no secret, no digest"
+        },
+        {
+          "key": "red_lead",
+          "request": "GET /keys",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"keys\": [{\"createdAt\": 1794861523, \"createdBy\": \"legacy-admin\", \"expired\": false, \"expiresAt\": 1794863323, \"id\": \"mk_aclUrW7ASYHsZuY7\", \"label\": \"kvm member\", \"principalId\": \"managed-member\", \"role\": \"operator\", \"scopes\": [\"inventory\", \"sa",
+          "detail": [
+            {
+              "createdAt": 1794861523,
+              "createdBy": "legacy-admin",
+              "expired": false,
+              "expiresAt": 1794863323,
+              "id": "mk_aclUrW7ASYHsZuY7",
+              "label": "kvm member",
+              "principalId": "managed-member",
+              "role": "operator",
+              "scopes": [
+                "inventory",
+                "sandboxes",
+                "templates",
+                "volumes",
+                "events"
+              ],
+              "teamId": "red"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "the managed member key creates a sandbox that boots on KVM",
+      "success": true,
+      "requests": [],
+      "detail": {
+        "status": 201
+      }
+    },
+    {
+      "name": "the member key works inside its team and is refused the key routes",
+      "success": true,
+      "requests": [
+        {
+          "key": "member",
+          "request": "POST /sandboxes/sbx-7d8b5fa8dd3242d499e3/exec",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"exit_code\": 0, \"stdout\": \"keyapi\\n\", \"stderr\": \"\", \"timed_out\": false}",
+          "detail": "guest ran the command"
+        },
+        {
+          "key": "member",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-7d8b5fa8dd3242d499e3\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-16T20:53:43.755Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyapi-kvm-node\", \"sandboxID\": \"sbx-7d8b5fa8dd3242d499e3\", \"",
+          "detail": true
+        },
+        {
+          "key": "member",
+          "request": "GET /keys",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "member",
+          "request": "POST /keys",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "member",
+          "request": "DELETE /keys/mk_aclUrW7ASYHsZuY7",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "member",
+          "request": "GET /teams/red/members",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "file_member",
+          "request": "GET /keys",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "unknown",
+          "request": "GET /keys",
+          "expected": [
+            401
+          ],
+          "status": 401,
+          "ok": true,
+          "response": "{\"code\": 401, \"message\": \"missing, expired or wrong X-API-Key\"}"
+        }
+      ]
+    },
+    {
+      "name": "POST /keys as legacy_admin for blue_member: 201",
+      "success": true,
+      "requests": [],
+      "detail": {
+        "status": 201,
+        "id": "mk_xxg5LsvaScZ4JW79",
+        "message": null
+      }
+    },
+    {
+      "name": "a team-admin cannot escalate: each rule is 403",
+      "success": true,
+      "requests": [
+        {
+          "key": "red_lead",
+          "request": "POST /keys",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"a team administrator can only make keys for its own team\"}"
+        },
+        {
+          "key": "red_lead",
+          "request": "POST /keys",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"that principal belongs to a key outside this team, or to an administrator\"}"
+        },
+        {
+          "key": "red_lead",
+          "request": "POST /keys",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"a team administrator cannot make a team administrator\"}"
+        },
+        {
+          "key": "red_lead",
+          "request": "POST /keys",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"a team administrator cannot make a team administrator\"}"
+        },
+        {
+          "key": "red_lead",
+          "request": "POST /keys",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"a team administrator cannot grant the admin scope\"}"
+        },
+        {
+          "key": "red_lead",
+          "request": "POST /keys",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"a team administrator cannot grant the admin scope\"}"
+        },
+        {
+          "key": "red_lead",
+          "request": "POST /keys",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"a team administrator cannot grant a scope it does not hold\"}"
+        },
+        {
+          "key": "red_lead",
+          "request": "POST /keys",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"a team administrator cannot grant a scope it does not hold\"}"
+        },
+        {
+          "key": "red_lead",
+          "request": "POST /keys",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"a team administrator cannot grant a scope it does not hold\"}"
+        },
+        {
+          "key": "red_short",
+          "request": "POST /keys",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"a team administrator cannot make a key that outlives its own\"}"
+        },
+        {
+          "key": "red_short",
+          "request": "POST /keys",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"a team administrator cannot make a key that outlives its own\"}"
+        }
+      ]
+    },
+    {
+      "name": "a team-admin sees and revokes only its own team's keys",
+      "success": true,
+      "requests": [
+        {
+          "key": "red_lead",
+          "request": "GET /keys",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"keys\": [{\"createdAt\": 1794861523, \"createdBy\": \"legacy-admin\", \"expired\": false, \"expiresAt\": 1794863323, \"id\": \"mk_aclUrW7ASYHsZuY7\", \"label\": \"kvm member\", \"principalId\": \"managed-member\", \"role\": \"operator\", \"scopes\": [\"inventory\", \"sa",
+          "detail": true
+        },
+        {
+          "key": "red_lead",
+          "request": "DELETE /keys/mk_xxg5LsvaScZ4JW79",
+          "expected": [
+            404
+          ],
+          "status": 404,
+          "ok": true,
+          "response": "{\"code\": 404, \"message\": \"no such managed key\"}"
+        },
+        {
+          "key": "blue_member",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[]"
+        },
+        {
+          "key": "red_lead",
+          "request": "GET /teams/blue/members",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"a team administrator can only list its own team's members\"}"
+        },
+        {
+          "key": "blue_lead",
+          "request": "GET /teams/red/members",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"a team administrator can only list its own team's members\"}"
+        },
+        {
+          "key": "red_lead",
+          "request": "DELETE /keys/77b7156559e02a5b",
+          "expected": [
+            404
+          ],
+          "status": 404,
+          "ok": true,
+          "response": "{\"code\": 404, \"message\": \"no such managed key\"}"
+        },
+        {
+          "key": "file_member",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-7d8b5fa8dd3242d499e3\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-16T20:53:43.755Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyapi-kvm-node\", \"sandboxID\": \"sbx-7d8b5fa8dd3242d499e3\", \""
+        }
+      ]
+    },
+    {
+      "name": "POST /keys as red_lead for red_child: 201",
+      "success": true,
+      "requests": [],
+      "detail": {
+        "status": 201,
+        "id": "mk_qb1ims9dQvFjJ-Se",
+        "message": null
+      }
+    },
+    {
+      "name": "a team-admin's own key is forced to its team and sees the team's sandbox",
+      "success": true,
+      "requests": [
+        {
+          "key": "red_child",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-7d8b5fa8dd3242d499e3\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-16T20:53:43.755Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyapi-kvm-node\", \"sandboxID\": \"sbx-7d8b5fa8dd3242d499e3\", \"",
+          "detail": true
+        },
+        {
+          "key": "red_child",
+          "request": "POST /sandboxes/sbx-7d8b5fa8dd3242d499e3/exec",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"exit_code\": 0, \"stdout\": \"keyapi\\n\", \"stderr\": \"\", \"timed_out\": false}",
+          "detail": "guest ran the command"
+        },
+        {
+          "key": "red_child",
+          "request": "GET /keys",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        },
+        {
+          "key": "blue_lead",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[]",
+          "detail": true
+        }
+      ]
+    },
+    {
+      "name": "the member listing covers file and managed keys of one team",
+      "success": true,
+      "requests": [
+        {
+          "key": "legacy_admin",
+          "request": "GET /teams/red/members",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"members\": [{\"keyCount\": 1, \"principalId\": \"file-member\", \"roles\": [\"operator\"]}, {\"keyCount\": 1, \"principalId\": \"managed-member\", \"roles\": [\"operator\"]}, {\"keyCount\": 1, \"principalId\": \"red-child\", \"roles\": [\"operator\"]}, {\"keyCount\": 1, ",
+          "detail": "file and managed principals, no secrets"
+        },
+        {
+          "key": "red_lead",
+          "request": "GET /teams/red/members",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"members\": [{\"keyCount\": 1, \"principalId\": \"file-member\", \"roles\": [\"operator\"]}, {\"keyCount\": 1, \"principalId\": \"managed-member\", \"roles\": [\"operator\"]}, {\"keyCount\": 1, \"principalId\": \"red-child\", \"roles\": [\"operator\"]}, {\"keyCount\": 1, ",
+          "detail": "file and managed principals, no secrets"
+        },
+        {
+          "key": "member",
+          "request": "GET /teams/red/members",
+          "expected": [
+            403
+          ],
+          "status": 403,
+          "ok": true,
+          "response": "{\"code\": 403, \"message\": \"API key scope does not permit this operation\"}"
+        }
+      ]
+    },
+    {
+      "name": "POST /keys as legacy_admin for short_lived: 201",
+      "success": true,
+      "requests": [],
+      "detail": {
+        "status": 201,
+        "id": "mk_oNQb-XYxbrk5kwfC",
+        "message": null
+      }
+    },
+    {
+      "name": "a 60 s key works while it lives",
+      "success": true,
+      "requests": [
+        {
+          "key": "short_lived",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-7d8b5fa8dd3242d499e3\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-16T20:53:43.755Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyapi-kvm-node\", \"sandboxID\": \"sbx-7d8b5fa8dd3242d499e3\", \""
+        }
+      ]
+    },
+    {
+      "name": "a managed key works on both control planes over the same Redis",
+      "success": true,
+      "requests": [],
+      "detail": {
+        "first": 200,
+        "second": 200
+      }
+    },
+    {
+      "name": "a managed key still works after the control plane restarts",
+      "success": true,
+      "requests": [],
+      "detail": {
+        "restart": "control"
+      }
+    },
+    {
+      "name": "revoking the member key by the administrator",
+      "success": true,
+      "requests": [
+        {
+          "key": "legacy_admin",
+          "request": "DELETE /keys/mk_aclUrW7ASYHsZuY7",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"deleted\": \"mk_aclUrW7ASYHsZuY7\", \"kind\": \"key\"}",
+          "detail": true
+        },
+        {
+          "key": "legacy_admin",
+          "request": "DELETE /keys/mk_aclUrW7ASYHsZuY7",
+          "expected": [
+            404
+          ],
+          "status": 404,
+          "ok": true,
+          "response": "{\"code\": 404, \"message\": \"no such managed key\"}"
+        }
+      ]
+    },
+    {
+      "name": "the revoked key's next request is 401 on both control planes",
+      "success": true,
+      "requests": [],
+      "detail": {
+        "first": 401,
+        "second": 401
+      }
+    },
+    {
+      "name": "the sandbox the revoked key made is untouched, and a team-admin revokes its own team's key",
+      "success": true,
+      "requests": [
+        {
+          "key": "red_lead",
+          "request": "GET /sandboxes/sbx-7d8b5fa8dd3242d499e3",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"clientID\": \"sbx-7d8b5fa8dd3242d499e3\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-16T20:53:43.755Z\", \"envdAccessToken\": \"4ae9f32c91fc4f208926a1ed50e88aba89f4f2e6b9284950a6bd023faf3e09c3\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \""
+        },
+        {
+          "key": "red_child",
+          "request": "GET /sandboxes",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "[{\"clientID\": \"sbx-7d8b5fa8dd3242d499e3\", \"cpuCount\": 1, \"diskSizeMB\": 0, \"endAt\": \"2026-11-16T20:53:43.755Z\", \"envdVersion\": \"0.6.3\", \"memoryMB\": 1024, \"metadata\": {}, \"nodeID\": \"keyapi-kvm-node\", \"sandboxID\": \"sbx-7d8b5fa8dd3242d499e3\", \""
+        },
+        {
+          "key": "red_lead",
+          "request": "DELETE /keys/mk_qb1ims9dQvFjJ-Se",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"deleted\": \"mk_qb1ims9dQvFjJ-Se\", \"kind\": \"key\"}"
+        },
+        {
+          "key": "red_child",
+          "request": "GET /sandboxes",
+          "expected": [
+            401
+          ],
+          "status": 401,
+          "ok": true,
+          "response": "{\"code\": 401, \"message\": \"missing, expired or wrong X-API-Key\"}"
+        },
+        {
+          "key": "red_lead",
+          "request": "DELETE /sandboxes/sbx-7d8b5fa8dd3242d499e3",
+          "expected": [
+            204
+          ],
+          "status": 204,
+          "ok": true,
+          "response": "null"
+        }
+      ]
+    },
+    {
+      "name": "a 60 s key is 401 once it has expired, and the listing says so",
+      "success": true,
+      "requests": [
+        {
+          "key": "short_lived",
+          "request": "GET /sandboxes",
+          "expected": [
+            401
+          ],
+          "status": 401,
+          "ok": true,
+          "response": "{\"code\": 401, \"message\": \"missing, expired or wrong X-API-Key\"}"
+        },
+        {
+          "key": "legacy_admin",
+          "request": "GET /keys",
+          "expected": [
+            200
+          ],
+          "status": 200,
+          "ok": true,
+          "response": "{\"keys\": [{\"createdAt\": 1794861523, \"createdBy\": \"legacy-admin\", \"expired\": false, \"expiresAt\": 1794863323, \"id\": \"mk_xxg5LsvaScZ4JW79\", \"label\": \"blue\", \"principalId\": \"blue-member\", \"role\": \"operator\", \"scopes\": [\"inventory\", \"sandboxes\",",
+          "detail": [
+            {
+              "createdAt": 1794861524,
+              "createdBy": "legacy-admin",
+              "expired": true,
+              "expiresAt": 1794861584,
+              "id": "mk_oNQb-XYxbrk5kwfC",
+              "label": "sixty",
+              "principalId": "short-lived",
+              "role": "operator",
+              "scopes": [
+                "inventory"
+              ],
+              "teamId": "red"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "no created secret, and no digest of one, appears in any service log",
+      "success": true,
+      "requests": [],
+      "detail": {
+        "logs_checked": [
+          "control.log",
+          "control2.log",
+          "node.log",
+          "redis.log"
+        ],
+        "leaked_in": [],
+        "secrets_made": 4
+      }
+    },
+    {
+      "name": "with Redis stopped a managed key's request is 503, and an unknown key's is not a pass",
+      "success": true,
+      "requests": [],
+      "detail": {
+        "before": 200,
+        "managed_key_down": 503,
+        "unknown_key_down": 503
+      }
+    }
+  ],
+  "policy": [
+    {
+      "expires_at": 1794863322,
+      "scopes": [
+        "sandboxes",
+        "inventory"
+      ],
+      "role": "member",
+      "principal_id": "file-member",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794863322,
+      "scopes": [
+        "sandboxes",
+        "inventory"
+      ],
+      "role": "team-admin",
+      "principal_id": "red-lead",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794861822,
+      "scopes": [
+        "sandboxes",
+        "inventory"
+      ],
+      "role": "team-admin",
+      "principal_id": "red-short",
+      "team_id": "red"
+    },
+    {
+      "expires_at": 1794863322,
+      "scopes": [
+        "sandboxes",
+        "inventory"
+      ],
+      "role": "team-admin",
+      "principal_id": "blue-lead",
+      "team_id": "blue"
+    }
+  ],
+  "platform_lines": {
+    "Kvm": 2,
+    "Tcg": 0
+  }
+}

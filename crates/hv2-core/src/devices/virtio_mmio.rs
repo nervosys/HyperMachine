@@ -305,7 +305,8 @@ impl VirtioMmioTransport {
         // respect what the driver accepted, and a queue configured under one
         // feature set and driven under another is a wire-format mismatch the
         // guest cannot see.
-        device.ack_features(state.transport.driver_features);
+        let driver_features = state.transport.driver_features & device.device_features();
+        device.ack_features(driver_features);
         device.restore_counters(&state.counters);
 
         let queues = device.queues();
@@ -458,7 +459,17 @@ impl VirtioMmioTransport {
             reg::QUEUE_NUM_MAX => self.selected_queue(&regs, |q| u32::from(q.max_size())),
             reg::QUEUE_READY => self.selected_queue(&regs, |q| u32::from(q.is_ready())),
             reg::INTERRUPT_STATUS => regs.interrupt_status,
-            reg::STATUS => regs.status,
+            reg::STATUS => {
+                // A queue the device had to stop is the device saying it needs
+                // a reset, whether or not the transport noticed at the time.
+                let broken = self.device.lock().queues().iter().any(|q| q.is_broken());
+                regs.status
+                    | if broken {
+                        status::DEVICE_NEEDS_RESET
+                    } else {
+                        0
+                    }
+            }
             reg::CONFIG_GENERATION => regs.config_generation,
             // Write-only registers read as zero rather than as stale state.
             reg::DEVICE_FEATURES_SEL
@@ -494,8 +505,14 @@ impl VirtioMmioTransport {
             reg::DRIVER_FEATURES_SEL => regs.driver_features_sel = value,
             reg::DRIVER_FEATURES => {
                 let shift = if regs.driver_features_sel == 0 { 0 } else { 32 };
+                // The driver may only accept what was offered. Anything else
+                // is a bit no device code was written to handle -- checksum
+                // offload on a device that never offered it, say -- so it is
+                // dropped here, before any device sees it.
+                let mut device = self.device.lock();
                 regs.driver_features |= u64::from(value) << shift;
-                self.device.lock().ack_features(regs.driver_features);
+                regs.driver_features &= device.device_features();
+                device.ack_features(regs.driver_features);
             }
             reg::QUEUE_SEL => regs.queue_sel = value,
             reg::QUEUE_NUM => self.with_selected_queue(&regs, |q| q.set_size(value as u16)),
@@ -505,7 +522,27 @@ impl VirtioMmioTransport {
                     self.name,
                     regs.queue_sel
                 );
-                self.with_selected_queue(&regs, |q| q.set_ready(value != 0));
+                // Enabling is where the rings the driver published are first
+                // vetted: an address that wraps, is misaligned or lies outside
+                // RAM leaves the queue disabled, and the device asks for a reset.
+                let mut refused = None;
+                self.with_selected_queue(&regs, |q| {
+                    if value == 0 {
+                        q.set_ready(false);
+                    } else if let Err(e) = q.enable(&self.memory) {
+                        refused = Some(e);
+                    }
+                });
+                if let Some(e) = refused {
+                    if regs.status & status::DEVICE_NEEDS_RESET == 0 {
+                        tracing::warn!(
+                            "virtio-mmio '{}': queue {} not enabled, device needs reset: {e}",
+                            self.name,
+                            regs.queue_sel
+                        );
+                    }
+                    regs.status |= status::DEVICE_NEEDS_RESET;
+                }
             }
             reg::QUEUE_DESC_LOW => {
                 self.with_selected_queue(&regs, |q| {
@@ -592,7 +629,10 @@ impl VirtioMmioTransport {
                     self.device.lock().reset();
                     return Ok(());
                 }
-                regs.status = value;
+                // NEEDS_RESET is the device's to set and only a reset clears
+                // it; a driver writing the status back without it does not
+                // get to forget.
+                regs.status = value | (regs.status & status::DEVICE_NEEDS_RESET);
             }
             other => {
                 tracing::debug!(
@@ -895,9 +935,15 @@ mod tests {
             assert_eq!(queue.desc_addr(), 0x7_8000_1000);
             assert_eq!(queue.avail_addr(), 0x2000);
             assert_eq!(queue.used_addr(), 0x3000);
-            assert!(queue.is_ready());
+            // The halves joined into an address far past the test's RAM, so
+            // the queue is published whole and then refused.
+            assert!(!queue.is_ready());
         }
-        assert_eq!(read32(&transport, reg::QUEUE_READY).await, 1);
+        assert_eq!(read32(&transport, reg::QUEUE_READY).await, 0);
+        assert_ne!(
+            read32(&transport, reg::STATUS).await & status::DEVICE_NEEDS_RESET,
+            0
+        );
     }
 
     #[tokio::test]

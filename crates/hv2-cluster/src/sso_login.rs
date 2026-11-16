@@ -94,6 +94,9 @@ pub struct SsoLogin {
     /// `Origin` header must say on a cookie-authenticated change.
     origin: String,
     http: reqwest::Client,
+    /// The domains guest URLs (`{port}-{sandbox}.{domain}`) may be under; see
+    /// [`Self::set_guest_domains`].
+    guest_domains: parking_lot::RwLock<Vec<String>>,
 }
 
 impl std::fmt::Debug for SsoLogin {
@@ -114,6 +117,15 @@ fn random_token(bytes: usize) -> Result<String, String> {
         .and_then(|crypto| crypto.random_bytes(&mut buffer))
         .map_err(|e| e.to_string())?;
     Ok(URL_SAFE_NO_PAD.encode(buffer))
+}
+
+/// The lower-case host of an authority, without its port.
+pub(crate) fn host_of(authority: &str) -> String {
+    let host = match authority.rsplit_once(':') {
+        Some((host, port)) if port.bytes().all(|b| b.is_ascii_digit()) => host,
+        _ => authority,
+    };
+    host.to_ascii_lowercase()
 }
 
 fn sha256(data: &[u8]) -> [u8; 32] {
@@ -195,7 +207,43 @@ impl SsoLogin {
             key,
             origin,
             http,
+            guest_domains: parking_lot::RwLock::new(Vec::new()),
         })
+    }
+
+    /// Set the domains this control plane's guest URLs are under. Only a host
+    /// of the form `{port}-{sandbox}.{domain}` for one of these -- or a custom
+    /// domain bound to a sandbox -- is ever sent a sign-in handoff, or
+    /// believed when it presents one. The first label of a guest host alone
+    /// names the sandbox, so without this any domain at all could be made to
+    /// look like a guest URL and be handed a member's credential.
+    ///
+    /// # Errors
+    /// A name that is not a DNS name.
+    pub fn set_guest_domains(&self, domains: &[String]) -> Result<(), String> {
+        let mut checked = Vec::with_capacity(domains.len());
+        for domain in domains {
+            let name = crate::domains::DomainName::parse(domain.trim_start_matches('.'))
+                .map_err(|e| format!("guest domain {domain:?}: {e}"))?;
+            checked.push(name.as_str().to_owned());
+        }
+        *self.guest_domains.write() = checked;
+        Ok(())
+    }
+
+    /// Whether `authority` (`host` or `host:port`) is `{port}-{sandbox}.{domain}`
+    /// for a configured guest domain: one label, then exactly the domain.
+    pub(crate) fn guest_domain_permits(&self, authority: &str) -> bool {
+        let host = host_of(authority);
+        let Some((_, rest)) = host.split_once('.') else {
+            return false;
+        };
+        hv2_api::sandbox_proxy::route_of(&host).is_some()
+            && self
+                .guest_domains
+                .read()
+                .iter()
+                .any(|domain| domain == rest)
     }
 
     /// Replace the members, after validating the whole document; a rejected

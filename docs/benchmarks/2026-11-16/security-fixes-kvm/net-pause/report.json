@@ -1,0 +1,162 @@
+{
+ "success": true,
+ "purpose": "functional verification of pausing, snapshotting and forking a networked sandbox under traffic, on KVM",
+ "input_sha256": {
+  "daemon": "2056b506899966a3a84b158380014babc74981f5a264885a869befbc72d50a75",
+  "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+  "initrd": "a22419caa282550c4bcd2b907a8aa9201c75fc8bb9859a1709ce023f6873174e",
+  "driver": "db035ccf8855ddd571a4f10565404353ef060fb41d8af4704f4e0a5ddf3fecfe"
+ },
+ "cycles": 6,
+ "cases": [
+  {
+   "name": "two sandboxes on a network, B reaching A's listener",
+   "success": true,
+   "detail": {
+    "addresses": {
+     "a": "10.200.0.2",
+     "b": "10.200.0.3"
+    }
+   }
+  },
+  {
+   "name": "cycle 0: pause and resume A under traffic",
+   "success": true,
+   "detail": {
+    "traffic_back_after_s": 0.51
+   }
+  },
+  {
+   "name": "cycle 0: snapshot A under traffic",
+   "success": true,
+   "detail": {
+    "traffic_back_after_s": 0.51
+   }
+  },
+  {
+   "name": "cycle 0: fork A under traffic",
+   "success": true,
+   "detail": {
+    "traffic_back_after_s": 0.52
+   }
+  },
+  {
+   "name": "cycle 1: pause and resume A under traffic",
+   "success": true,
+   "detail": {
+    "traffic_back_after_s": 0.51
+   }
+  },
+  {
+   "name": "cycle 1: snapshot A under traffic",
+   "success": true,
+   "detail": {
+    "traffic_back_after_s": 0.51
+   }
+  },
+  {
+   "name": "cycle 1: fork A under traffic",
+   "success": true,
+   "detail": {
+    "traffic_back_after_s": 0.51
+   }
+  },
+  {
+   "name": "cycle 2: pause and resume A under traffic",
+   "success": true,
+   "detail": {
+    "traffic_back_after_s": 0.51
+   }
+  },
+  {
+   "name": "cycle 2: snapshot A under traffic",
+   "success": true,
+   "detail": {
+    "traffic_back_after_s": 0.51
+   }
+  },
+  {
+   "name": "cycle 2: fork A under traffic",
+   "success": true,
+   "detail": {
+    "traffic_back_after_s": 0.52
+   }
+  },
+  {
+   "name": "cycle 3: pause and resume A under traffic",
+   "success": true,
+   "detail": {
+    "traffic_back_after_s": 0.51
+   }
+  },
+  {
+   "name": "cycle 3: snapshot A under traffic",
+   "success": true,
+   "detail": {
+    "traffic_back_after_s": 0.51
+   }
+  },
+  {
+   "name": "cycle 3: fork A under traffic",
+   "success": true,
+   "detail": {
+    "traffic_back_after_s": 0.51
+   }
+  },
+  {
+   "name": "cycle 4: pause and resume A under traffic",
+   "success": true,
+   "detail": {
+    "traffic_back_after_s": 0.51
+   }
+  },
+  {
+   "name": "cycle 4: snapshot A under traffic",
+   "success": true,
+   "detail": {
+    "traffic_back_after_s": 0.51
+   }
+  },
+  {
+   "name": "cycle 4: fork A under traffic",
+   "success": true,
+   "detail": {
+    "traffic_back_after_s": 0.51
+   }
+  },
+  {
+   "name": "cycle 5: pause and resume A under traffic",
+   "success": true,
+   "detail": {
+    "traffic_back_after_s": 0.51
+   }
+  },
+  {
+   "name": "cycle 5: snapshot A under traffic",
+   "success": true,
+   "detail": {
+    "traffic_back_after_s": 0.51
+   }
+  },
+  {
+   "name": "cycle 5: fork A under traffic",
+   "success": true,
+   "detail": {
+    "traffic_back_after_s": 0.51
+   }
+  },
+  {
+   "name": "the peer's tries: no corrupted reply",
+   "success": true,
+   "detail": {
+    "ok": 51,
+    "fail": 50,
+    "bad": 0
+   }
+  }
+ ],
+ "platform_lines": {
+  "Kvm": 15,
+  "Tcg": 0
+ }
+}

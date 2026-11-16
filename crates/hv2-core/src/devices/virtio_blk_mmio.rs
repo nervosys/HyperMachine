@@ -57,6 +57,16 @@ const QUEUE_SIZE: u16 = 128;
 /// request can carry at most the rest of the queue.
 const SEG_MAX: u32 = QUEUE_SIZE as u32 - 2;
 
+/// Most bytes of requests one kick will serve.
+///
+/// A full ring (`QUEUE_SIZE` requests) of 2 MiB each. Linux splits requests at
+/// 1280 KiB by default, so a full ring of its largest is 160 MiB, well inside
+/// this; a driver tuned to larger requests still drains a full ring of them.
+/// What the figure rules out is the ring's worth of 64 MiB chains, aliased
+/// over the same memory, that would cost several GiB of host I/O per kick.
+/// Requests beyond it stay on the ring until the next kick.
+const KICK_BYTES: usize = QUEUE_SIZE as usize * 2 * 1024 * 1024;
+
 /// Bytes of `virtio_blk_req` in front of every request: type, reserved, sector.
 const REQ_HDR_LEN: usize = 16;
 
@@ -174,7 +184,12 @@ impl VirtioBlockMmio {
     /// Serve every request the driver has made available.
     fn drain(&mut self, mem: &GuestMemory) -> Result<bool> {
         let mut consumed = false;
-        while let Some(chain) = self.queues[0].pop(mem)? {
+        let mut budget = self.queues[0].kick_budget(KICK_BYTES);
+        while !budget.exhausted() {
+            let Some(chain) = self.queues[0].pop(mem)? else {
+                break;
+            };
+            budget.charge(chain.readable_len().saturating_add(chain.writable_len()));
             let written = self.serve(&chain, mem)?;
             self.queues[0].add_used(mem, chain.head, written)?;
             consumed = true;
@@ -286,7 +301,14 @@ fn answer(chain: &DescriptorChain, mem: &GuestMemory, data: &[u8], status: u8) -
     for (addr, len) in &chain.writable {
         let len = *len as usize;
         if remaining < len {
-            mem.write_bytes(addr + remaining as u64, &[status])?;
+            // The queue vets `addr + len` already; this is the same check
+            // again at the one place a device adds to a guest address.
+            let at = addr.checked_add(remaining as u64).ok_or_else(|| {
+                Error::Device(format!(
+                    "virtio-blk: status address {addr:#x} + {remaining} overflows"
+                ))
+            })?;
+            mem.write_bytes(at, &[status])?;
             break;
         }
         remaining -= len;
@@ -369,7 +391,7 @@ impl VirtioMmioDevice for VirtioBlockMmio {
         if queue == 0 {
             self.drain(mem)
         } else {
-            tracing::warn!("virtio-blk: notify for queue {queue}, which does not exist");
+            tracing::debug!("virtio-blk: notify for queue {queue}, which does not exist");
             Ok(false)
         }
     }

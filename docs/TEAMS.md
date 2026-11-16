@@ -42,7 +42,7 @@ team's resources.
 
 | Role | What it can do | What it cannot |
 |---|---|---|
-| `viewer` (same as `observer`) | `GET`/`HEAD` the inventory routes (`/sandboxes`, `/v2/sandboxes`, `/templates`, `/sandboxes/metrics`, `/cluster/nodes`) its scopes allow | Sandbox detail, exec, create, pause, delete, volumes, events, owner adoption: 403, even with more scopes |
+| `viewer` (same as `observer`) | `GET`/`HEAD` the inventory routes (`/sandboxes`, `/v2/sandboxes`, `/templates`, `/sandboxes/metrics`, `/cluster/nodes`) its scopes allow; `/cluster/nodes` shows it load and the templates it may start, not node addresses, signing keys or other teams' snapshot names (administrators see everything) | Sandbox detail, exec, create, pause, delete, volumes, events, owner adoption: 403, even with more scopes |
 | `member` (same as `operator`, and the default) | Everything its scopes allow on its team's sandboxes, volumes, machines, webhooks, snapshots, whoever created them | Owner adoption, node routes, `/cluster/events`, building templates (403); another team's resources (403 or 404) |
 | `team-admin` | Everything a `member` with the same scopes can, plus `POST /sandboxes/{id}/owner` on a sandbox of its own team (it needs the `sandboxes` scope) | Another team's sandbox (403, and 404 when it does not exist); node management, `/cluster/events`, template builds, cluster-wide usage (403); changing a sandbox's team; any use of the `admin` scope |
 | administrator (operator with the `admin` scope) | Everything, in every team | Nothing |

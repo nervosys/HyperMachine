@@ -75,11 +75,24 @@ browser and CLI sign-in, the origin check, a non-member, and revocation on reloa
 
 ## Private guest URLs
 
-With `--sso-guest-urls`, which needs proxy TLS, a browser at a sandbox's
-`{port}-{sandbox}.{domain}` URL (or a bound custom domain) must be a signed-in
-member who may view that sandbox. The guest app is then told who they are in
+With `--sso-guest-urls`, which needs proxy TLS and at least one
+`--guest-domain`, a browser at a sandbox's `{port}-{sandbox}.{domain}` URL (or a
+bound custom domain) must be a signed-in member who may view that sandbox. The guest app is then told who they are in
 `X-HyperMachine-User: <verified email>`, as an exe.dev app receives
 `X-ExeDev-Email`.
+
+**Guest domains.** A sandbox is named by the first label of its URL alone, so
+which domains count as guest URLs is yours to say: `--guest-domain example.com`
+(repeat it for each). Only `{port}-{sandbox}.example.com` -- exactly one label,
+then the domain, compared whole-label and case-insensitively -- or a custom
+domain bound to a sandbox is a guest URL. Anything else gets `400` at
+`/auth/guest` and no handoff, and the proxy refuses a handoff or a pass for it
+even if it is validly sealed. Without this, a signed-in member who followed
+`https://cp/auth/guest?url=https://8080-S.evil.example/x` would be sent a handoff
+for `evil.example`, whose owner could redeem it at the proxy with
+`Host: 8080-S.evil.example` and view the sandbox as that member.
+`--sso-guest-urls` without `--guest-domain` (and the reverse) is a startup error.
+A domain must be a DNS name with at least two labels; a leading dot is ignored.
 
 The API session cookie never goes to a guest host: a guest URL is served by a
 program in the guest, and it could keep anything its browser sent. Instead:
@@ -88,10 +101,10 @@ program in the guest, and it could keep anything its browser sent. Instead:
    `/auth/guest?url=…`. If it has no session there, it signs in first.
 2. If the member may view the sandbox, they get a one-minute handoff token
    sealed to that one host, and are sent back to `https://{host}/__hm/auth`.
-3. The proxy checks the handoff names this host, sets `__Host-hm_guest`
+3. The proxy checks the host is a guest URL (above) and the handoff names it, sets `__Host-hm_guest`
    (`Secure`, `HttpOnly`, host-only), and returns the browser to the page it
    asked for.
-4. On every request the proxy checks the pass, looks the member up again, and
+4. On every request the proxy checks the host again, checks the pass, looks the member up again, and
    checks they may still view the sandbox. It then removes the pass from the
    request (the guest's own cookies are kept), replaces any client-sent
    `X-HyperMachine-User`, and forwards.
@@ -124,6 +137,11 @@ Envd's own port keeps its per-sandbox token and is not affected.
   cookie with their POSTs. Bearer tokens are not affected.
 - **No anonymous access.** With SSO on, a request with neither a session nor a
   key gets 401, even when no API keys are configured.
+- **Nodes never see a session token.** When the control plane repeats a request
+  to a node it drops `Authorization` unless the request is for the volume
+  content API (whose bearer is the volume's own token), and never repeats a
+  `Bearer hms1.` value at all, so a compromised node cannot replay a member's
+  session here.
 
 ## Not yet
 

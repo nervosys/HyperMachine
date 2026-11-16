@@ -241,6 +241,139 @@ pub struct ManagedKey {
     pub created_at: i64,
     /// Unix seconds; required, and checked on every request.
     pub expires_at: i64,
+    /// Lower-case hex HMAC-SHA256 over every field above, under the control
+    /// plane's own [`ManagedKeySecret`]. The store is shared with nodes, which
+    /// can write to it; this is what tells a record a control plane made from
+    /// one a node did. Empty on a record nobody sealed, which is never trusted.
+    #[serde(default)]
+    pub mac: String,
+}
+
+/// The control plane's own secret, which nodes never hold, for sealing the
+/// managed keys it makes. Nodes share the store the keys live in and can
+/// write to it; without a seal a compromised node could add a record naming
+/// the `admin` scope under the digest of a secret of its own choosing, and
+/// authenticate as an administrator.
+///
+/// The seal is an HMAC-SHA256 over every field that decides what a key may do
+/// (and its label), checked in constant time. Every control plane sharing a
+/// store must hold the same secret.
+pub struct ManagedKeySecret(crate::sso::SessionKey);
+
+impl std::fmt::Debug for ManagedKeySecret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ManagedKeySecret(..)")
+    }
+}
+
+impl ManagedKeySecret {
+    /// The shortest secret accepted, in bytes.
+    pub const MIN_BYTES: usize = 32;
+
+    /// A secret of at least [`Self::MIN_BYTES`] bytes, used as given.
+    ///
+    /// # Errors
+    /// A shorter secret.
+    pub fn new(bytes: Vec<u8>) -> Result<Self, String> {
+        if bytes.len() < Self::MIN_BYTES {
+            return Err(format!(
+                "the managed key secret needs at least {} bytes",
+                Self::MIN_BYTES
+            ));
+        }
+        crate::sso::SessionKey::new(bytes)
+            .map(Self)
+            .map_err(|e| e.to_string())
+    }
+
+    /// What is sealed, unambiguously: every field named and length-prefixed, so
+    /// no two different records encode alike.
+    fn canonical(key: &ManagedKey) -> String {
+        use std::fmt::Write;
+        fn text(out: &mut String, name: &str, value: &str) {
+            let _ = write!(out, "{name}={}:{value};", value.len());
+        }
+        fn optional(out: &mut String, name: &str, value: Option<&str>) {
+            match value {
+                Some(value) => text(out, name, value),
+                None => {
+                    let _ = write!(out, "{name}=-;");
+                }
+            }
+        }
+        let mut out = String::from("hv2-managed-key-v1;");
+        text(&mut out, "id", &key.id);
+        text(&mut out, "sha256", &key.sha256);
+        let _ = write!(out, "scopes={}[", key.scopes.len());
+        for scope in &key.scopes {
+            let name = serde_json::to_string(scope).unwrap_or_default();
+            let _ = write!(out, "{}:{name},", name.len());
+        }
+        out.push_str("];");
+        text(
+            &mut out,
+            "role",
+            &serde_json::to_string(&key.role).unwrap_or_default(),
+        );
+        optional(
+            &mut out,
+            "team",
+            key.team_id.as_ref().map(crate::ownership::TeamId::as_str),
+        );
+        optional(
+            &mut out,
+            "principal",
+            key.principal
+                .as_ref()
+                .map(crate::ownership::OwnerId::as_str),
+        );
+        text(&mut out, "label", &key.label);
+        text(&mut out, "created_by", &key.created_by);
+        let _ = write!(
+            out,
+            "created_at={};expires_at={};",
+            key.created_at, key.expires_at
+        );
+        out
+    }
+
+    fn mac_of(&self, key: &ManagedKey) -> Option<[u8; 32]> {
+        self.0.mac_of(&Self::canonical(key)).ok()
+    }
+
+    /// `key` with its seal set.
+    ///
+    /// # Errors
+    /// Only if the MAC primitive fails.
+    pub fn seal(&self, mut key: ManagedKey) -> Result<ManagedKey, String> {
+        let mac = self
+            .mac_of(&key)
+            .ok_or_else(|| "could not seal a managed key".to_string())?;
+        key.mac = mac.iter().map(|byte| format!("{byte:02x}")).collect();
+        Ok(key)
+    }
+
+    /// Whether this secret sealed `key` as it now stands. Constant-time; false
+    /// for a record with no seal, a malformed one, or any changed field.
+    #[must_use]
+    pub fn verifies(&self, key: &ManagedKey) -> bool {
+        let Some(expected) = self.mac_of(key) else {
+            return false;
+        };
+        let given = key.mac.as_bytes();
+        if given.len() != 64 || !given.iter().all(u8::is_ascii_hexdigit) {
+            return false;
+        }
+        let mut decoded = [0u8; 32];
+        for (index, byte) in decoded.iter_mut().enumerate() {
+            let pair = &key.mac[index * 2..index * 2 + 2];
+            match u8::from_str_radix(pair, 16) {
+                Ok(value) => *byte = value,
+                Err(_) => return false,
+            }
+        }
+        bool::from(decoded.ct_eq(&expected))
+    }
 }
 
 impl std::fmt::Debug for ManagedKey {
@@ -1019,6 +1152,7 @@ mod tests {
             team_id: team.map(|t| crate::ownership::TeamId::parse(t).unwrap()),
             principal: Some(crate::ownership::OwnerId::parse("pat").unwrap()),
             label: "fixture".into(),
+            mac: String::new(),
             created_by: "lead".into(),
             created_at: 1,
             expires_at: 100,
@@ -1263,5 +1397,186 @@ mod tests {
         assert!(!inventory.permits(&Method::POST, "/sandboxes/box/owner"));
         assert!(!lead.permits(&Method::GET, "/cluster/nodes/n/registrations/pending"));
         assert!(!lead.is_administrator());
+    }
+}
+
+#[cfg(test)]
+mod seal_tests {
+    use super::*;
+
+    fn record() -> ManagedKey {
+        ManagedKey {
+            id: "mk_seal".into(),
+            sha256: "ab".repeat(32),
+            scopes: [ApiScope::Sandboxes, ApiScope::Inventory].into(),
+            role: ApiRole::Operator,
+            team_id: Some(crate::ownership::TeamId::parse("red").unwrap()),
+            principal: Some(crate::ownership::OwnerId::parse("alice").unwrap()),
+            label: "ci".into(),
+            created_by: "lead".into(),
+            created_at: 100,
+            expires_at: 200,
+            mac: String::new(),
+        }
+    }
+
+    fn secret(byte: u8) -> ManagedKeySecret {
+        ManagedKeySecret::new(vec![byte; 32]).unwrap()
+    }
+
+    /// Changing any one field, or sealing under another secret, or not
+    /// sealing, voids the seal.
+    #[test]
+    fn the_seal_covers_every_field() {
+        let sealed = secret(1).seal(record()).unwrap();
+        assert!(secret(1).verifies(&sealed));
+        assert_eq!(sealed.mac.len(), 64);
+        assert!(!secret(2).verifies(&sealed), "another secret");
+        assert!(!secret(1).verifies(&record()), "never sealed");
+        let other_team = Some(crate::ownership::TeamId::parse("blue").unwrap());
+        let other_principal = Some(crate::ownership::OwnerId::parse("bob").unwrap());
+        let changes: Vec<(&str, ManagedKey)> = vec![
+            (
+                "id",
+                ManagedKey {
+                    id: "mk_other".into(),
+                    ..sealed.clone()
+                },
+            ),
+            (
+                "sha256",
+                ManagedKey {
+                    sha256: "cd".repeat(32),
+                    ..sealed.clone()
+                },
+            ),
+            (
+                "scopes added",
+                ManagedKey {
+                    scopes: [ApiScope::Sandboxes, ApiScope::Inventory, ApiScope::Admin].into(),
+                    ..sealed.clone()
+                },
+            ),
+            (
+                "scopes swapped",
+                ManagedKey {
+                    scopes: [ApiScope::Sandboxes, ApiScope::Volumes].into(),
+                    ..sealed.clone()
+                },
+            ),
+            (
+                "role",
+                ManagedKey {
+                    role: ApiRole::Observer,
+                    ..sealed.clone()
+                },
+            ),
+            (
+                "team changed",
+                ManagedKey {
+                    team_id: other_team,
+                    ..sealed.clone()
+                },
+            ),
+            (
+                "team removed",
+                ManagedKey {
+                    team_id: None,
+                    ..sealed.clone()
+                },
+            ),
+            (
+                "principal changed",
+                ManagedKey {
+                    principal: other_principal,
+                    ..sealed.clone()
+                },
+            ),
+            (
+                "principal removed",
+                ManagedKey {
+                    principal: None,
+                    ..sealed.clone()
+                },
+            ),
+            (
+                "label",
+                ManagedKey {
+                    label: "other".into(),
+                    ..sealed.clone()
+                },
+            ),
+            (
+                "created_by",
+                ManagedKey {
+                    created_by: "eve".into(),
+                    ..sealed.clone()
+                },
+            ),
+            (
+                "created_at",
+                ManagedKey {
+                    created_at: 101,
+                    ..sealed.clone()
+                },
+            ),
+            (
+                "expires_at",
+                ManagedKey {
+                    expires_at: 4_000_000_000,
+                    ..sealed.clone()
+                },
+            ),
+        ];
+        for (field, changed) in changes {
+            assert!(!secret(1).verifies(&changed), "{field}");
+        }
+        for bad in [
+            "",
+            "zz",
+            &"0".repeat(64),
+            &"g".repeat(64),
+            &sealed.mac[..63],
+        ] {
+            let forged = ManagedKey {
+                mac: bad.to_string(),
+                ..sealed.clone()
+            };
+            assert!(!secret(1).verifies(&forged), "{bad:?}");
+        }
+        // Upper-case hex of the right MAC is the same bytes and still verifies;
+        // that is not a way to forge anything, only to spell it.
+        assert!(ManagedKeySecret::new(vec![0; 31]).is_err());
+    }
+
+    /// Two different records never share an encoding, whatever their text.
+    #[test]
+    fn the_encoding_is_unambiguous() {
+        let a = ManagedKey {
+            label: "a;created_by=5:lead".into(),
+            ..record()
+        };
+        let b = ManagedKey {
+            created_by: "lead".into(),
+            label: "a".into(),
+            ..record()
+        };
+        assert_ne!(
+            ManagedKeySecret::canonical(&a),
+            ManagedKeySecret::canonical(&b)
+        );
+        let no_team = ManagedKey {
+            team_id: None,
+            ..record()
+        };
+        let empty_team_text = ManagedKey {
+            team_id: None,
+            label: "x".into(),
+            ..record()
+        };
+        assert_ne!(
+            ManagedKeySecret::canonical(&no_team),
+            ManagedKeySecret::canonical(&empty_team_text)
+        );
     }
 }

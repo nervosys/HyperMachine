@@ -162,8 +162,8 @@ async function refresh() {
       const fill = document.createElement("span");
       fill.style.width = (n.capacity ? Math.min(100, 100 * n.running / n.capacity) : 0) + "%";
       bar.append(fill); load.append(bar);
-      tr.append(load, cell(n.running + " / " + n.capacity), cell(n.api, "mono"),
-                cell(n.proxy, "mono"), cell(ago(n.heartbeat_ms)));
+      tr.append(load, cell(n.running + " / " + n.capacity), cell(n.api || "", "mono"),
+                cell(n.proxy || "", "mono"), cell(ago(n.heartbeat_ms)));
       return tr;
     }), "No live nodes.", 6);
 

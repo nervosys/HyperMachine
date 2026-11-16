@@ -21,7 +21,9 @@ no tenant isolation (see below for `team_id`). Public-port management separately
 
 An observer can only GET/HEAD `/sandboxes`, `/v2/sandboxes`, `/templates`,
 `/sandboxes/metrics` and `/cluster/nodes`, and only where its scopes also allow
-the route. The role caps even `admin` scope. All other protected routes are
+the route. `/cluster/nodes` gives an administrator each node as it reported itself;
+anyone else gets each node's id, load, version and the templates they may start,
+without node URLs, signing keys or other teams' snapshot names. The role caps even `admin` scope. All other protected routes are
 denied, including sandbox detail/name lookup, volume credentials, upload URLs,
 execution and GET TCP upgrades. Sandbox listings omit the guest access token.
 Operators retain the existing scope behavior. For an inventory observer, add
@@ -108,6 +110,31 @@ plane's API, and they are kept in the cluster store (Redis or the in-memory stor
 the API cannot read or change. A managed key behaves exactly like a policy entry with the same fields: the
 same scopes, presets, roles, team and principal rules, and the same expiry check on every request.
 
+### The managed key secret
+
+The cluster store is shared with nodes, and a node can write to it. So that a compromised node cannot add a
+record naming the `admin` scope under the digest of a secret it chose, every managed key is sealed with an
+HMAC-SHA256 under a secret that only control planes hold:
+
+```
+hv2-control-plane --managed-key-secret-file /etc/hypermachine/managed-key-secret ...
+```
+
+- **Format.** The file's bytes, all of them (a trailing newline included), are the secret; at least 32 bytes.
+  For example `head -c 48 /dev/urandom | base64 > managed-key-secret` (mode 0600). Every control plane that
+  shares a store must be given the same file; never give it to a node. Changing it makes every managed key
+  stop working (they are refused as untrustworthy), so it is a way to revoke them all, not a rotation.
+- **What is sealed.** The id, the digest, the scopes, the role, the team, the principal, the label, the
+  creator and both times. A record whose seal does not verify (forged, altered after sealing, never sealed, or
+  sealed under another secret) never authenticates: the request is **503**, as for any record that cannot be
+  trusted, never 200 and never mistaken for an unknown key. It is not listed, it does not count against the
+  key limit, and a team-admin cannot see it. An administrator can still `DELETE /keys/{id}` it.
+- **Without the flag, managed keys are off.** `POST`, `GET` and `DELETE /keys` answer **503** ("managed API
+  keys are disabled ..."), no managed key authenticates (a key the file does not name is unknown: 401, and the
+  store is not asked), and `GET /teams/{team}/members` lists the policy file's members only. The control plane
+  says so at startup. Embedded users call `ControlPlane::set_managed_key_secret`.
+- A key made before this existed has no seal and stops working; make it again.
+
 | Route | What it does |
 |---|---|
 | `POST /keys` | Makes a key. Returns 201 with `{id, key, label, scopes, role, teamId, principalId, expiresAt, createdAt}`. **`key` is shown only here.** |
@@ -140,8 +167,11 @@ POST /keys
   random and not derived from it. The store holds the SHA-256 of the secret, the id, the expanded scopes, the
   role, the team, the principal, the label, who created it and when. A secret whose digest equals a policy
   entry's, or the legacy admin key, is refused (not reachable with 256 random bits, but checked).
-- At most 1000 unexpired managed keys are held (429 beyond that; `ControlPlane::set_managed_key_limit`).
-  Expired keys stay listed, marked `expired`, until deleted.
+- At most 1000 unexpired managed keys are held **per team** (429 beyond that;
+  `ControlPlane::set_managed_key_limit`), so one team cannot use up another's room. Administrators' keys that
+  name no team are one bucket of their own. Expired keys stay listed, marked `expired`, until deleted. A record
+  in the store that cannot be read is skipped and logged; it does not stop the listing, the count or a
+  revocation.
 
 ### Who may use them
 
@@ -182,6 +212,7 @@ Redis, no scan), **on that request, with no cache**. So:
 - **A store error while checking a key is 503, never 401 and never a pass.** The key may be fine; the control
   plane cannot tell. Requests with a policy-file key or the legacy admin key do not touch the store and are
   unaffected.
+- The record must carry this control plane's seal (see [the managed key secret](#the-managed-key-secret)).
 - A request with no key makes no store call.
 - Each such request with an unrecognised key costs the store one lookup.
 

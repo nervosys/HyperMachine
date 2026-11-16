@@ -42,6 +42,8 @@ struct Options {
     identity_issuer: Option<String>,
     /// The longest a key made with `POST /keys` may live, in seconds.
     managed_key_max_ttl_secs: Option<u64>,
+    /// The secret managed keys are sealed with; without it they are off.
+    managed_key_secret_file: Option<String>,
     /// Refuse to start unless TLS runs on AWS-LC's FIPS module.
     fips: bool,
     /// Single sign-on through an OpenID Connect provider; see `sso_login`.
@@ -60,6 +62,8 @@ struct SsoOptions {
     session_hours: Option<u64>,
     /// Sign people in on private guest URLs too; see `sso_guest`.
     guest_urls: bool,
+    /// The domains guest URLs are under (`{port}-{sandbox}.{domain}`).
+    guest_domains: Vec<String>,
 }
 
 fn parse() -> Result<Options, String> {
@@ -90,6 +94,7 @@ fn parse() -> Result<Options, String> {
         team_otlp_endpoints: Vec::new(),
         identity_issuer: None,
         managed_key_max_ttl_secs: None,
+        managed_key_secret_file: None,
         fips: false,
         sso: SsoOptions::default(),
     };
@@ -166,6 +171,7 @@ fn parse() -> Result<Options, String> {
                         .map_err(|e| format!("--managed-key-max-ttl-secs: {e}"))?,
                 );
             }
+            "--managed-key-secret-file" => opts.managed_key_secret_file = Some(value()?),
             "--fips" => opts.fips = true,
             "--sso-issuer" => opts.sso.issuer = Some(value()?),
             "--sso-client-id" => opts.sso.client_id = Some(value()?),
@@ -175,6 +181,7 @@ fn parse() -> Result<Options, String> {
             "--sso-session-key-file" => opts.sso.session_key_file = Some(value()?),
             "--sso-provider-ca" => opts.sso.provider_ca = Some(value()?),
             "--sso-guest-urls" => opts.sso.guest_urls = true,
+            "--guest-domain" => opts.sso.guest_domains.push(value()?),
             "--sso-session-hours" => {
                 opts.sso.session_hours = Some(
                     value()?
@@ -191,11 +198,12 @@ fn parse() -> Result<Options, String> {
                      [--api-keys-file F] [--native-port-range FIRST-LAST] [--reap-interval SECS] [--tls-cert F --tls-key F] \
                      [--tls-bundle-file F] [--api-tls-cert F --api-tls-key F] \
                      [--mtls-ca F --mtls-cert F --mtls-key F [--mtls-node-name N]] \
-                     [--identity-issuer URL] [--managed-key-max-ttl-secs N] [--web-access-file F] [--domain-verification-file F] \
+                     [--identity-issuer URL] [--managed-key-max-ttl-secs N] [--managed-key-secret-file F] [--web-access-file F] [--domain-verification-file F] \
                      [--team-otlp-endpoint URL]... \
                      [--sso-issuer URL --sso-client-id ID --sso-redirect-url URL \
                      --sso-members-file F --sso-session-key-file F [--sso-client-secret-file F] \
-                     [--sso-provider-ca F] [--sso-session-hours N] [--sso-guest-urls]]\n\
+                     [--sso-provider-ca F] [--sso-session-hours N] \
+                     [--sso-guest-urls --guest-domain DOMAIN [--guest-domain DOMAIN]...]]\n\
                      HV2_API_KEY and HV2_CLUSTER_TOKEN are read from the environment too."
                 );
                 std::process::exit(0);
@@ -388,7 +396,13 @@ async fn main() -> std::process::ExitCode {
     // Discovered before the proxy starts: guest URLs and the API share it.
     let sso_login = match opts.sso.issuer.clone() {
         Some(issuer) => match sso(issuer, &opts.sso).await {
-            Ok(sso) => Some(Arc::new(sso)),
+            Ok(sso) => {
+                if let Err(e) = sso.set_guest_domains(&opts.sso.guest_domains) {
+                    eprintln!("hv2-control-plane: {e}");
+                    return std::process::ExitCode::FAILURE;
+                }
+                Some(Arc::new(sso))
+            }
             Err(e) => {
                 eprintln!("hv2-control-plane: SSO: {e}");
                 return std::process::ExitCode::FAILURE;
@@ -403,6 +417,17 @@ async fn main() -> std::process::ExitCode {
         }
         None => None,
     };
+    // A guest URL is named by its first label alone, so which domains those
+    // are is the operator's to say: without it a member could be sent to, and
+    // a pass believed from, any domain at all.
+    if opts.sso.guest_urls && opts.sso.guest_domains.is_empty() {
+        eprintln!("hv2-control-plane: --sso-guest-urls needs at least one --guest-domain");
+        return std::process::ExitCode::FAILURE;
+    }
+    if !opts.sso.guest_urls && !opts.sso.guest_domains.is_empty() {
+        eprintln!("hv2-control-plane: --guest-domain needs --sso-guest-urls");
+        return std::process::ExitCode::FAILURE;
+    }
     // `__Host-` cookies are Secure: guest URLs must be served over TLS.
     if opts.sso.guest_urls && opts.tls_cert.is_none() && opts.tls_bundle_file.is_none() {
         eprintln!(
@@ -546,6 +571,28 @@ async fn main() -> std::process::ExitCode {
             eprintln!("hv2-control-plane: {error}");
             return std::process::ExitCode::FAILURE;
         }
+    }
+    // Managed keys live in a store nodes can write to; this secret, which
+    // nodes never hold, is what tells a key a control plane made from one a
+    // node did. The file's bytes, all of them, are the secret: give every
+    // control plane sharing a store the same file.
+    match opts.managed_key_secret_file.as_deref() {
+        Some(path) => {
+            let secret = match std::fs::read(path) {
+                Ok(bytes) => zeroize::Zeroizing::new(bytes),
+                Err(_) => {
+                    eprintln!("hv2-control-plane: could not read the managed key secret file");
+                    return std::process::ExitCode::FAILURE;
+                }
+            };
+            if let Err(error) = control.set_managed_key_secret(secret.to_vec()) {
+                eprintln!("hv2-control-plane: --managed-key-secret-file: {error}");
+                return std::process::ExitCode::FAILURE;
+            }
+        }
+        None => tracing::warn!(
+            "no --managed-key-secret-file: managed API keys (/keys) are off, and none authenticates"
+        ),
     }
     if let Some(range) = opts.native_port_range {
         if let Err(error) = control.configure_public_ports(range) {

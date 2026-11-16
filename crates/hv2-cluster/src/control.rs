@@ -74,6 +74,8 @@ pub struct ControlPlane {
     managed_key_max_ttl_secs: std::sync::atomic::AtomicU64,
     /// The most unexpired keys made through `POST /keys` the store may hold.
     managed_key_limit: std::sync::atomic::AtomicUsize,
+    /// What managed keys are sealed with; none, and managed keys are off.
+    managed_key_secret: parking_lot::RwLock<Option<Arc<crate::keys::ManagedKeySecret>>>,
     domain_verification:
         parking_lot::RwLock<Option<Arc<crate::domain_verification::DomainVerification>>>,
     native_port_range: parking_lot::RwLock<Option<crate::ports::PublicPortRange>>,
@@ -218,6 +220,7 @@ impl ControlPlane {
             managed_key_limit: std::sync::atomic::AtomicUsize::new(
                 key_api::DEFAULT_MANAGED_KEY_LIMIT,
             ),
+            managed_key_secret: parking_lot::RwLock::new(None),
             domain_verification: parking_lot::RwLock::new(None),
             config,
             native_port_range: parking_lot::RwLock::new(None),
@@ -253,6 +256,82 @@ fn api_error(status: StatusCode, message: impl std::fmt::Display) -> Response {
         Json(json!({ "code": status.as_u16(), "message": message.to_string() })),
     )
         .into_response()
+}
+
+/// A node's URL for `segments`, each one path segment: percent-encoded, so a
+/// value that came from a request can never add a segment, climb out of the
+/// path with `..`, or reach another route. An empty, `.` or `..` segment is
+/// refused outright rather than dropped.
+///
+/// # Errors
+/// A node URL that cannot take a path, or an unusable segment.
+pub(crate) fn node_url(base: &str, segments: &[&str]) -> Result<reqwest::Url, &'static str> {
+    let mut url = reqwest::Url::parse(base).map_err(|_| "the node's URL is not valid")?;
+    {
+        let mut path = url
+            .path_segments_mut()
+            .map_err(|()| "the node's URL cannot take a path")?;
+        path.pop_if_empty();
+        for segment in segments {
+            if matches!(*segment, "" | "." | "..") {
+                return Err("a path segment is empty or a dot segment");
+            }
+            path.push(segment);
+        }
+    }
+    Ok(url)
+}
+
+/// Whether `path_and_query`, a client's request target about to be repeated to
+/// a node verbatim, stays where it says it does. URL parsers resolve `.` and
+/// `..` segments, in any percent-encoding, and treat `\` as `/`, so a path
+/// that routed here as one thing would reach the node as another.
+pub(crate) fn forwards_verbatim(path_and_query: &str) -> bool {
+    let path = path_and_query
+        .split_once(['?', '#'])
+        .map_or(path_and_query, |(path, _)| path);
+    path.starts_with('/')
+        && !path.bytes().any(|b| b.is_ascii_control() || b == b'\\')
+        && path.split('/').all(|segment| !is_dot_segment(segment))
+}
+
+/// Whether a path segment is `.` or `..` once percent-decoded.
+fn is_dot_segment(segment: &str) -> bool {
+    let hex = |b: u8| {
+        char::from(b)
+            .to_digit(16)
+            .and_then(|d| u8::try_from(d).ok())
+    };
+    let bytes = segment.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if let (b'%', Some(high), Some(low)) = (
+            bytes[i],
+            bytes.get(i + 1).copied().and_then(hex),
+            bytes.get(i + 2).copied().and_then(hex),
+        ) {
+            decoded.push(high << 4 | low);
+            i += 3;
+        } else {
+            decoded.push(bytes[i]);
+            i += 1;
+        }
+    }
+    matches!(decoded.as_slice(), b"." | b"..")
+}
+
+/// Whether a client's `Authorization` header may be repeated to a node for a
+/// request to `path`. Only the volume content API reads one, and it is the
+/// volume's own token. Anything else is the caller's credential for *this*
+/// control plane -- above all a signed-in member's session bearer
+/// (`Bearer hms1.`) -- which a node has no use for and must never be able to
+/// replay here. A session token is never repeated, whichever path it is sent to.
+pub(crate) fn forwards_authorization(path: &str, value: &[u8]) -> bool {
+    let session = value.len() >= crate::sso::SESSION_BEARER_PREFIX.len()
+        && value[..crate::sso::SESSION_BEARER_PREFIX.len()]
+            .eq_ignore_ascii_case(crate::sso::SESSION_BEARER_PREFIX.as_bytes());
+    !session && path.starts_with("/volumecontent/")
 }
 
 /// The routes.
@@ -2177,6 +2256,9 @@ async fn port_tunnel(
         }
         Err(error) => return api_error(StatusCode::SERVICE_UNAVAILABLE, error),
     };
+    if !forwards_verbatim(request.uri().path()) {
+        return api_error(StatusCode::BAD_REQUEST, "invalid request path");
+    }
     let url = format!("{}{}", node.api, request.uri().path());
     let stream = match upgrade_to_node(&control, url, protocol, None, &id).await {
         Ok(stream) => stream,
@@ -2279,6 +2361,9 @@ async fn machine_reverse_tunnel(
             )
         };
     };
+    if !forwards_verbatim(request.uri().path()) {
+        return api_error(StatusCode::BAD_REQUEST, "invalid request path");
+    }
     let url = format!("{}{}", node.api, request.uri().path());
     match upgrade_to_node(
         &control,
@@ -2427,6 +2512,9 @@ async fn forward(
     };
 
     let path_and_query = uri.path_and_query().map_or(uri.path(), |p| p.as_str());
+    if !forwards_verbatim(path_and_query) {
+        return api_error(StatusCode::BAD_REQUEST, "invalid request path");
+    }
     let reqwest_method =
         reqwest::Method::from_bytes(method.as_str().as_bytes()).unwrap_or(reqwest::Method::GET);
     let mut answered = None;
@@ -2714,11 +2802,50 @@ async fn reconcile_on_node(
     (status, Json(descriptor)).into_response()
 }
 
-async fn cluster_nodes(State(control): State<Arc<ControlPlane>>) -> Response {
-    match control.store.nodes().await {
-        Ok(nodes) => Json(nodes).into_response(),
-        Err(e) => api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+/// `GET /cluster/nodes`. An administrator -- or a deployment with no keys --
+/// gets each node as it reported itself. Anyone else who may read the
+/// inventory gets its load and the templates it may start, and nothing that
+/// says where the node is or what other teams hold: not its URLs, its signing
+/// key, or the names of other teams' private snapshots.
+async fn cluster_nodes(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(admin): Extension<AdministratorContext>,
+    Extension(access): Extension<SandboxAccess>,
+    Extension(team): Extension<crate::ownership::RequestTeam>,
+) -> Response {
+    let nodes = match control.store.nodes().await {
+        Ok(nodes) => nodes,
+        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+    };
+    if admin.0 || matches!(access, SandboxAccess::All) {
+        return Json(nodes).into_response();
     }
+    Json(
+        nodes
+            .iter()
+            .map(|node| {
+                // A node that lists none offers `base` alone.
+                let offered = if node.templates.is_empty() {
+                    vec!["base".to_owned()]
+                } else {
+                    node.templates.clone()
+                };
+                let templates: Vec<String> = offered
+                    .into_iter()
+                    .filter(|name| node.offers_to(name, &team))
+                    .collect();
+                json!({
+                    "id": node.id,
+                    "capacity": node.capacity,
+                    "running": node.running,
+                    "heartbeat_ms": node.heartbeat_ms,
+                    "version": node.version,
+                    "templates": templates,
+                })
+            })
+            .collect::<Vec<_>>(),
+    )
+    .into_response()
 }
 
 async fn cluster_events(
@@ -2962,6 +3089,9 @@ async fn on_every_node(
     method: Method,
     path: &str,
 ) -> Result<Vec<(String, u16, Value)>, (StatusCode, String)> {
+    if !forwards_verbatim(path) {
+        return Err((StatusCode::BAD_REQUEST, "invalid request path".into()));
+    }
     let nodes = control
         .store
         .nodes()
@@ -3086,6 +3216,15 @@ async fn share_template(
     body: Bytes,
 ) -> Response {
     let name = crate::model::untagged(&id);
+    // Both are repeated to every node in a URL. A team is a bounded label;
+    // anything else -- `x/../../sandboxes/y`, say -- is not a team, and is
+    // not sent anywhere.
+    let Ok(with) = crate::ownership::TeamId::parse(&with) else {
+        return api_error(StatusCode::BAD_REQUEST, "invalid team ID");
+    };
+    if node_url("http://node", &["templates", name, "shares", with.as_str()]).is_err() {
+        return api_error(StatusCode::BAD_REQUEST, "invalid snapshot ID");
+    }
     match snapshot_owner(&control, name).await {
         Err(response) => return response,
         Ok(Some((owner, _))) if team.0.as_ref().is_none_or(|mine| *mine == owner) => {}
@@ -3103,12 +3242,12 @@ async fn share_template(
     let mut worst: Option<(u16, Value)> = None;
     let mut done: Option<(u16, Value)> = None;
     for node in &nodes {
+        let Ok(url) = node_url(&node.api, &["templates", name, "shares", with.as_str()]) else {
+            continue;
+        };
         let mut request = control
             .http
-            .request(
-                method.clone(),
-                format!("{}/templates/{name}/shares/{with}", node.api),
-            )
+            .request(method.clone(), url)
             .header("content-type", "application/json")
             .body(body.clone());
         if let Some(token) = &control.config.cluster_token {
@@ -3159,7 +3298,12 @@ async fn delete_template(
             return api_error(StatusCode::NOT_FOUND, format!("no snapshot {id}"));
         }
     }
-    let path = format!("/templates/{name}");
+    // The name is a request's, and one segment of the path: encoded, it cannot
+    // be anything else.
+    let Ok(url) = node_url("http://node", &["templates", name]) else {
+        return api_error(StatusCode::BAD_REQUEST, "invalid snapshot ID");
+    };
+    let path = url.path().to_owned();
     let answers = match on_every_node(&control, Method::DELETE, &path).await {
         Ok(answers) => answers,
         Err((status, message)) => return api_error(status, message),
@@ -3250,8 +3394,9 @@ async fn to_builder(
 
 /// Pass one request to `node`, both bodies streamed: an upload or a
 /// download may be large. The host the caller reached goes along, so links
-/// a node makes point back here; so does a bearer token, which the volume
-/// content API authenticates with.
+/// a node makes point back here; so does a bearer token, but only to the
+/// volume content API, which authenticates with it (see
+/// [`forwards_authorization`]).
 async fn relay(
     control: &ControlPlane,
     node: &crate::model::NodeInfo,
@@ -3274,16 +3419,25 @@ async fn relay_with_team(
     team: Option<&crate::ownership::TeamId>,
 ) -> Response {
     let path_and_query = uri.path_and_query().map_or(uri.path(), |p| p.as_str());
+    if !forwards_verbatim(path_and_query) {
+        return api_error(StatusCode::BAD_REQUEST, "invalid request path");
+    }
     let reqwest_method =
         reqwest::Method::from_bytes(method.as_str().as_bytes()).unwrap_or(reqwest::Method::GET);
     let mut request = control
         .http
         .request(reqwest_method, format!("{}{path_and_query}", node.api))
         .body(body);
-    for name in ["content-type", "content-length", "authorization"] {
+    for name in ["content-type", "content-length"] {
         if let Some(value) = headers.get(name) {
             request = request.header(name, value.as_bytes());
         }
+    }
+    if let Some(value) = headers
+        .get("authorization")
+        .filter(|value| forwards_authorization(uri.path(), value.as_bytes()))
+    {
+        request = request.header("authorization", value.as_bytes());
     }
     if let Some(host) = headers
         .get("x-forwarded-host")
@@ -3785,9 +3939,10 @@ impl ClusterRoutes {
             return None;
         }
         for node in self.store.nodes().await.ok()? {
-            let mut request = http
-                .get(format!("{}/machines/{id}", node.api))
-                .timeout(Duration::from_secs(5));
+            let Ok(url) = crate::control::node_url(&node.api, &["machines", id]) else {
+                continue;
+            };
+            let mut request = http.get(url).timeout(Duration::from_secs(5));
             if let Some(token) = token {
                 request = request.header(CLUSTER_TOKEN_HEADER, token);
             }
@@ -3878,7 +4033,14 @@ impl hv2_api::sandbox_proxy::SandboxRoutes for ClusterRoutes {
         if port == hv2_api::sandbox_proxy::ENVD_PORT {
             return None;
         }
-        crate::sso_guest::intercept(sso, uri, headers, self.web_access.is_some())
+        crate::sso_guest::intercept(
+            sso,
+            self.store.as_ref(),
+            uri,
+            headers,
+            self.web_access.is_some(),
+        )
+        .await
     }
 
     async fn admit_request(
@@ -5628,5 +5790,102 @@ mod web_sharing_failure_tests {
         assert_eq!(h[crate::web_access::IDENTITY_HEADER], "alice");
         assert!(!h.contains_key("authorization"));
         eprintln!("stored grant admission: store error and stall deny; cancelled=1; rotation expiry delegation races deny; current grant admits");
+    }
+}
+
+#[cfg(test)]
+mod confinement_tests {
+    use super::*;
+
+    #[test]
+    fn a_segment_is_one_segment_whatever_it_holds() {
+        let url = |segments: &[&str]| node_url("http://10.0.0.5:3980", segments).unwrap();
+        assert_eq!(
+            url(&["templates", "snap", "shares", "red"]).as_str(),
+            "http://10.0.0.5:3980/templates/snap/shares/red"
+        );
+        // A base with a path keeps it.
+        assert_eq!(
+            node_url("http://10.0.0.5:3980/api/", &["machines", "vm-1"])
+                .unwrap()
+                .as_str(),
+            "http://10.0.0.5:3980/api/machines/vm-1"
+        );
+        for hostile in [
+            "x/../../sandboxes/victim",
+            "a/b",
+            r"a\b",
+            "a?b=c",
+            "a#b",
+            "a%2Fb",
+            "a b",
+            "\u{e9}",
+        ] {
+            let built = url(&["templates", hostile, "shares", "red"]);
+            // Always exactly four segments: the text is inside one of them.
+            assert_eq!(
+                built.path_segments().unwrap().count(),
+                4,
+                "{hostile}: {built}"
+            );
+            assert!(
+                built.query().is_none() && built.fragment().is_none(),
+                "{built}"
+            );
+        }
+        for refused in ["", ".", ".."] {
+            assert!(
+                node_url("http://10.0.0.5:3980", &["templates", refused]).is_err(),
+                "{refused:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_client_path_with_a_dot_segment_is_not_repeated() {
+        for fine in [
+            "/sandboxes/abc/exec",
+            "/volumes/vol.1",
+            "/templates/a..b",
+            "/volumecontent/x/file?path=../../etc",
+            "/x/..a/b",
+            "/x/%2e%2ea",
+        ] {
+            assert!(forwards_verbatim(fine), "{fine}");
+        }
+        for refused in [
+            "/sandboxes/../templates",
+            "/sandboxes/./x",
+            "/sandboxes/%2e%2e/x",
+            "/sandboxes/%2E%2E",
+            "/sandboxes/.%2e/x",
+            "/sandboxes/%2e./x",
+            "/sandboxes/%2e/x",
+            "/a/..",
+            r"/a\..\b",
+            "/a/b\n",
+            "relative",
+        ] {
+            assert!(!forwards_verbatim(refused), "{refused:?}");
+        }
+    }
+
+    #[test]
+    fn only_the_volume_content_api_gets_a_bearer_and_never_a_session() {
+        assert!(forwards_authorization(
+            "/volumecontent/v/file",
+            b"Bearer volume-token"
+        ));
+        assert!(!forwards_authorization(
+            "/volumes/v",
+            b"Bearer volume-token"
+        ));
+        assert!(!forwards_authorization("/sandboxes", b"Basic dXNlcjpwdw=="));
+        for session in ["Bearer hms1.a.b", "bearer HMS1.a.b", "BEARER hms1."] {
+            assert!(
+                !forwards_authorization("/volumecontent/v/file", session.as_bytes()),
+                "{session}"
+            );
+        }
     }
 }

@@ -1,0 +1,25 @@
+{
+  "success": false,
+  "purpose": "functional verification of firmware-booted machines on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "2056b506899966a3a84b158380014babc74981f5a264885a869befbc72d50a75",
+    "firmware": "4a0a1e977368f6b15d2198a216bdedf9a350bf5e5ae07e29e695373ec16ad958",
+    "image": "ff40d989141ba0313b9bfc3cdfaf645a942547d38f54dbeebf76074df77304d2",
+    "driver": "fd37b8d570488c35ae3fb8a969ccfb8828c9e98a60ae697eb8eac0e298e7c5df"
+  },
+  "cases": [
+    {
+      "name": "a machine created from the image boots by firmware to the image's login prompt",
+      "success": true,
+      "detail": {
+        "machineID": "vm-7eea058809befe15",
+        "diskGiB": 4,
+        "prompt": "ubuntu login:"
+      }
+    },
+    {
+      "name": "the console takes input: a login, commands, and a file written",
+      "success": false
+    }
+  ]
+}

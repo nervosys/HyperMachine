@@ -14,6 +14,18 @@
 //! A key found there acts under the same [`ApiKeyPolicy`] a file entry with the
 //! same fields would.
 //!
+//! # The store is not trusted
+//!
+//! Nodes share the store and can write to it, so a record in it proves
+//! nothing by being there. Each is sealed with an HMAC under a secret only
+//! control planes hold (`--managed-key-secret-file`), covering every field
+//! that decides what the key may do. A record whose seal does not verify --
+//! forged, altered, or sealed under another secret -- never authenticates
+//! (the request is refused with a 503, as for any record that cannot be
+//! trusted), is never listed, never counted against a limit, and can be
+//! revoked only by an administrator. With no secret configured, managed keys
+//! are off: `/keys` answers 503 and no key is looked up in the store.
+//!
 //! # Who may do what
 //!
 //! An administrator manages any key and any team. A team-admin manages its own
@@ -37,7 +49,7 @@ use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
 use super::{api_error, ControlPlane};
-use crate::keys::{ApiKeyPolicy, ApiRole, ApiScope, KeyRequest, ManagedKey};
+use crate::keys::{ApiKeyPolicy, ApiRole, ApiScope, KeyRequest, ManagedKey, ManagedKeySecret};
 use crate::model::ClusterEvent;
 use crate::ownership::{OwnerId, TeamId};
 use std::sync::Arc;
@@ -48,7 +60,8 @@ pub const MIN_KEY_TTL_SECS: u64 = 60;
 pub const DEFAULT_MAX_KEY_TTL_SECS: u64 = 90 * 24 * 60 * 60;
 /// The most a configured maximum may be: ten years.
 pub const MAX_CONFIGURABLE_KEY_TTL_SECS: u64 = 3650 * 24 * 60 * 60;
-/// Unexpired managed keys the store holds at most, unless configured.
+/// Unexpired managed keys one team (or, for administrators' keys that name
+/// no team, all of them together) may hold at most, unless configured.
 pub const DEFAULT_MANAGED_KEY_LIMIT: usize = 1000;
 /// What a secret begins with, so a leaked one is recognisable.
 pub const KEY_PREFIX: &str = "hm_";
@@ -134,6 +147,11 @@ fn hex(bytes: &[u8]) -> String {
 
 /// Look the presented key up in the store, on this request, uncached.
 pub(super) async fn authenticate(control: &ControlPlane, sent: &[u8], now: i64) -> Managed {
+    // Without the secret no record can be told from a forgery: managed keys
+    // are off, and the key is simply not one.
+    let Some(secret) = control.managed_key_secret() else {
+        return Managed::Unknown;
+    };
     let digest: [u8; 32] = Sha256::digest(sent).into();
     let found = tokio::time::timeout(
         STORE_TIMEOUT,
@@ -152,6 +170,11 @@ pub(super) async fn authenticate(control: &ControlPlane, sent: &[u8], now: i64) 
             return Managed::Unavailable;
         }
     };
+    if !secret.verifies(&record) {
+        tracing::warn!(key = %record.id.escape_debug(),
+            "a managed key record is not sealed by this control plane; request refused");
+        return Managed::Unavailable;
+    }
     let policy = match ApiKeyPolicy::from_managed(&record) {
         Ok(policy) if policy.has_digest(&digest) => policy,
         _ => {
@@ -167,6 +190,22 @@ pub(super) async fn authenticate(control: &ControlPlane, sent: &[u8], now: i64) 
 }
 
 impl ControlPlane {
+    /// Turn managed API keys on, sealing and checking them with `secret`
+    /// (at least 32 bytes, used as given). Every control plane that shares a
+    /// store must be given the same one; nodes must not have it. Without it
+    /// `/keys` answers 503 and no managed key authenticates.
+    ///
+    /// # Errors
+    /// A secret shorter than 32 bytes.
+    pub fn set_managed_key_secret(&self, secret: Vec<u8>) -> Result<(), String> {
+        *self.managed_key_secret.write() = Some(Arc::new(ManagedKeySecret::new(secret)?));
+        Ok(())
+    }
+
+    pub(super) fn managed_key_secret(&self) -> Option<Arc<ManagedKeySecret>> {
+        self.managed_key_secret.read().clone()
+    }
+
     /// Set how long a managed key may live at most; the default is 90 days.
     ///
     /// # Errors
@@ -182,7 +221,8 @@ impl ControlPlane {
         Ok(())
     }
 
-    /// Set how many unexpired managed keys the store may hold; the default is 1000.
+    /// Set how many unexpired managed keys one team may hold (administrators'
+    /// keys that name no team count together as one); the default is 1000.
     pub fn set_managed_key_limit(&self, limit: usize) {
         self.managed_key_limit.store(limit, Ordering::Relaxed);
     }
@@ -240,6 +280,44 @@ fn plausible_id(id: &str) -> bool {
 fn unavailable(what: &str, error: &dyn std::fmt::Display) -> Response {
     tracing::warn!(%error, "{what}");
     api_error(StatusCode::SERVICE_UNAVAILABLE, "key store unavailable")
+}
+
+/// The answer when no secret is configured: nothing here can be trusted, so
+/// nothing here is offered.
+fn disabled() -> Response {
+    api_error(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "managed API keys are disabled: this control plane has no managed key secret \
+         (--managed-key-secret-file)",
+    )
+}
+
+/// What the store holds, split by whether this control plane sealed it.
+struct Held {
+    /// Sealed by this control plane's secret.
+    trusted: Vec<ManagedKey>,
+    /// Anything else. Never acted on; an administrator may revoke it.
+    untrusted: Vec<ManagedKey>,
+}
+
+/// Every managed key, with the ones this control plane did not seal set aside.
+// Handlers answer with a Response; see events.rs for the same allowance.
+#[allow(clippy::result_large_err)]
+async fn read_managed(control: &ControlPlane, secret: &ManagedKeySecret) -> Result<Held, Response> {
+    let keys = match tokio::time::timeout(STORE_TIMEOUT, control.store.managed_keys()).await {
+        Ok(Ok(keys)) => keys,
+        Ok(Err(error)) => return Err(unavailable("could not read managed keys", &error)),
+        Err(_) => return Err(unavailable("reading managed keys timed out", &"timeout")),
+    };
+    let (trusted, untrusted): (Vec<_>, Vec<_>) =
+        keys.into_iter().partition(|key| secret.verifies(key));
+    if !untrusted.is_empty() {
+        tracing::warn!(
+            count = untrusted.len(),
+            "managed key records not sealed by this control plane were ignored"
+        );
+    }
+    Ok(Held { trusted, untrusted })
 }
 
 async fn announce(control: &ControlPlane, kind: &str, key: &ManagedKey, by: &str) {
@@ -309,6 +387,9 @@ pub(super) async fn create_key(
     let authority = match caller.authority() {
         Ok(authority) => authority,
         Err(response) => return response,
+    };
+    let Some(seal) = control.managed_key_secret() else {
+        return disabled();
     };
     let request: KeyRequest = match serde_json::from_slice(&body) {
         Ok(request) => request,
@@ -427,11 +508,19 @@ pub(super) async fn create_key(
         created_by: caller.created_by.clone(),
         created_at,
         expires_at,
+        mac: String::new(),
+    };
+    let record = match seal.seal(record) {
+        Ok(record) => record,
+        Err(error) => {
+            tracing::warn!(%error, "could not seal a managed key");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, "could not seal the key");
+        }
     };
 
     let limit = control.managed_key_limit.load(Ordering::Relaxed);
-    match tokio::time::timeout(STORE_TIMEOUT, control.store.managed_keys()).await {
-        Ok(Ok(held)) => {
+    match read_managed(&control, &seal).await {
+        Ok(Held { trusted: held, .. }) => {
             // Principals are global. A team-admin may name one its own team
             // already uses (a new key for a member), but never one a key
             // outside its team or an administrator's key carries: that would
@@ -444,20 +533,24 @@ pub(super) async fn create_key(
                     );
                 }
             }
+            // Per team, so one team cannot use up the room of the others;
+            // administrators' keys that name no team are one bucket of their
+            // own. Records this control plane did not seal are not counted:
+            // anyone who can write to the store could otherwise fill a team's
+            // room with them.
             if held
                 .iter()
-                .filter(|key| key.expires_at > created_at)
+                .filter(|key| key.expires_at > created_at && key.team_id == record.team_id)
                 .count()
                 >= limit
             {
                 return api_error(
                     StatusCode::TOO_MANY_REQUESTS,
-                    "too many managed keys; delete some first",
+                    "too many managed keys for this team; delete some first",
                 );
             }
         }
-        Ok(Err(error)) => return unavailable("could not count managed keys", &error),
-        Err(_) => return unavailable("counting managed keys timed out", &"timeout"),
+        Err(response) => return response,
     }
     match tokio::time::timeout(STORE_TIMEOUT, control.store.put_managed_key(&record)).await {
         Ok(Ok(())) => {}
@@ -503,10 +596,12 @@ pub(super) async fn list_keys(
         Ok(authority) => authority,
         Err(response) => return response,
     };
-    let keys = match tokio::time::timeout(STORE_TIMEOUT, control.store.managed_keys()).await {
-        Ok(Ok(keys)) => keys,
-        Ok(Err(error)) => return unavailable("could not list managed keys", &error),
-        Err(_) => return unavailable("listing managed keys timed out", &"timeout"),
+    let Some(secret) = control.managed_key_secret() else {
+        return disabled();
+    };
+    let keys = match read_managed(&control, &secret).await {
+        Ok(held) => held.trusted,
+        Err(response) => return response,
     };
     let at = now();
     let listed: Vec<Value> = keys
@@ -535,20 +630,25 @@ pub(super) async fn delete_key(
     if !plausible_id(&id) {
         return not_found();
     }
-    let held = match tokio::time::timeout(STORE_TIMEOUT, control.store.managed_keys()).await {
-        Ok(Ok(keys)) => keys,
-        Ok(Err(error)) => return unavailable("could not read managed keys", &error),
-        Err(_) => return unavailable("reading managed keys timed out", &"timeout"),
+    let Some(secret) = control.managed_key_secret() else {
+        return disabled();
     };
-    let Some(key) = held.into_iter().find(|key| key.id == id) else {
-        return not_found();
+    let held = match read_managed(&control, &secret).await {
+        Ok(held) => held,
+        Err(response) => return response,
     };
-    // Another team's key, or an administrator's, does not exist to a team-admin.
-    if let Authority::Team(team) = &authority {
-        if !within(team, &key) {
-            return not_found();
-        }
+    let key = held.trusted.into_iter().find(|key| key.id == id);
+    match (&authority, &key) {
+        // Another team's key, or an administrator's, does not exist to a
+        // team-admin; nor does a record this control plane did not seal.
+        (Authority::Team(team), Some(key)) if within(team, key) => {}
+        (Authority::Team(_), _) => return not_found(),
+        // An administrator may remove anything the store holds under this id,
+        // a record that cannot be trusted or even read included: revoking is
+        // always possible.
+        (Authority::Administrator, _) => {}
     }
+    let untrusted = held.untrusted.iter().find(|key| key.id == id);
     match tokio::time::timeout(STORE_TIMEOUT, control.store.remove_managed_key(&id)).await {
         Ok(Ok(true)) => {}
         // Someone else revoked it between the read and the removal.
@@ -558,7 +658,9 @@ pub(super) async fn delete_key(
     }
     tracing::info!(target: "hv2_cluster::access", key = %id, by = %caller.created_by,
         "managed key revoked");
-    announce(&control, "key-deleted", &key, &caller.created_by).await;
+    if let Some(key) = key.as_ref().or(untrusted) {
+        announce(&control, "key-deleted", key, &caller.created_by).await;
+    }
     Json(json!({ "deleted": id, "kind": "key" })).into_response()
 }
 
@@ -598,10 +700,14 @@ pub(super) async fn team_members(
             }
         }
     }
-    let managed = match tokio::time::timeout(STORE_TIMEOUT, control.store.managed_keys()).await {
-        Ok(Ok(keys)) => keys,
-        Ok(Err(error)) => return unavailable("could not list managed keys", &error),
-        Err(_) => return unavailable("listing managed keys timed out", &"timeout"),
+    // With managed keys off there are none to list: the policy file's members
+    // are all there are.
+    let managed = match control.managed_key_secret() {
+        Some(secret) => match read_managed(&control, &secret).await {
+            Ok(held) => held.trusted,
+            Err(response) => return response,
+        },
+        None => Vec::new(),
     };
     for key in managed
         .iter()

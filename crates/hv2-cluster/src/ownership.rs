@@ -11,8 +11,11 @@ pub struct OwnerId(String);
 impl OwnerId {
     /// Reject empty, non-ASCII, decorated and oversized principal labels.
     pub fn parse(value: &str) -> Result<Self, &'static str> {
+        // `.` and `..` are labels by the alphabet but path segments by every
+        // URL parser: a team or principal in a URL would climb out of it.
         if value.is_empty()
             || value.len() > 128
+            || matches!(value, "." | "..")
             || !value
                 .bytes()
                 .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
@@ -115,7 +118,7 @@ mod tests {
     use super::*;
     #[test]
     fn owner_labels_are_bounded_and_validated_on_deserialization() {
-        for value in ["", "alice@example.com", "a/b", "a b", "a\n", "é"] {
+        for value in ["", ".", "..", "alice@example.com", "a/b", "a b", "a\n", "é"] {
             assert!(OwnerId::parse(value).is_err());
             assert!(serde_json::from_value::<OwnerId>(serde_json::json!(value)).is_err());
         }

@@ -42,7 +42,10 @@ const S_IFLNK: u32 = 0o120_000;
 
 /// The image's filesystem with the kit on top, as a gzipped `newc` cpio.
 pub fn build(image: &Image, kit: &GuestKit) -> Result<Vec<u8>, String> {
-    let mut entries = image.entries.clone();
+    // Every path through the guest's own symlinks, so no entry of the archive
+    // is below a symlink: a reader that unpacks it onto a disk (the node
+    // does, to make a machine's root) can then refuse any that is.
+    let mut entries = through_links(&image.entries);
     let exec = |data| Entry::File { mode: 0o755, data };
     for dir in ["bin", "sbin", "dev", "proc", "sys", "tmp", "etc", "root"] {
         entries
@@ -51,10 +54,9 @@ pub fn build(image: &Image, kit: &GuestKit) -> Result<Vec<u8>, String> {
     }
     // Where the image's /bin is a symlink (merged /usr), the kit goes where
     // it points, as `cp` into the directory would put it.
-    let bin = match entries.get("bin") {
-        Some(Entry::Symlink { target }) => target.trim_start_matches('/').to_string(),
-        _ => "bin".to_string(),
-    };
+    let bin = resolved(&entries, "bin/x")
+        .strip_suffix("/x")
+        .map_or_else(|| "bin".to_string(), str::to_string);
     // The image's own busybox, if it has one (alpine, busybox), is its to
     // keep: it runs against the image's libc, and replacing it would change
     // every applet the image links to it. The kit's static one fills the gap
@@ -77,8 +79,9 @@ pub fn build(image: &Image, kit: &GuestKit) -> Result<Vec<u8>, String> {
         entries.entry(format!("{bin}/bash")).or_insert(exec(shim));
     }
     if let Ok(bundle) = kit.file("ca-certificates.crt") {
+        // Fedora's /etc/ssl/certs is a link to /etc/pki/tls/certs.
         entries.insert(
-            "etc/ssl/certs/ca-certificates.crt".into(),
+            resolved(&entries, "etc/ssl/certs/ca-certificates.crt"),
             Entry::File {
                 mode: 0o644,
                 data: bundle,
@@ -86,14 +89,18 @@ pub fn build(image: &Image, kit: &GuestKit) -> Result<Vec<u8>, String> {
         );
     }
     // The image's environment, for init to load before the agent starts.
+    // The keys are written bare into a shell script, so only a name the shell
+    // would take as a variable is: the image's own text is not trusted not to
+    // be `X=1; touch /y; export Z`.
     let env: String = image
         .env
         .iter()
         .filter_map(|line| line.split_once('='))
+        .filter(|(key, _)| valid_env_key(key))
         .map(|(key, value)| format!("export {key}='{}'\n", value.replace('\'', "'\\''")))
         .collect();
     entries.insert(
-        "etc/hv2-env".into(),
+        resolved(&entries, "etc/hv2-env"),
         Entry::File {
             mode: 0o644,
             data: env.into_bytes(),
@@ -105,7 +112,7 @@ pub fn build(image: &Image, kit: &GuestKit) -> Result<Vec<u8>, String> {
     if image.workdir.is_some() || image.user.is_some() {
         let defaults = serde_json::json!({"cwd": image.workdir, "user": image.user});
         entries.insert(
-            "etc/hv2/defaults.json".into(),
+            resolved(&entries, "etc/hv2/defaults.json"),
             Entry::File {
                 mode: 0o644,
                 data: defaults.to_string().into_bytes(),
@@ -115,7 +122,7 @@ pub fn build(image: &Image, kit: &GuestKit) -> Result<Vec<u8>, String> {
     let launch =
         serde_json::json!({"entrypoint": image.entrypoint, "cmd": image.cmd, "user": image.user});
     entries.insert(
-        "etc/hv2/image.json".into(),
+        resolved(&entries, "etc/hv2/image.json"),
         Entry::File {
             mode: 0o644,
             data: launch.to_string().into_bytes(),
@@ -142,6 +149,67 @@ pub fn build(image: &Image, kit: &GuestKit) -> Result<Vec<u8>, String> {
         entries.entry(dir).or_insert(Entry::Dir { mode: 0o755 });
     }
     write(&entries)
+}
+
+/// Whether `key` is a shell variable name: `[A-Za-z_][A-Za-z0-9_]*`.
+fn valid_env_key(key: &str) -> bool {
+    let mut chars = key.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// `path` as the guest's filesystem reaches it: each symlink among its parent
+/// directories followed, within `entries` -- an absolute target from the
+/// root, a relative one from the link's directory, `..` held at the root.
+/// The last component is not followed. A path through more than 40 links (a
+/// loop) is returned as it came.
+fn resolved(entries: &BTreeMap<String, Entry>, path: &str) -> String {
+    let mut pending: Vec<&str> = path.split('/').rev().collect();
+    let mut done: Vec<&str> = Vec::new();
+    let mut hops = 0;
+    while let Some(part) = pending.pop() {
+        match part {
+            "" | "." => continue,
+            ".." => {
+                done.pop();
+                continue;
+            }
+            _ => {}
+        }
+        done.push(part);
+        if pending.iter().all(|p| p.is_empty() || *p == ".") {
+            break; // the last component names the entry itself
+        }
+        if let Some(Entry::Symlink { target }) = entries.get(&done.join("/")) {
+            hops += 1;
+            if hops > 40 {
+                return path.to_string();
+            }
+            done.pop();
+            if target.starts_with('/') {
+                done.clear();
+            }
+            pending.extend(target.split('/').rev());
+        }
+    }
+    done.join("/")
+}
+
+/// `entries` with every path (and hard link target) given as [`resolved`].
+fn through_links(entries: &BTreeMap<String, Entry>) -> BTreeMap<String, Entry> {
+    let mut out = BTreeMap::new();
+    for (path, entry) in entries {
+        let entry = match entry {
+            Entry::Link { target } => Entry::Link {
+                target: resolved(entries, target),
+            },
+            other => other.clone(),
+        };
+        out.insert(resolved(entries, path), entry);
+    }
+    out
 }
 
 /// The file a hard link finally names, following links to links; `None`
@@ -260,6 +328,99 @@ fn record(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn file(data: &str) -> Entry {
+        Entry::File {
+            mode: 0o644,
+            data: data.as_bytes().to_vec(),
+        }
+    }
+
+    fn link(target: &str) -> Entry {
+        Entry::Symlink {
+            target: target.into(),
+        }
+    }
+
+    /// Paths are followed through symlinks the way the guest's kernel would:
+    /// the last component is the entry, every other one a directory.
+    #[test]
+    fn a_path_is_resolved_through_the_symlinks_among_its_parents() {
+        let mut entries = BTreeMap::new();
+        entries.insert("bin".to_string(), link("usr/bin"));
+        entries.insert("etc/ssl/certs".to_string(), link("../pki/tls/certs"));
+        entries.insert("abs".to_string(), link("/opt/x"));
+        entries.insert("up".to_string(), link("../../../etc"));
+        entries.insert("loop".to_string(), link("loop"));
+        entries.insert("usr/bin/sh".to_string(), link("busybox"));
+        assert_eq!(resolved(&entries, "bin/sh"), "usr/bin/sh");
+        assert_eq!(resolved(&entries, "bin"), "bin", "the last is not followed");
+        assert_eq!(resolved(&entries, "usr/bin/sh"), "usr/bin/sh");
+        assert_eq!(
+            resolved(&entries, "etc/ssl/certs/ca.crt"),
+            "etc/pki/tls/certs/ca.crt"
+        );
+        assert_eq!(resolved(&entries, "abs/y/z"), "opt/x/y/z");
+        assert_eq!(resolved(&entries, "up/passwd"), "etc/passwd", "held at /");
+        assert_eq!(resolved(&entries, "loop/x"), "loop/x", "a loop gives up");
+        assert_eq!(resolved(&entries, "plain/a/b"), "plain/a/b");
+    }
+
+    /// Nothing in a built archive is below a symlink, whatever the image held.
+    #[test]
+    fn a_built_archive_has_no_entry_below_a_symlink() {
+        let mut entries = BTreeMap::new();
+        entries.insert("bin".to_string(), link("usr/bin"));
+        entries.insert("usr/bin".to_string(), Entry::Dir { mode: 0o755 });
+        entries.insert("bin/tool".to_string(), file("t"));
+        entries.insert(
+            "bin/alias".to_string(),
+            Entry::Link {
+                target: "bin/tool".into(),
+            },
+        );
+        entries.insert("evil".to_string(), link("/etc/cron.d"));
+        entries.insert("evil/x".to_string(), file("x"));
+        let out = through_links(&entries);
+        assert!(out.contains_key("usr/bin/tool"), "{:?}", out.keys());
+        assert!(
+            matches!(&out["usr/bin/alias"], Entry::Link { target } if target == "usr/bin/tool")
+        );
+        assert!(out.contains_key("etc/cron.d/x"), "inside the guest's root");
+        for path in out.keys() {
+            let mut at = String::new();
+            for part in path.split('/') {
+                if !at.is_empty() && matches!(out.get(&at), Some(Entry::Symlink { .. })) {
+                    panic!("{path} is below the symlink {at}");
+                }
+                at = if at.is_empty() {
+                    part.to_string()
+                } else {
+                    format!("{at}/{part}")
+                };
+            }
+        }
+    }
+
+    #[test]
+    fn only_shell_variable_names_are_environment_keys() {
+        for good in ["PATH", "_", "a1", "LD_LIBRARY_PATH", "_x_9"] {
+            assert!(valid_env_key(good), "{good}");
+        }
+        for bad in [
+            "",
+            "1A",
+            "A B",
+            "A;touch /x;B",
+            "A-B",
+            "A$(x)",
+            "a\nb",
+            "é",
+            "A=B",
+        ] {
+            assert!(!valid_env_key(bad), "{bad:?}");
+        }
+    }
 
     /// A written archive reads back with `cpio`'s own format rules: each
     /// header where the last record's padding ends, names and sizes intact.

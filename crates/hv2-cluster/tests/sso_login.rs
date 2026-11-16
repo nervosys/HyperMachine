@@ -25,6 +25,15 @@ use serde_json::{json, Value};
 const CLIENT_ID: &str = "hypermachine";
 const CLIENT_SECRET: &str = "fixture-client-secret";
 const REDIRECT: &str = "https://cp.test/auth/callback";
+/// What the control plane under test seals managed keys with.
+const SEAL: [u8; 40] = [3u8; 40];
+
+fn seal_key(key: hv2_cluster::keys::ManagedKey) -> hv2_cluster::keys::ManagedKey {
+    hv2_cluster::keys::ManagedKeySecret::new(SEAL.to_vec())
+        .unwrap()
+        .seal(key)
+        .unwrap()
+}
 
 /// What the fixture provider does on its next sign-in.
 #[derive(Clone)]
@@ -211,6 +220,9 @@ async fn spawn_cluster_with(provider: &Provider, members: &str) -> Cluster {
         .unwrap(),
     );
     control.enable_sso(Arc::clone(&sso)).unwrap();
+    control.set_managed_key_secret(SEAL.to_vec()).unwrap();
+    sso.set_guest_domains(&["example.test".to_string()])
+        .unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let router = control::router(control);
@@ -403,7 +415,7 @@ async fn a_member_signs_in_and_the_api_admits_the_session() {
         let secret = format!("hm_{}", uuid::Uuid::new_v4().simple());
         cluster
             .store
-            .put_managed_key(&hv2_cluster::keys::ManagedKey {
+            .put_managed_key(&seal_key(hv2_cluster::keys::ManagedKey {
                 id: "mk_sso".into(),
                 sha256: Sha256::digest(secret.as_bytes())
                     .iter()
@@ -417,7 +429,8 @@ async fn a_member_signs_in_and_the_api_admits_the_session() {
                 created_by: "test".into(),
                 created_at: 1,
                 expires_at: chrono::Utc::now().timestamp() + 600,
-            })
+                mac: String::new(),
+            }))
             .await
             .unwrap();
         assert_eq!(
@@ -783,6 +796,77 @@ async fn a_guest_url_tells_the_guest_who_signed_in_and_never_shows_it_the_pass()
         .await
         .unwrap();
     assert_eq!(response.status(), 401);
+
+    // Which hosts are guest URLs is the operator's to say. The sandbox is
+    // named by the first label alone, so a host under any other domain would
+    // otherwise be sent alice's handoff, and could redeem it here.
+    for evil in [
+        "https://8080-redsbx.evil.example/x",
+        "https://8080-redsbx.example.test.evil.example/x",
+        "https://8080-redsbx.sub.example.test/x",
+        "https://8080-redsbx.example.test@evil.example/x",
+        "https://8080-redsbx.EVIL.example:8443/x",
+        "https://8080-redsbx.xexample.test/x",
+        "http://8080-redsbx.example.test/x",
+    ] {
+        let response = cluster
+            .client
+            .get(format!(
+                "{}/auth/guest?url={}",
+                cluster.base,
+                reqwest::Url::parse_with_params("http://x/", [("url", evil)])
+                    .unwrap()
+                    .query()
+                    .unwrap()
+                    .trim_start_matches("url=")
+            ))
+            .header(header::COOKIE, format!("__Host-hm_session={session}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 400, "{evil}");
+        assert!(response.headers().get(header::LOCATION).is_none(), "{evil}");
+    }
+    // At the proxy, a handoff for such a host is refused, and a pass for it is
+    // not admitted -- even sealed by this control plane's own key, which is how
+    // they are made here. The same two for a configured domain are the
+    // control: they work, so what refuses the others is the domain.
+    let seal = |prefix: &str, value: Value| {
+        let body = format!("{prefix}.{}", URL_SAFE_NO_PAD.encode(value.to_string()));
+        let mac = crypto().hmac_sha256(&[9u8; 32], body.as_bytes()).unwrap();
+        format!("{body}.{}", URL_SAFE_NO_PAD.encode(mac))
+    };
+    let exp = chrono::Utc::now().timestamp() + 60;
+    let evil_host = format!("8080-redsbx.evil.example:{proxy_port}");
+    for (label, host, expected_handoff, expected_pass) in [
+        ("configured domain", host.as_str(), 303, 200),
+        ("evil domain", evil_host.as_str(), 403, 401),
+    ] {
+        let handoff = seal(
+            "hmg1",
+            json!({"email": "alice@example.com", "host": host, "exp": exp}),
+        );
+        let response = via_proxy(&format!("/__hm/auth?token={handoff}&path=%2F"), host)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected_handoff, "handoff, {label}");
+        assert_eq!(
+            set_cookie(&response, "__Host-hm_guest").is_some(),
+            expected_handoff == 303,
+            "handoff cookie, {label}"
+        );
+        let pass = seal(
+            "hmh1",
+            json!({"email": "alice@example.com", "host": host, "exp": exp}),
+        );
+        let response = via_proxy("/", host)
+            .header(header::COOKIE, format!("__Host-hm_guest={pass}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected_pass, "pass, {label}");
+    }
 
     // Someone who may not view the sandbox gets no handoff.
     *provider.next.lock() = Next {

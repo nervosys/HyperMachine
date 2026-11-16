@@ -310,7 +310,8 @@ NOT VERIFIED. The highlights:
   keys typed in the browser reaching the guest.
 - **Access:** scoped, expiring API keys with presets
   ([API_KEY_ROTATION.md](docs/API_KEY_ROTATION.md)). Admins and team-admins can create, list
-  and revoke keys through `POST/GET/DELETE /keys`. Keys are checked on every request, so a
+  and revoke keys through `POST/GET/DELETE /keys` (on once the control plane has a
+  `--managed-key-secret-file`). Keys are checked on every request, so a
   revoke holds at once on every control plane. [Teams](docs/TEAMS.md) have viewer, member and
   team-admin roles and a member listing. SSO sign-in is supported.
   [Usage](docs/USAGE.md) is counted per sandbox, team, template or key.

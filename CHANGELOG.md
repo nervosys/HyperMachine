@@ -288,6 +288,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`hm-tui`, a new terminal dashboard** for Type 2 VMs and sandbox VMs over the same APIs `hm-gui` and `hm sandbox vm` already use; and a Sandboxes tab for `hm-gui`, which previously showed only Type 2 VMs.
 
 ### Security
+- **A guest can no longer abort the node through a virtio device.** `hv2-sandboxd` hosts every VM's
+  devices in one process built with `overflow-checks` and `panic = "abort"`, so an arithmetic
+  overflow reachable from guest memory took down every VM on the host. Fixed in `hv2-core`:
+  queue rings are now checked when the driver enables a queue (aligned, sized for the negotiated
+  queue, wholly inside guest RAM) and a refusal leaves the queue disabled and sets NEEDS_RESET; all
+  ring-address arithmetic is checked; every descriptor's `addr + len` must be guest RAM before a
+  device sees it (previously `0xFFFF_FFFF_FFFF_FFFF` in `QUEUE_DRIVER` or a blk status descriptor
+  overflowed); drivers may only accept features the device offered, on both MMIO and PCI (an
+  unmasked CSUM bit reached `finish_offloaded`, whose 32-bit checksum sum also overflowed on a large
+  frame; it now sums in 64 bits and drops an over-limit frame first); and the PCI transport ignores
+  a kick before DRIVER_OK as MMIO already did.
+- **A guest can no longer make a device do unbounded work per kick.** An `avail.idx` behind the
+  device's position read as 65 535 pending chains, each of up to 64 MiB, drained on the vCPU thread
+  under the device lock. A queue whose driver has published more chains than the ring holds is now
+  stopped, logged once and reported as NEEDS_RESET until reset; a kick serves at most one chain per
+  ring slot and a byte budget (blk 256 MiB, net and vsock a full ring of maximal chains); net and
+  vsock queues refuse a chain over 256 KiB and 1 MiB (was 64 MiB). Guest-triggered `warn` logs for
+  unmapped MMIO, unknown exits and malformed vsock/blk traffic are demoted to `debug` after the
+  first few.
 - **The secrets scan is now a real CI gate.** `gitleaks/gitleaks-action` exited at "missing gitleaks
   license" on every run, so nothing had ever been scanned. The Security workflow now installs the
   gitleaks CLI at a pinned version, checks the tarball against a hard-coded sha256, and runs
@@ -297,6 +316,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   test vectors, doc placeholders); the config allowlists those by exact path, rule and value, and
   history now scans to 0. A planted GitHub token and private key, including one in `docs/benchmarks/`,
   are still caught. See `docs/security/SECRET_SCANNING.md`.
+- **A template share could be steered at any other route on a node (path injection).** `PUT` or
+  `DELETE /templates/{id}/shares/{team}` put the decoded `{team}` straight into the node URL, so
+  `x%2F..%2F..%2F..%2F..%2Fsandboxes%2F{victim}` was resolved to `DELETE /sandboxes/{victim}` and sent
+  with the cluster token: any key with the `templates` scope could delete or re-network another team's
+  sandbox. `{team}` must now be a team ID (and `.` and `..` are no longer valid team or principal IDs),
+  node URLs are built from percent-encoded path segments, and a path the control plane repeats to a node
+  as the client wrote it (sandbox, machine and volume routes, tunnels) is refused with 400 if any segment
+  is `.` or `..` in any spelling. `tests/request_confinement.rs` drives the traversal at a fake node
+  and asserts it receives nothing outside `/templates/{name}/shares/{team}`.
+- **Private guest URLs handed a member's sign-in to any domain.** The sandbox is named by the first label
+  of a guest URL, and the domain was ignored, so `/auth/guest?url=https://8080-S.evil.example/x` redirected
+  a signed-in member to `evil.example` with a handoff its owner could redeem at the proxy for a pass.
+  Guest URLs are now `{port}-{sandbox}.{domain}` for a domain given with the new repeatable
+  `--guest-domain`, or a bound custom domain; anything else is 400 at `/auth/guest`, and the proxy refuses
+  a handoff or a pass for any other host. **`--sso-guest-urls` now fails to start without a
+  `--guest-domain`.** See `docs/SSO.md`.
+- **A compromised node could make itself an administrator through the shared store.** Managed API keys
+  sit in a store nodes can write to, with nothing to say who wrote a record, so a node could add one
+  naming the `admin` scope under the digest of its own secret. Each managed key is now sealed with an
+  HMAC-SHA256 over every field, under a secret only control planes hold
+  (`--managed-key-secret-file`, at least 32 bytes, the same file on every control plane); a record that
+  does not verify is refused with 503, is not listed or counted, and an administrator may still remove
+  it. **Without the flag managed keys are off:** `/keys` answers 503 and no managed key authenticates.
+  **Keys made before this have no seal and stop working.** See `docs/API_KEY_ROTATION.md`.
+- **One team could lock every other team out of making keys.** The 1000 managed-key limit was global; it
+  is now per team (administrators' team-less keys are one bucket). A stored key record that cannot be
+  decoded is skipped and logged instead of failing every listing, count and revocation.
+- **`GET /cluster/nodes` showed every node's URLs, signing key and every team's snapshot names to any key
+  with the `inventory` scope.** Administrators still get the raw record; everyone else gets each node's
+  id, load and version and the templates they may start.
+- **The control plane repeated a caller's `Authorization` header to nodes**, including a signed-in
+  member's session bearer (`Bearer hms1.`), which a compromised node could replay. It is now repeated only
+  to the volume content API, whose bearer is the volume's own token, and never when it is a session token.
+- **A template image could write files anywhere on the node's host.** `hv2-sandboxd` unpacked a
+  template's cpio onto the host to make a machine's root disk, following symlinks the image itself
+  had made: a symlink `a -> /etc/cron.d` and then a file `a/x` wrote `/etc/cron.d/x` as the node's
+  user, and a directory entry `a/` (a different key from `a`) after the symlink changed the
+  target's mode. Templates come from client-chosen registry images and Dockerfiles. The tree is now
+  written by descriptor: each directory is opened from the one above it with `O_NOFOLLOW`, files are
+  made `O_CREAT|O_EXCL|O_NOFOLLOW` and their modes set on the descriptor, and any symlink (or file)
+  where a directory belongs refuses the whole template. Cpio names are normalised (no trailing
+  `/`, no empty, `.` or `..` component, no NUL) so `a` and `a/` are one entry; the scratch tree is
+  mode 0700 (guest files keep their modes, setuid included, which `mkfs` needs). The initramfs
+  builder now resolves its own placements (`etc/ssl/certs` as a link, `bin -> usr/bin`) through the
+  image's links, so what it writes never has an entry below a symlink. The OCI layer unpack and
+  the initramfs writer touch no host path: both are in memory.
+- **The node's API and proxy listened on `0.0.0.0` with no authentication by default.** A standalone
+  `hv2-sandboxd` let anyone who could reach it run commands, read files, create machines, and reach
+  every `proxy: true` machine port (noVNC desktops included) by a guessable id. They now listen on
+  `127.0.0.1` unless the node has a cluster token or mTLS (cluster mode), when they listen on
+  `0.0.0.0` as before. New `--bind ADDR` (both listeners) overrides it; a non-loopback address with no
+  token or mTLS is refused at start unless `--allow-unauthenticated` is given, which warns loudly at
+  every start; a clustered node that advertises a non-loopback address but would listen on
+  loopback is refused. The cluster token guards the API, not the node's proxy port, which the
+  control plane reaches without it: keep that port to the control plane. `docs/MACHINES.md` no
+  longer implies a node's noVNC is behind a login.
+- **Registry content could exhaust the node's memory.** A tar header claiming a 2^40-byte file was
+  `Vec::with_capacity`'d, aborting the node; gzip and zstd layers were decompressed with no limit; a
+  blob was buffered whole before its size was checked, so a chunked response had no limit; a
+  `COPY` upload (up to 4 GiB) was read whole into memory. Layers now stream through a reader that
+  fails at 4 GiB unpacked per image (headers counted, shared across layers), 2 GiB per file and 1 000 000
+  entries; nothing is sized from a header; blobs and manifests are counted as they arrive; each
+  registry request has a time limit (60 s, 10 min for a blob) and the shared HTTP client has a 120 s
+  total and 60 s read timeout. A `COPY` upload streams under the same kind of cap (2 GiB, 1 000 000
+  members). Whiteouts no longer scan the whole image.
+- **A request could panic `build_from_image`.** The digest after `@` in an image reference was
+  sliced `[..16]`, which splits a multibyte character, and was used in a file name. The name now
+  takes 16 hex digits of a real `sha256:` digest and a hash of anything else.
+- **A guest could exhaust the node's file descriptors through 9P, and keep setuid bits on a
+  volume.** Fids were unbounded and each open one held a host descriptor in the shared daemon. A
+  mount now holds at most 4096 fids and 2048 open files, and the node 16384 open files across all
+  mounts, refused with `EMFILE`/`ENFILE` (a refused create makes no file); a directory is listed
+  a screenful at a time instead of built whole. Create, mkdir and chmod over 9P, and the volume
+  API's create, mkdir, chmod and PUT, no longer store setuid or setgid bits (the sticky bit stays).
+- **An image's environment could inject shell into `etc/hv2-env`.** Keys were written unescaped
+  (`export {key}=...`); a key that is not `[A-Za-z_][A-Za-z0-9_]*` is now dropped.
 
 ## [1.2.0] - 2026-11-09
 

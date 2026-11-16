@@ -56,6 +56,50 @@ const MAX_CHAIN_LEN: usize = MAX_QUEUE_SIZE as usize;
 /// the host to allocate 4 GiB per request.
 pub const MAX_CHAIN_BYTES: usize = 64 * 1024 * 1024;
 
+/// Add `offset` to a ring's base address, refusing a sum that wraps.
+///
+/// Every ring address is the guest's to choose, so `base + offset` is guest
+/// arithmetic: `base` of `u64::MAX` must be an error, not an overflow panic in
+/// a process that hosts every other VM.
+fn ring_addr(base: GuestAddress, offset: u64) -> Result<GuestAddress> {
+    base.checked_add(offset).ok_or_else(|| {
+        Error::Device(format!(
+            "virtqueue ring address {base:#x} + {offset:#x} overflows the address space"
+        ))
+    })
+}
+
+/// How much one notification may ask of the host.
+///
+/// A device drains its queue on the kick, on the vCPU thread, holding its own
+/// lock. The driver chooses how much is queued, so without a bound it also
+/// chooses how long that takes. A budget is spent chain by chain: at most one
+/// chain per ring slot, and at most `bytes` of described data. What is left
+/// stays on the ring for the next kick.
+///
+/// Sized so a correct driver never meets it: a ring holds at most
+/// `size` chains, and the byte figure is several times what a full ring of
+/// ordinary requests describes.
+#[derive(Debug, Clone, Copy)]
+pub struct KickBudget {
+    chains: u32,
+    bytes: usize,
+}
+
+impl KickBudget {
+    /// Whether the budget has run out.
+    #[must_use]
+    pub fn exhausted(&self) -> bool {
+        self.chains == 0 || self.bytes == 0
+    }
+
+    /// Spend one chain of `bytes` bytes.
+    pub fn charge(&mut self, bytes: usize) {
+        self.chains = self.chains.saturating_sub(1);
+        self.bytes = self.bytes.saturating_sub(bytes);
+    }
+}
+
 /// Descriptor flags.
 pub mod desc_flags {
     /// The chain continues at `next`.
@@ -170,6 +214,12 @@ pub struct GuestQueue {
     last_avail_idx: u16,
     /// Next used-ring slot the device will fill.
     next_used_idx: u16,
+    /// Most bytes one chain may describe on this queue.
+    max_chain_bytes: usize,
+    /// The driver published more chains than the ring holds. Nothing in a
+    /// correct driver does that, so the device stops reading the ring and the
+    /// transport reports NEEDS_RESET. Cleared only by a reset.
+    broken: bool,
 }
 
 impl GuestQueue {
@@ -184,7 +234,36 @@ impl GuestQueue {
             ready: false,
             last_avail_idx: 0,
             next_used_idx: 0,
+            max_chain_bytes: MAX_CHAIN_BYTES,
+            broken: false,
         }
+    }
+
+    /// Lower the number of bytes one chain may describe, from the default of
+    /// [`MAX_CHAIN_BYTES`]. A device knows how large a request can legitimately
+    /// be -- a network frame is under 64 KiB -- and should not allocate for
+    /// more. The limit survives [`Self::reset`].
+    #[must_use]
+    pub fn with_max_chain_bytes(mut self, bytes: usize) -> Self {
+        self.max_chain_bytes = bytes.min(MAX_CHAIN_BYTES);
+        self
+    }
+
+    /// What one kick may spend on this queue: one chain per ring slot and
+    /// `max_bytes` of described data.
+    #[must_use]
+    pub fn kick_budget(&self, max_bytes: usize) -> KickBudget {
+        KickBudget {
+            chains: u32::from(self.ring_size()),
+            bytes: max_bytes,
+        }
+    }
+
+    /// Whether the driver broke the ring: it published more chains than the
+    /// ring holds. The queue is dead until the device is reset.
+    #[must_use]
+    pub fn is_broken(&self) -> bool {
+        self.broken
     }
 
     /// Largest size this device advertises, for QueueNumMax.
@@ -259,9 +338,90 @@ impl GuestQueue {
             && self.used_addr != 0
     }
 
-    /// Set the QueueReady bit as the driver wrote it.
+    /// Set the QueueReady bit as the driver wrote it, without checking where
+    /// the rings are.
+    ///
+    /// A driver's write goes through [`Self::enable`]; this is for a host
+    /// restoring state it already vetted, and for tests.
     pub fn set_ready(&mut self, ready: bool) {
         self.ready = ready;
+    }
+
+    /// Check that the rings the driver published can be used, without touching
+    /// them.
+    ///
+    /// Each of the three must be non-null, aligned as the specification
+    /// requires (16, 2 and 4 bytes), sized for the negotiated queue, and lie
+    /// entirely inside guest RAM. Every size is computed with checked
+    /// arithmetic: an address of `0xFFFF_FFFF_FFFF_FFFF` is refused here
+    /// rather than overflowing in the first ring access.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Device`] naming the ring that cannot be used.
+    pub fn validate(&self, mem: &GuestMemory) -> Result<()> {
+        let n = u64::from(self.ring_size());
+        if n == 0 {
+            return Err(Error::Device("virtqueue has no size".to_string()));
+        }
+        // Table, available ring (flags, idx, ring, used_event), used ring
+        // (flags, idx, ring, avail_event). `n` is at most 32768, so these
+        // cannot overflow, but they are computed checked all the same.
+        let rings = [
+            (
+                "descriptor table",
+                self.desc_addr,
+                DESC_SIZE.checked_mul(n),
+                16,
+            ),
+            (
+                "available ring",
+                self.avail_addr,
+                n.checked_mul(2).and_then(|b| b.checked_add(6)),
+                2,
+            ),
+            (
+                "used ring",
+                self.used_addr,
+                n.checked_mul(8).and_then(|b| b.checked_add(6)),
+                4,
+            ),
+        ];
+        for (name, addr, len, alignment) in rings {
+            let len = len.ok_or_else(|| Error::Device(format!("{name} size overflows")))?;
+            if addr == 0 {
+                return Err(Error::Device(format!("virtqueue {name} was never set")));
+            }
+            if addr % alignment != 0 {
+                return Err(Error::Device(format!(
+                    "virtqueue {name} at {addr:#x} is not {alignment}-byte aligned"
+                )));
+            }
+            if addr.checked_add(len).is_none() {
+                return Err(Error::Device(format!(
+                    "virtqueue {name} at {addr:#x} ({len} bytes) overflows the address space"
+                )));
+            }
+            mem.check_range(addr, len).map_err(|e| {
+                Error::Device(format!(
+                    "virtqueue {name} at {addr:#x} ({len} bytes) is not in guest RAM: {e}"
+                ))
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Mark the queue ready if, and only if, [`Self::validate`] accepts its
+    /// rings. This is what a transport calls when the driver writes
+    /// QueueReady / queue_enable.
+    ///
+    /// # Errors
+    ///
+    /// The validation error; the queue is left not ready.
+    pub fn enable(&mut self, mem: &GuestMemory) -> Result<()> {
+        self.validate(mem)?;
+        self.ready = true;
+        Ok(())
     }
 
     /// How far this device has got through the rings.
@@ -292,35 +452,60 @@ impl GuestQueue {
     /// Return the queue to its post-reset state, keeping the advertised
     /// maximum.
     pub fn reset(&mut self) {
-        *self = Self::new(self.max_size);
+        *self = Self::new(self.max_size).with_max_chain_bytes(self.max_chain_bytes);
     }
 
     /// The driver's available-ring index.
     pub fn avail_idx(&self, mem: &GuestMemory) -> Result<u16> {
         let mut buf = [0u8; 2];
-        mem.read_bytes_into(self.avail_addr + 2, &mut buf)?;
+        mem.read_bytes_into(ring_addr(self.avail_addr, 2)?, &mut buf)?;
         Ok(u16::from_le_bytes(buf))
+    }
+
+    /// How many chains the driver has published that the device has not yet
+    /// consumed, as the driver's index says. Zero for a queue that is not
+    /// ready or is broken. A value above the ring size is not a count of
+    /// anything real: see [`Self::is_broken`].
+    fn published(&self, mem: &GuestMemory) -> Result<u16> {
+        if !self.is_ready() || self.broken {
+            return Ok(0);
+        }
+        Ok(self.avail_idx(mem)?.wrapping_sub(self.last_avail_idx))
     }
 
     /// Whether the driver has made a chain available that the device has not
     /// yet consumed.
     pub fn has_available(&self, mem: &GuestMemory) -> Result<bool> {
-        if !self.is_ready() {
-            return Ok(false);
-        }
-        Ok(self.avail_idx(mem)? != self.last_avail_idx)
+        let published = self.published(mem)?;
+        Ok(published != 0 && published <= self.ring_size())
     }
 
     /// Take the next available chain, or `None` when the driver has published
     /// nothing new.
+    ///
+    /// A driver that has published more chains than the ring has slots --
+    /// `avail.idx` behind the device's own position, which wraps to a count in
+    /// the tens of thousands -- is broken, not busy. The queue is marked so,
+    /// logged once, and yields nothing further until the device is reset;
+    /// otherwise the device would walk every one of those phantom entries.
     pub fn pop(&mut self, mem: &GuestMemory) -> Result<Option<DescriptorChain>> {
-        if !self.has_available(mem)? {
+        let published = self.published(mem)?;
+        if published == 0 {
+            return Ok(None);
+        }
+        if published > self.ring_size() {
+            self.broken = true;
+            tracing::warn!(
+                "virtqueue: driver published {published} chains on a ring of {}; \
+                 the queue is stopped until the device is reset",
+                self.ring_size()
+            );
             return Ok(None);
         }
 
         // avail: flags u16, idx u16, then the ring.
         let slot = self.last_avail_idx % self.ring_size();
-        let ring_entry = self.avail_addr + 4 + u64::from(slot) * 2;
+        let ring_entry = ring_addr(self.avail_addr, 4 + u64::from(slot) * 2)?;
         let mut buf = [0u8; 2];
         mem.read_bytes_into(ring_entry, &mut buf)?;
         let head = u16::from_le_bytes(buf);
@@ -341,7 +526,10 @@ impl GuestQueue {
             )));
         }
         let mut buf = [0u8; DESC_SIZE as usize];
-        mem.read_bytes_into(self.desc_addr + u64::from(idx) * DESC_SIZE, &mut buf)?;
+        mem.read_bytes_into(
+            ring_addr(self.desc_addr, u64::from(idx) * DESC_SIZE)?,
+            &mut buf,
+        )?;
         Ok(Descriptor::from_bytes(&buf))
     }
 
@@ -372,7 +560,8 @@ impl GuestQueue {
             if desc.flags & desc_flags::INDIRECT != 0 {
                 self.walk_indirect(mem, &desc, &mut chain, &mut total_bytes)?;
             } else {
-                push_buffer(
+                self.push_buffer(
+                    mem,
                     &mut chain,
                     desc.addr,
                     desc.len,
@@ -437,7 +626,8 @@ impl GuestQueue {
                     "an indirect descriptor may not itself be indirect".to_string(),
                 ));
             }
-            push_buffer(
+            self.push_buffer(
+                mem,
                 chain,
                 entry.addr,
                 entry.len,
@@ -463,16 +653,17 @@ impl GuestQueue {
 
         // used: flags u16, idx u16, then ring[size] of {id u32, len u32}.
         let slot = self.next_used_idx % self.ring_size();
-        let entry = self.used_addr + 4 + u64::from(slot) * 8;
+        let entry = ring_addr(self.used_addr, 4 + u64::from(slot) * 8)?;
         let mut bytes = [0u8; 8];
         bytes[0..4].copy_from_slice(&u32::from(head).to_le_bytes());
         bytes[4..8].copy_from_slice(&len.to_le_bytes());
+        let idx_addr = ring_addr(self.used_addr, 2)?;
         mem.write_bytes(entry, &bytes)?;
 
         // The index is published last: a driver that reads it must find the
         // entry it points past already written.
         self.next_used_idx = self.next_used_idx.wrapping_add(1);
-        mem.write_bytes(self.used_addr + 2, &self.next_used_idx.to_le_bytes())?;
+        mem.write_bytes(idx_addr, &self.next_used_idx.to_le_bytes())?;
         Ok(())
     }
 
@@ -482,29 +673,50 @@ impl GuestQueue {
     }
 }
 
-/// Add one buffer to the right half of a chain, enforcing the byte ceiling.
-fn push_buffer(
-    chain: &mut DescriptorChain,
-    addr: GuestAddress,
-    len: u32,
-    write_only: bool,
-    total_bytes: &mut usize,
-) -> Result<()> {
-    if len == 0 {
-        return Ok(());
+impl GuestQueue {
+    /// Add one buffer to the right half of a chain, enforcing the byte ceiling
+    /// and that the buffer is real guest memory.
+    ///
+    /// A descriptor's address and length are the guest's, so
+    /// `addr + len` can wrap and `addr` can point anywhere. Checking here, once,
+    /// means a device never sees a buffer it could overflow on or read from
+    /// outside RAM.
+    fn push_buffer(
+        &self,
+        mem: &GuestMemory,
+        chain: &mut DescriptorChain,
+        addr: GuestAddress,
+        len: u32,
+        write_only: bool,
+        total_bytes: &mut usize,
+    ) -> Result<()> {
+        if len == 0 {
+            return Ok(());
+        }
+        *total_bytes = total_bytes.saturating_add(len as usize);
+        if *total_bytes > self.max_chain_bytes {
+            return Err(Error::Device(format!(
+                "virtqueue chain describes more than {} bytes",
+                self.max_chain_bytes
+            )));
+        }
+        if addr.checked_add(u64::from(len)).is_none() {
+            return Err(Error::Device(format!(
+                "virtqueue buffer at {addr:#x} of {len} bytes overflows the address space"
+            )));
+        }
+        mem.check_range(addr, u64::from(len)).map_err(|e| {
+            Error::Device(format!(
+                "virtqueue buffer at {addr:#x} of {len} bytes is not in guest RAM: {e}"
+            ))
+        })?;
+        if write_only {
+            chain.writable.push((addr, len));
+        } else {
+            chain.readable.push((addr, len));
+        }
+        Ok(())
     }
-    *total_bytes = total_bytes.saturating_add(len as usize);
-    if *total_bytes > MAX_CHAIN_BYTES {
-        return Err(Error::Device(format!(
-            "virtqueue chain describes more than {MAX_CHAIN_BYTES} bytes"
-        )));
-    }
-    if write_only {
-        chain.writable.push((addr, len));
-    } else {
-        chain.readable.push((addr, len));
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -814,12 +1026,14 @@ mod tests {
     #[test]
     fn a_chain_claiming_more_than_the_byte_ceiling_is_refused() {
         let mem = memory();
-        let mut q = ready_queue();
+        // A queue limited to 32 KiB a chain, standing in for the 64 MiB
+        // default, which this test's 64 KiB of RAM cannot hold.
+        let mut q = ready_queue().with_max_chain_bytes(0x8000);
 
-        // Two descriptors of 48 MiB each: individually plausible, together
-        // past the ceiling. The device would otherwise allocate 96 MiB
+        // Two descriptors of 24 KiB each: individually plausible, together
+        // past the ceiling. The device would otherwise allocate 48 KiB
         // because the guest asked it to.
-        let big = 48 * 1024 * 1024u32;
+        let big = 0x6000u32;
         write_desc(
             &mem,
             0,

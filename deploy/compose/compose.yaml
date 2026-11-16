@@ -7,6 +7,11 @@
 # The host needs /dev/kvm. Add nodes on other hosts by running the node image
 # there against the same store (see deploy/helm for Kubernetes).
 
+# HV2_CLUSTER_TOKEN is what lets the node listen beyond its own loopback: a node
+# with a token binds 0.0.0.0, so the control plane can dial node:3980 and
+# node:3981, and one without binds 127.0.0.1 and could not be reached. The
+# token guards the node's API; its proxy port (3981) has no check of its own, so
+# publish only the control plane's ports (5980, 5981), as below.
 x-secrets: &secrets
   HV2_API_KEY: ${HV2_API_KEY:-e2b_change_me_before_exposing_this}
   HV2_CLUSTER_TOKEN: ${HV2_CLUSTER_TOKEN:-change-me-cluster-token}

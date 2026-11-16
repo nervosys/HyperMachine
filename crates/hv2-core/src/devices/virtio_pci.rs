@@ -500,7 +500,12 @@ impl VirtioPciTransport {
             // "no vector" value rather than whatever the driver last wrote.
             common::CONFIG_MSIX_VECTOR | common::QUEUE_MSIX_VECTOR => 0xFFFF,
             common::NUM_QUEUES => self.device.lock().queues().len() as u64,
-            common::DEVICE_STATUS => u64::from(regs.device_status),
+            common::DEVICE_STATUS => {
+                // A queue the device had to stop is the device saying it needs
+                // a reset, whether or not the transport noticed at the time.
+                let broken = self.any_queue_broken();
+                u64::from(regs.device_status | if broken { status::NEEDS_RESET } else { 0 })
+            }
             common::CONFIG_GENERATION => u64::from(regs.config_generation),
             common::QUEUE_SELECT => u64::from(regs.queue_select),
             common::QUEUE_SIZE => self.with_selected_queue(&regs, |q| {
@@ -554,9 +559,15 @@ impl VirtioPciTransport {
                     regs.driver_features =
                         (regs.driver_features & 0xFFFF_FFFF) | ((value & 0xFFFF_FFFF) << 32);
                 }
+                // The driver may only accept what was offered. Anything else
+                // is a bit no device code was written to handle -- checksum
+                // offload on a device that never offered it, say -- so it is
+                // dropped here, before any device sees it.
+                let mut device = self.device.lock();
+                regs.driver_features &= device.device_features();
                 let accepted = regs.driver_features;
                 drop(regs);
-                self.device.lock().ack_features(accepted);
+                device.ack_features(accepted);
             }
             common::DEVICE_STATUS => {
                 let new = value as u8;
@@ -571,13 +582,36 @@ impl VirtioPciTransport {
                     drop(regs);
                     self.device.lock().reset();
                 } else {
-                    regs.device_status = new;
+                    // NEEDS_RESET is the device's to set and only a reset
+                    // clears it; a driver writing the status back without it
+                    // does not get to forget.
+                    regs.device_status = new | (regs.device_status & status::NEEDS_RESET);
                 }
             }
             common::QUEUE_SELECT => regs.queue_select = value as u16,
             common::QUEUE_SIZE => self.with_selected_queue_mut(&regs, |q| q.set_size(value as u16)),
             common::QUEUE_ENABLE => {
-                self.with_selected_queue_mut(&regs, |q| q.set_ready(value != 0));
+                // Enabling is where the rings the driver published are first
+                // vetted: an address that wraps, is misaligned or lies outside
+                // RAM leaves the queue disabled, and the device asks for a reset.
+                let mut refused = None;
+                self.with_selected_queue_mut(&regs, |q| {
+                    if value == 0 {
+                        q.set_ready(false);
+                    } else if let Err(e) = q.enable(&self.memory) {
+                        refused = Some(e);
+                    }
+                });
+                if let Some(e) = refused {
+                    if regs.device_status & status::NEEDS_RESET == 0 {
+                        tracing::warn!(
+                            "virtio-pci '{}': queue {} not enabled, device needs reset: {e}",
+                            self.name,
+                            regs.queue_select
+                        );
+                    }
+                    regs.device_status |= status::NEEDS_RESET;
+                }
             }
             common::QUEUE_DESC => {
                 self.with_selected_queue_mut(&regs, |q| q.set_desc_addr(value));
@@ -615,6 +649,11 @@ impl VirtioPciTransport {
                 );
             }
         }
+    }
+
+    /// Whether any queue of the device was stopped for a broken ring.
+    fn any_queue_broken(&self) -> bool {
+        self.device.lock().queues().iter().any(|q| q.is_broken())
     }
 
     fn with_selected_queue<T: Default>(
@@ -858,6 +897,16 @@ impl Device for VirtioPciTransport {
             // Which queue was kicked is the address, not the value: the driver
             // computes notify_base + queue_notify_off * multiplier.
             let queue = ((offset - window::NOTIFY) / u64::from(NOTIFY_OFF_MULTIPLIER)) as u16;
+            // A kick before the driver finished bring-up is not one the
+            // device should act on: the queue may be half-published. The MMIO
+            // transport makes the same refusal.
+            if self.regs.lock().device_status & status::DRIVER_OK == 0 {
+                tracing::debug!(
+                    "virtio-pci '{}': notify for queue {queue} before DRIVER_OK, ignored",
+                    self.name
+                );
+                return Ok(());
+            }
             let used = self.device.lock().notify(queue, &self.memory)?;
             if used {
                 self.signal_used()?;
@@ -968,7 +1017,10 @@ mod tests {
 
     fn transport() -> (VirtioPciTransport, Arc<Mutex<StubDevice>>) {
         let device = Arc::new(Mutex::new(StubDevice::new()));
-        let memory = Arc::new(GuestMemory::new(0x1000).expect("guest memory"));
+        // Real RAM under the addresses the tests publish as rings, because
+        // enabling a queue now checks that they are inside it.
+        let memory = Arc::new(GuestMemory::new(0x10000).expect("guest memory"));
+        memory.allocate_region(0x10000, false).expect("region");
         let transport = VirtioPciTransport::new("virtio-pci-test", BAR, memory, device.clone());
         (transport, device)
     }
@@ -1300,6 +1352,7 @@ mod tests {
     #[tokio::test]
     async fn the_queue_a_write_notifies_comes_from_its_address() {
         let (mut t, device) = transport();
+        write_u8(&mut t, common::DEVICE_STATUS, status::DRIVER_OK).await;
 
         // Queue 1 notifies at notify_base + 1 * multiplier.
         t.write(
@@ -1480,6 +1533,7 @@ mod tests {
     #[tokio::test]
     async fn the_isr_reports_a_used_queue_and_clears_when_read() {
         let (mut t, _) = transport();
+        write_u8(&mut t, common::DEVICE_STATUS, status::DRIVER_OK).await;
 
         t.write(window::NOTIFY, &0u16.to_le_bytes()).await.unwrap();
 

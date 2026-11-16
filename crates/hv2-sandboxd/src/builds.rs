@@ -1775,6 +1775,13 @@ async fn copy(
         })
 }
 
+/// The most a COPY's upload may unpack to, and the most one member may hold:
+/// the repacked archive is built in memory and sent to the guest whole.
+const MAX_COPY_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+
+/// The most members a COPY's upload may have.
+const MAX_COPY_MEMBERS: usize = 1_000_000;
+
 /// The upload's entries for `src`, as a tar of their paths at `dest`, and
 /// those paths.
 fn repack(
@@ -1782,12 +1789,33 @@ fn repack(
     src: &str,
     dest: &str,
 ) -> Result<(Vec<u8>, Vec<String>), String> {
+    repack_within(upload, src, dest, MAX_COPY_BYTES)
+}
+
+/// [`repack`], for an upload that may unpack to `limit` bytes.
+fn repack_within(
+    upload: &std::path::Path,
+    src: &str,
+    dest: &str,
+    limit: u64,
+) -> Result<(Vec<u8>, Vec<String>), String> {
     let src = src.trim_start_matches("./").trim_end_matches('/');
-    let bytes = std::fs::read(upload).map_err(|e| format!("the upload: {e}"))?;
-    let reader: Box<dyn Read> = if bytes.starts_with(&[0x1f, 0x8b]) {
-        Box::new(flate2::read::GzDecoder::new(&bytes[..]))
+    // The upload is read as a stream, never whole: it may be gigabytes, and a
+    // few KiB of gzip may be gigabytes more. What it unpacks to, what one
+    // member of it holds, and how many members it has are all bounded.
+    let mut unpacked = limit;
+    let mut file = std::fs::File::open(upload).map_err(|e| format!("the upload: {e}"))?;
+    let mut magic = [0u8; 2];
+    let gzip = file.read_exact(&mut magic).is_ok() && magic == [0x1f, 0x8b];
+    std::io::Seek::rewind(&mut file).map_err(|e| format!("the upload: {e}"))?;
+    let file = std::io::BufReader::new(file);
+    let reader: Box<dyn Read + '_> = if gzip {
+        Box::new(crate::oci::Capped::new(
+            flate2::read::GzDecoder::new(file),
+            &mut unpacked,
+        ))
     } else {
-        Box::new(&bytes[..])
+        Box::new(crate::oci::Capped::new(file, &mut unpacked))
     };
     // A glob's matches land under dest by their path below its fixed part.
     let glob = src.contains(['*', '?', '[']);
@@ -1846,10 +1874,17 @@ fn repack(
 
     let mut out = tar::Builder::new(Vec::new());
     let mut paths = Vec::new();
+    let mut members = 0usize;
     let mut archive = tar::Archive::new(reader);
     for entry in archive.entries().map_err(|e| e.to_string())? {
         let mut entry = entry.map_err(|e| e.to_string())?;
         let path = normal(&entry.path().map_err(|e| e.to_string())?.to_string_lossy());
+        members += 1;
+        if members > MAX_COPY_MEMBERS {
+            return Err(format!(
+                "the upload has more than {MAX_COPY_MEMBERS} members, the most a COPY takes"
+            ));
+        }
         let is_dir = entry.header().entry_type().is_dir();
         let Some(target) = place(&path, is_dir) else {
             continue;
@@ -1857,8 +1892,19 @@ fn repack(
         let mut header = entry.header().clone();
         header.set_uid(0);
         header.set_gid(0);
+        // Nothing is sized from the header's claim: the buffer grows with
+        // what the archive delivers, which the reader above also bounds.
+        if entry.size() > limit {
+            return Err(format!(
+                "{path:?} claims {} bytes, more than a COPY takes",
+                entry.size()
+            ));
+        }
         let mut data = Vec::new();
-        entry.read_to_end(&mut data).map_err(|e| e.to_string())?;
+        (&mut entry)
+            .take(limit)
+            .read_to_end(&mut data)
+            .map_err(|e| format!("{path:?}: {e}"))?;
         match entry.header().entry_type() {
             kind @ (tar::EntryType::Symlink | tar::EntryType::Link) => {
                 let mut link = entry
@@ -2302,6 +2348,80 @@ mod tests {
             crate::env_vars::members_of(&b.into_inner().unwrap(), "x"),
             Err(Unpack::Shell(_))
         ));
+    }
+
+    /// An upload is read as a stream and bounded: a gzip that unpacks to more
+    /// than the limit is refused, whole or as one member, and a header claiming
+    /// a file far larger than the limit is refused without allocating it.
+    #[test]
+    fn an_upload_that_unpacks_too_large_is_refused() {
+        use std::io::Write;
+        let dir = tempdir::Dir::new();
+        let mut builder = tar::Builder::new(Vec::new());
+        let big = vec![0u8; 8 << 20];
+        let mut header = tar::Header::new_gnu();
+        header.set_size(big.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, "zeros.bin", &big[..])
+            .unwrap();
+        let tar = builder.into_inner().unwrap();
+        let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        gz.write_all(&tar).unwrap();
+        let gz = gz.finish().unwrap();
+        assert!(gz.len() < 64 << 10, "a small bomb: {}", gz.len());
+        let at = dir.path.join("bomb.tgz");
+        std::fs::write(&at, &gz).unwrap();
+        // Refused: by the member's own size here, and by the stream's total
+        // for an archive of many small members (below).
+        let err = repack_within(&at, ".", "/app/", 1 << 20).unwrap_err();
+        assert!(err.contains("more than"), "{err}");
+        // The same upload, within its limit, is fine -- gzip or plain.
+        let (_, paths) = repack_within(&at, ".", "/app/", 16 << 20).unwrap();
+        assert_eq!(paths, ["/app/zeros.bin"]);
+        let plain = dir.path.join("plain.tar");
+        std::fs::write(&plain, &tar).unwrap();
+        assert!(repack_within(&plain, ".", "/app/", 1 << 20).is_err());
+        assert!(repack_within(&plain, ".", "/app/", 16 << 20).is_ok());
+
+        // Many members, each within the limit but together over it: the
+        // stream's total stops it, not any one member.
+        let mut builder = tar::Builder::new(Vec::new());
+        for i in 0..64 {
+            let chunk = vec![0u8; 64 << 10];
+            let mut header = tar::Header::new_gnu();
+            header.set_size(chunk.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            builder
+                .append_data(&mut header, format!("part-{i}"), &chunk[..])
+                .unwrap();
+        }
+        let many = dir.path.join("many.tar");
+        std::fs::write(&many, builder.into_inner().unwrap()).unwrap();
+        let err = repack_within(&many, ".", "/app/", 1 << 20).unwrap_err();
+        assert!(err.contains("unpacks to more than"), "{err}");
+        assert!(repack_within(&many, ".", "/app/", 16 << 20).is_ok());
+
+        // A header that claims 2^40 bytes: refused before anything is read.
+        let mut header = tar::Header::new_gnu();
+        header.set_path("huge").unwrap();
+        header.set_mode(0o644);
+        header.set_size(0);
+        header.set_cksum();
+        let mut block = header.as_bytes().to_vec();
+        block[124] = 0x80;
+        block[125..136].fill(0);
+        block[128..136].copy_from_slice(&(1u64 << 40).to_be_bytes());
+        block[148..156].fill(b' ');
+        let sum: u32 = block.iter().map(|b| u32::from(*b)).sum();
+        block[148..156].copy_from_slice(format!("{sum:06o}\0 ").as_bytes());
+        block.extend_from_slice(b"tiny");
+        let lying = dir.path.join("lying.tar");
+        std::fs::write(&lying, &block).unwrap();
+        let err = repack(&lying, ".", "/app/").unwrap_err();
+        assert!(err.contains("claims"), "{err}");
     }
 
     /// A scratch directory, gone with the value.

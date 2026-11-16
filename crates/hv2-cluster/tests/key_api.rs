@@ -18,7 +18,7 @@ use sha2::{Digest, Sha256};
 
 use hv2_cluster::control::{self, ControlConfig, ControlPlane};
 use hv2_cluster::domains::{DomainBinding, DomainName};
-use hv2_cluster::keys::{ApiKeyPolicy, ApiRole, ApiScope, ManagedKey};
+use hv2_cluster::keys::{ApiKeyPolicy, ApiRole, ApiScope, ManagedKey, ManagedKeySecret};
 use hv2_cluster::model::{ClusterEvent, Delivery, NodeInfo, SandboxRecord, Webhook};
 use hv2_cluster::names::{NameReservation, SandboxName};
 use hv2_cluster::store::{
@@ -27,6 +27,16 @@ use hv2_cluster::store::{
 
 const TOKEN: &str = "cluster-secret";
 const ADMIN: &str = "legacy-admin-fixture";
+/// What the control planes under test seal managed keys with.
+const SEAL: [u8; 48] = [0x5a; 48];
+
+/// `key`, sealed as the control planes under test seal theirs.
+fn sealed(key: ManagedKey) -> ManagedKey {
+    ManagedKeySecret::new(SEAL.to_vec())
+        .unwrap()
+        .seal(key)
+        .unwrap()
+}
 
 /// A `MemoryStore` whose managed-key calls can be made to fail.
 #[derive(Default)]
@@ -237,6 +247,17 @@ async fn world() -> World {
 }
 
 async fn world_on(store: Arc<Flaky>, policies: Value) -> World {
+    let world = world_without_secret_on(store, policies).await;
+    world.control.set_managed_key_secret(SEAL.to_vec()).unwrap();
+    world
+}
+
+/// A control plane that was given no managed key secret.
+async fn world_without_secret() -> World {
+    world_without_secret_on(Arc::new(Flaky::default()), file_policies()).await
+}
+
+async fn world_without_secret_on(store: Arc<Flaky>, policies: Value) -> World {
     let control = ControlPlane::new(
         store.clone(),
         ControlConfig {
@@ -696,17 +717,20 @@ async fn revoking_a_key_takes_effect_on_the_next_request_everywhere() {
 async fn an_expired_managed_key_is_refused_like_an_expired_file_key() {
     let w = world().await;
     let secret = format!("hm_{}", uuid::Uuid::new_v4().simple());
-    let record = |id: &str, secret: &str, expires_at: i64| ManagedKey {
-        id: id.into(),
-        sha256: digest(secret),
-        scopes: [ApiScope::Inventory].into(),
-        role: ApiRole::Operator,
-        team_id: Some(hv2_cluster::ownership::TeamId::parse("red").unwrap()),
-        principal: Some(hv2_cluster::ownership::OwnerId::parse("old").unwrap()),
-        label: "old".into(),
-        created_by: "lead".into(),
-        created_at: now() - 7200,
-        expires_at,
+    let record = |id: &str, secret: &str, expires_at: i64| {
+        sealed(ManagedKey {
+            id: id.into(),
+            sha256: digest(secret),
+            scopes: [ApiScope::Inventory].into(),
+            role: ApiRole::Operator,
+            team_id: Some(hv2_cluster::ownership::TeamId::parse("red").unwrap()),
+            principal: Some(hv2_cluster::ownership::OwnerId::parse("old").unwrap()),
+            label: "old".into(),
+            created_by: "lead".into(),
+            created_at: now() - 7200,
+            expires_at,
+            mac: String::new(),
+        })
     };
     w.store
         .put_managed_key(&record("mk_old", &secret, now() - 1))
@@ -1008,14 +1032,47 @@ async fn the_longest_lifetime_is_configurable() {
         .is_err());
 }
 
+/// The limit is a team's: one team using up its own room leaves every other
+/// team's (and the administrators') untouched, and a team-admin cannot fill
+/// anyone's but its own.
 #[tokio::test]
-async fn the_number_of_live_keys_is_bounded() {
+async fn the_number_of_live_keys_is_bounded_per_team() {
     let w = world().await;
     w.control.set_managed_key_limit(2);
     let body = member_body("red", "p");
     let (_, first) = post_key(&w.base, ADMIN, body.clone()).await;
     assert_eq!(post_key(&w.base, ADMIN, body.clone()).await.0, 201);
     assert_eq!(post_key(&w.base, ADMIN, body.clone()).await.0, 429);
+    // Red's own team-admin is refused too, and blue is not affected.
+    let lead = |team: &str, principal: &str| {
+        json!({"label": "ci", "expiresInSeconds": 600, "scopes": ["inventory"],
+               "teamId": team, "principalId": principal})
+    };
+    assert_eq!(post_key(&w.base, "red-lead", lead("red", "p")).await.0, 429);
+    for principal in ["b1", "b2"] {
+        assert_eq!(
+            post_key(&w.base, "blue-lead", lead("blue", principal))
+                .await
+                .0,
+            201
+        );
+    }
+    assert_eq!(
+        post_key(&w.base, "blue-lead", lead("blue", "b3")).await.0,
+        429,
+        "blue has its own room, and it is used"
+    );
+    // Administrators' team-less keys are a bucket of their own.
+    let admin_body = json!({"label": "ops", "expiresInSeconds": 3600, "scopes": ["admin"]});
+    for _ in 0..2 {
+        assert_eq!(post_key(&w.base, ADMIN, admin_body.clone()).await.0, 201);
+    }
+    assert_eq!(post_key(&w.base, ADMIN, admin_body).await.0, 429);
+    // A third team still has all its room.
+    assert_eq!(
+        post_key(&w.base, ADMIN, member_body("green", "g1")).await.0,
+        201
+    );
     let id = first["id"].as_str().unwrap();
     assert_eq!(
         status(
@@ -1445,7 +1502,7 @@ async fn the_member_listing_covers_file_and_managed_keys_of_one_team() {
         assert_eq!(code, 201, "{made}");
     }
     w.store
-        .put_managed_key(&ManagedKey {
+        .put_managed_key(&sealed(ManagedKey {
             id: "mk_gone".into(),
             sha256: digest("gone-secret"),
             scopes: [ApiScope::Inventory].into(),
@@ -1456,7 +1513,8 @@ async fn the_member_listing_covers_file_and_managed_keys_of_one_team() {
             created_by: "lead".into(),
             created_at: now() - 100,
             expires_at: now() - 1,
-        })
+            mac: String::new(),
+        }))
         .await
         .unwrap();
     // A red administrator key: not a member of anything.
@@ -1639,4 +1697,184 @@ async fn creating_and_revoking_are_events_that_name_the_key_and_its_creator_only
     )
     .await;
     assert_eq!(feed, json!([]));
+}
+
+// ── The store is not trusted ────────────────────────────────────────────────
+
+/// A record as a compromised node would write it: an administrator's, under
+/// the digest of a secret it chose.
+fn node_written(id: &str, secret: &str, mac: &str) -> ManagedKey {
+    ManagedKey {
+        id: id.into(),
+        sha256: digest(secret),
+        scopes: [ApiScope::Admin].into(),
+        role: ApiRole::Operator,
+        team_id: None,
+        principal: None,
+        label: "node".into(),
+        created_by: "node".into(),
+        created_at: now(),
+        expires_at: now() + 3600,
+        mac: mac.into(),
+    }
+}
+
+/// Nodes share the store and can write to it. A record this control plane did
+/// not seal -- forged, unsealed, sealed under another secret, or sealed and
+/// then changed -- is refused with a 503 (never a 200, never mistaken for an
+/// unknown key), is not listed and does not count against a limit; and an
+/// administrator can still remove it.
+#[tokio::test]
+async fn a_record_this_control_plane_did_not_seal_never_authenticates() {
+    let w = world().await;
+    let (code, made) = post_key(&w.base, ADMIN, member_body("red", "carol")).await;
+    assert_eq!(code, 201, "{made}");
+    let good = made["key"].as_str().unwrap().to_owned();
+    let good_id = made["id"].as_str().unwrap().to_owned();
+
+    let elsewhere = ManagedKeySecret::new(vec![9u8; 48]).unwrap();
+    let mut changed = sealed(ManagedKey {
+        scopes: [ApiScope::Inventory].into(),
+        team_id: Some(hv2_cluster::ownership::TeamId::parse("red").unwrap()),
+        principal: Some(hv2_cluster::ownership::OwnerId::parse("eve").unwrap()),
+        ..node_written("mk_changed", "forged-changed", "")
+    });
+    // Sealed as a red inventory key; stored as an administrator's.
+    changed.scopes = [ApiScope::Admin].into();
+    changed.team_id = None;
+    let forgeries = [
+        (
+            "forged-bad-mac",
+            ManagedKey {
+                // Red's room, if it counted.
+                team_id: Some(hv2_cluster::ownership::TeamId::parse("red").unwrap()),
+                ..node_written("mk_bad_mac", "forged-bad-mac", &"0".repeat(64))
+            },
+        ),
+        (
+            "forged-unsealed",
+            node_written("mk_unsealed", "forged-unsealed", ""),
+        ),
+        (
+            "forged-other",
+            elsewhere
+                .seal(node_written("mk_other", "forged-other", ""))
+                .unwrap(),
+        ),
+        ("forged-changed", changed),
+    ];
+    for (_, record) in &forgeries {
+        w.store.put_managed_key(record).await.unwrap();
+    }
+    for (secret, record) in &forgeries {
+        for path in ["/keys", "/sandboxes", "/cluster/nodes"] {
+            let (code, body) = call(&w.base, reqwest::Method::GET, path, Some(secret), None).await;
+            assert_eq!(code, 503, "{} {path}: {body}", record.id);
+        }
+        let (code, body) = post_key(&w.base, secret, member_body("red", "x")).await;
+        assert_eq!(code, 503, "{} POST /keys: {body}", record.id);
+    }
+    // The key this control plane made is unaffected, and is all anyone sees.
+    assert_eq!(
+        status(&w.base, reqwest::Method::GET, "/sandboxes", &good).await,
+        200
+    );
+    assert_eq!(ids(&listed(&w.base, ADMIN).await), [good_id].into());
+    // Forgeries take no room: red holds carol's key and a forged red record,
+    // and with a limit of two there is still room for one more.
+    w.control.set_managed_key_limit(2);
+    assert_eq!(
+        post_key(&w.base, ADMIN, member_body("red", "dave")).await.0,
+        201
+    );
+    // An administrator can remove a forgery; a team-admin cannot see it.
+    assert_eq!(
+        status(
+            &w.base,
+            reqwest::Method::DELETE,
+            "/keys/mk_bad_mac",
+            "red-lead"
+        )
+        .await,
+        404
+    );
+    for (secret, record) in &forgeries {
+        assert_eq!(
+            status(
+                &w.base,
+                reqwest::Method::DELETE,
+                &format!("/keys/{}", record.id),
+                ADMIN
+            )
+            .await,
+            200,
+            "{}",
+            record.id
+        );
+        assert_eq!(
+            status(&w.base, reqwest::Method::GET, "/sandboxes", secret).await,
+            401,
+            "{} once removed it is simply unknown",
+            record.id
+        );
+    }
+}
+
+/// Without a secret managed keys are off: the routes say so, and the store is
+/// not even asked about a key, so one in it (sealed or not) is unknown.
+#[tokio::test]
+async fn without_a_managed_key_secret_managed_keys_are_off() {
+    let w = world_without_secret().await;
+    for (method, path, body) in [
+        (
+            reqwest::Method::POST,
+            "/keys",
+            Some(member_body("red", "x")),
+        ),
+        (reqwest::Method::GET, "/keys", None),
+        (reqwest::Method::DELETE, "/keys/mk_anything", None),
+    ] {
+        let (code, answer) = call(&w.base, method.clone(), path, Some(ADMIN), body).await;
+        assert_eq!(code, 503, "{method} {path}: {answer}");
+        assert!(
+            answer["message"]
+                .as_str()
+                .unwrap()
+                .contains("managed key secret"),
+            "{answer}"
+        );
+    }
+    // The members of a team are the policy file's alone.
+    let (code, members) = call(
+        &w.base,
+        reqwest::Method::GET,
+        "/teams/red/members",
+        Some(ADMIN),
+        None,
+    )
+    .await;
+    assert_eq!(code, 200, "{members}");
+    // A record even this test's secret sealed is no way in.
+    let record = sealed(ManagedKey {
+        scopes: [ApiScope::Inventory].into(),
+        team_id: Some(hv2_cluster::ownership::TeamId::parse("red").unwrap()),
+        principal: Some(hv2_cluster::ownership::OwnerId::parse("eve").unwrap()),
+        ..node_written("mk_present", "present-secret", "")
+    });
+    w.store.put_managed_key(&record).await.unwrap();
+    let before = w.store.lookups.load(Ordering::SeqCst);
+    assert_eq!(
+        status(
+            &w.base,
+            reqwest::Method::GET,
+            "/sandboxes",
+            "present-secret"
+        )
+        .await,
+        401
+    );
+    assert_eq!(w.store.lookups.load(Ordering::SeqCst), before);
+    // A secret is at least 32 bytes.
+    assert!(w.control.set_managed_key_secret(vec![1u8; 31]).is_err());
+    assert!(w.control.set_managed_key_secret(vec![1u8; 32]).is_ok());
 }

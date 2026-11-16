@@ -69,6 +69,19 @@ const TX_QUEUE: usize = 1;
 /// Queue depth offered to the driver.
 const QUEUE_SIZE: u16 = 256;
 
+/// Most bytes one chain may describe, on either queue.
+///
+/// A frame is at most [`MAX_OFFLOADED_FRAME_LEN`] plus the header, so a quarter
+/// of a megabyte is ample. The generic ceiling is 64 MiB, which a driver could
+/// otherwise have this device allocate and copy once per chain, a ring's worth
+/// per kick.
+const MAX_NET_CHAIN_BYTES: usize = 256 * 1024;
+
+/// Most bytes of chains one transmit kick may drain. A full ring of maximal
+/// chains, so a correct driver is never held up; the rest waits for the next
+/// kick.
+const TX_KICK_BYTES: usize = QUEUE_SIZE as usize * MAX_NET_CHAIN_BYTES;
+
 /// Bytes of `virtio_net_hdr` in front of every frame.
 ///
 /// Twelve under `VIRTIO_F_VERSION_1`, which includes `num_buffers` whether or
@@ -149,7 +162,10 @@ impl VirtioNetMmio {
         Self {
             mac,
             acked_features: 0,
-            queues: vec![GuestQueue::new(QUEUE_SIZE), GuestQueue::new(QUEUE_SIZE)],
+            queues: vec![
+                GuestQueue::new(QUEUE_SIZE).with_max_chain_bytes(MAX_NET_CHAIN_BYTES),
+                GuestQueue::new(QUEUE_SIZE).with_max_chain_bytes(MAX_NET_CHAIN_BYTES),
+            ],
             tx_pending: VecDeque::new(),
             rx_pending: VecDeque::new(),
             backlog: 256,
@@ -267,7 +283,12 @@ impl VirtioNetMmio {
     /// into an interrupt.
     fn drain_tx(&mut self, mem: &GuestMemory) -> Result<bool> {
         let mut consumed = false;
-        while let Some(chain) = self.queues[TX_QUEUE].pop(mem)? {
+        let mut budget = self.queues[TX_QUEUE].kick_budget(TX_KICK_BYTES);
+        while !budget.exhausted() {
+            let Some(chain) = self.queues[TX_QUEUE].pop(mem)? else {
+                break;
+            };
+            budget.charge(chain.readable_len().saturating_add(chain.writable_len()));
             let bytes = chain.read_all(mem)?;
             // Everything before the header is the driver's business; a frame
             // shorter than the header is not a frame.
@@ -282,7 +303,12 @@ impl VirtioNetMmio {
                 // What the driver left to us: a checksum it did not finish,
                 // or a segment larger than the MTU whose headers describe
                 // the pieces it was to be cut into rather than itself.
-                if offloaded && (bytes[0] & VIRTIO_NET_HDR_F_NEEDS_CSUM != 0 || bytes[1] != 0) {
+                // Only a frame within the limit is worth the work, so the
+                // driver's choice of length cannot buy a checksum over it.
+                if frame.len() <= limit
+                    && offloaded
+                    && (bytes[0] & VIRTIO_NET_HDR_F_NEEDS_CSUM != 0 || bytes[1] != 0)
+                {
                     let csum_start = usize::from(u16::from_le_bytes([bytes[6], bytes[7]]));
                     let csum_offset = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
                     finish_offloaded(&mut frame, csum_start, csum_offset);
@@ -318,10 +344,14 @@ impl VirtioNetMmio {
     /// Put waiting frames into receive buffers the driver has posted.
     fn flush_rx(&mut self, mem: &GuestMemory) -> Result<bool> {
         let mut published = false;
-        while !self.rx_pending.is_empty() {
+        // One receive buffer per ring slot at most, so a driver that keeps
+        // posting while this runs cannot hold the vCPU here.
+        let mut budget = self.queues[RX_QUEUE].kick_budget(usize::MAX);
+        while !self.rx_pending.is_empty() && !budget.exhausted() {
             let Some(chain) = self.queues[RX_QUEUE].pop(mem)? else {
                 break;
             };
+            budget.charge(0);
             // Taken only once a buffer exists, so a frame is never lost to a
             // queue that turned out to be empty.
             let frame = self
@@ -352,19 +382,23 @@ impl VirtioNetMmio {
 
 /// The ones'-complement sum of `data` as 16-bit big-endian words, added to
 /// `sum`.
-fn sum16(mut sum: u32, data: &[u8]) -> u32 {
+///
+/// Accumulated in 64 bits: `data` is a guest's frame, and 65 538 words of
+/// `0xFFFF` already overflow 32. The caller bounds the length too; this does
+/// not depend on it.
+fn sum16(mut sum: u64, data: &[u8]) -> u64 {
     let (words, rest) = data.as_chunks::<2>();
     for word in words {
-        sum += u32::from(u16::from_be_bytes(*word));
+        sum += u64::from(u16::from_be_bytes(*word));
     }
     if let [last] = rest {
-        sum += u32::from(*last) << 8;
+        sum += u64::from(*last) << 8;
     }
     sum
 }
 
 /// Fold and invert: the checksum a header carries.
-fn fold(mut sum: u32) -> u16 {
+fn fold(mut sum: u64) -> u16 {
     while sum > 0xffff {
         sum = (sum & 0xffff) + (sum >> 16);
     }
@@ -401,13 +435,13 @@ fn finish_offloaded(frame: &mut [u8], csum_start: usize, csum_offset: usize) {
                 let ip = fold(sum16(0, &frame[ETH..l4]));
                 frame[ETH + 10..ETH + 12].copy_from_slice(&ip.to_be_bytes());
 
-                let length = (frame.len() - l4) as u32;
+                let length = (frame.len() - l4) as u64;
                 if proto == 17 {
                     frame[l4 + 4..l4 + 6].copy_from_slice(&(length as u16).to_be_bytes());
                 }
                 frame[l4 + field..l4 + field + 2].copy_from_slice(&[0, 0]);
                 let mut sum = sum16(0, &frame[ETH + 12..ETH + 20]);
-                sum += u32::from(proto) + length;
+                sum += u64::from(proto) + length;
                 let mut l4sum = fold(sum16(sum, &frame[l4..]));
                 if proto == 17 && l4sum == 0 {
                     l4sum = 0xffff;
@@ -478,7 +512,7 @@ impl VirtioMmioDevice for VirtioNetMmio {
             }
             RX_QUEUE => self.flush_rx(mem),
             other => {
-                tracing::warn!("virtio-net: notify for queue {other}, which does not exist");
+                tracing::debug!("virtio-net: notify for queue {other}, which does not exist");
                 Ok(false)
             }
         }
@@ -779,12 +813,22 @@ mod tests {
             "the IP checksum verifies"
         );
         let mut pseudo = sum16(0, &frame[26..34]);
-        pseudo += 6 + (frame.len() - 34) as u32;
+        pseudo += 6 + (frame.len() - 34) as u64;
         assert_eq!(
             fold(sum16(pseudo, &frame[34..])),
             0,
             "the TCP checksum verifies"
         );
+    }
+
+    #[test]
+    fn the_checksum_sum_holds_a_long_run_of_ones() {
+        // 65 538 words of 0xFFFF overflow a 32-bit accumulator; a megabyte of
+        // them is far past it.
+        let words = 512 * 1024u64;
+        let data = vec![0xFFu8; (words * 2) as usize];
+        assert_eq!(sum16(0, &data), words * 0xFFFF);
+        assert_eq!(fold(sum16(0, &data)), 0, "ones' complement of all ones");
     }
 
     #[test]

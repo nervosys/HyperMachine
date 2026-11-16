@@ -201,6 +201,11 @@ def main():
             ]
             policies = directory / "keys.json"
             policies.write_text(json.dumps(policy))
+            # The managed key secret: control planes only, never the node. Both control planes
+            # share one Redis, so both get this same file.
+            managed_key_secret = directory / "managed-key-secret"
+            managed_key_secret.write_text(os.urandom(48).hex())
+            managed_key_secret.chmod(0o600)
             report["policy"] = [{k: v for k, v in row.items() if k != "sha256"} for row in policy]
             start("node", [str(args.daemon), "--port", str(node_port), "--proxy-port", str(node_proxy),
                            "--memory-mb", "1024", "--cpu-cores", "1", "--capacity", "8",
@@ -214,6 +219,7 @@ def main():
             def start_control(name, listen, proxy):
                 return start(name, [str(args.control), "--store", store, "--namespace", namespace, "--port", str(listen),
                                     "--proxy-port", str(proxy), "--api-keys-file", str(policies),
+                                    "--managed-key-secret-file", str(managed_key_secret),
                                     "--api-tls-cert", str(directory / "api.pem"), "--api-tls-key", str(directory / "api.key"),
                                     "--tls-cert", str(directory / "api.pem"), "--tls-key", str(directory / "api.key"),
                                     "--mtls-ca", str(directory / "ca.pem"), "--mtls-cert", str(directory / "control.pem"),

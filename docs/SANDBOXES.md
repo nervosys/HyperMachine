@@ -680,6 +680,44 @@ for PUT /sandboxes/ID/names/NAME with no message`, and for a 404 adds that the
 daemon may not serve the route: reserved aliases, domains, usage and cluster routes
 need a control plane, and a standalone `hv2-sandboxd` has none.
 
+## Where a node listens
+
+A node's API runs commands in guests, reads and writes their files, and
+creates machines; its sandbox proxy reaches whatever a guest or a machine
+publishes. Neither is for a network that is not trusted, so the node chooses
+where to listen by whether it asks its callers to prove who they are:
+
+| The node has | `--bind` unset | `--bind ADDR` |
+|---|---|---|
+| nothing (standalone) | **`127.0.0.1`**: this host only | loopback only; a non-loopback `ADDR` is **refused at start**, unless `--allow-unauthenticated` |
+| a cluster token (`--cluster-token` or `HV2_CLUSTER_TOKEN`) or mTLS | `0.0.0.0`: the control plane can dial it | `ADDR` |
+
+`--bind ADDR` is one IP address, for the API (`--port`, 3980) and the proxy
+(`--proxy-port`, 3981) both. There is no separate flag for each.
+
+- **`--allow-unauthenticated`** is the explicit choice to listen beyond loopback
+  with no token and no mTLS: for a lab, or behind a network that does the
+  authenticating. The node then says so on stderr and in its log, at every start,
+  naming both ports.
+- **A clustered node that advertises a reachable address** (`--advertise-api
+  http://10.0.0.7:3980`) with no token would listen on loopback, where its control
+  plane could never dial it. It refuses to start and says so, rather than
+  registering a node nobody can reach.
+- **`/metrics` is on the API's port**, so a scraper on another host needs the node
+  to be bound beyond loopback: with a token, or `--bind` and `--allow-unauthenticated`.
+- **The token guards the API, not the proxy.** The control plane's proxy relays
+  to a node's proxy without a token, so a node's proxy port (3981) has no check of
+  its own, in cluster mode as in any other. Anyone who can reach it can reach what
+  a sandbox serves, and every machine port published with `proxy: true`, a
+  desktop's noVNC among them, by its guessable `{port}-{id}` name. Keep it on a
+  network only the control plane can reach: a firewall, a security group, a
+  Kubernetes network policy.
+- **mTLS** (`--mtls-ca`, `--mtls-cert`, `--mtls-key`) is the other way to ask
+  callers to prove themselves, on both ports, and counts as authentication.
+
+The container, compose and Helm deployments set a cluster token, so their nodes
+listen on every address of their pod or container, as before.
+
 ## Reaching it as an agent
 
 Two tools, dispatched against a `SandboxHost` the way `vm.*` dispatches against

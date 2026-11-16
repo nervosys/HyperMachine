@@ -68,6 +68,16 @@
 //! Substrate multiplexes actors onto workers. Paused sandboxes live on this
 //! node's disk, over this node's template, and end with the process.
 //!
+//! # Who can reach it
+//!
+//! The API and the sandbox proxy listen on `127.0.0.1` unless the node has a
+//! `--cluster-token` (or mTLS), in which case they listen on `0.0.0.0` so a
+//! control plane can dial them. `--bind ADDR` chooses the address for both. A
+//! non-loopback address with neither is refused at start unless
+//! `--allow-unauthenticated` is given, which logs a warning. The token guards
+//! the API only: the proxy port has no check of its own and must not be exposed
+//! beyond the control plane. See `docs/SANDBOXES.md`, "Where a node listens".
+//!
 //! # Running it
 //!
 //! ```text
@@ -224,6 +234,14 @@ impl GuestTransport {
 struct Options {
     port: u16,
     proxy_port: u16,
+    /// `--bind`: the address both listeners (API and proxy) bind. Unset, it is
+    /// loopback, or every address when the node authenticates its callers.
+    bind: Option<String>,
+    /// `--allow-unauthenticated`: bind beyond loopback with no cluster token
+    /// and no mTLS, so that anyone who can reach the node can use it.
+    allow_unauthenticated: bool,
+    /// What `bind` and the rest decided: where the listeners are bound.
+    bind_ip: std::net::IpAddr,
     /// Both must be given for the proxy to speak TLS; either alone is an
     /// error rather than a silent downgrade to plaintext.
     tls_cert: Option<String>,
@@ -382,6 +400,9 @@ fn parse_options() -> Result<Options, String> {
     let mut opts = Options {
         port: 3980,
         proxy_port: 3981,
+        bind: None,
+        allow_unauthenticated: false,
+        bind_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
         tls_cert: None,
         tls_key: None,
         kernel,
@@ -464,6 +485,8 @@ fn parse_options() -> Result<Options, String> {
             "--proxy-port" => {
                 opts.proxy_port = value(&mut i)?.parse().map_err(|e| format!("{e}"))?;
             }
+            "--bind" => opts.bind = Some(value(&mut i)?),
+            "--allow-unauthenticated" => opts.allow_unauthenticated = true,
             "--tls-cert" => opts.tls_cert = Some(value(&mut i)?),
             "--tls-key" => opts.tls_key = Some(value(&mut i)?),
             "--memory-gb" => {
@@ -661,7 +684,7 @@ fn parse_options() -> Result<Options, String> {
             }
             "--help" | "-h" => {
                 println!(
-                    "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N | --memory-mb N] [--cpu-cores N] \
+                    "usage: hv2-sandboxd [--port N] [--proxy-port N] [--bind ADDR] [--allow-unauthenticated] [--memory-gb N | --memory-mb N] [--cpu-cores N] \
                      [--capacity N] [--guest-transport mmio|pci] [--cold-start-concurrency N] [--no-template | --require-template] [--prefault] [--sized-templates N] [--sized-template-disk-gb N] [--template-size CPUSxMB ...] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] [--idle-pause-after SECS] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy] \
                      [--tenant-reserved-cidr CIDR]...] \
@@ -670,7 +693,10 @@ fn parse_options() -> Result<Options, String> {
                      [--lit BIN [--lit-remote URL]...] [--git-remote URL]... [--git-credential PREFIX=ENV]... \
                      [--cluster-store redis://H:P --advertise-api URL --advertise-proxy H:P \
                      [--node-id ID] [--cluster-namespace NS] [--cluster-token T] [--node-ttl SECS] [--registration-reconcile-interval SECS]]\n\
-                     HV2_KERNEL and HV2_INITRD name the guest; HV2_CLUSTER_TOKEN may carry the token."
+                     HV2_KERNEL and HV2_INITRD name the guest; HV2_CLUSTER_TOKEN may carry the token.\n\
+                     --bind ADDR is the address the API and the proxy listen on: 127.0.0.1 unless the node \
+                     has a cluster token or mTLS, then 0.0.0.0. A non-loopback ADDR with neither is refused \
+                     unless --allow-unauthenticated."
                 );
                 std::process::exit(0);
             }
@@ -691,7 +717,86 @@ fn parse_options() -> Result<Options, String> {
         |name| std::env::var(name).ok(),
         "hv2-sandboxd",
     )?;
+    opts.bind_ip = bind_address(
+        opts.bind.as_deref(),
+        opts.authenticates(),
+        opts.allow_unauthenticated,
+        opts.cluster_store
+            .is_some()
+            .then_some(opts.advertise_api.as_deref())
+            .flatten(),
+    )?;
     Ok(opts)
+}
+
+impl Options {
+    /// Whether this node asks its callers to prove who they are: a cluster
+    /// token on the API, or mutual TLS on both ports.
+    fn authenticates(&self) -> bool {
+        self.cluster_token.as_deref().is_some_and(|t| !t.is_empty())
+            || (self.mtls_ca.is_some() && self.mtls_cert.is_some() && self.mtls_key.is_some())
+    }
+}
+
+/// Where the API and the proxy listen.
+///
+/// The node's API runs commands in guests, reads their files, and makes
+/// machines; its proxy reaches whatever a machine publishes with `proxy:true`,
+/// a desktop among them. Neither is safe to offer to a network unless callers
+/// are authenticated, so with no `--bind` the node listens on loopback alone --
+/// until it has a cluster token (or mTLS), which is cluster mode, where the
+/// control plane must reach it, and then on every address. A `--bind` beyond
+/// loopback without either is a node open to whoever can reach it: refused,
+/// unless `--allow-unauthenticated` says that is meant. A node in a cluster
+/// that advertises an address other than loopback but listens on loopback
+/// could never be reached, which is also refused, rather than left to fail
+/// quietly.
+fn bind_address(
+    bind: Option<&str>,
+    authenticated: bool,
+    allow_unauthenticated: bool,
+    advertised_api: Option<&str>,
+) -> Result<std::net::IpAddr, String> {
+    use std::net::{IpAddr, Ipv4Addr};
+    let ip = match bind {
+        Some(text) => text
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .parse::<IpAddr>()
+            .map_err(|_| {
+                format!("--bind takes an IP address (127.0.0.1, 0.0.0.0, ::), not {text:?}")
+            })?,
+        None if authenticated => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+        None => IpAddr::V4(Ipv4Addr::LOCALHOST),
+    };
+    if !ip.is_loopback() && !authenticated && !allow_unauthenticated {
+        return Err(format!(
+            "--bind {ip} would offer this node, unauthenticated, to every host that can reach              it: anyone could run commands in its sandboxes, read their files, create machines,              and reach the ports they publish. Give the node a --cluster-token (or \
+             HV2_CLUSTER_TOKEN) or mTLS, or bind 127.0.0.1, or pass --allow-unauthenticated if \
+             that is really intended"
+        ));
+    }
+    if ip.is_loopback() {
+        if let Some(api) = advertised_api {
+            let host = api
+                .split_once("://")
+                .map_or(api, |(_, rest)| rest)
+                .split('/')
+                .next()
+                .unwrap_or_default();
+            let host = host.rsplit_once(':').map_or(host, |(h, _)| h);
+            let host = host.trim_start_matches('[').trim_end_matches(']');
+            if !matches!(host, "127.0.0.1" | "localhost" | "::1") {
+                return Err(format!(
+                    "this node listens on loopback only ({ip}) but advertises {api}, where \
+                     a control plane could not reach it. Give it a --cluster-token (or \
+                     HV2_CLUSTER_TOKEN), which lets it listen on every address, or pass \
+                     --bind ADDR --allow-unauthenticated"
+                ));
+            }
+        }
+    }
+    Ok(ip)
 }
 
 /// `FIRST-LAST`, as `--machine-ports` gives it: the node's ports that may be
@@ -5330,6 +5435,25 @@ fn valid_template_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
+/// The part of a built image's file name that tells one pull from another: the
+/// first 16 hex digits of its digest. The "digest" is the client's own text when
+/// the registry's manifest is not an index (a tag, or whatever followed the
+/// `@`), so it is only used when it is a sha256 digest; anything else -- a
+/// multibyte string, a path -- is hashed to something safe in a file name.
+fn image_file_tag(digest: &str) -> String {
+    use sha2::Digest;
+    match digest.strip_prefix("sha256:") {
+        Some(hex) if hex.len() >= 16 && hex.bytes().all(|b| b.is_ascii_hexdigit()) => {
+            hex[..16].to_ascii_lowercase()
+        }
+        _ => sha2::Sha256::digest(digest.as_bytes())
+            .iter()
+            .take(8)
+            .map(|b| format!("{b:02x}"))
+            .collect(),
+    }
+}
+
 /// Pull `image`, write its initramfs, snapshot it, and offer it.
 async fn build_from_image(
     state: &Arc<AppState>,
@@ -5351,8 +5475,7 @@ async fn build_from_image(
         None => std::env::temp_dir().join(format!("hv2-sandboxd-{}-images", std::process::id())),
     };
     std::fs::create_dir_all(&images).map_err(|e| format!("{}: {e}", images.display()))?;
-    let short = digest.trim_start_matches("sha256:");
-    let file = images.join(format!("{name}-{}.cpio.gz", &short[..short.len().min(16)]));
+    let file = images.join(format!("{name}-{}.cpio.gz", image_file_tag(&digest)));
     let scratch = images.join(format!(".{}", uuid::Uuid::new_v4().simple()));
     std::fs::write(&scratch, &bytes).map_err(|e| format!("{}: {e}", scratch.display()))?;
     std::fs::rename(&scratch, &file).map_err(|e| format!("{}: {e}", file.display()))?;
@@ -6333,6 +6456,19 @@ async fn main() -> std::process::ExitCode {
         }
         eprintln!("hv2-sandboxd: FIPS mode: TLS on AWS-LC's validated module");
     }
+    if !opts.bind_ip.is_loopback() && !opts.authenticates() {
+        // `bind_address` refused this unless it was asked for; say so, every
+        // time it starts, where it will be read.
+        let warning = format!(
+            "--allow-unauthenticated: this node's API (port {}) and proxy (port {}) listen on \
+             {} with no cluster token and no mTLS. Every host that can reach them can run \
+             commands in sandboxes and machines, read and write their files, create machines, \
+             and reach any port a machine publishes through the proxy, desktops included",
+            opts.port, opts.proxy_port, opts.bind_ip
+        );
+        eprintln!("hv2-sandboxd: WARNING: {warning}");
+        tracing::warn!("{warning}");
+    }
     let port = opts.port;
     let proxy_port = opts.proxy_port;
     let tls_cert = opts.tls_cert.clone();
@@ -6538,7 +6674,7 @@ async fn main() -> std::process::ExitCode {
                     return std::process::ExitCode::FAILURE;
                 }
             };
-            if opts.cluster_token.is_none() {
+            if !opts.authenticates() {
                 tracing::warn!(
                     "no --cluster-token: anyone who can reach this node's port can use it, \
                      bypassing the control plane's API key"
@@ -6640,9 +6776,14 @@ async fn main() -> std::process::ExitCode {
         snapshots: parking_lot::RwLock::new(BTreeMap::new()),
         step_builds: parking_lot::Mutex::new(HashMap::new()),
         upload_tokens: Mutex::new(HashMap::new()),
+        // A stalled or endless response from a registry or login server ends:
+        // each request has two minutes in all (registry blobs ask for their
+        // own, longer, in `oci`), and a connection that goes quiet one.
         http: hv2_tls::http_client(None)
             .unwrap_or_default()
             .connect_timeout(Duration::from_secs(10))
+            .read_timeout(Duration::from_secs(60))
+            .timeout(Duration::from_secs(120))
             .build()
             .unwrap_or_default(),
         metrics: NodeMetrics::default(),
@@ -6727,13 +6868,7 @@ async fn main() -> std::process::ExitCode {
     // which is exactly how the proxy's own tests failed the first time they
     // were written.
     let (_proxy_shutdown, proxy_rx) = tokio::sync::oneshot::channel();
-    let proxy_addr: std::net::SocketAddr = match format!("0.0.0.0:{proxy_port}").parse() {
-        Ok(addr) => addr,
-        Err(e) => {
-            eprintln!("hv2-sandboxd: bad proxy port {proxy_port}: {e}");
-            return std::process::ExitCode::FAILURE;
-        }
-    };
+    let proxy_addr = std::net::SocketAddr::new(state.opts.bind_ip, proxy_port);
     // Mutual TLS, when configured, for both of this node's ports: only a
     // peer whose certificate the cluster's CA signed -- a control plane --
     // gets a handshake at all. It replaces --tls-cert/--tls-key, which
@@ -7096,7 +7231,7 @@ async fn main() -> std::process::ExitCode {
         })
         .with_state(Arc::clone(&state));
 
-    let addr = format!("0.0.0.0:{port}");
+    let addr = std::net::SocketAddr::new(state.opts.bind_ip, port);
     println!(
         "hv2-sandboxd: listening on {addr}, capacity {}{}",
         state.opts.capacity,
@@ -7135,7 +7270,7 @@ async fn main() -> std::process::ExitCode {
     println!("{template_line}");
     println!();
     println!(
-        "sandbox proxy on 0.0.0.0:{proxy_port} -- {scheme}, routed by the authority a client asks \
+        "sandbox proxy on {proxy_addr} -- {scheme}, routed by the authority a client asks \
          for, as {ENVD_PORT}-<sandboxID>.<anything>"
     );
     println!(
@@ -7219,6 +7354,80 @@ async fn main() -> std::process::ExitCode {
 
 #[cfg(test)]
 mod tests {
+    /// A node listens where it can be trusted to: loopback until it
+    /// authenticates its callers, every address once it does, and anywhere
+    /// else only when told, twice over, that open is meant.
+    #[test]
+    fn a_node_binds_loopback_until_it_authenticates_its_callers() {
+        let ip = |s: &str| s.parse::<std::net::IpAddr>().unwrap();
+        // Standalone and unauthenticated: loopback, by default.
+        assert_eq!(
+            bind_address(None, false, false, None).unwrap(),
+            ip("127.0.0.1")
+        );
+        // With a cluster token or mTLS: every address, so a control plane can dial it.
+        assert_eq!(
+            bind_address(None, true, false, None).unwrap(),
+            ip("0.0.0.0")
+        );
+        // An explicit loopback or a named interface, with or without a token.
+        assert_eq!(
+            bind_address(Some("::1"), false, false, None).unwrap(),
+            ip("::1")
+        );
+        assert_eq!(
+            bind_address(Some("[::1]"), false, false, None).unwrap(),
+            ip("::1")
+        );
+        assert_eq!(
+            bind_address(Some("10.1.2.3"), true, false, None).unwrap(),
+            ip("10.1.2.3")
+        );
+        // Beyond loopback with nothing to authenticate callers: refused...
+        for beyond in ["0.0.0.0", "::", "10.1.2.3", "192.168.1.5"] {
+            let err = bind_address(Some(beyond), false, false, None).unwrap_err();
+            assert!(err.contains("--allow-unauthenticated"), "{beyond}: {err}");
+        }
+        // ...unless it is asked for in as many words.
+        assert_eq!(
+            bind_address(Some("0.0.0.0"), false, true, None).unwrap(),
+            ip("0.0.0.0")
+        );
+        // Not an address.
+        assert!(bind_address(Some("localhost"), false, false, None).is_err());
+        assert!(bind_address(Some(""), true, false, None).is_err());
+        // A clustered node that advertises a reachable address but would
+        // listen on loopback could never be dialled: said at start.
+        let err = bind_address(None, false, false, Some("http://10.0.0.7:3980")).unwrap_err();
+        assert!(err.contains("advertises"), "{err}");
+        assert!(bind_address(None, false, false, Some("http://127.0.0.1:3980")).is_ok());
+        assert!(bind_address(None, false, false, Some("https://localhost:3980/")).is_ok());
+        assert!(bind_address(None, true, false, Some("http://10.0.0.7:3980")).is_ok());
+        assert!(bind_address(Some("0.0.0.0"), false, true, Some("http://10.0.0.7:3980")).is_ok());
+    }
+
+    /// The digest a client sends after `@` names the built image's file. A
+    /// multibyte one used to panic the request (`&short[..16]` mid-character),
+    /// and a path in it wrote outside the images directory.
+    #[test]
+    fn an_image_file_tag_is_safe_whatever_the_client_sent() {
+        let hex = "0123456789ABCDEFfedcba9876543210";
+        assert_eq!(image_file_tag(&format!("sha256:{hex}")), "0123456789abcdef");
+        for hostile in [
+            "sha256:ééééééééééééééééééé",
+            "ééééééééééééééééééééé",
+            "latest",
+            "sha256:../../../../etc/cron.d/x0123456789",
+            "sha256:",
+            "",
+            "日本語日本語日本語日本語日本語",
+        ] {
+            let tag = image_file_tag(hostile);
+            assert_eq!(tag.len(), 16, "{hostile:?} -> {tag:?}");
+            assert!(tag.bytes().all(|b| b.is_ascii_hexdigit()), "{tag:?}");
+        }
+    }
+
     /// A team's sandboxes try the team's Git credentials first, then the
     /// node's if shared; others get the node's if shared; nothing otherwise.
     #[test]

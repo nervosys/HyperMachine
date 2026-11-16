@@ -30,6 +30,9 @@ pub mod virtio_vsock;
 #[cfg(test)]
 mod integration_tests;
 
+#[cfg(test)]
+mod virtio_guest_abuse_tests;
+
 pub use disk_image::{
     DiskImage, ImageFormat, InMemoryImage, Qcow2Header, RawImage, VhdxFileHeader, QCOW2_MAGIC,
     SECTOR_SIZE as DISK_SECTOR_SIZE, VHDX_SIGNATURE,
@@ -84,7 +87,9 @@ pub use virtio_mmio::{
     VirtioMmioDevice, VirtioMmioTransport, CONFIG_OFFSET, VIRTIO_F_VERSION_1, VIRTIO_MMIO_MAGIC,
     VIRTIO_MMIO_REGION_SIZE, VIRTIO_MMIO_VERSION,
 };
-pub use virtio_queue::{Descriptor, DescriptorChain, GuestQueue, MAX_CHAIN_BYTES, MAX_QUEUE_SIZE};
+pub use virtio_queue::{
+    Descriptor, DescriptorChain, GuestQueue, KickBudget, MAX_CHAIN_BYTES, MAX_QUEUE_SIZE,
+};
 pub use virtio_vsock::{
     VsockConnectionId, VsockConnectionState, VsockDevice, VsockHeader, VsockPacket,
     VIRTIO_ID_VSOCK, VSOCK_HEADER_SIZE, VSOCK_HOST_CID, VSOCK_RX_BUF_SIZE,

@@ -252,6 +252,41 @@ mod team_tests {
 #[cfg(test)]
 mod creation_tests {
     use super::*;
+
+    /// The volume API's create, chmod and PUT keep no setuid or setgid bit,
+    /// whatever mode a request asks for; permissions and sticky are kept.
+    #[test]
+    fn the_volume_api_stores_no_setuid_or_setgid_bit() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!("hm-volume-modes-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        let fs = Beneath::open(&root).unwrap();
+        let mode = |name: &str| {
+            std::fs::symlink_metadata(root.join(name))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o7777
+        };
+        // PUT without an atomic stage: the file is created with the mode.
+        let fd = fs.open_at(&["put".into()], libc::O_WRONLY | libc::O_CREAT, 0o6755);
+        drop(fd.unwrap());
+        assert_eq!(mode("put"), 0o755);
+        // mkdir, as the directory endpoint does it.
+        mkdir(&fs, &["dir".into()], 0o3777).unwrap();
+        // Sticky is kept (the umask may take permission bits); setgid is not.
+        assert_eq!(mode("dir") & 0o7000, 0o1000);
+        // chmod of an existing file or directory, and the atomic PUT's own.
+        apply(&fs, &["put".into()], None, None, Some(0o4777)).unwrap();
+        assert_eq!(mode("put"), 0o777);
+        apply(&fs, &["dir".into()], None, None, Some(0o2755)).unwrap();
+        assert_eq!(mode("dir"), 0o755);
+        let file = std::fs::File::open(root.join("put")).unwrap();
+        ninep::chmod(std::os::fd::AsRawFd::as_raw_fd(&file), 0o6644).unwrap();
+        assert_eq!(mode("put"), 0o644);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn atomic_upload_preserves_previous_file_until_publication() {
         use std::io::Write;
@@ -747,7 +782,7 @@ fn mkdir(fs: &Beneath, parts: &[String], mode: u32) -> std::io::Result<()> {
     let d = fs.dir(dir)?;
     let n = std::ffi::CString::new(name.as_str())
         .map_err(|_| std::io::Error::from_raw_os_error(libc::EINVAL))?;
-    if unsafe { libc::mkdirat(d.as_raw_fd(), n.as_ptr(), mode) } < 0 {
+    if unsafe { libc::mkdirat(d.as_raw_fd(), n.as_ptr(), ninep::safe_mode(mode)) } < 0 {
         return Err(std::io::Error::last_os_error());
     }
     Ok(())

@@ -235,9 +235,9 @@ impl GuestMemory {
                     return Err(Error::Memory(format!(
                         "Access 0x{:x}..0x{:x} exceeds region 0x{:x}..0x{:x} (overrun by {} bytes)",
                         guest_addr,
-                        guest_addr + len,
+                        guest_addr.saturating_add(len),
                         region.guest_addr,
-                        region.guest_addr + region.size,
+                        region.guest_addr.saturating_add(region.size),
                         end_offset - region.size
                     )));
                 }
@@ -248,6 +248,20 @@ impl GuestMemory {
             "Invalid guest address: 0x{:x}",
             guest_addr
         )))
+    }
+
+    /// Whether `len` bytes from `guest_addr` lie wholly inside one region.
+    ///
+    /// For a caller that must vet a guest-supplied address range before it
+    /// does arithmetic on it or hands it on: an address near the top of the
+    /// 64-bit space, or a range that runs off the end of RAM, is refused here
+    /// with an error rather than reaching an addition that overflows.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Memory`] if the range overflows or is not entirely RAM.
+    pub fn check_range(&self, guest_addr: GuestAddress, len: u64) -> Result<()> {
+        self.translate_range(guest_addr, len).map(|_| ())
     }
 
     /// Write bytes to guest memory
@@ -482,6 +496,28 @@ mod numa_backing {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn check_range_refuses_wraps_and_overruns_without_panicking() {
+        let memory = GuestMemory::new(0x2000).unwrap();
+        memory.allocate_region(0x1000, false).unwrap();
+        // A second region above the first, so region base + length is a sum
+        // an error message could overflow.
+        memory.allocate_region(0x1000, false).unwrap();
+
+        assert!(memory.check_range(0x1800, 0x100).is_ok());
+        assert!(
+            memory.check_range(0x1800, 0x1000).is_err(),
+            "runs off the end"
+        );
+        assert!(memory.check_range(0x1800, u64::MAX).is_err());
+        assert!(memory.check_range(u64::MAX, 1).is_err());
+        assert!(memory.check_range(u64::MAX, u64::MAX).is_err());
+        assert!(
+            memory.check_range(0x1000, 0x1000).is_ok(),
+            "exactly a region"
+        );
+    }
 
     #[test]
     fn test_guest_memory_allocation() {

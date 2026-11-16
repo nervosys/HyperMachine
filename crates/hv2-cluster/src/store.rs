@@ -345,7 +345,9 @@ pub trait ClusterStore: Send + Sync {
     async fn managed_key_by_sha256(&self, _sha256: &str) -> Result<Option<ManagedKey>> {
         Ok(None)
     }
-    /// Every managed key, oldest first.
+    /// Every managed key, oldest first. A record that cannot be decoded is
+    /// skipped (and logged), not an error: one damaged or foreign record must
+    /// not hide the others or stop their revocation.
     async fn managed_keys(&self) -> Result<Vec<ManagedKey>> {
         Err(StoreError(
             "managed API keys unsupported by this store".into(),
@@ -2769,10 +2771,19 @@ redis.call('HSET',KEYS[1],ARGV[2],ARGV[3]); redis.call('HSET',KEYS[2],ARGV[1],AR
             .query_async(&mut c)
             .await
             .map_err(redis_error)?;
-        let mut found = all
+        // One record that cannot be read (damaged, or written by something
+        // that is not a control plane) must not hide the others, or stop a
+        // list, a count or a revocation of them. It is skipped, and said.
+        let mut found: Vec<ManagedKey> = all
             .values()
-            .map(|json| serde_json::from_str::<ManagedKey>(json).map_err(json_error))
-            .collect::<Result<Vec<_>>>()?;
+            .filter_map(|json| match serde_json::from_str::<ManagedKey>(json) {
+                Ok(key) => Some(key),
+                Err(error) => {
+                    tracing::warn!(%error, "skipping a managed key record that cannot be decoded");
+                    None
+                }
+            })
+            .collect();
         found.sort_by(|a, b| (a.created_at, &a.id).cmp(&(b.created_at, &b.id)));
         Ok(found)
     }
@@ -3953,6 +3964,7 @@ pub(crate) mod tests {
             team_id: team.map(|t| crate::ownership::TeamId::parse(t).unwrap()),
             principal: Some(crate::ownership::OwnerId::parse("alice").unwrap()),
             label: "ci".into(),
+            mac: String::new(),
             created_by: "lead".into(),
             created_at,
             expires_at: created_at + 600,
@@ -4024,6 +4036,23 @@ pub(crate) mod tests {
         // Another connection (another control plane) sees the same keys.
         let other = RedisStore::connect(&url, &namespace).await.unwrap();
         assert_eq!(other.managed_keys().await.unwrap().len(), 2);
+        // A record nothing could decode -- written by something that is not a
+        // control plane -- is skipped, not a failure of the list; the keys
+        // either side of it are still there and still revocable.
+        let mut c = store.connection.clone();
+        for (field, value) in [("c".repeat(64), "not json"), ("d".repeat(64), "{\"id\":1}")] {
+            redis::cmd("HSET")
+                .arg(store.key("managed-keys"))
+                .arg(field)
+                .arg(value)
+                .query_async::<()>(&mut c)
+                .await
+                .unwrap();
+        }
+        let all = other.managed_keys().await.unwrap();
+        assert_eq!(all.len(), 2, "the two readable keys, not an error");
+        assert!(other.remove_managed_key("mk_a").await.unwrap());
+        assert_eq!(other.managed_keys().await.unwrap().len(), 1);
         assert!(other
             .managed_key_by_sha256(&"b".repeat(64))
             .await

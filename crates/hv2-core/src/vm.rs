@@ -22,6 +22,30 @@ use std::time::Duration;
 use tokio::sync::{mpsc, Notify};
 use tokio::task::JoinHandle;
 
+/// How many times a given guest-triggered event is logged at `warn` before it
+/// drops to `debug`.
+///
+/// These are things a guest does by being buggy or hostile -- touching an
+/// address nothing answers, causing an exit nothing recognises -- at a rate it
+/// chooses, in a process whose log every VM shares. The first few are worth an
+/// operator's attention; the millionth is a denial of service on the log.
+const GUEST_WARN_LIMIT: u64 = 8;
+
+/// `tracing::warn!` for the first [`GUEST_WARN_LIMIT`] occurrences counted by
+/// `$counter`, `tracing::debug!` for the rest.
+macro_rules! warn_guest_event {
+    ($counter:expr, $($arg:tt)+) => {
+        if $counter.fetch_add(1, Ordering::Relaxed) < GUEST_WARN_LIMIT {
+            tracing::warn!($($arg)+)
+        } else {
+            tracing::debug!($($arg)+)
+        }
+    };
+}
+
+static UNMAPPED_MMIO_EVENTS: AtomicU64 = AtomicU64::new(0);
+static UNKNOWN_EXIT_EVENTS: AtomicU64 = AtomicU64::new(0);
+
 /// Linux's calling-thread CPU clock, used only by opt-in cold diagnostics.
 /// Missing clocks or invalid values leave the measurement unavailable.
 #[cfg(target_os = "linux")]
@@ -5301,7 +5325,7 @@ impl VM {
             VmExit::Interrupted => Ok(true),
 
             VmExit::Unknown { reason } => {
-                tracing::warn!("Unknown VM exit reason: {}", reason);
+                warn_guest_event!(UNKNOWN_EXIT_EVENTS, "Unknown VM exit reason: {}", reason);
                 Ok(true)
             }
 
@@ -5382,7 +5406,11 @@ impl VM {
                     true,
                 ));
             } else {
-                tracing::warn!("MMIO write to unmapped address: {:#x}", phys_addr);
+                warn_guest_event!(
+                    UNMAPPED_MMIO_EVENTS,
+                    "MMIO write to unmapped address: {:#x}",
+                    phys_addr
+                );
             }
         } else {
             tracing::debug!("MMIO read: addr={:#x} len={}", phys_addr, len);
@@ -5417,7 +5445,11 @@ impl VM {
                     false,
                 ));
             } else {
-                tracing::warn!("MMIO read from unmapped address: {:#x}", phys_addr);
+                warn_guest_event!(
+                    UNMAPPED_MMIO_EVENTS,
+                    "MMIO read from unmapped address: {:#x}",
+                    phys_addr
+                );
                 data[..len as usize].fill(0xFF);
             }
         }
@@ -5706,7 +5738,7 @@ impl VM {
             VmExit::Interrupted => Ok(true),
 
             VmExit::Unknown { reason } => {
-                tracing::warn!("Unknown VM exit reason: {}", reason);
+                warn_guest_event!(UNKNOWN_EXIT_EVENTS, "Unknown VM exit reason: {}", reason);
                 Ok(true)
             }
 
@@ -5789,7 +5821,11 @@ impl VM {
                     true,
                 ));
             } else {
-                tracing::warn!("MMIO write to unmapped address: {:#x}", phys_addr);
+                warn_guest_event!(
+                    UNMAPPED_MMIO_EVENTS,
+                    "MMIO write to unmapped address: {:#x}",
+                    phys_addr
+                );
             }
         } else {
             // MMIO read
@@ -5828,7 +5864,11 @@ impl VM {
                     false,
                 ));
             } else {
-                tracing::warn!("MMIO read from unmapped address: {:#x}", phys_addr);
+                warn_guest_event!(
+                    UNMAPPED_MMIO_EVENTS,
+                    "MMIO read from unmapped address: {:#x}",
+                    phys_addr
+                );
                 // Return 0xFF for unmapped reads
                 data[..len as usize].fill(0xFF);
             }

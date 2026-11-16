@@ -391,6 +391,8 @@ pub struct Session {
 }
 
 const SESSION_PREFIX: &str = "hms1";
+/// What an `Authorization` header starts with when it carries a session token.
+pub(crate) const SESSION_BEARER_PREFIX: &str = "Bearer hms1.";
 
 impl SessionKey {
     /// A key of at least 32 bytes.
