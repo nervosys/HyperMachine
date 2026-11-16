@@ -226,7 +226,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   administrator's key, carries it, since principals are global. Verified: 22 HTTP tests over a
   memory store, the store contract on a real Redis, and `tools/check-key-api-kvm.py` on KVM,
   22 cases in three runs, with two control planes over one Redis (revocation on both, restart,
-  expiry, 503 with Redis down). Not verified: an SSO session making keys, more than one node,
+  expiry, 503 with Redis down). SSO sessions (an administrator member, a team-admin member, the cookie's same-origin rule) are covered by tests
+  against a fixture provider, not KVM. A team-admin could name the principal of a signed-in member outside its team
+  or an administrator member; that is now refused. Not verified: a real identity provider, more than one node,
   concurrent revokes. See `docs/benchmarks/2026-11-15/key-api-kvm`.
 - **A browser seen drawing a machine's desktop.** `tools/check-desktop-browser-kvm.py`
   creates a machine with a desktop on KVM, opens noVNC through its published port in

@@ -228,6 +228,15 @@ impl SsoLogin {
         self.config.session_ttl
     }
 
+    /// Whether a member outside `team`, or an administrator, carries `principal`.
+    pub(crate) fn principal_is_foreign(
+        &self,
+        principal: &crate::ownership::OwnerId,
+        team: &crate::ownership::TeamId,
+    ) -> bool {
+        self.members.read().principal_is_foreign(principal, team)
+    }
+
     /// The member with this verified email, as the members file says now.
     pub(crate) fn member(&self, email: &str) -> Option<Member> {
         self.members.read().get(email).cloned()

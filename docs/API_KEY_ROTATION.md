@@ -161,6 +161,11 @@ A team-admin cannot raise anyone above itself. Each rule below answers 403:
 5. `expiresAt` (now plus `expiresInSeconds`) may not be later than the team-admin's own expiry. For a
    signed-in member that is the end of the session.
 
+Both kinds of signed-in member are covered by tests (not KVM) against a fixture identity provider. A session's
+keys record the member's principal as `createdBy`, never the email. A cookie session may only make a key from
+the control plane's own pages (a foreign or missing `Origin` is 403); a bearer token needs no `Origin`. A team-admin
+member also cannot name the principal of another team's member or of an administrator member, as it cannot for keys.
+
 A team-admin never sees, and cannot revoke, a managed key that is an administrator's, even one that names its
 team, nor another team's key: both are 404 and are not listed. A key it made is a plain `member` or `viewer`:
 it cannot manage keys.

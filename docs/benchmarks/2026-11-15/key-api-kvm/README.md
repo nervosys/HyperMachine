@@ -65,8 +65,16 @@ earlier run without that row also passed, and is not kept.
 
 ## NOT VERIFIED
 
-- An SSO session, admin or team-admin, making keys. Only a non-admin member being refused
-  is tested, in unit tests.
+- An SSO session making keys, on KVM. It is covered by tests, not KVM: `tests/sso_login.rs`
+  drives a fixture OpenID Connect provider and signs in an administrator member, a
+  team-admin member and a plain member. The administrator makes, lists and revokes keys (one
+  outliving the session), and a team-admin is held to its team, the admin scope, scopes it
+  holds, the team-admin role, the session's expiry and principals of members outside its
+  team (`an_sso_administrator_makes_lists_and_revokes_keys`,
+  `an_sso_team_admin_makes_keys_for_its_own_team_only`,
+  `a_cookie_session_makes_keys_only_from_the_control_planes_own_pages`). A session's keys are
+  recorded as created by the member's principal, not the email. Not covered: a real
+  identity provider, a browser, more than one node.
 - More than one node, and concurrency: two revokes racing, or creates racing past the
   1,000-key bound.
 - Load on the per-request store lookup that an unknown key costs.

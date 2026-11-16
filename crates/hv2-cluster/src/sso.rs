@@ -535,6 +535,21 @@ impl Members {
         Ok(Self { by_email })
     }
 
+    /// Whether any member carries `principal` while being outside `team` or
+    /// an administrator: the same test as for a key, for people.
+    pub(crate) fn principal_is_foreign(
+        &self,
+        principal: &crate::ownership::OwnerId,
+        team: &crate::ownership::TeamId,
+    ) -> bool {
+        self.by_email.values().any(|member| {
+            let administrator = member.role == crate::keys::ApiRole::Operator
+                && member.scopes.contains(&crate::keys::ApiScope::Admin);
+            &member.principal_id == principal
+                && (administrator || member.team_id.as_ref() != Some(team))
+        })
+    }
+
     /// The member with this verified email.
     #[must_use]
     pub fn get(&self, email: &str) -> Option<&Member> {

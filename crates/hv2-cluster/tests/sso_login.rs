@@ -177,6 +177,10 @@ struct Cluster {
 }
 
 async fn spawn_cluster(provider: &Provider) -> Cluster {
+    spawn_cluster_with(provider, MEMBERS).await
+}
+
+async fn spawn_cluster_with(provider: &Provider, members: &str) -> Cluster {
     let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
     let control = ControlPlane::new(
         Arc::clone(&store),
@@ -200,7 +204,7 @@ async fn spawn_cluster(provider: &Provider) -> Cluster {
                 session_ttl: Duration::from_secs(3600),
                 provider_ca_pem: None,
             },
-            Members::from_json(MEMBERS).unwrap(),
+            Members::from_json(members).unwrap(),
             SessionKey::new(vec![9u8; 32]).unwrap(),
         )
         .await
@@ -809,4 +813,226 @@ async fn a_guest_url_tells_the_guest_who_signed_in_and_never_shows_it_the_pass()
         .await
         .unwrap();
     assert_eq!(response.status(), 401);
+}
+
+const KEY_MEMBERS: &str = r#"[
+    {"email":"root@example.com","scopes":["admin"],"principal_id":"root"},
+    {"email":"lead@example.com","scopes":["sandboxes","inventory"],"role":"team-admin",
+     "principal_id":"lead","team_id":"red"},
+    {"email":"alice@example.com","scopes":["sandboxes"],"principal_id":"alice","team_id":"red"}]"#;
+
+/// Sign `email` in through the fixture provider; returns the session token.
+async fn session_for(provider: &Provider, cluster: &Cluster, email: &str) -> String {
+    provider.next.lock().email = email.into();
+    let callback = sign_in(cluster, untouched).await;
+    assert_eq!(callback.status(), 303);
+    set_cookie(&callback, "__Host-hm_session").expect("a session cookie")
+}
+
+async fn make_key(cluster: &Cluster, session: &str, body: Value) -> reqwest::Response {
+    cluster
+        .client
+        .post(format!("{}/keys", cluster.base))
+        .header(header::AUTHORIZATION, format!("Bearer {session}"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap()
+}
+
+async fn list_keys(cluster: &Cluster, session: &str) -> Vec<Value> {
+    let response = cluster
+        .client
+        .get(format!("{}/keys", cluster.base))
+        .header(header::AUTHORIZATION, format!("Bearer {session}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    let body: Value = response.json().await.unwrap();
+    body["keys"].as_array().unwrap().clone()
+}
+
+async fn delete_key(cluster: &Cluster, session: &str, id: &str) -> StatusCode {
+    cluster
+        .client
+        .delete(format!("{}/keys/{id}", cluster.base))
+        .header(header::AUTHORIZATION, format!("Bearer {session}"))
+        .send()
+        .await
+        .unwrap()
+        .status()
+}
+
+async fn key_status(cluster: &Cluster, key: &str) -> StatusCode {
+    cluster
+        .client
+        .get(format!("{}/sandboxes", cluster.base))
+        .header("x-api-key", key)
+        .send()
+        .await
+        .unwrap()
+        .status()
+}
+
+#[tokio::test]
+async fn an_sso_administrator_makes_lists_and_revokes_keys() {
+    let provider = spawn_provider().await;
+    let cluster = spawn_cluster_with(&provider, KEY_MEMBERS).await;
+    let session = session_for(&provider, &cluster, "root@example.com").await;
+
+    // Past the session's hour: an administrator's keys are not bounded by it.
+    let response = make_key(
+        &cluster,
+        &session,
+        json!({"label":"ci","expiresInSeconds":7200,"scopes":["sandboxes"],"teamId":"red"}),
+    )
+    .await;
+    assert_eq!(response.status(), 201);
+    let made: Value = response.json().await.unwrap();
+    let (id, key) = (
+        made["id"].as_str().unwrap().to_string(),
+        made["key"].as_str().unwrap().to_string(),
+    );
+    assert_eq!(made["teamId"], "red");
+    assert_eq!(key_status(&cluster, &key).await, 200, "the key works");
+
+    // createdBy is the member's principal, never the email.
+    let keys = list_keys(&cluster, &session).await;
+    assert_eq!(keys.len(), 1);
+    assert_eq!(keys[0]["id"], id.as_str());
+    assert_eq!(keys[0]["createdBy"], "root");
+    assert!(!keys[0].to_string().contains("example.com"));
+
+    assert_eq!(delete_key(&cluster, &session, &id).await, 200);
+    assert!(list_keys(&cluster, &session).await.is_empty());
+    assert_eq!(key_status(&cluster, &key).await, 401, "revoked at once");
+}
+
+#[tokio::test]
+async fn an_sso_team_admin_makes_keys_for_its_own_team_only() {
+    let provider = spawn_provider().await;
+    let cluster = spawn_cluster_with(&provider, KEY_MEMBERS).await;
+    let admin = session_for(&provider, &cluster, "root@example.com").await;
+    let lead = session_for(&provider, &cluster, "lead@example.com").await;
+
+    // Its own team, omitted or named, within the session's hour.
+    for body in [
+        json!({"label":"a","expiresInSeconds":600,"scopes":["sandboxes"]}),
+        json!({"label":"b","expiresInSeconds":600,"scopes":["sandboxes"],"teamId":"red"}),
+    ] {
+        let response = make_key(&cluster, &lead, body).await;
+        assert_eq!(response.status(), 201);
+        let made: Value = response.json().await.unwrap();
+        assert_eq!(made["teamId"], "red");
+        assert_eq!(
+            key_status(&cluster, made["key"].as_str().unwrap()).await,
+            200
+        );
+    }
+    let keys = list_keys(&cluster, &lead).await;
+    assert_eq!(keys.len(), 2);
+    // The creator is recorded by principal, not by email.
+    assert!(keys.iter().all(|k| k["createdBy"] == "lead"));
+    assert!(!Value::Array(keys.clone())
+        .to_string()
+        .contains("example.com"));
+
+    // Each of these is an escalation.
+    for (what, body) in [
+        (
+            "another team",
+            json!({"label":"x","expiresInSeconds":600,"scopes":["sandboxes"],"teamId":"blue"}),
+        ),
+        (
+            "the admin scope",
+            json!({"label":"x","expiresInSeconds":600,"scopes":["admin"]}),
+        ),
+        (
+            "the admin scope with an operator role",
+            json!({"label":"x","expiresInSeconds":600,"scopes":["admin"],"role":"operator"}),
+        ),
+        (
+            "a scope it does not hold",
+            json!({"label":"x","expiresInSeconds":600,"scopes":["volumes"]}),
+        ),
+        (
+            "a team administrator",
+            json!({"label":"x","expiresInSeconds":600,"scopes":["sandboxes"],"role":"team-admin"}),
+        ),
+        (
+            "a lifetime beyond the session",
+            json!({"label":"x","expiresInSeconds":7200,"scopes":["sandboxes"]}),
+        ),
+        (
+            "the principal of an administrator member",
+            json!({"label":"x","expiresInSeconds":600,"scopes":["sandboxes"],"principalId":"root"}),
+        ),
+    ] {
+        let status = make_key(&cluster, &lead, body).await.status();
+        assert_eq!(status, 403, "{what}");
+    }
+    assert_eq!(
+        list_keys(&cluster, &lead).await.len(),
+        2,
+        "nothing leaked in"
+    );
+
+    // An administrator's key and another team's key are not its to see.
+    let mut ids = Vec::new();
+    for body in [
+        json!({"label":"b","expiresInSeconds":600,"scopes":["sandboxes"],"teamId":"blue"}),
+        json!({"label":"g","expiresInSeconds":600,"scopes":["admin"]}),
+    ] {
+        let made: Value = make_key(&cluster, &admin, body).await.json().await.unwrap();
+        ids.push(made["id"].as_str().unwrap().to_string());
+    }
+    assert_eq!(list_keys(&cluster, &lead).await.len(), 2);
+    for id in &ids {
+        assert_eq!(delete_key(&cluster, &lead, id).await, 404);
+    }
+    let own = keys[0]["id"].as_str().unwrap();
+    assert_eq!(delete_key(&cluster, &lead, own).await, 200);
+}
+
+#[tokio::test]
+async fn a_cookie_session_makes_keys_only_from_the_control_planes_own_pages() {
+    let provider = spawn_provider().await;
+    let cluster = spawn_cluster_with(&provider, KEY_MEMBERS).await;
+    let session = session_for(&provider, &cluster, "root@example.com").await;
+    let cookie = format!("__Host-hm_session={session}");
+    let body = json!({"label":"c","expiresInSeconds":600,"scopes":["sandboxes"],"teamId":"red"});
+    let post = || {
+        cluster
+            .client
+            .post(format!("{}/keys", cluster.base))
+            .header(header::COOKIE, &cookie)
+            .json(&body)
+    };
+
+    assert_eq!(post().send().await.unwrap().status(), 403, "no Origin");
+    for origin in ["https://8080-sbx.cp.test", "https://evil.example", "null"] {
+        let response = post().header(header::ORIGIN, origin).send().await.unwrap();
+        assert_eq!(response.status(), 403, "{origin}");
+    }
+    assert!(
+        list_keys(&cluster, &session).await.is_empty(),
+        "nothing made"
+    );
+
+    // A read needs no Origin; its own page's Origin may change things.
+    let response = cluster
+        .client
+        .get(format!("{}/keys", cluster.base))
+        .header(header::COOKIE, &cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    let response = post()
+        .header(header::ORIGIN, "https://cp.test")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 201);
 }

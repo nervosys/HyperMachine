@@ -283,7 +283,13 @@ fn principal_is_foreign(
         policy.principal_id() == Some(principal)
             && (policy.team_id() != Some(team) || policy.is_administrator())
     });
+    // Signed-in members carry principals too; a team-admin may not mint a
+    // key as one outside its team, or as an administrator.
+    let in_members = control
+        .sso()
+        .is_some_and(|sso| sso.principal_is_foreign(principal, team));
     in_file
+        || in_members
         || held.iter().any(|key| {
             key.principal.as_ref() == Some(principal)
                 && (key.team_id.as_ref() != Some(team) || key.is_administrator())
