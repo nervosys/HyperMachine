@@ -209,6 +209,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   seventh, Gitleaks, is now a real gate; see Security.)
 
 ### Added
+- **A browser seen drawing a machine's desktop.** `tools/check-desktop-browser-kvm.py`
+  creates a machine with a desktop on KVM, opens noVNC through its published port in
+  headless Chromium, and checks the canvas is the guest's 1280x800, is not blank, matches
+  the API's own screenshot (mean difference 0.04 of 255), and that keys typed in the
+  browser reach the guest's terminal. Three runs plus a fourth; WebRTC, sound, clipboard,
+  recording and the proxy login are not verified. See
+  `docs/benchmarks/2026-11-15/desktop-browser-kvm`.
 - **Team roles in the key policy file.** `role` accepts `viewer` (an alias of `observer`)
   and `member` (an alias of `operator`), and a new `team-admin`: an operator that can also
   adopt an owner (`POST /sandboxes/{id}/owner`) on a sandbox of its own team. It needs a

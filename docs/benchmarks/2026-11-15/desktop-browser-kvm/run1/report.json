@@ -1,0 +1,143 @@
+{
+  "success": true,
+  "purpose": "a real browser draws a machine's desktop through noVNC on KVM; no sound, clipboard or WebRTC",
+  "input_sha256": {
+    "daemon": "672801943ae283ce6c25b582333264526b41006efbf92c42e8246e7af6677e70",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "2952bbbe585a1b2e780aa3f3c02ffa722c203065f0341717653bb20dec33cca0",
+    "firmware": "4a0a1e977368f6b15d2198a216bdedf9a350bf5e5ae07e29e695373ec16ad958",
+    "image": "ff40d989141ba0313b9bfc3cdfaf645a942547d38f54dbeebf76074df77304d2",
+    "guest-agent": "52f84b96fc42c0124593897b0655e34bb75b94792f33a3a920eaf4287e1ddd32",
+    "driver": "9da81e79001d309316cbb6cb7214c1bfaacf1b4ebd06278d8e02dbe9b97424f7",
+    "browser": "045558b2f167db04624e36d952496705418a85d87ff9b5fb55a8c40cc59201ae"
+  },
+  "cases": [
+    {
+      "name": "the desktop installs and says it is up",
+      "success": true,
+      "detail": {
+        "units": [
+          "active",
+          "active",
+          "active",
+          "active",
+          "active"
+        ],
+        "desktop": {
+          "display": ":1",
+          "height": 800,
+          "log": "/var/log/hv2-desktop.log",
+          "ready": true,
+          "webPath": "/vnc.html",
+          "webPort": 6080,
+          "width": 1280
+        },
+        "terminal_window": "2097164"
+      }
+    },
+    {
+      "name": "noVNC connects in a browser and its canvas is the guest's size",
+      "success": true,
+      "detail": {
+        "canvas_size": [
+          1280,
+          800
+        ],
+        "status_text": "Connected (unencrypted) to desk-01:1",
+        "title": "desk-01:1 - noVNC"
+      }
+    },
+    {
+      "name": "the canvas is not blank",
+      "success": true,
+      "detail": {
+        "distinct": 2739,
+        "dominant_fraction": 0.7523,
+        "dominant": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "name": "the canvas and the API's own screenshot are the same size and close",
+      "success": true,
+      "detail": {
+        "size": [
+          1280,
+          800
+        ],
+        "mean_abs_diff_per_channel_of_255": 0.0426,
+        "threshold": 2.0,
+        "pixels_differing_by_over_32": 0,
+        "api_colours": {
+          "distinct": 792,
+          "dominant_fraction": 0.7523,
+          "dominant": [
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "name": "typing into the canvas changes it, inside the terminal, and reaches the guest",
+      "success": true,
+      "detail": {
+        "terminal_window": [
+          42,
+          80,
+          646,
+          474
+        ],
+        "clicked_at": [
+          242,
+          180
+        ],
+        "pixels_changed": 1402,
+        "changed_bbox": [
+          43,
+          62,
+          546,
+          101
+        ],
+        "changed_bbox_inside_terminal_window_and_frame": true,
+        "frame_allowance_px": 30,
+        "guest_pointer": [
+          242,
+          180
+        ],
+        "file_in_guest": "typed-in-the-browser",
+        "canvas_vs_api_after_typing": 0.0426
+      }
+    },
+    {
+      "name": "it ran on KVM, not TCG",
+      "success": true,
+      "detail": {
+        "platform_Kvm": 1,
+        "platform_Tcg": 0
+      }
+    }
+  ],
+  "timings_seconds": {
+    "desktop_ready": 265.9,
+    "browser_connected_and_drawn": 2.1,
+    "browser_interaction": 5.0,
+    "total": 280.3
+  },
+  "published_port": 20000,
+  "browser": {
+    "version": "159.0.8154.6",
+    "executable": "given"
+  },
+  "browser_console": [
+    "verbose: [DOM] Input elements should have autocomplete attributes (suggested: \"current-password\"): (More info: https://goo.gl/9p2vKq) %o",
+    "error: Failed to load resource: the server responded with a status of 404 (File not found)",
+    "error: Couldn't fetch package.json: Error: 404 File not found",
+    "warning: The resource http://127.0.0.1:20000/app/images/error.svg was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally.",
+    "warning: The resource http://127.0.0.1:20000/app/images/warning.svg was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally."
+  ]
+}
