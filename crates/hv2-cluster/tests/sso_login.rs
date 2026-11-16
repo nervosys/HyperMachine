@@ -363,6 +363,79 @@ async fn a_member_signs_in_and_the_api_admits_the_session() {
         403
     );
 
+    // A member who is not an administrator is refused the key routes, over
+    // a session cookie and over a bearer token alike.
+    assert_eq!(
+        api("/keys")
+            .header(header::COOKIE, &cookie)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    for request in [
+        cluster.client.post(format!("{}/keys", cluster.base)).json(
+            &json!({"label":"x","expiresInSeconds":600,"scopes":["sandboxes"],
+                          "teamId":"red","principalId":"p"}),
+        ),
+        cluster.client.get(format!("{}/keys", cluster.base)),
+        cluster
+            .client
+            .get(format!("{}/teams/red/members", cluster.base)),
+    ] {
+        let response = request
+            .header(header::AUTHORIZATION, format!("Bearer {session}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 403);
+    }
+
+    // With sign-on on and no policy file, a managed key is still a way in:
+    // the store is asked about it, and an unknown one is still refused.
+    {
+        use sha2::{Digest, Sha256};
+        let secret = format!("hm_{}", uuid::Uuid::new_v4().simple());
+        cluster
+            .store
+            .put_managed_key(&hv2_cluster::keys::ManagedKey {
+                id: "mk_sso".into(),
+                sha256: Sha256::digest(secret.as_bytes())
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect(),
+                scopes: [hv2_cluster::keys::ApiScope::Inventory].into(),
+                role: hv2_cluster::keys::ApiRole::Operator,
+                team_id: Some(hv2_cluster::ownership::TeamId::parse("red").unwrap()),
+                principal: Some(hv2_cluster::ownership::OwnerId::parse("bot").unwrap()),
+                label: "ci".into(),
+                created_by: "test".into(),
+                created_at: 1,
+                expires_at: chrono::Utc::now().timestamp() + 600,
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            api("/sandboxes")
+                .header("x-api-key", &secret)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            200
+        );
+        assert_eq!(
+            api("/sandboxes")
+                .header("x-api-key", "not-a-key")
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            401
+        );
+    }
+
     // Removed from the members, the session stops working at once.
     cluster.sso.replace_members("[{\"email\":\"someone@example.com\",\"scopes\":[\"sandboxes\"],\"principal_id\":\"x\"}]").unwrap();
     assert_eq!(

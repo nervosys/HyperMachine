@@ -209,6 +209,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   seventh, Gitleaks, is now a real gate; see Security.)
 
 ### Added
+- **Keys can be made, listed and revoked through the control plane's API.**
+  `POST /keys` makes a key and shows its secret once (`hm_` and 32 random bytes); `GET /keys`
+  lists metadata only; `DELETE /keys/{id}` revokes it; `GET /teams/{team}/members` lists a
+  team's principals from policy-file and managed keys. Managed keys live in the cluster store
+  (memory and Redis, indexed by SHA-256 so a lookup is one `HGET`), never in the policy file;
+  a key no policy names is looked up on that request with no cache, so a revocation holds on
+  the next request on every control plane, an expired one is 401, and a store error is 503.
+  `preset`, `scopes`, `role` and `teamId` are validated by the policy file's own code, and
+  lifetime is 60 seconds to 90 days (`--managed-key-max-ttl-secs`). Administrators manage
+  any key; a `team-admin` manages only its own team's and cannot escalate (its team,
+  member/viewer roles only, no `admin` scope, only scopes it holds, nothing outliving its own
+  expiry); everyone else gets 403. Policy-file keys cannot be deleted through it, and a key a
+  team-admin made outlives the team-admin that made it. See `docs/API_KEY_ROTATION.md` and
+  `docs/TEAMS.md`. A team-admin may name a principal only if no key outside its team, and no
+  administrator's key, carries it, since principals are global. Verified: 22 HTTP tests over a
+  memory store, the store contract on a real Redis, and `tools/check-key-api-kvm.py` on KVM,
+  22 cases in three runs, with two control planes over one Redis (revocation on both, restart,
+  expiry, 503 with Redis down). Not verified: an SSO session making keys, more than one node,
+  concurrent revokes. See `docs/benchmarks/2026-11-15/key-api-kvm`.
 - **A browser seen drawing a machine's desktop.** `tools/check-desktop-browser-kvm.py`
   creates a machine with a desktop on KVM, opens noVNC through its published port in
   headless Chromium, and checks the canvas is the guest's 1280x800, is not blank, matches

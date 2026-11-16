@@ -38,6 +38,8 @@ use crate::names::{NameReservation, SandboxName, NAME_OPERATION_HEADER};
 use crate::scheduler::candidates;
 use crate::store::{ClusterStore, DomainClaim};
 
+mod key_api;
+
 /// The header a node reads the cluster token from.
 pub const CLUSTER_TOKEN_HEADER: &str = "x-hv2-cluster-token";
 
@@ -68,6 +70,10 @@ pub struct ControlPlane {
     tcp_http: reqwest::Client,
     config: ControlConfig,
     api_keys: parking_lot::RwLock<Vec<crate::keys::ApiKeyPolicy>>,
+    /// The longest a key made through `POST /keys` may live, in seconds.
+    managed_key_max_ttl_secs: std::sync::atomic::AtomicU64,
+    /// The most unexpired keys made through `POST /keys` the store may hold.
+    managed_key_limit: std::sync::atomic::AtomicUsize,
     domain_verification:
         parking_lot::RwLock<Option<Arc<crate::domain_verification::DomainVerification>>>,
     native_port_range: parking_lot::RwLock<Option<crate::ports::PublicPortRange>>,
@@ -206,6 +212,12 @@ impl ControlPlane {
             http,
             tcp_http,
             api_keys: parking_lot::RwLock::new(config.api_keys.clone()),
+            managed_key_max_ttl_secs: std::sync::atomic::AtomicU64::new(
+                key_api::DEFAULT_MAX_KEY_TTL_SECS,
+            ),
+            managed_key_limit: std::sync::atomic::AtomicUsize::new(
+                key_api::DEFAULT_MANAGED_KEY_LIMIT,
+            ),
             domain_verification: parking_lot::RwLock::new(None),
             config,
             native_port_range: parking_lot::RwLock::new(None),
@@ -263,6 +275,15 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/sandboxes/{id}/resize", post(forward))
         .route("/sandboxes/{id}/fork", post(forward))
         .route("/sandboxes/{id}/owner", post(adopt_owner))
+        // Managed API keys; see `key_api`.
+        .route(
+            "/keys",
+            get(key_api::list_keys)
+                .post(key_api::create_key)
+                .layer(axum::extract::DefaultBodyLimit::max(16384)),
+        )
+        .route("/keys/{id}", axum::routing::delete(key_api::delete_key))
+        .route("/teams/{team}/members", get(key_api::team_members))
         .route(
             "/sandboxes/{id}/private-networks",
             get(get_private_membership)
@@ -1245,106 +1266,174 @@ async fn require_api_key(
         let (token, from_cookie) = crate::sso_login::session_token(request.headers())?;
         Some((sso.member_for(token), from_cookie))
     });
-    let (kind, key_id, mut rejection, principal, team, administrator, team_admin) = if let Some((
-        member,
-        from_cookie,
-    )) = session
-    {
-        match member {
-            Some((member, expires_at)) => {
-                let policy = crate::keys::ApiKeyPolicy::for_member(&member, expires_at);
-                let origin = sso.as_ref().map_or("", |sso| sso.origin());
-                let rejection = if from_cookie
-                    && !crate::sso_login::same_origin(request.method(), request.headers(), origin)
-                {
-                    Some(api_error(
+    let (kind, key_id, mut rejection, principal, team, administrator, team_admin, caller_policy) =
+        if let Some((member, from_cookie)) = session {
+            match member {
+                Some((member, expires_at)) => {
+                    let policy = crate::keys::ApiKeyPolicy::for_member(&member, expires_at);
+                    let origin = sso.as_ref().map_or("", |sso| sso.origin());
+                    let rejection = if from_cookie
+                        && !crate::sso_login::same_origin(
+                            request.method(),
+                            request.headers(),
+                            origin,
+                        ) {
+                        Some(api_error(
                         StatusCode::FORBIDDEN,
                         "a change made with the session cookie must come from this control plane's own pages",
                     ))
-                } else if !policy.permits(request.method(), request.uri().path()) {
-                    Some(api_error(
-                        StatusCode::FORBIDDEN,
-                        "this member's scopes do not permit this operation",
-                    ))
-                } else {
-                    None
-                };
-                let key_id = {
-                    use sha2::{Digest, Sha256};
-                    Sha256::digest(member.email.as_bytes())[..8]
-                        .iter()
-                        .map(|byte| format!("{byte:02x}"))
-                        .collect::<String>()
-                };
-                let administrator = rejection.is_none() && policy.is_administrator();
-                let team_admin = rejection.is_none() && policy.is_team_admin();
-                (
+                    } else if !policy.permits(request.method(), request.uri().path()) {
+                        Some(api_error(
+                            StatusCode::FORBIDDEN,
+                            "this member's scopes do not permit this operation",
+                        ))
+                    } else {
+                        None
+                    };
+                    let key_id = {
+                        use sha2::{Digest, Sha256};
+                        Sha256::digest(member.email.as_bytes())[..8]
+                            .iter()
+                            .map(|byte| format!("{byte:02x}"))
+                            .collect::<String>()
+                    };
+                    let administrator = rejection.is_none() && policy.is_administrator();
+                    let team_admin = rejection.is_none() && policy.is_team_admin();
+                    (
+                        "session",
+                        key_id,
+                        rejection,
+                        policy.principal_id().cloned(),
+                        policy.team_id().cloned(),
+                        administrator,
+                        team_admin,
+                        Some(policy),
+                    )
+                }
+                None => (
                     "session",
-                    key_id,
-                    rejection,
-                    policy.principal_id().cloned(),
-                    policy.team_id().cloned(),
-                    administrator,
-                    team_admin,
-                )
+                    "invalid".into(),
+                    Some(api_error(
+                        StatusCode::UNAUTHORIZED,
+                        "the session has expired, is not valid, or its member was removed",
+                    )),
+                    None,
+                    None,
+                    false,
+                    false,
+                    None,
+                ),
             }
-            None => (
-                "session",
-                "invalid".into(),
+        } else {
+            // The policy file first, exactly as before. The guard is dropped
+            // before the store is asked anything.
+            let (mut kind, mut key_id, mut rejection, mut matched) = {
+                let policies = control.api_keys.read();
+                let (kind, key_id, rejection) = authorize(&control.config, &policies, &request);
+                let matched = (kind == "scoped" && rejection.is_none())
+                    .then(|| {
+                        use sha2::{Digest, Sha256};
+                        let digest = Sha256::digest(
+                            request
+                                .headers()
+                                .get("x-api-key")
+                                .map(HeaderValue::as_bytes)
+                                .unwrap_or_default(),
+                        )
+                        .into();
+                        policies
+                            .iter()
+                            .find(|policy| policy.has_digest(&digest))
+                            .cloned()
+                    })
+                    .flatten();
+                (kind, key_id, rejection, matched)
+            };
+            // A key no policy and not the legacy admin names may be a managed
+            // one: looked up in the store on this request, never cached, so a
+            // revocation holds on the next request on every control plane. An
+            // expired file key was answered above and is never looked up.
+            let sent = request
+                .headers()
+                .get("x-api-key")
+                .map(|value| value.as_bytes().to_vec())
+                .unwrap_or_default();
+            if !sent.is_empty() && matches!(kind, "unauthenticated" | "anonymous") {
+                match key_api::authenticate(&control, &sent, chrono::Utc::now().timestamp()).await {
+                    key_api::Managed::Unknown => {}
+                    key_api::Managed::Valid(policy, id) => {
+                        kind = "managed";
+                        key_id = id;
+                        rejection = if policy.permits(request.method(), request.uri().path()) {
+                            None
+                        } else {
+                            Some(api_error(
+                                StatusCode::FORBIDDEN,
+                                "API key scope does not permit this operation",
+                            ))
+                        };
+                        matched = Some(*policy);
+                    }
+                    key_api::Managed::Expired => {
+                        use sha2::{Digest, Sha256};
+                        kind = "expired";
+                        key_id = Sha256::digest(&sent)[..8]
+                            .iter()
+                            .map(|byte| format!("{byte:02x}"))
+                            .collect();
+                        rejection = Some(api_error(
+                            StatusCode::UNAUTHORIZED,
+                            "missing, expired or wrong X-API-Key",
+                        ));
+                    }
+                    key_api::Managed::Unavailable => {
+                        kind = "store_error";
+                        key_id = "none".into();
+                        rejection = Some(api_error(
+                            StatusCode::SERVICE_UNAVAILABLE,
+                            "the key store is unavailable; the key could not be checked",
+                        ));
+                    }
+                }
+            }
+            let principal = matched.as_ref().and_then(|p| p.principal_id()).cloned();
+            let team = matched.as_ref().and_then(|p| p.team_id()).cloned();
+            let administrator = rejection.is_none()
+                && (kind == "legacy_admin"
+                    || matched.as_ref().is_some_and(|p| p.is_administrator()));
+            let team_admin =
+                rejection.is_none() && matched.as_ref().is_some_and(|p| p.is_team_admin());
+            let caller_policy = matched.filter(|_| rejection.is_none());
+            // With sign-on configured nobody is anonymous, keys or no keys.
+            let rejection = if sso.is_some() && kind == "anonymous" && rejection.is_none() {
                 Some(api_error(
                     StatusCode::UNAUTHORIZED,
-                    "the session has expired, is not valid, or its member was removed",
-                )),
-                None,
-                None,
-                false,
-                false,
-            ),
-        }
-    } else {
-        let policies = control.api_keys.read();
-        let (kind, key_id, rejection) = authorize(&control.config, &policies, &request);
-        let matched = (kind == "scoped" && rejection.is_none())
-            .then(|| {
-                use sha2::{Digest, Sha256};
-                let digest = Sha256::digest(
-                    request
-                        .headers()
-                        .get("x-api-key")
-                        .map(HeaderValue::as_bytes)
-                        .unwrap_or_default(),
-                )
-                .into();
-                policies
-                    .iter()
-                    .find(|policy| policy.has_digest(&digest))
-                    .cloned()
-            })
-            .flatten();
-        let principal = matched.as_ref().and_then(|p| p.principal_id()).cloned();
-        let team = matched.as_ref().and_then(|p| p.team_id()).cloned();
-        let administrator = rejection.is_none()
-            && (kind == "legacy_admin" || matched.as_ref().is_some_and(|p| p.is_administrator()));
-        let team_admin = rejection.is_none() && matched.as_ref().is_some_and(|p| p.is_team_admin());
-        // With sign-on configured nobody is anonymous, keys or no keys.
-        let rejection = if sso.is_some() && kind == "anonymous" && rejection.is_none() {
-            Some(api_error(
-                StatusCode::UNAUTHORIZED,
-                "sign in at /auth/login, or send an X-API-Key",
-            ))
-        } else {
-            rejection
+                    "sign in at /auth/login, or send an X-API-Key",
+                ))
+            } else {
+                rejection
+            };
+            (
+                kind,
+                key_id,
+                rejection,
+                principal,
+                team,
+                administrator,
+                team_admin,
+                caller_policy,
+            )
         };
-        (
-            kind,
-            key_id,
-            rejection,
-            principal,
-            team,
-            administrator,
-            team_admin,
-        )
-    };
+    // Who is calling, for key management; before `principal` is replaced
+    // below by a sandbox's owner.
+    let key_caller = key_api::KeyCaller::new(
+        kind,
+        &key_id,
+        principal.as_ref(),
+        administrator,
+        team_admin,
+        caller_policy.as_ref(),
+    );
     // Authentication supplies this context. A client cannot choose its owner
     // or its team.
     request.headers_mut().remove(crate::ownership::OWNER_HEADER);
@@ -1425,6 +1514,7 @@ async fn require_api_key(
     request
         .extensions_mut()
         .insert(TeamAdminContext(team_admin));
+    request.extensions_mut().insert(key_caller);
     let allowed = rejection.is_none();
     let sandbox_ref = if let Some(audit) = &control.config.access_audit {
         if audit.resource_attribution_enabled()

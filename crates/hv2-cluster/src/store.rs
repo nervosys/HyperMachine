@@ -28,6 +28,7 @@ use crate::private_networks::{
 use crate::web_sharing::{SharingAccess, SharingChange, WebSharingState};
 
 use crate::environments::Environment;
+use crate::keys::ManagedKey;
 use crate::model::{ClusterEvent, Delivery, NodeInfo, SandboxRecord, Webhook};
 use crate::team_telemetry::TeamTelemetry;
 
@@ -326,6 +327,36 @@ pub trait ClusterStore: Send + Sync {
     async fn delete_team_telemetry(&self, _key: &str) -> Result<bool> {
         Ok(false)
     }
+
+    /// Keep a key made through the API ([`ManagedKey`]). Refuses a key whose
+    /// `id` or `sha256` is already held, so a collision can never replace
+    /// another key.
+    async fn put_managed_key(&self, _key: &ManagedKey) -> Result<()> {
+        Err(StoreError(
+            "managed API keys unsupported by this store".into(),
+        ))
+    }
+    /// The key whose secret hashes to `sha256` (lower-case hex), if any: one
+    /// lookup, no scan. Called on every request that presents a key no policy
+    /// file names, and never cached, so a revoked key stops working on the
+    /// next request. A store that keeps none answers `None` -- which
+    /// authenticates nobody -- rather than an error that would turn every
+    /// unknown key into a 503.
+    async fn managed_key_by_sha256(&self, _sha256: &str) -> Result<Option<ManagedKey>> {
+        Ok(None)
+    }
+    /// Every managed key, oldest first.
+    async fn managed_keys(&self) -> Result<Vec<ManagedKey>> {
+        Err(StoreError(
+            "managed API keys unsupported by this store".into(),
+        ))
+    }
+    /// Remove the key `id` names; whether there was one.
+    async fn remove_managed_key(&self, _id: &str) -> Result<bool> {
+        Err(StoreError(
+            "managed API keys unsupported by this store".into(),
+        ))
+    }
 }
 
 /// Deliveries kept per webhook, at most.
@@ -346,6 +377,8 @@ pub struct MemoryStore {
     deliveries: Mutex<HashMap<String, std::collections::VecDeque<Delivery>>>,
     environments: Mutex<std::collections::BTreeMap<String, Environment>>,
     telemetry: Mutex<std::collections::BTreeMap<String, TeamTelemetry>>,
+    /// Managed keys by id; the lookup by digest scans a map this small.
+    managed_keys: Mutex<std::collections::BTreeMap<String, ManagedKey>>,
     usage: Mutex<UsageBook>,
 }
 
@@ -1066,6 +1099,34 @@ impl ClusterStore for MemoryStore {
 
     async fn delete_team_telemetry(&self, key: &str) -> Result<bool> {
         Ok(self.telemetry.lock().remove(key).is_some())
+    }
+
+    async fn put_managed_key(&self, key: &ManagedKey) -> Result<()> {
+        let mut keys = self.managed_keys.lock();
+        if keys.contains_key(&key.id) || keys.values().any(|held| held.sha256 == key.sha256) {
+            return Err(StoreError("managed API key already exists".into()));
+        }
+        keys.insert(key.id.clone(), key.clone());
+        Ok(())
+    }
+
+    async fn managed_key_by_sha256(&self, sha256: &str) -> Result<Option<ManagedKey>> {
+        Ok(self
+            .managed_keys
+            .lock()
+            .values()
+            .find(|held| held.sha256 == sha256)
+            .cloned())
+    }
+
+    async fn managed_keys(&self) -> Result<Vec<ManagedKey>> {
+        let mut all: Vec<_> = self.managed_keys.lock().values().cloned().collect();
+        all.sort_by(|a, b| (a.created_at, &a.id).cmp(&(b.created_at, &b.id)));
+        Ok(all)
+    }
+
+    async fn remove_managed_key(&self, id: &str) -> Result<bool> {
+        Ok(self.managed_keys.lock().remove(id).is_some())
     }
 
     async fn put_webhook(&self, hook: &Webhook) -> Result<()> {
@@ -2660,6 +2721,81 @@ return {1,values}
         Ok(removed > 0)
     }
 
+    // Two hashes: `managed-keys` is sha256 -> record, so authenticating a
+    // request is one HGET; `managed-key-ids` is id -> sha256, so a key is
+    // revoked by id without a scan. A script keeps them in step.
+    async fn put_managed_key(&self, key: &ManagedKey) -> Result<()> {
+        let json = serde_json::to_string(key).map_err(json_error)?;
+        let mut c = self.connection.clone();
+        let stored: i64 = redis::cmd("EVAL")
+            .arg(
+                r#"
+if redis.call('HEXISTS',KEYS[2],ARGV[1])==1 or redis.call('HEXISTS',KEYS[1],ARGV[2])==1 then return 0 end
+redis.call('HSET',KEYS[1],ARGV[2],ARGV[3]); redis.call('HSET',KEYS[2],ARGV[1],ARGV[2]); return 1
+"#,
+            )
+            .arg(2)
+            .arg(self.key("managed-keys"))
+            .arg(self.key("managed-key-ids"))
+            .arg(&key.id)
+            .arg(&key.sha256)
+            .arg(json)
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        if stored == 1 {
+            Ok(())
+        } else {
+            Err(StoreError("managed API key already exists".into()))
+        }
+    }
+
+    async fn managed_key_by_sha256(&self, sha256: &str) -> Result<Option<ManagedKey>> {
+        let mut c = self.connection.clone();
+        let json: Option<String> = redis::cmd("HGET")
+            .arg(self.key("managed-keys"))
+            .arg(sha256)
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        json.map(|json| serde_json::from_str(&json).map_err(json_error))
+            .transpose()
+    }
+
+    async fn managed_keys(&self) -> Result<Vec<ManagedKey>> {
+        let mut c = self.connection.clone();
+        let all: HashMap<String, String> = redis::cmd("HGETALL")
+            .arg(self.key("managed-keys"))
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        let mut found = all
+            .values()
+            .map(|json| serde_json::from_str::<ManagedKey>(json).map_err(json_error))
+            .collect::<Result<Vec<_>>>()?;
+        found.sort_by(|a, b| (a.created_at, &a.id).cmp(&(b.created_at, &b.id)));
+        Ok(found)
+    }
+
+    async fn remove_managed_key(&self, id: &str) -> Result<bool> {
+        let mut c = self.connection.clone();
+        let removed: i64 = redis::cmd("EVAL")
+            .arg(
+                r#"
+local sha=redis.call('HGET',KEYS[2],ARGV[1]); if not sha then return 0 end
+redis.call('HDEL',KEYS[1],sha); redis.call('HDEL',KEYS[2],ARGV[1]); return 1
+"#,
+            )
+            .arg(2)
+            .arg(self.key("managed-keys"))
+            .arg(self.key("managed-key-ids"))
+            .arg(id)
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        Ok(removed == 1)
+    }
+
     async fn put_webhook(&self, hook: &Webhook) -> Result<()> {
         let json = serde_json::to_string(hook).map_err(json_error)?;
         let mut c = self.connection.clone();
@@ -3805,6 +3941,94 @@ pub(crate) mod tests {
         };
         let namespace = format!("team-telemetry-test-{}", uuid::Uuid::new_v4());
         team_telemetry_contract(&RedisStore::connect(&url, &namespace).await.unwrap()).await;
+    }
+
+    /// What a store must do with managed API keys.
+    async fn managed_key_contract(store: &dyn ClusterStore) {
+        let key = |id: &str, digest: char, team: Option<&str>, created_at: i64| ManagedKey {
+            id: id.into(),
+            sha256: digest.to_string().repeat(64),
+            scopes: [crate::keys::ApiScope::Sandboxes].into(),
+            role: crate::keys::ApiRole::Operator,
+            team_id: team.map(|t| crate::ownership::TeamId::parse(t).unwrap()),
+            principal: Some(crate::ownership::OwnerId::parse("alice").unwrap()),
+            label: "ci".into(),
+            created_by: "lead".into(),
+            created_at,
+            expires_at: created_at + 600,
+        };
+        assert!(store.managed_keys().await.unwrap().is_empty());
+        assert!(store
+            .managed_key_by_sha256(&"a".repeat(64))
+            .await
+            .unwrap()
+            .is_none());
+        store
+            .put_managed_key(&key("mk_b", 'b', Some("red"), 20))
+            .await
+            .unwrap();
+        store
+            .put_managed_key(&key("mk_a", 'a', None, 10))
+            .await
+            .unwrap();
+        // Neither a reused id nor a reused digest replaces what is held.
+        assert!(store
+            .put_managed_key(&key("mk_a", 'c', None, 30))
+            .await
+            .is_err());
+        assert!(store
+            .put_managed_key(&key("mk_c", 'a', None, 30))
+            .await
+            .is_err());
+        let held = store.managed_key_by_sha256(&"a".repeat(64)).await.unwrap();
+        assert_eq!(held.unwrap().id, "mk_a");
+        assert!(store
+            .managed_key_by_sha256(&"c".repeat(64))
+            .await
+            .unwrap()
+            .is_none());
+        // Oldest first, and the record round-trips.
+        let all = store.managed_keys().await.unwrap();
+        assert_eq!(
+            all.iter().map(|k| k.id.as_str()).collect::<Vec<_>>(),
+            ["mk_a", "mk_b"]
+        );
+        assert_eq!(all[1], key("mk_b", 'b', Some("red"), 20));
+        // Removing by id frees the digest and the id, and says whether there was one.
+        assert!(store.remove_managed_key("mk_a").await.unwrap());
+        assert!(!store.remove_managed_key("mk_a").await.unwrap());
+        assert!(store
+            .managed_key_by_sha256(&"a".repeat(64))
+            .await
+            .unwrap()
+            .is_none());
+        assert_eq!(store.managed_keys().await.unwrap().len(), 1);
+        store
+            .put_managed_key(&key("mk_a", 'a', None, 40))
+            .await
+            .unwrap();
+    }
+    #[tokio::test]
+    async fn memory_managed_key_contract() {
+        managed_key_contract(&MemoryStore::new()).await;
+    }
+    #[tokio::test]
+    async fn redis_managed_key_contract() {
+        let Ok(url) = std::env::var("HV2_TEST_REDIS") else {
+            eprintln!("skipped: HV2_TEST_REDIS is unset");
+            return;
+        };
+        let namespace = format!("managed-keys-test-{}", uuid::Uuid::new_v4());
+        let store = RedisStore::connect(&url, &namespace).await.unwrap();
+        managed_key_contract(&store).await;
+        // Another connection (another control plane) sees the same keys.
+        let other = RedisStore::connect(&url, &namespace).await.unwrap();
+        assert_eq!(other.managed_keys().await.unwrap().len(), 2);
+        assert!(other
+            .managed_key_by_sha256(&"b".repeat(64))
+            .await
+            .unwrap()
+            .is_some());
     }
 
     #[tokio::test]

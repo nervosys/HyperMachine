@@ -71,12 +71,40 @@ Left administrator-only, because the code has no team-scoped form of them:
   `.../registration/reconcile`): they act on a node, which no team owns.
 - `/cluster/events`, and building templates (see "Not yet partitioned" below).
 - Usage and billing: there is no per-owner or per-team usage route to scope.
-- Adding, removing or changing members: keys come from the policy file, and
-  there is no member API.
+- Adding, removing or changing members through the policy file. A team-admin
+  makes and revokes its own team's keys through the
+  [key API](API_KEY_ROTATION.md#managed-keys), which is how it adds and removes
+  access (see [Members](#members)); a policy-file key is the operator's.
 - Reassigning an owner who exists. The node refuses it for everyone, an
   administrator included.
 
 Evidence: [`team-admin`, `viewer` and `member` on a real KVM node](benchmarks/2026-11-15/team-roles-kvm/README.md).
+
+## Members
+
+```
+GET /teams/{team}/members
+-> {"teamId": "red", "members": [
+     {"principalId": "alice", "roles": ["operator"], "keyCount": 2},
+     {"principalId": "lead",  "roles": ["team-admin"], "keyCount": 1}]}
+```
+
+A member here is a principal that holds at least one unexpired key of the team: keys from the policy file and
+[managed keys](API_KEY_ROTATION.md#managed-keys) alike, one entry per principal, with each role its keys hold
+(policy names: `operator` is `member`, `observer` is `viewer`) and how many keys it has. Administrators are
+global and are not members of a team, even if their key names one. Expired keys count for nothing, and a
+principal whose keys all expired is not listed. People who sign in through single sign-on are not listed
+either: their membership is the members file, not a key.
+
+An administrator lists any team; one that has no keys is an empty list. A `team-admin` lists its own team,
+and another team's is 403 (not an empty list). Every other caller gets 403. The listing never contains a
+secret, a digest or a key id.
+
+Adding and removing members is done with the key API: a team-admin makes a key for a principal
+(`POST /keys` with `principalId`; a principal that a key outside the team, or an administrator's key, already
+carries is refused with 403, because principals are global), and revokes it (`DELETE /keys/{id}`) to remove the access it gave. Policy-file
+members are changed by the operator, in the file. There is still no durable record of a member apart from its
+keys.
 
 ## What a team key can do
 
@@ -159,6 +187,6 @@ administrators use them:
   `/v3/templates`, and build files and status under `/templates/{id}/…`)
 - `/cluster/events`, the operator's view of nodes and sandboxes together
 
-Also not done: single sign-on (keys are still operator-provisioned), team
-membership as durable records with an API, and per-team private networks.
-Private networks are still per creator.
+Also not done: team membership as durable records apart from keys (a member
+is the principal of a key; see [Members](#members)), and per-team private
+networks. Private networks are still per creator.

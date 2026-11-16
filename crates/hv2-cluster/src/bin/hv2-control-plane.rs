@@ -40,6 +40,8 @@ struct Options {
     /// Prefixes teams' own telemetry may be sent under; see `team_telemetry`.
     team_otlp_endpoints: Vec<String>,
     identity_issuer: Option<String>,
+    /// The longest a key made with `POST /keys` may live, in seconds.
+    managed_key_max_ttl_secs: Option<u64>,
     /// Refuse to start unless TLS runs on AWS-LC's FIPS module.
     fips: bool,
     /// Single sign-on through an OpenID Connect provider; see `sso_login`.
@@ -87,6 +89,7 @@ fn parse() -> Result<Options, String> {
         mtls_node_name: hv2_cluster::mtls::DEFAULT_NODE_NAME.to_string(),
         team_otlp_endpoints: Vec::new(),
         identity_issuer: None,
+        managed_key_max_ttl_secs: None,
         fips: false,
         sso: SsoOptions::default(),
     };
@@ -156,6 +159,13 @@ fn parse() -> Result<Options, String> {
                 opts.team_otlp_endpoints.push(prefix);
             }
             "--identity-issuer" => opts.identity_issuer = Some(value()?),
+            "--managed-key-max-ttl-secs" => {
+                opts.managed_key_max_ttl_secs = Some(
+                    value()?
+                        .parse()
+                        .map_err(|e| format!("--managed-key-max-ttl-secs: {e}"))?,
+                );
+            }
             "--fips" => opts.fips = true,
             "--sso-issuer" => opts.sso.issuer = Some(value()?),
             "--sso-client-id" => opts.sso.client_id = Some(value()?),
@@ -181,7 +191,7 @@ fn parse() -> Result<Options, String> {
                      [--api-keys-file F] [--native-port-range FIRST-LAST] [--reap-interval SECS] [--tls-cert F --tls-key F] \
                      [--tls-bundle-file F] [--api-tls-cert F --api-tls-key F] \
                      [--mtls-ca F --mtls-cert F --mtls-key F [--mtls-node-name N]] \
-                     [--identity-issuer URL] [--web-access-file F] [--domain-verification-file F] \
+                     [--identity-issuer URL] [--managed-key-max-ttl-secs N] [--web-access-file F] [--domain-verification-file F] \
                      [--team-otlp-endpoint URL]... \
                      [--sso-issuer URL --sso-client-id ID --sso-redirect-url URL \
                      --sso-members-file F --sso-session-key-file F [--sso-client-secret-file F] \
@@ -531,6 +541,12 @@ async fn main() -> std::process::ExitCode {
             }
         },
     };
+    if let Some(secs) = opts.managed_key_max_ttl_secs {
+        if let Err(error) = control.set_managed_key_max_ttl(Duration::from_secs(secs)) {
+            eprintln!("hv2-control-plane: {error}");
+            return std::process::ExitCode::FAILURE;
+        }
+    }
     if let Some(range) = opts.native_port_range {
         if let Err(error) = control.configure_public_ports(range) {
             eprintln!("hv2-control-plane: {error}");

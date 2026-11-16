@@ -8,7 +8,7 @@
 //! as its role allows. Administrators stay global.
 
 use axum::http::Method;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use subtle::ConstantTimeEq;
@@ -33,7 +33,7 @@ pub fn read_policy_file(path: impl AsRef<std::path::Path>) -> Result<String, Str
     String::from_utf8(bytes).map_err(|_| "API key policy document must be UTF-8".into())
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ApiScope {
     Admin,
@@ -49,7 +49,7 @@ pub enum ApiScope {
 
 /// A role limits capabilities independently of the resource scopes.
 /// Omitted roles preserve the existing operator policy behavior.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ApiRole {
     /// Also written `member`, the team name for the same role.
@@ -167,6 +167,26 @@ struct RawPolicy {
     team_id: Option<crate::ownership::TeamId>,
 }
 
+/// A team-admin is team-scoped: it needs a team and may not hold the
+/// cluster-wide `admin` scope. Shared by the policy file and the key API.
+fn check_team_admin(
+    role: ApiRole,
+    scopes: &BTreeSet<ApiScope>,
+    has_team: bool,
+) -> Result<(), String> {
+    if role == ApiRole::TeamAdmin {
+        if !has_team {
+            return Err("API key role team-admin needs a team_id".into());
+        }
+        if scopes.contains(&ApiScope::Admin) {
+            return Err(
+                "API key role team-admin cannot hold the admin scope, which is cluster-wide".into(),
+            );
+        }
+    }
+    Ok(())
+}
+
 impl RawPolicy {
     /// The effective scopes and role once any preset is expanded.
     fn expand(&self) -> Result<(BTreeSet<ApiScope>, ApiRole), String> {
@@ -198,7 +218,143 @@ impl RawPolicy {
     }
 }
 
+/// A key made through the API and kept in the cluster store, never in the
+/// policy file. Holds the SHA-256 of the secret, never the secret; the `id`
+/// is random, URL-safe and not derived from it, so it can be listed, logged
+/// and used to revoke without revealing anything.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ManagedKey {
+    pub id: String,
+    /// Lower-case hex SHA-256 of the secret.
+    pub sha256: String,
+    /// The scopes after any preset was expanded.
+    pub scopes: BTreeSet<ApiScope>,
+    pub role: ApiRole,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub team_id: Option<crate::ownership::TeamId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub principal: Option<crate::ownership::OwnerId>,
+    pub label: String,
+    /// The creating key's principal or id; never a secret.
+    pub created_by: String,
+    /// Unix seconds.
+    pub created_at: i64,
+    /// Unix seconds; required, and checked on every request.
+    pub expires_at: i64,
+}
+
+impl std::fmt::Debug for ManagedKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ManagedKey")
+            .field("id", &self.id)
+            .field("team_id", &self.team_id)
+            .field("role", &self.role)
+            .field("expires_at", &self.expires_at)
+            .finish_non_exhaustive()
+    }
+}
+
+impl ManagedKey {
+    /// Whether this key holds the cluster-wide `admin` scope as an operator,
+    /// which is what makes a key an administrator.
+    #[must_use]
+    pub fn is_administrator(&self) -> bool {
+        self.role == ApiRole::Operator && self.scopes.contains(&ApiScope::Admin)
+    }
+}
+
+/// The body of `POST /keys`. `expiresInSeconds` and `label` are required;
+/// the rest are validated by the same rules as a policy-file entry.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct KeyRequest {
+    pub label: String,
+    pub expires_in_seconds: u64,
+    #[serde(default, deserialize_with = "present")]
+    pub preset: Option<ApiPreset>,
+    #[serde(default)]
+    pub scopes: BTreeSet<ApiScope>,
+    #[serde(default, deserialize_with = "present")]
+    pub role: Option<ApiRole>,
+    #[serde(default)]
+    pub team_id: Option<crate::ownership::TeamId>,
+    #[serde(default)]
+    pub principal_id: Option<crate::ownership::OwnerId>,
+}
+
+impl KeyRequest {
+    /// The scopes and role this request stands for once a preset is expanded,
+    /// validated as a policy-file entry for `team` would be. `team` is passed
+    /// in because the caller may force it.
+    pub(crate) fn grant(
+        &self,
+        team: Option<&crate::ownership::TeamId>,
+    ) -> Result<(BTreeSet<ApiScope>, ApiRole), String> {
+        let raw = RawPolicy {
+            sha256: String::new(),
+            expires_at: 1,
+            scopes: self.scopes.clone(),
+            role: self.role,
+            preset: self.preset,
+            principal_id: None,
+            team_id: team.cloned(),
+        };
+        let (scopes, role) = raw.expand()?;
+        check_team_admin(role, &scopes, team.is_some())?;
+        if scopes.is_empty() {
+            return Err("API key scopes must be nonempty: give a preset or scopes".into());
+        }
+        Ok((scopes, role))
+    }
+}
+
 impl ApiKeyPolicy {
+    /// The policy a stored managed key acts under: the same fields and the
+    /// same checks as a file entry. Fails on a record that no key made
+    /// through the API could have produced, so a damaged record is refused
+    /// rather than trusted.
+    ///
+    /// # Errors
+    /// A malformed digest, empty scopes, or a team-admin the policy file
+    /// would have refused.
+    pub(crate) fn from_managed(key: &ManagedKey) -> Result<Self, String> {
+        if key.sha256.len() != 64 || !key.sha256.bytes().all(|c| c.is_ascii_hexdigit()) {
+            return Err("managed API key digest is malformed".into());
+        }
+        let mut digest = [0u8; 32];
+        for (index, byte) in digest.iter_mut().enumerate() {
+            *byte = u8::from_str_radix(&key.sha256[index * 2..index * 2 + 2], 16)
+                .map_err(|_| "managed API key digest is malformed")?;
+        }
+        if digest == <[u8; 32]>::from(Sha256::digest(b"")) {
+            return Err("managed API key digest is the empty credential's".into());
+        }
+        check_team_admin(key.role, &key.scopes, key.team_id.is_some())?;
+        if key.scopes.is_empty() || key.expires_at <= 0 {
+            return Err("managed API key has no scopes or no expiry".into());
+        }
+        Ok(Self {
+            digest,
+            expires_at: key.expires_at,
+            scopes: key.scopes.clone(),
+            role: key.role,
+            principal_id: key.principal.clone(),
+            team_id: key.team_id.clone(),
+        })
+    }
+
+    pub(crate) fn expires_at(&self) -> i64 {
+        self.expires_at
+    }
+
+    pub(crate) fn scopes(&self) -> &BTreeSet<ApiScope> {
+        &self.scopes
+    }
+
+    pub(crate) fn role(&self) -> ApiRole {
+        self.role
+    }
+
     /// Parse a nonempty policy array. Expiry is Unix time in seconds.
     ///
     /// # Errors
@@ -233,17 +389,7 @@ impl ApiKeyPolicy {
                     return Err("empty or duplicate API key credential".into());
                 }
                 let (scopes, role) = raw.expand()?;
-                if role == ApiRole::TeamAdmin {
-                    if raw.team_id.is_none() {
-                        return Err("API key role team-admin needs a team_id".into());
-                    }
-                    if scopes.contains(&ApiScope::Admin) {
-                        return Err(
-                            "API key role team-admin cannot hold the admin scope, which is cluster-wide"
-                                .into(),
-                        );
-                    }
-                }
+                check_team_admin(role, &scopes, raw.team_id.is_some())?;
                 if raw.expires_at <= 0 || scopes.is_empty() {
                     return Err("API key expiry must be positive and scopes nonempty".into());
                 }
@@ -353,6 +499,17 @@ impl ApiKeyPolicy {
             return true;
         }
         let parts: Vec<_> = path.trim_start_matches('/').split('/').collect();
+        // Key management: administrators (the `admin` scope, above) and team
+        // administrators only; the handler limits a team-admin to its team.
+        // No scope list reaches these, so every other key is refused.
+        match parts.as_slice() {
+            ["keys"] => {
+                return self.is_team_admin() && (*method == Method::GET || *method == Method::POST);
+            }
+            ["keys", _] => return self.is_team_admin() && *method == Method::DELETE,
+            ["teams", _, "members"] => return self.is_team_admin() && *method == Method::GET,
+            _ => {}
+        }
         if matches!(parts.as_slice(), ["sandboxes", _, "owner"]) {
             // Only a team administrator, and only for POST; the handler
             // checks that the sandbox is in its team.
@@ -851,6 +1008,214 @@ mod tests {
         assert!(ApiKeyPolicy::from_json(&file)
             .unwrap_err()
             .contains("team_id and principal_id"));
+    }
+
+    fn managed(role: ApiRole, scopes: &[ApiScope], team: Option<&str>) -> ManagedKey {
+        ManagedKey {
+            id: "mk_fixture".into(),
+            sha256: digest("managed-fixture"),
+            scopes: scopes.iter().copied().collect(),
+            role,
+            team_id: team.map(|t| crate::ownership::TeamId::parse(t).unwrap()),
+            principal: Some(crate::ownership::OwnerId::parse("pat").unwrap()),
+            label: "fixture".into(),
+            created_by: "lead".into(),
+            created_at: 1,
+            expires_at: 100,
+        }
+    }
+
+    /// A stored key acts under exactly the policy a file entry with the same
+    /// fields would, and a record no API call could have made is refused.
+    #[test]
+    fn a_managed_key_becomes_the_policy_a_file_entry_would() {
+        let record = managed(
+            ApiRole::TeamAdmin,
+            &[ApiScope::Sandboxes, ApiScope::Inventory],
+            Some("red"),
+        );
+        let from_store = ApiKeyPolicy::from_managed(&record).unwrap();
+        let from_file = preset_policy(
+            r#""scopes":["sandboxes","inventory"],"role":"team-admin","team_id":"red","principal_id":"pat""#,
+        )
+        .unwrap();
+        assert_eq!(from_store.scopes, from_file.scopes);
+        assert_eq!(from_store.role, from_file.role);
+        assert_eq!(from_store.team_id, from_file.team_id);
+        assert_eq!(from_store.principal_id, from_file.principal_id);
+        assert_eq!(from_store.expires_at, 100);
+        assert!(from_store.is_team_admin() && !from_store.is_administrator());
+        assert!(from_store.has_digest(&Sha256::digest(b"managed-fixture").into()));
+        assert!(from_store.matches(&Sha256::digest(b"managed-fixture").into(), 99));
+        assert!(!from_store.matches(&Sha256::digest(b"managed-fixture").into(), 100));
+        let admin =
+            ApiKeyPolicy::from_managed(&managed(ApiRole::Operator, &[ApiScope::Admin], None))
+                .unwrap();
+        assert!(admin.is_administrator() && admin.team_id().is_none());
+
+        for (why, bad) in [
+            (
+                "short digest",
+                ManagedKey {
+                    sha256: "ab".into(),
+                    ..record.clone()
+                },
+            ),
+            (
+                "non-hex digest",
+                ManagedKey {
+                    sha256: "z".repeat(64),
+                    ..record.clone()
+                },
+            ),
+            (
+                "empty credential",
+                ManagedKey {
+                    sha256: digest(""),
+                    ..record.clone()
+                },
+            ),
+            (
+                "no scopes",
+                ManagedKey {
+                    scopes: BTreeSet::new(),
+                    ..record.clone()
+                },
+            ),
+            (
+                "no expiry",
+                ManagedKey {
+                    expires_at: 0,
+                    ..record.clone()
+                },
+            ),
+            (
+                "team-admin without team",
+                ManagedKey {
+                    team_id: None,
+                    ..record.clone()
+                },
+            ),
+            (
+                "team-admin with admin",
+                ManagedKey {
+                    scopes: [ApiScope::Admin].into(),
+                    ..record.clone()
+                },
+            ),
+        ] {
+            assert!(ApiKeyPolicy::from_managed(&bad).is_err(), "{why}");
+        }
+        // Debug never shows the digest, and the record round-trips.
+        assert!(!format!("{record:?}").contains(&record.sha256));
+        let again: ManagedKey =
+            serde_json::from_str(&serde_json::to_string(&record).unwrap()).unwrap();
+        assert_eq!(again, record);
+    }
+
+    /// The key routes are the administrator's and the team-admin's, and no
+    /// other role or scope list reaches them.
+    #[test]
+    fn only_administrators_and_team_admins_are_permitted_the_key_routes() {
+        let routes = [
+            (Method::GET, "/keys"),
+            (Method::POST, "/keys"),
+            (Method::DELETE, "/keys/mk_x"),
+            (Method::GET, "/teams/red/members"),
+        ];
+        let team = r#""team_id":"red","principal_id":"p""#;
+        let lead = preset_policy(&format!(
+            r#""scopes":["sandboxes"],"role":"team-admin",{team}"#
+        ))
+        .unwrap();
+        // No scope is needed beyond the role, and the method must fit the route.
+        for (method, path) in &routes {
+            assert!(lead.permits(method, path), "{method} {path}");
+            assert!(preset_policy(r#""preset":"admin""#)
+                .unwrap()
+                .permits(method, path));
+        }
+        for (method, path) in [
+            (Method::PUT, "/keys"),
+            (Method::DELETE, "/keys"),
+            (Method::GET, "/keys/mk_x"),
+            (Method::POST, "/keys/mk_x"),
+            (Method::POST, "/teams/red/members"),
+            (Method::DELETE, "/teams/red/members"),
+            (Method::GET, "/teams/red"),
+            (Method::GET, "/teams"),
+            (Method::GET, "/keys/a/b"),
+        ] {
+            assert!(!lead.permits(&method, path), "{method} {path}");
+        }
+        for extra in [
+            r#""scopes":["sandboxes","inventory","templates","volumes","events","machines","telemetry"]"#,
+            r#""preset":"developer""#,
+            r#""preset":"machines""#,
+            r#""preset":"read-only""#,
+            r#""scopes":["inventory"],"role":"viewer""#,
+            r#""scopes":["sandboxes"],"role":"member""#,
+        ] {
+            let other = preset_policy(&format!("{extra},{team}")).unwrap();
+            for (method, path) in &routes {
+                assert!(!other.permits(method, path), "{extra}: {method} {path}");
+            }
+        }
+        // An observer with the admin scope is still capped.
+        let mut observer = policy("admin");
+        observer.role = ApiRole::Observer;
+        for (method, path) in &routes {
+            assert!(!observer.permits(method, path), "{method} {path}");
+        }
+    }
+
+    /// The request is expanded and checked by the policy file's rules.
+    #[test]
+    fn a_key_request_is_validated_as_a_policy_entry_would_be() {
+        let request = |json: &str| -> Result<KeyRequest, _> { serde_json::from_str(json) };
+        let red = crate::ownership::TeamId::parse("red").unwrap();
+        let grant = |json: &str, team: Option<&crate::ownership::TeamId>| {
+            request(json).unwrap().grant(team)
+        };
+        let (scopes, role) = grant(
+            r#"{"label":"x","expiresInSeconds":60,"preset":"developer","role":"viewer"}"#,
+            Some(&red),
+        )
+        .unwrap();
+        assert_eq!(role, ApiRole::Observer);
+        assert_eq!(scopes, ApiPreset::Developer.scopes());
+        assert!(grant(r#"{"label":"x","expiresInSeconds":60}"#, Some(&red))
+            .unwrap_err()
+            .contains("nonempty"));
+        assert!(grant(
+            r#"{"label":"x","expiresInSeconds":60,"scopes":["inventory"],"role":"team-admin"}"#,
+            None
+        )
+        .unwrap_err()
+        .contains("needs a team_id"));
+        assert!(grant(
+            r#"{"label":"x","expiresInSeconds":60,"preset":"admin","role":"team-admin"}"#,
+            Some(&red)
+        )
+        .unwrap_err()
+        .contains("admin scope"));
+        assert!(grant(
+            r#"{"label":"x","expiresInSeconds":60,"preset":"read-only","role":"operator"}"#,
+            Some(&red)
+        )
+        .unwrap_err()
+        .contains("cannot raise"));
+        for bad in [
+            r#"{"label":"x","expiresInSeconds":60,"preset":null}"#,
+            r#"{"label":"x","expiresInSeconds":60,"role":null}"#,
+            r#"{"label":"x","expiresInSeconds":60,"extra":1}"#,
+            r#"{"label":"x"}"#,
+            r#"{"expiresInSeconds":60}"#,
+            r#"{"label":"x","expiresInSeconds":"60"}"#,
+            r#"{"label":"x","expiresInSeconds":60,"teamId":"a b"}"#,
+        ] {
+            assert!(request(bad).is_err(), "{bad}");
+        }
     }
 
     #[test]

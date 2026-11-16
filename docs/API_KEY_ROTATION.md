@@ -97,9 +97,105 @@ file is loaded or reloaded, to a fixed set of scopes and a role:
   `principal_id`, expiry and the multi-tenant rules apply as they do to any key. An `admin` preset key with
   no team is an administrator and stays global.
 
-Presets exist only in this file. There is still no API or CLI that creates a key. [Three real KVM runs of 25
+Presets work in the file and in the [key API](#managed-keys). [Three real KVM runs of 25
 cases](benchmarks/2026-11-14/key-presets-kvm/README.md) check each preset's allowed and refused requests,
 a start with an unknown preset, and reloads with bad files.
+
+## Managed keys
+
+The policy file is the operator's. Keys can also be made, listed and revoked at run time through the control
+plane's API, and they are kept in the cluster store (Redis or the in-memory store), never in the file, which
+the API cannot read or change. A managed key behaves exactly like a policy entry with the same fields: the
+same scopes, presets, roles, team and principal rules, and the same expiry check on every request.
+
+| Route | What it does |
+|---|---|
+| `POST /keys` | Makes a key. Returns 201 with `{id, key, label, scopes, role, teamId, principalId, expiresAt, createdAt}`. **`key` is shown only here.** |
+| `GET /keys` | Lists keys: `{keys: [{id, label, scopes, role, teamId, principalId, createdBy, createdAt, expiresAt, expired}]}`. Never a secret or a digest. |
+| `DELETE /keys/{id}` | Revokes a key: `{"deleted": id, "kind": "key"}`. An id the store does not hold is 404. |
+| `GET /teams/{team}/members` | Lists a team's principals; see [Teams](TEAMS.md#members). |
+
+These routes are on the control plane only, not on `hv2-sandboxd`.
+
+```json
+POST /keys
+{"label": "ci runner 4", "expiresInSeconds": 86400, "preset": "developer",
+ "teamId": "red", "principalId": "ci-4"}
+```
+
+- `label` (1-128 characters, no control characters) and `expiresInSeconds` are required. Expiry is from 60 up
+  to 90 days; an operator changes the upper limit with `--managed-key-max-ttl-secs` (or
+  `ControlPlane::set_managed_key_max_ttl`), up to ten years.
+- `preset`, `scopes` and `role` are expanded and validated by the policy file's own code: the same
+  presets, the same `viewer`/`member` aliases, the same refusals (`read-only` cannot be raised, a `team-admin`
+  needs a team and cannot hold `admin`, scopes may not be empty, unknown fields and explicit `null` are
+  400).
+- `teamId` is required unless the key is an administrator's (operator role with the `admin` scope). A key
+  with no team would be global, and the policy file's rule is that only an administrator may be. A key with
+  a team always has a principal: `principalId` if given, otherwise its own `id`. A team-admin may name a
+  principal its own team already uses (a new key for a member), but not one a key outside its team, or an
+  administrator's key, carries (403): principals are global, and a key for one is a key as that person.
+- The secret is `hm_` and 43 characters from 32 bytes of the OS random generator (through the same
+  FIPS-capable module the control plane uses for its session tokens). The `id` (`mk_` and 16 characters) is
+  random and not derived from it. The store holds the SHA-256 of the secret, the id, the expanded scopes, the
+  role, the team, the principal, the label, who created it and when. A secret whose digest equals a policy
+  entry's, or the legacy admin key, is refused (not reachable with 256 random bits, but checked).
+- At most 1000 unexpired managed keys are held (429 beyond that; `ControlPlane::set_managed_key_limit`).
+  Expired keys stay listed, marked `expired`, until deleted.
+
+### Who may use them
+
+| Caller | Create | List | Delete | Members |
+|---|---|---|---|---|
+| administrator (legacy admin key, or an operator key with `admin`) | any team, any role, any scope, including a team-admin or another administrator | all | any | any team |
+| `team-admin` | its own team only | its own team's | its own team's (other: 404) | its own team (other: 403) |
+| everyone else: observers, operators, `read-only`, inventory keys, SSO members who are not administrators | 403 | 403 | 403 | 403 |
+
+A team-admin cannot raise anyone above itself. Each rule below answers 403:
+
+1. `teamId` is forced to its own team when omitted and must equal it when given.
+2. `role` may be `viewer`/`observer` or `member`/`operator`, never `team-admin`.
+3. The `admin` scope, however it is requested (`scopes`, `preset: admin`), is refused.
+4. Every scope the key would hold must be one the team-admin itself holds. A preset that expands to a scope it
+   lacks is refused as a whole.
+5. `expiresAt` (now plus `expiresInSeconds`) may not be later than the team-admin's own expiry. For a
+   signed-in member that is the end of the session.
+
+A team-admin never sees, and cannot revoke, a managed key that is an administrator's, even one that names its
+team, nor another team's key: both are 404 and are not listed. A key it made is a plain `member` or `viewer`:
+it cannot manage keys.
+
+### How a managed key authenticates
+
+The policy file is checked first, exactly as before, and the legacy admin key after it. If the presented
+key's SHA-256 matches neither, the control plane looks it up in the store, by that digest (one `HGET` in
+Redis, no scan), **on that request, with no cache**. So:
+
+- **A revocation takes effect on the next request, on every control plane** sharing the store. In-flight
+  requests and open streams continue, as for a policy reload.
+- An expired managed key is refused 401, with the same message as an expired file key.
+- **A store error while checking a key is 503, never 401 and never a pass.** The key may be fine; the control
+  plane cannot tell. Requests with a policy-file key or the legacy admin key do not touch the store and are
+  unaffected.
+- A request with no key makes no store call.
+- Each such request with an unrecognised key costs the store one lookup.
+
+### What the API cannot do
+
+- **Policy-file keys cannot be deleted, listed or changed through the API.** They have no id here, so
+  `DELETE /keys/{anything}` for one is 404, as for any id the store does not hold. Rotate them as above.
+- **A key made by a team-admin belongs to the team, not to its creator.** If the creator's key is revoked,
+  rotated out of the file or expires, the keys it made keep working until their own expiry or until a
+  team-admin or administrator revokes them. `createdBy` records who made it.
+- A key's scopes, role, team and expiry cannot be changed: revoke and make another.
+- Secrets are never logged. The access log and the audit records name a managed key by its id.
+  `key-created` and `key-deleted` events (`GET /cluster/events`, administrators only) carry `id=... by=...`
+  and the team, and nothing else: no secret, digest or label. Webhooks and the E2B event feed ignore them.
+- The API answers 403 to every caller when the deployment has no key and no sign-on, since nobody is an
+  administrator then.
+
+With the API in use, "revoke all keys" is two actions: replace the file as above, and delete managed keys
+(list, then delete each id).
 
 ## Durable access history
 
