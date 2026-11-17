@@ -22,7 +22,9 @@ on each key:
 ]
 ```
 
-- A file with no `team_id` anywhere behaves exactly as before: one team.
+- A file with no `team_id` anywhere is one team, except that keys with different
+  principals do not see each other's resources: see
+  [a key with a principal and no team](#a-key-with-a-principal-and-no-team).
 - Once any key names a team, every key that is not an administrator must name
   both `team_id` and `principal_id`. A file that leaves one out is refused at
   startup and on reload. A key with no team would otherwise be global by
@@ -167,6 +169,36 @@ A webhook belongs to the team that created it and receives only that team's
 sandboxes' events. An administrator's webhook receives every event. An event
 that concerns no sandbox's team (a node joining) is visible to administrators
 only.
+
+## A key with a principal and no team
+
+A key that names a principal but no team (a policy file where no key names a
+team, or a signed-in member without one; the file rule above refuses it once
+any key names a team) acts as a team of one: it sees and changes only what its
+principal created. An administrator is unchanged,
+and so is a team key.
+
+| | Teamless key with a principal |
+|---|---|
+| Sandboxes, their events, ports, sharing | the principal's own (unchanged) |
+| `/events/sandboxes` | events of its own sandboxes; an event with no principal scope (made before this, or by no sandbox) is not listed |
+| Webhooks | its own: create, list, change, delete, deliveries (another's is 404); it is delivered only events about its own sandboxes and machines |
+| Volumes, machines | its own; a volume or machine with no owner is not there (404) |
+| Snapshots, templates, shares | its own snapshots, those shared with it, and every operator template; it cannot delete an operator's template or share one it does not own |
+| `/telemetry` | its own destination (an administrator's is separate) |
+| `/cluster/events` | 403: the log lists every principal's and team's events |
+
+How: the control plane gives such a key the scope `principal.` plus 32 hex digits
+of the SHA-256 of its principal, sends that to nodes as the key's team, and
+every team check applies as it does to a team. A real team may not use a label
+beginning `principal.`: a key that does is refused with 403. Two keys with the
+same principal share a scope, as two keys of one team do. Records made before
+this carry no such scope: events, webhooks, volumes, machines, snapshots and
+environments of a teamless key are visible to administrators only, and
+sandboxes made before it stay with their owner (the owner still sees its own
+sandboxes, but not their old events). Template builds (`POST /templates`,
+`/v3/templates`) write the namespace every tenant shares and are still not
+fenced for such a key.
 
 The team travels with the sandbox. The control plane sends it to the node on
 create, in an internal header that clients cannot set, and the node records it.

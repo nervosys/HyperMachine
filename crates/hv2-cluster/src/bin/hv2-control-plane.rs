@@ -46,6 +46,9 @@ struct Options {
     managed_key_secret_file: Option<String>,
     /// Refuse to start unless TLS runs on AWS-LC's FIPS module.
     fips: bool,
+    /// `--allow-unauthenticated`: start with no API key and no sign-on, every
+    /// caller an administrator.
+    allow_unauthenticated: bool,
     /// Single sign-on through an OpenID Connect provider; see `sso_login`.
     sso: SsoOptions,
 }
@@ -96,6 +99,7 @@ fn parse() -> Result<Options, String> {
         managed_key_max_ttl_secs: None,
         managed_key_secret_file: None,
         fips: false,
+        allow_unauthenticated: false,
         sso: SsoOptions::default(),
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -173,6 +177,7 @@ fn parse() -> Result<Options, String> {
             }
             "--managed-key-secret-file" => opts.managed_key_secret_file = Some(value()?),
             "--fips" => opts.fips = true,
+            "--allow-unauthenticated" => opts.allow_unauthenticated = true,
             "--sso-issuer" => opts.sso.issuer = Some(value()?),
             "--sso-client-id" => opts.sso.client_id = Some(value()?),
             "--sso-client-secret-file" => opts.sso.client_secret_file = Some(value()?),
@@ -204,6 +209,9 @@ fn parse() -> Result<Options, String> {
                      --sso-members-file F --sso-session-key-file F [--sso-client-secret-file F] \
                      [--sso-provider-ca F] [--sso-session-hours N] \
                      [--sso-guest-urls --guest-domain DOMAIN [--guest-domain DOMAIN]...]]\n\
+                     [--allow-unauthenticated]\n\
+                     Without an API key, an --api-keys-file or --sso-*, it refuses to start unless \
+                     --allow-unauthenticated is given.\n\
                      HV2_API_KEY and HV2_CLUSTER_TOKEN are read from the environment too."
                 );
                 std::process::exit(0);
@@ -266,6 +274,24 @@ async fn sso(
     .await
 }
 
+/// Whether the control plane may start. With no way to tell callers apart (no
+/// `--api-key`/`HV2_API_KEY`, no non-empty `--api-keys-file`, no `--sso-*`)
+/// every caller is an administrator, so it starts that way only when asked
+/// for in as many words. Managed keys do not count: they are minted by an
+/// administrator, so on their own they authenticate nobody.
+fn startup_authentication(authenticates: bool, allow_unauthenticated: bool) -> Result<(), String> {
+    if authenticates || allow_unauthenticated {
+        return Ok(());
+    }
+    Err(
+        "no API key is configured, so every caller who can reach this control plane would be an \
+         administrator: they could create, read and delete every sandbox, machine, volume and \
+         key. Give it an --api-key (or HV2_API_KEY), an --api-keys-file, or single sign-on \
+         (--sso-issuer), or pass --allow-unauthenticated if that is what you mean"
+            .to_string(),
+    )
+}
+
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
     tracing_subscriber::fmt()
@@ -325,8 +351,21 @@ async fn main() -> std::process::ExitCode {
             return std::process::ExitCode::FAILURE;
         }
     };
-    if opts.api_key.is_none() && api_keys.is_empty() {
-        tracing::warn!("no --api-key: anyone who can reach this port can create sandboxes");
+    let authenticates = opts.api_key.is_some() || !api_keys.is_empty() || opts.sso.issuer.is_some();
+    if let Err(error) = startup_authentication(authenticates, opts.allow_unauthenticated) {
+        eprintln!("hv2-control-plane: {error}");
+        return std::process::ExitCode::FAILURE;
+    }
+    if !authenticates {
+        // `startup_authentication` refused this unless it was asked for; say
+        // so, every time it starts, where it will be read.
+        tracing::warn!(
+            "--allow-unauthenticated: this control plane has no API key and no sign-on, so \
+             everyone who can reach port {} (and the envd proxy on {}) is an administrator: \
+             they can create, read and delete every sandbox, machine, volume and key",
+            opts.port,
+            opts.proxy_port
+        );
     }
 
     let domain_verification = match opts.domain_verification_file.as_deref() {
@@ -761,4 +800,22 @@ async fn main() -> std::process::ExitCode {
         return std::process::ExitCode::FAILURE;
     }
     std::process::ExitCode::SUCCESS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::startup_authentication;
+
+    #[test]
+    fn refuses_to_start_open_unless_asked() {
+        // No key source and no flag: refused, naming the flag.
+        let error = startup_authentication(false, false).unwrap_err();
+        assert!(error.contains("--allow-unauthenticated"), "{error}");
+        assert!(error.contains("--api-keys-file"), "{error}");
+        // The flag opts in.
+        assert!(startup_authentication(false, true).is_ok());
+        // A key source starts it, with or without the flag.
+        assert!(startup_authentication(true, false).is_ok());
+        assert!(startup_authentication(true, true).is_ok());
+    }
 }

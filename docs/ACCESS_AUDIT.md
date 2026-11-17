@@ -6,6 +6,7 @@ Enable synced, tamper-evident records for the protected API in
 ```sh
 export HV2_ACCESS_AUDIT=/var/lib/hypermachine/control-1-access.jsonl
 export HV2_ACCESS_AUDIT_KEY_FILE=/etc/hypermachine/access-audit.key
+export HV2_API_KEY=...   # or --api-keys-file: a control plane with no key will not start
 hv2-control-plane --store redis://127.0.0.1:6379
 ```
 

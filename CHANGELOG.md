@@ -288,6 +288,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`hm-tui`, a new terminal dashboard** for Type 2 VMs and sandbox VMs over the same APIs `hm-gui` and `hm sandbox vm` already use; and a Sandboxes tab for `hm-gui`, which previously showed only Type 2 VMs.
 
 ### Security
+- **The control plane no longer starts open by accident.** With no API key, key file or single sign-on
+  configured it refuses to start; pass `--allow-unauthenticated` to run it open as before.
+- **A key with a principal and no team saw every team's resources.** Such a key now sees, and acts on,
+  only what its principal created: events, webhooks, machines, volumes, snapshots, templates, shares
+  and telemetry. It cannot read the cluster event log. Records made before this change are hidden
+  from it.
 - **A node's sandbox proxy accepted anyone who could reach it.** A node with a cluster token now
   requires each proxy connection to begin with a signed, single-use, time-limited line, which the
   control plane sends. Use `--proxy-open` for the old behaviour.

@@ -1550,6 +1550,37 @@ async fn require_api_key(
             "this resource is shared by every team and is not available to team keys",
         ));
     }
+    // A key with a principal and no team is a team of one: everything it
+    // creates outside sandboxes is recorded under that scope, and everything
+    // it reads is filtered to it, by the same checks that fence teams. The
+    // label is reserved, so no real team can be mistaken for a principal.
+    if rejection.is_none()
+        && team
+            .as_ref()
+            .is_some_and(crate::ownership::TeamId::is_personal)
+    {
+        rejection = Some(api_error(
+            StatusCode::FORBIDDEN,
+            "this team label is reserved for principals",
+        ));
+    }
+    let team = match (&team, &principal) {
+        (None, Some(owner)) if !administrator => Some(crate::ownership::TeamId::personal(owner)),
+        _ => team.clone(),
+    };
+    // The event log lists every principal's and team's events at once, and
+    // is filtered by none of them.
+    if rejection.is_none()
+        && route == "/cluster/events"
+        && team
+            .as_ref()
+            .is_some_and(crate::ownership::TeamId::is_personal)
+    {
+        rejection = Some(api_error(
+            StatusCode::FORBIDDEN,
+            "the cluster event log is not available to a key without a team",
+        ));
+    }
     // A teammate acts on a sandbox as its creator, which is who the store's
     // own ownership checks (ports, sharing, private networks) are written
     // for: authorization is the team check below, and those checks still

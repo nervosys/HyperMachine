@@ -261,7 +261,7 @@ jobs:
               run: |
                   cargo build -p hv2-cluster --bin hv2-control-plane --features hv2-cluster/fips
                   set +e
-                  timeout 5 target/debug/hv2-control-plane --fips --port 59813 --proxy-port 59814 > fips.log 2>&1
+                  HV2_API_KEY=ci-fips-startup-key timeout 5 target/debug/hv2-control-plane --fips --port 59813 --proxy-port 59814 > fips.log 2>&1
                   code=$?
                   set -e
                   cat fips.log

@@ -245,13 +245,39 @@ not on KVM.
     default. Hitting one returns `EDQUOT`.
   - **Not verified:** unit-tested only, not on KVM.
 
+## Fixed in a fourth follow-up (owner decisions)
+
+The owner chose how to resolve O4 and O5.
+
+- **O4 (Medium): the control plane ran open with no key source.**
+  - **No key source:** `hv2-control-plane` now refuses to start, with an error naming
+    `--allow-unauthenticated`. Key sources are `--api-key`/`HV2_API_KEY`, `--api-keys-file` and
+    `--sso-issuer`.
+  - **Opt-in:** with `--allow-unauthenticated` it runs open as before and logs a warning at each
+    start.
+  - **Managed keys:** `--managed-key-secret-file` alone does not count as a key source, because
+    managed keys are minted by an administrator.
+  - **Callers updated:** the CI FIPS step and `check-domain-verification-startup.py` now pass a key.
+  - **Verified:** on Linux, the release binary exits 1 with no key, and keeps running with the flag.
+- **O5 (Medium): keys with a principal and no team saw every team's resources.**
+  - **Personal scope:** such a key, unless it is an administrator, now acts as a team of one. Its
+    label is `principal.` followed by a hash of the principal. That label is recorded on whatever
+    the key creates, and every existing team check applies to it.
+  - **What the key sees:** events, webhooks and webhook deliveries, machines, volumes, snapshots,
+    templates, shares and telemetry are limited to its own.
+  - **Other rules:** the cluster event log refuses such a key, and a real team may not use the
+    `principal.` prefix. Sandboxes keep their existing owner scoping.
+  - **Records made before the change** carry no scope, so these keys cannot see them.
+  - **Template builds** are not scoped; see O14.
+  - **Verified:** seven new tests, six of which fail without the change. `verify-owner-sharing-kvm.py`,
+    which uses such keys, passes all 11 cases on KVM.
+
 ## Open: found, not fixed
 
 | Id | Severity | Finding | Why not now |
 |---|---|---|---|
-| O4 | Medium | The control plane runs open, everyone an administrator, when no API key source is configured, and managed keys do not change that. | A change to default behaviour, left for the owner. Startup logs a warning. |
-| O5 | Medium | Keys that have a principal but no team see every team's events, webhooks, machines and volumes. | Needs scoping by principal: a design decision. |
 | O12 | Low | Partly fixed (see below). A node with write access to Redis can delete a key's sealed revocation record and then replay the key's old record. It can also delete records outright (denial of service). Keys revoked before the fix have no revocation record. | Redis cannot stop a writer from deleting. A key's own expiry bounds the damage. |
+| O14 | Low | Template builds (`POST /templates`, `/v3/templates`, build status and files) still write the node-wide namespace for a key with a principal and no team. Team keys are refused there. | Refusing it would break teamless keys that build templates today; left for the owner. |
 
 ## Checked and found sound
 

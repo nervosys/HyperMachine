@@ -39,7 +39,7 @@ def main():
             if raw is not None: policy.write_text(raw)
             command=[str(binary),'--store','memory:','--namespace','fixture','--port',str(port()),
                      '--proxy-port',str(port()),'--domain-verification-file',str(policy)]
-            result=subprocess.run(command,env={'PATH':'/usr/local/bin:/usr/bin:/bin','RUST_LOG':'warn'},
+            result=subprocess.run(command,env={'PATH':'/usr/local/bin:/usr/bin:/bin','RUST_LOG':'warn','HV2_API_KEY':secrets.token_hex(32)},
                                   stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=10)
             output=result.stdout.decode(errors='replace')
             if result.returncode==0 or expected not in output or secret in output:

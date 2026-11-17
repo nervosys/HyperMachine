@@ -97,7 +97,8 @@ file is loaded or reloaded, to a fixed set of scopes and a role:
   with the active keys left unchanged, as for every other policy error.
 - An entry with no `preset` behaves exactly as before. A preset changes nothing else: `team_id`,
   `principal_id`, expiry and the multi-tenant rules apply as they do to any key. An `admin` preset key with
-  no team is an administrator and stays global.
+  no team is an administrator and stays global. A key with a principal and no team that is not an administrator is
+  scoped to what its principal created ([Teams](TEAMS.md#a-key-with-a-principal-and-no-team)).
 
 Presets work in the file and in the [key API](#managed-keys). [Three real KVM runs of 25
 cases](benchmarks/2026-11-14/key-presets-kvm/README.md) check each preset's allowed and refused requests,
@@ -229,6 +230,15 @@ Redis, no scan), **on that request, with no cache**. So:
   and the team, and nothing else: no secret, digest or label. Webhooks and the E2B event feed ignore them.
 - The API answers 403 to every caller when the deployment has no key and no sign-on, since nobody is an
   administrator then.
+
+## Starting with no key
+
+With no `--api-key` (or `HV2_API_KEY`), no non-empty `--api-keys-file` and no `--sso-issuer`, nothing tells one
+caller from another, so every caller who can reach the port would be an administrator. `hv2-control-plane`
+therefore refuses to start, with an error naming `--allow-unauthenticated`. Pass that flag to run open anyway
+(for a throwaway local run); the control plane then logs a warning at every start. A managed-key secret
+(`--managed-key-secret-file`) does not count: managed keys are minted by an administrator, so on their own they
+authenticate nobody. `hv2-sandboxd` has the same flag for binding beyond loopback with no token.
 
 With the API in use, "revoke all keys" is two actions: replace the file as above, and delete managed keys
 (list, then delete each id).

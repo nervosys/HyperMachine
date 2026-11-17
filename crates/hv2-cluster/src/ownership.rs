@@ -60,7 +60,32 @@ impl TeamId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// The scope of a key that has a principal and no team: a team of one.
+    /// Everything such a key creates -- events, webhooks, machines, volumes,
+    /// snapshots, environments, telemetry -- is recorded under it, so the
+    /// team checks that fence tenants fence principals as well. Derived from
+    /// the principal by a hash, so the label is a valid team and reveals
+    /// nothing a team label could not.
+    #[must_use]
+    pub fn personal(owner: &OwnerId) -> Self {
+        use sha2::{Digest, Sha256};
+        let digest = Sha256::digest(owner.as_str().as_bytes());
+        let hex: String = digest[..16].iter().map(|b| format!("{b:02x}")).collect();
+        Self(format!("{PERSONAL_PREFIX}{hex}"))
+    }
+
+    /// Whether this is a principal's own scope ([`Self::personal`]). A real
+    /// team may not use such a label: it would be that principal's.
+    #[must_use]
+    pub fn is_personal(&self) -> bool {
+        self.0.starts_with(PERSONAL_PREFIX)
+    }
 }
+
+/// What every [`TeamId::personal`] label starts with.
+const PERSONAL_PREFIX: &str = "principal.";
+
 impl TryFrom<String> for TeamId {
     type Error = &'static str;
     fn try_from(value: String) -> Result<Self, Self::Error> {
@@ -75,7 +100,9 @@ impl From<TeamId> for String {
 
 /// The team a request acts for, set by the control plane's authentication
 /// for routes served outside it (events and webhooks). `None` is every team:
-/// an administrator, or a deployment without teams. Absent altogether on a
+/// an administrator, or a deployment without teams. A key with a principal
+/// and no team acts for [`TeamId::personal`], so it sees only what it made.
+/// Absent altogether on a
 /// node, which serves those routes to its control plane only.
 #[derive(Debug, Clone)]
 pub struct RequestTeam(pub Option<TeamId>);
