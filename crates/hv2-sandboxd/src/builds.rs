@@ -78,7 +78,12 @@ fn stored_uploads(dir: &std::path::Path) -> (usize, u64) {
     let mut bytes = 0;
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
-            let Ok(meta) = entry.metadata() else { continue };
+            // Not `entry.metadata()`: on Windows that is the directory
+            // listing's cached size, which a file published by hard link can
+            // show as 0, and the byte quota would then never bind.
+            let Ok(meta) = std::fs::symlink_metadata(entry.path()) else {
+                continue;
+            };
             if !meta.is_file() {
                 continue;
             }
