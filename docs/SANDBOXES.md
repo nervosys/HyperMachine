@@ -725,13 +725,23 @@ where to listen by whether it asks its callers to prove who they are:
   registering a node nobody can reach.
 - **`/metrics` is on the API's port**, so a scraper on another host needs the node
   to be bound beyond loopback: with a token, or `--bind` and `--allow-unauthenticated`.
-- **The token guards the API, not the proxy.** The control plane's proxy relays
-  to a node's proxy without a token, so a node's proxy port (3981) has no check of
-  its own, in cluster mode as in any other. Anyone who can reach it can reach what
-  a sandbox serves, and every machine port published with `proxy: true`, a
-  desktop's noVNC among them, by its guessable `{port}-{id}` name. Keep it on a
-  network only the control plane can reach: a firewall, a security group, a
-  Kubernetes network policy.
+- **The token guards the proxy too.** A node with a token requires every
+  connection to its proxy port (3981) to open with one line, `HV2-PROXY <hmac>
+  <nonce> <unix-time>` and CRLF, where `<hmac>` is the hex HMAC-SHA256, keyed by the
+  token, of `hv2-proxy-v1;<nonce>;<unix-time>`. The control plane sends it first
+  on every connection it relays (it has the same `--cluster-token`); the node
+  reads it with a 5 s limit and a 256-byte cap, compares in constant time, refuses
+  a time more than 60 s from its own clock (keep node and control-plane clocks in
+  step) and a nonce it has seen, and closes the connection on anything else.
+  What follows the line is the HTTP connection, untouched. A direct client of a
+  tokened node's proxy -- anything but the control plane -- must either send that
+  line or be pointed at a node started with **`--proxy-open`**, which keeps the old
+  behaviour (no check) and logs a warning at every start. A node without a token
+  accepts and drops a line if one arrives, so a control plane with a token still
+  works in front of it. Still keep the port on a network only the control plane
+  can reach: the line proves the token, it does not encrypt (use mTLS or a private
+  network against an on-path attacker, who could also replay a line within 60 s on
+  a connection of their own only before the genuine one arrives).
 - **mTLS** (`--mtls-ca`, `--mtls-cert`, `--mtls-key`) is the other way to ask
   callers to prove themselves, on both ports, and counts as authentication.
 
@@ -794,6 +804,37 @@ agent cannot create one), and a modification time is not kept on files unpacked 
 agent. Opening a checkpoint on a guest with no shell reads it without first stopping its
 programs (stopping needs `kill` on pids the agent did not start); the guest's own programs
 there are whatever its agent started.
+
+## Volumes: how much a guest may write
+
+A volume is a host directory that `hv2-sandboxd` shares into guests over 9P
+(`crates/hv2-sandboxd/src/ninep.rs`) and that the content API
+(`/volumecontent/...`) reads and writes. Both spend the same allowance, kept in
+`ninep/quota.rs`, and both are checked *before* an operation that grows storage:
+a write past the end of a file, a create, `mkdir`, `symlink`, `link`, a truncate
+to a larger size, and a content-API upload (checked chunk by chunk). A refusal
+is `ENOSPC` or `EDQUOT` to a guest and `507 Insufficient Storage` to the API;
+nothing is left behind on the host.
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--volume-reserve-percent N` | `5` | The host-disk guard. Refuse growth that would leave the volume's filesystem with less than N% of it free (never more than 2 GiB is kept back) or less than 1% of its inodes. `0` turns the guard off. |
+| `--volume-max-bytes BYTES` | `0` | A quota on the contents of each volume. `0` is no limit. |
+| `--volume-max-inodes N` | `0` | A quota on the entries (files, directories, symlinks) in each volume. `0` is no limit. |
+
+The guard is on by default and a volume on a healthy disk never notices it. It
+asks `statvfs` at most once a second (or per 64 MiB of admitted growth),
+subtracting what it has admitted since from the last answer.
+
+The quotas are off by default. When set, a volume's tree is walked once, the
+first time it is mounted or written through the API, and from then on a counter
+moves with every create, write, truncate, unlink and rename-over. Growth is
+charged before it is done, so a volume is never taken past its limit, not even
+by one write; the counter errs the other way (space freed by deleting a file a
+guest still holds open comes back late). The limits are per volume, apply to
+every sandbox mounting it together, and count apparent sizes: a sparse file
+counts what it claims. They are not per user and do not stop a guest from
+filling its own disks or its sandbox's memory, which have their own limits.
 
 ## What this does not replace
 

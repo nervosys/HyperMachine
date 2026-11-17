@@ -242,6 +242,255 @@ pub trait SandboxRoutes: Send + Sync + 'static {
     )> {
         None
     }
+
+    /// The authentication line to send on each new connection to a backend,
+    /// before any request bytes: a control plane relaying to a node's proxy
+    /// proves it holds the cluster token this way. `None`, the default, sends
+    /// nothing -- right for a loopback listener of a sandbox's own.
+    fn backend_preamble(&self) -> Option<Vec<u8>> {
+        None
+    }
+
+    /// What this proxy's own listener does with a preamble on an accepted
+    /// connection. The default expects none: a public-facing proxy has no use
+    /// for the line, and must not treat client bytes as one.
+    fn preamble_policy(&self) -> PreamblePolicy {
+        PreamblePolicy::Ignore
+    }
+}
+
+/// The tag a proxy authentication line starts with.
+pub const PREAMBLE_TAG: &str = "HV2-PROXY";
+/// The longest authentication line a proxy will read, line ending included.
+pub const PREAMBLE_MAX_LEN: usize = 256;
+/// How long a connection has to deliver its authentication line.
+pub const PREAMBLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+/// How far a line's timestamp may be from the verifier's clock, either way.
+pub const PREAMBLE_SKEW_SECS: i64 = 60;
+/// How many nonces a verifier remembers; a full memory refuses rather than
+/// forgets, because forgetting would let a captured line be replayed.
+const PREAMBLE_NONCE_CAPACITY: usize = 100_000;
+
+/// What a listener does with the authentication line a client may send first.
+#[derive(Clone)]
+pub enum PreamblePolicy {
+    /// Do not look for one: the bytes are the client's own.
+    Ignore,
+    /// Accept a line if one is sent and drop it unchecked; a connection
+    /// without one proceeds. For a node with no token to check against, or one
+    /// started with `--proxy-open`, that a current control plane still relays
+    /// to.
+    Strip,
+    /// Refuse every connection that does not begin with a valid line.
+    Require(Arc<PreambleVerifier>),
+}
+
+/// Checks the authentication lines of one node's proxy.
+pub struct PreambleVerifier {
+    token: String,
+    /// Nonces accepted within the skew window, by the second they were sent.
+    seen: Mutex<HashMap<String, i64>>,
+}
+
+impl PreambleVerifier {
+    #[must_use]
+    pub fn new(token: &str) -> Self {
+        Self {
+            token: token.to_owned(),
+            seen: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Whether `line` -- without its line ending -- is an authentication line
+    /// made with this verifier's token, recently, and not seen before.
+    #[must_use]
+    pub fn verify(&self, line: &str, now: i64) -> bool {
+        use subtle::ConstantTimeEq;
+
+        let mut parts = line.split(' ');
+        let (Some(tag), Some(mac), Some(nonce), Some(ts), None) = (
+            parts.next(),
+            parts.next(),
+            parts.next(),
+            parts.next(),
+            parts.next(),
+        ) else {
+            return false;
+        };
+        if tag != PREAMBLE_TAG
+            || nonce.len() < 16
+            || nonce.len() > 64
+            || !nonce.bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            return false;
+        }
+        let Ok(ts) = ts.parse::<i64>() else {
+            return false;
+        };
+        if ts.saturating_sub(now).abs() > PREAMBLE_SKEW_SECS {
+            return false;
+        }
+        let expected = preamble_mac(&self.token, nonce, ts);
+        let genuine =
+            mac.len() == expected.len() && bool::from(mac.as_bytes().ct_eq(expected.as_bytes()));
+        if !genuine {
+            return false;
+        }
+        // Only a genuine line is remembered, so a stranger cannot fill the
+        // memory with nonces of their own choosing.
+        let mut seen = self.seen.lock();
+        if seen.len() >= PREAMBLE_NONCE_CAPACITY / 2 {
+            seen.retain(|_, sent| sent.saturating_sub(now).abs() <= PREAMBLE_SKEW_SECS);
+        }
+        if seen.len() >= PREAMBLE_NONCE_CAPACITY || seen.contains_key(nonce) {
+            return false;
+        }
+        seen.insert(nonce.to_owned(), ts);
+        true
+    }
+}
+
+fn preamble_mac(token: &str, nonce: &str, ts: i64) -> String {
+    crate::middleware::hmac_sha256(
+        token.as_bytes(),
+        format!("hv2-proxy-v1;{nonce};{ts}").as_bytes(),
+    )
+}
+
+/// The authentication line for one new connection to a node's proxy:
+/// `HV2-PROXY <hmac> <nonce> <unix-time>\r\n`, the HMAC-SHA256 (hex) of
+/// `hv2-proxy-v1;<nonce>;<unix-time>` under the cluster token.
+#[must_use]
+pub fn build_preamble(token: &str) -> Vec<u8> {
+    let nonce = uuid::Uuid::new_v4().simple().to_string();
+    build_preamble_at(token, &nonce, chrono::Utc::now().timestamp())
+}
+
+/// [`build_preamble`] with the nonce and time given.
+#[must_use]
+pub fn build_preamble_at(token: &str, nonce: &str, ts: i64) -> Vec<u8> {
+    format!(
+        "{PREAMBLE_TAG} {} {nonce} {ts}\r\n",
+        preamble_mac(token, nonce, ts)
+    )
+    .into_bytes()
+}
+
+/// A stream with some bytes already read from it, handed back first.
+struct Replay<S> {
+    prefix: Vec<u8>,
+    pos: usize,
+    inner: S,
+}
+
+impl<S: tokio::io::AsyncRead + Unpin> tokio::io::AsyncRead for Replay<S> {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        if self.pos < self.prefix.len() {
+            let n = (self.prefix.len() - self.pos).min(buf.remaining());
+            let start = self.pos;
+            buf.put_slice(&self.prefix[start..start + n]);
+            self.pos += n;
+            return std::task::Poll::Ready(Ok(()));
+        }
+        std::pin::Pin::new(&mut self.inner).poll_read(cx, buf)
+    }
+}
+
+impl<S: tokio::io::AsyncWrite + Unpin> tokio::io::AsyncWrite for Replay<S> {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        data: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        std::pin::Pin::new(&mut self.inner).poll_write(cx, data)
+    }
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.inner).poll_flush(cx)
+    }
+    fn poll_shutdown(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.inner).poll_shutdown(cx)
+    }
+}
+
+/// Read the authentication line off a new connection, per `policy`.
+///
+/// One byte at a time, so that nothing past the line is consumed: what the
+/// client sent after it is the HTTP connection and goes to hyper untouched.
+/// `Err` is a connection to close.
+async fn read_preamble<S>(
+    mut stream: S,
+    policy: &PreamblePolicy,
+) -> Result<impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static, &'static str>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+{
+    use tokio::io::AsyncReadExt;
+
+    let tag = format!("{PREAMBLE_TAG} ");
+    let required = matches!(policy, PreamblePolicy::Require(_));
+    let mut line: Vec<u8> = Vec::with_capacity(64);
+    let body = async {
+        loop {
+            let mut byte = [0u8; 1];
+            if stream.read_exact(&mut byte).await.is_err() {
+                return Err("the connection ended before an authentication line");
+            }
+            line.push(byte[0]);
+            if line.len() <= tag.len() && !tag.as_bytes().starts_with(&line) {
+                // Not an authentication line. A listener that does not insist
+                // on one hands what it read back to the client's own protocol.
+                return if required {
+                    Err("the connection did not start with an authentication line")
+                } else {
+                    Ok(false)
+                };
+            }
+            if byte[0] == b'\n' {
+                return Ok(true);
+            }
+            if line.len() >= PREAMBLE_MAX_LEN {
+                return Err("the authentication line is too long");
+            }
+        }
+    };
+    // Waiting for the first byte is not the client's fault when the policy
+    // does not insist: an HTTP client that connects and waits is still one.
+    let found = if required {
+        tokio::time::timeout(PREAMBLE_TIMEOUT, body)
+            .await
+            .map_err(|_| "the authentication line did not arrive in time")??
+    } else {
+        body.await?
+    };
+    if !found {
+        return Ok(Replay {
+            prefix: line,
+            pos: 0,
+            inner: stream,
+        });
+    }
+    if let PreamblePolicy::Require(verifier) = policy {
+        let text = String::from_utf8_lossy(&line);
+        let text = text.trim_end_matches(['\r', '\n']);
+        if !verifier.verify(text, chrono::Utc::now().timestamp()) {
+            return Err("the authentication line is not valid");
+        }
+    }
+    Ok(Replay {
+        prefix: Vec::new(),
+        pos: 0,
+        inner: stream,
+    })
 }
 
 /// A route owner's own answer to a request, sent instead of forwarding it.
@@ -437,6 +686,25 @@ pub async fn serve_listener(
 /// Shared by the plaintext and TLS listeners, which differ only in what they
 /// hand over here.
 async fn serve_one<S>(stream: S, routes: Arc<dyn SandboxRoutes>, peer: SocketAddr)
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+{
+    match routes.preamble_policy() {
+        PreamblePolicy::Ignore => serve_http(stream, routes, peer).await,
+        // Strip: a line is dropped unchecked if sent; Require: it must verify.
+        policy @ (PreamblePolicy::Strip | PreamblePolicy::Require(_)) => {
+            match read_preamble(stream, &policy).await {
+                Ok(stream) => serve_http(stream, routes, peer).await,
+                Err(why) => {
+                    tracing::warn!("sandbox proxy: refused a connection from {peer}: {why}");
+                }
+            }
+        }
+    }
+}
+
+/// The HTTP side of [`serve_one`], once any authentication line is read.
+async fn serve_http<S>(stream: S, routes: Arc<dyn SandboxRoutes>, peer: SocketAddr)
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
 {
@@ -713,6 +981,21 @@ async fn proxy(
             }
         }
     };
+    // A node that holds a cluster token wants proof of it before anything
+    // else: the line goes first on the connection, ahead of any request.
+    let mut stream = stream;
+    if let Some(line) = routes.backend_preamble() {
+        use tokio::io::AsyncWriteExt;
+        if let Err(e) = stream.write_all(&line).await {
+            tracing::warn!("sandbox proxy: {target} did not take the authentication line: {e}");
+            return Ok(refuse(
+                grpc,
+                StatusCode::BAD_GATEWAY,
+                grpc_status::UNAVAILABLE,
+                "the sandbox's listener did not accept a connection",
+            ));
+        }
+    }
     // envd's port is gRPC and Connect over HTTP/2; every other port is
     // whatever the sandbox serves there, which is HTTP/1.1 far more often,
     // and WebSockets need its upgrades.
@@ -1201,5 +1484,207 @@ mod tests {
             released.load(Ordering::SeqCst),
             "a finished body releases it"
         );
+    }
+
+    // ---- the proxy authentication line -------------------------------------
+
+    const TOKEN: &str = "cluster-secret-for-the-proxy-tests";
+    const NONCE: &str = "0123456789abcdef0123456789abcdef";
+
+    fn line_text(bytes: &[u8]) -> String {
+        String::from_utf8(bytes.to_vec())
+            .unwrap()
+            .trim_end_matches(['\r', '\n'])
+            .to_owned()
+    }
+
+    #[test]
+    fn a_genuine_line_verifies_once_and_a_replay_does_not() {
+        let now = 1_700_000_000;
+        let verifier = PreambleVerifier::new(TOKEN);
+        let line = line_text(&build_preamble_at(TOKEN, NONCE, now));
+        assert!(verifier.verify(&line, now));
+        assert!(
+            !verifier.verify(&line, now),
+            "the same nonce twice is a replay"
+        );
+    }
+
+    #[test]
+    fn forged_stale_and_malformed_lines_are_refused() {
+        let now = 1_700_000_000;
+        let verifier = PreambleVerifier::new(TOKEN);
+        let wrong_key = line_text(&build_preamble_at("another-token", NONCE, now));
+        assert!(!verifier.verify(&wrong_key, now));
+        let stale = line_text(&build_preamble_at(TOKEN, NONCE, now - 61));
+        assert!(!verifier.verify(&stale, now));
+        let future = line_text(&build_preamble_at(TOKEN, NONCE, now + 61));
+        assert!(!verifier.verify(&future, now));
+        // A good MAC for one timestamp does not carry to another.
+        let good = line_text(&build_preamble_at(TOKEN, NONCE, now));
+        let moved = good.replacen(&now.to_string(), &(now + 1).to_string(), 1);
+        assert!(!verifier.verify(&moved, now));
+        for bad in [
+            "",
+            "HV2-PROXY",
+            "HV2-PROXY a b",
+            "HV2-PROXY a b c d",
+            "GET / HTTP/1.1",
+        ] {
+            assert!(!verifier.verify(bad, now), "{bad}");
+        }
+        // Within the window on both sides is fine.
+        let early = line_text(&build_preamble_at(TOKEN, "aaaaaaaaaaaaaaaa", now - 60));
+        assert!(verifier.verify(&early, now));
+    }
+
+    /// A routes with a policy of its own that answers every request with the
+    /// proxy's "no such sandbox" -- reaching that answer means the connection
+    /// was admitted and its HTTP bytes were intact.
+    struct Gate(PreamblePolicy);
+
+    #[async_trait::async_trait]
+    impl SandboxRoutes for Gate {
+        async fn resolve(&self, _sandbox: &str, _port: u16) -> Option<SocketAddr> {
+            None
+        }
+        fn preamble_policy(&self) -> PreamblePolicy {
+            self.0.clone()
+        }
+    }
+
+    const REQUEST: &[u8] =
+        b"GET / HTTP/1.1\r\nHost: 9000-sbx_one.test\r\nConnection: close\r\n\r\n";
+
+    /// What a client gets back for `bytes` sent as one write to a proxy.
+    async fn ask(policy: PreamblePolicy, bytes: &[u8]) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let routes: Arc<dyn SandboxRoutes> = Arc::new(Gate(policy));
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (_stop, rx) = tokio::sync::oneshot::channel();
+        tokio::spawn(serve_listener(listener, routes, rx));
+        let mut client = TcpStream::connect(address).await.unwrap();
+        client.write_all(bytes).await.unwrap();
+        let mut answer = Vec::new();
+        // A refused connection is closed or reset; either ends the read.
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            client.read_to_end(&mut answer),
+        )
+        .await;
+        String::from_utf8_lossy(&answer).into_owned()
+    }
+
+    fn required() -> PreamblePolicy {
+        PreamblePolicy::Require(Arc::new(PreambleVerifier::new(TOKEN)))
+    }
+
+    #[tokio::test]
+    async fn a_tokened_proxy_refuses_a_connection_with_no_line() {
+        let answer = ask(required(), REQUEST).await;
+        assert_eq!(answer, "", "no line, no answer: {answer}");
+    }
+
+    #[tokio::test]
+    async fn a_tokened_proxy_refuses_forged_and_stale_lines() {
+        let now = chrono::Utc::now().timestamp();
+        for line in [
+            build_preamble_at("not-the-token", NONCE, now),
+            build_preamble_at(TOKEN, NONCE, now - 3600),
+            b"HV2-PROXY nonsense\r\n".to_vec(),
+        ] {
+            let mut bytes = line;
+            bytes.extend_from_slice(REQUEST);
+            let answer = ask(required(), &bytes).await;
+            assert_eq!(answer, "", "a bad line gets no answer: {answer}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_tokened_proxy_accepts_a_valid_line_and_passes_the_request_on_unchanged() {
+        let mut bytes = build_preamble(TOKEN);
+        bytes.extend_from_slice(REQUEST);
+        let answer = ask(required(), &bytes).await;
+        assert!(
+            answer.starts_with("HTTP/1.1 404"),
+            "the request after the line reached the proxy intact: {answer}"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_open_proxy_accepts_plain_requests_and_drops_a_line_if_sent() {
+        let plain = ask(PreamblePolicy::Strip, REQUEST).await;
+        assert!(plain.starts_with("HTTP/1.1 404"), "{plain}");
+        // A control plane with the token in front of a node without one.
+        let mut with_line = build_preamble(TOKEN);
+        with_line.extend_from_slice(REQUEST);
+        let stripped = ask(PreamblePolicy::Strip, &with_line).await;
+        assert!(stripped.starts_with("HTTP/1.1 404"), "{stripped}");
+        // Bytes that merely begin like the tag are the client's own.
+        let hv = ask(
+            PreamblePolicy::Strip,
+            b"HEAD / HTTP/1.1\r\nHost: 9000-sbx_one.test\r\nConnection: close\r\n\r\n",
+        )
+        .await;
+        assert!(hv.starts_with("HTTP/1.1 404"), "{hv}");
+    }
+
+    #[tokio::test]
+    async fn a_proxy_relaying_with_a_line_sends_it_first_and_the_request_after() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        struct Relay(SocketAddr);
+        #[async_trait::async_trait]
+        impl SandboxRoutes for Relay {
+            async fn resolve(&self, _sandbox: &str, _port: u16) -> Option<SocketAddr> {
+                Some(self.0)
+            }
+            fn backend_preamble(&self) -> Option<Vec<u8>> {
+                Some(build_preamble(TOKEN))
+            }
+        }
+        // A node's proxy, here a socket that reads what arrives first.
+        let node = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let node_address = node.local_addr().unwrap();
+        let node_side = tokio::spawn(async move {
+            let (mut stream, _) = node.accept().await.unwrap();
+            let mut seen = Vec::new();
+            let mut byte = [0u8; 1];
+            while !seen.ends_with(b"\r\n") {
+                stream.read_exact(&mut byte).await.unwrap();
+                seen.push(byte[0]);
+            }
+            let mut rest = vec![0u8; 4];
+            stream.read_exact(&mut rest).await.unwrap();
+            let _ = stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                .await;
+            (seen, rest)
+        });
+        let routes: Arc<dyn SandboxRoutes> = Arc::new(Relay(node_address));
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (_stop, rx) = tokio::sync::oneshot::channel();
+        tokio::spawn(serve_listener(listener, routes, rx));
+        let mut client = TcpStream::connect(address).await.unwrap();
+        // Not envd's port, so it is relayed as HTTP/1.1.
+        client.write_all(REQUEST).await.unwrap();
+        let mut answer = Vec::new();
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            client.read_to_end(&mut answer),
+        )
+        .await;
+        let (line, rest) = tokio::time::timeout(std::time::Duration::from_secs(3), node_side)
+            .await
+            .unwrap()
+            .unwrap();
+        let verifier = PreambleVerifier::new(TOKEN);
+        assert!(
+            verifier.verify(&line_text(&line), chrono::Utc::now().timestamp()),
+            "the first bytes to the node are a valid line: {}",
+            String::from_utf8_lossy(&line)
+        );
+        assert_eq!(&rest, b"GET ", "the request follows the line");
     }
 }

@@ -35,6 +35,7 @@ use super::{
     api_error, new_access_token, AppState, Arc, Deserialize, IntoResponse, Json, Path, Query,
     Response, Serialize, State, StatusCode,
 };
+use crate::ninep::quota::{self, Budget, Cost};
 use crate::ninep::{self, Beneath};
 
 /// How long a guest has to mount a volume.
@@ -88,6 +89,33 @@ fn root(state: &AppState) -> std::path::PathBuf {
 
 fn data_dir(state: &AppState, id: &str) -> std::path::PathBuf {
     root(state).join(id).join("data")
+}
+
+/// `--volume-reserve-percent`: keep this much of a volume's filesystem free
+/// (0 turns the guard off).
+pub(crate) fn set_reserve_percent(percent: u64) {
+    quota::configure(|policy| policy.reserve_percent = percent);
+}
+
+/// `--volume-max-bytes`: the most contents one volume may hold (0: no limit).
+pub(crate) fn set_max_bytes(bytes: u64) {
+    quota::configure(|policy| policy.max_bytes = bytes);
+}
+
+/// `--volume-max-inodes`: the most entries one volume may hold (0: no limit).
+pub(crate) fn set_max_inodes(inodes: u64) {
+    quota::configure(|policy| policy.max_inodes = inodes);
+}
+
+/// What the volume at `dir` may still grow by, shared with its mounts. The
+/// first call per volume walks it when a quota is set, so it runs off the
+/// async runtime.
+async fn budget(dir: &std::path::Path) -> Arc<Budget> {
+    let owned = dir.to_path_buf();
+    match tokio::task::spawn_blocking(move || quota::budget_for(&owned)).await {
+        Ok(budget) => budget,
+        Err(_) => quota::budget_for(dir),
+    }
 }
 
 fn all(state: &AppState) -> Vec<Meta> {
@@ -273,7 +301,7 @@ mod creation_tests {
         drop(fd.unwrap());
         assert_eq!(mode("put"), 0o755);
         // mkdir, as the directory endpoint does it.
-        mkdir(&fs, &["dir".into()], 0o3777).unwrap();
+        mkdir(&fs, &quota::budget_for(&root), &["dir".into()], 0o3777).unwrap();
         // Sticky is kept (the umask may take permission bits); setgid is not.
         assert_eq!(mode("dir") & 0o7000, 0o1000);
         // chmod of an existing file or directory, and the atomic PUT's own.
@@ -497,7 +525,10 @@ pub(crate) async fn delete(
         return response;
     }
     match std::fs::remove_dir_all(root(&state).join(&id)) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Ok(()) => {
+            quota::forget(&data_dir(&state, &id));
+            StatusCode::NO_CONTENT.into_response()
+        }
         Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
@@ -537,8 +568,12 @@ pub(crate) async fn mount(
     for m in mounts {
         let meta =
             by_name(state, team, &m.name).ok_or_else(|| format!("no volume named {:?}", m.name))?;
-        let fs = Beneath::open(&data_dir(state, &meta.id))
-            .map_err(|e| format!("volume {}: {e}", m.name))?;
+        let dir = data_dir(state, &meta.id);
+        let fs = Beneath::open(&dir).map_err(|e| format!("volume {}: {e}", m.name))?;
+        // Counting what a volume already holds can take a while: do it before
+        // the guest starts waiting for its mount, and off the runtime.
+        // (`Server::new` finds it, already made, in the registry.)
+        budget(&dir).await;
         let path = format!(
             "/{}",
             ninep::components(&m.path)
@@ -607,6 +642,7 @@ fn io_error(e: &std::io::Error) -> Response {
     let status = match e.raw_os_error() {
         Some(libc::ENOENT) => StatusCode::NOT_FOUND,
         Some(libc::EEXIST | libc::ENOTEMPTY) => StatusCode::CONFLICT,
+        Some(libc::ENOSPC | libc::EDQUOT) => StatusCode::INSUFFICIENT_STORAGE,
         Some(
             libc::ELOOP | libc::EXDEV | libc::EACCES | libc::EINVAL | libc::ENOTDIR | libc::EISDIR,
         ) => StatusCode::BAD_REQUEST,
@@ -632,6 +668,19 @@ pub(crate) struct At {
 
 fn overwrite_default() -> bool {
     true
+}
+
+/// What an upload has charged a volume for a file that is not yet in place:
+/// given back when the upload is dropped before it gets there.
+struct Held<'a> {
+    budget: &'a Budget,
+    cost: Cost,
+}
+
+impl Drop for Held<'_> {
+    fn drop(&mut self) {
+        self.budget.release(self.cost);
+    }
 }
 
 /// A replacement staged beside its destination; dropping before publication
@@ -763,26 +812,34 @@ fn stat_json(fs: &Beneath, parts: &[String]) -> std::io::Result<Value> {
 }
 
 /// Each missing directory on the way to `parts` (excluding the last).
-fn make_parents(fs: &Beneath, parts: &[String]) -> std::io::Result<()> {
+fn make_parents(fs: &Beneath, budget: &Budget, parts: &[String]) -> std::io::Result<()> {
     for depth in 1..parts.len() {
         match fs.entry(&parts[..depth]) {
             Ok(e) if ninep::is_dir(&e.stat) => {}
             Ok(_) => return Err(std::io::Error::from_raw_os_error(libc::ENOTDIR)),
-            Err(e) if e.raw_os_error() == Some(libc::ENOENT) => mkdir(fs, &parts[..depth], 0o755)?,
+            Err(e) if e.raw_os_error() == Some(libc::ENOENT) => {
+                mkdir(fs, budget, &parts[..depth], 0o755)?;
+            }
             Err(e) => return Err(e),
         }
     }
     Ok(())
 }
 
-fn mkdir(fs: &Beneath, parts: &[String], mode: u32) -> std::io::Result<()> {
+fn mkdir(fs: &Beneath, budget: &Budget, parts: &[String], mode: u32) -> std::io::Result<()> {
     let (name, dir) = parts
         .split_last()
         .ok_or_else(|| std::io::Error::from_raw_os_error(libc::EEXIST))?;
     let d = fs.dir(dir)?;
     let n = std::ffi::CString::new(name.as_str())
         .map_err(|_| std::io::Error::from_raw_os_error(libc::EINVAL))?;
+    let charge = Cost {
+        inodes: 1,
+        ..Cost::default()
+    };
+    budget.admit(charge)?;
     if unsafe { libc::mkdirat(d.as_raw_fd(), n.as_ptr(), ninep::safe_mode(mode)) } < 0 {
+        budget.release(charge);
         return Err(std::io::Error::last_os_error());
     }
     Ok(())
@@ -812,7 +869,7 @@ fn apply(
 }
 
 /// Everything at `parts`, a directory's contents first.
-fn remove(fs: &Beneath, parts: &[String]) -> std::io::Result<()> {
+fn remove(fs: &Beneath, budget: &Budget, parts: &[String]) -> std::io::Result<()> {
     let (name, dir) = parts
         .split_last()
         .ok_or_else(|| std::io::Error::from_raw_os_error(libc::EBUSY))?;
@@ -821,7 +878,7 @@ fn remove(fs: &Beneath, parts: &[String]) -> std::io::Result<()> {
         for child in list_names(fs, parts)? {
             let mut p = parts.to_vec();
             p.push(child);
-            remove(fs, &p)?;
+            remove(fs, budget, &p)?;
         }
     }
     let d = fs.dir(dir)?;
@@ -835,6 +892,7 @@ fn remove(fs: &Beneath, parts: &[String]) -> std::io::Result<()> {
     if unsafe { libc::unlinkat(d.as_raw_fd(), n.as_ptr(), flags) } < 0 {
         return Err(std::io::Error::last_os_error());
     }
+    budget.removed(&entry.stat);
     Ok(())
 }
 
@@ -936,17 +994,44 @@ pub(crate) async fn write_file(
         Ok(_) => return api_error(StatusCode::BAD_REQUEST, "a file path"),
         Err(r) => return r,
     };
+    let budget = budget(&data_dir(&state, &id)).await;
     if at.force {
-        if let Err(e) = make_parents(&fs, &parts) {
+        if let Err(e) = make_parents(&fs, &budget, &parts) {
             return io_error(&e);
         }
     }
+    // What a regular file already at the path holds: given back when it is
+    // emptied or replaced; none is a new entry, charged before it is made.
+    let existing = fs
+        .entry(&parts)
+        .ok()
+        .map(|e| e.stat)
+        .filter(|st| st.st_mode & libc::S_IFMT == libc::S_IFREG);
+    let new_entry = Cost {
+        inodes: 1,
+        ..Cost::default()
+    };
+    // What this upload has charged for a file that is not yet in place; given
+    // back if it never gets there.
+    let mut staged = Held {
+        budget: &budget,
+        cost: Cost::default(),
+    };
     let (mut atomic, file) = if at.atomic {
+        if let Err(e) = budget.admit(new_entry) {
+            return io_error(&e);
+        }
+        staged.cost.inodes = 1;
         match AtomicUpload::new(&fs, &parts) {
             Ok((stage, file)) => (Some(stage), file),
             Err(e) => return io_error(&e),
         }
     } else {
+        if existing.is_none() {
+            if let Err(e) = budget.admit(new_entry) {
+                return io_error(&e);
+            }
+        }
         let flags = libc::O_WRONLY
             | libc::O_CREAT
             | if at.overwrite {
@@ -955,8 +1040,24 @@ pub(crate) async fn write_file(
                 libc::O_EXCL
             };
         match fs.open_at(&parts, flags, at.mode.unwrap_or(0o644)) {
-            Ok(fd) => (None, std::fs::File::from(fd)),
-            Err(e) => return io_error(&e),
+            Ok(fd) => {
+                if let (Some(old), true) = (&existing, at.overwrite) {
+                    // Opened with O_TRUNC: its bytes are free again.
+                    if let Ok(now) = quota::size_of(fd.as_raw_fd()) {
+                        budget.release(Cost {
+                            size: u64::try_from(old.st_size).unwrap_or(0).saturating_sub(now),
+                            ..Cost::default()
+                        });
+                    }
+                }
+                (None, std::fs::File::from(fd))
+            }
+            Err(e) => {
+                if existing.is_none() {
+                    budget.release(new_entry);
+                }
+                return io_error(&e);
+            }
         }
     };
     let mut file = tokio::fs::File::from_std(file);
@@ -974,7 +1075,23 @@ pub(crate) async fn write_file(
                 "larger than a volume file may be",
             );
         }
+        // Charged before it is written, so a volume at its limit stops the
+        // upload at the chunk that would pass it.
+        let growth = Cost {
+            size: chunk.len() as u64,
+            disk: chunk.len() as u64,
+            inodes: 0,
+        };
+        if let Err(e) = budget.admit(growth) {
+            return io_error(&e);
+        }
+        if atomic.is_some() {
+            staged.cost.size += growth.size;
+        }
         if let Err(e) = file.write_all(&chunk).await {
+            if atomic.is_none() {
+                budget.release(growth);
+            }
             return io_error(&e);
         }
     }
@@ -1004,6 +1121,12 @@ pub(crate) async fn write_file(
     if let Some(stage) = atomic.as_mut() {
         if let Err(e) = stage.publish(at.overwrite) {
             return io_error(&e);
+        }
+        // In place: what it holds is the volume's now, and what it replaced
+        // is gone.
+        staged.cost = Cost::default();
+        if let Some(old) = &existing {
+            budget.removed(old);
         }
         let parent = match stage.parent.try_clone() {
             Ok(file) => file,
@@ -1096,12 +1219,13 @@ pub(crate) async fn make_dir(
         Ok(_) => return api_error(StatusCode::BAD_REQUEST, "a directory path"),
         Err(r) => return r,
     };
+    let budget = budget(&data_dir(&state, &id)).await;
     if at.force {
-        if let Err(e) = make_parents(&fs, &parts) {
+        if let Err(e) = make_parents(&fs, &budget, &parts) {
             return io_error(&e);
         }
     }
-    match mkdir(&fs, &parts, at.mode.unwrap_or(0o755)) {
+    match mkdir(&fs, &budget, &parts, at.mode.unwrap_or(0o755)) {
         Ok(()) => {}
         Err(e) if at.force && e.raw_os_error() == Some(libc::EEXIST) => {
             // Force accepts an existing directory, never a regular file or link.
@@ -1195,7 +1319,8 @@ pub(crate) async fn remove_path(
         Ok(_) => return api_error(StatusCode::BAD_REQUEST, "not the volume's root"),
         Err(r) => return r,
     };
-    match remove(&fs, &parts) {
+    let budget = budget(&data_dir(&state, &id)).await;
+    match remove(&fs, &budget, &parts) {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => io_error(&e),
     }

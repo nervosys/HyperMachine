@@ -64,8 +64,8 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           # HV2_CLUSTER_TOKEN (below) makes the node listen on every address, so the
           # control plane can dial its pod IP. Without a token it would listen on
-          # loopback only. The token guards the API; the proxy port (3981) has no
-          # check of its own, so only the control plane should be able to reach it.
+          # loopback only. The token guards the API, and also the proxy port
+          # (3981): each connection must open with a line only the control plane makes.
           args:
             - --port
             - "3980"

@@ -435,7 +435,9 @@ async fn main() -> std::process::ExitCode {
         );
         return std::process::ExitCode::FAILURE;
     }
-    let routes = ClusterRoutes::new(Arc::clone(&store), Duration::from_secs(2));
+    // Nodes that hold the cluster token want it proved on their proxy port too.
+    let routes = ClusterRoutes::new(Arc::clone(&store), Duration::from_secs(2))
+        .with_proxy_token(opts.cluster_token.clone());
     // A machine's proxied port, through this proxy and its logins: nodes are
     // asked who has the machine, over the client the control plane uses.
     let machine_http = match &mtls {

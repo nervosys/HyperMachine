@@ -220,14 +220,37 @@ not on KVM.
   is never removed by normal operations. Authentication and listing refuse a key that has a valid
   one, so writing the old record back no longer revives the key. What remains is in the open table.
 
+## Fixed in a third follow-up
+
+- **O3 (Medium): the node's sandbox proxy had no authentication.**
+  - **What the node requires:** a node with a cluster token accepts a proxy connection only if it
+    begins with `HV2-PROXY <hmac> <nonce> <unix-time>`. The HMAC is HMAC-SHA256 under the cluster
+    token.
+  - **Checks on the line:** it is compared in constant time, must be within 60 s of the node's
+    clock, and is refused if its nonce has been seen before.
+  - **The control plane:** it sends the line on every connection it relays.
+  - **Opt-out:** `--proxy-open` keeps the old behaviour and logs a warning.
+  - **What remains:** the line is not bound to its connection. An on-path observer could replay a
+    captured line within 60 s, before the original arrives, so mTLS or a private network still
+    matters.
+  - **Evidence:** a KVM check first found that the node made a new nonce memory for every
+    connection, so replays were accepted. That is fixed:
+    [proxy-auth-kvm](../benchmarks/2026-11-16/proxy-auth-kvm/README.md).
+- **O7 (Medium): a guest could fill the host disk through a volume.**
+  - **Disk guard:** 9P operations that grow storage, and the HTTP volume content API, are refused
+    with `ENOSPC` (507 over HTTP) when the volume's filesystem would fall below a reserve. The
+    reserve is 5% of its space, capped at 2 GiB, or 1% of its inodes. `--volume-reserve-percent N`
+    changes it, and 0 turns it off.
+  - **Optional quotas:** `--volume-max-bytes` and `--volume-max-inodes` set per-volume quotas, off by
+    default. Hitting one returns `EDQUOT`.
+  - **Not verified:** unit-tested only, not on KVM.
+
 ## Open: found, not fixed
 
 | Id | Severity | Finding | Why not now |
 |---|---|---|---|
-| O3 | Medium | The node's sandbox proxy has no authentication of its own. The control plane relays to it as raw TCP. | Documented. The proxy port must not be exposed beyond the control plane. Fixing it needs the control plane to send credentials. |
 | O4 | Medium | The control plane runs open, everyone an administrator, when no API key source is configured, and managed keys do not change that. | A change to default behaviour, left for the owner. Startup logs a warning. |
 | O5 | Medium | Keys that have a principal but no team see every team's events, webhooks, machines and volumes. | Needs scoping by principal: a design decision. |
-| O7 | Medium | Volumes have no byte or inode quota, so a guest can fill the host disk. | Known gap (listed in the CubeSandbox roadmap). |
 | O12 | Low | Partly fixed (see below). A node with write access to Redis can delete a key's sealed revocation record and then replay the key's old record. It can also delete records outright (denial of service). Keys revoked before the fix have no revocation record. | Redis cannot stop a writer from deleting. A key's own expiry bounds the damage. |
 
 ## Checked and found sound

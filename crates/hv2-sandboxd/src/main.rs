@@ -75,8 +75,10 @@
 //! control plane can dial them. `--bind ADDR` chooses the address for both. A
 //! non-loopback address with neither is refused at start unless
 //! `--allow-unauthenticated` is given, which logs a warning. The token guards
-//! the API only: the proxy port has no check of its own and must not be exposed
-//! beyond the control plane. See `docs/SANDBOXES.md`, "Where a node listens".
+//! the API, and also the proxy: with a token, every connection to the proxy port
+//! must open with an `HV2-PROXY` authentication line only a holder of the token
+//! (the control plane) can make, or it is closed. `--proxy-open` keeps the old
+//! unauthenticated proxy. See `docs/SANDBOXES.md`, "Where a node listens".
 //!
 //! # Running it
 //!
@@ -242,6 +244,9 @@ struct Options {
     /// `--allow-unauthenticated`: bind beyond loopback with no cluster token
     /// and no mTLS, so that anyone who can reach the node can use it.
     allow_unauthenticated: bool,
+    /// `--proxy-open`: do not require the cluster token's authentication line
+    /// on the proxy port, as before it existed. Only matters with a token.
+    proxy_open: bool,
     /// What `bind` and the rest decided: where the listeners are bound.
     bind_ip: std::net::IpAddr,
     /// Both must be given for the proxy to speak TLS; either alone is an
@@ -417,6 +422,7 @@ fn parse_options() -> Result<Options, String> {
         proxy_port: 3981,
         bind: None,
         allow_unauthenticated: false,
+        proxy_open: false,
         bind_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
         tls_cert: None,
         tls_key: None,
@@ -506,6 +512,7 @@ fn parse_options() -> Result<Options, String> {
             }
             "--bind" => opts.bind = Some(value(&mut i)?),
             "--allow-unauthenticated" => opts.allow_unauthenticated = true,
+            "--proxy-open" => opts.proxy_open = true,
             "--tls-cert" => opts.tls_cert = Some(value(&mut i)?),
             "--tls-key" => opts.tls_key = Some(value(&mut i)?),
             "--memory-gb" => {
@@ -532,6 +539,19 @@ fn parse_options() -> Result<Options, String> {
             "--fips" => opts.fips = true,
             "--guest-kit" => opts.guest_kit = Some(value(&mut i)?.into()),
             "--volume-dir" => opts.volume_dir = Some(value(&mut i)?),
+            "--volume-reserve-percent" => {
+                let percent: u64 = value(&mut i)?.parse().map_err(|e| format!("{e}"))?;
+                if percent > 100 {
+                    return Err("--volume-reserve-percent: 0 to 100".to_string());
+                }
+                volumes::set_reserve_percent(percent);
+            }
+            "--volume-max-bytes" => {
+                volumes::set_max_bytes(value(&mut i)?.parse().map_err(|e| format!("{e}"))?);
+            }
+            "--volume-max-inodes" => {
+                volumes::set_max_inodes(value(&mut i)?.parse().map_err(|e| format!("{e}"))?);
+            }
             "--disk-dir" => opts.disk_dir = Some(value(&mut i)?),
             "--machine-dir" => opts.machine_dir = Some(value(&mut i)?),
             "--machine-ports" => {
@@ -707,7 +727,7 @@ fn parse_options() -> Result<Options, String> {
             }
             "--help" | "-h" => {
                 println!(
-                    "usage: hv2-sandboxd [--port N] [--proxy-port N] [--bind ADDR] [--allow-unauthenticated] [--memory-gb N | --memory-mb N] [--cpu-cores N] \
+                    "usage: hv2-sandboxd [--port N] [--proxy-port N] [--bind ADDR] [--allow-unauthenticated] [--proxy-open] [--memory-gb N | --memory-mb N] [--cpu-cores N] \
                      [--capacity N] [--guest-transport mmio|pci] [--cold-start-concurrency N] [--no-template | --require-template] [--prefault] [--sized-templates N] [--sized-template-disk-gb N] [--template-size CPUSxMB ...] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] [--idle-pause-after SECS] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy] \
                      [--tenant-reserved-cidr CIDR]...] \
@@ -720,7 +740,8 @@ fn parse_options() -> Result<Options, String> {
                      HV2_KERNEL and HV2_INITRD name the guest; HV2_CLUSTER_TOKEN may carry the token.\n\
                      --bind ADDR is the address the API and the proxy listen on: 127.0.0.1 unless the node \
                      has a cluster token or mTLS, then 0.0.0.0. A non-loopback ADDR with neither is refused \
-                     unless --allow-unauthenticated."
+                     unless --allow-unauthenticated. With a cluster token the proxy port also requires the \
+                     token's authentication line (only the control plane sends it); --proxy-open turns that off."
                 );
                 std::process::exit(0);
             }
@@ -4671,11 +4692,29 @@ async fn fork_route(
     (StatusCode::CREATED, Json(results)).into_response()
 }
 
+/// What the node's proxy port demands of a new connection: the cluster
+/// token's authentication line when the node has a token, unless `--proxy-open`.
+/// Otherwise a line is accepted and dropped, so a control plane that sends one
+/// anyway (it has the token; this node was started without) still works.
+fn proxy_preamble_policy(opts: &Options) -> sandbox_proxy::PreamblePolicy {
+    match opts.cluster_token.as_deref() {
+        Some(token) if !token.is_empty() && !opts.proxy_open => {
+            sandbox_proxy::PreamblePolicy::Require(Arc::new(sandbox_proxy::PreambleVerifier::new(
+                token,
+            )))
+        }
+        _ => sandbox_proxy::PreamblePolicy::Strip,
+    }
+}
+
 /// The proxy's view of this node's sandboxes: a paused one that resumes on
 /// traffic is brought back by the request that wants it, and every request
 /// is counted against its sandbox for as long as it is in flight.
 struct ResumingRoutes {
     state: Arc<AppState>,
+    /// Made once: its verifier remembers the nonces it has accepted, so a
+    /// fresh one per connection would let any captured line be replayed.
+    preamble: sandbox_proxy::PreamblePolicy,
 }
 
 impl ResumingRoutes {
@@ -4709,6 +4748,10 @@ impl ResumingRoutes {
 
 #[async_trait::async_trait]
 impl sandbox_proxy::SandboxRoutes for ResumingRoutes {
+    fn preamble_policy(&self) -> sandbox_proxy::PreamblePolicy {
+        self.preamble.clone()
+    }
+
     async fn resolve(&self, sandbox: &str, port: u16) -> Option<std::net::SocketAddr> {
         self.open(sandbox, port).await.map(|(addr, _)| addr)
     }
@@ -6501,6 +6544,16 @@ async fn main() -> std::process::ExitCode {
         eprintln!("hv2-sandboxd: WARNING: {warning}");
         tracing::warn!("{warning}");
     }
+    if opts.proxy_open && opts.cluster_token.as_deref().is_some_and(|t| !t.is_empty()) {
+        let warning = format!(
+            "--proxy-open: this node's proxy (port {}) does not check the cluster token, so \
+             any host that can reach it can reach every port a machine publishes and every \
+             sandbox's envd; keep it reachable only from the control plane",
+            opts.proxy_port
+        );
+        eprintln!("hv2-sandboxd: WARNING: {warning}");
+        tracing::warn!("{warning}");
+    }
     let port = opts.port;
     let proxy_port = opts.proxy_port;
     let tls_cert = opts.tls_cert.clone();
@@ -6975,6 +7028,7 @@ async fn main() -> std::process::ExitCode {
     // The proxy asks the node, not the bare map, so that a request for a
     // paused sandbox can resume it.
     let routes: Arc<dyn sandbox_proxy::SandboxRoutes> = Arc::new(ResumingRoutes {
+        preamble: proxy_preamble_policy(&state.opts),
         state: Arc::clone(&state),
     });
     tokio::spawn(async move {

@@ -36,6 +36,9 @@ use std::time::Duration;
 
 use hv2_agent::GuestChannel;
 
+pub mod quota;
+use quota::{Budget, Cost};
+
 /// The attribute holding a file's owner in the guest, `"uid:gid"`.
 const OWNER_XATTR: &str = "user.hv2.owner";
 
@@ -136,6 +139,7 @@ impl std::ops::Deref for OpenFile {
 /// A directory, and everything beneath it -- nothing else.
 pub struct Beneath {
     root: OwnedFd,
+    path: std::path::PathBuf,
 }
 
 /// What a path names: its host fd (`O_PATH`, the entry itself even when a
@@ -196,7 +200,13 @@ impl Beneath {
         }
         Ok(Self {
             root: unsafe { OwnedFd::from_raw_fd(fd) },
+            path: dir.to_path_buf(),
         })
+    }
+
+    /// Where the volume is on the host.
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
     }
 
     /// Open `parts` beneath the root with `flags` (`O_NOFOLLOW` added): no
@@ -475,14 +485,23 @@ pub struct Server {
     open_files: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     max_fids: usize,
     max_open_files: usize,
+    /// What the volume may still grow by, shared with its other mounts.
+    budget: std::sync::Arc<Budget>,
 }
 
 const RLERROR: u8 = 7;
 
 impl Server {
     pub fn new(fs: Beneath) -> Self {
+        let budget = quota::budget_for(fs.path());
+        Self::with_budget(fs, budget)
+    }
+
+    /// A server whose volume spends `budget`.
+    pub fn with_budget(fs: Beneath, budget: std::sync::Arc<Budget>) -> Self {
         Self {
             fs,
+            budget,
             fids: HashMap::new(),
             msize: 8192,
             open_files: std::sync::Arc::default(),
@@ -648,6 +667,9 @@ impl Server {
                 };
                 let share = self.reserve_file()?;
                 let fd = self.fs.open_at(&parts, open_flags, 0)?;
+                if open_flags & libc::O_TRUNC != 0 {
+                    self.truncated(fd.as_raw_fd(), entry.stat.st_size);
+                }
                 let f = self.fid_mut(fid)?;
                 f.file = Some(share.file(File::from(fd)));
                 f.listing = None;
@@ -668,7 +690,27 @@ impl Server {
                     | libc::O_CREAT;
                 // Before the file is made: a refusal leaves nothing behind.
                 let share = self.reserve_file()?;
-                let fd = self.fs.open_at(&parts, flags, safe_mode(mode))?;
+                // A name already there is opened (and perhaps emptied), not
+                // made: only a new entry is charged, and the charge is taken
+                // before it exists.
+                let before = self.fs.entry(&parts).ok().map(|e| e.stat);
+                let charge = Cost {
+                    inodes: u64::from(before.is_none()),
+                    ..Cost::default()
+                };
+                self.budget.admit(charge)?;
+                let fd = match self.fs.open_at(&parts, flags, safe_mode(mode)) {
+                    Ok(fd) => fd,
+                    Err(e) => {
+                        self.budget.release(charge);
+                        return Err(e);
+                    }
+                };
+                if let Some(before) = &before {
+                    if flags & libc::O_TRUNC != 0 {
+                        self.truncated(fd.as_raw_fd(), before.st_size);
+                    }
+                }
                 let _ = set_owner(fd.as_raw_fd(), uid, gid);
                 let st = fstat(fd.as_raw_fd())?;
                 let f = self.fid_mut(fid)?;
@@ -688,7 +730,14 @@ impl Server {
                 let (parts, _) = self.child(fid, &name)?;
                 let dir = self.fs.dir(&parts[..parts.len() - 1])?;
                 let (t, n) = (cstring(&target)?, cstring(&name)?);
+                let charge = Cost {
+                    size: target.len() as u64,
+                    disk: target.len() as u64,
+                    inodes: 1,
+                };
+                self.budget.admit(charge)?;
                 if unsafe { libc::symlinkat(t.as_ptr(), dir.as_raw_fd(), n.as_ptr()) } < 0 {
+                    self.budget.release(charge);
                     return Err(last_error());
                 }
                 let st = self.fs.entry(&parts)?.stat;
@@ -802,10 +851,23 @@ impl Server {
                     if symlink || is_dir(&entry.stat) {
                         return Err(Error::from_raw_os_error(libc::EINVAL));
                     }
+                    let old = u64::try_from(entry.stat.st_size).unwrap_or(0);
+                    // Growing is charged to the quota only: a truncate
+                    // makes a hole, which the host does not have to fill.
+                    let grow = Cost {
+                        size: size.saturating_sub(old),
+                        ..Cost::default()
+                    };
+                    self.budget.admit(grow)?;
                     let path = proc_path(fd);
                     if unsafe { libc::truncate(path.as_ptr(), size as libc::off_t) } < 0 {
+                        self.budget.release(grow);
                         return Err(last_error());
                     }
+                    self.budget.release(Cost {
+                        size: old.saturating_sub(size),
+                        ..Cost::default()
+                    });
                 }
                 if valid & 0x30 != 0 && !symlink {
                     // ATIME 0x10, MTIME 0x20; *_SET 0x80/0x100 give the time,
@@ -882,6 +944,12 @@ impl Server {
                 };
                 let (a, b) = (self.fs.dir(fdir)?, self.fs.dir(tdir)?);
                 let (an, bn) = (cstring(fname)?, cstring(tname)?);
+                // A link is a directory entry: no inode, no bytes of its own,
+                // but it still needs room on a disk that is nearly full.
+                self.budget.admit(Cost {
+                    disk: 1,
+                    ..Cost::default()
+                })?;
                 if unsafe {
                     libc::linkat(a.as_raw_fd(), an.as_ptr(), b.as_raw_fd(), bn.as_ptr(), 0)
                 } < 0
@@ -899,7 +967,13 @@ impl Server {
                 let (parts, uid) = self.child(dfid, &name)?;
                 let dir = self.fs.dir(&parts[..parts.len() - 1])?;
                 let n = cstring(&name)?;
+                let charge = Cost {
+                    inodes: 1,
+                    ..Cost::default()
+                };
+                self.budget.admit(charge)?;
                 if unsafe { libc::mkdirat(dir.as_raw_fd(), n.as_ptr(), safe_mode(mode)) } < 0 {
+                    self.budget.release(charge);
                     return Err(last_error());
                 }
                 let entry = self.fs.entry(&parts)?;
@@ -932,8 +1006,12 @@ impl Server {
                 } else {
                     0
                 };
+                let gone = self.fs.entry(&parts).ok().map(|e| e.stat);
                 if unsafe { libc::unlinkat(dir.as_raw_fd(), n.as_ptr(), at) } < 0 {
                     return Err(last_error());
+                }
+                if let Some(gone) = &gone {
+                    self.budget.removed(gone);
                 }
                 Ok(reply(77).finish())
             }
@@ -984,7 +1062,31 @@ impl Server {
                     .file
                     .as_ref()
                     .ok_or_else(|| Error::from_raw_os_error(libc::EBADF))?;
-                file.write_all_at(data, offset)?;
+                // Only what passes the end of the file is new: an append
+                // (which ignores the offset) is all new, a rewrite is not.
+                let fd = file.as_raw_fd();
+                let size = quota::size_of(fd)?;
+                let appending = unsafe { libc::fcntl(fd, libc::F_GETFL) } & libc::O_APPEND != 0;
+                let end = if appending {
+                    size.saturating_add(count as u64)
+                } else {
+                    offset.saturating_add(count as u64)
+                };
+                let growth = end.saturating_sub(size);
+                let charge = Cost {
+                    size: growth,
+                    disk: growth.min(count as u64),
+                    inodes: 0,
+                };
+                if growth > 0 {
+                    self.budget.admit(charge)?;
+                }
+                if let Err(e) = file.write_all_at(data, offset) {
+                    if growth > 0 {
+                        self.budget.release(charge);
+                    }
+                    return Err(e);
+                }
                 let mut out = reply(119);
                 out.u32(count as u32);
                 Ok(out.finish())
@@ -1016,6 +1118,7 @@ impl Server {
                 if unsafe { libc::unlinkat(dir.as_raw_fd(), n.as_ptr(), at) } < 0 {
                     return Err(last_error());
                 }
+                self.budget.removed(&entry.stat);
                 Ok(reply(123).finish())
             }
             _ => Err(Error::from_raw_os_error(libc::EOPNOTSUPP)),
@@ -1029,10 +1132,30 @@ impl Server {
         };
         let (a, b) = (self.fs.dir(fdir)?, self.fs.dir(tdir)?);
         let (an, bn) = (cstring(fname)?, cstring(tname)?);
+        // A rename over an existing name removes what was there.
+        let moved = self.fs.entry(from).ok().map(|e| e.stat);
+        let replaced = self.fs.entry(to).ok().map(|e| e.stat);
         if unsafe { libc::renameat(a.as_raw_fd(), an.as_ptr(), b.as_raw_fd(), bn.as_ptr()) } < 0 {
             return Err(last_error());
         }
+        if let (Some(moved), Some(replaced)) = (&moved, &replaced) {
+            if (moved.st_dev, moved.st_ino) != (replaced.st_dev, replaced.st_ino) {
+                self.budget.removed(replaced);
+            }
+        }
         Ok(())
+    }
+
+    /// The file behind `fd` was opened with `O_TRUNC` when it was `before`
+    /// bytes long: what it no longer holds is given back.
+    fn truncated(&self, fd: RawFd, before: i64) {
+        let before = u64::try_from(before).unwrap_or(0);
+        if let Ok(after) = quota::size_of(fd) {
+            self.budget.release(Cost {
+                size: before.saturating_sub(after),
+                ..Cost::default()
+            });
+        }
     }
 
     /// `Treaddir`: the entries from `offset`, as many as fit in `count`. The
@@ -1216,7 +1339,10 @@ mod tests {
     }
 
     fn attached(dir: &std::path::Path) -> Server {
-        let mut s = Server::new(Beneath::open(dir).unwrap());
+        handshake(Server::new(Beneath::open(dir).unwrap()))
+    }
+
+    fn handshake(mut s: Server) -> Server {
         let r = s.handle(&msg(100, |o| {
             o.u32(65536).str("9P2000.L");
         }));
@@ -1556,5 +1682,331 @@ mod tests {
         assert_eq!(components("a/./b/../c").unwrap(), ["a", "c"]);
         assert!(components("../x").is_err());
         assert!(!valid_name("a/b") && !valid_name("..") && valid_name("a b"));
+    }
+
+    // ---- space: the host-disk guard and the per-volume quota ----
+
+    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    const GIB: u64 = 1024 * 1024 * 1024;
+
+    /// A disk the test controls: 10 GiB with `avail` bytes and `inodes` of
+    /// 1000 inodes free, and a count of how often it was asked.
+    struct Disk {
+        avail: Arc<AtomicU64>,
+        inodes: Arc<AtomicU64>,
+        asked: Arc<AtomicUsize>,
+    }
+
+    impl Disk {
+        fn new(avail: u64) -> Self {
+            Self {
+                avail: Arc::new(AtomicU64::new(avail)),
+                inodes: Arc::new(AtomicU64::new(1000)),
+                asked: Arc::new(AtomicUsize::new(0)),
+            }
+        }
+        fn budget(&self, policy: quota::Policy, ttl: Duration) -> Arc<Budget> {
+            let (a, i, n) = (
+                Arc::clone(&self.avail),
+                Arc::clone(&self.inodes),
+                Arc::clone(&self.asked),
+            );
+            Arc::new(Budget::new(
+                policy,
+                Box::new(move || {
+                    n.fetch_add(1, Ordering::SeqCst);
+                    Ok(quota::Space {
+                        avail_bytes: a.load(Ordering::SeqCst),
+                        total_bytes: 10 * GIB,
+                        avail_inodes: i.load(Ordering::SeqCst),
+                        total_inodes: 1000,
+                    })
+                }),
+                ttl,
+            ))
+        }
+    }
+
+    fn quota_of(max_bytes: u64, max_inodes: u64) -> quota::Policy {
+        quota::Policy {
+            reserve_percent: 0,
+            max_bytes,
+            max_inodes,
+        }
+    }
+
+    fn served(dir: &std::path::Path, budget: &Arc<Budget>) -> Server {
+        let mut s = handshake(Server::with_budget(
+            Beneath::open(dir).unwrap(),
+            Arc::clone(budget),
+        ));
+        assert_eq!(kind(&walk(&mut s, 0, 1, &[])), 111);
+        s
+    }
+
+    /// Make `name` in the root, left open on `fid`.
+    fn make(s: &mut Server, fid: u32, name: &str) -> Vec<u8> {
+        assert_eq!(kind(&walk(s, 0, fid, &[])), 111);
+        create(s, fid, name, 0o644)
+    }
+
+    fn write(s: &mut Server, fid: u32, offset: u64, data: &[u8]) -> Vec<u8> {
+        s.handle(&msg(118, |o| {
+            o.u32(fid).u64(offset).u32(data.len() as u32).bytes(data);
+        }))
+    }
+
+    fn set_size(s: &mut Server, fid: u32, size: u64) -> Vec<u8> {
+        s.handle(&msg(26, |o| {
+            o.u32(fid).u32(0x8).u32(0).u32(0).u32(0).u64(size);
+            o.u64(0).u64(0).u64(0).u64(0);
+        }))
+    }
+
+    fn unlink(s: &mut Server, name: &str) -> Vec<u8> {
+        s.handle(&msg(76, |o| {
+            o.u32(1).str(name).u32(0);
+        }))
+    }
+
+    /// With the disk under its reserve, nothing that grows storage is
+    /// accepted -- not a create, a write, a mkdir or a symlink -- and each is
+    /// refused with `ENOSPC` and leaves nothing on the host.
+    #[test]
+    fn a_nearly_full_host_disk_refuses_growth_with_enospc() {
+        let tmp = Tmp::new();
+        let disk = Disk::new(10 * GIB);
+        let budget = disk.budget(quota::Policy::DEFAULT, Duration::ZERO);
+        let mut s = served(&tmp.0, &budget);
+        assert_eq!(kind(&make(&mut s, 2, "ok")), 15);
+        assert_eq!(kind(&write(&mut s, 2, 0, b"fine")), 119);
+
+        // 5% of 10 GiB is the reserve; 100 MiB free is under it.
+        disk.avail.store(100 * 1024 * 1024, Ordering::SeqCst);
+        let r = make(&mut s, 3, "refused");
+        assert_eq!(error(&r), Some(libc::ENOSPC));
+        assert!(!tmp.0.join("refused").exists());
+        assert_eq!(error(&write(&mut s, 2, 4, b"more")), Some(libc::ENOSPC));
+        assert_eq!(std::fs::read(tmp.0.join("ok")).unwrap(), b"fine");
+        let r = s.handle(&msg(72, |o| {
+            o.u32(1).str("d").u32(0o755).u32(1000);
+        }));
+        assert_eq!(error(&r), Some(libc::ENOSPC));
+        assert!(!tmp.0.join("d").exists());
+        let r = s.handle(&msg(16, |o| {
+            o.u32(1).str("l").str("target").u32(1000);
+        }));
+        assert_eq!(error(&r), Some(libc::ENOSPC));
+        assert!(std::fs::symlink_metadata(tmp.0.join("l")).is_err());
+
+        // Space comes back: the same guest carries on.
+        disk.avail.store(5 * GIB, Ordering::SeqCst);
+        assert_eq!(kind(&write(&mut s, 2, 4, b"more")), 119);
+    }
+
+    /// The reserve is 5% or 2 GiB, whichever is less; a write that would
+    /// leave less than it is refused before it is made, not after.
+    #[test]
+    fn the_reserve_is_capped_and_counts_the_write_itself() {
+        let tmp = Tmp::new();
+        let disk = Disk::new(0);
+        let budget = disk.budget(quota::Policy::DEFAULT, Duration::ZERO);
+        let mut s = served(&tmp.0, &budget);
+        // 10 GiB disk: 5% is 512 MiB. Exactly the reserve plus the write is
+        // allowed; one byte less is not.
+        disk.avail.store(512 * 1024 * 1024 + 4, Ordering::SeqCst);
+        assert_eq!(kind(&make(&mut s, 2, "f")), 15);
+        assert_eq!(kind(&write(&mut s, 2, 0, b"1234")), 119);
+        disk.avail.store(512 * 1024 * 1024 + 3, Ordering::SeqCst);
+        assert_eq!(error(&write(&mut s, 2, 4, b"1234")), Some(libc::ENOSPC));
+
+        // On a big disk the cap applies: 5% of 1 TiB would be 51 GiB.
+        let on_big_disk = |avail: u64| {
+            Budget::new(
+                quota::Policy::DEFAULT,
+                Box::new(move || {
+                    Ok(quota::Space {
+                        avail_bytes: avail,
+                        total_bytes: 1024 * GIB,
+                        avail_inodes: 0,
+                        total_inodes: 0,
+                    })
+                }),
+                Duration::ZERO,
+            )
+        };
+        let one_byte = quota::Cost {
+            size: 1,
+            disk: 1,
+            inodes: 0,
+        };
+        assert!(on_big_disk(3 * GIB).admit(one_byte).is_ok());
+        let r = on_big_disk(2 * GIB).admit(one_byte);
+        assert_eq!(r.unwrap_err().raw_os_error(), Some(libc::ENOSPC));
+    }
+
+    #[test]
+    fn running_out_of_inodes_refuses_creates_and_percent_zero_turns_the_guard_off() {
+        let tmp = Tmp::new();
+        let disk = Disk::new(10 * GIB);
+        let budget = disk.budget(quota::Policy::DEFAULT, Duration::ZERO);
+        let mut s = served(&tmp.0, &budget);
+        // 1% of 1000 inodes is 10 to keep.
+        disk.inodes.store(10, Ordering::SeqCst);
+        assert_eq!(error(&make(&mut s, 2, "a")), Some(libc::ENOSPC));
+        assert!(!tmp.0.join("a").exists());
+        disk.inodes.store(12, Ordering::SeqCst);
+        assert_eq!(kind(&make(&mut s, 2, "a")), 15);
+
+        // Off: a disk with nothing free is not this server's business.
+        let off = disk.budget(
+            quota::Policy {
+                reserve_percent: 0,
+                ..quota::Policy::DEFAULT
+            },
+            Duration::ZERO,
+        );
+        disk.avail.store(0, Ordering::SeqCst);
+        disk.inodes.store(0, Ordering::SeqCst);
+        let tmp2 = Tmp::new();
+        let mut s = served(&tmp2.0, &off);
+        assert_eq!(kind(&make(&mut s, 2, "b")), 15);
+        assert_eq!(kind(&write(&mut s, 2, 0, b"x")), 119);
+    }
+
+    /// `statvfs` is not a syscall per write: within its lifetime one answer
+    /// serves every write, with what was admitted since subtracted from it.
+    #[test]
+    fn the_disk_is_asked_once_per_interval_not_once_per_write() {
+        let tmp = Tmp::new();
+        let disk = Disk::new(10 * GIB);
+        let budget = disk.budget(quota::Policy::DEFAULT, Duration::from_secs(3600));
+        let mut s = served(&tmp.0, &budget);
+        assert_eq!(kind(&make(&mut s, 2, "f")), 15);
+        for i in 0..50u64 {
+            assert_eq!(kind(&write(&mut s, 2, i * 4, b"abcd")), 119);
+        }
+        assert_eq!(disk.asked.load(Ordering::SeqCst), 1);
+
+        // Within one answer, growth already admitted counts against it:
+        // 28 MiB above a 512 MiB reserve admits 28 MiB, not more.
+        let disk = Disk::new(512 * 1024 * 1024 + 28 * 1024 * 1024);
+        let budget = disk.budget(quota::Policy::DEFAULT, Duration::from_secs(3600));
+        let grow = |n| quota::Cost {
+            size: n,
+            disk: n,
+            inodes: 0,
+        };
+        let mib = 1024 * 1024;
+        assert!(budget.admit(grow(10 * mib)).is_ok());
+        assert!(budget.admit(grow(10 * mib)).is_ok());
+        let r = budget.admit(grow(10 * mib));
+        assert_eq!(r.unwrap_err().raw_os_error(), Some(libc::ENOSPC));
+    }
+
+    #[test]
+    fn a_byte_quota_refuses_the_write_that_would_pass_it() {
+        let tmp = Tmp::new();
+        let disk = Disk::new(10 * GIB);
+        let budget = disk.budget(quota_of(100, 0), Duration::ZERO);
+        let mut s = served(&tmp.0, &budget);
+        assert_eq!(kind(&make(&mut s, 2, "f")), 15);
+        assert_eq!(kind(&write(&mut s, 2, 0, &[1; 60])), 119);
+        // 60 more would be 120.
+        assert_eq!(error(&write(&mut s, 2, 60, &[2; 60])), Some(libc::EDQUOT));
+        assert_eq!(std::fs::metadata(tmp.0.join("f")).unwrap().len(), 60);
+        // Exactly the limit is fine; one more byte is not.
+        assert_eq!(kind(&write(&mut s, 2, 60, &[2; 40])), 119);
+        assert_eq!(error(&write(&mut s, 2, 100, &[3])), Some(libc::EDQUOT));
+        // Rewriting what is there is not growth.
+        assert_eq!(kind(&write(&mut s, 2, 0, &[9; 100])), 119);
+        // Nor can a truncate make the file bigger than the quota.
+        assert_eq!(error(&set_size(&mut s, 2, 101)), Some(libc::EDQUOT));
+        assert_eq!(std::fs::metadata(tmp.0.join("f")).unwrap().len(), 100);
+        assert_eq!(budget.used(), (100, 1));
+        // A second file shares the volume's allowance.
+        assert_eq!(kind(&make(&mut s, 3, "g")), 15);
+        assert_eq!(error(&write(&mut s, 3, 0, &[1])), Some(libc::EDQUOT));
+    }
+
+    #[test]
+    fn an_inode_quota_refuses_the_create() {
+        let tmp = Tmp::new();
+        let disk = Disk::new(10 * GIB);
+        let budget = disk.budget(quota_of(0, 2), Duration::ZERO);
+        let mut s = served(&tmp.0, &budget);
+        assert_eq!(kind(&make(&mut s, 2, "a")), 15);
+        let r = s.handle(&msg(72, |o| {
+            o.u32(1).str("d").u32(0o755).u32(1000);
+        }));
+        assert_eq!(kind(&r), 73);
+        assert_eq!(error(&make(&mut s, 3, "b")), Some(libc::EDQUOT));
+        assert!(!tmp.0.join("b").exists());
+        let r = s.handle(&msg(16, |o| {
+            o.u32(1).str("l").str("t").u32(1000);
+        }));
+        assert_eq!(error(&r), Some(libc::EDQUOT));
+        assert!(std::fs::symlink_metadata(tmp.0.join("l")).is_err());
+        // Opening a name that is already there makes nothing: allowed.
+        assert_eq!(kind(&make(&mut s, 4, "a")), 15);
+    }
+
+    #[test]
+    fn deleting_frees_quota() {
+        let tmp = Tmp::new();
+        let disk = Disk::new(10 * GIB);
+        let budget = disk.budget(quota_of(100, 2), Duration::ZERO);
+        let mut s = served(&tmp.0, &budget);
+        assert_eq!(kind(&make(&mut s, 2, "a")), 15);
+        assert_eq!(kind(&write(&mut s, 2, 0, &[1; 100])), 119);
+        assert_eq!(kind(&make(&mut s, 3, "b")), 15);
+        assert_eq!(error(&make(&mut s, 4, "c")), Some(libc::EDQUOT));
+        assert_eq!(error(&write(&mut s, 3, 0, &[1])), Some(libc::EDQUOT));
+        assert_eq!(kind(&unlink(&mut s, "a")), 77);
+        assert_eq!(budget.used(), (0, 1));
+        // Both the inode and the 100 bytes are free again.
+        assert_eq!(kind(&write(&mut s, 3, 0, &[1; 100])), 119);
+        assert_eq!(kind(&make(&mut s, 4, "c")), 15);
+
+        // A truncate gives bytes back; so does renaming another file over
+        // one that holds some.
+        assert_eq!(kind(&set_size(&mut s, 3, 10)), 27);
+        assert_eq!(budget.used(), (10, 2));
+        assert_eq!(kind(&write(&mut s, 3, 10, &[1; 90])), 119);
+        let r = s.handle(&msg(74, |o| {
+            o.u32(1).str("c").u32(1).str("b");
+        }));
+        assert_eq!(kind(&r), 75);
+        assert_eq!(budget.used(), (0, 1));
+    }
+
+    #[test]
+    fn what_a_volume_already_holds_counts_against_its_quota() {
+        let tmp = Tmp::new();
+        std::fs::write(tmp.0.join("old"), [0u8; 50]).unwrap();
+        std::fs::create_dir(tmp.0.join("sub")).unwrap();
+        std::fs::write(tmp.0.join("sub/older"), [0u8; 30]).unwrap();
+        std::fs::hard_link(tmp.0.join("old"), tmp.0.join("sub/link")).unwrap();
+        let budget = Arc::new(Budget::scanned(
+            quota_of(100, 0),
+            Box::new(|| {
+                Ok(quota::Space {
+                    avail_bytes: 10 * GIB,
+                    total_bytes: 10 * GIB,
+                    avail_inodes: 1000,
+                    total_inodes: 1000,
+                })
+            }),
+            Duration::ZERO,
+            &tmp.0,
+        ));
+        // 50 + 30 bytes (the hard link is the same inode); old, sub, older.
+        assert_eq!(budget.used(), (80, 3));
+        let mut s = served(&tmp.0, &budget);
+        assert_eq!(kind(&make(&mut s, 2, "new")), 15);
+        assert_eq!(error(&write(&mut s, 2, 0, &[1; 21])), Some(libc::EDQUOT));
+        assert_eq!(kind(&write(&mut s, 2, 0, &[1; 20])), 119);
     }
 }

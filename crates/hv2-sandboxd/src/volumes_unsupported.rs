@@ -47,6 +47,11 @@ pub(crate) async fn mount(
     check(_state, None, mounts)
 }
 
+/// The space limits only mean something where volumes exist.
+pub(crate) fn set_reserve_percent(_percent: u64) {}
+pub(crate) fn set_max_bytes(_bytes: u64) {}
+pub(crate) fn set_max_inodes(_inodes: u64) {}
+
 pub(crate) async fn create() -> Response {
     refused()
 }

@@ -1,0 +1,99 @@
+{
+  "success": true,
+  "purpose": "local KVM functional verification; no performance comparison",
+  "input_sha256": {
+    "daemon": "71d55a4850fa3f4b1f2b2961d8c90cca341ea2ca575c832783cec51e7d2171d0",
+    "control": "3c989654a23f5e603a3e191b26ffc292e0a90be2bde47eeae8c19298be146806",
+    "cli": "c749ba9b584663d097c96878db14b59fa223fd6074061c514da16a8aee5145d2",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "85d929acc80d0f0eadfae26e7187f92bcac31c3acf2802a6d46f99dffd3ab485",
+    "driver": "63fc3f9f54571696b3f466c33e298c1cb63e63cbeeb73fe2b597ca90ead7de4b"
+  },
+  "cases": [
+    {
+      "name": "creator-api-boundary-on-real-kvm",
+      "success": true
+    },
+    {
+      "name": "owner-permissions-and-no-grant-denial",
+      "success": true
+    },
+    {
+      "name": "owner-cli-exact-retry-and-real-guest-identity",
+      "success": true
+    },
+    {
+      "name": "custom-domain-uses-stored-grant",
+      "success": true
+    },
+    {
+      "name": "fork-does-not-inherit-parent-grant",
+      "success": true
+    },
+    {
+      "name": "shipped-control-plane-restart-preserves-active-grant",
+      "success": true
+    },
+    {
+      "name": "owner-revocation-does-not-wake-paused-guest",
+      "success": true
+    },
+    {
+      "name": "shipped-control-plane-restart-preserves-revocation",
+      "success": true
+    },
+    {
+      "name": "current-regrant-allows-auto-resume",
+      "success": true
+    },
+    {
+      "name": "operator-delegation-reload-controls-owner-grants",
+      "success": true
+    },
+    {
+      "name": "expired-stored-grant-denies-real-guest",
+      "success": true
+    }
+  ],
+  "cleanup_errors": [],
+  "redis_outage_requested": false,
+  "owned_directory": "/var/tmp/hm-owner-sharing-kvm-lfe2l0yv",
+  "final_inventory_empty": true,
+  "processes": [
+    {
+      "name": "control-revoked-restarted",
+      "pid": 735,
+      "stopped": true
+    },
+    {
+      "name": "control-restarted",
+      "pid": 684,
+      "stopped": true
+    },
+    {
+      "name": "control",
+      "pid": 542,
+      "stopped": true
+    },
+    {
+      "name": "node",
+      "pid": 541,
+      "stopped": true
+    },
+    {
+      "name": "redis",
+      "pid": 535,
+      "stopped": true
+    }
+  ],
+  "input_sha256_after": {
+    "daemon": "71d55a4850fa3f4b1f2b2961d8c90cca341ea2ca575c832783cec51e7d2171d0",
+    "control": "3c989654a23f5e603a3e191b26ffc292e0a90be2bde47eeae8c19298be146806",
+    "cli": "c749ba9b584663d097c96878db14b59fa223fd6074061c514da16a8aee5145d2",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "85d929acc80d0f0eadfae26e7187f92bcac31c3acf2802a6d46f99dffd3ab485",
+    "driver": "63fc3f9f54571696b3f466c33e298c1cb63e63cbeeb73fe2b597ca90ead7de4b"
+  },
+  "inputs_unchanged": true,
+  "owned_directory_removed": true
+}

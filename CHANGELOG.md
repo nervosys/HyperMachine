@@ -288,6 +288,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`hm-tui`, a new terminal dashboard** for Type 2 VMs and sandbox VMs over the same APIs `hm-gui` and `hm sandbox vm` already use; and a Sandboxes tab for `hm-gui`, which previously showed only Type 2 VMs.
 
 ### Security
+- **A node's sandbox proxy accepted anyone who could reach it.** A node with a cluster token now
+  requires each proxy connection to begin with a signed, single-use, time-limited line, which the
+  control plane sends. Use `--proxy-open` for the old behaviour.
+- **A guest could fill the host disk through a volume.** Growing a volume is refused once its
+  filesystem would fall below 5% free (at most 2 GiB) or 1% of inodes (`--volume-reserve-percent`).
+  `--volume-max-bytes` and `--volume-max-inodes` add per-volume quotas.
 - **The e2fs tools that read guest disks now run confined.** `debugfs`, `e2fsck` and `resize2fs` run
   under Landlock, writing only their scratch directory or image, with resource limits and a timeout.
   A host without Landlock refuses them unless `--allow-unconfined-e2fs-tools` is given.

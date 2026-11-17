@@ -104,6 +104,8 @@ def main():
             def prepared():
                 assert all(child.poll() is None for _,child in processes),"owned service exited"
                 assert any("base" in row.get("aliases",[]) for row in api("GET","/templates",key=legacy_key)),"template not ready"
+                # The node publishes its template before its API listens.
+                with socket.create_connection(("127.0.0.1",node_port),timeout=.2):pass
             eventually(prepared,60)
             created=api("POST","/v2/sandboxes",{"templateID":"base","timeout":600,"allowInternetAccess":False,"autoResume":{"enabled":True}},status=201)
             guest=created["sandboxID"];guests.add(guest)

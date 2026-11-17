@@ -1,0 +1,9 @@
+A1 tokened, direct plain HTTP        -> b'<ConnectionResetError>' len 22
+A2 tokened, wrong-token line + HTTP  -> b'<ConnectionResetError>'
+A3 tokened, stale ts (-3600s) + HTTP -> b'<ConnectionResetError>'
+A4 tokened, valid line + HTTP        -> b'HTTP/1.1 404 Not Found'
+A5 tokened, REPLAY of same line      -> b'<ConnectionResetError>'
+A6 tokened, valid fresh line + HTTP  -> b'HTTP/1.1 404 Not Found'
+B1 --proxy-open, direct plain HTTP   -> b'HTTP/1.1 404 Not Found'
+B2 --proxy-open, valid line + HTTP   -> b'HTTP/1.1 404 Not Found'
+neg exit 0

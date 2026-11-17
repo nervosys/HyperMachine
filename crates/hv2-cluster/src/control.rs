@@ -3927,9 +3927,21 @@ pub struct ClusterRoutes {
     /// machine's port published with `proxy` is reached through this proxy
     /// too, behind its logins. See `with_machines`.
     machines: Option<(reqwest::Client, Option<String>)>,
+    /// The cluster token, proven to each node's proxy on every connection to
+    /// it. See `with_proxy_token`.
+    proxy_token: Option<String>,
 }
 
 impl ClusterRoutes {
+    /// Prove the cluster token to a node's proxy at the start of every
+    /// connection to it (`hv2_api::sandbox_proxy::build_preamble`). A node that
+    /// holds the same token refuses a proxy connection without it.
+    #[must_use]
+    pub fn with_proxy_token(mut self, cluster_token: Option<String>) -> Self {
+        self.proxy_token = cluster_token.filter(|t| !t.is_empty());
+        self
+    }
+
     #[must_use]
     pub fn new(store: Arc<dyn ClusterStore>, ttl: Duration) -> Self {
         Self {
@@ -3940,6 +3952,7 @@ impl ClusterRoutes {
             ttl,
             backend_tls: None,
             machines: None,
+            proxy_token: None,
         }
     }
 
@@ -4190,11 +4203,52 @@ impl hv2_api::sandbox_proxy::SandboxRoutes for ClusterRoutes {
     )> {
         self.backend_tls.clone()
     }
+
+    fn backend_preamble(&self) -> Option<Vec<u8>> {
+        self.proxy_token
+            .as_deref()
+            .map(hv2_api::sandbox_proxy::build_preamble)
+    }
 }
 
 #[cfg(test)]
 mod access_audit_tests {
     use super::*;
+
+    /// The control plane proves the cluster token to a node's proxy on every
+    /// connection it relays: a line a node holding that token accepts, and
+    /// nobody else's does.
+    #[test]
+    fn the_relay_sends_a_line_only_the_cluster_token_makes() {
+        use hv2_api::sandbox_proxy::{PreambleVerifier, SandboxRoutes};
+        let store = || -> Arc<dyn ClusterStore> { Arc::new(crate::store::MemoryStore::new()) };
+        let now = chrono::Utc::now().timestamp();
+
+        let routes = ClusterRoutes::new(store(), Duration::from_secs(1))
+            .with_proxy_token(Some("cluster-token".into()));
+        let first = routes
+            .backend_preamble()
+            .expect("a tokened relay sends a line");
+        let second = routes.backend_preamble().expect("every connection");
+        assert_ne!(first, second, "a fresh nonce each time");
+        let text = |b: &[u8]| String::from_utf8(b.to_vec()).unwrap().trim_end().to_owned();
+        assert!(first.ends_with(b"\r\n"));
+        let node = PreambleVerifier::new("cluster-token");
+        assert!(node.verify(&text(&first), now));
+        assert!(node.verify(&text(&second), now));
+        assert!(!node.verify(&text(&first), now), "no replay");
+        assert!(
+            !PreambleVerifier::new("a-different-token")
+                .verify(&text(&routes.backend_preamble().unwrap()), now),
+            "another token's node refuses it"
+        );
+
+        let untokened = ClusterRoutes::new(store(), Duration::from_secs(1));
+        assert!(untokened.backend_preamble().is_none());
+        let empty = ClusterRoutes::new(store(), Duration::from_secs(1))
+            .with_proxy_token(Some(String::new()));
+        assert!(empty.backend_preamble().is_none());
+    }
 
     #[test]
     fn only_a_machine_s_own_id_shape_is_asked_of_nodes() {
