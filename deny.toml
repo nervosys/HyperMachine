@@ -55,6 +55,15 @@ ignore = [
     "RUSTSEC-2026-0371",
     "RUSTSEC-2026-0372",
 
+    # chrono and chrono-tz are marked unmaintained (first seen by CI on
+    # 2026-11-17, with no change to Cargo.lock). chrono is a direct dependency
+    # of about twenty workspace crates for timestamps; chrono-tz only of
+    # hv2-jobs, for cron schedules in named time zones. No known vulnerability,
+    # and "no safe upgrade is available". Replacing them (jiff or time) is a
+    # migration of its own, not something to fold into a security fix.
+    "RUSTSEC-2026-0543",
+    "RUSTSEC-2026-0555",
+
     # unsafe-libyaml is unmaintained (a C libyaml transliteration, unsafe).
     # Via serde_yaml_ng, which hm-cli uses only to read the compose file the
     # user names on the command line. No known vulnerability; the input is a
