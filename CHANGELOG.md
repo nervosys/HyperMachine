@@ -288,6 +288,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`hm-tui`, a new terminal dashboard** for Type 2 VMs and sandbox VMs over the same APIs `hm-gui` and `hm sandbox vm` already use; and a Sandboxes tab for `hm-gui`, which previously showed only Type 2 VMs.
 
 ### Security
+- **Template builds by a key with a principal and no team were shared node-wide.** They are now
+  stored under that principal's scope; other principals and team keys can neither see, use, rebuild
+  nor delete them.
 - **The control plane no longer starts open by accident.** With no API key, key file or single sign-on
   configured it refuses to start; pass `--allow-unauthenticated` to run it open as before.
 - **A key with a principal and no team saw every team's resources.** Such a key now sees, and acts on,

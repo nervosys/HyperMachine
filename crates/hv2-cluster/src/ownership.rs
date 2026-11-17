@@ -86,6 +86,28 @@ impl TeamId {
 /// What every [`TeamId::personal`] label starts with.
 const PERSONAL_PREFIX: &str = "principal.";
 
+/// What the name of a template built under a principal's scope starts with.
+/// Nodes keep one template namespace for the whole node, with no owner on a
+/// build; the control plane puts the scope in the name instead, and lets no
+/// one but that scope (and an administrator) name such a template.
+pub const TEMPLATE_SCOPE_PREFIX: &str = "scope.";
+
+impl TeamId {
+    /// The prefix of every template this scope builds -- `scope.`, sixteen hex
+    /// digits of the principal's hash, and `--` -- or `None` for a real team,
+    /// which builds none. It takes 24 of a node's 64 template-name
+    /// characters. It is not a secret: the control plane refuses any name
+    /// under a scope that is not the caller's own.
+    #[must_use]
+    pub fn template_prefix(&self) -> Option<String> {
+        let hex = self.0.strip_prefix(PERSONAL_PREFIX)?;
+        Some(format!(
+            "{TEMPLATE_SCOPE_PREFIX}{}--",
+            &hex[..hex.len().min(16)]
+        ))
+    }
+}
+
 impl TryFrom<String> for TeamId {
     type Error = &'static str;
     fn try_from(value: String) -> Result<Self, Self::Error> {
@@ -112,6 +134,62 @@ impl RequestTeam {
     #[must_use]
     pub fn sees(&self, team: Option<&TeamId>) -> bool {
         self.0.as_ref().is_none_or(|mine| team == Some(mine))
+    }
+
+    /// The prefix of the templates this request builds: a principal's scope.
+    #[must_use]
+    pub fn template_prefix(&self) -> Option<String> {
+        self.0.as_ref().and_then(TeamId::template_prefix)
+    }
+
+    /// Whether this request may name `name` (a template name, untagged): any
+    /// name that is not under a principal's scope, and under one only its
+    /// own. An administrator names every one.
+    #[must_use]
+    pub fn may_name_template(&self, name: &str) -> bool {
+        !name.starts_with(TEMPLATE_SCOPE_PREFIX)
+            || self.0.is_none()
+            || self
+                .template_prefix()
+                .is_some_and(|prefix| name.starts_with(&prefix))
+    }
+
+    /// The template `requested` means to this request, for starting a
+    /// sandbox or a build from it: a principal's own template of that name
+    /// when `exists` says there is one, else the name as given. `None` for a
+    /// name under someone else's scope.
+    pub fn resolve_template(
+        &self,
+        requested: &str,
+        exists: impl Fn(&str) -> bool,
+    ) -> Option<String> {
+        let name = crate::model::untagged(requested);
+        if !self.may_name_template(name) {
+            return None;
+        }
+        if let Some(prefix) = self.template_prefix() {
+            if !name.starts_with(&prefix) {
+                let scoped = format!("{prefix}{name}");
+                if exists(&scoped) {
+                    return Some(scoped);
+                }
+            }
+        }
+        Some(name.to_owned())
+    }
+
+    /// The name a build `requested` is made under: the principal's scope
+    /// before it. `None` for a name under someone else's scope.
+    #[must_use]
+    pub fn build_template_name(&self, requested: &str) -> Option<String> {
+        let name = crate::model::untagged(requested);
+        if !self.may_name_template(name) {
+            return None;
+        }
+        Some(match self.template_prefix() {
+            Some(prefix) if !name.starts_with(&prefix) => format!("{prefix}{name}"),
+            _ => name.to_owned(),
+        })
     }
 
     /// Whether a template belonging to `owner` may be used, listed or

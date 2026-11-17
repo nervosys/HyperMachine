@@ -1,0 +1,436 @@
+{
+  "success": true,
+  "purpose": "functional verification of principal-scoped template builds (O14) on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "a6ccec92e4a0db47df65b446aca5528ef48edb84029015bbd778a2b233d6c21f",
+    "control": "0eb86cdd44a096abb10a4df946ae82e85d46f6b5195b74c9b5b0eaa7c11ec602",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "85d929acc80d0f0eadfae26e7187f92bcac31c3acf2802a6d46f99dffd3ab485",
+    "redis": "b747f74364ce61350ce4d2cd0e38ca2eacbfa7fe6f3a2560483ab6403a2e8573",
+    "driver": "44617613ae3772f78980f0af5f452a4c0fe01f055daeb5811a30be60227c77b7"
+  },
+  "cases": [
+    {
+      "name": "1. alice's `app` build reaches ready on the node",
+      "success": true,
+      "detail": {
+        "build_response": {
+          "aliases": [
+            "scope.2bd806c97f0e00af--app"
+          ],
+          "buildID": "b69e1ea6-4431-4374-baae-792bf5564a73",
+          "names": [
+            "scope.2bd806c97f0e00af--app:default"
+          ],
+          "public": false,
+          "tags": [
+            "default"
+          ],
+          "templateID": "scope.2bd806c97f0e00af--app"
+        },
+        "final_status": "ready",
+        "node_templates": "node listing unavailable: HTTP Error 401: Unauthorized"
+      }
+    },
+    {
+      "name": "2. alice's sandbox from `app` prints hi from /hello",
+      "success": true,
+      "detail": {
+        "create_status": 201,
+        "cat_hello": "hi\n"
+      }
+    },
+    {
+      "name": "3a. admin finds the canonical scope.<hash>--app name",
+      "success": true,
+      "detail": [
+        "scope.2bd806c97f0e00af--app"
+      ]
+    },
+    {
+      "name": "3b. bob gets 404 for alice's template: list, status, create, delete (plain and canonical)",
+      "success": true,
+      "detail": {
+        "bob_list_has_no_alice_template": true,
+        "status_plain": 404,
+        "create_plain": 404,
+        "delete_plain": 404,
+        "status_canonical": 404,
+        "create_canonical": 404,
+        "delete_canonical": 404,
+        "status_template_id": 404,
+        "create_template_id": 404,
+        "delete_template_id": 404
+      }
+    },
+    {
+      "name": "3c. bob's own `app` build gets a different scoped name and works for bob",
+      "success": true,
+      "detail": {
+        "alice_scoped": "scope.2bd806c97f0e00af--app",
+        "bob_scoped": "scope.81b637d8fcd2c6da--app",
+        "bob_build": {
+          "aliases": [
+            "scope.81b637d8fcd2c6da--app"
+          ],
+          "buildID": "a0a8ebea-1bc8-49a9-81f6-77d98743d62e",
+          "names": [
+            "scope.81b637d8fcd2c6da--app:default"
+          ],
+          "public": false,
+          "tags": [
+            "default"
+          ],
+          "templateID": "scope.81b637d8fcd2c6da--app"
+        },
+        "bob_sandbox_from_own_app_cat_hello": "hi\n"
+      }
+    },
+    {
+      "name": "4. an admin key sees alice's template in GET /templates",
+      "success": true,
+      "detail": {
+        "admin_list_includes": "scope.2bd806c97f0e00af--app",
+        "status": 200
+      }
+    },
+    {
+      "name": "5. alice can DELETE her template (bob's stays)",
+      "success": true,
+      "detail": {
+        "delete_status": 200,
+        "gone_from_admin_list": true,
+        "bob_template_survives": true
+      }
+    }
+  ],
+  "calls": [
+    {
+      "as": "alice",
+      "method": "POST",
+      "path": "/v3/templates",
+      "status": 202,
+      "response": {
+        "aliases": [
+          "scope.2bd806c97f0e00af--app"
+        ],
+        "buildID": "b69e1ea6-4431-4374-baae-792bf5564a73",
+        "names": [
+          "scope.2bd806c97f0e00af--app:default"
+        ],
+        "public": false,
+        "tags": [
+          "default"
+        ],
+        "templateID": "scope.2bd806c97f0e00af--app"
+      }
+    },
+    {
+      "as": "alice",
+      "method": "POST",
+      "path": "/v2/templates/scope.2bd806c97f0e00af--app/builds/b69e1ea6-4431-4374-baae-792bf5564a73",
+      "status": 202,
+      "response": null
+    },
+    {
+      "as": "alice",
+      "method": "GET",
+      "path": "/templates/scope.2bd806c97f0e00af--app/builds/b69e1ea6-4431-4374-baae-792bf5564a73/status",
+      "status": 200,
+      "response": {
+        "status": "ready",
+        "reason": null
+      }
+    },
+    {
+      "as": "alice",
+      "method": "POST",
+      "path": "/sandboxes",
+      "status": 201,
+      "response": {
+        "clientID": "sbx-8280727d211f49a485cc",
+        "envdAccessToken": "1d30df810c9342bbb25e8035cddbec56e91b5f68ce6a4ce9b9bc3a143f691e8b",
+        "envdHost": "49983-sbx-8280727d211f49a485cc",
+        "envdVersion": "0.6.3",
+        "nodeID": "ptpl-kvm-node",
+        "processPort": 40815,
+        "proxyPort": 47327,
+        "sandboxID": "sbx-8280727d211f49a485cc",
+        "templateID": "scope.2bd806c97f0e00af--app"
+      }
+    },
+    {
+      "as": "alice",
+      "method": "POST",
+      "path": "/sandboxes/sbx-8280727d211f49a485cc/exec",
+      "status": 200,
+      "response": {
+        "exit_code": 0,
+        "stdout": "hi\n",
+        "stderr": "",
+        "timed_out": false
+      }
+    },
+    {
+      "as": "admin",
+      "method": "GET",
+      "path": "/templates",
+      "status": 200,
+      "response": "(long)"
+    },
+    {
+      "as": "bob",
+      "method": "GET",
+      "path": "/templates",
+      "status": 200,
+      "response": "(long)"
+    },
+    {
+      "as": "bob",
+      "method": "GET",
+      "path": "/templates/app/builds/b69e1ea6-4431-4374-baae-792bf5564a73/status",
+      "status": 404,
+      "response": {
+        "code": 404,
+        "message": "no build b69e1ea6-4431-4374-baae-792bf5564a73"
+      }
+    },
+    {
+      "as": "bob",
+      "method": "POST",
+      "path": "/sandboxes",
+      "status": 404,
+      "response": {
+        "code": 404,
+        "message": "template \"app\" not found on any live node"
+      }
+    },
+    {
+      "as": "bob",
+      "method": "DELETE",
+      "path": "/templates/app",
+      "status": 404,
+      "response": {
+        "code": 404,
+        "message": "no snapshot app"
+      }
+    },
+    {
+      "as": "bob",
+      "method": "GET",
+      "path": "/templates/scope.2bd806c97f0e00af--app/builds/b69e1ea6-4431-4374-baae-792bf5564a73/status",
+      "status": 404,
+      "response": {
+        "code": 404,
+        "message": "no template scope.2bd806c97f0e00af--app"
+      }
+    },
+    {
+      "as": "bob",
+      "method": "POST",
+      "path": "/sandboxes",
+      "status": 404,
+      "response": {
+        "code": 404,
+        "message": "template \"scope.2bd806c97f0e00af--app\" not found on any live node"
+      }
+    },
+    {
+      "as": "bob",
+      "method": "DELETE",
+      "path": "/templates/scope.2bd806c97f0e00af--app",
+      "status": 404,
+      "response": {
+        "code": 404,
+        "message": "no snapshot scope.2bd806c97f0e00af--app"
+      }
+    },
+    {
+      "as": "bob",
+      "method": "GET",
+      "path": "/templates/scope.2bd806c97f0e00af--app/builds/b69e1ea6-4431-4374-baae-792bf5564a73/status",
+      "status": 404,
+      "response": {
+        "code": 404,
+        "message": "no template scope.2bd806c97f0e00af--app"
+      }
+    },
+    {
+      "as": "bob",
+      "method": "POST",
+      "path": "/sandboxes",
+      "status": 404,
+      "response": {
+        "code": 404,
+        "message": "template \"scope.2bd806c97f0e00af--app\" not found on any live node"
+      }
+    },
+    {
+      "as": "bob",
+      "method": "DELETE",
+      "path": "/templates/scope.2bd806c97f0e00af--app",
+      "status": 404,
+      "response": {
+        "code": 404,
+        "message": "no snapshot scope.2bd806c97f0e00af--app"
+      }
+    },
+    {
+      "as": "bob",
+      "method": "POST",
+      "path": "/v3/templates",
+      "status": 202,
+      "response": {
+        "aliases": [
+          "scope.81b637d8fcd2c6da--app"
+        ],
+        "buildID": "a0a8ebea-1bc8-49a9-81f6-77d98743d62e",
+        "names": [
+          "scope.81b637d8fcd2c6da--app:default"
+        ],
+        "public": false,
+        "tags": [
+          "default"
+        ],
+        "templateID": "scope.81b637d8fcd2c6da--app"
+      }
+    },
+    {
+      "as": "bob",
+      "method": "POST",
+      "path": "/v2/templates/scope.81b637d8fcd2c6da--app/builds/a0a8ebea-1bc8-49a9-81f6-77d98743d62e",
+      "status": 202,
+      "response": null
+    },
+    {
+      "as": "bob",
+      "method": "GET",
+      "path": "/templates/scope.81b637d8fcd2c6da--app/builds/a0a8ebea-1bc8-49a9-81f6-77d98743d62e/status",
+      "status": 200,
+      "response": {
+        "status": "ready",
+        "reason": null
+      }
+    },
+    {
+      "as": "admin",
+      "method": "GET",
+      "path": "/templates",
+      "status": 200,
+      "response": "(long)"
+    },
+    {
+      "as": "bob",
+      "method": "GET",
+      "path": "/templates",
+      "status": 200,
+      "response": "(long)"
+    },
+    {
+      "as": "bob",
+      "method": "POST",
+      "path": "/sandboxes",
+      "status": 201,
+      "response": {
+        "clientID": "sbx-b1653a8a6a224b9ba966",
+        "envdAccessToken": "f12e741a96214cc69e081a64f48e7e6b780abb028b6f447691fdc7fec38c4bc6",
+        "envdHost": "49983-sbx-b1653a8a6a224b9ba966",
+        "envdVersion": "0.6.3",
+        "nodeID": "ptpl-kvm-node",
+        "processPort": 32945,
+        "proxyPort": 47327,
+        "sandboxID": "sbx-b1653a8a6a224b9ba966",
+        "templateID": "scope.81b637d8fcd2c6da--app"
+      }
+    },
+    {
+      "as": "bob",
+      "method": "POST",
+      "path": "/sandboxes/sbx-b1653a8a6a224b9ba966/exec",
+      "status": 200,
+      "response": {
+        "exit_code": 0,
+        "stdout": "hi\n",
+        "stderr": "",
+        "timed_out": false
+      }
+    },
+    {
+      "as": "bob",
+      "method": "DELETE",
+      "path": "/sandboxes/sbx-b1653a8a6a224b9ba966",
+      "status": 204,
+      "response": null
+    },
+    {
+      "as": "admin",
+      "method": "GET",
+      "path": "/templates",
+      "status": 200,
+      "response": "(long)"
+    },
+    {
+      "as": "alice",
+      "method": "DELETE",
+      "path": "/sandboxes/sbx-8280727d211f49a485cc",
+      "status": 204,
+      "response": null
+    },
+    {
+      "as": "alice",
+      "method": "DELETE",
+      "path": "/templates/app",
+      "status": 204,
+      "response": null
+    },
+    {
+      "as": "alice",
+      "method": "GET",
+      "path": "/templates",
+      "status": 200,
+      "response": "(long)"
+    },
+    {
+      "as": "admin",
+      "method": "GET",
+      "path": "/templates",
+      "status": 200,
+      "response": "(long)"
+    }
+  ],
+  "policy": [
+    {
+      "expires_at": 1794938709,
+      "scopes": [
+        "sandboxes",
+        "inventory",
+        "templates"
+      ],
+      "principal_id": "alice"
+    },
+    {
+      "expires_at": 1794938709,
+      "scopes": [
+        "sandboxes",
+        "inventory",
+        "templates"
+      ],
+      "principal_id": "bob"
+    },
+    {
+      "expires_at": 1794938709,
+      "scopes": [
+        "admin",
+        "sandboxes",
+        "inventory",
+        "templates"
+      ],
+      "role": "operator",
+      "principal_id": "admin"
+    }
+  ],
+  "log_counts": {
+    "kvm_lines": 5,
+    "tcg_lines": 0
+  }
+}

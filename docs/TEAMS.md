@@ -196,9 +196,30 @@ same principal share a scope, as two keys of one team do. Records made before
 this carry no such scope: events, webhooks, volumes, machines, snapshots and
 environments of a teamless key are visible to administrators only, and
 sandboxes made before it stay with their owner (the owner still sees its own
-sandboxes, but not their old events). Template builds (`POST /templates`,
-`/v3/templates`) write the namespace every tenant shares and are still not
-fenced for such a key.
+sandboxes, but not their old events).
+
+Template builds are scoped the same way, by name. A node has one template
+namespace and records no owner on a build, so the control plane builds under
+`scope.` + 16 hex digits of the principal's hash + `--` in front of the name
+the key gave (`app` is `scope.<hash>--app` on the node, which leaves 40 of a
+node's 64 name characters), and finds it again the same way:
+
+| | Teamless key with a principal | Another principal, or a team key |
+|---|---|---|
+| `POST /templates`, `POST /v3/templates` | builds under its own scope; `app:v1` keeps its tag | cannot name, rebuild or overwrite it: a name under another scope is 403 (a team key is 403 on builds anyway) |
+| Build files, start, status (`/templates/{id}/…`, `/v2/templates/{id}/builds/{build}`) | `app` and the ID the build answered with both work; a start may build `fromTemplate` its own | 404, and nothing reaches the node: a build ID is checked to be one of the caller's before any call that names it |
+| `GET /templates`, aliases, `/cluster/nodes`, `/snapshots` | its own builds (alias `app`) and every operator template | not listed, no alias (404) |
+| `templateID` of a sandbox or machine | `app` means its own build if it has one, else the operator's `app` | 404 |
+| `DELETE /templates/{id}` | its own builds | 404 |
+
+An administrator names every scope's templates. A team key cannot name any:
+templates called `scope.…` are reserved, so an operator's template must not be
+named that way (it would be hidden from every non-administrator). A principal
+may build a name an operator also uses; for that principal, its own wins.
+Builds made before this have no scope: they are the operator's, as before.
+Still shared on the node: uploads for `COPY` are content-addressed (a hash of
+the files, whoever sent them), as are pulled images (`image-…`) and cached
+build steps (`build-cache-…`), which two builds with identical inputs share.
 
 The team travels with the sandbox. The control plane sends it to the node on
 create, in an internal header that clients cannot set, and the node records it.

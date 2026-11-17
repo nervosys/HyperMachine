@@ -277,12 +277,33 @@ The owner chose how to resolve O4 and O5.
   - **Verified:** seven new tests, six of which fail without the change. `verify-owner-sharing-kvm.py`,
     which uses such keys, passes all 11 cases on KVM.
 
+## Fixed in a fifth follow-up (owner decision)
+
+- **O14 (Low): template builds by a key with a principal and no team went to the node-wide
+  namespace.** As the owner chose, such builds are now scoped to the principal.
+  - **The name:** a build is stored on the node as `scope.<16 hex of the principal hash>--<name>`.
+    The control plane adds the prefix, resolves the plain name for the owning key, and reserves
+    `scope.` names for their owner and administrators.
+  - **Build ids:** before a build start or status call, the control plane asks the node for the
+    build and requires the build's template to be the caller's own.
+  - **Other principals and team keys:** they can neither list, use, build over nor delete such a
+    template.
+  - **Verified on KVM:** through a real control plane and node, alice's `app` built as
+    `scope.…--app` and a sandbox from it ran. Bob's 9 calls on her template, by plain name,
+    canonical name and template id, all got 404. His own `app` got its own scope, and an
+    administrator saw both. Evidence:
+    [principal-templates-kvm](../benchmarks/2026-11-17/principal-templates-kvm/README.md).
+  - **Remaining:**
+    - Content-addressed upload hashes, pulled images and cached build steps are still shared
+      node-wide by identical input.
+    - Builds made before this change remain visible to everyone.
+    - A scoped name leaves 40 of the node's 64 characters.
+
 ## Open: found, not fixed
 
 | Id | Severity | Finding | Why not now |
 |---|---|---|---|
 | O12 | Low | Partly fixed (see below). A node with write access to Redis can delete a key's sealed revocation record and then replay the key's old record. It can also delete records outright (denial of service). Keys revoked before the fix have no revocation record. | Redis cannot stop a writer from deleting. A key's own expiry bounds the damage. |
-| O14 | Low | Template builds (`POST /templates`, `/v3/templates`, build status and files) still write the node-wide namespace for a key with a principal and no team. Team keys are refused there. | Refusing it would break teamless keys that build templates today; left for the owner. |
 
 ## Checked and found sound
 

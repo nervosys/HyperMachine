@@ -1907,6 +1907,22 @@ async fn create_inner(
         })
         .unwrap_or_else(|| "base".to_string());
     let requester = crate::ownership::RequestTeam(team.cloned());
+    // A principal's own build of that name comes before an operator's; a
+    // name under another scope is not a template at all.
+    let Some(resolved) =
+        requester.resolve_template(&template, |name| nodes.iter().any(|n| n.offers(name)))
+    else {
+        return api_error(
+            StatusCode::NOT_FOUND,
+            format!("template {template:?} not found on any live node"),
+        );
+    };
+    let body = if resolved == crate::model::untagged(&template) {
+        body
+    } else {
+        with_field(&body, "templateID", &resolved)
+    };
+    let template = resolved;
     let nodes: Vec<_> = nodes
         .into_iter()
         .filter(|n| n.offers_to(&template, &requester))
@@ -2883,7 +2899,7 @@ async fn cluster_nodes(
                 };
                 let templates: Vec<String> = offered
                     .into_iter()
-                    .filter(|name| node.offers_to(name, &team))
+                    .filter(|name| team.may_name_template(name) && node.offers_to(name, &team))
                     .collect();
                 json!({
                     "id": node.id,
@@ -3033,10 +3049,12 @@ async fn templates(
         };
         for name in names {
             let metadata = node.template_metadata.get(&name);
-            if !team.may_use_shared_template(
-                metadata.and_then(|m| m.team.as_ref()),
-                metadata.map_or(&[][..], |m| m.shared_with.as_slice()),
-            ) {
+            if !team.may_name_template(&name)
+                || !team.may_use_shared_template(
+                    metadata.and_then(|m| m.team.as_ref()),
+                    metadata.map_or(&[][..], |m| m.shared_with.as_slice()),
+                )
+            {
                 continue;
             }
             offered.entry(name).or_default().push((node, metadata));
@@ -3073,7 +3091,10 @@ async fn templates(
                 json!({
                     "templateID": name,
                     "buildID": name,
-                    "aliases": [name],
+                    "aliases": [team
+                        .template_prefix()
+                        .and_then(|prefix| name.strip_prefix(&prefix).map(str::to_owned))
+                        .unwrap_or_else(|| name.clone())],
                     "public": false,
                     "buildStatus": "ready",
                     "nodeIDs": nodes.iter().map(|(node, _)| &node.id).collect::<Vec<_>>(),
@@ -3099,7 +3120,31 @@ async fn templates(
 /// Every node, not one: without a shared snapshot store a template exists
 /// only where it was built. With one, nodes adopt what another built, and
 /// the extra builds converge on the same content-addressed files.
-async fn build_templates(State(control): State<Arc<ControlPlane>>, body: Bytes) -> Response {
+async fn build_templates(
+    State(control): State<Arc<ControlPlane>>,
+    Extension(team): Extension<crate::ownership::RequestTeam>,
+    body: Bytes,
+) -> Response {
+    // A principal's build is made under its own scope; a name under
+    // another's is refused. A body that does not parse is the node's to
+    // refuse.
+    let body = match serde_json::from_slice::<Value>(&body)
+        .ok()
+        .and_then(|b| b["templateID"].as_str().map(str::to_owned))
+    {
+        Some(requested) => {
+            if !team.may_name_template(crate::model::untagged(&requested)) {
+                return api_error(StatusCode::FORBIDDEN, RESERVED_TEMPLATE);
+            }
+            match team.template_prefix() {
+                Some(prefix) if !requested.starts_with(&prefix) => {
+                    with_field(&body, "templateID", &format!("{prefix}{requested}"))
+                }
+                _ => body,
+            }
+        }
+        None => body,
+    };
     let nodes = match control.store.nodes().await {
         Ok(nodes) => nodes,
         Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
@@ -3206,6 +3251,9 @@ async fn snapshots(
             let Some(id) = snapshot["snapshotID"].as_str().map(str::to_string) else {
                 continue;
             };
+            if !team.may_name_template(&id) {
+                continue;
+            }
             let entry = merged.entry(id).or_insert_with(|| {
                 snapshot["nodeIDs"] = json!([]);
                 snapshot
@@ -3332,26 +3380,38 @@ async fn delete_template(
     Extension(team): Extension<crate::ownership::RequestTeam>,
     Path(id): Path<String>,
 ) -> Response {
-    let name = crate::model::untagged(&id);
+    let mut name = crate::model::untagged(&id).to_owned();
     // A team deletes its own snapshots and nothing else: not another
-    // team's, and not an operator's template every team uses.
+    // team's, and not an operator's template every team uses. A principal
+    // also deletes the templates it built, which are its own by their name.
     if let Some(mine) = &team.0 {
         let nodes = match control.store.nodes().await {
             Ok(nodes) => nodes,
             Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
         };
-        let owned = nodes.iter().any(|node| {
-            node.template_metadata
-                .get(name)
-                .is_some_and(|info| info.team.as_ref() == Some(mine))
-        });
+        let Some(resolved) =
+            team.resolve_template(&id, |name| nodes.iter().any(|node| node.offers(name)))
+        else {
+            return api_error(StatusCode::NOT_FOUND, format!("no snapshot {id}"));
+        };
+        name = resolved;
+        let built = team
+            .template_prefix()
+            .is_some_and(|prefix| name.starts_with(&prefix))
+            && nodes.iter().any(|node| node.offers(&name));
+        let owned = built
+            || nodes.iter().any(|node| {
+                node.template_metadata
+                    .get(&name)
+                    .is_some_and(|info| info.team.as_ref() == Some(mine))
+            });
         if !owned {
             return api_error(StatusCode::NOT_FOUND, format!("no snapshot {id}"));
         }
     }
     // The name is a request's, and one segment of the path: encoded, it cannot
     // be anything else.
-    let Ok(url) = node_url("http://node", &["templates", name]) else {
+    let Ok(url) = node_url("http://node", &["templates", &name]) else {
         return api_error(StatusCode::BAD_REQUEST, "invalid snapshot ID");
     };
     let path = url.path().to_owned();
@@ -3410,37 +3470,186 @@ fn fnv1a(parts: &[&[u8]]) -> u64 {
 /// streamed through, not buffered: an upload may be large. The host the
 /// caller reached is passed on, so the upload links a node makes point
 /// back here.
+///
+/// A key that is not an administrator names templates in its own scope: a
+/// principal's builds are made, found, started and read under
+/// [`TeamId::template_prefix`] before the name the caller gave, and a name
+/// under another scope is refused. The node's namespace is node-wide and a
+/// build has no owner there, so the scope is in the name, and a build's ID
+/// is checked to be one of the caller's before a call that names it.
+/// The upload `PUT` carries no key and is the node's to check, by its token.
 async fn to_builder(
     State(control): State<Arc<ControlPlane>>,
+    team: Option<Extension<crate::ownership::RequestTeam>>,
     method: Method,
-    uri: axum::http::Uri,
-    headers: HeaderMap,
+    mut uri: axum::http::Uri,
+    mut headers: HeaderMap,
     body: Body,
 ) -> Response {
-    let path = uri.path();
+    // `None` for an administrator, and for the upload, which has no key.
+    let team = team
+        .map(|Extension(team)| team)
+        .filter(|team| team.0.is_some());
+    let path = uri.path().to_owned();
     let (template, body) = if path == "/v3/templates" {
         // The name is in the body, which is small.
-        let bytes = match axum::body::to_bytes(body, 1 << 20).await {
+        let mut bytes = match axum::body::to_bytes(body, 1 << 20).await {
             Ok(bytes) => bytes,
             Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
         };
         let parsed = serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null);
-        let name = parsed["name"]
-            .as_str()
-            .or_else(|| parsed["alias"].as_str())
-            .unwrap_or_default()
-            .to_string();
+        let field = if parsed["name"].is_string() {
+            "name"
+        } else {
+            "alias"
+        };
+        let mut name = parsed[field].as_str().unwrap_or_default().to_string();
+        if let Some(team) = &team {
+            if !team.may_name_template(crate::model::untagged(&name)) {
+                return api_error(StatusCode::FORBIDDEN, RESERVED_TEMPLATE);
+            }
+            if let Some(prefix) = team.template_prefix() {
+                if !name.is_empty() && !name.starts_with(&prefix) {
+                    // The tag, if any, stays where the node reads it.
+                    let tag = name
+                        .rsplit('/')
+                        .next()
+                        .and_then(|last| last.split_once(':'))
+                        .map(|(_, tag)| format!(":{tag}"))
+                        .unwrap_or_default();
+                    name = format!("{prefix}{}{tag}", crate::model::untagged(&name));
+                    bytes = with_field(&bytes, field, &name);
+                    headers.remove("content-length");
+                }
+            }
+        }
         (name, reqwest::Body::from(bytes))
     } else {
-        let mut segments = path.trim_start_matches("/v2").split('/').skip(2);
-        let name = segments.next().unwrap_or_default().to_string();
-        (name, reqwest::Body::wrap_stream(body.into_data_stream()))
+        // `/templates/{id}/..` or `/v2/templates/{id}/..`.
+        let at = if path.starts_with("/v2/") { 3 } else { 2 };
+        let mut segments: Vec<String> = path.split('/').map(str::to_owned).collect();
+        let mut name = segments.get(at).cloned().unwrap_or_default();
+        // Streamed, unless it is a build's start by a principal: that is read
+        // for the template it starts from.
+        let reads_base = team.is_some() && path.starts_with("/v2/") && method == Method::POST;
+        let mut body = Some(body);
+        let mut forwarded = None;
+        if let Some(team) = &team {
+            if name.contains('%') {
+                return api_error(StatusCode::BAD_REQUEST, "invalid template ID");
+            }
+            if !team.may_name_template(crate::model::untagged(&name)) {
+                return api_error(StatusCode::NOT_FOUND, format!("no template {name}"));
+            }
+            if let Some(prefix) = team.template_prefix() {
+                if !name.is_empty() && !name.starts_with(&prefix) {
+                    name = format!("{prefix}{}", crate::model::untagged(&name));
+                    segments[at].clone_from(&name);
+                    let mut rewritten = segments.join("/");
+                    if let Some(query) = uri.query() {
+                        rewritten = format!("{rewritten}?{query}");
+                    }
+                    match rewritten.parse() {
+                        Ok(rewritten) => uri = rewritten,
+                        Err(_) => return api_error(StatusCode::BAD_REQUEST, "invalid template ID"),
+                    }
+                }
+            }
+            // Starting from a template: the principal's own of that name
+            // first, and never another scope's.
+            if let (true, Some(unread)) = (reads_base, body.take()) {
+                let bytes = match axum::body::to_bytes(unread, 8 << 20).await {
+                    Ok(bytes) => bytes,
+                    Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+                };
+                let parsed = serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null);
+                let nodes = match control.store.nodes().await {
+                    Ok(nodes) => nodes,
+                    Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
+                };
+                forwarded = Some(match parsed["fromTemplate"].as_str() {
+                    Some(base) => {
+                        match team.resolve_template(base, |name| {
+                            nodes.iter().any(|node| node.offers(name))
+                        }) {
+                            Some(resolved) => {
+                                headers.remove("content-length");
+                                reqwest::Body::from(with_field(&bytes, "fromTemplate", &resolved))
+                            }
+                            None => {
+                                return api_error(
+                                    StatusCode::BAD_REQUEST,
+                                    format!("no template {base:?}"),
+                                )
+                            }
+                        }
+                    }
+                    None => reqwest::Body::from(bytes),
+                });
+            }
+        }
+        let body = forwarded.unwrap_or_else(|| {
+            reqwest::Body::wrap_stream(body.unwrap_or_else(Body::empty).into_data_stream())
+        });
+        (name, body)
     };
     let node = match builder(&control, &template).await {
         Ok(node) => node,
         Err((status, message)) => return api_error(status, message),
     };
+    // A build is named by its ID alone; the node does not look at the
+    // template beside it. Whose it is, is what the node says it built.
+    if team.is_some() {
+        if let Some((_, build)) = path.split_once("/builds/") {
+            let build = build.split('/').next().unwrap_or_default();
+            if !build_is_of(&control, &node, crate::model::untagged(&template), build).await {
+                return api_error(StatusCode::NOT_FOUND, format!("no build {build}"));
+            }
+        }
+    }
     relay(&control, &node, &method, &uri, &headers, body).await
+}
+
+/// Whether `node` holds the build `build` of the template `template`.
+async fn build_is_of(
+    control: &ControlPlane,
+    node: &crate::model::NodeInfo,
+    template: &str,
+    build: &str,
+) -> bool {
+    let path = format!("/templates/{template}/builds/{build}/status");
+    if !forwards_verbatim(&path) {
+        return false;
+    }
+    let mut request = control.http.get(format!("{}{path}", node.api));
+    if let Some(token) = &control.config.cluster_token {
+        request = request.header(CLUSTER_TOKEN_HEADER, token);
+    }
+    let Ok(response) = request.send().await else {
+        return false;
+    };
+    if !response.status().is_success() {
+        return false;
+    }
+    response
+        .json::<Value>()
+        .await
+        .is_ok_and(|answer| answer["templateID"].as_str() == Some(template))
+}
+
+/// Why a name is refused.
+const RESERVED_TEMPLATE: &str = "that template name is under another principal's scope";
+
+/// `body` with the JSON field `field` set to `value`; as it was if it is
+/// not a JSON object.
+fn with_field(body: &Bytes, field: &str, value: &str) -> Bytes {
+    match serde_json::from_slice::<Value>(body) {
+        Ok(Value::Object(mut object)) => {
+            object.insert(field.to_owned(), json!(value));
+            serde_json::to_vec(&Value::Object(object)).map_or_else(|_| body.clone(), Bytes::from)
+        }
+        _ => body.clone(),
+    }
 }
 
 /// Pass one request to `node`, both bodies streamed: an upload or a
@@ -3777,7 +3986,7 @@ async fn create_machine(
     };
     let parsed = serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null);
     let name = parsed["name"].as_str().unwrap_or_default();
-    let template = parsed["templateID"].as_str().unwrap_or("base");
+    let requested = parsed["templateID"].as_str().unwrap_or("base");
     let inventory = match machine_inventory(&control).await {
         Ok(inventory) => inventory,
         Err((status, message)) => return api_error(status, message),
@@ -3788,6 +3997,20 @@ async fn create_machine(
             "a node is not answering; a machine of this name may exist there",
         );
     }
+    let Some(resolved) = team.resolve_template(requested, |candidate| {
+        inventory.nodes.iter().any(|node| node.offers(candidate))
+    }) else {
+        return api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            format!("no live node offers template {requested}"),
+        );
+    };
+    let bytes = if resolved == crate::model::untagged(requested) {
+        bytes
+    } else {
+        with_field(&bytes, "templateID", &resolved)
+    };
+    let template = resolved.as_str();
     let taken = inventory.machines.iter().any(|(_, machine)| {
         machine["name"].as_str() == Some(name) && machine_team(machine) == team.0
     });
@@ -3875,10 +4098,13 @@ async fn template_alias(
         Err(e) => return hidden(StatusCode::SERVICE_UNAVAILABLE, e),
     };
     let name = crate::model::untagged(&alias);
-    if nodes.iter().any(|n| n.offers_to(name, &team)) {
-        Json(json!({ "templateID": name, "public": false })).into_response()
-    } else {
-        api_error(StatusCode::NOT_FOUND, format!("no template {name}"))
+    let resolved =
+        team.resolve_template(name, |candidate| nodes.iter().any(|n| n.offers(candidate)));
+    match resolved {
+        Some(resolved) if nodes.iter().any(|n| n.offers_to(&resolved, &team)) => {
+            Json(json!({ "templateID": resolved, "public": false })).into_response()
+        }
+        _ => api_error(StatusCode::NOT_FOUND, format!("no template {name}")),
     }
 }
 
