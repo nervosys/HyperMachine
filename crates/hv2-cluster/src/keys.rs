@@ -249,6 +249,39 @@ pub struct ManagedKey {
     pub mac: String,
 }
 
+/// The sealed record of a revocation, kept apart from the key records and
+/// never removed by any API call.
+///
+/// Removing a [`ManagedKey`] record alone is not a revocation the store can
+/// hold: a node with store access can write the key's old sealed record back,
+/// and its seal still verifies. A tombstone names the key id, so a record
+/// found under that id is refused however validly it is sealed.
+///
+/// Limits: a node with store access can still delete a tombstone (and then
+/// replay the record), or delete records outright (denying service). A
+/// tombstone stops a replay by a writer that cannot also delete it, and any
+/// record forged under a new id still needs the secret.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeyTombstone {
+    /// The revoked key's id.
+    pub id: String,
+    /// Unix seconds.
+    pub revoked_at: i64,
+    /// Lower-case hex HMAC-SHA256 over the fields above, under the
+    /// [`ManagedKeySecret`].
+    #[serde(default)]
+    pub mac: String,
+}
+
+impl std::fmt::Debug for KeyTombstone {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KeyTombstone")
+            .field("id", &self.id)
+            .field("revoked_at", &self.revoked_at)
+            .finish_non_exhaustive()
+    }
+}
+
 /// The control plane's own secret, which nodes never hold, for sealing the
 /// managed keys it makes. Nodes share the store the keys live in and can
 /// write to it; without a seal a compromised node could add a record naming
@@ -357,22 +390,53 @@ impl ManagedKeySecret {
     /// for a record with no seal, a malformed one, or any changed field.
     #[must_use]
     pub fn verifies(&self, key: &ManagedKey) -> bool {
-        let Some(expected) = self.mac_of(key) else {
-            return false;
-        };
-        let given = key.mac.as_bytes();
-        if given.len() != 64 || !given.iter().all(u8::is_ascii_hexdigit) {
+        self.mac_of(key)
+            .is_some_and(|expected| Self::mac_matches(&key.mac, &expected))
+    }
+
+    fn mac_matches(given: &str, expected: &[u8; 32]) -> bool {
+        let bytes = given.as_bytes();
+        if bytes.len() != 64 || !bytes.iter().all(u8::is_ascii_hexdigit) {
             return false;
         }
         let mut decoded = [0u8; 32];
         for (index, byte) in decoded.iter_mut().enumerate() {
-            let pair = &key.mac[index * 2..index * 2 + 2];
-            match u8::from_str_radix(pair, 16) {
+            match u8::from_str_radix(&given[index * 2..index * 2 + 2], 16) {
                 Ok(value) => *byte = value,
                 Err(_) => return false,
             }
         }
-        bool::from(decoded.ct_eq(&expected))
+        bool::from(decoded.ct_eq(expected))
+    }
+
+    fn tombstone_mac(&self, id: &str, revoked_at: i64) -> Option<[u8; 32]> {
+        let text = format!(
+            "hv2-managed-key-tombstone-v1;id={}:{id};state=revoked;revoked_at={revoked_at};",
+            id.len()
+        );
+        self.0.mac_of(&text).ok()
+    }
+
+    /// A sealed tombstone for the key `id`, revoked at `revoked_at`.
+    ///
+    /// # Errors
+    /// Only if the MAC primitive fails.
+    pub fn seal_tombstone(&self, id: &str, revoked_at: i64) -> Result<KeyTombstone, String> {
+        let mac = self
+            .tombstone_mac(id, revoked_at)
+            .ok_or_else(|| "could not seal a key tombstone".to_string())?;
+        Ok(KeyTombstone {
+            id: id.to_owned(),
+            revoked_at,
+            mac: mac.iter().map(|byte| format!("{byte:02x}")).collect(),
+        })
+    }
+
+    /// Whether this secret sealed `tombstone`. Constant-time.
+    #[must_use]
+    pub fn verifies_tombstone(&self, tombstone: &KeyTombstone) -> bool {
+        self.tombstone_mac(&tombstone.id, tombstone.revoked_at)
+            .is_some_and(|expected| Self::mac_matches(&tombstone.mac, &expected))
     }
 }
 

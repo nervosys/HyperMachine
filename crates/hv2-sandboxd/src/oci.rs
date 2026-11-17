@@ -153,7 +153,7 @@ enum Auth {
 
 /// A registry session: the client and whatever a challenge earned.
 struct Registry {
-    http: reqwest::Client,
+    policy: Policy,
     base: String,
     repository: String,
     auth: Auth,
@@ -169,19 +169,21 @@ impl Registry {
     ) -> Result<reqwest::Response, String> {
         let url = format!("{}/v2/{}/{path}", self.base, self.repository);
         for _ in 0..2 {
-            let mut request = self
-                .http
-                .get(&url)
-                .header("Accept", accept)
-                .timeout(timeout);
-            match (&self.auth, &self.credentials) {
-                (Auth::Bearer(token), _) => request = request.bearer_auth(token),
-                (Auth::Basic, Some(c)) => {
-                    request = request.basic_auth(&c.username, Some(&c.password));
-                }
-                _ => {}
-            }
-            let response = request.send().await.map_err(|e| format!("{url}: {e}"))?;
+            // Credentials and the token go to the registry itself, never to
+            // wherever a redirect sends the request on.
+            let response = self
+                .policy
+                .get(&url, true, timeout, |request, same_origin| {
+                    let request = request.header("Accept", accept);
+                    match (&self.auth, &self.credentials) {
+                        (Auth::Bearer(token), _) if same_origin => request.bearer_auth(token),
+                        (Auth::Basic, Some(c)) if same_origin => {
+                            request.basic_auth(&c.username, Some(&c.password))
+                        }
+                        _ => request,
+                    }
+                })
+                .await?;
             if response.status() == reqwest::StatusCode::UNAUTHORIZED
                 && matches!(self.auth, Auth::None)
             {
@@ -235,12 +237,23 @@ impl Registry {
             ));
         }
         let realm = realm.ok_or("a bearer challenge without a realm")?;
-        let mut request = self.http.get(&realm).query(&query).timeout(API_TIMEOUT);
-        if let Some(c) = &self.credentials {
-            request = request.basic_auth(&c.username, Some(&c.password));
-        }
-        let answer: Value = request
-            .send()
+        // The realm is named by the registry and receives the client's
+        // credentials: it must be a scheme, an address and (when a list is
+        // set) a host the registry's own would be allowed.
+        realm_scheme_ok(&self.base, &realm)?;
+        let mut realm_url = reqwest::Url::parse(&realm).map_err(|e| format!("{realm}: {e}"))?;
+        realm_url.query_pairs_mut().extend_pairs(&query);
+        let answer: Value = self
+            .policy
+            .get(
+                realm_url.as_str(),
+                true,
+                API_TIMEOUT,
+                |request, same_origin| match (&self.credentials, same_origin) {
+                    (Some(c), true) => request.basic_auth(&c.username, Some(&c.password)),
+                    _ => request,
+                },
+            )
             .await
             .map_err(|e| format!("{realm}: {e}"))?
             .error_for_status()
@@ -311,13 +324,13 @@ impl Registry {
 
 /// Pull `image` for `linux/amd64` and assemble its filesystem.
 pub async fn pull(
-    http: &reqwest::Client,
+    policy: &Policy,
     image: &str,
     credentials: Option<Credentials>,
 ) -> Result<Image, String> {
     let reference = Reference::parse(image)?;
     let mut registry = Registry {
-        http: http.clone(),
+        policy: policy.clone(),
         base: format!("{}://{}", scheme(&reference.registry), reference.registry),
         repository: reference.repository.clone(),
         auth: Auth::None,
@@ -420,6 +433,177 @@ fn launch_of(config: &Value) -> (Vec<String>, Vec<String>, Option<String>, Optio
         text("WorkingDir"),
         text("User"),
     )
+}
+
+/// Where a pull may connect: the registry, the bearer realm it names, and any
+/// redirect either answers with.
+///
+/// By default every address must be a public one
+/// (`hv2_cluster::events::is_global`: not loopback, private, link-local -- the
+/// cloud metadata service --, shared CGNAT, unique-local, multicast,
+/// documentation or unspecified), because the registry host comes from a
+/// client's image reference and the realm from the registry's reply, and each
+/// is a request the node makes from inside its network. The name is resolved
+/// once, here, and the connection is pinned to the address that passed, so it
+/// cannot resolve somewhere else a moment later.
+#[derive(Debug, Clone, Default)]
+pub struct Policy {
+    /// `--allow-private-registries`: skip the address check.
+    pub allow_private: bool,
+    /// `--registry-allow HOST`: when non-empty, the registry's host and its
+    /// realm's host must be one of these (a bare host, or `host:port`).
+    pub allow_hosts: Vec<String>,
+    /// Test only: one address exempt from the address check, for a server on
+    /// loopback that stands in for the registry.
+    #[cfg(test)]
+    pub(crate) exempt: Option<std::net::SocketAddr>,
+}
+
+/// Redirects followed per request.
+const MAX_REDIRECTS: usize = 5;
+
+impl Policy {
+    /// The operator's settings: `--allow-private-registries` and `--registry-allow`.
+    pub fn new(allow_private: bool, allow_hosts: Vec<String>) -> Self {
+        Self {
+            allow_private,
+            allow_hosts,
+            #[cfg(test)]
+            exempt: None,
+        }
+    }
+
+    /// Whether `host` (with `port`) is on the operator's list, if there is one.
+    fn listed(&self, host: &str, port: Option<u16>) -> Result<(), String> {
+        if self.allow_hosts.is_empty() {
+            return Ok(());
+        }
+        let host = host
+            .trim_matches(|c| c == '[' || c == ']')
+            .to_ascii_lowercase();
+        let found = self.allow_hosts.iter().any(|allowed| {
+            let allowed = allowed.to_ascii_lowercase();
+            allowed == host || port.is_some_and(|p| allowed == format!("{host}:{p}"))
+        });
+        if found {
+            Ok(())
+        } else {
+            Err(format!(
+                "{host} is not one of this node's --registry-allow hosts"
+            ))
+        }
+    }
+
+    /// The first of `addrs` a pull may connect to.
+    fn pick(&self, addrs: &[std::net::SocketAddr]) -> Option<std::net::SocketAddr> {
+        addrs.iter().copied().find(|a| {
+            self.allow_private || hv2_cluster::events::is_global(a.ip()) || self.is_exempt(a)
+        })
+    }
+
+    #[cfg(test)]
+    fn is_exempt(&self, a: &std::net::SocketAddr) -> bool {
+        self.exempt == Some(*a)
+    }
+
+    #[cfg(not(test))]
+    fn is_exempt(&self, _: &std::net::SocketAddr) -> bool {
+        false
+    }
+
+    /// A client for `url` that can connect only to the address that passed.
+    async fn client_for(
+        &self,
+        url: &reqwest::Url,
+        listed: bool,
+    ) -> Result<reqwest::Client, String> {
+        // An IPv6 literal comes bracketed; the lookup wants it bare.
+        let host = url
+            .host_str()
+            .ok_or_else(|| format!("{url}: no host"))?
+            .trim_matches(|c| c == '[' || c == ']')
+            .to_string();
+        let port = url.port_or_known_default().unwrap_or(443);
+        if listed {
+            self.listed(&host, url.port())?;
+        }
+        let addrs: Vec<std::net::SocketAddr> = tokio::net::lookup_host((host.as_str(), port))
+            .await
+            .map_err(|e| format!("{host}: {e}"))?
+            .collect();
+        let addr = self.pick(&addrs).ok_or_else(|| {
+            format!(
+                "{host} resolves to no public address; a registry on a private network \
+                 needs --allow-private-registries"
+            )
+        })?;
+        hv2_tls::http_client(None)
+            .unwrap_or_default()
+            .resolve(&host, addr)
+            .redirect(reqwest::redirect::Policy::none())
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .build()
+            .map_err(|e| format!("{host}: {e}"))
+    }
+
+    /// `GET url`, each hop checked: the first against the host list (when
+    /// `listed`), every hop against the address check and never from https
+    /// down to http. `build` adds headers; it is told whether the request is
+    /// still on the origin it began at, so credentials do not follow a
+    /// redirect elsewhere.
+    async fn get(
+        &self,
+        url: &str,
+        listed: bool,
+        timeout: std::time::Duration,
+        build: impl Fn(reqwest::RequestBuilder, bool) -> reqwest::RequestBuilder,
+    ) -> Result<reqwest::Response, String> {
+        let mut url = reqwest::Url::parse(url).map_err(|e| format!("{url}: {e}"))?;
+        let origin = url.origin();
+        for hop in 0..=MAX_REDIRECTS {
+            let client = self.client_for(&url, listed && hop == 0).await?;
+            let request = build(
+                client.get(url.clone()).timeout(timeout),
+                url.origin() == origin,
+            );
+            let response = request.send().await.map_err(|e| format!("{url}: {e}"))?;
+            if !response.status().is_redirection() {
+                return Ok(response);
+            }
+            let Some(location) = response
+                .headers()
+                .get(reqwest::header::LOCATION)
+                .and_then(|v| v.to_str().ok())
+            else {
+                return Ok(response);
+            };
+            let next = url
+                .join(location)
+                .map_err(|e| format!("{url}: redirect to {location:?}: {e}"))?;
+            if !matches!(next.scheme(), "http" | "https")
+                || (url.scheme() == "https" && next.scheme() != "https")
+            {
+                return Err(format!("{url}: refused a redirect to {next}"));
+            }
+            url = next;
+        }
+        Err(format!("{url}: more than {MAX_REDIRECTS} redirects"))
+    }
+}
+
+/// A bearer realm must be https when the registry is: a challenge in the
+/// clear would hand the client's credentials to the network.
+fn realm_scheme_ok(registry_base: &str, realm: &str) -> Result<(), String> {
+    let url = reqwest::Url::parse(realm).map_err(|e| format!("realm {realm}: {e}"))?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(format!("realm {realm}: not an http(s) URL"));
+    }
+    if registry_base.starts_with("https://") && url.scheme() != "https" {
+        return Err(format!(
+            "realm {realm}: the registry is https and its token server must be too"
+        ));
+    }
+    Ok(())
 }
 
 /// HTTPS, but for a registry on this host -- as Docker, which lets
@@ -832,5 +1016,158 @@ mod tests {
         assert_eq!(clean("../etc/passwd"), None);
         assert_eq!(clean("./usr//bin/x"), Some("usr/bin/x".into()));
         assert_eq!(clean("/"), None);
+    }
+
+    // ---- where a pull may connect ----
+
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    /// A server on loopback that answers every request with `reply` and
+    /// counts the connections it took.
+    async fn serve(reply: String) -> (std::net::SocketAddr, Arc<AtomicUsize>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let seen = Arc::new(AtomicUsize::new(0));
+        let count = Arc::clone(&seen);
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                count.fetch_add(1, Ordering::SeqCst);
+                let mut buf = [0u8; 4096];
+                let _ = socket.read(&mut buf).await;
+                let _ = socket.write_all(reply.as_bytes()).await;
+            }
+        });
+        (addr, seen)
+    }
+
+    fn url(s: &str) -> reqwest::Url {
+        reqwest::Url::parse(s).unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_registry_on_a_non_public_address_is_refused() {
+        let strict = Policy::default();
+        for bad in [
+            "https://127.0.0.1:5000/",
+            "https://localhost/",
+            "https://10.1.2.3/",
+            "https://172.16.0.9/",
+            "https://192.168.1.1/",
+            "https://169.254.169.254/latest/meta-data/",
+            "https://100.64.0.1/",
+            "https://[::1]/",
+            "https://[fd00::1]/",
+            "https://[fe80::1]/",
+            "https://0.0.0.0/",
+        ] {
+            let e = strict.client_for(&url(bad), true).await.unwrap_err();
+            assert!(e.contains("no public address"), "{bad}: {e}");
+        }
+        // A public literal needs no lookup and passes.
+        strict
+            .client_for(&url("https://93.184.216.34/"), true)
+            .await
+            .unwrap();
+        // The opt-out lets the private ones through.
+        let open = Policy {
+            allow_private: true,
+            ..Policy::default()
+        };
+        for ok in ["https://127.0.0.1:5000/", "https://169.254.169.254/"] {
+            open.client_for(&url(ok), true).await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn with_a_list_only_listed_hosts_are_allowed() {
+        let policy = Policy {
+            allow_hosts: vec!["Registry.Example".into(), "93.184.216.34:8443".into()],
+            ..Policy::default()
+        };
+        // A public address, but not listed.
+        let e = policy
+            .client_for(&url("https://93.184.216.35/"), true)
+            .await
+            .unwrap_err();
+        assert!(e.contains("--registry-allow"), "{e}");
+        policy
+            .client_for(&url("https://93.184.216.34:8443/"), true)
+            .await
+            .unwrap();
+        // The list does not lift the address check.
+        let on_list = Policy {
+            allow_hosts: vec!["127.0.0.1".into()],
+            ..Policy::default()
+        };
+        let e = on_list
+            .client_for(&url("https://127.0.0.1/"), true)
+            .await
+            .unwrap_err();
+        assert!(e.contains("no public address"), "{e}");
+    }
+
+    #[test]
+    fn a_realm_must_be_https_when_the_registry_is() {
+        assert!(realm_scheme_ok("https://r.example", "https://auth.example/token").is_ok());
+        assert!(realm_scheme_ok("https://r.example", "http://auth.example/token").is_err());
+        assert!(realm_scheme_ok("https://r.example", "ftp://auth.example/token").is_err());
+        assert!(realm_scheme_ok("http://localhost:5000", "http://localhost:5000/token").is_ok());
+    }
+
+    #[tokio::test]
+    async fn pulling_from_a_loopback_registry_never_connects() {
+        let (addr, seen) = serve("HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\n{}".into()).await;
+        let e = pull(&Policy::default(), &format!("{addr}/library/x:1"), None)
+            .await
+            .map(|_| ())
+            .unwrap_err();
+        assert!(e.contains("no public address"), "{e}");
+        assert_eq!(seen.load(Ordering::SeqCst), 0, "a connection was made");
+    }
+
+    #[tokio::test]
+    async fn a_redirect_to_the_metadata_service_is_not_followed() {
+        let (addr, seen) = serve(
+            "HTTP/1.1 302 Found\r\nlocation: http://169.254.169.254/latest/meta-data/\r\n\
+             content-length: 0\r\n\r\n"
+                .into(),
+        )
+        .await;
+        let policy = Policy {
+            exempt: Some(addr),
+            ..Policy::default()
+        };
+        let e = pull(&policy, &format!("{addr}/library/x:1"), None)
+            .await
+            .map(|_| ())
+            .unwrap_err();
+        assert!(e.contains("no public address"), "{e}");
+        assert_eq!(seen.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn a_bearer_realm_on_an_internal_address_gets_no_credentials() {
+        let (addr, _) = serve(
+            "HTTP/1.1 401 Unauthorized\r\nwww-authenticate: Bearer \
+             realm=\"http://169.254.169.254/token\",service=\"r\"\r\ncontent-length: 0\r\n\r\n"
+                .into(),
+        )
+        .await;
+        let policy = Policy {
+            exempt: Some(addr),
+            ..Policy::default()
+        };
+        let creds = Credentials {
+            username: "u".into(),
+            password: "p".into(),
+        };
+        let e = pull(&policy, &format!("{addr}/library/x:1"), Some(creds))
+            .await
+            .map(|_| ())
+            .unwrap_err();
+        assert!(e.contains("169.254.169.254"), "{e}");
+        assert!(e.contains("no public address"), "{e}");
     }
 }

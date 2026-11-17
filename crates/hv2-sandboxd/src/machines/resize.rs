@@ -83,12 +83,16 @@ fn resized(machine: &Stored, change: &Resize) -> Result<Stored, String> {
 }
 
 /// Run one of e2fsprogs' tools on `image`; its exit code and what it said.
-fn e2fs(tool: &str, args: &[&str], image: &FsPath) -> Result<(i32, String), String> {
-    let out = std::process::Command::new(tool)
-        .args(args)
-        .arg(image)
-        .output()
-        .map_err(|e| format!("running {tool} (is e2fsprogs installed?): {e}"))?;
+///
+/// The image is the guest's: the tool is confined (see `e2fs_jail`) to that
+/// one file, and may write no file larger than `max_file`.
+fn e2fs(tool: &str, args: &[&str], image: &FsPath, max_file: u64) -> Result<(i32, String), String> {
+    let mut all: Vec<std::ffi::OsString> = args.iter().map(Into::into).collect();
+    all.push(image.into());
+    let out = {
+        let mut command = crate::e2fs_jail::tool(tool, &all, image, true, None, max_file)?;
+        crate::e2fs_jail::output(&mut command, E2FS_TIMEOUT).map_err(|e| format!("{tool}: {e}"))?
+    };
     let said = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
@@ -96,6 +100,9 @@ fn e2fs(tool: &str, args: &[&str], image: &FsPath) -> Result<(i32, String), Stri
     );
     Ok((out.status.code().unwrap_or(-1), said.trim().to_string()))
 }
+
+/// How long a filesystem check or grow may take.
+const E2FS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3600);
 
 /// Grow the disk at `image` to `gib`, and with `filesystem` the ext4
 /// filesystem that is the whole of it.
@@ -108,7 +115,7 @@ fn e2fs(tool: &str, args: &[&str], image: &FsPath) -> Result<(i32, String), Stri
 fn grow(image: &FsPath, gib: u64, filesystem: bool) -> Result<(), String> {
     if filesystem {
         // 0 is clean and 1 is errors put right; anything more was not.
-        let (code, said) = e2fs("e2fsck", &["-f", "-p"], image)?;
+        let (code, said) = e2fs("e2fsck", &["-f", "-p"], image, gib << 30)?;
         if code > 1 {
             return Err(format!(
                 "the disk's filesystem did not pass its check, so it was not grown: {said}"
@@ -121,7 +128,7 @@ fn grow(image: &FsPath, gib: u64, filesystem: bool) -> Result<(), String> {
         .and_then(|file| file.set_len(gib << 30))
         .map_err(|e| format!("growing {}: {e}", image.display()))?;
     if filesystem {
-        let (code, said) = e2fs("resize2fs", &[], image)?;
+        let (code, said) = e2fs("resize2fs", &[], image, gib << 30)?;
         if code != 0 {
             return Err(format!(
                 "the disk grew and its filesystem did not; it is as large as it was: {said}"
@@ -252,5 +259,29 @@ mod tests {
         // as it was.
         assert!(grow(&image, 2, true).is_err());
         assert_eq!(std::fs::metadata(&image).unwrap().len(), 1 << 30);
+    }
+
+    /// The check and the grow of a real ext4 image run confined, and work.
+    #[test]
+    fn a_real_filesystem_is_checked_and_grown_under_confinement() {
+        let dir = tempfile::tempdir().unwrap();
+        let image = dir.path().join("root.img");
+        let made = std::process::Command::new("mkfs.ext4")
+            .args(["-q", "-F"])
+            .arg(&image)
+            .arg("16M")
+            .output();
+        if !made.is_ok_and(|o| o.status.success()) {
+            eprintln!("skipped: no mkfs.ext4 here");
+            return;
+        }
+        grow(&image, 1, true).unwrap();
+        assert_eq!(std::fs::metadata(&image).unwrap().len(), 1 << 30);
+        let (code, said) = e2fs("e2fsck", &["-f", "-n"], &image, 1 << 30).unwrap();
+        assert_eq!(code, 0, "{said}");
+        assert!(
+            said.contains("262144 blocks") || said.contains("/262144"),
+            "{said}"
+        );
     }
 }

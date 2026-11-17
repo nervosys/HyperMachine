@@ -141,7 +141,9 @@ def main():
     log = (args.output / "daemon.log").open("wb")
     daemon = subprocess.Popen(
         [str(args.daemon), "--port", str(api), "--proxy-port", str(port()), "--guest-kit", str(args.kit),
-         "--memory-mb", "512", "--cpu-cores", "1", "--capacity", "4"],
+         "--memory-mb", "512", "--cpu-cores", "1", "--capacity", "4",
+         # The registry here is on loopback, which the node refuses by default.
+         "--allow-private-registries"],
         env=dict(os.environ, HV2_KERNEL=str(args.kernel), HV2_INITRD=str(args.initrd), RUST_LOG="info"),
         stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
 

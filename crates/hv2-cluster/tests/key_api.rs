@@ -18,7 +18,9 @@ use sha2::{Digest, Sha256};
 
 use hv2_cluster::control::{self, ControlConfig, ControlPlane};
 use hv2_cluster::domains::{DomainBinding, DomainName};
-use hv2_cluster::keys::{ApiKeyPolicy, ApiRole, ApiScope, ManagedKey, ManagedKeySecret};
+use hv2_cluster::keys::{
+    ApiKeyPolicy, ApiRole, ApiScope, KeyTombstone, ManagedKey, ManagedKeySecret,
+};
 use hv2_cluster::model::{ClusterEvent, Delivery, NodeInfo, SandboxRecord, Webhook};
 use hv2_cluster::names::{NameReservation, SandboxName};
 use hv2_cluster::store::{
@@ -161,6 +163,15 @@ impl ClusterStore for Flaky {
     }
     async fn remove_managed_key(&self, id: &str) -> StoreResult<bool> {
         self.inner.remove_managed_key(id).await
+    }
+    async fn put_key_tombstone(&self, tombstone: &KeyTombstone) -> StoreResult<()> {
+        self.inner.put_key_tombstone(tombstone).await
+    }
+    async fn key_tombstone(&self, id: &str) -> StoreResult<Option<KeyTombstone>> {
+        self.inner.key_tombstone(id).await
+    }
+    async fn key_tombstones(&self) -> StoreResult<Vec<KeyTombstone>> {
+        self.inner.key_tombstones().await
     }
 }
 
@@ -711,6 +722,65 @@ async fn revoking_a_key_takes_effect_on_the_next_request_everywhere() {
             401
         );
     }
+}
+
+/// The store is shared with nodes: writing a revoked key's old sealed record
+/// back (its seal still verifies) must not revive it.
+#[tokio::test]
+async fn a_revoked_key_stays_revoked_when_its_old_record_is_written_back() {
+    let w = world().await;
+    let (_, made) = post_key(&w.base, ADMIN, member_body("red", "carol")).await;
+    let (id, key) = (
+        made["id"].as_str().unwrap().to_owned(),
+        made["key"].as_str().unwrap().to_owned(),
+    );
+    let before = w.store.managed_keys().await.unwrap().remove(0);
+    assert_eq!(before.id, id);
+    assert_eq!(
+        status(&w.base, reqwest::Method::GET, "/sandboxes", &key).await,
+        200
+    );
+    assert_eq!(
+        status(
+            &w.base,
+            reqwest::Method::DELETE,
+            &format!("/keys/{id}"),
+            ADMIN
+        )
+        .await,
+        200
+    );
+    assert_eq!(
+        status(&w.base, reqwest::Method::GET, "/sandboxes", &key).await,
+        401
+    );
+
+    // A node replays the pre-revocation record, seal intact.
+    w.store.put_managed_key(&before).await.unwrap();
+    assert_eq!(
+        status(&w.base, reqwest::Method::GET, "/sandboxes", &key).await,
+        401,
+        "a replayed record revived a revoked key"
+    );
+    // Nor does it show up in the listing.
+    assert!(listed(&w.base, ADMIN).await.is_empty());
+
+    // A tombstone a node forged (wrong seal) revokes nothing...
+    let (_, other) = post_key(&w.base, ADMIN, member_body("red", "dave")).await;
+    let other_id = other["id"].as_str().unwrap().to_owned();
+    let other_key = other["key"].as_str().unwrap().to_owned();
+    w.store
+        .put_key_tombstone(&KeyTombstone {
+            id: other_id,
+            revoked_at: now(),
+            mac: "0".repeat(64),
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        status(&w.base, reqwest::Method::GET, "/sandboxes", &other_key).await,
+        200
+    );
 }
 
 #[tokio::test]

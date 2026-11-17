@@ -288,6 +288,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`hm-tui`, a new terminal dashboard** for Type 2 VMs and sandbox VMs over the same APIs `hm-gui` and `hm sandbox vm` already use; and a Sandboxes tab for `hm-gui`, which previously showed only Type 2 VMs.
 
 ### Security
+- **The e2fs tools that read guest disks now run confined.** `debugfs`, `e2fsck` and `resize2fs` run
+  under Landlock, writing only their scratch directory or image, with resource limits and a timeout.
+  A host without Landlock refuses them unless `--allow-unconfined-e2fs-tools` is given.
+- **Registry pulls no longer reach internal addresses.** The registry, the bearer realm and every
+  redirect must resolve to public addresses, and the connection is pinned to the checked address.
+  Use `--allow-private-registries` for a registry on a private network. `--registry-allow HOST`
+  restricts pulls to listed hosts.
+- **A revoked managed key could be revived by writing its old record back.** Revocation now leaves a
+  sealed record that authentication checks.
 - **A guest could reach its own node's public address.** Under an allow-default egress policy the
   gateway refused only reserved ranges. It now also refuses the host's interface addresses, read at
   start.

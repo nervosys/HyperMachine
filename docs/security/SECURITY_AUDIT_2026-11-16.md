@@ -195,17 +195,40 @@ Six of the open findings were fixed after the first commit. Each has a test that
 Verified with unit tests only (hv2-cluster, hm-cli, hv2-net and hv2-sandboxd, on Windows and Linux),
 not on KVM.
 
+## Fixed in a second follow-up
+
+- **O1 (High, plausible): e2fsprogs parsed guest-written images unconfined.** `debugfs`, `e2fsck` and
+  `resize2fs` now run in a child confined with Landlock: it may write only the scratch directory
+  (for `rdump`) or the one image (for `e2fsck` and `resize2fs`), and read only the image, system
+  binaries and libraries, and its own mount table. The child also gets `no_new_privs`, limits on file
+  size, address space and CPU, no core dumps, and a wall-clock timeout. Before an `rdump` result is
+  archived, sockets, FIFOs and device nodes are deleted, and links are never followed. A host
+  without Landlock refuses these operations unless `--allow-unconfined-e2fs-tools` is given. There
+  is no seccomp filter and no network namespace.
+- **O2 (Medium): registry pulls reached internal addresses.**
+  - **Address check:** every connection (registry, bearer realm and each redirect hop) resolves its
+    host and refuses addresses that are not public. That includes loopback, private ranges,
+    link-local, the cloud metadata address, CGNAT and ULA. The connection is pinned to the checked
+    address.
+  - **Redirects:** up to five are followed, each checked again. A redirect from https to http is
+    refused, and credentials go only to the original origin.
+  - **Realm:** it must use https when the registry does.
+  - **Flags:**
+    - `--allow-private-registries` turns the address check off.
+    - `--registry-allow HOST` (repeatable) admits only the listed registry and realm hosts.
+- **O12 (Low): partly fixed.** Revoking a managed key now also writes a sealed revocation record that
+  is never removed by normal operations. Authentication and listing refuse a key that has a valid
+  one, so writing the old record back no longer revives the key. What remains is in the open table.
+
 ## Open: found, not fixed
 
 | Id | Severity | Finding | Why not now |
 |---|---|---|---|
-| O1 | High (plausible) | `GET /machines/{n}/snapshots/{id}/archive` runs `debugfs rdump` on a guest-written ext4 image as the node user. A crafted image may write outside the scratch directory. `e2fsck`, `resize2fs` and `debugfs` also parse guest-controlled filesystems in the node process. | Not reproduced. Needs a crafted image, or a sandboxed (user namespace, seccomp) extraction process. |
-| O2 | Medium | Registry pulls go to any host a client names, including internal addresses. Bearer `realm` URLs receive the client's registry credentials, and redirects are followed. | Needs an operator registry allow-list: a design decision. |
 | O3 | Medium | The node's sandbox proxy has no authentication of its own. The control plane relays to it as raw TCP. | Documented. The proxy port must not be exposed beyond the control plane. Fixing it needs the control plane to send credentials. |
 | O4 | Medium | The control plane runs open, everyone an administrator, when no API key source is configured, and managed keys do not change that. | A change to default behaviour, left for the owner. Startup logs a warning. |
 | O5 | Medium | Keys that have a principal but no team see every team's events, webhooks, machines and volumes. | Needs scoping by principal: a design decision. |
 | O7 | Medium | Volumes have no byte or inode quota, so a guest can fill the host disk. | Known gap (listed in the CubeSandbox roadmap). |
-| O12 | Low | A compromised node can still delete or re-add a sealed managed-key record. It cannot forge one. | Revocation can be undone only for a key whose secret the attacker already holds. |
+| O12 | Low | Partly fixed (see below). A node with write access to Redis can delete a key's sealed revocation record and then replay the key's old record. It can also delete records outright (denial of service). Keys revoked before the fix have no revocation record. | Redis cannot stop a writer from deleting. A key's own expiry bounds the damage. |
 
 ## Checked and found sound
 

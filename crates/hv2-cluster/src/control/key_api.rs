@@ -141,6 +141,28 @@ pub(super) enum Managed {
     Unavailable,
 }
 
+/// Whether `tombstone` is a genuine revocation of key `id`. One whose seal
+/// does not verify (a node wrote it) is ignored, and said.
+///
+/// Not defended: anyone with write access to the store can delete records
+/// (denying service) or a tombstone together with replaying the record. The
+/// tombstone defeats replay only by a writer that cannot also delete it.
+fn tombstone_applies(
+    secret: &ManagedKeySecret,
+    tombstone: &crate::keys::KeyTombstone,
+    id: &str,
+) -> bool {
+    if tombstone.id != id {
+        return false;
+    }
+    if secret.verifies_tombstone(tombstone) {
+        return true;
+    }
+    tracing::warn!(key = %id.escape_debug(),
+        "ignoring a key tombstone not sealed by this control plane");
+    false
+}
+
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
@@ -174,6 +196,22 @@ pub(super) async fn authenticate(control: &ControlPlane, sent: &[u8], now: i64) 
         tracing::warn!(key = %record.id.escape_debug(),
             "a managed key record is not sealed by this control plane; request refused");
         return Managed::Unavailable;
+    }
+    // A revoked key stays revoked even if its old sealed record was written
+    // back into the store: the tombstone outlives the record.
+    match tokio::time::timeout(STORE_TIMEOUT, control.store.key_tombstone(&record.id)).await {
+        Ok(Ok(Some(tombstone))) if tombstone_applies(&secret, &tombstone, &record.id) => {
+            return Managed::Unknown;
+        }
+        Ok(Ok(_)) => {}
+        Ok(Err(error)) => {
+            tracing::warn!(%error, "key tombstone lookup failed; request refused");
+            return Managed::Unavailable;
+        }
+        Err(_) => {
+            tracing::warn!("key tombstone lookup timed out; request refused");
+            return Managed::Unavailable;
+        }
     }
     let policy = match ApiKeyPolicy::from_managed(&record) {
         Ok(policy) if policy.has_digest(&digest) => policy,
@@ -309,8 +347,19 @@ async fn read_managed(control: &ControlPlane, secret: &ManagedKeySecret) -> Resu
         Ok(Err(error)) => return Err(unavailable("could not read managed keys", &error)),
         Err(_) => return Err(unavailable("reading managed keys timed out", &"timeout")),
     };
-    let (trusted, untrusted): (Vec<_>, Vec<_>) =
-        keys.into_iter().partition(|key| secret.verifies(key));
+    let revoked: BTreeSet<String> =
+        match tokio::time::timeout(STORE_TIMEOUT, control.store.key_tombstones()).await {
+            Ok(Ok(all)) => all
+                .into_iter()
+                .filter(|t| tombstone_applies(secret, t, &t.id))
+                .map(|t| t.id)
+                .collect(),
+            Ok(Err(error)) => return Err(unavailable("could not read key tombstones", &error)),
+            Err(_) => return Err(unavailable("reading key tombstones timed out", &"timeout")),
+        };
+    // A revoked key whose record came back is neither listed nor counted.
+    let keys = keys.into_iter().filter(|key| !revoked.contains(&key.id));
+    let (trusted, untrusted): (Vec<_>, Vec<_>) = keys.partition(|key| secret.verifies(key));
     if !untrusted.is_empty() {
         tracing::warn!(
             count = untrusted.len(),
@@ -649,6 +698,23 @@ pub(super) async fn delete_key(
         (Authority::Administrator, _) => {}
     }
     let untrusted = held.untrusted.iter().find(|key| key.id == id);
+    // Tombstone first, so a failure between the two steps leaves the key
+    // refused rather than revoked in name only. It is never removed, so a
+    // later write-back of the old record does not revive the key.
+    // (Only for an id the store held, so a stream of DELETEs for ids that
+    // never existed cannot grow the tombstone set.)
+    if key.is_some() || untrusted.is_some() {
+        let tombstone = match secret.seal_tombstone(&id, now()) {
+            Ok(tombstone) => tombstone,
+            Err(error) => return unavailable("could not seal a key tombstone", &error),
+        };
+        match tokio::time::timeout(STORE_TIMEOUT, control.store.put_key_tombstone(&tombstone)).await
+        {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => return unavailable("could not record the revocation", &error),
+            Err(_) => return unavailable("recording the revocation timed out", &"timeout"),
+        }
+    }
     match tokio::time::timeout(STORE_TIMEOUT, control.store.remove_managed_key(&id)).await {
         Ok(Ok(true)) => {}
         // Someone else revoked it between the read and the removal.

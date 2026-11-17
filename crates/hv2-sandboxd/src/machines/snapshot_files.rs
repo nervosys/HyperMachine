@@ -43,6 +43,9 @@ const MAX_DUMP: u64 = 4 * MAX_FILE as u64;
 /// The most entries one dump may write.
 const MAX_DUMP_ENTRIES: u64 = 500_000;
 /// How long a dump or an archive may take.
+/// How long one `debugfs` request may take.
+const DEBUGFS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+/// How long a dump may take.
 const ARCHIVE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(180);
 /// An ext superblock's magic, at this offset in its filesystem.
 const EXT_MAGIC_AT: u64 = 1080;
@@ -180,12 +183,10 @@ fn debugfs(image: &FsPath, offset: u64, request: &str) -> Result<Vec<u8>, String
     if offset != 0 {
         spec.push(format!("?offset={offset}"));
     }
-    let out = std::process::Command::new("debugfs")
-        .arg("-R")
-        .arg(request)
-        .arg(spec)
-        .output()
-        .map_err(|e| format!("running debugfs (is e2fsprogs installed?): {e}"))?;
+    let args = [std::ffi::OsString::from("-R"), request.into(), spec];
+    let mut command = crate::e2fs_jail::tool("debugfs", &args, image, false, None, 0)?;
+    let out = crate::e2fs_jail::output(&mut command, DEBUGFS_TIMEOUT)
+        .map_err(|e| format!("debugfs: {e}"))?;
     // It says what went wrong on standard error, after its version line,
     // and exits 0 regardless.
     let complaint: Vec<&str> = std::str::from_utf8(&out.stderr)
@@ -400,6 +401,36 @@ fn tree_size(dir: &FsPath, stop: (u64, u64)) -> (u64, u64) {
     (bytes, entries)
 }
 
+/// Walk `root` without following a link, and remove whatever is not a regular
+/// file, a directory or a symbolic link: a socket, a FIFO, a device node. A
+/// link is kept as a link -- it is archived as one and never opened -- but is
+/// never entered. Returns how many entries were removed. `root` itself must be
+/// a real directory, not a link to one.
+fn prune_special(root: &FsPath) -> std::io::Result<usize> {
+    if !std::fs::symlink_metadata(root)?.file_type().is_dir() {
+        return Err(std::io::Error::other(format!(
+            "{} is not a directory",
+            root.display()
+        )));
+    }
+    let mut removed = 0;
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        for entry in std::fs::read_dir(&dir)? {
+            let entry = entry?;
+            let kind = std::fs::symlink_metadata(entry.path())?.file_type();
+            if kind.is_dir() {
+                pending.push(entry.path());
+            } else if !kind.is_file() && !kind.is_symlink() {
+                // A socket, FIFO or device node: nothing a tree needs.
+                std::fs::remove_file(entry.path())?;
+                removed += 1;
+            }
+        }
+    }
+    Ok(removed)
+}
+
 /// The directory `path` of the filesystem at `offset` in `image` and
 /// everything below it, as a gzipped tar.
 ///
@@ -438,11 +469,24 @@ fn archive(
         spec.push(format!("?offset={offset}"));
     }
     let complaints = tempfile::tempfile().map_err(|e| internal(e.to_string()))?;
-    let mut dump = Command::new("debugfs")
+    // Confined (see `e2fs_jail`): the scratch directory is the one place it
+    // may write, the image the one thing it may read.
+    let args = [
+        std::ffi::OsString::from("-R"),
+        format!("rdump <{}> .", entry.inode).into(),
+        spec,
+    ];
+    let mut dump_command = crate::e2fs_jail::tool(
+        "debugfs",
+        &args,
+        image,
+        false,
+        Some(scratch.path()),
+        max_dump.0.saturating_add(1 << 20),
+    )
+    .map_err(internal)?;
+    let mut dump = dump_command
         .current_dir(scratch.path())
-        .arg("-R")
-        .arg(format!("rdump <{}> .", entry.inode))
-        .arg(spec)
         .stdout(Stdio::null())
         .stderr(Stdio::from(
             complaints
@@ -511,6 +555,9 @@ fn archive(
         .find(|e| e.file_type().is_ok_and(|t| t.is_dir()))
         .ok_or_else(|| internal("debugfs wrote nothing".to_string()))?
         .path();
+    // What a crafted image could leave that is not a file, directory or link
+    // is removed before anything reads the tree.
+    prune_special(scratch.path()).map_err(|e| internal(format!("checking the dump: {e}")))?;
     let mut tar = Command::new("tar")
         .arg("-C")
         .arg(&dumped)
@@ -810,5 +857,33 @@ mod tests {
         // Nothing ext anywhere.
         let (head, read) = disk(vec![0; 4096], &[]);
         assert!(find_ext(&head, None, read).unwrap_err().contains("no ext2"));
+    }
+
+    /// A dump is walked without following links, and what is not a file,
+    /// directory or link is removed before it is archived.
+    #[test]
+    fn a_dump_is_pruned_of_everything_but_files_directories_and_links() {
+        use std::os::unix::net::UnixListener;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("dump");
+        std::fs::create_dir_all(root.join("sub")).unwrap();
+        std::fs::write(root.join("sub/file"), "x").unwrap();
+        std::os::unix::fs::symlink("/etc/passwd", root.join("sub/link")).unwrap();
+        let fifo = std::ffi::CString::new(root.join("sub/fifo").to_str().unwrap()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+        let _socket = UnixListener::bind(root.join("sock")).unwrap();
+
+        assert_eq!(prune_special(&root).unwrap(), 2);
+        assert!(root.join("sub/file").is_file());
+        assert!(std::fs::symlink_metadata(root.join("sub/link"))
+            .unwrap()
+            .is_symlink());
+        assert!(std::fs::symlink_metadata(root.join("sub/fifo")).is_err());
+        assert!(std::fs::symlink_metadata(root.join("sock")).is_err());
+
+        // A root that is itself a link is refused, not entered.
+        let alias = dir.path().join("alias");
+        std::os::unix::fs::symlink(&root, &alias).unwrap();
+        assert!(prune_special(&alias).is_err());
     }
 }

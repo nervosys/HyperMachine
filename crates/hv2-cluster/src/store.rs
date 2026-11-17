@@ -28,7 +28,7 @@ use crate::private_networks::{
 use crate::web_sharing::{SharingAccess, SharingChange, WebSharingState};
 
 use crate::environments::Environment;
-use crate::keys::ManagedKey;
+use crate::keys::{KeyTombstone, ManagedKey};
 use crate::model::{ClusterEvent, Delivery, NodeInfo, SandboxRecord, Webhook};
 use crate::team_telemetry::TeamTelemetry;
 
@@ -359,6 +359,22 @@ pub trait ClusterStore: Send + Sync {
             "managed API keys unsupported by this store".into(),
         ))
     }
+    /// Record a revocation ([`KeyTombstone`]), replacing any earlier one for
+    /// the same id. No method of this trait removes a tombstone.
+    async fn put_key_tombstone(&self, _tombstone: &KeyTombstone) -> Result<()> {
+        Err(StoreError(
+            "managed API keys unsupported by this store".into(),
+        ))
+    }
+    /// The tombstone held for key `id`, if any. One that cannot be decoded is
+    /// treated as absent (and logged); the caller checks the seal.
+    async fn key_tombstone(&self, _id: &str) -> Result<Option<KeyTombstone>> {
+        Ok(None)
+    }
+    /// Every tombstone held, undecodable ones skipped.
+    async fn key_tombstones(&self) -> Result<Vec<KeyTombstone>> {
+        Ok(Vec::new())
+    }
 }
 
 /// Deliveries kept per webhook, at most.
@@ -381,6 +397,7 @@ pub struct MemoryStore {
     telemetry: Mutex<std::collections::BTreeMap<String, TeamTelemetry>>,
     /// Managed keys by id; the lookup by digest scans a map this small.
     managed_keys: Mutex<std::collections::BTreeMap<String, ManagedKey>>,
+    key_tombstones: Mutex<std::collections::BTreeMap<String, KeyTombstone>>,
     usage: Mutex<UsageBook>,
 }
 
@@ -1129,6 +1146,21 @@ impl ClusterStore for MemoryStore {
 
     async fn remove_managed_key(&self, id: &str) -> Result<bool> {
         Ok(self.managed_keys.lock().remove(id).is_some())
+    }
+
+    async fn put_key_tombstone(&self, tombstone: &KeyTombstone) -> Result<()> {
+        self.key_tombstones
+            .lock()
+            .insert(tombstone.id.clone(), tombstone.clone());
+        Ok(())
+    }
+
+    async fn key_tombstone(&self, id: &str) -> Result<Option<KeyTombstone>> {
+        Ok(self.key_tombstones.lock().get(id).cloned())
+    }
+
+    async fn key_tombstones(&self) -> Result<Vec<KeyTombstone>> {
+        Ok(self.key_tombstones.lock().values().cloned().collect())
     }
 
     async fn put_webhook(&self, hook: &Webhook) -> Result<()> {
@@ -2807,6 +2839,55 @@ redis.call('HDEL',KEYS[1],sha); redis.call('HDEL',KEYS[2],ARGV[1]); return 1
         Ok(removed == 1)
     }
 
+    // A third hash, id -> sealed tombstone. Nothing here HDELs it.
+    async fn put_key_tombstone(&self, tombstone: &KeyTombstone) -> Result<()> {
+        let json = serde_json::to_string(tombstone).map_err(json_error)?;
+        let mut c = self.connection.clone();
+        redis::cmd("HSET")
+            .arg(self.key("managed-key-tombstones"))
+            .arg(&tombstone.id)
+            .arg(json)
+            .query_async::<()>(&mut c)
+            .await
+            .map_err(redis_error)
+    }
+
+    async fn key_tombstone(&self, id: &str) -> Result<Option<KeyTombstone>> {
+        let mut c = self.connection.clone();
+        let json: Option<String> = redis::cmd("HGET")
+            .arg(self.key("managed-key-tombstones"))
+            .arg(id)
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        Ok(json.and_then(|json| match serde_json::from_str(&json) {
+            Ok(tombstone) => Some(tombstone),
+            Err(error) => {
+                tracing::warn!(%error, "ignoring a key tombstone that cannot be decoded");
+                None
+            }
+        }))
+    }
+
+    async fn key_tombstones(&self) -> Result<Vec<KeyTombstone>> {
+        let mut c = self.connection.clone();
+        let all: HashMap<String, String> = redis::cmd("HGETALL")
+            .arg(self.key("managed-key-tombstones"))
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        Ok(all
+            .values()
+            .filter_map(|json| match serde_json::from_str(json) {
+                Ok(tombstone) => Some(tombstone),
+                Err(error) => {
+                    tracing::warn!(%error, "ignoring a key tombstone that cannot be decoded");
+                    None
+                }
+            })
+            .collect())
+    }
+
     async fn put_webhook(&self, hook: &Webhook) -> Result<()> {
         let json = serde_json::to_string(hook).map_err(json_error)?;
         let mut c = self.connection.clone();
@@ -4006,8 +4087,21 @@ pub(crate) mod tests {
             ["mk_a", "mk_b"]
         );
         assert_eq!(all[1], key("mk_b", 'b', Some("red"), 20));
+        // Tombstones round-trip and survive removing the record.
+        let stone = KeyTombstone {
+            id: "mk_a".into(),
+            revoked_at: 7,
+            mac: "ab".repeat(32),
+        };
+        assert!(store.key_tombstone("mk_a").await.unwrap().is_none());
+        store.put_key_tombstone(&stone).await.unwrap();
         // Removing by id frees the digest and the id, and says whether there was one.
         assert!(store.remove_managed_key("mk_a").await.unwrap());
+        assert_eq!(
+            store.key_tombstone("mk_a").await.unwrap(),
+            Some(stone.clone())
+        );
+        assert_eq!(store.key_tombstones().await.unwrap(), vec![stone]);
         assert!(!store.remove_managed_key("mk_a").await.unwrap());
         assert!(store
             .managed_key_by_sha256(&"a".repeat(64))

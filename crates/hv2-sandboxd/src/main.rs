@@ -135,6 +135,8 @@ mod checkpoint_files;
 mod checkpoints;
 mod cloud_login;
 mod disks;
+#[cfg(target_os = "linux")]
+mod e2fs_jail;
 // Machines boot from ext4 root disks made with mkfs.ext4 and Unix file
 // modes; see machines_unsupported.rs for other hosts.
 mod env_vars;
@@ -362,6 +364,15 @@ struct Options {
     otlp: Option<hv2_cluster::otlp::Config>,
     /// Let webhooks reach loopback, private and link-local addresses.
     allow_private_webhooks: bool,
+    /// Let image pulls reach registries (and bearer realms) on loopback,
+    /// private, link-local and other non-public addresses.
+    allow_private_registries: bool,
+    /// When non-empty, the only registry hosts (and realm hosts) a pull may
+    /// use: `--registry-allow HOST`, repeatable.
+    registry_allow: Vec<String>,
+    /// Run e2fsprogs on guest-written filesystems even where it cannot be
+    /// confined (see `e2fs_jail`); refused otherwise.
+    allow_unconfined_e2fs_tools: bool,
     /// Prefault a restored guest's working set. Off by default: it halves
     /// the page faults and exits a restore takes, and did not change create
     /// latency measurably on the nested-KVM host it was tried on, where it
@@ -458,6 +469,9 @@ fn parse_options() -> Result<Options, String> {
         otlp_flags: hv2_cluster::otlp::Flags::default(),
         otlp: None,
         allow_private_webhooks: false,
+        allow_private_registries: false,
+        registry_allow: Vec::new(),
+        allow_unconfined_e2fs_tools: false,
         snapshot_store: None,
         mtls_ca: None,
         mtls_cert: None,
@@ -581,6 +595,9 @@ fn parse_options() -> Result<Options, String> {
                 );
             }
             "--allow-private-webhooks" => opts.allow_private_webhooks = true,
+            "--allow-private-registries" => opts.allow_private_registries = true,
+            "--registry-allow" => opts.registry_allow.push(value(&mut i)?),
+            "--allow-unconfined-e2fs-tools" => opts.allow_unconfined_e2fs_tools = true,
             "--template" => {
                 let spec = value(&mut i)?;
                 let (name, path) = spec
@@ -695,6 +712,7 @@ fn parse_options() -> Result<Options, String> {
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy] \
                      [--tenant-reserved-cidr CIDR]...] \
                      [--tls-cert F --tls-key F] \
+                     [--registry-allow HOST]... [--allow-private-registries] [--allow-unconfined-e2fs-tools] \
                      [--otlp-endpoint URL [--otlp-header KEY=VALUE]... [--otlp-interval SECS]] \
                      [--lit BIN [--lit-remote URL]...] [--git-remote URL]... [--git-credential PREFIX=ENV]... \
                      [--cluster-store redis://H:P --advertise-api URL --advertise-proxy H:P \
@@ -5470,7 +5488,15 @@ async fn build_from_image(
 ) -> Result<(), String> {
     let kit_dir = state.opts.guest_kit.clone().ok_or("no --guest-kit")?;
     let kit = initramfs::GuestKit::check(&kit_dir)?;
-    let pulled = oci::pull(&state.http, image, credentials).await?;
+    let pulled = oci::pull(
+        &oci::Policy::new(
+            state.opts.allow_private_registries,
+            state.opts.registry_allow.clone(),
+        ),
+        image,
+        credentials,
+    )
+    .await?;
     let digest = pulled.digest.clone();
     let bytes = tokio::task::spawn_blocking(move || initramfs::build(&pulled, &kit))
         .await
@@ -6745,6 +6771,11 @@ async fn main() -> std::process::ExitCode {
         eprintln!("hv2-sandboxd: {}: {e}", suspend_dir.display());
         return std::process::ExitCode::FAILURE;
     }
+
+    #[cfg(target_os = "linux")]
+    e2fs_jail::allow_unconfined(opts.allow_unconfined_e2fs_tools);
+    #[cfg(not(target_os = "linux"))]
+    let _ = opts.allow_unconfined_e2fs_tools;
 
     let routes = Arc::new(PortMap::new());
     let opts_capacity = opts.capacity as usize;
