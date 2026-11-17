@@ -243,7 +243,12 @@ not on KVM.
     changes it, and 0 turns it off.
   - **Optional quotas:** `--volume-max-bytes` and `--volume-max-inodes` set per-volume quotas, off by
     default. Hitting one returns `EDQUOT`.
-  - **Not verified:** unit-tested only, not on KVM.
+  - **Verified on KVM** (2026-11-17), from inside a guest over 9P:
+    - An 8 MiB byte quota and a 24-entry inode quota stopped `dd`, `touch`, `mkdir` and `ln -s` with
+      "Disk quota exceeded" exactly at the limit, and deleting freed both.
+    - On a 64 MiB filesystem the guard stopped a write with "No space left on device" just above
+      the 5% reserve. With `--volume-reserve-percent 0` the same write filled it.
+    - Evidence: [volume-quota-kvm](../benchmarks/2026-11-17/volume-quota-kvm/README.md).
 
 ## Fixed in a fourth follow-up (owner decisions)
 

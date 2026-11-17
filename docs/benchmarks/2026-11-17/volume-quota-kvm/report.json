@@ -1,0 +1,97 @@
+{
+  "success": true,
+  "purpose": "functional verification of O7 volume quotas and the reserve guard from inside a guest, on KVM; no timing claim",
+  "input_sha256": {
+    "daemon": "a9ca8fd805a6975947c01f11621a534c02e45cd1e8f4c0a40b2a5b8e277dd0b5",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "85d929acc80d0f0eadfae26e7187f92bcac31c3acf2802a6d46f99dffd3ab485",
+    "driver": "9f61e21f49a6c1336b3591ed2bc903f2bc57c75a547bd6082ec3a8697174d9ed"
+  },
+  "limits": {
+    "max_bytes": 8388608,
+    "max_inodes": 24
+  },
+  "cases": [
+    {
+      "name": "a. volume works: 9p mount, 1 MiB write read back, a second sandbox reads the same bytes",
+      "ok": true,
+      "mount": "hv2-volume /vol 9p rw,relatime,access=user,msize=524288,trans=fd,rfd=5,wfd=5 0 0",
+      "sha256": "d9009cece4459fd0fce479746d14d1c45f62a4335359919748aaca2d80b2a9b9",
+      "second_sandbox_sha256": "d9009cece4459fd0fce479746d14d1c45f62a4335359919748aaca2d80b2a9b9",
+      "host_bytes": 1048576
+    },
+    {
+      "name": "b. a write past the byte quota stops with EDQUOT at the limit (1 MiB used + big file; limit 8 MiB)",
+      "ok": true,
+      "exit_code": 0,
+      "dd_output": "rc=1\n7340032\ndd: error writing '/vol/big': Disk quota exceeded\n113+0 records in\n112+0 records out",
+      "guest_big_size": 7340032,
+      "host_total_bytes": 8388608,
+      "limit": 8388608
+    },
+    {
+      "name": "b2. at the limit a further write is refused too",
+      "ok": true,
+      "output": "dd: error writing '/vol/more': Disk quota exceeded\n1+0 records in\n0+0 records out\nrc=1",
+      "host_total_bytes": 8388608
+    },
+    {
+      "name": "c. deleting frees byte quota: after rm, a 4 MiB write succeeds",
+      "ok": true,
+      "output": "64+0 records in\n64+0 records out\nrc=0\n4194304",
+      "host_total_bytes": 5242880
+    },
+    {
+      "name": "d. creates stop at the inode quota (24 entries) with EDQUOT",
+      "ok": true,
+      "output": "touch: /vol/f23: Disk quota exceeded\ncreated=23",
+      "created_after_small": 23,
+      "host_entries": 24,
+      "limit": 24
+    },
+    {
+      "name": "d2. mkdir and symlink are refused at the inode quota too",
+      "ok": true,
+      "output": "mkdir: can't create directory '/vol/d': Disk quota exceeded\nrc=1\nln: /vol/l: Disk quota exceeded\nrc=1"
+    },
+    {
+      "name": "e. deleting frees inodes: after rm of 5 entries, 5 creates succeed and the 6th is refused",
+      "ok": true,
+      "output": "touch: /vol/new_f: Disk quota exceeded\ndone",
+      "host_entries": 24
+    },
+    {
+      "name": "f. guard: guest writes 32 MiB onto a tmpfs with ~9 MiB free; refused with ENOSPC while the host keeps its reserve",
+      "ok": true,
+      "output": "dd: error writing '/vol/fill': No space left on device\n93+0 records in\n92+0 records out\nrc=1\n6029312",
+      "exit_code": 0,
+      "tmpfs_total": 67108864,
+      "reserve_bytes": 3355443,
+      "host_free_before": 9437184,
+      "host_free_after": 3407872,
+      "guest_file_size": "6029312"
+    },
+    {
+      "name": "g. guard: after deleting the guest's file, a 2 MiB write succeeds again",
+      "ok": true,
+      "output": "32+0 records in\n32+0 records out\nrc=0",
+      "host_free": 7340032
+    },
+    {
+      "name": "h. noguard: guest writes 32 MiB onto a tmpfs with ~9 MiB free; reserve off: the guest runs the filesystem to ~0 free",
+      "ok": true,
+      "output": "dd: error writing '/vol/fill': No space left on device\n145+0 records in\n144+0 records out\nrc=1\n9437184",
+      "exit_code": 0,
+      "tmpfs_total": 67108864,
+      "reserve_bytes": 0,
+      "host_free_before": 9437184,
+      "host_free_after": 0,
+      "guest_file_size": "9437184"
+    }
+  ],
+  "platform_lines": {
+    "Kvm": 7,
+    "Tcg": 0
+  },
+  "failures": []
+}

@@ -1,0 +1,52 @@
+2026-11-17T16:33:27.473766Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-17T16:33:27.475131Z  INFO hv2_core::vm: VM 'template': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-17T16:33:27.475179Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-17T16:33:27.501634Z  INFO hv2_core::vm: Provisioned VM 'template' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-17T16:33:27.524016Z  INFO hv2_core::backends::kvm: KVM: Linux kernel loaded at 0x100000, boot_params at 0x90000
+2026-11-17T16:33:27.524079Z  INFO hv2_core::vm: VM 'template': loaded linux boot image (16170540 bytes), entry 0x100000
+2026-11-17T16:33:27.525949Z  INFO hv2_core::vm: Starting VM 'template' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-17T16:33:27.526818Z  INFO hv2_core::vm: Starting VM execution for 'template' with 1 vCPUs
+2026-11-17T16:33:27.526876Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-17T16:33:27.527536Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-17T16:33:28.311450Z  INFO hv2_core::vm: VM 'template' paused
+2026-11-17T16:33:28.707640Z  INFO hv2_core::vm: VM 'template' snapshotted to /tmp/hv2-sandboxd-569-base/template.snap
+2026-11-17T16:33:28.707794Z  INFO hv2_core::vm: VM 'template' resumed
+2026-11-17T16:33:28.707902Z  INFO hv2_core::vm: vCPU 0 task exited (exits=670)
+2026-11-17T16:33:28.708293Z  INFO hv2_core::vm: VM parallel execution completed for 'template'
+2026-11-17T16:33:28.708383Z  INFO hv2_core::vm: VM 'template' stopped
+2026-11-17T16:33:28.708396Z  INFO hv2_sandboxd: template ready in 1.234842719s at /tmp/hv2-sandboxd-569-base/template.snap; working set 0 pages in 0 ranges
+2026-11-17T16:33:28.736093Z  INFO hv2_api::sandbox_proxy: sandbox proxy listening on 127.0.0.1:43419
+hv2-sandboxd: listening on 127.0.0.1:42349, capacity 4
+  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)
+  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)
+  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls
+  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener
+  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules
+  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back, and with autoResume so does a request through the proxy
+  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies
+  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log
+  POST   /networks                 -- NOT E2B's; create a network joining sandboxes on this node
+  GET    /networks                 -- NOT E2B's; list this node's networks
+  GET    /networks/{name}         -- NOT E2B's; a network's members and addresses
+  DELETE /networks/{name}         -- NOT E2B's; remove a network
+  POST   /networks/{name}/connect    -- NOT E2B's; join a sandbox under an alias
+  POST   /networks/{name}/disconnect -- NOT E2B's; leave a network
+sandboxes get no network interface (--network to change that)
+sandboxes are restored from template snapshots: base
+
+sandbox proxy on 127.0.0.1:43419 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>
+  grpcurl -plaintext -authority 49983-$SBX.local -H "X-Access-Token: $TOKEN" -import-path crates/hv2-api/proto -proto process.proto \
+      -d '{"process":{"cmd":"/bin/sh","args":["-c","echo hi"]}}' \
+      localhost:43419 process.Process/Start
+2026-11-17T16:33:29.014733Z  INFO hv2_core::hypervisor: Detected hypervisor platform: Kvm
+2026-11-17T16:33:29.015714Z  INFO hv2_core::vm: VM 'sbx-a4bb51e78a704946bb6e': vsock device attached at 0xd0000000 (guest CID 100, IRQ 5)
+2026-11-17T16:33:29.015745Z  INFO hv2_core::devices::serial: Initializing serial device 'COM1' at 0x3F8
+2026-11-17T16:33:29.019270Z  INFO hv2_core::vm: Provisioned VM 'sbx-a4bb51e78a704946bb6e' on the Kvm backend (1 vCPUs, 512 MiB)
+2026-11-17T16:33:29.019861Z  INFO hv2_core::vm: VM 'sbx-a4bb51e78a704946bb6e' restored from /tmp/hv2-sandboxd-569-base/template.snap
+2026-11-17T16:33:29.019883Z  INFO hv2_core::vm: Starting VM 'sbx-a4bb51e78a704946bb6e' with 1 vCPUs and 0 GB memory (parallel=true)
+2026-11-17T16:33:29.020153Z  INFO hv2_core::vm: Starting VM execution for 'sbx-a4bb51e78a704946bb6e' with 1 vCPUs
+2026-11-17T16:33:29.020163Z  INFO hv2_core::vm: Starting parallel execution with 1 vCPU tasks
+2026-11-17T16:33:29.020451Z  INFO hv2_core::vm: vCPU 0 task started
+2026-11-17T16:33:29.496312Z  INFO hv2_core::vm: vCPU 0 task exited (exits=1550)
+2026-11-17T16:33:29.496386Z  INFO hv2_core::vm: VM parallel execution completed for 'sbx-a4bb51e78a704946bb6e'
+2026-11-17T16:33:29.496401Z  INFO hv2_core::vm: VM 'sbx-a4bb51e78a704946bb6e' stopped
