@@ -231,6 +231,46 @@ Redis, no scan), **on that request, with no cache**. So:
 - The API answers 403 to every caller when the deployment has no key and no sign-on, since nobody is an
   administrator then.
 
+## Redis roles: keep nodes away from the key records
+
+Every node (`hv2-sandboxd --cluster-store`), every control plane and the native gateway share one Redis. On a
+single shared Redis user, a node with write access could `HDEL` a revoked key's sealed revocation record and
+`HSET` the key's old record back, which makes the key work again. The seal and the revocation record stop a
+*forged* record; they cannot stop a Redis writer from deleting. Take the write access away instead, with one
+Redis ACL user per role. This needs Redis or Valkey 7 or later (key-permission `%R~` and `EVAL_RO`).
+
+`tools/redis-acl.py` prints the users for a namespace (`--namespace`, default `default`). It reads three
+passwords from the environment and writes only their SHA-256 hashes, so the output holds no secret:
+
+```sh
+export HV2_ACL_CONTROL_PLANE_PASSWORD=$(openssl rand -hex 24)
+export HV2_ACL_NODE_PASSWORD=$(openssl rand -hex 24)
+export HV2_ACL_GATEWAY_PASSWORD=$(openssl rand -hex 24)
+tools/redis-acl.py --namespace default > /etc/redis/hypermachine.acl     # then: redis-server --aclfile ...
+tools/redis-acl.py --namespace default --format commands                  # or ACL SETUSER lines for redis-cli
+```
+
+| Role (user) | Reads and writes | Reads only | No access |
+|---|---|---|---|
+| control plane (`hv2-control-plane`) | every family | | |
+| node (`hv2-node`) | everything a node serves: nodes, sandboxes, ports, names, domains, private networks, events, usage, environments, webhooks | | **`managed-keys`, `managed-key-ids`, `managed-key-tombstones`, `team-telemetry`** |
+| native gateway (`hv2-gateway`) | | `nodes`, `node:*`, `sandboxes`, `sandbox:*`, `ports:*`, `public-ports` | everything else |
+
+The `default` user is turned off. Give each process a URL that carries its user and password:
+
+```sh
+hv2-control-plane --store redis://hv2-control-plane:$CP_PW@redis:6379 --managed-key-secret-file ...
+hv2-sandboxd      --cluster-store redis://hv2-node:$NODE_PW@redis:6379 ...
+HV2_STORE_URL=redis://hv2-gateway:$GW_PW@redis:6379 hv2-native-gateway ...
+```
+
+Use hex passwords (no URL escaping needed) and `rediss://` as before. The key families are the single table in
+`tools/redis-acl.py`; `tools/redis-acl.py --check-source crates/hv2-cluster/src/store.rs` fails if `store.rs`
+builds a family the table does not name, so run it when `store.rs` changes. The compose and Helm charts in
+`deploy/` still ship one `requirepass` for all roles; a deployment that keeps it has the residual described in
+finding O12 of `docs/security/SECURITY_AUDIT_2026-11-16.md`. `tools/check-redis-acl-roles.py` is the KVM
+check; its evidence is in `docs/benchmarks/2026-11-17/redis-acl-roles`.
+
 ## Starting with no key
 
 With no `--api-key` (or `HV2_API_KEY`), no non-empty `--api-keys-file` and no `--sso-issuer`, nothing tells one

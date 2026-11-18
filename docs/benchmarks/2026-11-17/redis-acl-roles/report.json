@@ -1,0 +1,284 @@
+{
+  "success": true,
+  "purpose": "functional verification of per-role Redis ACLs on a real KVM node; no performance comparison",
+  "input_sha256": {
+    "daemon": "a6ccec92e4a0db47df65b446aca5528ef48edb84029015bbd778a2b233d6c21f",
+    "control": "0eb86cdd44a096abb10a4df946ae82e85d46f6b5195b74c9b5b0eaa7c11ec602",
+    "kernel": "07a76776dd0623e19bc70bfd4caaceb6d82c68ecdb6e1c9e74c4d85b70165297",
+    "initrd": "85d929acc80d0f0eadfae26e7187f92bcac31c3acf2802a6d46f99dffd3ab485",
+    "driver": "01b6e45dbad08e1c0849066372cf7da9df8e2e4d6501eeb99468b506dd4833e3",
+    "acl_generator": "c970e0f4a826c1684071c588d1293b1e1c4fc54f476b8938a6d6a0abb7db32b8",
+    "redis": "b747f74364ce61350ce4d2cd0e38ca2eacbfa7fe6f3a2560483ab6403a2e8573"
+  },
+  "cases": [
+    {
+      "name": "the sandbox booted on KVM (no Tcg)",
+      "success": true,
+      "detail": {
+        "Kvm": 2,
+        "Tcg": 0
+      }
+    },
+    {
+      "name": "the default user is off: an unauthenticated client can do nothing",
+      "success": true,
+      "detail": {
+        "ping_as_default": "NOAUTH Authentication required."
+      }
+    },
+    {
+      "name": "the node (as hv2-node) joined and the control plane (as hv2-control-plane) lists it live",
+      "success": true,
+      "detail": {
+        "status": 200,
+        "nodes": "[{\"id\": \"redisacl-kvm-node\", \"api\": \"https://127.0.0.1:45037\", \"proxy\": \"127.0.0.1:52911\", \"capacity\": 8, \"running\": 0, \"heartbeat_ms\": 1794965020643, \"version\": \"1.2.0\", \"templates\": [\"base\"], \"template_metadata\": {\"base\": {\"snapshot\": true, \"cpu_count\": 1, \"memory_mb\": 1024}}}]"
+      }
+    },
+    {
+      "name": "a managed key creates a sandbox through the control plane; it boots on the node",
+      "success": true,
+      "detail": {
+        "status": 201
+      }
+    },
+    {
+      "name": "a command runs in it through the control plane",
+      "success": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "the sandbox is deleted through the control plane (the node removes its records)",
+      "success": true,
+      "detail": {
+        "status": 204
+      }
+    },
+    {
+      "name": "the managed key works before revocation",
+      "success": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "(harness) the key's sealed record is in Redis, as read by the admin",
+      "success": true,
+      "detail": {
+        "record_bytes": 387
+      }
+    },
+    {
+      "name": "the control plane revokes the key (DELETE /keys/{id})",
+      "success": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "the revoked key is 401",
+      "success": true,
+      "detail": {
+        "status": 401
+      }
+    },
+    {
+      "name": "(harness) the revocation record exists in Redis",
+      "success": true,
+      "detail": {
+        "hexists": "1"
+      }
+    },
+    {
+      "name": "as hv2-node, HDEL tombstone is refused",
+      "success": true,
+      "detail": {
+        "reply": "NOPERM No permissions to access a key"
+      }
+    },
+    {
+      "name": "as hv2-node, DEL tombstone hash is refused",
+      "success": true,
+      "detail": {
+        "reply": "NOPERM No permissions to access a key"
+      }
+    },
+    {
+      "name": "as hv2-node, HSET old key record back is refused",
+      "success": true,
+      "detail": {
+        "reply": "NOPERM No permissions to access a key"
+      }
+    },
+    {
+      "name": "as hv2-node, HGET key record (even a read) is refused",
+      "success": true,
+      "detail": {
+        "reply": "NOPERM No permissions to access a key"
+      }
+    },
+    {
+      "name": "as hv2-node, HGETALL tombstones (even a read) is refused",
+      "success": true,
+      "detail": {
+        "reply": "NOPERM No permissions to access a key"
+      }
+    },
+    {
+      "name": "as hv2-node, Lua HDEL tombstone is refused",
+      "success": true,
+      "detail": {
+        "reply": "NOPERM No permissions to access a key"
+      }
+    },
+    {
+      "name": "as hv2-node, Lua HSET old key record is refused",
+      "success": true,
+      "detail": {
+        "reply": "NOPERM No permissions to access a key"
+      }
+    },
+    {
+      "name": "as hv2-node, FLUSHALL is refused",
+      "success": true,
+      "detail": {
+        "reply": "NOPERM User hv2-node has no permissions to run the 'flushall' command"
+      }
+    },
+    {
+      "name": "as hv2-node, KEYS * is refused",
+      "success": true,
+      "detail": {
+        "reply": "NOPERM User hv2-node has no permissions to run the 'keys' command"
+      }
+    },
+    {
+      "name": "as hv2-gateway, HDEL tombstone is refused",
+      "success": true,
+      "detail": {
+        "reply": "NOPERM User hv2-gateway has no permissions to run the 'hdel' command"
+      }
+    },
+    {
+      "name": "as hv2-gateway, DEL tombstone hash is refused",
+      "success": true,
+      "detail": {
+        "reply": "NOPERM User hv2-gateway has no permissions to run the 'del' command"
+      }
+    },
+    {
+      "name": "as hv2-gateway, HSET old key record back is refused",
+      "success": true,
+      "detail": {
+        "reply": "NOPERM User hv2-gateway has no permissions to run the 'hset' command"
+      }
+    },
+    {
+      "name": "(harness) the tombstone is still there afterwards",
+      "success": true,
+      "detail": {
+        "hexists": "1"
+      }
+    },
+    {
+      "name": "the revoked key is still 401 after the node-user attacks",
+      "success": true,
+      "detail": {
+        "status": 401
+      }
+    },
+    {
+      "name": "as hv2-node, writing its own families (environments) is allowed",
+      "success": true,
+      "detail": {
+        "reply": "1"
+      }
+    },
+    {
+      "name": "as hv2-gateway, reading nodes is allowed",
+      "success": true,
+      "detail": {
+        "reply": "redisacl-kvm-node"
+      }
+    },
+    {
+      "name": "as hv2-gateway, writing nodes is refused",
+      "success": true,
+      "detail": {
+        "reply": "NOPERM User hv2-gateway has no permissions to run the 'sadd' command"
+      }
+    },
+    {
+      "name": "as hv2-gateway, a family it does not use is refused",
+      "success": true,
+      "detail": {
+        "reply": "NOPERM No permissions to access a key"
+      }
+    },
+    {
+      "name": "as hv2-gateway, a Lua script that writes is refused",
+      "success": true,
+      "detail": {
+        "reply": "NOPERM No permissions to access a key"
+      }
+    },
+    {
+      "name": "(control) a second key is revoked and is 401",
+      "success": true,
+      "detail": {
+        "revoke": 200,
+        "after": 401
+      }
+    },
+    {
+      "name": "(control) as the legacy shared user the same HDEL and HSET succeed",
+      "success": true,
+      "detail": {
+        "hdel_reply": "1",
+        "hset_reply": "1"
+      }
+    },
+    {
+      "name": "(control) the revoked key answers 200 again: the residual was real without role ACLs",
+      "success": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "the node log has no NOPERM",
+      "success": true,
+      "detail": {
+        "noperm_lines": 0
+      }
+    },
+    {
+      "name": "the control log has no NOPERM",
+      "success": true,
+      "detail": {
+        "noperm_lines": 0
+      }
+    },
+    {
+      "name": "no password or key appears in any service log",
+      "success": true,
+      "detail": {
+        "leaked_in": []
+      }
+    }
+  ],
+  "redis_version": "8.0.2",
+  "acl_list": [
+    "user default off sanitize-payload resetchannels -@all",
+    "user hv2-admin on sanitize-payload #<sha256-of-password> ~* &* +@all",
+    "user hv2-control-plane on sanitize-payload #<sha256-of-password> ~hv2:redisacl-fe3302fc217b:nodes ~hv2:redisacl-fe3302fc217b:node:* ~hv2:redisacl-fe3302fc217b:sandboxes ~hv2:redisacl-fe3302fc217b:sandbox:* ~hv2:redisacl-fe3302fc217b:public-ports ~hv2:redisacl-fe3302fc217b:ports:* ~hv2:redisacl-fe3302fc217b:private-membership:* ~hv2:redisacl-fe3302fc217b:web-sharing:* ~hv2:redisacl-fe3302fc217b:private-addresses:* ~hv2:redisacl-fe3302fc217b:name-reservations ~hv2:redisacl-fe3302fc217b:reserved-names:* ~hv2:redisacl-fe3302fc217b:domains ~hv2:redisacl-fe3302fc217b:domains:* ~hv2:redisacl-fe3302fc217b:events ~hv2:redisacl-fe3302fc217b:usage:since ~hv2:redisacl-fe3302fc217b:usage:open ~hv2:redisacl-fe3302fc217b:usage:closed ~hv2:redisacl-fe3302fc217b:environments ~hv2:redisacl-fe3302fc217b:webhooks ~hv2:redisacl-fe3302fc217b:deliveries:* ~hv2:redisacl-fe3302fc217b:team-telemetry ~hv2:redisacl-fe3302fc217b:managed-keys ~hv2:redisacl-fe3302fc217b:managed-key-ids ~hv2:redisacl-fe3302fc217b:managed-key-tombstones resetchannels -@all +@read +@write +@transaction +@connection +eval +evalsha +script|load -@dangerous",
+    "user hv2-gateway on sanitize-payload #<sha256-of-password> %R~hv2:redisacl-fe3302fc217b:nodes %R~hv2:redisacl-fe3302fc217b:node:* %R~hv2:redisacl-fe3302fc217b:sandboxes %R~hv2:redisacl-fe3302fc217b:sandbox:* %R~hv2:redisacl-fe3302fc217b:public-ports %R~hv2:redisacl-fe3302fc217b:ports:* resetchannels -@all +@read +@connection +eval_ro +evalsha_ro +eval +evalsha +script|load -@dangerous",
+    "user hv2-node on sanitize-payload #<sha256-of-password> ~hv2:redisacl-fe3302fc217b:nodes ~hv2:redisacl-fe3302fc217b:node:* ~hv2:redisacl-fe3302fc217b:sandboxes ~hv2:redisacl-fe3302fc217b:sandbox:* ~hv2:redisacl-fe3302fc217b:public-ports ~hv2:redisacl-fe3302fc217b:ports:* ~hv2:redisacl-fe3302fc217b:private-membership:* ~hv2:redisacl-fe3302fc217b:web-sharing:* ~hv2:redisacl-fe3302fc217b:private-addresses:* ~hv2:redisacl-fe3302fc217b:name-reservations ~hv2:redisacl-fe3302fc217b:reserved-names:* ~hv2:redisacl-fe3302fc217b:domains ~hv2:redisacl-fe3302fc217b:domains:* ~hv2:redisacl-fe3302fc217b:events ~hv2:redisacl-fe3302fc217b:usage:since ~hv2:redisacl-fe3302fc217b:usage:open ~hv2:redisacl-fe3302fc217b:usage:closed ~hv2:redisacl-fe3302fc217b:environments ~hv2:redisacl-fe3302fc217b:webhooks ~hv2:redisacl-fe3302fc217b:deliveries:* resetchannels -@all +@read +@write +@transaction +@connection +eval +evalsha +script|load -@dangerous",
+    "user hv2-shared on sanitize-payload #<sha256-of-password> ~hv2:redisacl-fe3302fc217b:* resetchannels +@all"
+  ],
+  "platform_lines": {
+    "Kvm": 2,
+    "Tcg": 0
+  }
+}

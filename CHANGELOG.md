@@ -288,6 +288,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`hm-tui`, a new terminal dashboard** for Type 2 VMs and sandbox VMs over the same APIs `hm-gui` and `hm sandbox vm` already use; and a Sandboxes tab for `hm-gui`, which previously showed only Type 2 VMs.
 
 ### Security
+- **A node could undo a key revocation through Redis (O12).** Nodes, control planes and the native
+  gateway shared one Redis user, so a node could delete a revoked managed key's revocation record and
+  write the old key record back. `tools/redis-acl.py` now prints one Redis 7+ ACL user per role; the node
+  user has no access to the managed-key, tombstone or team-telemetry keys, and the default user is off.
+  On KVM the node user's `HDEL`/`HSET` are refused (`NOPERM`) and the revoked key stays 401, where the old
+  shared user revives it. A deployment that keeps one shared Redis user (the shipped compose and Helm
+  charts) is unchanged. See `docs/API_KEY_ROTATION.md` and `docs/benchmarks/2026-11-17/redis-acl-roles`.
 - **Template builds by a key with a principal and no team were shared node-wide.** They are now
   stored under that principal's scope; other principals and team keys can neither see, use, rebuild
   nor delete them.

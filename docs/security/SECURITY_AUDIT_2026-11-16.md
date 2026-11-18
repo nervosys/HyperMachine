@@ -216,9 +216,20 @@ not on KVM.
   - **Flags:**
     - `--allow-private-registries` turns the address check off.
     - `--registry-allow HOST` (repeatable) admits only the listed registry and realm hosts.
-- **O12 (Low): partly fixed.** Revoking a managed key now also writes a sealed revocation record that
-  is never removed by normal operations. Authentication and listing refuse a key that has a valid
-  one, so writing the old record back no longer revives the key. What remains is in the open table.
+- **O12 (Low): fixed when deployed with the role ACLs; the residual stays for a shared Redis user.**
+  Revoking a managed key now also writes a sealed revocation record that is never removed by normal
+  operations. Authentication and listing refuse a key that has a valid one, so writing the old record
+  back no longer revives the key.
+  - **Role ACLs (2026-11-17):** `tools/redis-acl.py` prints one Redis 7+ ACL user per role (control
+    plane, node, native gateway). The node user has no access at all to `managed-keys`,
+    `managed-key-ids`, `managed-key-tombstones` or `team-telemetry`, and the default user is off.
+    On KVM, as the node user, `HDEL` of the tombstone, `HSET` of the old record, and the same inside
+    a Lua script are each refused (`NOPERM`), and the revoked key stays 401. Control: with one
+    shared user the same two commands succeed and the revoked key answers 200 again.
+    See `docs/benchmarks/2026-11-17/redis-acl-roles` and `docs/API_KEY_ROTATION.md`.
+  - **Still open:** a deployment that gives nodes and control planes the same Redis user (the
+    `deploy/` compose and Helm charts do) has the residual unchanged. The gateway role was not run
+    as a process.
 
 ## Fixed in a third follow-up
 
@@ -303,7 +314,7 @@ The owner chose how to resolve O4 and O5.
 
 | Id | Severity | Finding | Why not now |
 |---|---|---|---|
-| O12 | Low | Partly fixed (see below). A node with write access to Redis can delete a key's sealed revocation record and then replay the key's old record. It can also delete records outright (denial of service). Keys revoked before the fix have no revocation record. | Redis cannot stop a writer from deleting. A key's own expiry bounds the damage. |
+| O12 | Low | Closed for deployments that apply the per-role Redis ACL (`tools/redis-acl.py`); open where a node shares a Redis user with the control plane (the shipped compose and Helm charts). There, a node can delete a key's sealed revocation record and replay the old record, and can delete records outright (denial of service). Keys revoked before the revocation record existed have none. | Code cannot stop a Redis writer from deleting; the fix is to take the write access away with ACL users. The charts still ship one `requirepass`. A key's own expiry bounds the damage. |
 
 ## Checked and found sound
 
