@@ -2,6 +2,22 @@
 # One Valkey, no persistence: the store holds liveness and routing, which the
 # nodes rebuild -- each re-announces itself and forgets stale records on join.
 # Losing it drops routes for running sandboxes until it is back.
+#
+# One Redis ACL user per role (security finding O12): the control plane, each
+# node and a native gateway have their own password, and the nodes' user has
+# no access to the managed API keys or their revocation records. The default
+# user is off. The init container turns the password Secret into hashes in
+# the ACL file; the ConfigMap holds none.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hv2.name" . }}-store-acl
+  labels: {{- include "hv2.labels" . | nindent 4 }}
+    app.kubernetes.io/component: store
+data:
+  users.acl: |
+    {{- include "hv2.storeAcl" . | nindent 4 }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,20 +34,49 @@ spec:
     metadata:
       labels: {{- include "hv2.labels" . | nindent 8 }}
         app.kubernetes.io/component: store
+      annotations:
+        checksum/store-acl: {{ include "hv2.storeAcl" . | sha256sum }}
     spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 999
+      initContainers:
+        - name: store-acl
+          image: {{ .Values.store.image }}
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              umask 077
+              hash() { printf %s "$1" | sha256sum | cut -d' ' -f1; }
+              sed -e "s/__HASH_CONTROL_PLANE__/$(hash "$HV2_STORE_PASSWORD_CONTROL_PLANE")/" \
+                  -e "s/__HASH_NODE__/$(hash "$HV2_STORE_PASSWORD_NODE")/" \
+                  -e "s/__HASH_GATEWAY__/$(hash "$HV2_STORE_PASSWORD_GATEWAY")/" \
+                  /acl-template/users.acl > /acl/users.acl
+          env:
+            - name: HV2_STORE_PASSWORD_CONTROL_PLANE
+              valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: store-password-control-plane } }
+            - name: HV2_STORE_PASSWORD_NODE
+              valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: store-password-node } }
+            - name: HV2_STORE_PASSWORD_GATEWAY
+              valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: store-password-gateway } }
+          volumeMounts:
+            - { name: acl-template, mountPath: /acl-template, readOnly: true }
+            - { name: acl, mountPath: /acl }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
       containers:
         - name: valkey
           image: {{ .Values.store.image }}
-          # A password even behind the NetworkPolicy: the store holds every
+          # Passwords even behind the NetworkPolicy: the store holds every
           # sandbox's envd access token and the routes to it, and a node's
           # own traffic -- which carries its sandboxes' -- is allowed in.
-          args: ["--save", "", "--appendonly", "no", "--requirepass", "$(HV2_STORE_PASSWORD)"]
-          env:
-            - name: HV2_STORE_PASSWORD
-              valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: store-password } }
+          args: ["--save", "", "--appendonly", "no", "--aclfile", "/acl/users.acl"]
+          volumeMounts:
+            - { name: acl, mountPath: /acl, readOnly: true }
           ports:
             - containerPort: 6379
               name: redis
@@ -42,6 +87,11 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: [ALL] }
+      volumes:
+        - name: acl-template
+          configMap: { name: {{ include "hv2.name" . }}-store-acl }
+        - name: acl
+          emptyDir: { medium: Memory }
 ---
 apiVersion: v1
 kind: Service

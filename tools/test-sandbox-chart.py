@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Render sandbox chart security configurations. Requires Helm and PyYAML."""
 import argparse
+import hashlib
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 import yaml
@@ -186,6 +188,59 @@ class ChartSecurityTests(unittest.TestCase):
                     self.assertEqual({item["name"] for item in mounts}, expected)
                     self.assertEqual({item["name"] for item in pod.get("volumes") or []}, expected)
                     self.assertTrue(all(item["readOnly"] for item in mounts))
+
+    def test_store_has_one_acl_user_per_role_and_each_component_uses_its_own(self):
+        # The chart's ACL (from files/redis-acl-table.txt) must equal what tools/redis-acl.py prints.
+        for namespace in ("default", "team-a.prod_1"):
+            result = render("--set", "store.namespace=" + namespace)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            resources = [item for item in yaml.safe_load_all(result.stdout) if item]
+            config = next(item for item in resources if item["kind"] == "ConfigMap"
+                          and item["metadata"]["name"].endswith("-store-acl"))
+            passwords = {role: role.lower() * 6 for role in ("CONTROL_PLANE", "NODE", "GATEWAY")}
+            expected = subprocess.run(
+                [sys.executable, str(chart.parents[2] / "tools/redis-acl.py"), "--namespace", namespace],
+                capture_output=True, text=True, check=True,
+                env={**os.environ, **{"HV2_ACL_%s_PASSWORD" % role: value for role, value in passwords.items()}}).stdout
+            actual = config["data"]["users.acl"]
+            for role, value in passwords.items():
+                actual = actual.replace("#__HASH_%s__" % role, "#" + hashlib.sha256(value.encode()).hexdigest())
+            self.assertEqual(actual.strip(), expected.strip())
+        self.assertIn("user default off", actual)
+        # The node's user keeps MULTI (redis-rs panics without it) and has no key records.
+        node_line = next(line for line in actual.splitlines() if line.startswith("user hv2-node "))
+        self.assertIn("+@transaction", node_line)
+        self.assertNotIn("managed-key", node_line)
+        urls = {}
+        for name, spec in (("control-plane", deployment(result)), ("node", node(result))):
+            container = spec["containers"][0]
+            args = container["args"]
+            urls[name] = args[args.index("--store" if name == "control-plane" else "--cluster-store") + 1]
+            variable = next(item for item in container["env"] if item["name"] == "HV2_STORE_PASSWORD")
+            self.assertEqual(variable["valueFrom"]["secretKeyRef"]["key"], "store-password-" + name)
+        self.assertTrue(urls["control-plane"].startswith("redis://hv2-control-plane:$(HV2_STORE_PASSWORD)@"))
+        self.assertTrue(urls["node"].startswith("redis://hv2-node:$(HV2_STORE_PASSWORD)@"))
+        store = next(item for item in resources if item["kind"] == "Deployment"
+                     and item["metadata"]["name"].endswith("-store"))["spec"]["template"]["spec"]
+        self.assertNotIn("--requirepass", store["containers"][0]["args"])
+        self.assertIn("--aclfile", store["containers"][0]["args"])
+
+    def test_store_namespace_cannot_widen_the_acl(self):
+        for namespace in ("a*", "a b", "a~b", "*"):
+            self.assertNotEqual(render("--set", "store.namespace=" + namespace).returncode, 0)
+
+    def test_store_passwords_are_validated_and_the_old_key_is_refused(self):
+        self.assertNotEqual(render("--set", "auth.storePassword=" + "a" * 30).returncode, 0)
+        self.assertNotEqual(render("--set", "auth.storePasswords.node=short").returncode, 0)
+        self.assertNotEqual(render("--set", "auth.storePasswords.node=" + "a/" * 20).returncode, 0)
+        self.assertEqual(render("--set", "auth.storePasswords.node=" + "a" * 30).returncode, 0)
+
+    def test_external_store_uses_the_role_urls(self):
+        result = render("--set", "store.deploy=false,store.url=redis://hv2-control-plane:x@h:6379,"
+                                 "store.nodeUrl=redis://hv2-node:y@h:6379,networkPolicy.externalStoreCidrs={10.1.0.0/16}")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("redis://hv2-control-plane:x@h:6379", deployment(result)["containers"][0]["args"])
+        self.assertIn("redis://hv2-node:y@h:6379", node(result)["containers"][0]["args"])
 
     def test_invalid_auth_configuration_cannot_render_an_open_api(self):
         for arguments in [("--set", "auth.legacyAdminEnabled=false"),

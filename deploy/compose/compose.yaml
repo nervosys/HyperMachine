@@ -1,5 +1,8 @@
 # One host, the whole cluster: a store, a control plane, one node.
 #
+#   export HV2_STORE_CONTROL_PLANE_PASSWORD=$(openssl rand -hex 24)
+#   export HV2_STORE_NODE_PASSWORD=$(openssl rand -hex 24)
+#   export HV2_STORE_GATEWAY_PASSWORD=$(openssl rand -hex 24)
 #   docker compose -f deploy/compose/compose.yaml up --build
 #   export E2B_API_URL=http://127.0.0.1:5980 E2B_SANDBOX_URL=http://127.0.0.1:5981
 #   export E2B_API_KEY=$HV2_API_KEY   # the value below, or your own
@@ -17,20 +20,44 @@ x-secrets: &secrets
   HV2_API_KEY: ${HV2_API_KEY:-e2b_change_me_before_exposing_this}
   HV2_CLUSTER_TOKEN: ${HV2_CLUSTER_TOKEN:-change-me-cluster-token}
 
-# The store holds every sandbox's envd access token. Letters and digits only:
-# it is spliced into a redis:// URL below.
-x-store-url: &store-url redis://:${HV2_STORE_PASSWORD:-changemestorepassword}@store:6379
+# The store holds every sandbox's envd access token and the managed API keys.
+# It has one Redis ACL user per role (security finding O12), so a node cannot
+# read or delete the keys or their revocation records: hv2-control-plane,
+# hv2-node and hv2-gateway (for a native gateway you run beside this; default
+# user off). Each password is 24 or more letters and digits (hex is fine), and
+# is spliced into a redis:// URL below. The `store-acl` job writes the ACL file
+# from tools/redis-acl.py, which holds the table of who may touch which keys;
+# the file has password hashes only. The namespace is the default one of
+# --namespace and --cluster-namespace; if you set either, set it here too.
+x-control-plane-store-url: &control-plane-store-url redis://hv2-control-plane:${HV2_STORE_CONTROL_PLANE_PASSWORD:?set HV2_STORE_CONTROL_PLANE_PASSWORD to 24+ letters and digits, e.g. openssl rand -hex 24}@store:6379
+x-node-store-url: &node-store-url redis://hv2-node:${HV2_STORE_NODE_PASSWORD:?set HV2_STORE_NODE_PASSWORD to 24+ letters and digits, e.g. openssl rand -hex 24}@store:6379
 
 services:
+  store-acl:
+    image: python:3.12-slim
+    command: ["sh", "-c", "python /redis-acl.py --namespace default > /acl/users.acl && chmod 644 /acl/users.acl"]
+    environment:
+      HV2_ACL_CONTROL_PLANE_PASSWORD: ${HV2_STORE_CONTROL_PLANE_PASSWORD:?set HV2_STORE_CONTROL_PLANE_PASSWORD to 24+ letters and digits, e.g. openssl rand -hex 24}
+      HV2_ACL_NODE_PASSWORD: ${HV2_STORE_NODE_PASSWORD:?set HV2_STORE_NODE_PASSWORD to 24+ letters and digits, e.g. openssl rand -hex 24}
+      HV2_ACL_GATEWAY_PASSWORD: ${HV2_STORE_GATEWAY_PASSWORD:?set HV2_STORE_GATEWAY_PASSWORD to 24+ letters and digits, e.g. openssl rand -hex 24}
+    volumes:
+      - ../../tools/redis-acl.py:/redis-acl.py:ro
+      - store-acl:/acl
+    restart: "no"
+
   store:
     image: valkey/valkey:8.1
-    command: ["--save", "", "--appendonly", "no", "--requirepass", "${HV2_STORE_PASSWORD:-changemestorepassword}"]
+    command: ["--save", "", "--appendonly", "no", "--aclfile", "/acl/users.acl"]
+    volumes:
+      - store-acl:/acl:ro
+    depends_on:
+      store-acl: { condition: service_completed_successfully }
     restart: unless-stopped
 
   control-plane:
     build: { context: ../.., dockerfile: Containerfile.sandbox, target: control-plane }
     image: hv2-control-plane:dev
-    command: ["--store", *store-url, "--port", "5980", "--proxy-port", "5981"]
+    command: ["--store", *control-plane-store-url, "--port", "5980", "--proxy-port", "5981"]
     environment: *secrets
     ports: ["5980:5980", "5981:5981"]
     depends_on: [store]
@@ -44,7 +71,7 @@ services:
       - --capacity
       - "16"
       - --cluster-store
-      - *store-url
+      - *node-store-url
       - --node-id
       - node-1
       - --advertise-api
@@ -56,3 +83,6 @@ services:
     depends_on: [store]
     restart: unless-stopped
     stop_grace_period: 60s
+
+volumes:
+  store-acl:

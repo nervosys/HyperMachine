@@ -288,6 +288,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`hm-tui`, a new terminal dashboard** for Type 2 VMs and sandbox VMs over the same APIs `hm-gui` and `hm sandbox vm` already use; and a Sandboxes tab for `hm-gui`, which previously showed only Type 2 VMs.
 
 ### Security
+- **The shipped deployments now use the per-role Redis users (O12).** The compose file and the
+  `hypermachine-sandbox` Helm chart no longer give the control plane and the nodes one shared
+  `requirepass`. The store gets an ACL file with `hv2-control-plane`, `hv2-node` and `hv2-gateway`
+  (default user off), the control plane connects as the first and each node as the second, and a node
+  cannot read, delete or rewrite managed keys or their revocation records. Compose writes the file
+  with `tools/redis-acl.py`; the chart cannot run Python, so it embeds the table as
+  `files/redis-acl-table.txt` and `tools/redis-acl.py --check-file` (run in CI) fails if the copy
+  drifts. **Upgrade:** compose now requires `HV2_STORE_CONTROL_PLANE_PASSWORD`,
+  `HV2_STORE_NODE_PASSWORD` and `HV2_STORE_GATEWAY_PASSWORD` (`HV2_STORE_PASSWORD` is gone); the chart's
+  Secret has `store-password-control-plane`, `-node` and `-gateway` instead of `store-password`
+  (an `existingSecret` must carry them), `auth.storePassword` is replaced by `auth.storePasswords.*`,
+  and an external store takes `store.url` (control plane) and `store.nodeUrl` (nodes).
 - **A Redis error could abort a node.** A Redis server or proxy that answers MULTI with an error (for example an ACL user without `+@transaction`) made redis-rs underflow a counter, and release builds abort on that. Node registration and removal now use EVAL scripts instead of MULTI/EXEC, and clippy forbids `redis::Pipeline::atomic` and `redis::transaction`.
 - **A node could undo a key revocation through Redis (O12).** Nodes, control planes and the native
   gateway shared one Redis user, so a node could delete a revoked managed key's revocation record and
