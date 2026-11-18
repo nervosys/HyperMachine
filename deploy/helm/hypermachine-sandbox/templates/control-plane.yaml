@@ -31,7 +31,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - --store
-            - {{ include "hv2.storeUrl" . | quote }}
+            - {{ include "hv2.storeUrl" (dict "root" . "user" "hv2-control-plane") | quote }}
             - --namespace
             - {{ .Values.store.namespace | quote }}
             - --port
@@ -64,7 +64,7 @@ spec:
             - name: HV2_CLUSTER_TOKEN
               valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: cluster-token } }
             - name: HV2_STORE_PASSWORD
-              valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: store-password } }
+              valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: store-password-control-plane } }
             {{- if .Values.store.tlsSecret }}
             # For a rediss:// store: its CA, and this pod's client certificate.
             - { name: HV2_STORE_CA, value: /etc/hv2-store-tls/ca.crt }

@@ -159,6 +159,8 @@ jobs:
               run: |
                   python3 -m venv "${RUNNER_TEMP}/hm-chart-tests"
                   "${RUNNER_TEMP}/hm-chart-tests/bin/python" -m pip install PyYAML==6.0.3
+            - name: The chart's embedded Redis ACL table matches tools/redis-acl.py
+              run: python3 tools/redis-acl.py --check-file deploy/helm/hypermachine-sandbox/files/redis-acl-table.txt
             - name: Verify chart authentication and TLS mount combinations
               run: '"${RUNNER_TEMP}/hm-chart-tests/bin/python" tools/test-sandbox-chart.py'
             - name: Lint default and policy-only sandbox charts

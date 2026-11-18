@@ -7,9 +7,11 @@ image:
   pullPolicy: IfNotPresent
 
 # The API key clients send as X-API-Key (E2B_API_KEY) and the token control
-# planes use with nodes, and the chart-deployed store's password. Left empty,
-# each is generated once and kept across upgrades. `existingSecret` names a
-# Secret with keys `api-key`, `cluster-token` and `store-password` instead.
+# planes use with nodes, and the chart-deployed store's passwords, one per
+# role. Left empty, each is generated once and kept across upgrades.
+# `existingSecret` names a Secret with keys `api-key`, `cluster-token`,
+# `store-password-control-plane`, `store-password-node` and
+# `store-password-gateway` instead.
 auth:
   apiKey: ""
   # Preserve the existing non-expiring admin credential by default.
@@ -20,8 +22,14 @@ auth:
   apiKeysSecret: ""
   apiKeysSecretKey: keys.json
   clusterToken: ""
-  # Letters and digits only: it is spliced into the store's redis:// URL.
-  storePassword: ""
+  # The store has one Redis ACL user per role, so a node cannot touch the
+  # managed API keys or their revocation records (finding O12). Each is 24 or
+  # more letters and digits: they are spliced into redis:// URLs. The gateway
+  # one is for a native gateway you run outside the chart.
+  storePasswords:
+    controlPlane: ""
+    node: ""
+    gateway: ""
   existingSecret: ""
 
 controlPlane:
@@ -139,12 +147,18 @@ mtls:
   controlPlaneSecret: ""
 
 store:
-  # Deploy a single Valkey instance with the chart, password-protected. For
-  # production, point `url` at a replicated Redis/Valkey instead (credentials
-  # in the URL: `redis://:PASSWORD@host:6379`), set `deploy: false`, and set
-  # `networkPolicy.externalStoreCidrs`.
+  # Deploy a single Valkey instance with the chart, with one ACL user per role
+  # (hv2-control-plane, hv2-node, hv2-gateway; the default user is off) built
+  # from files/redis-acl-table.txt. For production, point `url` at a
+  # replicated Redis/Valkey 7+ instead, set `deploy: false`, and set
+  # `networkPolicy.externalStoreCidrs`. Then create the role users yourself
+  # (tools/redis-acl.py --namespace <store.namespace>) and give the control
+  # plane's URL in `url` (`redis://hv2-control-plane:PASSWORD@host:6379`) and
+  # the nodes' in `nodeUrl` (`redis://hv2-node:PASSWORD@host:6379`). A node on
+  # the control plane's user leaves finding O12 open.
   deploy: true
   url: ""
+  nodeUrl: ""
   # For an external store over TLS (url: rediss://...): a Secret in
   # cert-manager's shape -- ca.crt to verify the store, tls.crt and tls.key
   # for a store that requires client certificates. The chart's own Valkey

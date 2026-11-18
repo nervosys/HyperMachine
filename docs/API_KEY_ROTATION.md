@@ -266,9 +266,16 @@ HV2_STORE_URL=redis://hv2-gateway:$GW_PW@redis:6379 hv2-native-gateway ...
 
 Use hex passwords (no URL escaping needed) and `rediss://` as before. The key families are the single table in
 `tools/redis-acl.py`; `tools/redis-acl.py --check-source crates/hv2-cluster/src/store.rs` fails if `store.rs`
-builds a family the table does not name, so run it when `store.rs` changes. The compose and Helm charts in
-`deploy/` still ship one `requirepass` for all roles; a deployment that keeps it has the residual described in
-finding O12 of `docs/security/SECURITY_AUDIT_2026-11-16.md`. `tools/check-redis-acl-roles.py` is the KVM
+builds a family the table does not name, so run it when `store.rs` changes. The compose file and the
+sandbox Helm chart in `deploy/` apply these roles: compose runs `tools/redis-acl.py` in a `store-acl` job
+and needs `HV2_STORE_CONTROL_PLANE_PASSWORD`, `HV2_STORE_NODE_PASSWORD` and `HV2_STORE_GATEWAY_PASSWORD`;
+the chart renders the ACL from its embedded copy of the table (`files/redis-acl-table.txt`, kept equal to
+the script's table by `tools/redis-acl.py --check-file`, which CI runs), takes the passwords from the
+Secret keys `store-password-control-plane`, `-node` and `-gateway` (`auth.storePasswords.*`, generated
+when empty), and, with an external store (`store.deploy: false`), expects the role users to exist there
+and the control plane's and nodes' URLs in `store.url` and `store.nodeUrl`. A deployment that points
+nodes and control planes at one Redis user has the residual described in finding O12 of
+`docs/security/SECURITY_AUDIT_2026-11-16.md`. `tools/check-redis-acl-roles.py` is the KVM
 check; its evidence is in `docs/benchmarks/2026-11-17/redis-acl-roles`.
 
 ## Starting with no key
