@@ -41,6 +41,11 @@ pub struct HyperMachineOntology {
 
     /// Event types for subscriptions
     pub events: Vec<EventType>,
+
+    /// Warnings attached to interfaces (operations, capabilities, tools).
+    /// Absent in documents served before guardrails existed.
+    #[serde(default)]
+    pub guardrails: Vec<Guardrail>,
 }
 
 /// JSON-LD context for semantic web compatibility
@@ -412,6 +417,44 @@ pub enum ConstraintType {
     Idempotent,
     /// This operation requires the resource to be in a specific state
     StatePrecondition,
+}
+
+/// How serious a [`Guardrail`] is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GuardrailSeverity {
+    /// Worth knowing; no action is required.
+    Info,
+    /// A weakness or limit that can bite under the stated condition.
+    Warning,
+    /// Can defeat a security or safety property under the stated condition.
+    Critical,
+}
+
+/// A warning attached to one or more interfaces: a condition under which they
+/// do not give the guarantee a reader would assume, and what to do about it.
+///
+/// `applies_to` holds ids of anything the ontology names: an
+/// [`Operation`] id, a [`Capability`] id, or an agent-callable MCP tool name.
+/// The tool projections (`/agentic/tools/*`, `/agentic/mcp`) append a short
+/// warning line to the description of every tool named here, so an LLM sees
+/// the caveat where it picks the tool. Guardrails are advisory data: nothing
+/// in this crate blocks a call because of one.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Guardrail {
+    /// Stable identifier, e.g. `redis-shared-user-revocation`.
+    pub id: String,
+    pub severity: GuardrailSeverity,
+    pub title: String,
+    pub description: String,
+    /// Operation, capability or tool ids this applies to.
+    pub applies_to: Vec<String>,
+    /// When it applies (a deployment or input condition).
+    pub condition: String,
+    /// What to do about it.
+    pub mitigation: String,
+    /// Repository path of the document that explains it.
+    pub reference: String,
 }
 
 /// A reusable composition pattern (plan template)
@@ -1281,6 +1324,7 @@ impl HyperMachineOntology {
             operations: Self::build_operations(),
             state_machines: Self::build_state_machines(),
             events: Self::build_events(),
+            guardrails: Self::build_guardrails(),
         }
     }
 
@@ -1394,6 +1438,48 @@ impl HyperMachineOntology {
                 ],
                 prerequisites: vec![],
                 permissions_required: vec!["metrics:read".to_string()],
+            },
+            Capability {
+                id: "managed_api_keys".to_string(),
+                name: "Managed API Keys (cluster control plane)".to_string(),
+                description: "Make, list and revoke API keys at run time through the cluster \
+                    control plane (`hv2-control-plane`), not this server. Keys live in the \
+                    cluster store, sealed with an HMAC under `--managed-key-secret-file`; \
+                    without that flag the whole interface answers 503. Authenticate with the \
+                    `X-API-Key` header. Only an administrator (the legacy admin key, or an \
+                    operator key holding the `admin` scope) or a `team-admin` may call it; \
+                    every other caller gets 403. A team-admin is confined to its own team \
+                    and cannot raise anyone above itself. There is no rotate route: rotate \
+                    by creating a replacement key, moving clients over, then revoking the \
+                    old one. Policy-file keys are not reachable here (see \
+                    docs/API_KEY_ROTATION.md for the file and SIGHUP reload)."
+                    .to_string(),
+                category: CapabilityCategory::Security,
+                operations: vec![
+                    "create_managed_key".to_string(),
+                    "list_managed_keys".to_string(),
+                    "revoke_managed_key".to_string(),
+                    "list_team_members".to_string(),
+                ],
+                prerequisites: vec![
+                    "control plane started with --managed-key-secret-file".to_string()
+                ],
+                permissions_required: vec!["administrator".to_string(), "team-admin".to_string()],
+            },
+            Capability {
+                id: "cluster_store_configuration".to_string(),
+                name: "Cluster Store Configuration".to_string(),
+                description: "Where control planes, nodes (`hv2-sandboxd --cluster-store`) and \
+                    the native gateway keep shared state, including managed API key \
+                    records and their revocation records: Redis, or an in-memory store. \
+                    This is an operator deployment setting, not an HTTP operation. Give each \
+                    role its own Redis ACL user (`tools/redis-acl.py`); the shipped \
+                    deploy/compose and deploy/helm do."
+                    .to_string(),
+                category: CapabilityCategory::Security,
+                operations: vec![],
+                prerequisites: vec![],
+                permissions_required: vec!["operator".to_string()],
             },
         ]
     }
@@ -1939,6 +2025,326 @@ impl HyperMachineOntology {
                 examples: vec![],
             },
         ]
+        .into_iter()
+        .chain(Self::build_key_operations())
+        .collect()
+    }
+
+    /// The control plane's managed API key routes (`hv2-cluster`
+    /// `control/key_api.rs`, routed in `control.rs`). Modelled as data here;
+    /// `hv2-api` does not depend on `hv2-cluster`. They are served by the
+    /// control plane, not by this server, and authenticate with `X-API-Key`.
+    fn build_key_operations() -> Vec<Operation> {
+        let error = |status_code: u16, description: &str| OperationResponse {
+            status_code,
+            description: description.to_string(),
+            schema: None,
+        };
+        let auth_errors = || {
+            vec![
+                error(401, "missing, expired or wrong X-API-Key"),
+                error(
+                    403,
+                    "caller is neither an administrator nor a team-admin, or the request would raise a team-admin above itself",
+                ),
+                error(
+                    503,
+                    "managed keys are disabled (no --managed-key-secret-file) or the cluster store is unavailable",
+                ),
+            ]
+        };
+        let mut create_responses = vec![
+            OperationResponse {
+                status_code: 201,
+                description: "Key made. `key` is the secret and is shown only in this response \
+                    (Cache-Control: no-store)."
+                    .to_string(),
+                schema: Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "string", "description": "mk_ and 16 characters" },
+                        "key": { "type": "string", "description": "hm_ and 43 characters; shown once" },
+                        "label": { "type": "string" },
+                        "scopes": { "type": "array", "items": { "type": "string" } },
+                        "role": { "type": "string" },
+                        "teamId": { "type": ["string", "null"] },
+                        "principalId": { "type": ["string", "null"] },
+                        "expiresAt": { "type": "integer", "description": "unix seconds" },
+                        "createdAt": { "type": "integer", "description": "unix seconds" }
+                    }
+                })),
+            },
+            error(400, "invalid label, expiresInSeconds, preset, scopes or role; unknown fields and null are refused"),
+            error(429, "the team already holds the maximum of unexpired managed keys (1000 by default)"),
+        ];
+        create_responses.extend(auth_errors());
+        let mut list_responses = vec![OperationResponse {
+            status_code: 200,
+            description: "Keys visible to the caller; never a secret or a digest. A team-admin \
+                sees only its own team's non-administrator keys."
+                .to_string(),
+            schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": { "keys": { "type": "array", "items": { "type": "object", "properties": {
+                    "id": { "type": "string" }, "label": { "type": "string" },
+                    "scopes": { "type": "array", "items": { "type": "string" } },
+                    "role": { "type": "string" }, "teamId": { "type": ["string", "null"] },
+                    "principalId": { "type": ["string", "null"] }, "createdBy": { "type": "string" },
+                    "createdAt": { "type": "integer" }, "expiresAt": { "type": "integer" },
+                    "expired": { "type": "boolean" }
+                } } } }
+            })),
+        }];
+        list_responses.extend(auth_errors());
+        let mut revoke_responses = vec![
+            OperationResponse {
+                status_code: 200,
+                description: "Revoked; the key is refused on the next request.".to_string(),
+                schema: Some(serde_json::json!({
+                    "type": "object",
+                    "properties": { "deleted": { "type": "string" }, "kind": { "type": "string", "enum": ["key"] } }
+                })),
+            },
+            error(
+                404,
+                "the store holds no such managed key (for a team-admin: no such key in its team). \
+                 Nothing is recorded, so an already-revoked key cannot be revoked again",
+            ),
+        ];
+        revoke_responses.extend(auth_errors());
+        let mut members_responses = vec![
+            OperationResponse {
+                status_code: 200,
+                description: "The team's principals with their roles and active key counts."
+                    .to_string(),
+                schema: Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "teamId": { "type": "string" },
+                        "members": { "type": "array", "items": { "type": "object", "properties": {
+                            "principalId": { "type": "string" },
+                            "roles": { "type": "array", "items": { "type": "string" } },
+                            "keyCount": { "type": "integer" }
+                        } } }
+                    }
+                })),
+            },
+            error(400, "invalid team id"),
+        ];
+        members_responses.extend(auth_errors());
+        vec![
+            Operation {
+                id: "create_managed_key".to_string(),
+                name: "Create Managed API Key".to_string(),
+                description: "Make a managed API key on the cluster control plane. Requires an \
+                    administrator or a team-admin; a team-admin's key is forced to its own \
+                    team and may not be a team-admin, hold `admin`, hold a scope the caller \
+                    lacks, or outlive the caller. The secret is returned once and cannot be \
+                    retrieved later. `teamId` is required unless the key is an \
+                    administrator's. Not idempotent: each call makes a new key."
+                    .to_string(),
+                http_method: "POST".to_string(),
+                path: "/keys".to_string(),
+                parameters: vec![],
+                request_body: Some(RequestBody {
+                    content_type: "application/json".to_string(),
+                    required: true,
+                    schema: serde_json::json!({
+                        "type": "object",
+                        "required": ["label", "expiresInSeconds"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "label": { "type": "string", "minLength": 1, "maxLength": 128 },
+                            "expiresInSeconds": { "type": "integer", "minimum": 60,
+                                "description": "60 up to 90 days unless the operator set --managed-key-max-ttl-secs (at most ten years)" },
+                            "preset": { "type": "string", "enum": ["read-only", "developer", "machines", "admin"] },
+                            "scopes": { "type": "array", "items": { "type": "string" } },
+                            "role": { "type": "string", "enum": ["operator", "member", "observer", "viewer", "team-admin"] },
+                            "teamId": { "type": "string" },
+                            "principalId": { "type": "string" }
+                        }
+                    }),
+                }),
+                responses: create_responses,
+                idempotent: false,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: "list_managed_keys".to_string(),
+                name: "List Managed API Keys".to_string(),
+                description: "List managed keys: id, label, scopes, role, team, principal, \
+                    creator, times and whether expired. Never returns a secret or digest. \
+                    Expired keys stay listed until revoked. Records the control plane did \
+                    not seal are skipped."
+                    .to_string(),
+                http_method: "GET".to_string(),
+                path: "/keys".to_string(),
+                parameters: vec![],
+                request_body: None,
+                responses: list_responses,
+                idempotent: true,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: "revoke_managed_key".to_string(),
+                name: "Revoke Managed API Key".to_string(),
+                description: "Revoke a managed key by id. A sealed revocation record is written \
+                    first, then the key record is removed; the key stops working on every \
+                    control plane on its next request. An administrator may revoke any key, \
+                    including a record that cannot be trusted; a team-admin only its own \
+                    team's non-administrator keys (anything else is 404). Revocation is \
+                    permanent for that id. Sessions already authorised and open streams are \
+                    not interrupted. See the guardrails for when revocation can be undone \
+                    or was never recorded."
+                    .to_string(),
+                http_method: "DELETE".to_string(),
+                path: "/keys/{id}".to_string(),
+                parameters: vec![Parameter {
+                    name: "id".to_string(),
+                    location: ParameterLocation::Path,
+                    required: true,
+                    description: "Managed key id: mk_ and 16 URL-safe characters".to_string(),
+                    schema: serde_json::json!({ "type": "string", "pattern": "^mk_[A-Za-z0-9_-]{16}$" }),
+                    default: None,
+                }],
+                request_body: None,
+                responses: revoke_responses,
+                idempotent: false,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: "list_team_members".to_string(),
+                name: "List Team Members".to_string(),
+                description: "List a team's principals, from the policy file and from managed \
+                    keys, with roles and active key counts. A team-admin may list only its \
+                    own team (403 otherwise). With managed keys disabled, the policy file's \
+                    members only."
+                    .to_string(),
+                http_method: "GET".to_string(),
+                path: "/teams/{team}/members".to_string(),
+                parameters: vec![Parameter {
+                    name: "team".to_string(),
+                    location: ParameterLocation::Path,
+                    required: true,
+                    description: "Team id".to_string(),
+                    schema: serde_json::json!({ "type": "string" }),
+                    default: None,
+                }],
+                request_body: None,
+                responses: members_responses,
+                idempotent: true,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+        ]
+    }
+
+    /// Warnings attached to interfaces. Exposures only: each entry is a
+    /// documented residual, not a general caution.
+    fn build_guardrails() -> Vec<Guardrail> {
+        vec![
+            Guardrail {
+                id: "redis-shared-user-revocation".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "Shared Redis user can revive a revoked key".to_string(),
+                description: "Where nodes and control planes connect to the cluster store \
+                    (Redis) as one shared user, a compromised node can delete a revoked \
+                    key's revocation record and write the old key record back, which makes \
+                    the revoked key work again until it expires. The seal and the revocation \
+                    record stop a forged record but cannot stop a Redis writer from deleting \
+                    one. A node can also delete records outright (denial of service)."
+                    .to_string(),
+                applies_to: vec![
+                    "revoke_managed_key".to_string(),
+                    "cluster_store_configuration".to_string(),
+                ],
+                condition: "Nodes and control planes use the same Redis user, for example an \
+                    external store configured with one URL or a hand-rolled deployment. Not \
+                    the shipped deploy/compose or deploy/helm, which create one user per role."
+                    .to_string(),
+                mitigation: "Give each role its own Redis ACL user with tools/redis-acl.py \
+                    (Redis or Valkey 7+): the node user has no access to managed-keys, \
+                    managed-key-ids, managed-key-tombstones or team-telemetry, and the \
+                    default user is off. Point control planes, nodes and the gateway at \
+                    their own URLs. A key's own expiry bounds the damage where this is not \
+                    done."
+                    .to_string(),
+                reference:
+                    "docs/API_KEY_ROTATION.md#redis-roles-keep-nodes-away-from-the-key-records"
+                        .to_string(),
+            },
+            Guardrail {
+                id: "pre-tombstone-revocations".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "Keys revoked before revocation records existed have no record".to_string(),
+                description: "A managed key revoked before revocation records existed has no \
+                    such record, so the protection against writing the old key record back \
+                    never covered it, even with per-role Redis users. A replayed record for \
+                    it would authenticate until the key's expiry. Revoking it again does not \
+                    help: the store no longer holds the key, so the revoke answers 404 and \
+                    writes nothing."
+                    .to_string(),
+                applies_to: vec!["revoke_managed_key".to_string()],
+                condition: "The key was revoked by a control plane built before revocation \
+                    records were written, and its record could be written back by a store \
+                    writer (see redis-shared-user-revocation)."
+                    .to_string(),
+                mitigation: "Only the key's expiry bounds it, so let it expire; with per-role \
+                    Redis users nothing can write the record back. If a replay is suspected \
+                    and cannot wait, changing the managed-key secret makes every managed key \
+                    stop authenticating (a blunt revoke-all: reissue the keys you still need). \
+                    Create keys with short expiries."
+                    .to_string(),
+                reference: "docs/security/SECURITY_AUDIT_2026-11-16.md".to_string(),
+            },
+        ]
+    }
+
+    /// The agent-callable tools, with a one-line warning appended to every
+    /// tool a guardrail names. The single projection behind the OpenAI,
+    /// Anthropic, Gemini and MCP-manifest exports.
+    fn projected_tools(&self) -> Vec<hv2_agent::McpTool> {
+        let mut tools = mcp_registry_tools();
+        for tool in &mut tools {
+            if let Some(line) = self.warning_line(&tool.name) {
+                tool.description.push_str("\n\n");
+                tool.description.push_str(&line);
+            }
+        }
+        tools
+    }
+
+    /// Guardrails whose `applies_to` names `id`.
+    pub fn guardrails_for(&self, id: &str) -> Vec<&Guardrail> {
+        self.guardrails
+            .iter()
+            .filter(|g| g.applies_to.iter().any(|a| a == id))
+            .collect()
+    }
+
+    /// A short warning for `id`, or `None` if no guardrail names it.
+    fn warning_line(&self, id: &str) -> Option<String> {
+        let found = self.guardrails_for(id);
+        if found.is_empty() {
+            return None;
+        }
+        let parts: Vec<String> = found
+            .iter()
+            .map(|g| {
+                format!(
+                    "{:?}: {} ({}). Mitigation: {}",
+                    g.severity, g.title, g.condition, g.mitigation
+                )
+            })
+            .collect();
+        Some(format!("WARNING - {}", parts.join(" | ")))
     }
 
     fn build_state_machines() -> Vec<StateMachine> {
@@ -2098,7 +2504,8 @@ impl HyperMachineOntology {
         // Project the complete MCP registry so the OpenAI tool list covers every
         // agent-callable tool (vm.*, guest.*, snapshot.*, network.*, agent.*,
         // system.*), not just the core VM-lifecycle REST operations.
-        let tools = mcp_registry_tools()
+        let tools = self
+            .projected_tools()
             .into_iter()
             .map(|t| OpenAITool {
                 tool_type: "function".to_string(),
@@ -2115,7 +2522,8 @@ impl HyperMachineOntology {
 
     /// Convert to Anthropic MCP tool format
     pub fn to_anthropic_tools(&self) -> AnthropicTools {
-        let tools = mcp_registry_tools()
+        let tools = self
+            .projected_tools()
             .into_iter()
             .map(|t| AnthropicTool {
                 name: t.name,
@@ -2133,7 +2541,8 @@ impl HyperMachineOntology {
 
     /// Convert to Google Gemini format
     pub fn to_gemini_tools(&self) -> GeminiTools {
-        let function_declarations = mcp_registry_tools()
+        let function_declarations = self
+            .projected_tools()
             .into_iter()
             .map(|t| GeminiFunction {
                 // Gemini function names disallow '.', so map dotted MCP tool
@@ -2631,7 +3040,8 @@ impl HyperMachineOntology {
         // (rather than the hand-maintained `operations` list) keeps every
         // agent-facing surface in lockstep with what `call_tool` can actually
         // dispatch.
-        let tools = mcp_registry_tools()
+        let tools = self
+            .projected_tools()
             .into_iter()
             .map(|t| McpTool {
                 name: t.name,
@@ -5243,5 +5653,113 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn guardrails_name_known_interfaces_and_have_content() {
+        let onto = HyperMachineOntology::build();
+        let tools: Vec<String> = mcp_registry_tools().into_iter().map(|t| t.name).collect();
+        for id in ["redis-shared-user-revocation", "pre-tombstone-revocations"] {
+            let g = onto.guardrails.iter().find(|g| g.id == id).expect(id);
+            assert!(!g.description.is_empty() && !g.mitigation.is_empty());
+            assert!(!g.condition.is_empty() && !g.reference.is_empty());
+            assert!(!g.applies_to.is_empty());
+        }
+        assert_eq!(onto.guardrails.len(), 2, "owner chose exposures only");
+        for g in &onto.guardrails {
+            for id in &g.applies_to {
+                let known = onto.operations.iter().any(|o| &o.id == id)
+                    || onto.capabilities.iter().any(|c| &c.id == id)
+                    || tools.contains(id);
+                assert!(known, "guardrail {} names unknown interface {id}", g.id);
+            }
+        }
+    }
+
+    #[test]
+    fn key_capability_operations_all_exist() {
+        let onto = HyperMachineOntology::build();
+        let cap = onto
+            .capabilities
+            .iter()
+            .find(|c| c.id == "managed_api_keys")
+            .unwrap();
+        let ops: Vec<(&str, &str)> = cap
+            .operations
+            .iter()
+            .map(|id| {
+                let op = onto.operations.iter().find(|o| &o.id == id).unwrap();
+                (op.http_method.as_str(), op.path.as_str())
+            })
+            .collect();
+        assert_eq!(
+            ops,
+            [
+                ("POST", "/keys"),
+                ("GET", "/keys"),
+                ("DELETE", "/keys/{id}"),
+                ("GET", "/teams/{team}/members"),
+            ]
+        );
+    }
+
+    #[test]
+    fn projected_tool_descriptions_carry_the_warning() {
+        let mut onto = HyperMachineOntology::build();
+        let plain: std::collections::BTreeMap<String, String> = mcp_registry_tools()
+            .into_iter()
+            .map(|t| (t.name, t.description))
+            .collect();
+        let mut names = plain.keys().cloned();
+        let (target, other) = (names.next().unwrap(), names.next().unwrap());
+        let openai = |o: &HyperMachineOntology, n: &str| {
+            o.to_openai_tools()
+                .tools
+                .into_iter()
+                .find(|t| t.function.name == n)
+                .unwrap()
+                .function
+                .description
+        };
+        // No built-in guardrail names an MCP tool, so projections match the registry.
+        assert_eq!(openai(&onto, &target), plain[&target]);
+        onto.guardrails.push(Guardrail {
+            id: "t".into(),
+            severity: GuardrailSeverity::Critical,
+            title: "Careful".into(),
+            description: "d".into(),
+            applies_to: vec![target.clone()],
+            condition: "when x".into(),
+            mitigation: "do y".into(),
+            reference: "docs/x.md".into(),
+        });
+        let gemini_name = target.replace('.', "_");
+        let texts = [
+            openai(&onto, &target),
+            onto.to_anthropic_tools()
+                .tools
+                .into_iter()
+                .find(|t| t.name == target)
+                .unwrap()
+                .description,
+            onto.to_gemini_tools()
+                .function_declarations
+                .into_iter()
+                .find(|t| t.name == gemini_name)
+                .unwrap()
+                .description,
+            onto.build_mcp_manifest()
+                .tools
+                .into_iter()
+                .find(|t| t.name == target)
+                .unwrap()
+                .description,
+        ];
+        for text in texts {
+            assert!(text.starts_with(&plain[&target]));
+            assert!(text.contains("WARNING") && text.contains("Careful") && text.contains("do y"));
+        }
+        // An unrelated tool is untouched.
+        assert_eq!(openai(&onto, &other), plain[&other]);
     }
 }

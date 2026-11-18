@@ -507,3 +507,77 @@ async fn test_mcp_manifest_endpoint_serves_full_surface() {
         assert_eq!(schema.get("type").unwrap(), "object");
     }
 }
+
+// ============================================================================
+// Guardrails and the managed API key interface
+// ============================================================================
+
+#[tokio::test]
+async fn test_served_ontology_carries_guardrails_and_key_interface() {
+    let response = create_router()
+        .oneshot(test_request("/agentic/ontology"))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    let ids = |key: &str| -> Vec<String> {
+        json[key]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v["id"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let (operations, capabilities) = (ids("operations"), ids("capabilities"));
+    let guardrails = json["guardrails"].as_array().expect("guardrails list");
+    assert_eq!(guardrails.len(), 2);
+    for id in ["redis-shared-user-revocation", "pre-tombstone-revocations"] {
+        let g = guardrails
+            .iter()
+            .find(|g| g["id"] == id)
+            .unwrap_or_else(|| panic!("missing guardrail {id}"));
+        assert!(matches!(
+            g["severity"].as_str(),
+            Some("info" | "warning" | "critical")
+        ));
+        for field in [
+            "title",
+            "description",
+            "condition",
+            "mitigation",
+            "reference",
+        ] {
+            assert!(
+                !g[field].as_str().unwrap_or("").is_empty(),
+                "{id}.{field} empty"
+            );
+        }
+        for target in g["applies_to"].as_array().unwrap() {
+            let target = target.as_str().unwrap();
+            assert!(
+                operations.iter().chain(&capabilities).any(|i| i == target),
+                "{id} applies_to unknown id {target}"
+            );
+        }
+    }
+    for op in [
+        "create_managed_key",
+        "list_managed_keys",
+        "revoke_managed_key",
+        "list_team_members",
+    ] {
+        assert!(operations.iter().any(|o| o == op), "missing operation {op}");
+    }
+    let revoke = json["operations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["id"] == "revoke_managed_key")
+        .unwrap();
+    assert_eq!(revoke["http_method"], "DELETE");
+    assert_eq!(revoke["path"], "/keys/{id}");
+}

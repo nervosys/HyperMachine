@@ -209,6 +209,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   seventh, Gitleaks, is now a real gate; see Security.)
 
 ### Added
+- **The agentic ontology has guardrails, and describes the managed API key
+  interface.** `/agentic/ontology` gains a top-level `guardrails` list
+  (`id`, `severity`, `title`, `description`, `applies_to`, `condition`,
+  `mitigation`, `reference`); tool exports append a warning line to any MCP
+  tool a guardrail names. The control plane's `POST/GET /keys`,
+  `DELETE /keys/{id}` and `GET /teams/{team}/members` are modelled as the
+  `managed_api_keys` capability, with two guardrails for the O12 residuals: a
+  Redis user shared by nodes and control planes can revive a revoked key, and
+  keys revoked before revocation records existed have no record. See
+  `docs/AGENTIC_ONTOLOGY.md`.
 - **Keys can be made, listed and revoked through the control plane's API.**
   `POST /keys` makes a key and shows its secret once (`hm_` and 32 random bytes); `GET /keys`
   lists metadata only; `DELETE /keys/{id}` revokes it; `GET /teams/{team}/members` lists a

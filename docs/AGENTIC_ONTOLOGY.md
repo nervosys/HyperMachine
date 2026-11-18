@@ -89,6 +89,7 @@ The ontology uses JSON-LD for semantic web compatibility:
 | `operations`     | Specific API operations with parameters and responses |
 | `state_machines` | Valid state transitions for resources                 |
 | `events`         | Event types for subscriptions                         |
+| `guardrails`     | Warnings attached to interfaces (see [Guardrails](#guardrails)) |
 
 ---
 
@@ -153,6 +154,78 @@ Collect and query performance metrics.
 - `set_alert` - Configure metric alerts
 
 **Permissions Required:** `metrics:read`
+
+### Managed API Keys (`managed_api_keys`)
+
+Make, list and revoke API keys at run time. These routes are served by the
+**cluster control plane** (`hv2-control-plane`), not by `hv2-api`; the
+ontology models them as data. They authenticate with the `X-API-Key` header.
+Keys live in the cluster store, sealed under `--managed-key-secret-file`;
+without it every route answers 503. Only an administrator (the legacy admin
+key, or an operator key with the `admin` scope) or a `team-admin` may call
+them (others: 403). A team-admin is confined to its own team and cannot
+raise anyone above itself. There is no rotate route: create a replacement,
+move clients over, then revoke the old key. Policy-file keys are not
+reachable here ([API_KEY_ROTATION.md](API_KEY_ROTATION.md)).
+
+| Operation (`id`)      | Method and path                | Notes |
+| --------------------- | ------------------------------ | ----- |
+| `create_managed_key`  | `POST /keys`                   | 201 with the secret, shown once. `label` and `expiresInSeconds` (60 s to 90 days by default) required; 429 past the per-team limit |
+| `list_managed_keys`   | `GET /keys`                    | Never a secret or digest; a team-admin sees its team's non-administrator keys |
+| `revoke_managed_key`  | `DELETE /keys/{id}`            | Writes a sealed revocation record, then removes the key; 404 if the store holds no such key |
+| `list_team_members`   | `GET /teams/{team}/members`    | A team-admin: own team only (403 otherwise) |
+
+**Permissions Required:** `administrator` or `team-admin`.
+**Prerequisite:** control plane started with `--managed-key-secret-file`.
+
+### Cluster Store Configuration (`cluster_store_configuration`)
+
+Where control planes, nodes and the native gateway keep shared state,
+including managed key records and their revocation records. An operator
+deployment setting, not an HTTP operation; it has no operations and exists so
+guardrails can name it.
+
+---
+
+## Guardrails
+
+A guardrail is a warning attached to interfaces: a condition under which they
+do not give the guarantee a reader would assume, and what to do about it. They
+are served as the top-level `guardrails` list of `/agentic/ontology`.
+
+| Field         | Meaning |
+| ------------- | ------- |
+| `id`          | Stable identifier |
+| `severity`    | `info`, `warning` or `critical` |
+| `title`, `description` | What the exposure is |
+| `applies_to`  | Ids of operations, capabilities or MCP tool names it covers |
+| `condition`   | When it applies |
+| `mitigation`  | What to do |
+| `reference`   | Repository document that explains it |
+
+Guardrails are advisory data: nothing blocks a call because of one. For every
+MCP tool named in `applies_to`, the OpenAI, Anthropic, Gemini and
+`/agentic/mcp` exports append a `WARNING - ...` line to the tool description,
+so a model sees the caveat when it picks the tool. (Today the two guardrails
+below name control-plane operations, which are not MCP tools, so no tool
+description changes yet.) Older documents without the field still deserialize
+(`guardrails` defaults to empty).
+
+Current guardrails (the documented residuals of finding O12 in
+[the 2026-11-16 security audit](security/SECURITY_AUDIT_2026-11-16.md)):
+
+- **`redis-shared-user-revocation`** (warning; applies to `revoke_managed_key`,
+  `cluster_store_configuration`). Where nodes and control planes share one
+  Redis user, a compromised node can delete a revoked key's revocation record
+  and write the old key record back, reviving the key until it expires.
+  Mitigation: one Redis ACL user per role with `tools/redis-acl.py`
+  (the shipped `deploy/compose` and `deploy/helm` already do); see
+  [API_KEY_ROTATION.md](API_KEY_ROTATION.md#redis-roles-keep-nodes-away-from-the-key-records).
+- **`pre-tombstone-revocations`** (warning; applies to `revoke_managed_key`).
+  A key revoked before revocation records existed has none, so the protection
+  above never covered it. Revoking again does not help (404, nothing
+  written); only the key's expiry bounds it. Changing the managed-key secret
+  is a blunt revoke-all.
 
 ---
 
@@ -462,6 +535,8 @@ Instead of polling, subscribe to events for real-time updates.
 | `/agentic/tools/anthropic`           | JSON    | Anthropic tools (direct) |
 | `/agentic/tools/gemini`              | JSON    | Gemini tools (direct)    |
 | `/.well-known/ai-plugin.json`        | JSON    | ChatGPT plugin manifest  |
+
+The `guardrails` list is part of `/agentic/ontology`; tool exports carry guardrail warnings in their descriptions.
 
 ---
 
