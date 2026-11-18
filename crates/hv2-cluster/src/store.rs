@@ -1491,16 +1491,23 @@ impl ClusterStore for RedisStore {
     async fn put_node(&self, node: &NodeInfo, ttl: Duration) -> Result<()> {
         let json = serde_json::to_string(node).map_err(json_error)?;
         let mut c = self.connection.clone();
-        redis::pipe()
-            .atomic()
-            .set_ex(
-                self.key(&format!("node:{}", node.id)),
-                json,
-                ttl.as_secs().max(1),
+        // A script, not MULTI/EXEC: redis-rs 1.7 panics (usize underflow in
+        // its response bookkeeping) when Redis refuses MULTI, which aborts
+        // the node. EVAL is just as atomic and a refusal is an ordinary error.
+        redis::cmd("EVAL")
+            .arg(
+                "redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2]) \
+                 redis.call('SADD', KEYS[2], ARGV[3]) return 1",
             )
-            .sadd(self.key("nodes"), &node.id)
-            .query_async::<()>(&mut c)
+            .arg(2)
+            .arg(self.key(&format!("node:{}", node.id)))
+            .arg(self.key("nodes"))
+            .arg(json)
+            .arg(ttl.as_secs().max(1))
+            .arg(&node.id)
+            .query_async::<i64>(&mut c)
             .await
+            .map(|_| ())
             .map_err(redis_error)
     }
 
@@ -1561,12 +1568,16 @@ impl ClusterStore for RedisStore {
 
     async fn remove_node(&self, id: &str) -> Result<()> {
         let mut c = self.connection.clone();
-        redis::pipe()
-            .atomic()
-            .del(self.key(&format!("node:{id}")))
-            .srem(self.key("nodes"), id)
-            .query_async::<()>(&mut c)
+        // A script rather than MULTI/EXEC; see `put_node`.
+        redis::cmd("EVAL")
+            .arg("redis.call('DEL', KEYS[1]) redis.call('SREM', KEYS[2], ARGV[1]) return 1")
+            .arg(2)
+            .arg(self.key(&format!("node:{id}")))
+            .arg(self.key("nodes"))
+            .arg(id)
+            .query_async::<i64>(&mut c)
             .await
+            .map(|_| ())
             .map_err(redis_error)
     }
 
@@ -4807,6 +4818,56 @@ pub(crate) mod tests {
                 "registration partially wrote after denying {denied}"
             );
         }
+    }
+
+    /// A user without `+@transaction` makes Redis answer MULTI with NOPERM.
+    /// That must come back as an error; it once panicked inside redis-rs
+    /// (usize underflow), which aborts a release node.
+    #[tokio::test]
+    async fn redis_refused_multi_is_an_error_not_a_panic() {
+        let Ok(url) = std::env::var("HV2_TEST_REDIS_ACL") else {
+            eprintln!("skipped: HV2_TEST_REDIS_ACL is unset (requires an owned Redis server)");
+            return;
+        };
+        let identity = uuid::Uuid::new_v4().simple().to_string();
+        let namespace = format!("multi-test-{identity}");
+        let store = RedisStore::connect(&url, &namespace).await.unwrap();
+        let username = format!("no-multi-{identity}");
+        let password = uuid::Uuid::new_v4().simple().to_string();
+        let mut admin = store.connection.clone();
+        redis::cmd("ACL")
+            .arg("SETUSER")
+            .arg(&username)
+            .arg("on")
+            .arg(format!(">{password}"))
+            .arg(format!("~{}*", store.prefix))
+            .arg("+@all")
+            .arg("-@transaction")
+            .query_async::<()>(&mut admin)
+            .await
+            .unwrap();
+        let restricted_url =
+            url.replacen("redis://", &format!("redis://{username}:{password}@"), 1);
+        let restricted = RedisStore::connect(&restricted_url, &namespace)
+            .await
+            .unwrap();
+        // Neither store write may use MULTI; before the fix this panicked in
+        // redis-rs's driver task and surfaced here as "broken pipe".
+        let put = restricted
+            .put_node(&node("n", 0, 1), Duration::from_secs(5))
+            .await;
+        let present = store.node("n").await.unwrap().is_some();
+        let removed = restricted.remove_node("n").await;
+        let gone = store.node("n").await.unwrap().is_none();
+        redis::cmd("ACL")
+            .arg("DELUSER")
+            .arg(&username)
+            .query_async::<u64>(&mut admin)
+            .await
+            .unwrap();
+        put.unwrap();
+        removed.unwrap();
+        assert!(present && gone);
     }
 
     #[tokio::test]

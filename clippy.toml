@@ -12,3 +12,12 @@ cognitive-complexity-threshold = 30
 
 # Minimum supported Rust version (must match workspace Cargo.toml)
 msrv = "1.95"
+
+# redis-rs (1.7 through 2.0.0-rc.3) underflows a usize when Redis answers
+# MULTI with an error (e.g. an ACL user without +@transaction, or a proxy
+# without transactions); release builds abort, taking down the node. Use an
+# EVAL script for atomic writes instead (see RedisStore::put_node).
+disallowed-methods = [
+    { path = "redis::Pipeline::atomic", reason = "MULTI errors panic redis-rs; use an EVAL script" },
+    { path = "redis::transaction", reason = "MULTI errors panic redis-rs; use an EVAL script" },
+]
